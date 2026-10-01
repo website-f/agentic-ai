@@ -1,0 +1,384 @@
+"""Agents: templates, tools, the builder's prompt preview, CRUD, and direct chat."""
+
+import logging
+from collections.abc import Mapping
+
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...agents import dispatch, runtime
+from ...agents.prompt import build_parts, render
+from ...agents.templates import TEMPLATES
+from ...agents.tools import TOOLS
+from ...core.db import get_db
+from ...engine import gateway
+from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task
+from ...services import audit, events
+from ...services.text import slugify
+from ..agent_schemas import (
+    AgentIn,
+    AgentOut,
+    AgentUpdateIn,
+    ChatIn,
+    ChatOut,
+    PromptPreviewOut,
+    TaskBrief,
+    ToolOut,
+)
+from ..deps import Principal, api_error, require
+
+router = APIRouter(prefix="/api", tags=["agents"])
+log = logging.getLogger("agentic.api.agents")
+
+OPEN = ("triage", "ready", "running", "blocked", "review")
+
+
+async def agent_out(db: AsyncSession, a: Agent) -> AgentOut:
+    branch = await db.get(Branch, a.branch_id)
+    dept = await db.get(Department, a.department_id) if a.department_id else None
+    current = await db.scalar(
+        select(Task)
+        .where(Task.assignee_agent_id == a.id, Task.status.in_(("running", "blocked")))
+        .order_by(Task.updated_at.desc())
+        .limit(1)
+    )
+    open_tasks = (
+        await db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.assignee_agent_id == a.id, Task.status.in_(OPEN))
+        )
+        or 0
+    )
+    return AgentOut(
+        id=a.id,
+        slug=a.slug,
+        name=a.name,
+        role=a.role,
+        template=a.template,
+        branch_id=a.branch_id,
+        branch_name=branch.name if branch else "",
+        department_id=a.department_id,
+        department_name=dept.name if dept else None,
+        soul=a.soul,
+        model_group=a.model_group,
+        tools=a.tools or {},
+        autonomy=a.autonomy,
+        sop_ids=a.sop_ids or [],
+        color=a.color,
+        reports_to=a.reports_to,
+        status=a.status,
+        current_task=TaskBrief(id=current.id, title=current.title, status=current.status)
+        if current
+        else None,
+        open_tasks=open_tasks,
+        created_at=a.created_at,
+    )
+
+
+async def get_agent(db: AsyncSession, workspace_id: str, agent_id: str) -> Agent:
+    a = await db.get(Agent, agent_id)
+    if a is None or a.workspace_id != workspace_id:
+        raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
+    return a
+
+
+async def _check_placement(
+    db: AsyncSession,
+    ws: str,
+    branch_id: str,
+    dept_id: str | None,
+    sop_ids: list[str],
+    reports_to: str | None,
+) -> None:
+    b = await db.get(Branch, branch_id)
+    if b is None or b.workspace_id != ws:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a branch from this workspace."
+        )
+    if dept_id:
+        d = await db.get(Department, dept_id)
+        if d is None or d.branch_id != branch_id:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "bad_department",
+                "That department is not in the chosen branch.",
+            )
+    if sop_ids:
+        found = (
+            await db.scalars(select(SOP.id).where(SOP.id.in_(sop_ids), SOP.workspace_id == ws))
+        ).all()
+        if len(set(found)) != len(set(sop_ids)):
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_sop", "One of the SOPs is not here.")
+    if reports_to:
+        await get_agent(db, ws, reports_to)
+
+
+def _check_tools(tools: Mapping[str, str]) -> None:
+    unknown = set(tools) - set(TOOLS)
+    if unknown:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "unknown_tool",
+            f"Unknown tools: {', '.join(sorted(unknown))}.",
+        )
+
+
+@router.get("/agents/templates")
+async def templates(_: Principal = Depends(require("read"))) -> list[dict]:
+    return [t.public() for t in TEMPLATES]
+
+
+@router.get("/agents/tools")
+async def tools(_: Principal = Depends(require("read"))) -> list[ToolOut]:
+    return [
+        ToolOut(
+            name=t.name,
+            label=t.label,
+            description=t.description,
+            risk=t.risk,
+            default_mode=t.default_mode,  # type: ignore[arg-type]
+        )
+        for t in TOOLS.values()
+    ]  # type: ignore[arg-type]
+
+
+@router.post("/agents/preview-prompt")
+async def preview_prompt(
+    body: AgentIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> PromptPreviewOut:
+    await _check_placement(
+        db, principal.workspace_id, body.branch_id, body.department_id, body.sop_ids, None
+    )
+    draft = Agent(
+        workspace_id=principal.workspace_id,
+        branch_id=body.branch_id,
+        department_id=body.department_id,
+        name=body.name,
+        role=body.role,
+        soul=body.soul,
+        sop_ids=body.sop_ids,
+        tools=body.tools,
+    )
+    parts = await build_parts(db, draft, "task")
+    text = render(parts)
+    return PromptPreviewOut(
+        prompt=text,
+        tokens_estimate=len(text) // 4,
+        parts=[{"title": p.title, "chars": len(p.text)} for p in parts],
+    )
+
+
+@router.get("/agents")
+async def list_agents(
+    branch_id: str | None = Query(default=None),
+    include_retired: bool = False,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[AgentOut]:
+    q = select(Agent).where(Agent.workspace_id == principal.workspace_id)
+    if branch_id:
+        q = q.where(Agent.branch_id == branch_id)
+    if not include_retired:
+        q = q.where(Agent.status != "retired")
+    rows = (await db.scalars(q.order_by(Agent.created_at))).all()
+    return [await agent_out(db, a) for a in rows]
+
+
+@router.post("/agents", status_code=status.HTTP_201_CREATED)
+async def create_agent(
+    body: AgentIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> AgentOut:
+    await _check_placement(
+        db,
+        principal.workspace_id,
+        body.branch_id,
+        body.department_id,
+        body.sop_ids,
+        body.reports_to,
+    )
+    _check_tools(body.tools)
+    base, slug, n = slugify(body.name, "agent"), slugify(body.name, "agent"), 2
+    while await db.scalar(
+        select(func.count())
+        .select_from(Agent)
+        .where(Agent.workspace_id == principal.workspace_id, Agent.slug == slug)
+    ):
+        slug, n = f"{base}-{n}", n + 1
+    a = Agent(workspace_id=principal.workspace_id, slug=slug, **body.model_dump())
+    db.add(a)
+    await db.flush()
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "agent.created",
+        target=a.id,
+        after={
+            "name": a.name,
+            "role": a.role,
+            "branch_id": a.branch_id,
+            "department_id": a.department_id,
+        },
+    )
+    await db.commit()
+    await db.refresh(a)
+    out = await agent_out(db, a)
+    await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
+    return out
+
+
+@router.get("/agents/{agent_id}")
+async def read_agent(
+    agent_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> AgentOut:
+    return await agent_out(db, await get_agent(db, principal.workspace_id, agent_id))
+
+
+@router.patch("/agents/{agent_id}")
+async def update_agent(
+    agent_id: str,
+    body: AgentUpdateIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> AgentOut:
+    a = await get_agent(db, principal.workspace_id, agent_id)
+    changes = body.model_dump(exclude_unset=True)
+    if "tools" in changes:
+        _check_tools(changes["tools"] or {})
+    branch_id = changes.get("branch_id", a.branch_id)
+    if branch_id != a.branch_id and "department_id" not in changes:
+        changes["department_id"] = None  # the old department belongs to the old branch
+    dept_id = changes.get("department_id", a.department_id)
+    await _check_placement(
+        db,
+        principal.workspace_id,
+        branch_id,
+        dept_id,
+        changes.get("sop_ids", []),
+        changes.get("reports_to"),
+    )
+    if changes.get("reports_to") == a.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "self_manager", "An agent cannot report to itself."
+        )
+    before = {k: getattr(a, k) for k in changes}
+    for k, v in changes.items():
+        setattr(a, k, v)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "agent.updated",
+        target=a.id,
+        before={k: v for k, v in before.items() if k != "soul"},
+        after={k: v for k, v in changes.items() if k != "soul"},
+        note="soul edited" if "soul" in changes else None,
+    )
+    await db.commit()
+    await db.refresh(a)
+    await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
+    return await agent_out(db, a)
+
+
+# ---------------------------------------------------------------- chat
+
+
+@router.get("/agents/{agent_id}/sessions")
+async def list_sessions(
+    agent_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    await get_agent(db, principal.workspace_id, agent_id)
+    rows = (
+        await db.scalars(
+            select(ChatSession)
+            .where(ChatSession.agent_id == agent_id, ChatSession.user_id == principal.user.id)
+            .order_by(ChatSession.updated_at.desc())
+            .limit(30)
+        )
+    ).all()
+    return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in rows]
+
+
+@router.get("/chat/sessions/{session_id}/messages")
+async def session_messages(
+    session_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    s = await db.get(ChatSession, session_id)
+    if s is None or s.user_id != principal.user.id:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "session_not_found", "That conversation is not here."
+        )
+    rows = (
+        await db.scalars(
+            select(AgentMessage).where(AgentMessage.session_id == s.id).order_by(AgentMessage.id)
+        )
+    ).all()
+    return [
+        {
+            "id": m.id,
+            "role": m.role,
+            "content": m.content,
+            "name": m.name,
+            "meta": m.meta,
+            "created_at": m.created_at,
+        }
+        for m in rows
+        if m.role in ("user", "assistant") and m.content
+    ]
+
+
+@router.post("/agents/{agent_id}/chat")
+async def chat(
+    agent_id: str,
+    body: ChatIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> ChatOut:
+    a = await get_agent(db, principal.workspace_id, agent_id)
+    if a.status != "active":
+        raise api_error(status.HTTP_409_CONFLICT, "agent_inactive", f"{a.name} is {a.status}.")
+    if body.session_id:
+        s = await db.get(ChatSession, body.session_id)
+        if s is None or s.user_id != principal.user.id or s.agent_id != a.id:
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "session_not_found", "That conversation is not here."
+            )
+    else:
+        s = ChatSession(
+            workspace_id=a.workspace_id,
+            agent_id=a.id,
+            user_id=principal.user.id,
+            title=body.message.strip()[:80],
+        )
+        db.add(s)
+        await db.commit()
+    try:
+        reply = await runtime.chat_turn(db, a, s, body.message)
+    except gateway.GatewayUnavailable as e:
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "no_model_available", str(e)) from e
+    s.title = s.title or body.message[:80]
+    await db.commit()
+    if reply.message_id is not None:
+        try:  # learning is best effort: chat must work even if Temporal is down
+            await dispatch.start_chat_learning(reply.message_id)
+        except Exception:  # noqa: BLE001
+            log.warning("could not start chat learning", exc_info=True)
+    return ChatOut(
+        session_id=s.id,
+        reply=reply.content,
+        provider=reply.provider_name,
+        model=reply.model,
+        tools_used=reply.tools_used,
+    )

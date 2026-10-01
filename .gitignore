@@ -1,0 +1,23 @@
+# secrets
+.env
+.env.*
+!.env.example
+!.env.vps.example
+
+# upstream reference clones and paid art
+/reference/
+/assets-private/
+
+# build output
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# local data
+/data/
+apps/api/data/
+*.log

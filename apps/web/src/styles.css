@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* Theme is driven by data-theme on <html> (set by public/theme-init.js before paint). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Layout: app shell = sidebar (md+) + header + scrolling main; phones get a bottom tab bar.
+   One accent (jade), cool neutrals biased toward it, semantic colors only for state. */
+:root {
+  --bg: #f6f8f7;
+  --surface: #ffffff;
+  --surface-2: #eef2f0;
+  --border: #d9e1dd;
+  --text: #121a17;
+  --text-muted: #5a6762;
+  --accent: #13895f;
+  --accent-fg: #ffffff;
+  --accent-soft: #dff2ea;
+  --ok: #1e8a4c;
+  --warn: #b7791f;
+  --danger: #c2412d;
+  --info: #2f6db5;
+  --shadow: 152 30% 18%;
+  /* Categorical series (dataviz reference palette, validated on --surface; fixed order). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --series-other: #8a9590;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0d1210;
+  --surface: #141b18;
+  --surface-2: #1b2420;
+  --border: #26322d;
+  --text: #e6ece9;
+  --text-muted: #93a39c;
+  --accent: #35c48c;
+  --accent-fg: #06130d;
+  --accent-soft: #123426;
+  --ok: #4cc27f;
+  --warn: #e0a84a;
+  --danger: #ef7a66;
+  --info: #6fa4e8;
+  --shadow: 150 40% 2%;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #6f7a75;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Mono", monospace;
+
+  --radius-sm: 8px;   /* inputs, chips */
+  --radius-md: 12px;  /* cards, sheets */
+  --radius-lg: 16px;  /* dialogs */
+
+  --shadow-soft: 0 1px 2px hsl(var(--shadow) / 0.06), 0 8px 24px -12px hsl(var(--shadow) / 0.18);
+  --shadow-pop: 0 12px 40px -12px hsl(var(--shadow) / 0.35);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Tailwind v4 positions with the `translate` property, so these only touch `transform`
+   and compose with centering instead of fighting it. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sheet-in {
+  from { opacity: 0.6; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Markdown output (agent answers, SOPs). Quiet, readable, theme-aware. */
+.md > * + * { margin-top: 0.6em; }
+.md h1, .md h2, .md h3 { font-weight: 600; line-height: 1.3; margin-top: 1em; }
+.md h1 { font-size: 1.25em; }
+.md h2 { font-size: 1.12em; }
+.md h3 { font-size: 1em; }
+.md ul { list-style: disc; padding-left: 1.3em; }
+.md ol { list-style: decimal; padding-left: 1.3em; }
+.md li + li { margin-top: 0.2em; }
+.md code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+.md pre { background: var(--surface-2); padding: 0.75em 1em; border-radius: var(--radius-sm); overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { border-left: 3px solid var(--border); padding-left: 0.9em; color: var(--text-muted); }
+.md table { width: 100%; border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--border); padding: 0.35em 0.6em; text-align: left; }
+.md th { background: var(--surface-2); font-weight: 500; }
+.md hr { border: 0; border-top: 1px solid var(--border); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,19 @@
+# Keep the build context small: only sources and lockfiles go to the daemon.
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+apps/web/dist
+apps/web/dev-dist
+.git
+.github
+docs
+reference
+assets-private
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+apps/api/data

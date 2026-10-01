@@ -1,0 +1,214 @@
+# Agentic-AI local stack. `docker compose up -d --build`, then open http://localhost:8500
+#
+# Ports (all bound to 127.0.0.1, block 8500-8509):
+#   8500 web (PWA + /api proxy)   8501 api        8502 Temporal UI
+#   8506 Postgres (dev)           8507 Valkey (dev)  8508 Temporal gRPC (dev)
+# The dev-only ports let `uv run` / `pnpm dev` on the host reach the containers.
+# A later docker-compose.vps.yml drops them and makes the data network internal.
+name: agentic
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+x-app-hardening: &app-hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+
+x-app-env: &app-env
+  AGENTIC_ENV: ${AGENTIC_ENV:-dev}
+  AGENTIC_SECRET_KEY: ${AGENTIC_SECRET_KEY:-dev-only-change-me}
+  AGENTIC_COOKIE_SECURE: ${AGENTIC_COOKIE_SECURE:-false}
+  AGENTIC_DATABASE_URL: postgresql+asyncpg://agentic:${AGENTIC_DB_PASSWORD:-agentic_dev}@postgres:5432/agentic
+  AGENTIC_VALKEY_URL: redis://valkey:6379/0
+  AGENTIC_TEMPORAL_ADDRESS: temporal:7233
+  AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:-}
+  # Hosts allowed to resolve to private IPs (e.g. a LAN Ollama box). Empty = none.
+  AGENTIC_PRIVATE_HOSTS_ALLOWED: ${AGENTIC_PRIVATE_HOSTS_ALLOWED:-}
+  # Dev test logins, created on first start when there are no users (apps/api/agentic/seed.py).
+  AGENTIC_DREAM_HOUR: ${AGENTIC_DREAM_HOUR:-2}
+  AGENTIC_DEV_SEED: ${AGENTIC_DEV_SEED:-true}
+  AGENTIC_SEED_PASSWORD: ${AGENTIC_SEED_PASSWORD:-agentic-test-2026}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17-trixie
+    restart: unless-stopped
+    shm_size: 256mb
+    command: >
+      postgres
+      -c shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      -c effective_cache_size=${PG_EFFECTIVE_CACHE:-1536MB}
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c random_page_cost=1.1
+      -c wal_compression=on
+      -c max_connections=150
+    environment:
+      POSTGRES_USER: agentic
+      POSTGRES_PASSWORD: ${AGENTIC_DB_PASSWORD:-agentic_dev}
+      POSTGRES_DB: agentic
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal_dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    ports: ["127.0.0.1:${PG_DEV_PORT:-8506}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentic -d agentic"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1536m
+    cpus: 1.0
+    networks: [data]
+    <<: *logging
+
+  valkey:
+    image: valkey/valkey:8.1.10-alpine
+    restart: unless-stopped
+    # Every key we write carries a TTL, so volatile-lru can evict safely under pressure.
+    command: valkey-server --appendonly yes --maxmemory 200mb --maxmemory-policy volatile-lru
+    volumes:
+      - valkeydata:/data
+    ports: ["127.0.0.1:${VALKEY_DEV_PORT:-8507}:6379"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [data]
+    <<: *logging
+
+  temporal:
+    # auto-setup creates and migrates its own schemas on our Postgres. 1.29.7 is the last
+    # published auto-setup tag; before production, move to temporalio/server + a schema
+    # job (see docs/DOCKER-AND-DEPLOY.md).
+    image: temporalio/auto-setup:1.29.7
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:-temporal_dev}
+      POSTGRES_SEEDS: postgres
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+      DEFAULT_NAMESPACE: default
+      DEFAULT_NAMESPACE_RETENTION: 7d
+      SKIP_DB_CREATE: "true"   # databases come from deploy/postgres/initdb
+    ports: ["127.0.0.1:${TEMPORAL_DEV_PORT:-8508}:7233"]
+    healthcheck:
+      test: ["CMD-SHELL", "tctl --address $$(hostname -i):7233 cluster health | grep -q SERVING"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    mem_limit: 768m
+    cpus: 0.75
+    networks: [data]
+    <<: *logging
+
+  temporal-ui:
+    image: temporalio/ui:2.54.1
+    restart: unless-stopped
+    depends_on:
+      temporal: { condition: service_healthy }
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:8502
+    ports: ["127.0.0.1:${TEMPORAL_UI_PORT:-8502}:8080"]
+    mem_limit: 128m
+    cpus: 0.25
+    networks: [data]
+    <<: *logging
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    image: agentic-py:dev
+    restart: unless-stopped
+    command: ["sh", "-c", "alembic upgrade head && python -m agentic.seed && exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --forwarded-allow-ips '*'"]
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      temporal: { condition: service_healthy }
+    ports: ["127.0.0.1:${API_PORT:-8501}:8501"]
+    # The brain vault: one git repo per workspace. Set AGENTIC_VAULT_DIR in .env to a host
+    # folder (e.g. ./data/vault) to open it directly in Obsidian on this PC.
+    volumes: ["${AGENTIC_VAULT_DIR:-vault}:/data/vault"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/readyz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 1g  # includes the ~300 MB embedding model
+    cpus: 0.75
+    networks: [data, edge]
+    <<: [*app-hardening, *logging]
+
+  worker:
+    # Same image as api; the build block lets a fresh clone build it instead of pulling.
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    image: agentic-py:dev
+    restart: unless-stopped
+    command: ["python", "-m", "agentic.workflows.worker"]
+    environment: *app-env
+    volumes: ["${AGENTIC_VAULT_DIR:-vault}:/data/vault"]
+    depends_on:
+      api: { condition: service_healthy }   # api runs the migrations first
+      temporal: { condition: service_healthy }
+    healthcheck:
+      # The worker refreshes this file every 15 s while it is polling Temporal.
+      test: ["CMD", "python", "-c", "import os,time,sys; sys.exit(0 if time.time()-os.path.getmtime('/tmp/worker-alive') < 60 else 1)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 1280m  # agent loops + the embedding model
+    cpus: 1.0
+    networks: [data, edge]
+    <<: [*app-hardening, *logging]
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    image: agentic-web:dev
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ["127.0.0.1:${WEB_PORT:-8500}:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    mem_limit: 64m
+    cpus: 0.25
+    networks: [edge]
+    <<: *logging
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+
+networks:
+  data: {}
+  edge: {}
+
+volumes:
+  pgdata: {}
+  valkeydata: {}
+  vault: {}
