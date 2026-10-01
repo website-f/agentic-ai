@@ -63,9 +63,13 @@ async def deciders(db: AsyncSession, workspace_id: str) -> list[User]:
 def describe(a: Approval, agent_name: str) -> tuple[str, str]:
     if a.kind == "question":
         return f"{agent_name} has a question", a.reason or "Open it to answer."
-    tool = a.tool_name.replace("_", " ")
+    if a.kind == "budget":
+        return f"{agent_name} is over budget", a.reason or "Approve more budget to continue."
+    from ..agents.tools import TOOLS  # late: tools import the brain and skills
+
+    tool = TOOLS[a.tool_name].label if a.tool_name in TOOLS else a.tool_name.replace("_", " ")
     why = f": {a.reason}" if a.reason else ""
-    return f"{agent_name} needs a decision", f"Wants to use {tool}{why}"
+    return f"{agent_name} needs a decision", f"Wants to: {tool.lower()}{why}"
 
 
 async def _add(db: AsyncSession, d: Delivery) -> str | None:
@@ -170,6 +174,80 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
                     kind="approval",
                     payload={"text": text, "buttons": buttons, "approval_id": a.id},
                     dedupe_key=f"approval:{a.id}:tg:{link.id}",
+                    created_at=now,
+                ),
+            )
+            if did:
+                ids.append(did)
+    await db.commit()
+    return ids
+
+
+async def notify_people(
+    db: AsyncSession,
+    workspace_id: str,
+    title: str,
+    body: str,
+    url: str,
+    *,
+    dedupe: str,
+    perm: str = "approvals.decide",
+) -> list[str]:
+    """A plain notice (no buttons) to everyone with `perm`: every device and linked Telegram."""
+    now = datetime.now(UTC)
+    ids: list[str] = []
+    rows = (
+        await db.execute(
+            select(User, Membership.role)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.workspace_id == workspace_id, User.is_active.is_(True))
+        )
+    ).all()
+    for user, role in rows:
+        if not can(role, perm):
+            continue
+        for sub in (
+            await db.scalars(
+                select(PushSubscription).where(
+                    PushSubscription.user_id == user.id,
+                    PushSubscription.workspace_id == workspace_id,
+                )
+            )
+        ).all():
+            did = await _add(
+                db,
+                Delivery(
+                    workspace_id=workspace_id,
+                    channel="webpush",
+                    target=sub.id,
+                    kind="notice",
+                    payload={"title": title, "body": body, "url": url, "tag": dedupe},
+                    dedupe_key=f"{dedupe}:push:{sub.id}",
+                    created_at=now,
+                ),
+            )
+            if did:
+                ids.append(did)
+        for link, ch in (
+            await db.execute(
+                select(ChannelLink, Channel)
+                .join(Channel, Channel.id == ChannelLink.channel_id)
+                .where(
+                    ChannelLink.user_id == user.id,
+                    Channel.workspace_id == workspace_id,
+                    Channel.enabled.is_(True),
+                )
+            )
+        ).all():
+            did = await _add(
+                db,
+                Delivery(
+                    workspace_id=workspace_id,
+                    channel="telegram",
+                    target=f"{ch.id}:{link.chat_id}",
+                    kind="notice",
+                    payload={"text": f"{title}\n\n{body}"},
+                    dedupe_key=f"{dedupe}:tg:{link.id}",
                     created_at=now,
                 ),
             )

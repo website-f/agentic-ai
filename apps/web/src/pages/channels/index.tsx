@@ -106,7 +106,8 @@ function ThisDevice() {
             onCheckedChange={(on) => toggle.mutate(on)}
             disabled={toggle.isPending}
             label="Notifications on this device"
-            hint={state === "on" ? "Approvals arrive with Approve and Deny buttons (iPhone: tap to open)." : "Your browser asks for permission when you turn this on."}
+            hint={toggle.isPending ? "Turning on… registering with the browser's push service can take half a minute the first time."
+              : state === "on" ? "Approvals arrive with Approve and Deny buttons (iPhone: tap to open)." : "Your browser asks for permission when you turn this on."}
           />
         )}
         <div className="flex flex-wrap gap-2">

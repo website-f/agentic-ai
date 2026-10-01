@@ -23,6 +23,8 @@ dependencies = [
     "pgvector>=0.5",
     "tzdata>=2026.4",
     "http-ece>=1.2",
+    "jsonschema>=4.23",
+    "cronsim>=2.7",
 ]
 
 [dependency-groups]

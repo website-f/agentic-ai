@@ -1,6 +1,18 @@
 """The API's only doorway into Temporal for agent work. Tests replace these functions."""
 
 from datetime import UTC, datetime
+from typing import Any
+
+from temporalio.client import (
+    Schedule,
+    ScheduleActionStartWorkflow,
+    ScheduleOverlapPolicy,
+    SchedulePolicy,
+    ScheduleSpec,
+    ScheduleState,
+    ScheduleUpdate,
+)
+from temporalio.service import RPCError
 
 from ..core.config import settings
 from ..core.temporal import temporal_client
@@ -8,6 +20,7 @@ from ..workflows.agent_workflows import AgentTaskWorkflow, BroadcastRepliesWorkf
 from ..workflows.brain_workflows import DreamWorkflow, LearnFromChatWorkflow
 from ..workflows.channel_workflows import DeliverWorkflow
 from ..workflows.skill_workflows import SkillEvalWorkflow
+from ..workflows.teams_workflows import MeetingWorkflow, ScheduledTaskWorkflow
 
 
 async def start_task(task_id: str, run: int) -> str:
@@ -74,6 +87,85 @@ async def start_skill_eval(kind: str, target_id: str) -> str:
         task_queue=settings.temporal_task_queue,
     )
     return workflow_id
+
+
+async def start_meeting(meeting_id: str) -> str:
+    client = await temporal_client()
+    workflow_id = f"meeting-{meeting_id}"
+    await client.start_workflow(
+        MeetingWorkflow.run, meeting_id, id=workflow_id, task_queue=settings.temporal_task_queue
+    )
+    return workflow_id
+
+
+def _schedule(schedule_id: str, cron: str, tz: str, enabled: bool, note: str) -> Schedule:
+    return Schedule(
+        action=ScheduleActionStartWorkflow(
+            ScheduledTaskWorkflow.run,
+            args=[schedule_id, False],
+            id=f"scheduled-{schedule_id}",
+            task_queue=settings.temporal_task_queue,
+        ),
+        spec=ScheduleSpec(cron_expressions=[cron], time_zone_name=tz),
+        policy=SchedulePolicy(overlap=ScheduleOverlapPolicy.SKIP),
+        state=ScheduleState(paused=not enabled, note=note[:200]),
+    )
+
+
+async def upsert_schedule(schedule_id: str, cron: str, tz: str, enabled: bool, note: str) -> None:
+    """Mirror a Schedule row into Temporal (create, or replace spec and paused state)."""
+    client = await temporal_client()
+    sched = _schedule(schedule_id, cron, tz, enabled, note)
+    handle = client.get_schedule_handle(f"sched-{schedule_id}")
+    try:
+        await handle.describe()
+    except RPCError:
+        await client.create_schedule(f"sched-{schedule_id}", sched)
+        return
+    await handle.update(lambda _: ScheduleUpdate(schedule=sched))
+
+
+async def delete_schedule(schedule_id: str) -> None:
+    client = await temporal_client()
+    try:
+        await client.get_schedule_handle(f"sched-{schedule_id}").delete()
+    except RPCError:
+        pass  # already gone
+
+
+async def run_schedule_now(schedule_id: str) -> str:
+    client = await temporal_client()
+    workflow_id = f"scheduled-{schedule_id}-now-{datetime.now(UTC):%Y%m%d%H%M%S}"
+    await client.start_workflow(
+        ScheduledTaskWorkflow.run,
+        args=[schedule_id, True],
+        id=workflow_id,
+        task_queue=settings.temporal_task_queue,
+    )
+    return workflow_id
+
+
+async def describe_schedules(ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Next and recent firings straight from Temporal, for the ledger page."""
+    client = await temporal_client()
+    out: dict[str, dict[str, Any]] = {}
+    for sid in ids:
+        try:
+            d = await client.get_schedule_handle(sid).describe()
+        except RPCError:
+            continue
+        out[sid] = {
+            "paused": d.schedule.state.paused,
+            "next": [t.isoformat() for t in d.info.next_action_times[:3]],
+            "recent": [
+                {
+                    "scheduled_at": a.scheduled_at.isoformat(),
+                    "started_at": a.started_at.isoformat(),
+                }
+                for a in d.info.recent_actions[-5:]
+            ],
+        }
+    return out
 
 
 async def start_deliveries(delivery_ids: list[str]) -> None:

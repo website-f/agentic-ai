@@ -44,6 +44,12 @@ export interface Agent {
   color: string;
   reports_to: string | null;
   status: "active" | "paused" | "retired";
+  role_kind: "leaf" | "orchestrator";
+  max_parallel_children: number;
+  max_spawn_depth: number;
+  budget_daily_tokens: number | null;
+  budget_monthly_usd: number | null;
+  heartbeat: boolean;
   current_task: { id: string; title: string; status: TaskStatus } | null;
   open_tasks: number;
   created_at: string;
@@ -83,6 +89,10 @@ export interface Task {
   updated_at: string;
   started_at: string | null;
   finished_at: string | null;
+  parent_task_id: string | null;
+  depth: number;
+  schedule_id: string | null;
+  has_output_schema: boolean;
 }
 
 export interface TaskEvent {
@@ -97,7 +107,7 @@ export interface TaskEvent {
 
 export interface Approval {
   id: string;
-  kind: "tool" | "question";
+  kind: "tool" | "question" | "budget";
   tool_name: string;
   tool_label: string;
   args: Record<string, unknown>;
@@ -134,6 +144,9 @@ export interface TaskDetail {
   events: TaskEvent[];
   approvals: Approval[];
   transcript: TranscriptItem[];
+  children: Task[];
+  parent: Task | null;
+  meetings: { id: string; topic: string; status: string; outcome: { decision: string } | null }[];
 }
 
 export interface Audience {

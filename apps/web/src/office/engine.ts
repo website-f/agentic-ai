@@ -155,7 +155,8 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
       if (list[i]) return list[i]!;
     }
     if (w.spotKey) spots.delete(w.spotKey);
-    const start = hash(w.id) % list.length;
+    // Meeting seats fill in order (they alternate sides of the table); elsewhere, spread out.
+    const start = zone === "meeting" ? 0 : hash(w.id) % list.length;
     for (let k = 0; k < list.length; k++) {
       const i = (start + k) % list.length;
       if (!spots.has(`${zone}:${i}`)) {
@@ -182,10 +183,12 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     w.errand = null;
     const desk = map.desks.get(w.id);
     const zone: ZoneName | null =
-      w.state === "waiting_approval" ? "podium" : w.state === "error" ? "bug" : w.state === "idle" ? "breakroom" : null;
+      w.state === "waiting_approval" ? "podium" : w.state === "in_meeting" ? "meeting" : w.state === "error" ? "bug" : w.state === "idle" ? "breakroom" : null;
     if (zone) {
       const s = spotFor(w, zone);
-      return { ...s, sit: false, facing: zone === "podium" ? "right" : zone === "bug" ? "up" : "down" };
+      // Meeting spots alternate above and below the table: face it.
+      const across = zone === "meeting" && Number(w.spotKey?.split(":")[1] ?? 0) % 2 === 1 ? "up" : "down";
+      return { ...s, sit: false, facing: zone === "podium" ? "right" : zone === "bug" ? "up" : zone === "meeting" ? across : "down" };
     }
     releaseSpot(w);
     if (desk) return { ...desk.seat, sit: true, facing: desk.facing };
@@ -286,7 +289,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
       if (!w) return;
       const s = ev.data.status;
       if (s === "broadcast_received") w.flash = { icon: "bang", until: now + 4000 };
-      else if (s === "working" || s === "waiting_approval" || s === "idle" || s === "error" || s === "paused") {
+      else if (s === "working" || s === "waiting_approval" || s === "in_meeting" || s === "idle" || s === "error" || s === "paused") {
         if (w.state !== s) {
           w.state = s;
           if (s === "working") w.errand = null;
@@ -312,6 +315,12 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
       if (ev.data.kind === "progress" || ev.data.kind === "tool" || ev.data.kind === "memory" || ev.data.kind === "skill") {
         // Timeline texts read "used Search memory": capitalise for the bubble.
         say(w, ev.data.text.charAt(0).toUpperCase() + ev.data.text.slice(1), now);
+      }
+    } else if (ev.type === "meeting.turn") {
+      const w = ev.data.agent_id ? walkers.get(ev.data.agent_id) : undefined;
+      if (w && ev.data.kind === "turn" && ev.data.content !== "(nothing to add)") {
+        w.lastBubble = 0; // in a meeting every turn shows
+        say(w, ev.data.content, now);
       }
     } else if (ev.type === "broadcast.ack") {
       const w = walkers.get(ev.data.agent_id);
@@ -498,11 +507,13 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
         ctx.fillStyle = dark ? "#1b2420" : "#ffffff";
         ctx.strokeStyle = dark ? "#33413a" : "#d9e1dd";
         ctx.lineWidth = d;
-        roundRect(cx - tw / 2, top - 22 * d, tw, 20 * d, 6 * d);
+        // Keep the bubble inside the canvas: rooms on the edge would cut it off.
+        const bx = Math.max(4 * d, Math.min(cx - tw / 2, ctx.canvas.width - tw - 4 * d));
+        roundRect(bx, top - 22 * d, tw, 20 * d, 6 * d);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = dark ? "#e6ece9" : "#121a17";
-        ctx.fillText(w.bubble.text, cx, top - 12 * d, 220 * d);
+        ctx.fillText(w.bubble.text, bx + tw / 2, top - 12 * d, 220 * d);
         ctx.globalAlpha = 1;
       } else if (icon) {
         const r = 9 * d;

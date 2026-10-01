@@ -23,11 +23,12 @@ import { groupsQuery } from "@/pages/ai-engine/data";
 import { ChatPanel } from "./chat-panel";
 import { MemoryTab } from "./memory-tab";
 import { agentState } from "./roster";
+import { TeamTab } from "./team-tab";
 import { ToolMatrix } from "./tool-matrix";
 
-const TABS = ["overview", "chat", "memory", "profile", "permissions", "sops"] as const;
+const TABS = ["overview", "chat", "memory", "profile", "team", "permissions", "sops"] as const;
 type Tab = (typeof TABS)[number];
-const LABELS: Record<Tab, string> = { overview: "Overview", chat: "Chat", memory: "Memory", profile: "Profile", permissions: "Permissions", sops: "SOPs" };
+const LABELS: Record<Tab, string> = { overview: "Overview", chat: "Chat", memory: "Memory", profile: "Profile", team: "Team & budget", permissions: "Permissions", sops: "SOPs" };
 
 function useSaveAgent(agent: Agent) {
   const qc = useQueryClient();
@@ -237,6 +238,7 @@ export function AgentDetailPage() {
         <Tabs.Content value="chat" className="outline-none"><ChatPanel agent={agent} canWrite={canWrite} className="h-[min(70dvh,44rem)]" /></Tabs.Content>
         <Tabs.Content value="memory" className="outline-none"><MemoryTab agent={agent} canWrite={canWrite} /></Tabs.Content>
         <Tabs.Content value="profile" className="outline-none"><Profile key={agent.id + agent.created_at} agent={agent} canManage={canManage} /></Tabs.Content>
+        <Tabs.Content value="team" className="outline-none"><TeamTab key={agent.id + String(agent.budget_daily_tokens) + agent.role_kind + String(agent.heartbeat)} agent={agent} canManage={canManage} /></Tabs.Content>
         <Tabs.Content value="permissions" className="outline-none"><Permissions key={JSON.stringify(agent.tools) + agent.autonomy} agent={agent} canManage={canManage} /></Tabs.Content>
         <Tabs.Content value="sops" className="outline-none"><SOPs agent={agent} canManage={canManage} /></Tabs.Content>
       </Tabs.Root>

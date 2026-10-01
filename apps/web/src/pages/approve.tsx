@@ -20,7 +20,7 @@ export function ApprovePage() {
     refetchInterval: 10_000,
   });
   return (
-    <div className="mx-auto grid w-full max-w-lg gap-4 px-4 py-6 sm:py-10">
+    <div className="mx-auto grid w-full max-w-lg grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6 sm:py-10">
       {isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" /> : error || !a ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : a.status === "pending" ? (

@@ -36,8 +36,8 @@ export interface OfficeSearch {
   view?: "map" | "list";
 }
 
-const STATE_ORDER = { waiting_approval: 0, error: 1, working: 2, idle: 3, paused: 4 } as const;
-const LIVE_TYPES = new Set(["agent.status", "agent.thinking", "task.event", "broadcast.ack"]);
+const STATE_ORDER = { waiting_approval: 0, error: 1, in_meeting: 2, working: 3, idle: 4, paused: 5 } as const;
+const LIVE_TYPES = new Set(["agent.status", "agent.thinking", "task.event", "broadcast.ack", "meeting.turn"]);
 
 const officeQuery = (branchId: string) => ({
   queryKey: ["office", branchId],
@@ -281,7 +281,7 @@ export function OfficePage() {
                   className={cn("flex shrink-0 items-center gap-2 rounded-full border px-1.5 py-1 pr-3 text-[12.5px]", a.id === search.agent ? "border-accent bg-accent-soft/60" : "border-border hover:bg-surface-2")}>
                   <AgentAvatar name={a.name} color={a.color} size="xs" working={a.state === "working"} />
                   <span className="font-medium">{a.name}</span>
-                  <span aria-hidden className={cn("size-2 rounded-full", a.state === "working" ? "bg-accent" : a.state === "waiting_approval" ? "bg-warn" : a.state === "error" ? "bg-danger" : a.state === "paused" ? "bg-border" : "bg-info")} />
+                  <span aria-hidden className={cn("size-2 rounded-full", a.state === "working" || a.state === "in_meeting" ? "bg-accent" : a.state === "waiting_approval" ? "bg-warn" : a.state === "error" ? "bg-danger" : a.state === "paused" ? "bg-border" : "bg-info")} />
                   <span className="sr-only">{STATE_INFO[a.state].label}</span>
                 </button>
               ))}

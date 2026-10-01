@@ -306,6 +306,14 @@ class Agent(Timestamps, Base):
     reports_to: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(16), default="active")
     color: Mapped[str] = mapped_column(String(16), default="#13895f")
+    # P7 delegation: orchestrators split work into child tasks, within these caps.
+    max_parallel_children: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    max_spawn_depth: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
+    # P7 budgets: auto-pause at 100 % (and ask), alert at 80 %. Null = no limit.
+    budget_daily_tokens: Mapped[int | None] = mapped_column(Integer)
+    budget_monthly_usd: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    # P7 heartbeat: wakes during work hours to pick up queued work or ask for some.
+    heartbeat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class ChatSession(Timestamps, Base):
@@ -355,6 +363,14 @@ class Task(Timestamps, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     memory_snapshot: Mapped[str | None] = mapped_column(Text)  # frozen at run start
+    # P7: child tasks of a delegation, and the schedule a task came from.
+    parent_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), index=True
+    )
+    depth: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    correction_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    schedule_id: Mapped[str | None] = mapped_column(String(40))
 
 
 class AgentMessage(Base):
@@ -840,3 +856,141 @@ class ApiToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- P7 teams and governance
+
+
+class Meeting(Base):
+    """A bounded discussion between agents (max 5, a few rounds, a token budget) that ends in
+    one structured outcome. It can never approve anything by itself."""
+
+    __tablename__ = "meetings"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'done', 'failed', 'cancelled')", name="ck_meetings_status"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mt"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    initiator_agent_id: Mapped[str | None] = mapped_column(String(40))  # null: a person called it
+    started_by: Mapped[str] = mapped_column(String(80))
+    topic: Mapped[str] = mapped_column(Text)
+    participant_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="running")
+    max_rounds: Mapped[int] = mapped_column(Integer, default=3)
+    rounds_done: Mapped[int] = mapped_column(Integer, default=0)
+    token_budget: Mapped[int] = mapped_column(Integer, default=24000)
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    outcome: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    decision_path: Mapped[str | None] = mapped_column(String(400))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingTurn(Base):
+    __tablename__ = "meeting_turns"
+    __table_args__ = (Index("ix_meeting_turns_meeting", "meeting_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    meeting_id: Mapped[str] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    round: Mapped[int] = mapped_column(Integer)
+    speaker: Mapped[str] = mapped_column(String(80))  # agent:<id> | user:<id> | system
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16), default="turn")  # turn | human | outcome
+    content: Mapped[str] = mapped_column(Text)
+    tokens: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class BudgetGrant(Base):
+    """Extra allowance a person approved when an agent hit its budget."""
+
+    __tablename__ = "budget_grants"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
+    period: Mapped[str] = mapped_column(String(8))  # day | month
+    period_key: Mapped[str] = mapped_column(String(10))  # 2026-10-01 | 2026-10
+    extra_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    extra_usd: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
+    granted_by: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AgentPing(Base):
+    """An agent asking people for something outside a task: work, or attention to its budget."""
+
+    __tablename__ = "agent_pings"
+    __table_args__ = (
+        Index("ix_agent_pings_ws_open", "workspace_id", "resolved_at"),
+        UniqueConstraint("agent_id", "kind", "period_key", name="uq_agent_pings_once"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ap"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))  # idle | budget_alert
+    message: Mapped[str] = mapped_column(Text)
+    period_key: Mapped[str] = mapped_column(String(10))  # at most one per agent, kind, period
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[str | None] = mapped_column(String(80))
+
+
+class Schedule(Timestamps, Base):
+    """Recurring work: a task an agent gets on a cron, run by a Temporal Schedule."""
+
+    __tablename__ = "schedules"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("sc"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(160))
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(200))
+    brief: Mapped[str] = mapped_column(Text, default="")
+    cron: Mapped[str] = mapped_column(String(120))
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kuala_Lumpur")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    requires_review: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str] = mapped_column(String(80))
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class JobRun(Base):
+    """The cron ledger (Hermes): every scheduled run, claimed -> running -> completed/failed."""
+
+    __tablename__ = "job_runs"
+    __table_args__ = (Index("ix_job_runs_ws_started", "workspace_id", "started_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(40))  # null: system jobs
+    job: Mapped[str] = mapped_column(String(40))  # schedule | heartbeat | dream | provider-health
+    schedule_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="claimed")
+    task_id: Mapped[str | None] = mapped_column(String(40))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    error: Mapped[str | None] = mapped_column(Text)
+    signature: Mapped[str | None] = mapped_column(String(64))
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Incident(Base):
+    """Failures grouped by signature, so 50 identical failures make one alert."""
+
+    __tablename__ = "incidents"
+    __table_args__ = (UniqueConstraint("workspace_id", "signature", name="uq_incidents_sig"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(String(40))
+    signature: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(300))
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

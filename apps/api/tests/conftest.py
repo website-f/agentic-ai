@@ -61,6 +61,13 @@ async def database():
 
 
 TABLES = (
+    "incidents",
+    "job_runs",
+    "schedules",
+    "agent_pings",
+    "budget_grants",
+    "meeting_turns",
+    "meetings",
     "deliveries",
     "action_tokens",
     "push_subscriptions",

@@ -1,6 +1,11 @@
 import {
   ArrowCounterClockwiseIcon,
+  ArrowElbowLeftUpIcon,
   BrainIcon,
+  CoinsIcon,
+  GavelIcon,
+  TreeStructureIcon,
+  UsersThreeIcon,
   ChatTextIcon,
   CheckIcon,
   CircleNotchIcon,
@@ -13,6 +18,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -31,7 +37,28 @@ import { PRIORITY_INFO, STATUS_INFO, taskQuery, workKeys, type Task, type TaskEv
 const EVENT_ICON: Record<string, typeof FlagIcon> = {
   created: FlagIcon, run: PlayIcon, status: CircleNotchIcon, tool: WrenchIcon, tool_blocked: ProhibitIcon,
   progress: ChatTextIcon, feedback: ArrowCounterClockwiseIcon, cancel: XIcon, memory: BrainIcon, skill: LightningIcon,
+  delegated: TreeStructureIcon, delegation_done: TreeStructureIcon, meeting_called: UsersThreeIcon, decision: GavelIcon,
+  correction: ArrowCounterClockwiseIcon, budget: CoinsIcon,
 };
+
+function SubTasks({ tasks }: { tasks: Task[] }) {
+  return (
+    <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+      {tasks.map((c) => (
+        <li key={c.id}>
+          <Link to="/tasks" search={{ task: c.id }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-2/60">
+            {c.assignee_name ? <AgentAvatar name={c.assignee_name} color={c.assignee_color ?? "#888"} size="xs" /> : null}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-medium">{c.title}</span>
+              <span className="block text-[12px] text-muted">{c.assignee_name ?? "Unassigned"}{c.has_output_schema ? " · structured answer" : ""}</span>
+            </span>
+            <Pill tone={STATUS_INFO[c.status].tone}>{STATUS_INFO[c.status].label}</Pill>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Timeline({ events }: { events: TaskEvent[] }) {
   return (
@@ -48,9 +75,12 @@ function Timeline({ events }: { events: TaskEvent[] }) {
               <p className="text-[13px]">
                 <span className="font-medium">{e.actor_name ?? (e.actor === "system" ? "System" : e.actor)}</span>{" "}
                 <span className="text-muted">
-                  {e.kind === "progress" ? <>posted an update: <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>sent it back: <span className="text-fg">{e.text}</span></> : e.text}
+                  {e.kind === "progress" ? <>posted an update: <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>sent it back: <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>summed up the meeting: <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.text}
                 </span>
               </p>
+              {e.kind === "decision" && typeof e.data?.meeting_id === "string" ? (
+                <Link to="/meetings" search={{ m: e.data.meeting_id }} className="mt-1 inline-block text-[12.5px] text-accent hover:underline">Read the meeting</Link>
+              ) : null}
               {e.kind === "tool" && typeof e.data?.result_preview === "string" ? (
                 <p className="mt-1 line-clamp-2 font-mono text-[11.5px] text-muted">{e.data.result_preview}</p>
               ) : null}
@@ -102,6 +132,11 @@ function Actions({ task, canWrite }: { task: Task; canWrite: boolean }) {
           <PlayIcon size={14} weight="fill" /> {s === "failed" ? "Retry" : "Start"}
         </Button>
       ) : null}
+      {s !== "done" && s !== "cancelled" ? (
+        <Button size="sm" variant="outline" asChild>
+          <Link to="/meetings" search={{ new: 1, task: task.id }}><UsersThreeIcon size={14} /> Meeting</Link>
+        </Button>
+      ) : null}
       {s === "running" || s === "blocked" || s === "ready" || s === "triage" ? (
         <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate({ path: "cancel" })}><HandIcon size={14} /> Cancel</Button>
       ) : null}
@@ -147,6 +182,34 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           {t.error ? <p role="alert" className="rounded-sm border border-danger/30 bg-danger/8 px-3 py-2 text-[13px] text-danger">{t.error}</p> : null}
           {t.status === "running" ? (
             <p className="flex items-center gap-2 text-[13px] text-accent"><CircleNotchIcon size={15} className="motion-safe:animate-spin" /> {t.assignee_name} is working. This updates live.</p>
+          ) : null}
+          {data.parent ? (
+            <Link to="/tasks" search={{ task: data.parent.id }} className="flex items-center gap-2 text-[13px] text-muted hover:text-fg">
+              <ArrowElbowLeftUpIcon size={14} /> Part of <span className="font-medium text-fg">{data.parent.title}</span> ({data.parent.assignee_name})
+            </Link>
+          ) : null}
+          {data.children.length ? (
+            <section className="grid gap-2">
+              <h3 className="text-[13px] font-semibold">
+                Handed out <span className="font-normal text-muted">· {data.children.filter((c) => c.status === "done" || c.status === "review").length} of {data.children.length} done</span>
+              </h3>
+              <SubTasks tasks={data.children} />
+            </section>
+          ) : null}
+          {data.meetings.length ? (
+            <section className="grid gap-2">
+              <h3 className="text-[13px] font-semibold">Meetings</h3>
+              <ul className="grid gap-2">
+                {data.meetings.map((m) => (
+                  <li key={m.id}>
+                    <Link to="/meetings" search={{ m: m.id }} className="block rounded-[var(--radius-md)] border border-border px-3 py-2.5 hover:bg-surface-2/60">
+                      <span className="flex items-center justify-between gap-2 text-[13px] font-medium">{m.topic}<Pill tone={m.status === "done" ? "ok" : m.status === "running" ? "accent" : "neutral"}>{m.status === "running" ? "In progress" : m.status}</Pill></span>
+                      {m.outcome ? <span className="mt-1 block text-[12.5px] text-muted">{m.outcome.decision}</span> : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
           {t.brief ? (
             <section className="grid gap-2">

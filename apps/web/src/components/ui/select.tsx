@@ -18,9 +18,10 @@ interface SelectProps {
   disabled?: boolean;
   size?: "sm" | "md";
   className?: string;
+  placeholder?: string;
 }
 
-export function Select({ value, onValueChange, options, label, disabled, size = "md", className }: SelectProps) {
+export function Select({ value, onValueChange, options, label, disabled, size = "md", className, placeholder }: SelectProps) {
   return (
     <S.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <S.Trigger
@@ -32,7 +33,7 @@ export function Select({ value, onValueChange, options, label, disabled, size = 
           className,
         )}
       >
-        <S.Value />
+        <S.Value placeholder={placeholder} />
         <S.Icon className="text-muted">
           <CaretDownIcon size={14} />
         </S.Icon>

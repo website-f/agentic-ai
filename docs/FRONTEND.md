@@ -154,3 +154,52 @@ Global: command palette (Ctrl/Cmd+K) for every page, agent and action; **broadca
 - Route-level code splitting; office, graph view, editor and charts are lazy chunks.
 - Budgets: initial JS under 200 KB gzip for the shell; LCP under 2.5 s on 4G; INP under 200 ms.
 - Playwright e2e runs on desktop and on iPhone / Pixel viewports in CI.
+
+## As built in P6 (2026-10-01): notifications and channels
+
+- **Web Push without an SDK.** VAPID keys are generated once per install and stored encrypted
+  (`instance_secrets`). Payloads are encrypted with `http_ece` (aes128gcm, RFC 8291) and the
+  VAPID JWT is signed with `cryptography`. Pushes go out over our own httpx client
+  (`apps/api/agentic/channels/webpush.py`). Subscriptions are accepted only for known push
+  services (FCM, Mozilla, Windows, Apple), so a forged subscription cannot point the server at
+  an internal address.
+- **Approve from the lock screen.** An approval push carries a single-use token. The token is
+  bound to one approval and one person, expires in 10 minutes, and is stored hashed; in the
+  delivery ledger it is kept encrypted until the moment of sending. The service worker's
+  Approve / Deny buttons post it to `/api/push/act`, which needs no session (and is CSRF-exempt
+  for that reason). An expired or used token falls back to opening the app.
+- **iPhone.** There are no notification buttons, so tapping opens `/approve/<id>`, a one-screen
+  page. Notifications need the app installed to the Home Screen (iOS 16.4+), and the Channels
+  page explains this when it detects Safari.
+- **Badge.** The installed app's icon shows the number of approvals waiting
+  (`navigator.setAppBadge`), from the push payload and from the live status.
+- **Subscription rotation.** The app re-sends its subscription on every start
+  (`lib/push.ts` `syncPush`). A service worker cannot do it: it cannot read the CSRF cookie.
+- **One decision path.** The dashboard, push buttons and Telegram buttons all call
+  `agents/decisions.py`, so every decision gets the same checks and audit entry (with `via`)
+  and the same Temporal signal.
+- **Telegram** (`channels/telegram.py`, `bot.py`, `poller.py`). The worker long-polls each bot,
+  with one poller per bot across workers (a Valkey lock), and saves the offset after every
+  update. A revoked token switches the bot off and shows Telegram's reason. People link their
+  account with a one-time code (`/start CODE`, 10 minutes); unlinked senders get a polite
+  refusal and never reach an agent. Bindings decide who answers: an exact chat beats groups,
+  and groups beat direct messages. Replying to a question notification answers the question.
+- **Delivery ledger** (`deliveries`). Every outbound notification or reply is a row first, with
+  a dedupe key, and is sent by `DeliverWorkflow` with retries. A 404/410 from a push service
+  removes that device.
+- **OpenAI-compatible API** (`api/routers/openai_compat.py`). `GET /api/v1/models` and
+  `POST /api/v1/chat/completions` (also `stream: true`), authenticated with `Bearer agt_...`
+  tokens that have the `chat` scope. Tokens are shown once and stored as sha256. A client's
+  system message never replaces the agent's own prompt. Errors use OpenAI's error format.
+
+Verified: 93 API tests, including push encryption decrypted with a browser-side key, token
+single use and expiry, dedupe, removal of gone subscriptions, the Telegram link, chat,
+approve-button and question-reply flows, the poller offset, and OpenAI responses and streaming.
+
+On the real stack, real Google Chrome subscribed through Google's push service
+(`fcm.googleapis.com`), received the test notification, then received an approval
+notification with Approve / Deny and its token. Posting that token approved the request, and
+the task resumed and finished. The OpenAI endpoint answered real HTTP calls, with and without
+streaming. A real Telegram bot was not available to test against: the Bot API flows are
+covered by tests against a faithful fake.
+

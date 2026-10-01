@@ -201,3 +201,68 @@ addresses are blocked by the hardline even when the agent runs on auto.
 Verified: 53 API tests, plus an end-to-end run on the full stack where a task waiting
 for approval kept waiting across an api and worker restart and finished after approval.
 
+## 15. As built in P7 (2026-10-01): teams and governance
+
+**Delegation.** `delegate` is offered only inside a task, only to agents whose role kind is
+orchestrator ("Leads" in the UI), and only while the task's depth is below the agent's
+`max_spawn_depth` (1 to 3). One call hands out at most `max_parallel_children` tasks (hard
+max 10) and a task at most 20 over its life. The step creates the child tasks (depth + 1,
+no review, the parent as `parent_task_id`), records a `delegated` timeline event with the
+call id, and returns `state: "delegate"`. `AgentTaskWorkflow` starts one child
+`AgentTaskWorkflow` per child task in parallel, waits for all of them (a cancel is passed
+on to each), then an activity writes one tool result with every answer fenced as data. A
+child with an `output_schema` gets the schema in its brief; an answer that does not match
+gets one correction turn, then the child fails with the reason. Retries are safe: the
+`delegated` event makes the step re-entrant and a tool result is written only once.
+
+**Meetings.** `consult` (inside tasks) or `POST /api/meetings` (people) creates a meeting
+of 2 to 5 agents. `MeetingWorkflow` runs rounds x participants, one activity per turn; a
+turn sees the transcript fenced as data, may only use `recall`, has 350 output tokens, and
+says `PASS` to skip. It stops at the round cap, at the token budget (24k by default), or
+after a round in which everyone passed. Lines people add (`/interject`) are read from the
+next turn. The chair (who called it, else the first participant) returns JSON
+`{decision, rationale, options, dissent, actions}`; it is saved as
+`wiki/decisions/<date>-<topic>-<id>.md` (inside the company folder for isolated companies)
+and posted once to the task as a `decision` event. A meeting cannot approve or run
+anything. The office shows its agents in the meeting room, with each turn as a bubble.
+
+**Budgets.** `budget_daily_tokens` and `budget_monthly_usd` per agent, measured from
+`llm_calls` in the workspace's time zone. Before every model call in a task: at 80 % one
+`budget_alert` ping (and a notification); at 100 % the step stops with a `budget`
+approval. Approving adds half the limit again for that day or month (`budget_grants`);
+denying or letting it expire fails the task. Chats over budget answer without calling a
+model.
+
+**Heartbeats.** The `agent-heartbeat` schedule runs hourly. Inside work hours (workspace
+`settings.work_hours`, default Monday to Friday 09:00 to 18:00), each active agent with
+`heartbeat` on that is not busy starts its oldest queued task, or, with an empty queue,
+asks once a day: "Nothing in my queue. What should I pick up, boss?" Each workspace tick
+is a `job_runs` row.
+
+**Schedules.** A `schedules` row is mirrored as a Temporal Schedule (`sched-<id>`, cron +
+time zone, overlap skip, paused when disabled). `ScheduledTaskWorkflow` claims a run
+(`job_runs`: claimed, running, completed or failed), creates a fresh task, runs it as a
+child workflow and retries the same task at 5, 15 and 30 minutes. Failures are grouped by a
+signature of schedule and normalised error into `incidents`; a new or reopened incident
+notifies people once. Cron lines run at most every 15 minutes.
+
+| Piece | Where |
+|---|---|
+| Budget state, grants, pings | `apps/api/agentic/teams/budget.py` |
+| Delegation plan, output check, collect | `teams/delegation.py` |
+| Meetings: create, turn, close, decision page | `teams/meetings.py` |
+| Heartbeat tick | `teams/heartbeat.py` |
+| Schedules, ledger, incidents | `teams/schedules.py` |
+| `MeetingWorkflow`, `HeartbeatWorkflow`, `ScheduledTaskWorkflow` | `workflows/teams_workflows.py` |
+| Routes: meetings, schedules, runs, incidents, system jobs, pings, budgets | `api/routers/teams.py` |
+| Meetings, Schedules, org chart, Team & budget tab, command center cards | `apps/web/src/pages/` |
+
+Verified: 110 API tests (17 new, including the three workflows on Temporal's time-skipping
+server) and 12 web tests. End to end on the full stack: an orchestrator handed three quote
+requests to three agents that ran at the same time and returned schema-valid JSON, then
+merged them into one table; two agents held a meeting that stopped after round 2 and
+posted exactly one decision to the task; an agent with a 3,000-token day stopped at 3,065
+tokens and asked, and asked again after the extra allowance ran out; a schedule ran from
+"Run now"; two failures of a paused agent's schedule became one incident with count 2; the
+heartbeat started a queued task and asked for work once.
+

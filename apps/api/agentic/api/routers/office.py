@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...models import Agent, Approval, Branch, Department, Task, TaskEvent
+from ...models import Agent, Approval, Branch, Department, Meeting, Task, TaskEvent
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["office"])
@@ -20,12 +20,14 @@ router = APIRouter(prefix="/api", tags=["office"])
 ERROR_WINDOW = timedelta(hours=1)  # a failure this recent still shows at the bug corner
 
 
-def derive_state(agent: Agent, tasks: list[Task], pending: int) -> str:
-    """paused | waiting_approval | working | error | idle, in that priority."""
+def derive_state(agent: Agent, tasks: list[Task], pending: int, in_meeting: bool = False) -> str:
+    """paused | waiting_approval | in_meeting | working | error | idle, in that priority."""
     if agent.status == "paused":
         return "paused"
     if pending or any(t.status == "blocked" for t in tasks):
         return "waiting_approval"
+    if in_meeting:
+        return "in_meeting"
     if any(t.status == "running" for t in tasks):
         return "working"
     recent = datetime.now(UTC) - ERROR_WINDOW
@@ -106,6 +108,17 @@ async def office_snapshot(
         for actor, text, ts, kind in rows:
             last.setdefault(actor.removeprefix("agent:"), {"text": text, "ts": ts, "kind": kind})
 
+    meeting_of: dict[str, str] = {}
+    for mid, people in (
+        await db.execute(
+            select(Meeting.id, Meeting.participant_ids).where(
+                Meeting.workspace_id == principal.workspace_id, Meeting.status == "running"
+            )
+        )
+    ).all():
+        for aid in people or []:
+            meeting_of.setdefault(aid, mid)
+
     by_agent: dict[str, list[Task]] = {}
     for t in tasks:
         by_agent.setdefault(t.assignee_agent_id or "", []).append(t)
@@ -124,7 +137,8 @@ async def office_snapshot(
                 "color": a.color,
                 "department_id": a.department_id,
                 "status": a.status,
-                "state": derive_state(a, mine, pending.get(a.id, 0)),
+                "state": derive_state(a, mine, pending.get(a.id, 0), a.id in meeting_of),
+                "meeting_id": meeting_of.get(a.id),
                 "pending_approvals": pending.get(a.id, 0),
                 "task": {"id": current.id, "title": current.title, "status": current.status}
                 if current

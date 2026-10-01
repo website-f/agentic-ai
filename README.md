@@ -5,7 +5,7 @@ Analyst, Finance, Data Entry, Writer, Reviewer, Ops) that remember, write their 
 and get better over time. You watch and direct them in a pixel-art office on the web dashboard
 or from your phone (installable PWA).
 
-**Status:** P0 to P5 done (2026-10-01): foundations, AI engine, agent runtime, brain, skills, pixel office.
+**Status:** P0 to P7 done (2026-10-01): foundations, AI engine, agent runtime, brain, skills, pixel office, channels, teams and governance.
 - P0: monorepo, Docker stack, sign-in with 5 roles, branches and departments, members, tamper-evident activity log, responsive PWA shell.
 - P1: provider keys (envelope-encrypted), 3-step streamed connection test, model discovery and pricing, model groups with fallback and cooldowns, playground, usage and cost, 30-minute scheduled health checks.
 - P2: SOPs (workspace/branch/department/library) layered into prompts, 6-step agent builder with templates, per-agent tool permissions, agent chat, durable tasks on Temporal (survive restarts, approvals wait 24 h), Kanban board, approvals and questions with a hardline policy floor, broadcasts with receipts and replies, live updates over SSE.
@@ -16,7 +16,11 @@ or from your phone (installable PWA).
 
 - P5: the Pixel office. One live office per company, generated from its departments (a desk per agent) plus a library, workshop with bug corner, breakroom, meeting room and approval podium. Agents walk there because of real events: at the desk while working ("..." while the model thinks), to the podium when they need you, to the library when they search memory, to the workshop when they write a skill, to the bug corner on errors, to the breakroom when idle. Tap an agent for its panel (approve right there, ask it something, pause it); drag a task card onto an agent to assign it. Day and night themes, pinch and wheel zoom in whole steps, a list view with the same data.
 
-Next: P6 Channels and phone push (Telegram, push approvals, API tokens).
+- P6: Channels. Phone and desktop notifications (Web Push, our own VAPID keys) with Approve / Deny buttons that work from the lock screen on Android (single-use 10-minute tokens), a one-screen approve page for iPhone, the app-icon badge, an installable PWA. A Telegram bot (long polling, no public URL) with inline approve/deny, answers by replying, and chats routed to the agent bound to that chat; only linked people are served. A delivery ledger so nothing is lost or sent twice. Scoped API tokens and an OpenAI-compatible endpoint (`/api/v1/chat/completions`, `model: "agent/<name>"`).
+
+- P7: Teams and governance. Agents marked Leads split a task into up to 10 parallel sub-tasks for other agents (depth cap of 1 to 3 levels), optionally with a JSON Schema the answer must match (one correction turn, then the sub-task fails), and merge the answers. Meetings: 2 to 5 agents discuss for a few rounds (only memory search allowed, a token cap, early stop when nobody adds anything, people can interject) and the chair writes one decision summary (decision, why, options, dissent, next steps) that lands on the task and in the brain as a decision page; meetings only recommend. A drag-and-drop org chart. Budgets per agent (tokens per day, dollars per month): an alert at 80 %, and at 100 % the agent pauses and asks; approving allows half the limit again. Heartbeats: hourly during work hours an agent picks up its queued work or asks for some, once a day. Schedules on Temporal (cron + time zone) with a run ledger, retries at 5/15/30 minutes, and failures grouped into incidents.
+
+Next: P8 Hardening and deploy (observability, backups, security review, load test, optional VPS).
 
 ## Run it
 
@@ -43,6 +47,15 @@ touches a database that already has users. AI provider keys are data, not config
 again on each new PC (AI Engine page).
 
 Everything binds to 127.0.0.1. Temporal UI: http://localhost:8502.
+
+**Use it on your phone.** Notifications need a secure origin. `localhost` counts, but a
+phone opening `http://<laptop-ip>:8500` does not. For a phone on the same network, use
+Tailscale's free HTTPS (`tailscale serve 8500`) or a mkcert certificate, then install the app
+from the browser (iPhone: Share > Add to Home Screen) and turn on notifications in Channels.
+
+**Telegram.** Create a bot with @BotFather, paste its token in Channels > Telegram, press
+"Link my account", and pick which agent answers direct messages. The worker polls Telegram,
+so no domain or webhook is needed.
 
 **Open the brain in Obsidian.** The vault lives in a Docker volume by default. Either download
 it (Brain > Download vault, a zip with its git history) or set `AGENTIC_VAULT_DIR=./data/vault`

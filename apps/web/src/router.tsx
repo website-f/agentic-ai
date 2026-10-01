@@ -43,6 +43,8 @@ const page = {
   office: lazyRouteComponent(() => import("@/pages/office"), "OfficePage"),
   channels: lazyRouteComponent(() => import("@/pages/channels"), "ChannelsPage"),
   approve: lazyRouteComponent(() => import("@/pages/approve"), "ApprovePage"),
+  meetings: lazyRouteComponent(() => import("@/pages/meetings"), "MeetingsPage"),
+  schedules: lazyRouteComponent(() => import("@/pages/schedules"), "SchedulesPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -180,7 +182,12 @@ const aiEngineRoute = createRoute({
   component: page.aiEngine,
 });
 
-const agentsRoute = createRoute({ getParentRoute: () => appRoute, path: "/agents", component: page.agents });
+const agentsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/agents",
+  validateSearch: (s: Record<string, unknown>): { view?: "org" } => ({ view: s.view === "org" ? "org" : undefined }),
+  component: page.agents,
+});
 const agentNewRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agents/new",
@@ -266,7 +273,27 @@ const skillsRoute = createRoute({
   component: page.skills,
 });
 
-function placeholder<P extends AppPath>(path: P) {
+const meetingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/meetings",
+  validateSearch: (s: Record<string, unknown>): { m?: string; new?: number; task?: string } => ({
+    m: str(s.m), new: num(s.new), task: str(s.task),
+  }),
+  component: page.meetings,
+});
+
+const SCHEDULE_TABS = ["schedules", "runs", "incidents", "system"] as const;
+const schedulesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/schedules",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof SCHEDULE_TABS)[number] } => ({
+    tab: SCHEDULE_TABS.find((t) => t === s.tab),
+  }),
+  component: page.schedules,
+});
+
+// Kept for pages that have not shipped yet (none right now).
+export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
   return createRoute({
     getParentRoute: () => appRoute,
@@ -299,8 +326,8 @@ const routeTree = rootRoute.addChildren([
     officeRoute,
     channelsRoute,
     approveRoute,
-    placeholder("/meetings"),
-    placeholder("/schedules"),
+    meetingsRoute,
+    schedulesRoute,
   ]),
 ]);
 

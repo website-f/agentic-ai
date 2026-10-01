@@ -32,6 +32,7 @@ from .routers import (
     sops,
     system,
     tasks,
+    teams,
 )
 
 log = logging.getLogger("agentic.api")
@@ -138,6 +139,7 @@ for r in (
     office.router,
     channels.router,
     openai_compat.router,
+    teams.router,
     events_stream.router,
 ):
     app.include_router(r)

@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import decisions, dispatch, runtime
+from ...agents import decisions, dispatch, launch, runtime
 from ...agents.tools import TOOLS
 from ...core.db import get_db
-from ...models import Agent, AgentMessage, Approval, Task, TaskEvent, User
+from ...models import Agent, AgentMessage, Approval, Meeting, Task, TaskEvent, User
 from ...services import audit, events
 from ...skills import store as skills_store
 from ..agent_schemas import (
@@ -87,6 +87,10 @@ async def task_out(db: AsyncSession, t: Task) -> TaskOut:
         updated_at=t.updated_at,
         started_at=t.started_at,
         finished_at=t.finished_at,
+        parent_task_id=t.parent_task_id,
+        depth=t.depth,
+        schedule_id=t.schedule_id,
+        has_output_schema=t.output_schema is not None,
     )
 
 
@@ -100,9 +104,8 @@ async def approval_out(
         id=a.id,
         kind=a.kind,
         tool_name=a.tool_name,
-        tool_label="Question"
-        if a.kind == "question"
-        else (TOOLS[a.tool_name].label if a.tool_name in TOOLS else a.tool_name),
+        tool_label={"question": "Question", "budget": "More budget"}.get(a.kind)
+        or (TOOLS[a.tool_name].label if a.tool_name in TOOLS else a.tool_name),
         args=a.args,
         reason=a.reason,
         risk=a.risk,
@@ -142,34 +145,10 @@ async def _assignee(db: AsyncSession, ws: str, agent_id: str | None) -> Agent | 
 
 
 async def start(db: AsyncSession, t: Task, actor: str) -> None:
-    """Begin a fresh run: a new workflow, the same conversation."""
-    if not t.assignee_agent_id:
-        raise api_error(
-            status.HTTP_400_BAD_REQUEST, "no_assignee", "Assign an agent before starting."
-        )
-    agent = await db.get(Agent, t.assignee_agent_id)
-    if agent is None or agent.status != "active":
-        raise api_error(
-            status.HTTP_409_CONFLICT, "agent_inactive", "The assigned agent is not active."
-        )
-    if t.status in RUNNING:
-        raise api_error(
-            status.HTTP_409_CONFLICT, "already_running", "This task is already running."
-        )
-    t.run_count += 1
-    t.status = "ready"
-    t.result = t.error = t.blocked_reason = None
-    await db.commit()
     try:
-        t.workflow_id = await dispatch.start_task(t.id, t.run_count)
-    except Exception as e:
-        t.status = "failed"
-        msg = f"Could not start: the worker service is not reachable ({e.__class__.__name__})."
-        t.error = msg
-        await db.commit()
-        raise api_error(status.HTTP_503_SERVICE_UNAVAILABLE, "temporal_unavailable", msg) from e
-    await db.commit()
-    await runtime.task_event(db, t, "run", actor, f"started run {t.run_count}")
+        await launch.launch(db, t, actor)
+    except launch.LaunchError as e:
+        raise api_error(e.status, e.code, e.message) from e
 
 
 # ---------------------------------------------------------------- tasks
@@ -287,6 +266,25 @@ async def task_detail(
         ],
         approvals=[await approval_out(db, a, names) for a in aps],
         transcript=transcript,
+        children=[
+            await task_out(db, c)
+            for c in (
+                await db.scalars(
+                    select(Task).where(Task.parent_task_id == t.id).order_by(Task.created_at)
+                )
+            ).all()
+        ],
+        parent=await task_out(db, parent)
+        if t.parent_task_id and (parent := await db.get(Task, t.parent_task_id))
+        else None,
+        meetings=[
+            {"id": m.id, "topic": m.topic, "status": m.status, "outcome": m.outcome}
+            for m in (
+                await db.scalars(
+                    select(Meeting).where(Meeting.task_id == t.id).order_by(Meeting.created_at)
+                )
+            ).all()
+        ],
     )
 
 

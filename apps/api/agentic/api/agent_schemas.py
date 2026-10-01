@@ -28,6 +28,12 @@ class AgentIn(BaseModel):
     sop_ids: list[str] = Field(default_factory=list, max_length=30)
     color: str = Field(default="#13895f", pattern=HEX)
     reports_to: str | None = None
+    role_kind: Literal["leaf", "orchestrator"] = "leaf"
+    max_parallel_children: int = Field(default=5, ge=1, le=10)
+    max_spawn_depth: int = Field(default=2, ge=1, le=3)
+    budget_daily_tokens: int | None = Field(default=None, ge=1000, le=100_000_000)
+    budget_monthly_usd: float | None = Field(default=None, ge=0.01, le=1_000_000)
+    heartbeat: bool = False
 
 
 class AgentUpdateIn(BaseModel):
@@ -43,6 +49,12 @@ class AgentUpdateIn(BaseModel):
     color: str | None = Field(default=None, pattern=HEX)
     reports_to: str | None = None
     status: Literal["active", "paused", "retired"] | None = None
+    role_kind: Literal["leaf", "orchestrator"] | None = None
+    max_parallel_children: int | None = Field(default=None, ge=1, le=10)
+    max_spawn_depth: int | None = Field(default=None, ge=1, le=3)
+    budget_daily_tokens: int | None = Field(default=None, ge=1000, le=100_000_000)
+    budget_monthly_usd: float | None = Field(default=None, ge=0.01, le=1_000_000)
+    heartbeat: bool | None = None
 
 
 class TaskBrief(BaseModel):
@@ -69,6 +81,12 @@ class AgentOut(BaseModel):
     color: str
     reports_to: str | None
     status: str
+    role_kind: str
+    max_parallel_children: int
+    max_spawn_depth: int
+    budget_daily_tokens: int | None
+    budget_monthly_usd: float | None
+    heartbeat: bool
     current_task: TaskBrief | None
     open_tasks: int
     created_at: datetime
@@ -157,6 +175,10 @@ class TaskOut(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    parent_task_id: str | None = None
+    depth: int = 0
+    schedule_id: str | None = None
+    has_output_schema: bool = False
 
 
 class TaskEventOut(BaseModel):
@@ -208,6 +230,9 @@ class TaskDetailOut(BaseModel):
     events: list[TaskEventOut]
     approvals: list[ApprovalOut]
     transcript: list[dict[str, Any]]
+    children: list[TaskOut] = []
+    parent: TaskOut | None = None
+    meetings: list[dict[str, Any]] = []
 
 
 class Audience(BaseModel):

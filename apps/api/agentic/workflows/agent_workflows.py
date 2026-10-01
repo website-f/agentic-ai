@@ -19,6 +19,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from .brain_activities import brain_learn_task
     from .skill_activities import skill_reflect
+    from .teams_activities import task_collect_children, task_meeting_result
 
 MAX_STEPS = 40
 STEP_RETRY = RetryPolicy(maximum_attempts=3, initial_interval=timedelta(seconds=5))
@@ -56,6 +57,33 @@ class AgentTaskWorkflow:
                 retry_policy=STEP_RETRY,
             )
             state = r["state"]
+            if state == "delegate":
+                # P7: child tasks run in parallel as child workflows; a cancel reaches them.
+                await self._run_children(r["children"])
+                if self.cancelled:
+                    break
+                await workflow.execute_activity(
+                    task_collect_children,
+                    args=[task_id, r["call_id"]],
+                    start_to_close_timeout=QUICK,
+                    retry_policy=STEP_RETRY,
+                )
+                continue
+            if state == "meeting":
+                handle = await workflow.start_child_workflow(
+                    "MeetingWorkflow", r["meeting_id"], id=f"meeting-{r['meeting_id']}"
+                )
+                await workflow.wait_condition(lambda handle=handle: handle.done() or self.cancelled)
+                if self.cancelled:
+                    handle.cancel()
+                    break
+                await workflow.execute_activity(
+                    task_meeting_result,
+                    args=[task_id, r["call_id"], r["meeting_id"]],
+                    start_to_close_timeout=QUICK,
+                    retry_policy=STEP_RETRY,
+                )
+                continue
             if state == "needs_approval":
                 aid = r["approval_id"]
                 try:
@@ -119,6 +147,25 @@ class AgentTaskWorkflow:
             start_to_close_timeout=QUICK,
         )
         return "failed"
+
+    async def _run_children(self, children: list[dict[str, str]]) -> None:
+        handles = [
+            await workflow.start_child_workflow(
+                AgentTaskWorkflow.run, c["task_id"], id=c["workflow_id"]
+            )
+            for c in children
+        ]
+        if not handles:
+            return
+        everyone = asyncio.gather(*handles, return_exceptions=True)
+        await workflow.wait_condition(lambda: everyone.done() or self.cancelled)
+        if not everyone.done():
+            for h in handles:
+                try:
+                    await h.signal(AgentTaskWorkflow.cancel)
+                except Exception:  # noqa: BLE001, S110 - that child already finished
+                    pass
+            await everyone
 
 
 @workflow.defn

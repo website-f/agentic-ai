@@ -1,4 +1,4 @@
-import { CheckIcon, ClockIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, ClockIcon, CoinsIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
+import { tokensShort } from "@/lib/teams";
 import { timeAgo } from "@/lib/utils";
 import { workKeys, type Approval } from "@/lib/work";
 
@@ -31,6 +32,22 @@ function ArgsPreview({ a }: { a: Approval }) {
   );
 }
 
+/** What a budget ask shows: how much was used against the limit, as a bar. */
+export function BudgetUsage({ args }: { args: Record<string, unknown> }) {
+  const n = (k: string) => (typeof args[k] === "number" ? (args[k] as number) : null);
+  const daily = (n("token_ratio") ?? 0) >= (n("usd_ratio") ?? 0) && n("token_limit") !== null;
+  const ratio = daily ? n("token_ratio") ?? 0 : n("usd_ratio") ?? 0;
+  const used = daily ? `${tokensShort(n("tokens_today"))} of ${tokensShort(n("token_limit"))} tokens today` : `$${(n("usd_month") ?? 0).toFixed(2)} of $${(n("usd_limit") ?? 0).toFixed(2)} this month`;
+  return (
+    <div className="grid gap-1.5">
+      <div className="h-2 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label="Budget used">
+        <div className="h-full rounded-full bg-danger" style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+      </div>
+      <p className="text-[12.5px] text-muted tabular">{used} ({Math.round(ratio * 100)}%)</p>
+    </div>
+  );
+}
+
 export function ApprovalCard({ approval: a, canDecide, showTask = true }: { approval: Approval; canDecide: boolean; showTask?: boolean }) {
   const qc = useQueryClient();
   const [answer, setAnswer] = useState("");
@@ -49,17 +66,18 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
     onError: (e) => toast.error(errorMessage(e)),
   });
   const question = a.kind === "question";
+  const budget = a.kind === "budget";
   const pending = a.status === "pending";
   const expiresIn = timeAgo(a.expires_at);
 
   return (
-    <article className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+    <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
       <header className="flex items-start gap-3">
         <AgentAvatar name={a.agent_name} color={a.agent_color} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-[14px]">
             <span className="font-semibold">{a.agent_name}</span>{" "}
-            <span className="text-muted">{question ? "has a question" : `wants to use ${a.tool_label}`}</span>
+            <span className="text-muted">{question ? "has a question" : budget ? "is over budget and paused" : `wants to use ${a.tool_label}`}</span>
           </p>
           {showTask ? (
             <Link to="/tasks" search={{ task: a.task_id }} className="block truncate text-[12.5px] text-accent hover:underline">{a.task_title}</Link>
@@ -67,6 +85,8 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
         </div>
         {question ? (
           <Pill tone="info"><QuestionIcon size={12} weight="bold" /> Question</Pill>
+        ) : budget ? (
+          <Pill tone="warn"><CoinsIcon size={12} weight="bold" /> Budget</Pill>
         ) : a.risk !== "low" ? (
           <Pill tone={a.risk === "high" ? "danger" : "warn"}><ShieldWarningIcon size={12} weight="bold" /> {a.risk === "high" ? "High" : "Medium"} risk</Pill>
         ) : null}
@@ -74,6 +94,11 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
 
       {question ? (
         <p className="rounded-sm bg-surface-2 px-3 py-2 text-[14px]">{a.reason}</p>
+      ) : budget ? (
+        <div className="grid gap-2">
+          <BudgetUsage args={a.args} />
+          <p className="text-[13px] text-muted">{a.reason}</p>
+        </div>
       ) : (
         <div className="grid gap-2">
           <ArgsPreview a={a} />
@@ -101,6 +126,11 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
               <Button type="button" size="sm" variant="ghost" onClick={() => setDenying(false)}>Back</Button>
             </div>
           </form>
+        ) : budget ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> Allow more</Button>
+            <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => setDenying(true)}>Stop the task</Button>
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> Approve once</Button>

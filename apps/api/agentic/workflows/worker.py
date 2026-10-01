@@ -45,6 +45,19 @@ from .engine_activities import check_all_providers
 from .skill_activities import skill_eval, skill_reflect
 from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
+from .teams_activities import (
+    heartbeat_tick,
+    meeting_close,
+    meeting_plan,
+    meeting_round_done,
+    meeting_turn,
+    schedule_attempt,
+    schedule_claim,
+    schedule_finish,
+    task_collect_children,
+    task_meeting_result,
+)
+from .teams_workflows import HeartbeatWorkflow, MeetingWorkflow, ScheduledTaskWorkflow
 
 log = logging.getLogger("agentic.worker")
 
@@ -58,6 +71,9 @@ WORKFLOWS = [
     DreamWorkflow,
     SkillEvalWorkflow,
     DeliverWorkflow,
+    MeetingWorkflow,
+    HeartbeatWorkflow,
+    ScheduledTaskWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -75,6 +91,16 @@ ACTIVITIES = [
     skill_reflect,
     skill_eval,
     deliver_one,
+    task_collect_children,
+    task_meeting_result,
+    meeting_plan,
+    meeting_turn,
+    meeting_round_done,
+    meeting_close,
+    heartbeat_tick,
+    schedule_claim,
+    schedule_attempt,
+    schedule_finish,
 ]
 
 
@@ -84,6 +110,8 @@ async def ensure_schedules(client: Client) -> None:
         ("provider-health", ProviderHealthWorkflow.run, timedelta(minutes=30)),
         # Hourly tick; each workspace dreams once, at settings.dream_hour in its own time zone.
         ("brain-dream", DreamTickWorkflow.run, timedelta(hours=1)),
+        # P7: agents with heartbeat on pick up queued work during work hours.
+        ("agent-heartbeat", HeartbeatWorkflow.run, timedelta(hours=1)),
     ]
     for schedule_id, run, every in jobs:
         try:

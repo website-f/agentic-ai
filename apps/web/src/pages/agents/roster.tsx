@@ -1,6 +1,7 @@
 import { PlusIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { RadioGroup } from "radix-ui";
 import { useMemo } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -14,9 +15,12 @@ import { branchesQuery, meQuery } from "@/lib/queries";
 import { useBranch } from "@/lib/stores";
 import { agentsQuery, type Agent } from "@/lib/work";
 
+import { OrgChart } from "./org-chart";
+
 export function agentState(a: Agent, live?: { status: string } | undefined): { label: string; tone: "accent" | "warn" | "neutral" | "info" } {
   if (a.status === "paused") return { label: "Paused", tone: "neutral" };
   if (a.current_task?.status === "blocked" || live?.status === "waiting_approval") return { label: "Waiting on you", tone: "warn" };
+  if (live?.status === "in_meeting") return { label: "In a meeting", tone: "accent" };
   if (a.current_task?.status === "running" || live?.status === "working") return { label: "Working", tone: "accent" };
   return { label: "Available", tone: "info" };
 }
@@ -44,6 +48,8 @@ function AgentCard({ agent }: { agent: Agent }) {
       <div className="flex flex-wrap gap-1.5 text-[11.5px]">
         <Pill className="font-mono">{agent.model_group}</Pill>
         {agent.autonomy === "auto" ? <Pill tone="accent">Auto</Pill> : null}
+        {agent.role_kind === "orchestrator" ? <Pill tone="accent">Leads</Pill> : null}
+        {agent.budget_daily_tokens || agent.budget_monthly_usd ? <Pill>Budget</Pill> : null}
         {agent.sop_ids.length ? <Pill>{agent.sop_ids.length} SOPs</Pill> : null}
       </div>
     </Link>
@@ -57,6 +63,8 @@ export function AgentsPage() {
   const { data: branches = [] } = useQuery(branchesQuery);
   const branchId = useBranch((s) => s.branchId);
   const branch = branches.find((b) => b.id === branchId) ?? branches[0];
+  const { view } = useSearch({ strict: false }) as { view?: "org" };
+  const navigate = useNavigate();
 
   const sections = useMemo(() => {
     if (!branch) return [];
@@ -95,6 +103,14 @@ export function AgentsPage() {
           action={canManage ? <Button asChild><Link to="/agents/new"><PlusIcon size={16} weight="bold" /> Create first agent</Link></Button> : undefined}
         />
       ) : (
+        <div className="grid gap-6">
+          <RadioGroup.Root value={view ?? "departments"} onValueChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
+            aria-label="Show agents by" className="inline-flex w-fit rounded-sm border border-border p-0.5">
+            {([["departments", "By department"], ["org", "Org chart"]] as const).map(([v, label]) => (
+              <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-3 py-1 text-[13px] text-muted data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{label}</RadioGroup.Item>
+            ))}
+          </RadioGroup.Root>
+          {view === "org" ? <OrgChart agents={(agents ?? []).filter((a) => a.branch_id === branch.id && a.status !== "retired")} manage={canManage} /> : (
         <div className="grid gap-8">
           {sections.filter((s) => s.agents.length).map((s) => (
             <section key={s.id} className="grid gap-3">
@@ -111,6 +127,8 @@ export function AgentsPage() {
               Empty departments: {sections.filter((s) => !s.agents.length).map((s) => s.name).join(", ")}.
             </p>
           ) : null}
+        </div>
+          )}
         </div>
       )}
     </Page>

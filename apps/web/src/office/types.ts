@@ -1,7 +1,7 @@
 /** Office engine types. This folder never imports React: the app talks to it through
  * the bridge in engine.ts, and all panels and buttons stay in the DOM. */
 
-export type AgentState = "working" | "waiting_approval" | "idle" | "error" | "paused";
+export type AgentState = "working" | "waiting_approval" | "in_meeting" | "idle" | "error" | "paused";
 
 export interface OfficeAgent {
   id: string;
@@ -27,7 +27,8 @@ export type OfficeEvent =
   | { type: "agent.status"; data: { agent_id: string; status: string } }
   | { type: "agent.thinking"; data: { agent_id: string; on: boolean } }
   | { type: "task.event"; data: { actor: string; kind: string; text: string; tool?: string | null } }
-  | { type: "broadcast.ack"; data: { agent_id: string } };
+  | { type: "broadcast.ack"; data: { agent_id: string } }
+  | { type: "meeting.turn"; data: { agent_id?: string; content: string; kind: string } };
 
 export const TILE = 16;
 

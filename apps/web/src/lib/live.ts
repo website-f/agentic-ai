@@ -8,6 +8,7 @@ import { create } from "zustand";
 
 import { brainKeys } from "./brain";
 import { keys } from "./queries";
+import { teamKeys } from "./teams";
 import { workKeys } from "./work";
 
 export interface LiveEvent {
@@ -56,6 +57,11 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "skill.updated": [["skills"], keys.status],
   "skill.used": [["skills"]],
   "delivery.updated": [["deliveries"]],
+  "meeting.updated": [teamKeys.meetings, workKeys.tasks, OFFICE],
+  "meeting.turn": [teamKeys.meetings],
+  "job_run.updated": [["runs"], teamKeys.schedules],
+  "incident.updated": [teamKeys.incidents],
+  "agent.ping": [teamKeys.pings, teamKeys.budgets],
 };
 
 export function useLiveEvents() {
@@ -82,6 +88,10 @@ export function useLiveEvents() {
       lastSeq = Math.max(lastSeq, ev.seq);
       for (const fn of listeners) fn(ev);
       for (const key of INVALIDATE[ev.type] ?? []) queue(key);
+      if (ev.type.startsWith("meeting.")) {
+        const id = ev.data.meeting_id;
+        if (typeof id === "string") queue(teamKeys.meeting(id));
+      }
       if (ev.type.startsWith("task.")) {
         const id = ev.data.task_id;
         if (typeof id === "string") queue(workKeys.task(id));

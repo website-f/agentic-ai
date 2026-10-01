@@ -19,6 +19,8 @@ import { errorMessage } from "@/lib/api";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { cn, greeting } from "@/lib/utils";
 
+import { BudgetsCard, PingsCard } from "./command-center-teams";
+
 function SystemPanel() {
   const { data, isLoading, error, dataUpdatedAt } = useQuery(systemStatusQuery);
 
@@ -130,6 +132,11 @@ export function CommandCenterPage() {
         <Stat label="Working now" value={counts?.tasks_running} to="/tasks" />
         <Stat label="Waiting on you" value={counts?.approvals_pending} to="/approvals" />
         <Stat label="To review" value={counts?.tasks_review} to="/tasks" />
+      </div>
+
+      <div className="mb-8 grid gap-8 empty:hidden lg:grid-cols-2">
+        <PingsCard canWrite={me.permissions.includes("work.write")} />
+        <BudgetsCard />
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">

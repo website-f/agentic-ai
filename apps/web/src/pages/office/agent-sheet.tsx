@@ -19,6 +19,7 @@ import type { OfficeAgent } from "@/office/types";
 export const STATE_INFO: Record<OfficeAgent["state"], { label: string; tone: "accent" | "warn" | "neutral" | "info" | "danger" }> = {
   working: { label: "Working", tone: "accent" },
   waiting_approval: { label: "Waiting on you", tone: "warn" },
+  in_meeting: { label: "In a meeting", tone: "accent" },
   idle: { label: "In the breakroom", tone: "info" },
   error: { label: "Stuck on an error", tone: "danger" },
   paused: { label: "Paused", tone: "neutral" },

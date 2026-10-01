@@ -573,6 +573,67 @@ TOOLS: dict[str, Tool] = {
     )
 }
 
+
+async def _team_only(_: ToolContext, __: dict[str, Any]) -> str:
+    # The runtime handles these inside tasks (the workflow runs the children / the meeting).
+    return "Error: this only works inside a task."
+
+
+TEAM = {
+    "delegate": Tool(
+        "delegate",
+        "Delegate work",
+        "Split work into tasks for other agents; they run in parallel and you get every "
+        "answer back to merge. Give each a clear title and brief, and an output_schema (JSON "
+        "Schema) when you need structured answers. Use team_directory for names.",
+        {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "agent": {"type": "string", "description": "Agent name"},
+                            "title": {"type": "string"},
+                            "brief": {"type": "string"},
+                            "output_schema": {
+                                "type": "object",
+                                "description": "Optional JSON Schema the answer must match",
+                            },
+                        },
+                        "required": ["agent", "title"],
+                    },
+                },
+                "why": {"type": "string"},
+            },
+            "required": ["tasks"],
+        },
+        "low",
+        "allow",
+        _team_only,
+    ),
+    "consult": Tool(
+        "consult",
+        "Hold a meeting",
+        "Call a short meeting with up to four other agents to weigh a decision. They discuss "
+        "for a few rounds and you get one decision summary (a recommendation, not an approval).",
+        {
+            "type": "object",
+            "properties": {
+                "agents": {"type": "array", "items": {"type": "string"}},
+                "topic": {"type": "string", "description": "The question to decide"},
+                "rounds": {"type": "integer", "minimum": 1, "maximum": 4},
+            },
+            "required": ["agents", "topic"],
+        },
+        "low",
+        "allow",
+        _team_only,
+    ),
+}
+TOOLS.update(TEAM)
+
 # Never offered to the model and never run, whatever any setting says.
 GLOBAL_DENY: frozenset[str] = frozenset()
 

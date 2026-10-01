@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch, runtime
 from ...agents.prompt import build_parts, render
-from ...agents.templates import TEMPLATES
+from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import TOOLS
 from ...core.db import get_db
 from ...engine import gateway
@@ -69,6 +69,14 @@ async def agent_out(db: AsyncSession, a: Agent) -> AgentOut:
         color=a.color,
         reports_to=a.reports_to,
         status=a.status,
+        role_kind=a.role_kind,
+        max_parallel_children=a.max_parallel_children,
+        max_spawn_depth=a.max_spawn_depth,
+        budget_daily_tokens=a.budget_daily_tokens,
+        budget_monthly_usd=float(a.budget_monthly_usd)
+        if a.budget_monthly_usd is not None
+        else None,
+        heartbeat=a.heartbeat,
         current_task=TaskBrief(id=current.id, title=current.title, status=current.status)
         if current
         else None,
@@ -210,7 +218,10 @@ async def create_agent(
         .where(Agent.workspace_id == principal.workspace_id, Agent.slug == slug)
     ):
         slug, n = f"{base}-{n}", n + 1
-    a = Agent(workspace_id=principal.workspace_id, slug=slug, **body.model_dump())
+    fields = body.model_dump()
+    if "role_kind" not in body.model_fields_set and body.template in BY_ID:
+        fields["role_kind"] = BY_ID[body.template].role_kind  # e.g. office manager: orchestrator
+    a = Agent(workspace_id=principal.workspace_id, slug=slug, **fields)
     db.add(a)
     await db.flush()
     await audit.record(
@@ -269,6 +280,17 @@ async def update_agent(
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "self_manager", "An agent cannot report to itself."
         )
+    boss, seen = changes.get("reports_to"), set()
+    while boss and boss not in seen:  # the org chart must stay a tree
+        if boss == a.id:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "reporting_loop",
+                "That would make a loop: someone above would end up reporting to this agent.",
+            )
+        seen.add(boss)
+        up = await db.get(Agent, boss)
+        boss = up.reports_to if up else None
     before = {k: getattr(a, k) for k in changes}
     for k, v in changes.items():
         setattr(a, k, v)

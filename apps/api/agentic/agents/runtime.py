@@ -24,6 +24,7 @@ from ..models import (
     AgentMessage,
     Approval,
     ChatSession,
+    Meeting,
     Task,
     TaskEvent,
     User,
@@ -31,6 +32,7 @@ from ..models import (
 )
 from ..services import events
 from ..skills import store as skills_store
+from ..teams import budget, delegation, meetings
 from . import policy
 from .prompt import system_prompt
 from .tools import TOOLS, ToolContext, modes_for
@@ -45,10 +47,14 @@ TOOL_TIMEOUT = 45
 
 @dataclass
 class StepResult:
-    state: str  # done | needs_approval | failed | continue
+    state: str  # done | needs_approval | failed | continue | delegate | meeting
     message: str | None = None
     approval_id: str | None = None
     timeout_seconds: int = 0
+    # P7: the workflow runs these, then hands the result back as the tool call's answer.
+    call_id: str | None = None
+    children: list[dict[str, str]] | None = None  # [{task_id, workflow_id}]
+    meeting_id: str | None = None
 
     def dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -209,9 +215,52 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
 
 
-def offered_tools(agent: Agent) -> list[dict[str, Any]]:
-    """Denied tools are not even shown to the model."""
-    return [TOOLS[n].schema() for n, mode in modes_for(agent).items() if mode != "deny"]
+TEAM_TOOLS = ("delegate", "consult")
+
+
+def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]]:
+    """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
+    delegate only for orchestrators above their depth cap."""
+    out = []
+    for n, mode in modes_for(agent).items():
+        if mode == "deny":
+            continue
+        if n == "delegate" and not delegation.can_delegate(agent, task):
+            continue
+        if n == "consult" and task is None:
+            continue
+        out.append(TOOLS[n].schema())
+    return out
+
+
+def _waiting(a: Approval) -> StepResult:
+    return StepResult(
+        "needs_approval",
+        approval_id=a.id,
+        timeout_seconds=max(60, int((a.expires_at - _now()).total_seconds())),
+    )
+
+
+async def add_tool_result(
+    db: AsyncSession, task_id: str, call_id: str, name: str, content: str
+) -> bool:
+    """Answer a tool call once (activities may retry). False if it was already answered."""
+    task = await db.get(Task, task_id)
+    agent = await db.get(Agent, task.assignee_agent_id) if task and task.assignee_agent_id else None
+    if task is None or agent is None:
+        return False
+    done = await db.scalar(
+        select(AgentMessage.id).where(
+            AgentMessage.task_id == task_id,
+            AgentMessage.role == "tool",
+            AgentMessage.tool_call_id == call_id,
+        )
+    )
+    if done is not None:
+        return False
+    _add(db, agent, "tool", task_id=task_id, content=content, tool_call_id=call_id, name=name)
+    await db.commit()
+    return True
 
 
 # ---------------------------------------------------------------- tool-call resolution
@@ -228,7 +277,7 @@ async def _pending_calls(db: AsyncSession, history: list[AgentMessage]) -> list[
 
 async def _resolve_calls(
     db: AsyncSession, ctx: ToolContext, task: Task, history: list[AgentMessage]
-) -> Approval | None:
+) -> StepResult | None:
     agent = ctx.agent
     for call in await _pending_calls(db, history):
         call_id = str(call.get("id"))
@@ -243,7 +292,7 @@ async def _resolve_calls(
             )
         )
         if waiting:
-            return waiting
+            return _waiting(waiting)
 
         args, err = _parse_args(fn.get("arguments"))
         if err or args is None:
@@ -261,11 +310,19 @@ async def _resolve_calls(
 
         if name == "ask_human":
             question = str(args.get("question", "")).strip() or "The agent needs your input."
-            return await _create_approval(
-                db, task, agent, "question", name, call_id, args, question, "low", "ask_human"
+            return _waiting(
+                await _create_approval(
+                    db, task, agent, "question", name, call_id, args, question, "low", "ask_human"
+                )
             )
 
         decision = await policy.evaluate(agent, name, args)
+        if name in TEAM_TOOLS and decision.effect != "deny":
+            # Coordination inside the office, no outside effect: never waits for approval.
+            team = await _team_call(db, ctx, task, name, call_id, args)
+            if team is not None:
+                return team
+            continue
         if decision.effect == "deny":
             label = TOOLS[name].label if name in TOOLS else name
             _add(
@@ -289,17 +346,19 @@ async def _resolve_calls(
             continue
         if decision.effect == "ask":
             reason = str(args.get("why") or args.get("reason") or "")
-            return await _create_approval(
-                db,
-                task,
-                agent,
-                "tool",
-                name,
-                call_id,
-                args,
-                reason,
-                TOOLS[name].risk,
-                decision.rule,
+            return _waiting(
+                await _create_approval(
+                    db,
+                    task,
+                    agent,
+                    "tool",
+                    name,
+                    call_id,
+                    args,
+                    reason,
+                    TOOLS[name].risk,
+                    decision.rule,
+                )
             )
 
         result = await run_tool(ctx, name, args)
@@ -317,6 +376,121 @@ async def _resolve_calls(
                 {"tool": name, "args": args, "result_preview": result[:300]},
             )
     return None
+
+
+async def _team_call(
+    db: AsyncSession, ctx: ToolContext, task: Task, name: str, call_id: str, args: dict[str, Any]
+) -> StepResult | None:
+    """delegate / consult: hand the work to the workflow, or answer with the reason it can't."""
+    agent = ctx.agent
+    if name == "delegate":
+        if not delegation.can_delegate(agent, task):
+            await add_tool_result(
+                db, task.id, call_id, name, "Error: you cannot delegate from this task."
+            )
+            return None
+        try:
+            run = await delegation.plan(db, task, agent, call_id, args)
+        except delegation.DelegationError as e:  # raised before anything is added
+            await add_tool_result(db, task.id, call_id, name, f"Error: {e}")
+            return None
+        if not run:  # every child already finished (a re-run): just collect
+            await delegation.collect(db, task.id, call_id)
+            return None
+        return StepResult("delegate", call_id=call_id, children=run)
+    # consult
+    called = next(
+        (
+            e
+            for e in (
+                await db.scalars(
+                    select(TaskEvent).where(
+                        TaskEvent.task_id == task.id, TaskEvent.kind == "meeting_called"
+                    )
+                )
+            ).all()
+            if (e.data or {}).get("call_id") == call_id
+        ),
+        None,
+    )
+    if called is not None:
+        m = await db.get(Meeting, (called.data or {}).get("meeting_id"))
+        if m is None or m.status != "running":
+            await add_tool_result(
+                db,
+                task.id,
+                call_id,
+                name,
+                meetings.result_for_tool(m) if m else "The meeting is gone.",
+            )
+            return None
+        return StepResult("meeting", call_id=call_id, meeting_id=m.id)
+    try:
+        refs = args.get("agents") or []
+        others = await meetings.resolve_agents(
+            db, task.workspace_id, [str(r) for r in refs] if isinstance(refs, list) else []
+        )
+        m = await meetings.create(
+            db,
+            task.workspace_id,
+            str(args.get("topic", "")),
+            others,
+            f"agent:{agent.id}",
+            task_id=task.id,
+            initiator=agent,
+            rounds=int(args.get("rounds") or 2),
+        )
+    except (meetings.MeetingError, ValueError, TypeError) as e:  # raised before any add
+        await add_tool_result(db, task.id, call_id, name, f"Error: {e}")
+        return None
+    names = ", ".join(a.name for a in others if a.id != agent.id)
+    await task_event(
+        db,
+        task,
+        "meeting_called",
+        f"agent:{agent.id}",
+        f"called a meeting with {names}: {m.topic[:200]}",
+        {"call_id": call_id, "meeting_id": m.id},
+    )
+    return StepResult("meeting", call_id=call_id, meeting_id=m.id)
+
+
+async def _budget_gate(
+    db: AsyncSession, task: Task, agent: Agent, ws: Workspace
+) -> StepResult | None:
+    """Over budget: stop and ask a person for more. Near it: warn once."""
+    st = await budget.state(db, agent, ws.timezone)
+    if not st.over:
+        await budget.alert_if_near(db, agent, ws, st)
+        return None
+    daily = bool(st.token_limit and st.token_ratio >= 1)
+    key = st.periods.day if daily else st.periods.month
+    # The limit is part of the id: after a grant a new ask is a new approval.
+    call_id = f"budget:{key}:{st.token_limit if daily else st.usd_limit}"
+    prior = await db.scalar(
+        select(Approval)
+        .where(Approval.task_id == task.id, Approval.tool_call_id == call_id)
+        .order_by(Approval.created_at.desc())
+    )
+    if prior is not None and prior.status == "pending":
+        return _waiting(prior)
+    if prior is not None and prior.status in ("denied", "expired", "cancelled"):
+        why = "no one approved more" if prior.status == "expired" else "more budget was denied"
+        return StepResult("failed", f"Stopped: {agent.name} is over budget and {why}.")
+    return _waiting(
+        await _create_approval(
+            db,
+            task,
+            agent,
+            "budget",
+            "budget",
+            call_id,
+            st.dict(),
+            st.reason(agent.name),
+            "medium",
+            "budget.limit",
+        )
+    )
 
 
 async def _create_approval(
@@ -347,8 +521,13 @@ async def _create_approval(
     )
     db.add(a)
     await db.flush()
-    what = f"Question: {reason}" if kind == "question" else f"Wants to use {TOOLS[tool].label}"
-    note = f"asked: {reason}" if kind == "question" else f"wants to use {TOOLS[tool].label}"
+    if kind == "question":
+        what, note = f"Question: {reason}", f"asked: {reason}"
+    elif kind == "budget":
+        what, note = "Over budget: approve more to continue", "hit its budget and asked for more"
+    else:
+        what = f"Wants to use {TOOLS[tool].label}"
+        note = f"wants to use {TOOLS[tool].label}"
     await set_task_status(
         db, task, "blocked", actor=f"agent:{agent.id}", note=note, blocked_reason=what[:300]
     )
@@ -400,6 +579,8 @@ async def run_task_step(task_id: str) -> StepResult:
         history = await _history(db, task_id=task.id)
         if not history:
             content = f"Task: {task.title}\n\n{task.brief}".strip()
+            if task.output_schema:
+                content += "\n\n" + delegation.schema_note(task.output_schema)
             block, n_facts, n_pages = await recall_block(
                 db, agent, f"{task.title}\n{task.brief}", ws.timezone
             )
@@ -425,17 +606,16 @@ async def run_task_step(task_id: str) -> StepResult:
         await agent_status(agent, "working", task)
         pending = await _resolve_calls(db, ctx, task, history)
         if pending:
-            return StepResult(
-                "needs_approval",
-                approval_id=pending.id,
-                timeout_seconds=max(60, int((pending.expires_at - _now()).total_seconds())),
-            )
+            return pending
 
         for _ in range(MAX_CALLS_PER_STEP):
             if task.steps_used >= MAX_CALLS_PER_TASK:
                 return StepResult(
                     "failed", f"Stopped after {MAX_CALLS_PER_TASK} model calls without finishing."
                 )
+            gate = await _budget_gate(db, task, agent, ws)
+            if gate:
+                return gate
             history = await _history(db, task_id=task.id)
             if task.memory_snapshot is None:
                 task.memory_snapshot = await core_memory.snapshot(db, agent)
@@ -450,7 +630,7 @@ async def run_task_step(task_id: str) -> StepResult:
                     agent.model_group,
                     messages,
                     task="agent.task",
-                    tools=offered_tools(agent),
+                    tools=offered_tools(agent, task),
                     max_tokens=1500,
                     agent_id=agent.id,
                     task_id=task.id,
@@ -477,11 +657,7 @@ async def run_task_step(task_id: str) -> StepResult:
                 history = await _history(db, task_id=task.id)
                 pending = await _resolve_calls(db, ctx, task, history)
                 if pending:
-                    return StepResult(
-                        "needs_approval",
-                        approval_id=pending.id,
-                        timeout_seconds=max(60, int((pending.expires_at - _now()).total_seconds())),
-                    )
+                    return pending
                 continue
             _add(
                 db,
@@ -492,7 +668,29 @@ async def run_task_step(task_id: str) -> StepResult:
                 meta={"provider": reply.provider_name, "model": reply.model},
             )
             await db.commit()
-            return StepResult("done", reply.content)
+            answer = reply.content
+            if task.output_schema:
+                value, why = delegation.check_output(reply.content, task.output_schema)
+                if why is not None:
+                    if task.correction_used:
+                        return StepResult(
+                            "failed", f"The answer did not match the required format: {why}."
+                        )
+                    task.correction_used = True
+                    _add(
+                        db,
+                        agent,
+                        "user",
+                        task_id=task.id,
+                        content=delegation.correction_prompt(why, task.output_schema),
+                    )
+                    await db.commit()
+                    await task_event(
+                        db, task, "correction", "system", f"asked for a corrected answer: {why}"
+                    )
+                    continue
+                answer = json.dumps(value, ensure_ascii=False)
+            return StepResult("done", answer)
         await db.commit()
         return StepResult("continue")
 
@@ -541,6 +739,12 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 )
             ).all():
                 a.status = "cancelled"
+            for m in (
+                await db.scalars(
+                    select(Meeting).where(Meeting.task_id == task.id, Meeting.status == "running")
+                )
+            ).all():
+                await meetings.cancel(db, m)
             await set_task_status(
                 db,
                 task,
@@ -581,6 +785,25 @@ async def apply_approval(approval_id: str) -> None:
             )
         ) is not None
         if answered or a.status in ("pending", "cancelled"):
+            return
+        if a.kind == "budget":
+            # No tool message: the next step re-checks the budget (and fails if denied).
+            if a.status == "approved":
+                await budget.grant(
+                    db, agent, await budget.state(db, agent, ws.timezone), a.decided_by or "system"
+                )
+                await task_event(
+                    db, task, "budget", a.decided_by or "system", "approved more budget"
+                )
+            await set_task_status(
+                db,
+                task,
+                "running",
+                actor=f"agent:{agent.id}",
+                note="resumed after the budget decision",
+                blocked_reason=None,
+            )
+            await agent_status(agent, "working", task)
             return
         who = "a person"
         if a.decided_by and a.decided_by.startswith("user:"):
@@ -650,6 +873,14 @@ async def expire_approval(approval_id: str) -> None:
 # ---------------------------------------------------------------- chat
 
 
+def over_budget_reply(st: budget.BudgetState) -> str:
+    when = "today" if st.token_limit and st.token_ratio >= 1 else "this month"
+    return (
+        f"I have used my budget for {when}, so I am paused. An admin can raise my budget on "
+        "my profile, or approve more when I ask inside a task."
+    )
+
+
 @dataclass
 class ChatReply:
     content: str
@@ -668,6 +899,14 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
         session.memory_snapshot = await core_memory.snapshot(db, agent)
     asked = _add(db, agent, "user", session_id=session.id, content=text)
     await db.commit()
+    st = await budget.state(db, agent, ws.timezone)
+    if st.over:
+        note = over_budget_reply(st)
+        answer = _add(
+            db, agent, "assistant", session_id=session.id, content=note, meta={"budget": True}
+        )
+        await db.commit()
+        return ChatReply(note, "", "", [], answer.id)
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     block, _, _ = await recall_block(db, agent, text, ws.timezone, exclude_session_id=session.id)
@@ -787,6 +1026,9 @@ async def chat_once(db: AsyncSession, agent: Agent, convo: list[dict[str, Any]])
     turns = [t for t in turns if t["content"].strip()]
     if not turns or turns[-1]["role"] != "user":
         raise ValueError("The last message must be from the user.")
+    st = await budget.state(db, agent, ws.timezone)
+    if st.over:
+        return OnceReply(over_budget_reply(st), "", 0, 0, [])
     block, _, _ = await recall_block(db, agent, turns[-1]["content"], ws.timezone)
     if block:
         turns[-1] = {"role": "user", "content": f"{turns[-1]['content']}\n\n{block}"}

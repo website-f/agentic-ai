@@ -70,7 +70,7 @@ export const NAV: NavSection[] = [
   {
     title: "Collaboration",
     items: [
-      { to: "/meetings", label: "Meetings", icon: UsersIcon, phase: "P7", blurb: "Watch agents discuss a decision with each other, interject, and read the outcome they agree on." },
+      { to: "/meetings", label: "Meetings", icon: UsersIcon, blurb: "Watch agents discuss a decision with each other, interject, and read the outcome they agree on." },
       { to: "/broadcasts", label: "Broadcasts", icon: BroadcastIcon, blurb: "Message everyone, a branch, a department or picked agents, and see who acknowledged it." },
     ],
   },
@@ -85,7 +85,7 @@ export const NAV: NavSection[] = [
   {
     title: "Operations",
     items: [
-      { to: "/schedules", label: "Schedules", icon: CalendarCheckIcon, phase: "P7", blurb: "Recurring work and every run's result, with retries and grouped incidents." },
+      { to: "/schedules", label: "Schedules", icon: CalendarCheckIcon, blurb: "Recurring work and every run's result, with retries and grouped incidents." },
       { to: "/ai-engine", label: "AI Engine", icon: CpuIcon, blurb: "Add provider keys, test the connection, choose models and see what every agent spends." },
       { to: "/channels", label: "Channels", icon: PlugsConnectedIcon, blurb: "Phone notifications, Telegram, API tokens, and which agent answers where." },
     ],
