@@ -101,13 +101,15 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
       }
     };
 
+    // Spread to the canvas: fewer nodes get longer links, and labels get room to breathe.
+    const spread = Math.min(size.w, size.h) / Math.sqrt(Math.max(4, nodes.length));
     const sim = forceSimulation(nodes)
-      .force("link", forceLink<Node, Edge>(edges).id((d) => d.id).distance(70).strength(0.6))
-      .force("charge", forceManyBody().strength(-180))
+      .force("link", forceLink<Node, Edge>(edges).id((d) => d.id).distance(Math.max(80, spread * 0.9)).strength(0.5))
+      .force("charge", forceManyBody().strength(-Math.max(260, spread * 4)))
       .force("center", forceCenter(size.w / 2, size.h / 2))
-      .force("x", forceX(size.w / 2).strength(0.05))
-      .force("y", forceY(size.h / 2).strength(0.08))
-      .force("collide", forceCollide<Node>((n) => radius(n) + 6));
+      .force("x", forceX(size.w / 2).strength(0.03))
+      .force("y", forceY(size.h / 2).strength(0.05))
+      .force("collide", forceCollide<Node>((n) => radius(n) + 26));
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (still) {
       sim.stop();

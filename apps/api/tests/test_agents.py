@@ -92,6 +92,8 @@ def temporal(monkeypatch):
         "replies": [],
         "learn_chat": [],
         "dream": [],
+        "skill_eval": [],
+        "deliveries": [],
     }
 
     async def start_task(task_id, run):
@@ -110,6 +112,13 @@ def temporal(monkeypatch):
     async def start_chat_learning(message_id):
         calls["learn_chat"].append(message_id)
 
+    async def start_deliveries(ids):
+        calls["deliveries"].extend(ids)
+
+    async def start_skill_eval(kind, target):
+        calls["skill_eval"].append((kind, target))
+        return f"skill-eval-{target}"
+
     async def start_dream(ws_id):
         calls["dream"].append(ws_id)
         return f"dream-{ws_id}"
@@ -121,6 +130,8 @@ def temporal(monkeypatch):
         ("start_broadcast_replies", start_broadcast_replies),
         ("start_chat_learning", start_chat_learning),
         ("start_dream", start_dream),
+        ("start_skill_eval", start_skill_eval),
+        ("start_deliveries", start_deliveries),
     ]:
         monkeypatch.setattr(dispatch, name, fn)
     return calls

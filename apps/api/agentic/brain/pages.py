@@ -15,8 +15,9 @@ _SEGMENT = re.compile(r"^[\w][\w .,()&'+-]{0,119}$", re.UNICODE)
 
 # Ranking boost per kind of page (decisions are the most trusted source).
 TIER = {"decision": 1.3, "wiki": 1.15, "skill": 1.0, "root": 1.0, "raw": 0.9, "log": 0.7}
-# Never searched: agent core memory is already in the prompt, dream diaries are meta.
-UNSEARCHED = ("agent", "dream")
+# Never searched: agent core memory is already in the prompt; dream diaries, the activity log
+# and the generated index are meta (past work is found through session recall instead).
+UNSEARCHED = ("agent", "dream", "log", "index", "skill")  # skills reach agents via their index
 # People can edit anything; agents only write knowledge pages.
 AGENT_WRITABLE = ("wiki/", "raw/")
 GENERATED = ("index.md",)
@@ -69,7 +70,7 @@ def kind_of(path: str) -> str:
     ):
         if rel.startswith(prefix):
             return kind
-    return "log" if rel == "log.md" else "root"
+    return {"log.md": "log", "index.md": "index"}.get(rel, "root")
 
 
 def name_of(path: str) -> str:
@@ -150,6 +151,17 @@ def chunks_of(title: str, content: str) -> list[tuple[str, str]]:
     return out or [(title, title)]
 
 
+_MD_LINK = re.compile(r"\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]")
+
+
+def plain(text: str) -> str:
+    """Markdown to readable text for snippets: [[a|b]] -> b, **x** -> x, # headings dropped."""
+    t = _MD_LINK.sub(lambda m: (m.group(2) or m.group(1)).strip(), text)
+    t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"(\*\*|__|`)", "", t)
+    return re.sub(r"^#{1,6}\s+", "", t, flags=re.M)
+
+
 def snippet(text: str, limit: int = 320) -> str:
-    t = re.sub(r"\s+", " ", text).strip()
+    t = re.sub(r"\s+", " ", plain(text)).strip()
     return t if len(t) <= limit else t[: limit - 1].rsplit(" ", 1)[0] + "…"

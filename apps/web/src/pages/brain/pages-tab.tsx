@@ -134,10 +134,10 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
   const [message, setMessage] = useState("");
   const [deleting, setDeleting] = useState(false);
   const byName = useMemo(() => {
-    const m = new Map<string, string>();
+    const m = new Map<string, { path: string; title: string }>();
     for (const p of pages) {
       const n = linkName(p.path);
-      if (!m.has(n)) m.set(n, p.path);
+      if (!m.has(n)) m.set(n, { path: p.path, title: p.title });
     }
     return m;
   }, [pages]);
@@ -203,7 +203,7 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
         </div>
       ) : (
         <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4">
-          <WikiMarkdown body={page.body || "_Empty page_"} resolve={(n) => byName.get(n) ?? null}
+          <WikiMarkdown body={page.body || "_Empty page_"} title={page.title} resolve={(n) => byName.get(n) ?? null}
             onOpen={(p, name) => (p ? onOpen(p) : canWrite ? onCreate(name) : toast(`There is no page called “${name}” yet.`))} />
         </div>
       )}

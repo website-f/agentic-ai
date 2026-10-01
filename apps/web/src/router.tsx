@@ -39,6 +39,10 @@ const page = {
   chat: lazyRouteComponent(() => import("@/pages/chat"), "ChatPage"),
   sops: lazyRouteComponent(() => import("@/pages/sops"), "SopsPage"),
   brain: lazyRouteComponent(() => import("@/pages/brain"), "BrainPage"),
+  skills: lazyRouteComponent(() => import("@/pages/skills"), "SkillsPage"),
+  office: lazyRouteComponent(() => import("@/pages/office"), "OfficePage"),
+  channels: lazyRouteComponent(() => import("@/pages/channels"), "ChannelsPage"),
+  approve: lazyRouteComponent(() => import("@/pages/approve"), "ApprovePage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -237,6 +241,31 @@ const brainRoute = createRoute({
   component: page.brain,
 });
 
+const channelsRoute = createRoute({ getParentRoute: () => appRoute, path: "/channels", component: page.channels });
+const approveRoute = createRoute({ getParentRoute: () => appRoute, path: "/approve/$approvalId", component: page.approve });
+
+const officeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/office",
+  validateSearch: (s: Record<string, unknown>): { agent?: string; view?: "map" | "list" } => ({
+    agent: str(s.agent),
+    view: s.view === "list" ? "list" : undefined,
+  }),
+  component: page.office,
+});
+
+const SKILL_TABS = ["library", "proposals", "history"] as const;
+const skillsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/skills",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof SKILL_TABS)[number]; skill?: string; proposal?: string } => ({
+    tab: SKILL_TABS.find((t) => t === s.tab),
+    skill: str(s.skill),
+    proposal: str(s.proposal),
+  }),
+  component: page.skills,
+});
+
 function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
   return createRoute({
@@ -266,11 +295,12 @@ const routeTree = rootRoute.addChildren([
     chatRoute,
     sopsRoute,
     brainRoute,
-    placeholder("/office"),
+    skillsRoute,
+    officeRoute,
+    channelsRoute,
+    approveRoute,
     placeholder("/meetings"),
-    placeholder("/skills"),
     placeholder("/schedules"),
-    placeholder("/channels"),
   ]),
 ]);
 

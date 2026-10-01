@@ -100,3 +100,48 @@ Pack textures into atlases (TexturePacker or free-tex-packer). One atlas for til
 ## 8. Theme
 
 Day palette follows the app light theme, night palette the dark theme (tint pass over the tilemap). The HUD (roster strip, approval badge, task tray) is DOM using the app design tokens, so it matches the rest of the dashboard.
+
+## 9. As built in P5 (2026-10-01)
+
+Two changes from the plan, both to keep it small, free and testable:
+
+- **Own Canvas 2D engine instead of Phaser 4.** It follows pixel-agents' approach: Canvas 2D,
+  a BFS grid and a clean adapter boundary. A top-down office with up to 40 sprites does not
+  need a game framework. The office chunk is 16.5 KB gzipped (Phaser alone is about 350 KB),
+  there is no WebGL context loss to handle, and layout and pathfinding are unit-tested.
+- **Pixel art drawn in code instead of Kenney/MetroCity packs.** Every tile, desk and character is
+  original and drawn at 1 px per art pixel. Each agent's shirt uses its own colour, with skin
+  and hair varied from its id, so there are no binary assets and no licences. `office/art.ts` is the
+  only module to replace if a real art pack is ever wanted.
+- **No Tiled file yet.** The map is generated from the branch's departments every time
+  (`office/layout.ts`, deterministic). A hand-tuned Tiled map can be added later per branch.
+
+| Piece | Where |
+|---|---|
+| Snapshot per branch: departments + each agent's state derived from tasks and approvals | `apps/api/agentic/api/routers/office.py` |
+| Live signals: `agent.status` (now with `error`), `agent.thinking`, tool name on `task.event` | `apps/api/agentic/agents/runtime.py` |
+| Map generation (rooms per department, shared places, collision grid) | `apps/web/src/office/layout.ts` |
+| BFS pathfinding | `office/path.ts` |
+| Tiles, furniture, character sheets | `office/art.ts` |
+| Engine: camera, state machine, walking, bubbles, input, drag and drop, render loop | `office/engine.ts` |
+| Page: company tabs, HUD, roster, task tray, agent panel, list view, broadcast banner | `apps/web/src/pages/office/` |
+
+Rules that keep it honest and light:
+
+- The snapshot is the truth (refetched on task and approval changes, and every 60 s); events only
+  make the change immediate. Errands (library, workshop) last 6 s, then the agent goes back to
+  what its state says. The only invented motion is idle agents drifting between breakroom seats.
+- Zoom is in whole device-pixel steps, so pixels stay crisp; text is drawn in screen space, so
+  it is sharp at every zoom.
+- It draws every frame only while someone walks. Typing, bubbles and the podium pulse run at
+  about 8 fps, and when nothing changes nothing is drawn.
+- The engine folder may not import React or app code (an ESLint rule enforces it). The app talks
+  to it through `createOffice()`: `setData`, `apply`, `focus`, `zoom`, `fit`, `setTheme`, `select`,
+  `agentPosition`, plus `onAgentTap` and `onTaskDrop` callbacks.
+
+Verified: layout tests (every agent gets a desk, every seat can reach every shared place,
+deterministic), office API tests (state derivation, thinking and tool signals), and a run on the
+full stack with 8 agents in every state, checked on desktop day and night and on a phone. In that
+run, tapping a character opened its panel, and dragging a task card onto an agent assigned and
+started the task, after which the agent walked to its desk.
+

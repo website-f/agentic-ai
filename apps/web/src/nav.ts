@@ -60,7 +60,7 @@ export const NAV: NavSection[] = [
     title: "Workspace",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
-      { to: "/office", label: "Office", icon: BuildingsIcon, phase: "P5", blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
+      { to: "/office", label: "Office", icon: BuildingsIcon, blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
       { to: "/agents", label: "Agents", icon: UsersThreeIcon, blurb: "Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom." },
       { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card onto an agent to assign it." },
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },
@@ -79,7 +79,7 @@ export const NAV: NavSection[] = [
     items: [
       { to: "/sops", label: "SOPs", icon: FileTextIcon, blurb: "Written procedures agents follow: for every company, one company, one department, or attached to specific agents." },
       { to: "/brain", label: "Brain", icon: BrainIcon, blurb: "What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian." },
-      { to: "/skills", label: "Skills", icon: LightningIcon, phase: "P4", blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
+      { to: "/skills", label: "Skills", icon: LightningIcon, blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
     ],
   },
   {
@@ -87,7 +87,7 @@ export const NAV: NavSection[] = [
     items: [
       { to: "/schedules", label: "Schedules", icon: CalendarCheckIcon, phase: "P7", blurb: "Recurring work and every run's result, with retries and grouped incidents." },
       { to: "/ai-engine", label: "AI Engine", icon: CpuIcon, blurb: "Add provider keys, test the connection, choose models and see what every agent spends." },
-      { to: "/channels", label: "Channels", icon: PlugsConnectedIcon, phase: "P6", blurb: "Telegram, phone push and API tokens, and which agent answers where." },
+      { to: "/channels", label: "Channels", icon: PlugsConnectedIcon, blurb: "Phone notifications, Telegram, API tokens, and which agent answers where." },
     ],
   },
   {

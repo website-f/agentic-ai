@@ -62,6 +62,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
             "approvals.decide",
             "engine.manage",
             "brain.manage",
+            "channels.manage",
         }
     ),
     "admin": frozenset(
@@ -74,6 +75,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
             "approvals.decide",
             "engine.manage",
             "brain.manage",
+            "channels.manage",
         }
     ),
     "operator": frozenset({"read", "work.write"}),

@@ -15,4 +15,10 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    files: ["src/office/**/*.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [{ group: ["react", "react-*", "@/*"], message: "The office engine is framework-free: talk to it through engine.ts." }] }],
+    },
+  },
 );

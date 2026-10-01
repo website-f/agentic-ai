@@ -18,6 +18,7 @@ with workflow.unsafe.imports_passed_through():
         task_step,
     )
     from .brain_activities import brain_learn_task
+    from .skill_activities import skill_reflect
 
 MAX_STEPS = 40
 STEP_RETRY = RetryPolicy(maximum_attempts=3, initial_interval=timedelta(seconds=5))
@@ -95,6 +96,17 @@ class AgentTaskWorkflow:
                         )
                     except ActivityError:
                         pass  # memory is best effort; the task itself is finished
+                # P4: was this worth a skill? Proposals wait for a person.
+                if state == "done" and workflow.patched("skill-reflect-v1"):
+                    try:
+                        await workflow.execute_activity(
+                            skill_reflect,
+                            task_id,
+                            start_to_close_timeout=timedelta(minutes=10),
+                            retry_policy=RetryPolicy(maximum_attempts=1),
+                        )
+                    except ActivityError:
+                        pass
                 return state
         if self.cancelled:
             await workflow.execute_activity(

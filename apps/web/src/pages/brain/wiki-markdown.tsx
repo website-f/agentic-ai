@@ -20,16 +20,24 @@ export function WikiMarkdown({
   body,
   resolve,
   onOpen,
+  title,
   className,
 }: {
   body: string;
-  resolve: (name: string) => string | null;
+  /** [[name]] -> the page it points to, or null when no such page exists yet. */
+  resolve: (name: string) => { path: string; title: string } | null;
   onOpen: (path: string | null, name: string) => void;
+  /** The page title already shown above: a leading "# <title>" line is not repeated. */
+  title?: string;
   className?: string;
 }) {
+  let text = stripFrontmatter(body);
+  const first = /^\s*#\s+(.+)\n?/.exec(text);
+  if (title && first?.[1]?.trim() === title.trim()) text = text.slice(first[0].length);
   // [[target|alias]] -> [alias](#wiki/target); the link renderer below turns it into a button.
-  const md = stripFrontmatter(body).replace(LINK, (_m, target: string, alias?: string) => {
-    const label = (alias ?? target).trim().replace(/[[\]]/g, "");
+  const md = text.replace(LINK, (_m, target: string, alias?: string) => {
+    // Obsidian shows the alias if given; otherwise we show the page's title, not its file name.
+    const label = (alias ?? resolve(linkName(target))?.title ?? target).trim().replace(/[[\]]/g, "");
     return `[${label}](#wiki/${encodeURIComponent(target.trim())})`;
   });
   return (
@@ -40,7 +48,7 @@ export function WikiMarkdown({
           a: ({ href, children }) => {
             if (href?.startsWith("#wiki/")) {
               const name = linkName(decodeURIComponent(href.slice(6)));
-              const path = resolve(name);
+              const path = resolve(name)?.path ?? null;
               return (
                 <button
                   type="button"

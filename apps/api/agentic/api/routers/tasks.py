@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import dispatch, runtime
+from ...agents import decisions, dispatch, runtime
 from ...agents.tools import TOOLS
 from ...core.db import get_db
 from ...models import Agent, AgentMessage, Approval, Task, TaskEvent, User
 from ...services import audit, events
+from ...skills import store as skills_store
 from ..agent_schemas import (
     ApprovalOut,
     DecisionIn,
@@ -387,6 +388,7 @@ async def accept_task(
         note="accepted the result",
         finished_at=datetime.now(UTC),
     )
+    await skills_store.settle(db, t.id, "accepted")
     await audit.record(db, principal.workspace_id, principal.actor, "task.accepted", target=t.id)
     await db.commit()
     await db.refresh(t)
@@ -409,6 +411,7 @@ async def revise_task(
     agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
     if agent is None:
         raise api_error(status.HTTP_400_BAD_REQUEST, "no_assignee", "Assign an agent first.")
+    await skills_store.settle(db, t.id, "sent_back")
     db.add(
         AgentMessage(
             workspace_id=t.workspace_id,
@@ -458,62 +461,8 @@ async def decide(
         raise api_error(
             status.HTTP_404_NOT_FOUND, "approval_not_found", "That approval is not here."
         )
-    if a.status != "pending":
-        raise api_error(
-            status.HTTP_409_CONFLICT, "already_decided", f"This was already {a.status}."
-        )
-    if a.kind == "question":
-        if body.decision == "deny":
-            a.status, a.answer = "denied", (body.answer or "").strip() or None
-        else:
-            if not (body.answer or "").strip():
-                raise api_error(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT, "answer_required", "Type an answer."
-                )
-            a.status, a.answer = "answered", body.answer.strip()  # type: ignore[union-attr]
-    else:
-        if body.decision == "answer":
-            raise api_error(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "bad_decision",
-                "Approve or deny this request.",
-            )
-        a.status = "approved" if body.decision == "approve" else "denied"
-        a.scope = body.scope if body.decision == "approve" else None
-        a.answer = (body.answer or "").strip() or None
-    a.decided_by, a.decided_at = principal.actor, datetime.now(UTC)
-    await audit.record(
-        db,
-        principal.workspace_id,
-        principal.actor,
-        f"approval.{a.status}",
-        target=a.id,
-        after={"tool": a.tool_name, "task_id": a.task_id, "scope": a.scope},
-    )
-    await db.commit()
-
-    t = await db.get(Task, a.task_id)
-    if t and t.workflow_id:
-        try:
-            # Temporal stores the signal even if no worker is running right now.
-            await dispatch.signal_decision(t.workflow_id, a.id)
-        except Exception as e:  # noqa: BLE001 - Temporal itself is unreachable
-            a.status, a.scope, a.answer, a.decided_by, a.decided_at = (
-                "pending",
-                None,
-                None,
-                None,
-                None,
-            )
-            await db.commit()
-            raise api_error(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "temporal_unavailable",
-                "Temporal is not reachable, so the decision was not sent. Try again in a moment.",
-            ) from e
-    await events.publish(
-        principal.workspace_id,
-        "approval.resolved",
-        {"approval_id": a.id, "status": a.status, "task_id": a.task_id},
-    )
+    try:
+        await decisions.decide(db, a, principal.actor, body.decision, body.scope, body.answer)
+    except decisions.DecisionError as e:
+        raise api_error(e.status, e.code, e.message) from e
     return await approval_out(db, a)

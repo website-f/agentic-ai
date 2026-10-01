@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # One git repo per workspace, laid out so Obsidian can open it as a vault.
     vault_dir: str = "./data/vault"
     dream_hour: int = Field(default=2, ge=0, le=23)  # local time of the nightly dream
+    # Channels (P6). Push services are fixed; extra hosts only for tests or self-hosted push.
+    push_hosts_allowed: str = ""
+    push_contact: str = "mailto:agentic@example.com"  # VAPID "sub": who push services contact
+    telegram_api_base: str = "https://api.telegram.org"
+    # Skills (P4): a finished task with at least this many tool calls is considered for a skill.
+    skill_min_tool_calls: int = Field(default=6, ge=2, le=40)
 
     # Dev only: on startup with no users, create a test workspace and one login per role
     # (agentic/seed.py), so every PC that runs `docker compose up` gets the same accounts.

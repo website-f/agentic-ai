@@ -3,7 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { api } from "./api";
 
-export type PageKind = "wiki" | "decision" | "raw" | "log" | "agent" | "dream" | "root" | "skill";
+export type PageKind = "wiki" | "decision" | "raw" | "log" | "agent" | "dream" | "root" | "skill" | "index";
 
 export interface PageSummary {
   path: string;
@@ -79,7 +79,13 @@ export interface SearchResult {
 }
 
 export interface DreamChange {
-  kind: "merge" | "contradiction" | "import" | "conflict";
+  kind: "merge" | "contradiction" | "import" | "conflict" | "skill";
+  action?: "merge" | "retire" | "flag" | "vault_edit";
+  name?: string;
+  other?: string;
+  days?: number;
+  success_rate?: number;
+  uses?: number;
   ended?: string;
   ended_text?: string;
   kept?: string;
@@ -183,6 +189,7 @@ export const KIND_INFO: Record<PageKind, { label: string; color: string }> = {
   root: { label: "Vault file", color: "var(--series-other)" },
   log: { label: "Log", color: "var(--series-other)" },
   dream: { label: "Dream diary", color: "var(--series-other)" },
+  index: { label: "Vault file", color: "var(--series-other)" },
 };
 
 export const END_REASON: Record<NonNullable<Fact["end_reason"]>, string> = {

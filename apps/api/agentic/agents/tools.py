@@ -27,6 +27,8 @@ from ..brain.scope import for_agent
 from ..core.ssrf import BlockedURL, guard_url
 from ..engine import client as engine_client
 from ..models import Agent, BrainPage, Branch, Department, Task, Workspace
+from ..skills import format as skill_format
+from ..skills import store as skill_store
 
 
 @dataclass
@@ -326,6 +328,36 @@ async def _memory(ctx: ToolContext, args: dict[str, Any]) -> str:
     )
 
 
+# ---------------------------------------------------------------- skills
+
+
+async def _use_skill(ctx: ToolContext, args: dict[str, Any]) -> str:
+    name = str(args.get("name", "")).strip()
+    if not name:
+        return "Error: give the skill name from your skills list."
+    file = str(args.get("file") or "").strip() or None
+    return await skill_store.load(ctx.db, ctx.agent, name, ctx.task.id if ctx.task else None, file)
+
+
+async def _propose_skill(ctx: ToolContext, args: dict[str, Any]) -> str:
+    try:
+        p = await skill_store.propose(
+            ctx.db,
+            ctx.workspace,
+            name=str(args.get("name", "")),
+            description=str(args.get("description", "")),
+            body=str(args.get("body", "")),
+            reason=str(args.get("why", "")) or "Proposed by the agent while working.",
+            proposed_by=f"agent:{ctx.agent.id}",
+            agent=ctx.agent,
+            source_task_id=ctx.task.id if ctx.task else None,
+        )
+    except (skill_store.SkillError, skill_format.SkillFormatError) as e:
+        return f"Error: {e}"
+    what = "an update to" if p.kind == "patch" else "a new skill,"
+    return f"Proposed {what} {p.name}. A person reviews it before anyone uses it."
+
+
 TOOLS: dict[str, Tool] = {
     t.name: t
     for t in (
@@ -496,6 +528,47 @@ TOOLS: dict[str, Tool] = {
             "low",
             "allow",
             _memory,
+        ),
+        Tool(
+            "use_skill",
+            "Use a skill",
+            "Load the full instructions of a skill from your skills list, then follow them. "
+            "Optional file: a supporting file the skill mentions.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Skill name, e.g. compare-quotes"},
+                    "file": {"type": "string", "description": "Optional supporting file"},
+                },
+                "required": ["name"],
+            },
+            "low",
+            "allow",
+            _use_skill,
+        ),
+        Tool(
+            "propose_skill",
+            "Propose a skill",
+            "Propose a new reusable procedure, or an improvement to an existing skill (use its "
+            "exact name and give the full improved text). A person reviews it first. Write the "
+            "general method, never this task's names, amounts or secrets.",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "kebab-case, e.g. reconcile-bank"},
+                    "description": {"type": "string", "description": "One sentence: what and when"},
+                    "body": {
+                        "type": "string",
+                        "description": "Markdown: ## When to use, ## Steps, ## Output format, "
+                        "## Pitfalls",
+                    },
+                    "why": {"type": "string", "description": "Why this will help next time"},
+                },
+                "required": ["name", "description", "body"],
+            },
+            "low",
+            "allow",
+            _propose_skill,
         ),
     )
 }

@@ -6,6 +6,8 @@ from ..core.config import settings
 from ..core.temporal import temporal_client
 from ..workflows.agent_workflows import AgentTaskWorkflow, BroadcastRepliesWorkflow
 from ..workflows.brain_workflows import DreamWorkflow, LearnFromChatWorkflow
+from ..workflows.channel_workflows import DeliverWorkflow
+from ..workflows.skill_workflows import SkillEvalWorkflow
 
 
 async def start_task(task_id: str, run: int) -> str:
@@ -59,3 +61,26 @@ async def start_dream(workspace_id: str) -> str:
         task_queue=settings.temporal_task_queue,
     )
     return workflow_id
+
+
+async def start_skill_eval(kind: str, target_id: str) -> str:
+    """kind = skill | proposal."""
+    client = await temporal_client()
+    workflow_id = f"skill-eval-{target_id}-{datetime.now(UTC):%Y%m%d%H%M%S}"
+    await client.start_workflow(
+        SkillEvalWorkflow.run,
+        args=[kind, target_id],
+        id=workflow_id,
+        task_queue=settings.temporal_task_queue,
+    )
+    return workflow_id
+
+
+async def start_deliveries(delivery_ids: list[str]) -> None:
+    client = await temporal_client()
+    await client.start_workflow(
+        DeliverWorkflow.run,
+        delivery_ids,
+        id=f"deliver-{delivery_ids[0]}-{len(delivery_ids)}",
+        task_queue=settings.temporal_task_queue,
+    )

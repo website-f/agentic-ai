@@ -1,3 +1,4 @@
+import { setBadge, syncPush } from "@/lib/push";
 import {
   CaretUpDownIcon,
   DotsThreeIcon,
@@ -64,7 +65,7 @@ function PhaseTag({ phase }: { phase: string }) {
 
 function Sidebar() {
   const sections = useVisibleNav();
-  const approvals = useApprovalCount();
+  const waiting = useWaiting();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <aside className="sticky top-0 hidden h-dvh w-[68px] shrink-0 flex-col border-r border-border bg-surface md:flex xl:w-[244px]">
@@ -101,10 +102,10 @@ function Sidebar() {
                     >
                       <span className="relative">
                         <IconCmp size={19} weight={active ? "fill" : "regular"} />
-                        {item.to === "/approvals" && approvals ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn xl:hidden" /> : null}
+                        {waiting[item.to] ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn xl:hidden" /> : null}
                       </span>
                       <span className="hidden xl:inline">{item.label}</span>
-                      {item.to === "/approvals" ? <Badge count={approvals} className="ml-auto hidden xl:grid" /> : null}
+                      <Badge count={waiting[item.to] ?? 0} className="ml-auto hidden xl:grid" />
                       {item.phase ? (
                         <span className="hidden xl:contents">
                           <PhaseTag phase={item.phase} />
@@ -230,6 +231,12 @@ function UserMenu() {
 function useApprovalCount() {
   const { data } = useQuery(systemStatusQuery);
   return data?.counts.approvals_pending ?? 0;
+}
+
+/** Things waiting for a person, per nav item: decisions and skill proposals. */
+function useWaiting(): Partial<Record<string, number>> {
+  const { data } = useQuery(systemStatusQuery);
+  return { "/approvals": data?.counts.approvals_pending ?? 0, "/skills": data?.counts.skill_proposals_pending ?? 0 };
 }
 
 function Badge({ count, className }: { count: number; className?: string }) {
@@ -372,9 +379,19 @@ function MobileTabBar() {
   );
 }
 
+function useDeviceSync() {
+  const { data } = useQuery(systemStatusQuery);
+  const waiting = data?.counts.approvals_pending ?? 0;
+  // The number on the installed app's icon follows the approvals waiting.
+  useEffect(() => setBadge(waiting), [waiting]);
+  // The browser may have rotated this device's push subscription: re-send it once per start.
+  useEffect(() => void syncPush(), []);
+}
+
 export function AppShell() {
   const setOpen = usePalette((s) => s.setOpen);
   useLiveEvents();
+  useDeviceSync();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {

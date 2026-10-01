@@ -20,6 +20,7 @@ from temporalio.client import (
 from temporalio.worker import Worker
 
 from ..brain import embed
+from ..channels import poller
 from ..core.config import settings
 from .activities import pong
 from .agent_activities import (
@@ -38,7 +39,11 @@ from .brain_activities import (
     brain_learn_task,
 )
 from .brain_workflows import DreamTickWorkflow, DreamWorkflow, LearnFromChatWorkflow
+from .channel_activities import deliver_one
+from .channel_workflows import DeliverWorkflow
 from .engine_activities import check_all_providers
+from .skill_activities import skill_eval, skill_reflect
+from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
 
 log = logging.getLogger("agentic.worker")
@@ -51,6 +56,8 @@ WORKFLOWS = [
     LearnFromChatWorkflow,
     DreamTickWorkflow,
     DreamWorkflow,
+    SkillEvalWorkflow,
+    DeliverWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -65,6 +72,9 @@ ACTIVITIES = [
     brain_learn_chat,
     brain_dream_tick,
     brain_dream_run,
+    skill_reflect,
+    skill_eval,
+    deliver_one,
 ]
 
 
@@ -128,8 +138,10 @@ async def main() -> None:
     log.info("worker polling task queue %s", settings.temporal_task_queue)
     async with worker:
         beat = asyncio.create_task(_heartbeat(stop))
+        telegram = asyncio.create_task(poller.run(stop))
         await stop.wait()
         beat.cancel()
+        telegram.cancel()
 
 
 async def _heartbeat(stop: asyncio.Event) -> None:

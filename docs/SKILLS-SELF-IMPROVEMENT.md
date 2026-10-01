@@ -97,3 +97,41 @@ Hermes self-evolution pattern: collect traces of accepted and rejected runs per 
 ## 8. Metrics on the Skills page
 
 Uses, success rate, average tokens per use, tokens saved vs runs without the skill, last edited by, version history.
+
+## 9. As built in P4 (2026-10-01)
+
+| Piece | Where |
+|---|---|
+| Library, index, `use_skill` loading, proposals, approve/reject, usage + tokens | `apps/api/agentic/skills/store.py` |
+| `SKILL.md` format and rules (kebab-case name, one-sentence description, 12k body cap) | `skills/format.py` |
+| Safety scan: secrets, rule overrides, internal addresses (block); unknown tools, missing sections, too specific (warn) | `skills/scan.py` |
+| Post-task reflection (trigger: 6+ tool calls, sent back 2+ times, or "remember how to do this") | `skills/reflect.py` |
+| Evals: must/must-not contain, regex, number within tolerance, JSON keys, LLM rubric last | `skills/evals.py` |
+| Curator in the nightly dream: merge (> 0.85 similar), retire (60 days unused), flag (< 70 % accepted) | `skills/curator.py` |
+| Agent tools `use_skill`, `propose_skill` | `agents/tools.py` |
+| Dashboard: Skills (library, proposals with split/unified diff, history), task timeline events | `apps/web/src/pages/skills/` |
+
+Decisions made while building:
+
+- **Who approves.** Owner, admin and approver (the `approvals.decide` permission). Their own
+  edits go through the same propose-then-approve path, so every change still gets a version,
+  a `skill_versions` row and a git commit. Operators can only propose.
+- **The vault is not a side door.** `skills/*/SKILL.md` cannot be edited in the Brain editor,
+  and agents cannot `write_page` there. A file edited in Obsidian becomes a proposal on the
+  next sync; rejecting it restores the approved text in the vault.
+- **Near-duplicates become patches.** A new proposal with an existing name, or similarity of
+  0.8 or more to an existing skill, is turned into a patch of that skill.
+- **Rejections teach.** The reason is saved as a private fact for the proposing agent, so it is
+  recalled the next time the agent works on something similar.
+- **Isolated companies keep their skills.** A skill learned by an agent of an isolated branch
+  is visible only inside that branch.
+- **Tokens saved** = 1 - (average tokens of accepted tasks that used the skill / tokens of the
+  task the skill was learned from). It appears once the skill has been used.
+- **Deferred:** the weekly DSPy + GEPA optimizer (section 7). It needs real accepted and
+  rejected traces to be worth running; the eval harness it will use is in place.
+
+Verified: 82 API tests (12 for skills), and an end-to-end run on the full stack. In that run,
+a reconciliation that took six calculations (7,670 tokens) led the agent to propose
+`reconcile-bank-statement`. The proposal passed the scan and its own test, and was approved.
+The next month's reconciliation loaded it and finished in 2,154 tokens: **72 % fewer, measured**.
+

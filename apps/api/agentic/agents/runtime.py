@@ -30,6 +30,7 @@ from ..models import (
     Workspace,
 )
 from ..services import events
+from ..skills import store as skills_store
 from . import policy
 from .prompt import system_prompt
 from .tools import TOOLS, ToolContext, modes_for
@@ -126,7 +127,13 @@ async def task_event(
     await events.publish(
         task.workspace_id,
         "task.event",
-        {"task_id": task.id, "kind": kind, "actor": actor, "text": text},
+        {
+            "task_id": task.id,
+            "kind": kind,
+            "actor": actor,
+            "text": text,
+            "tool": (data or {}).get("tool"),
+        },
     )
 
 
@@ -158,6 +165,11 @@ async def set_task_status(
         "task.updated",
         {"task_id": task.id, "status": status, "assignee_agent_id": task.assignee_agent_id},
     )
+
+
+async def agent_thinking(agent: Agent, on: bool) -> None:
+    """A model call is in flight (the office shows a "..." bubble). Overlay, not a state."""
+    await events.publish(agent.workspace_id, "agent.thinking", {"agent_id": agent.id, "on": on})
 
 
 async def agent_status(agent: Agent, status: str, task: Task | None = None) -> None:
@@ -354,6 +366,13 @@ async def _create_approval(
         },
     )
     await agent_status(agent, "waiting_approval", task)
+    # Phone push and Telegram: queued in the delivery ledger, sent by the worker.
+    from ..channels import deliver  # late: channels -> agents.decisions -> dispatch
+
+    try:
+        await deliver.start(await deliver.approval_requested(db, a))
+    except Exception:  # noqa: BLE001 - notifications must never break the task
+        log.warning("could not queue notifications for %s", a.id, exc_info=True)
     return a
 
 
@@ -423,6 +442,7 @@ async def run_task_step(task_id: str) -> StepResult:
             prompt = await system_prompt(db, agent, "task", task.memory_snapshot)
             messages = [{"role": "system", "content": prompt}]
             messages += [to_openai(m) for m in history]
+            await agent_thinking(agent, True)
             try:
                 reply = await gateway.chat(
                     db,
@@ -440,6 +460,8 @@ async def run_task_step(task_id: str) -> StepResult:
                     f"{a['member']}: {a.get('failed') or a.get('skipped')}" for a in e.attempts
                 )
                 return StepResult("failed", f"{e}{' (' + why + ')' if why else ''}")
+            finally:
+                await agent_thinking(agent, False)
             task.steps_used += 1
             if reply.tool_calls:
                 _add(
@@ -498,6 +520,8 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
         task, agent, _ = await _load(db, task_id)
         if state == "done":
             status = "review" if task.requires_review else "done"
+            if status == "done":
+                await skills_store.settle(db, task.id, "accepted")
             await set_task_status(
                 db,
                 task,
@@ -526,6 +550,7 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 blocked_reason=None,
             )
         else:
+            await skills_store.settle(db, task.id, "failed")
             await set_task_status(
                 db,
                 task,
@@ -536,7 +561,7 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 finished_at=_now(),
                 blocked_reason=None,
             )
-        await agent_status(agent, "idle")
+        await agent_status(agent, "error" if state not in ("done", "cancelled") else "idle", task)
 
 
 async def apply_approval(approval_id: str) -> None:
@@ -657,16 +682,20 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
             if block and m.id == asked.id:
                 d["content"] = f"{m.content}\n\n{block}"
             messages.append(d)
-        reply = await gateway.chat(
-            db,
-            ws.id,
-            agent.model_group,
-            messages,
-            task="agent.chat",
-            tools=offered_tools(agent),
-            max_tokens=1200,
-            agent_id=agent.id,
-        )
+        await agent_thinking(agent, True)
+        try:
+            reply = await gateway.chat(
+                db,
+                ws.id,
+                agent.model_group,
+                messages,
+                task="agent.chat",
+                tools=offered_tools(agent),
+                max_tokens=1200,
+                agent_id=agent.id,
+            )
+        finally:
+            await agent_thinking(agent, False)
         if not reply.tool_calls:
             answer = _add(
                 db,
@@ -721,3 +750,106 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     _add(db, agent, "assistant", session_id=session.id, content=final)
     await db.commit()
     return ChatReply(final, "", "", used)
+
+
+@dataclass
+class OnceReply:
+    content: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    tools_used: list[str]
+
+
+async def chat_once(db: AsyncSession, agent: Agent, convo: list[dict[str, Any]]) -> OnceReply:
+    """Stateless chat for the OpenAI-compatible API: the client sends the history each time.
+    Same rules as dashboard chat: the agent's prompt, recalled memory, and only tools the
+    policy allows outright (anything needing approval belongs in a task)."""
+    ws = await db.get(Workspace, agent.workspace_id)
+    assert ws is not None
+
+    def text_of(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):  # [{"type": "text", "text": ...}, ...]
+            return "\n".join(
+                str(p.get("text", ""))
+                for p in content
+                if isinstance(p, dict) and p.get("type") == "text"
+            )
+        return ""
+
+    turns = [
+        {"role": m["role"], "content": text_of(m.get("content"))}
+        for m in convo
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+    ][-40:]
+    turns = [t for t in turns if t["content"].strip()]
+    if not turns or turns[-1]["role"] != "user":
+        raise ValueError("The last message must be from the user.")
+    block, _, _ = await recall_block(db, agent, turns[-1]["content"], ws.timezone)
+    if block:
+        turns[-1] = {"role": "user", "content": f"{turns[-1]['content']}\n\n{block}"}
+    prompt = await system_prompt(db, agent, "chat", await core_memory.snapshot(db, agent))
+    messages: list[dict[str, Any]] = [{"role": "system", "content": prompt}, *turns]
+    ctx = ToolContext(db=db, agent=agent, workspace=ws, task=None)
+    used: list[str] = []
+    p_tokens = c_tokens = 0
+    model = ""
+    for _ in range(4):
+        await agent_thinking(agent, True)
+        try:
+            reply = await gateway.chat(
+                db,
+                ws.id,
+                agent.model_group,
+                messages,
+                task="agent.api",
+                tools=offered_tools(agent),
+                max_tokens=1200,
+                agent_id=agent.id,
+            )
+        finally:
+            await agent_thinking(agent, False)
+        p_tokens += reply.usage.prompt
+        c_tokens += reply.usage.completion
+        model = reply.model
+        if not reply.tool_calls:
+            return OnceReply(reply.content, model, p_tokens, c_tokens, used)
+        messages.append(
+            {"role": "assistant", "content": reply.content or None, "tool_calls": reply.tool_calls}
+        )
+        for call in reply.tool_calls:
+            fn = call.get("function") or {}
+            name = str(fn.get("name", ""))
+            args, err = _parse_args(fn.get("arguments"))
+            if err or args is None:
+                result = f"Error: {err}"
+            elif name == "ask_human":
+                result = "You are talking to a person through an app. Ask in your reply."
+            else:
+                d = await policy.evaluate(agent, name, args)
+                if d.effect == "allow":
+                    result = await run_tool(ctx, name, args)
+                    used.append(name)
+                elif d.effect == "ask":
+                    result = (
+                        "This needs approval, which only works inside a task. Say so in your reply."
+                    )
+                else:
+                    result = f"Blocked by policy ({d.rule}): {d.reason}"
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(call.get("id")),
+                    "name": name,
+                    "content": result,
+                }
+            )
+    return OnceReply(
+        "I could not finish that in one go. Try a smaller question, or ask for a task.",
+        model,
+        p_tokens,
+        c_tokens,
+        used,
+    )

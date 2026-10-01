@@ -30,6 +30,7 @@ from ...models import (
     User,
     Workspace,
 )
+from ...skills import store as skills_store
 from ..deps import Principal, api_error, require
 from .agents import get_agent
 
@@ -352,7 +353,10 @@ async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage) -> PageOut:
             select(BrainPage.path, BrainPage.title, BrainPage.name)
             .join(BrainLink, BrainLink.src_page_id == BrainPage.id)
             .where(
-                BrainLink.workspace_id == ws.id, BrainLink.dst_name == p.name, BrainPage.id != p.id
+                BrainLink.workspace_id == ws.id,
+                BrainLink.dst_name == p.name,
+                BrainPage.id != p.id,
+                BrainPage.path.not_in(GENERATED),  # the index links to everything
             )
             .distinct()
             .order_by(BrainPage.path)
@@ -403,6 +407,8 @@ async def put_page(
         path = normalize_path(body.path)
         if path in GENERATED:
             raise PathError("index.md is rebuilt every night; edit the pages it lists instead.")
+        if path.startswith("skills/"):
+            raise PathError("Skills change through review: edit them on the Skills page.")
         p = await store.save_page(db, ws, path, body.body, _author(principal), body.message)
     except PathError as e:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_path", str(e)) from e
@@ -442,7 +448,7 @@ async def graph(
             ).where(
                 BrainPage.workspace_id == ws_id,
                 BrainPage.path.not_in(GENERATED),
-                BrainPage.kind.not_in(("dream", "log")),
+                BrainPage.kind.not_in(("dream", "log", "agent", "index", "skill")),
             )
         )
     ).all()
@@ -480,6 +486,7 @@ async def graph(
         "nodes": [
             {"id": pid, "path": path, "title": title, "kind": kind, "degree": degree.get(pid, 0)}
             for pid, path, title, kind, _ in pages
+            if degree.get(pid) or kind != "root"  # unlinked vault files are just noise
         ],
         "edges": [{"source": s, "target": t} for s, t in sorted(edges)],
         "unresolved": missing[:100],
@@ -728,7 +735,10 @@ async def undo_change(
 async def sync_vault(
     principal: Principal = Depends(require("brain.manage")), db: AsyncSession = Depends(get_db)
 ) -> dict[str, list[str]]:
-    report = await store.sync_from_vault(db, await _ws(db, principal))
+    ws = await _ws(db, principal)
+    report = await store.sync_from_vault(db, ws)
+    # SKILL.md files edited in the vault become proposals for review, not live changes.
+    report.skills = await skills_store.ingest_vault(db, ws, report.imported)  # type: ignore[attr-defined]
     return report.__dict__
 
 

@@ -129,3 +129,51 @@ request_ref, response_ref        -- pointers to redacted bodies in rustfs (reten
 2. Find agents with high output/input ratio; tighten their output schemas.
 3. Export accepted runs per skill as eval datasets; run the optimizer.
 4. When one task type has 1-5k accepted examples, consider fine-tuning a small local model for it.
+
+## 8. As built in P3 (2026-10-01)
+
+Two changes from the plan, both for fewer moving parts:
+
+- **No Mem0 library.** Its recipe (extract facts, then reconcile each against similar known
+  facts: add, skip or replace) is written natively on our gateway and tables, like the agent
+  loop. Unlike Mem0 nothing is deleted: a replaced, merged or contradicted fact gets
+  `valid_to` and a reason, so the dashboard shows what changed and every change can be undone.
+  `brain.facts.learn` is still the single entry point, so swapping in Hindsight later stays an
+  adapter change.
+- **Postgres is the source of truth, git is the mirror.** Every page save is a Postgres row and
+  a git commit with the person or agent as author. Edits made in the vault folder (Obsidian)
+  are imported by Sync vault and by the dream; a page edited in both places keeps the
+  dashboard copy and saves the vault copy beside it as `<name>.conflict-<date>.md`.
+
+| Piece | Where |
+|---|---|
+| Embeddings: fastembed `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, CPU, baked into the image, works offline) | `apps/api/agentic/brain/embed.py` |
+| Vault mirror (dulwich, one repo per workspace) | `brain/vault.py`, `brain/store.py` |
+| Facts: extract + reconcile, dedupe, secrets filter | `brain/facts.py`, `brain/learn.py` |
+| Hybrid search: tsvector + pgvector HNSW + one link hop, RRF k=60, kind boost | `brain/search.py` |
+| Recall block (6 facts, 3 page snippets, fenced as data) | `brain/recall.py` |
+| Core memory: MEMORY.md 2,200 / USER.md 1,400 chars, frozen per task run and chat | `brain/core.py` |
+| Visibility: private, company, workspace; isolated companies share with nobody | `brain/scope.py` |
+| Nightly dream (hourly tick, runs at 02:00 workspace time) + undo | `brain/dream.py`, `workflows/brain_*.py` |
+| Agent tools: recall, read_page, write_page, remember, memory | `agents/tools.py` |
+| Dashboard: Brain (pages, facts, search, graph, dreams), agent Memory tab | `apps/web/src/pages/brain/` |
+
+**Where recall goes in the prompt.** Never in the system prompt (that would break provider
+prompt caching). A task gets one `<memory>` block appended to its first message, once per run;
+a chat turn gets one attached to the current message only and not stored, so earlier turns
+stay byte-identical.
+
+**Relevance.** Similarity has no absolute meaning: with this model related English/Malay
+pairs score 0.4 to 0.6 and loosely related text can reach 0.4. A vector hit counts only if it
+is at least 0.38 and within 0.15 of the best hit for that query. Keyword hits always count.
+
+**Numbers matter.** Embeddings barely see numbers ("cut-off is the 20th" vs "the 22nd" score
+as near-identical), so two facts are only treated as duplicates when their numbers also match.
+Otherwise the change goes through reconcile (or the dream's judge) and the newer fact wins.
+
+Verified: 70 API tests, plus an end-to-end run on the full stack. In that run, a fact
+backdated two weeks was recalled into a new task. A supplier's new terms replaced the old
+fact, and the agent updated the wiki page under its own git authorship. A Malay question
+found the English fact by meaning. An Obsidian-style edit was imported, and the dream merged
+one duplicate and settled one contradiction.
+

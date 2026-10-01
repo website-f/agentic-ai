@@ -22,6 +22,7 @@ dependencies = [
     "dulwich>=1.2",
     "pgvector>=0.5",
     "tzdata>=2026.4",
+    "http-ece>=1.2",
 ]
 
 [dependency-groups]

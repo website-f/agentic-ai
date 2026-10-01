@@ -52,7 +52,13 @@ class FakeRun:
                 raise RuntimeError("no model")
             return 1
 
+        @activity.defn(name="skill_reflect")
+        async def skill_reflect(task_id: str) -> str | None:
+            self.log.append(("reflect", task_id))
+            return None
+
         return [
+            skill_reflect,
             task_start,
             task_step,
             task_apply_approval,
@@ -95,8 +101,8 @@ async def test_approval_wait_expires_after_a_day(env):
     )
     assert await _run(env, fake) == "done"
     kinds = [x[0] for x in fake.log]
-    assert kinds == ["start", "step", "expire", "apply", "step", "finish", "learn"]
-    assert fake.log[-2] == ("finish", "done", "Finished without it.")
+    assert kinds == ["start", "step", "expire", "apply", "step", "finish", "learn", "reflect"]
+    assert fake.log[-3] == ("finish", "done", "Finished without it.")
 
 
 async def test_decision_signal_resumes_without_expiry(env):
@@ -128,4 +134,5 @@ async def test_learning_failure_does_not_fail_the_task(env):
     fake.learn_fails = True
     assert await _run(env, fake) == "done"
     kinds = [x[0] for x in fake.log]
-    assert kinds[-3:] == ["finish", "learn", "learn"]  # one retry, then the task stays done
+    # one retry, then the task stays done and still reflects
+    assert kinds[-4:] == ["finish", "learn", "learn", "reflect"]

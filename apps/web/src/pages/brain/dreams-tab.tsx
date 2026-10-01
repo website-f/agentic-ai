@@ -36,6 +36,20 @@ function ChangeRow({ dream, change, index, canManage }: { dream: Dream; change: 
     onError: (e) => toast.error(errorMessage(e)),
   });
   const fact = change.kind === "merge" || change.kind === "contradiction";
+  if (change.kind === "skill") {
+    const text = {
+      merge: `Proposed merging ${change.other} into ${change.name}`,
+      retire: `Proposed retiring ${change.name} (unused for ${change.days} days)`,
+      flag: `${change.name} was accepted only ${Math.round((change.success_rate ?? 0) * 100)}% of the last ${change.uses} times`,
+      vault_edit: `${change.name} was edited in the vault; waiting for review`,
+    }[change.action ?? "merge"];
+    return (
+      <li className="grid gap-1 px-4 py-3">
+        <p className="text-[13px]">{text}</p>
+        <p className="text-[12px] text-muted">Skill curator · review in <a href="/skills?tab=proposals" className="text-accent hover:underline">Skills &gt; Proposals</a></p>
+      </li>
+    );
+  }
   return (
     <li className="grid gap-1 px-4 py-3">
       <div className="flex items-start gap-3">
@@ -100,7 +114,7 @@ function DreamDetail({ id, canManage }: { id: string; canManage: boolean }) {
       {d.diary ? (
         <section className="grid gap-2">
           <h3 className="text-[13.5px] font-semibold">Diary <span className="font-mono text-[12px] font-normal text-muted">{d.diary_path}</span></h3>
-          <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4"><Markdown>{stripFrontmatter(d.diary)}</Markdown></div>
+          <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4"><Markdown>{stripFrontmatter(d.diary).replace(/^#\s+Dream diary[^\n]*\n+/, "")}</Markdown></div>
         </section>
       ) : null}
     </div>

@@ -70,8 +70,8 @@ export function BrainPage() {
         description={<>What the office knows: facts agents learned, wiki pages, and a nightly dream that keeps it tidy. Stored as markdown in a git vault that also opens in Obsidian. {summary}</>}
         actions={canManage ? (
           <>
-            <Button variant="outline" size="sm" loading={sync.isPending} onClick={() => sync.mutate()}><ArrowsClockwiseIcon size={15} /> Sync vault</Button>
-            <Button variant="outline" size="sm" asChild><a href="/api/brain/vault.zip" download><DownloadSimpleIcon size={15} /> Download vault</a></Button>
+            <Button variant="outline" size="sm" loading={sync.isPending} onClick={() => sync.mutate()}><ArrowsClockwiseIcon size={15} /> <span className="max-sm:sr-only">Sync vault</span></Button>
+            <Button variant="outline" size="sm" asChild><a href="/api/brain/vault.zip" download><DownloadSimpleIcon size={15} /> <span className="max-sm:sr-only">Download vault</span></a></Button>
             <Button size="sm" loading={dream.isPending} onClick={() => dream.mutate()}><MoonStarsIcon size={15} /> Dream now</Button>
           </>
         ) : null}

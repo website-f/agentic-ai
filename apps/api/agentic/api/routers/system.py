@@ -15,7 +15,16 @@ from ...core.config import settings
 from ...core.db import get_db
 from ...core.temporal import temporal_client
 from ...core.valkey import valkey
-from ...models import Agent, AIProvider, Approval, Branch, Department, Membership, Task
+from ...models import (
+    Agent,
+    AIProvider,
+    Approval,
+    Branch,
+    Department,
+    Membership,
+    SkillProposal,
+    Task,
+)
 from ...workflows.system import PingWorkflow
 from ..deps import Principal, require
 from ..schemas import ComponentStatus, SystemStatusOut
@@ -147,6 +156,12 @@ async def system_status(
             select(func.count())
             .select_from(Approval)
             .where(Approval.workspace_id == ws, Approval.status == "pending")
+        )
+        or 0,
+        "skill_proposals_pending": await db.scalar(
+            select(func.count())
+            .select_from(SkillProposal)
+            .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending")
         )
         or 0,
     }

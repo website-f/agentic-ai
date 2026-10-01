@@ -30,17 +30,32 @@ export const useLive = create<LiveState>((set) => ({
   set: (patch) => set(patch),
 }));
 
+type Listener = (ev: LiveEvent) => void;
+const listeners = new Set<Listener>();
+
+/** Subscribe to every live event as it arrives (the pixel office animates from these). */
+export function onLiveEvent(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+const OFFICE = ["office"] as const;
+
 const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "task.created": [workKeys.tasks, keys.status],
-  "task.updated": [workKeys.tasks, workKeys.agents, keys.status],
+  "task.updated": [workKeys.tasks, workKeys.agents, keys.status, OFFICE],
   "task.event": [workKeys.tasks],
-  "approval.requested": [["approvals"], workKeys.tasks, keys.status],
-  "approval.resolved": [["approvals"], workKeys.tasks, keys.status],
-  "agent.upsert": [workKeys.agents, keys.status],
+  "approval.requested": [["approvals"], workKeys.tasks, keys.status, OFFICE],
+  "approval.resolved": [["approvals"], workKeys.tasks, keys.status, OFFICE],
+  "agent.upsert": [workKeys.agents, keys.status, OFFICE],
   "broadcast.sent": [workKeys.broadcasts],
   "broadcast.ack": [workKeys.broadcasts],
   "brain.page": [brainKeys.pages, brainKeys.graph, brainKeys.overview, ["brain", "page"]],
   "brain.dream": [brainKeys.dreams, brainKeys.overview, ["brain", "facts"]],
+  "skill.proposal": [["skills"], keys.status],
+  "skill.updated": [["skills"], keys.status],
+  "skill.used": [["skills"]],
+  "delivery.updated": [["deliveries"]],
 };
 
 export function useLiveEvents() {
@@ -65,6 +80,7 @@ export function useLiveEvents() {
 
     const handle = (ev: LiveEvent) => {
       lastSeq = Math.max(lastSeq, ev.seq);
+      for (const fn of listeners) fn(ev);
       for (const key of INVALIDATE[ev.type] ?? []) queue(key);
       if (ev.type.startsWith("task.")) {
         const id = ev.data.task_id;

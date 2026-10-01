@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..engine import gateway
 from ..models import BrainDream, BrainFact, BrainPage, Workspace
 from ..services import events
+from ..skills import curator as skills_curator
+from ..skills import store as skills_store
 from . import store
 from .facts import end, parse_json, same_numbers
 
@@ -166,6 +168,10 @@ async def _consolidate(
     return changes
 
 
+def _n(n: int, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 def _diary(ws: Workspace, day: date, changes: list[dict[str, Any]], stats: dict[str, Any]) -> str:
     merges = [c for c in changes if c["kind"] == "merge"]
     fixes = [c for c in changes if c["kind"] == "contradiction"]
@@ -174,9 +180,10 @@ def _diary(ws: Workspace, day: date, changes: list[dict[str, Any]], stats: dict[
     out = [
         f"# Dream diary, {day:%d %B %Y}",
         "",
-        f"{stats.get('facts_learned', 0)} facts learned and {stats.get('pages_changed', 0)} pages "
-        f"changed since the last dream. {len(merges)} duplicates merged, {len(fixes)} "
-        f"contradictions settled, {len(imports)} vault edits imported.",
+        f"{_n(stats.get('facts_learned', 0), 'fact')} learned and "
+        f"{_n(stats.get('pages_changed', 0), 'page')} changed since the last dream. "
+        f"{_n(len(merges), 'duplicate')} merged, {_n(len(fixes), 'contradiction')} settled, "
+        f"{_n(len(imports), 'vault edit')} imported.",
         "",
         "Review and undo in the dashboard: Brain > Dreams.",
     ]
@@ -195,6 +202,21 @@ def _diary(ws: Workspace, day: date, changes: list[dict[str, Any]], stats: dict[
             f"- {c['path']}: the dashboard copy was kept, the vault copy saved beside it"
             for c in conflicts
         ]
+    skills = [c for c in changes if c["kind"] == "skill"]
+    if skills:
+        out += ["", f"## Skills ({len(skills)})", "Proposals wait in Skills > Proposals."]
+        for c in skills:
+            name, action = c["name"], c.get("action", "")
+            pct = round((c.get("success_rate") or 0) * 100)
+            out.append(
+                {
+                    "merge": f"- Proposed merging {c.get('other')} into {name}",
+                    "retire": f"- Proposed retiring {name} (unused for {c.get('days')} days)",
+                    "flag": f"- {name} was accepted only {pct}% of the last {c.get('uses')} "
+                    "times; worth a look",
+                    "vault_edit": f"- {name} was edited in the vault; the edit waits for review",
+                }.get(action, f"- {name}")
+            )
     if stats.get("judge_skipped"):
         out += ["", f"Note: {stats['judge_skipped']}."]
     return "\n".join(out) + "\n"
@@ -232,6 +254,15 @@ async def run_dream(
             "conflicts": len(sync.conflicts),
         }
         changes += await _consolidate(db, ws, stats)
+        changes += [
+            {"kind": "skill", "action": "vault_edit", "name": n}
+            for n in await skills_store.ingest_vault(db, ws, sync.imported)
+        ]
+        try:
+            changes += await skills_curator.run(db, ws)
+        except Exception:  # noqa: BLE001 - the curator must never sink the dream
+            log.warning("skill curator failed for %s", ws.id, exc_info=True)
+            await db.rollback()
         await store.rebuild_index(db, ws)
         stats["facts_learned"] = await db.scalar(
             select(func.count())

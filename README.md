@@ -5,13 +5,18 @@ Analyst, Finance, Data Entry, Writer, Reviewer, Ops) that remember, write their 
 and get better over time. You watch and direct them in a pixel-art office on the web dashboard
 or from your phone (installable PWA).
 
-**Status:** P0 Foundations, P1 AI Engine and P2 Agent runtime done (2026-10-01).
+**Status:** P0 to P5 done (2026-10-01): foundations, AI engine, agent runtime, brain, skills, pixel office.
 - P0: monorepo, Docker stack, sign-in with 5 roles, branches and departments, members, tamper-evident activity log, responsive PWA shell.
 - P1: provider keys (envelope-encrypted), 3-step streamed connection test, model discovery and pricing, model groups with fallback and cooldowns, playground, usage and cost, 30-minute scheduled health checks.
-
 - P2: SOPs (workspace/branch/department/library) layered into prompts, 6-step agent builder with templates, per-agent tool permissions, agent chat, durable tasks on Temporal (survive restarts, approvals wait 24 h), Kanban board, approvals and questions with a hardline policy floor, broadcasts with receipts and replies, live updates over SSE.
 
-Next: P3 Brain (memory and the markdown vault).
+- P3: the Brain. Facts learned after every task and chat (extract, then reconcile; replaced facts are kept, never deleted), capped core memory per agent with a frozen snapshot, wiki pages in a git vault that opens in Obsidian, hybrid search (keywords + local multilingual embeddings + wikilinks, RRF), automatic recall at the start of each task and chat turn, a nightly dream that merges duplicates and settles contradictions with an undoable diary, company isolation.
+
+- P4: Skills. Agents see a short index of proven procedures and load one only when a task matches (`SKILL.md` convention). After long or corrected work they draft a skill or an improvement; a safety scan and old-vs-new tests run before a person reviews a side-by-side diff and approves, edits or rejects (the agent remembers why). Every approval is a version and a git commit. Usage, acceptance rate and tokens saved are measured per skill; a nightly curator proposes merges and retirements.
+
+- P5: the Pixel office. One live office per company, generated from its departments (a desk per agent) plus a library, workshop with bug corner, breakroom, meeting room and approval podium. Agents walk there because of real events: at the desk while working ("..." while the model thinks), to the podium when they need you, to the library when they search memory, to the workshop when they write a skill, to the bug corner on errors, to the breakroom when idle. Tap an agent for its panel (approve right there, ask it something, pause it); drag a task card onto an agent to assign it. Day and night themes, pinch and wheel zoom in whole steps, a list view with the same data.
+
+Next: P6 Channels and phone push (Telegram, push approvals, API tokens).
 
 ## Run it
 
@@ -38,6 +43,11 @@ touches a database that already has users. AI provider keys are data, not config
 again on each new PC (AI Engine page).
 
 Everything binds to 127.0.0.1. Temporal UI: http://localhost:8502.
+
+**Open the brain in Obsidian.** The vault lives in a Docker volume by default. Either download
+it (Brain > Download vault, a zip with its git history) or set `AGENTIC_VAULT_DIR=./data/vault`
+in `.env` before the first start, then open `./data/vault/qbot-group` as a vault. Edits made in
+Obsidian come back in with Brain > Sync vault, and every night automatically.
 
 ## Develop
 

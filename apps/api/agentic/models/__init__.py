@@ -586,3 +586,257 @@ class BrainDream(Base):
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- P4 skills
+
+
+class Skill(Timestamps, Base):
+    """A procedure agents load on demand (SKILL.md convention). The active version lives here
+    and in the vault at skills/<name>/SKILL.md; every approved change is a new version."""
+
+    __tablename__ = "skills"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_skills_ws_name"),
+        CheckConstraint("status IN ('active', 'retired')", name="ck_skills_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("sk"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    # An isolated company's skills stay with it; null = every company.
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(64))  # kebab-case, also the vault folder
+    description: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)  # markdown instructions, no frontmatter
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    trust: Mapped[str] = mapped_column(String(16), default="trusted")  # builtin|official|trusted
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # empty = every agent
+    embedding: Mapped[Any] = mapped_column(Vector(EMBED_DIMS), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(80))
+    approved_by: Mapped[str | None] = mapped_column(String(80))
+    # Token cost of the task the skill was learned from: the "before" in tokens saved.
+    baseline_tokens: Mapped[int | None] = mapped_column(Integer)
+    source_task_id: Mapped[str | None] = mapped_column(String(40))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_eval: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class SkillVersion(Base):
+    __tablename__ = "skill_versions"
+    __table_args__ = (UniqueConstraint("skill_id", "version", name="uq_skill_versions"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    skill_id: Mapped[str] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(80))
+    approved_by: Mapped[str | None] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SkillProposal(Base):
+    """A change waiting for a person: a new skill, a patch, a merge or a retirement."""
+
+    __tablename__ = "skill_proposals"
+    __table_args__ = (
+        CheckConstraint("kind IN ('new', 'patch', 'merge', 'retire')", name="ck_sp_kind"),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'superseded')", name="ck_sp_status"
+        ),
+        Index("ix_skill_proposals_ws_status", "workspace_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("sp"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    skill_id: Mapped[str | None] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    # merge: the other skill folded into skill_id
+    other_skill_id: Mapped[str | None] = mapped_column(String(40))
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)
+    base_version: Mapped[int | None] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    eval_cases: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    scan: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    eval: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    proposed_by: Mapped[str] = mapped_column(String(80))  # agent:<id> | curator | vault | user:<id>
+    agent_id: Mapped[str | None] = mapped_column(String(40))
+    branch_id: Mapped[str | None] = mapped_column(String(40))
+    source_task_id: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    decided_by: Mapped[str | None] = mapped_column(String(80))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SkillUse(Base):
+    """One agent loading one skill for one task (or chat). Outcome follows the task."""
+
+    __tablename__ = "skill_uses"
+    __table_args__ = (Index("ix_skill_uses_skill", "skill_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(String(40))
+    skill_id: Mapped[str] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer)
+    agent_id: Mapped[str] = mapped_column(String(40))
+    task_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    outcome: Mapped[str | None] = mapped_column(String(16))  # accepted | sent_back | failed
+    tokens: Mapped[int | None] = mapped_column(Integer)  # whole task, set when it finishes
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SkillEvalCase(Base):
+    """A test for a skill: an input and checks on the answer (cheap, deterministic first)."""
+
+    __tablename__ = "skill_eval_cases"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ec"))
+    workspace_id: Mapped[str] = mapped_column(String(40))
+    skill_id: Mapped[str] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    input: Mapped[str] = mapped_column(Text)
+    # {"must_contain": [...], "must_not_contain": [...], "regex": "...",
+    #  "number": {"value": 1640.4, "tolerance": 0.01}, "json_keys": [...], "rubric": "..."}
+    checks: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_by: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- P6 channels
+
+
+class InstanceSecret(Base):
+    """Install-wide secrets the app generates itself (the VAPID key pair for web push)."""
+
+    __tablename__ = "instance_secrets"
+
+    name: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value_enc: Mapped[str] = mapped_column(Text)
+    public: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PushSubscription(Base):
+    """One browser or installed app that may receive notifications for one person."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ps"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    label: Mapped[str] = mapped_column(String(120), default="This device")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ActionToken(Base):
+    """Single-use, short-lived proof that lets a notification button decide one approval."""
+
+    __tablename__ = "action_tokens"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("at"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    approval_id: Mapped[str] = mapped_column(ForeignKey("approvals.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Channel(Timestamps, Base):
+    """An outside messaging account, e.g. a Telegram bot. The token is encrypted at rest."""
+
+    __tablename__ = "channels"
+    __table_args__ = (CheckConstraint("kind IN ('telegram')", name="ck_channels_kind"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ch"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(120))
+    config_enc: Mapped[str] = mapped_column(Text)
+    state: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict
+    )  # offset, bot username, errors
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ChannelLink(Base):
+    """A person's account on a channel (their Telegram user), linked by a one-time code."""
+
+    __tablename__ = "channel_links"
+    __table_args__ = (UniqueConstraint("channel_id", "external_id", name="uq_channel_links"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cl"))
+    channel_id: Mapped[str] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    external_id: Mapped[str] = mapped_column(String(80))
+    chat_id: Mapped[str] = mapped_column(String(80))  # private chat with the bot
+    display: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Binding(Base):
+    """Which agent answers where (OpenClaw bindings). Most specific match wins:
+    chat:<id> > group > dm."""
+
+    __tablename__ = "bindings"
+    __table_args__ = (UniqueConstraint("channel_id", "match", name="uq_bindings_match"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("bd"))
+    channel_id: Mapped[str] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"))
+    match: Mapped[str] = mapped_column(String(120))
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Delivery(Base):
+    """The delivery ledger (Hermes): every outbound message, so none is lost or sent twice."""
+
+    __tablename__ = "deliveries"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('pending', 'sent', 'failed', 'skipped')", name="ck_deliveries_state"
+        ),
+        Index("ix_deliveries_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dl"))
+    workspace_id: Mapped[str] = mapped_column(String(40))
+    channel: Mapped[str] = mapped_column(String(16))  # webpush | telegram
+    target: Mapped[str] = mapped_column(String(300))  # subscription id | channel id:chat id
+    kind: Mapped[str] = mapped_column(String(16))  # approval | reply | test | link
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    dedupe_key: Mapped[str | None] = mapped_column(String(160), unique=True)
+    state: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ApiToken(Base):
+    """Scoped tokens for the OpenAI-compatible endpoint and scripts. Shown once, stored hashed."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("tok"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    prefix: Mapped[str] = mapped_column(String(16))
+    scopes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

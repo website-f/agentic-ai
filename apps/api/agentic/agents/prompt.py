@@ -1,7 +1,8 @@
 """System prompt assembly, in cache-friendly order (stable parts first):
 
 workspace rules -> workspace SOPs -> branch SOPs -> department SOPs -> attached SOPs
--> identity and soul -> core memory (frozen snapshot) -> recent announcements -> mode note.
+-> identity and soul -> skills index -> core memory (frozen snapshot) -> recent announcements
+-> mode note.
 
 Everything before "recent announcements" changes rarely, so provider prompt caching hits.
 Recalled facts never go here: they ride on the task's first message or the chat turn.
@@ -78,6 +79,10 @@ async def build_parts(
         PromptPart("Identity", who + ("\n\n" + agent.soul.strip() if agent.soul.strip() else ""))
     )
 
+    from ..skills.store import index_for  # late: skills -> brain -> ... -> agents
+
+    if skills := await index_for(db, agent):
+        parts.append(PromptPart("Skills", skills))
     if memory:
         parts.append(PromptPart("Your memory", memory))
 

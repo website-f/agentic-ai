@@ -19,6 +19,9 @@ os.environ["AGENTIC_ENV"] = "dev"
 os.environ["AGENTIC_PRIVATE_HOSTS_ALLOWED"] = "good.fake,ratelimit.fake,broken.fake"
 # Brain: deterministic word-hash embeddings (no model download) and a throwaway vault.
 os.environ["AGENTIC_EMBED_BACKEND"] = "hash"
+# Channels: a fake push service and a fake Telegram API (see test_channels.py).
+os.environ["AGENTIC_PUSH_HOSTS_ALLOWED"] = "push.fake"
+os.environ["AGENTIC_TELEGRAM_API_BASE"] = "https://tg.fake"
 os.environ["AGENTIC_RECALL_MIN_SIMILARITY"] = "0.3"
 VAULT_DIR = Path(tempfile.mkdtemp(prefix="agentic-vault-"))
 os.environ["AGENTIC_VAULT_DIR"] = str(VAULT_DIR)
@@ -58,6 +61,19 @@ async def database():
 
 
 TABLES = (
+    "deliveries",
+    "action_tokens",
+    "push_subscriptions",
+    "bindings",
+    "channel_links",
+    "channels",
+    "api_tokens",
+    "instance_secrets",
+    "skill_eval_cases",
+    "skill_uses",
+    "skill_versions",
+    "skill_proposals",
+    "skills",
     "brain_dreams",
     "brain_links",
     "brain_chunks",

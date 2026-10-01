@@ -6,6 +6,7 @@ import {
   CircleNotchIcon,
   FlagIcon,
   HandIcon,
+  LightningIcon,
   PlayIcon,
   ProhibitIcon,
   WrenchIcon,
@@ -29,7 +30,7 @@ import { PRIORITY_INFO, STATUS_INFO, taskQuery, workKeys, type Task, type TaskEv
 
 const EVENT_ICON: Record<string, typeof FlagIcon> = {
   created: FlagIcon, run: PlayIcon, status: CircleNotchIcon, tool: WrenchIcon, tool_blocked: ProhibitIcon,
-  progress: ChatTextIcon, feedback: ArrowCounterClockwiseIcon, cancel: XIcon, memory: BrainIcon,
+  progress: ChatTextIcon, feedback: ArrowCounterClockwiseIcon, cancel: XIcon, memory: BrainIcon, skill: LightningIcon,
 };
 
 function Timeline({ events }: { events: TaskEvent[] }) {
@@ -40,7 +41,7 @@ function Timeline({ events }: { events: TaskEvent[] }) {
         return (
           <li key={e.id} className="relative flex gap-3 pb-3">
             {i < events.length - 1 ? <span aria-hidden className="absolute top-6 bottom-0 left-[11px] w-px bg-border" /> : null}
-            <span className={cn("relative grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 text-muted", e.kind === "tool_blocked" && "bg-danger/12 text-danger", e.kind === "progress" && "bg-accent-soft text-accent", e.kind === "memory" && "bg-info/12 text-info")}>
+            <span className={cn("relative grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 text-muted", e.kind === "tool_blocked" && "bg-danger/12 text-danger", e.kind === "progress" && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill") && "bg-info/12 text-info")}>
               <Icon size={13} weight="bold" />
             </span>
             <div className="min-w-0 flex-1 pt-0.5">

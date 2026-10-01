@@ -22,9 +22,13 @@ from .routers import (
     auth,
     brain,
     broadcasts,
+    channels,
     events_stream,
     members,
+    office,
+    openai_compat,
     org,
+    skills,
     sops,
     system,
     tasks,
@@ -34,7 +38,7 @@ log = logging.getLogger("agentic.api")
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # No session exists yet on these, so there is no CSRF cookie to compare against.
-CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup"}
+CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
 
 
 @asynccontextmanager
@@ -130,6 +134,10 @@ for r in (
     tasks.router,
     broadcasts.router,
     brain.router,
+    skills.router,
+    office.router,
+    channels.router,
+    openai_compat.router,
     events_stream.router,
 ):
     app.include_router(r)
