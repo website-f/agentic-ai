@@ -51,21 +51,62 @@ Rules:
   Otherwise return {"propose": false, "why": "..."}.
 - Write the general procedure. Never copy this task's client names, amounts, dates or secrets.
 - Name the tools to use (calc, web_fetch, recall, write_page, ask_human) where they belong.
-- If an EXISTING skill covers this work, improve it: use its exact name, return the full
-  improved body, and say in "why" what was missing.
+- Where to put the lesson, in this order: 1) the skill USED IN THIS TASK, if any; 2) an
+  EXISTING related skill; 3) a new skill for the whole class of work (never one named after
+  a single client, error or document). To improve a skill, use its exact name and return
+  the full improved body; say in "why" what was missing or wrong.
+- A person's correction (work sent back, "don't do X", "use this format") is the most
+  important signal: write it into the governing skill's Pitfalls, so it applies every time.
+- A pitfall is a general rule plus a short reason, in plain imperative words. The same lesson
+  appears once. If the skill was wrong, fix the wrong text in place; never append
+  "update: actually...".
+- Never capture: one-off failures of the moment (a site down, a timeout, a rate limit);
+  claims that a tool is broken or useless (they harden into refusals); dead ends that were
+  never solved, written up as if they were the way.
+- description: one short sentence saying when to use it (under 90 characters).
 - Up to 3 eval_cases, each checkable by words that must appear in a correct answer."""
 
 
-def _trigger(task: Task, msgs: list[AgentMessage]) -> str | None:
+FEEDBACK = "Feedback on your last answer:"  # how a sent-back task's correction is recorded
+CADENCE = 8  # every this many finished tasks with real tool work, reflect anyway (Hermes)
+
+
+def _proposed_itself(msgs: list[AgentMessage]) -> bool:
+    return any(
+        (c.get("function") or {}).get("name") == "propose_skill"
+        for m in msgs
+        if m.role == "assistant"
+        for c in m.tool_calls or []
+    )
+
+
+def _trigger(task: Task, msgs: list[AgentMessage], tasks_since: int = 0) -> str | None:
+    if _proposed_itself(msgs):
+        return None  # the agent already saved what it learned
     tool_calls = sum(1 for m in msgs if m.role == "tool")
     if tool_calls >= settings.skill_min_tool_calls:
         return f"the task took {tool_calls} tool calls"
     if task.run_count >= 3:
         return f"the work was sent back {task.run_count - 1} times"
+    if any(m.role == "user" and (m.content or "").startswith(FEEDBACK) for m in msgs):
+        return "a person corrected the work"
     asked = [task.brief] + [m.content or "" for m in msgs if m.role == "user"]
     if any(REMEMBER.search(a) for a in asked):
         return "someone asked to remember how to do this"
+    if tasks_since >= CADENCE and tool_calls >= 3:
+        return f"a regular check after {tasks_since} tasks"
     return None
+
+
+async def _tasks_since(agent_id: str, reset: bool = False) -> int:
+    """Finished tasks since this agent last reflected (a backstop for the triggers above)."""
+    from ..core.valkey import valkey
+
+    key = f"skills:reflect:since:{agent_id}"
+    if reset:
+        await valkey().delete(key)
+        return 0
+    return int(await valkey().incr(key))
 
 
 def _transcript(task: Task, msgs: list[AgentMessage]) -> str:
@@ -149,9 +190,10 @@ async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | Non
             )
         ).all()
     )
-    why = _trigger(task, msgs)
+    why = _trigger(task, msgs, await _tasks_since(agent.id))
     if why is None:
         return None
+    await _tasks_since(agent.id, reset=True)
 
     used = (
         await db.scalars(
@@ -178,10 +220,12 @@ async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | Non
         ).all():
             if float(sim) >= CONTEXT_SIMILARITY:
                 related.setdefault(s.id, s)
+    used_ids = {s.id for s in used}
     existing = (
         "\n\n".join(
-            f"EXISTING SKILL {s.name} (v{s.version}): {s.description}\n{s.body[:1500]}"
-            for s in related.values()
+            f"{'SKILL USED IN THIS TASK' if s.id in used_ids else 'EXISTING SKILL'} "
+            f"{s.name} (v{s.version}): {s.description}\n{s.body[:1500]}"
+            for s in sorted(related.values(), key=lambda s: s.id not in used_ids)
         )
         or "EXISTING SKILLS: none related."
     )

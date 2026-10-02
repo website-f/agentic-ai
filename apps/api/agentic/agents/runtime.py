@@ -36,7 +36,7 @@ from ..models import (
 from ..services import events
 from ..skills import store as skills_store
 from ..teams import budget, colleague, delegation, meetings
-from . import policy
+from . import context, policy
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
@@ -777,7 +777,18 @@ async def run_task_step(task_id: str) -> StepResult:
                 task.memory_snapshot = await core_memory.snapshot(db, agent)
             prompt = await system_prompt(db, agent, "task", task.memory_snapshot)
             messages = [{"role": "system", "content": prompt}]
-            messages += [to_openai(m) for m in history]
+            # P12: long runs send a checkpoint + recent turns, not the whole history.
+            window = await context.plan(
+                db,
+                task,
+                history,
+                workspace_id=ws.id,
+                group=agent.model_group,
+                pinned_first=True,
+                agent_id=agent.id,
+                task_id=task.id,
+            )
+            messages += context.render(history, window, to_openai, pinned_first=True)
             await agent_thinking(agent, True)
             try:
                 reply = await gateway.chat(
@@ -1137,11 +1148,24 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
         history = await _history(db, session_id=session.id)
         prompt = await system_prompt(db, agent, "chat", session.memory_snapshot)
         messages = [{"role": "system", "content": prompt}]
-        for m in history[-40:]:
-            d = to_openai(m)
-            if block and m.id == asked.id:
-                d["content"] = f"{m.content}\n\n{block}"
-            messages.append(d)
+        # P12: a long conversation is checkpointed instead of cut at a fixed count (which
+        # could split a tool call from its results).
+        window = await context.plan(
+            db,
+            session,
+            history,
+            workspace_id=ws.id,
+            group=agent.model_group,
+            pinned_first=False,
+            agent_id=agent.id,
+        )
+        messages += context.render(
+            history,
+            window,
+            to_openai,
+            pinned_first=False,
+            extra={asked.id: block} if block else None,
+        )
         await agent_thinking(agent, True)
         try:
             reply = await gateway.chat(

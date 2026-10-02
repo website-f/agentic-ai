@@ -340,6 +340,11 @@ class ChatSession(Timestamps, Base):
     # Core memory as it was when the conversation started (frozen so the prompt prefix
     # stays cacheable while the agent edits its memory).
     memory_snapshot: Mapped[str | None] = mapped_column(Text)
+    # P12 context window (agents/context.py): the checkpoint of compacted work, the last
+    # message it covers, and the last message whose old tool results are shown as stubs.
+    ctx_summary: Mapped[str | None] = mapped_column(Text)
+    ctx_summary_upto: Mapped[int | None] = mapped_column(BigInteger)
+    ctx_cut: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class Task(Timestamps, Base):
@@ -388,6 +393,11 @@ class Task(Timestamps, Base):
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     # P11: the workflow run this task is one step of.
     workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    # P12 context window (agents/context.py): the checkpoint of compacted work, the last
+    # message it covers, and the last message whose old tool results are shown as stubs.
+    ctx_summary: Mapped[str | None] = mapped_column(Text)
+    ctx_summary_upto: Mapped[int | None] = mapped_column(BigInteger)
+    ctx_cut: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class AgentMessage(Base):

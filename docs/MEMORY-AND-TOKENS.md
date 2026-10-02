@@ -109,6 +109,27 @@ Ranked by payoff vs effort. Figures are from provider docs and published benchma
 
 Semantic (fuzzy) response caching is **not** used for multi-turn agents: production hit rates are low and wrong-answer risk is real.
 
+## 6a. Context window for long runs (P12, from Hermes Agent)
+
+`agents/context.py`. Tasks and chats used to resend their whole history on every model call.
+Now, on every call:
+
+- **Prune (free):** once the history passes 10k tokens, tool results older than the recent 6k
+  tokens become one-line stubs (tool, size, first words, "call again for the full text"); an
+  output identical to a later one becomes a pointer. Tool calls are never rewritten.
+- **Checkpoint (one call):** past 24k tokens, the middle is summarised into fixed sections
+  (goal, constraints, done so far with ids, facts, decisions, open points, next step) by the
+  agent's own model group; later checkpoints update the previous one. Exact ids, document
+  numbers, amounts, emails and links from the compacted part are appended verbatim. No model →
+  a plain list of what was done.
+- **Cache-friendly:** both cut points are stored on the task/session (`ctx_cut`,
+  `ctx_summary_upto`, migration 0013) and move only after 3k+ tokens of new history, so the
+  prompt prefix stays byte-identical between moves. A tool call and its results are never
+  split (this also fixed chat's old 40-message cut, which could split them).
+
+Measured by replaying the office's six longest real tasks: 3.15M → 1.89M history tokens (40%
+less), 55% on the longest; short tasks unchanged.
+
 ## 7. Token logging
 
 Every model call writes one `llm_calls` row:

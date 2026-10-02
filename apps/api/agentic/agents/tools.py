@@ -542,7 +542,9 @@ TOOLS: dict[str, Tool] = {
             "Edit your always-loaded notes. target=memory for lessons and how this office "
             "works (2,200 chars); target=user for who you work for and their preferences "
             "(1,400 chars). action=add, replace (old_text -> text) or remove (old_text). "
-            "When full, merge entries. Changes apply from your next task or conversation.",
+            "When full, merge entries. Changes apply from your next task or conversation. "
+            "Write facts, not orders to yourself ('The owner prefers short replies', not "
+            "'Always reply briefly'); how to do a kind of work belongs in a skill instead.",
             {
                 "type": "object",
                 "properties": {

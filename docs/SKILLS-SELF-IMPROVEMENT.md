@@ -135,3 +135,15 @@ a reconciliation that took six calculations (7,670 tokens) led the agent to prop
 `reconcile-bank-statement`. The proposal passed the scan and its own test, and was approved.
 The next month's reconciliation loaded it and finished in 2,154 tokens: **72 % fewer, measured**.
 
+## P12 upgrades (from Hermes Agent)
+
+- Reflection also runs when a person corrected the work (sent back with feedback) and, as a
+  backstop, after every 8 finished tasks with real tool work; never when the agent already
+  proposed a skill itself in that task.
+- The reflect prompt puts a lesson, in order, into the skill used in the task, then an existing
+  related skill, then a new class-level skill (never one named after a single client or
+  error); corrections become Pitfalls of the governing skill; wrong text is fixed in place.
+- It never captures transient failures, claims that a tool is broken, or unsolved dead ends.
+- Skills unused for 21 days stay loadable but are listed by name only in the prompt index.
+- Memory guidance: facts, not orders to yourself; how-to belongs in skills.
+

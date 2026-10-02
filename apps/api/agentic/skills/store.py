@@ -7,7 +7,7 @@
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, or_, select
@@ -35,6 +35,7 @@ from .scan import blocked, scan
 
 PATCH_SIMILARITY = 0.8  # above this, a "new" skill must be a patch of the existing one
 INDEX_LIMIT = 40
+STALE_DAYS = 21  # unused this long: named in the index, description dropped
 
 
 class SkillError(ValueError):
@@ -164,7 +165,16 @@ async def index_for(db: AsyncSession, agent: Agent) -> str:
     skills = (await visible(db, agent))[:INDEX_LIMIT]
     if not skills:
         return ""
-    lines = [f"- {s.name}: {s.description}" for s in sorted(skills, key=lambda s: s.name)]
+    # P12 (from Hermes): skills nobody used for weeks are listed by name only, which keeps
+    # the always-sent index small; they still load with use_skill and come back when used.
+    stale_before = datetime.now(UTC) - timedelta(days=STALE_DAYS)
+    fresh, stale = [], []
+    for s in sorted(skills, key=lambda s: s.name):
+        last = s.last_used_at or s.created_at
+        (stale if s.trust != "builtin" and last < stale_before else fresh).append(s)
+    lines = [f"- {s.name}: {s.description}" for s in fresh]
+    if stale:
+        lines.append("- Also available (not used lately): " + ", ".join(s.name for s in stale))
     return (
         "Proven procedures for this office. When a task matches one, call use_skill with its "
         "name first and follow it.\n" + "\n".join(lines)
