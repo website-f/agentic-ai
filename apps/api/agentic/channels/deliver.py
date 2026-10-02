@@ -49,15 +49,26 @@ def channel_token(ch: Channel) -> str:
     return crypto.decrypt(ch.config_enc, f"channel:{ch.id}")
 
 
-async def deciders(db: AsyncSession, workspace_id: str) -> list[User]:
+async def deciders(db: AsyncSession, workspace_id: str, agent: Agent | None = None) -> list[User]:
+    """People who may decide; given the asking agent, only those whose scope covers it (a
+    staff member hears about their own agents, a HOD about the department's)."""
+    from ..api.scope import Scope
+
     rows = (
         await db.execute(
-            select(User, Membership.role)
+            select(User, Membership)
             .join(Membership, Membership.user_id == User.id)
             .where(Membership.workspace_id == workspace_id, User.is_active.is_(True))
         )
     ).all()
-    return [u for u, role in rows if can(role, "approvals.decide")]
+    return [
+        u
+        for u, m in rows
+        if can(m.role, "approvals.decide")
+        and (
+            agent is None or Scope.of(m.role, u.id, m.branch_id, m.department_id).sees_agent(agent)
+        )
+    ]
 
 
 def describe(a: Approval, agent_name: str) -> tuple[str, str]:
@@ -98,7 +109,7 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     )
     now = datetime.now(UTC)
     ids: list[str] = []
-    for user in await deciders(db, a.workspace_id):
+    for user in await deciders(db, a.workspace_id, agent):
         subs = (
             await db.scalars(
                 select(PushSubscription).where(

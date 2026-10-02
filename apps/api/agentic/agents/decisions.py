@@ -74,6 +74,12 @@ async def decide(
     await events.publish(
         a.workspace_id,
         "approval.resolved",
-        {"approval_id": a.id, "status": a.status, "task_id": a.task_id, "via": via},
+        {
+            "approval_id": a.id,
+            "status": a.status,
+            "task_id": a.task_id,
+            "agent_id": a.agent_id,
+            "via": via,
+        },
     )
     return a

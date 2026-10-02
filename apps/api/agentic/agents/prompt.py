@@ -126,7 +126,10 @@ async def build_parts(
             PromptPart(
                 "Mode",
                 "You are working on a task. Use tools as needed, post "
-                "report_progress for long work, and end with your final answer.",
+                "report_progress for long work, and end with your final answer. If you need "
+                "the person's choice or information before you can finish, call ask_human "
+                "(with options when it is a choice) and wait for the answer: never end a task "
+                "with a question to them.",
             )
         )
     return parts

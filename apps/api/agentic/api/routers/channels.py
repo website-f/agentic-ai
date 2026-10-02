@@ -229,7 +229,15 @@ async def act(body: ActIn, db: AsyncSession = Depends(get_db)) -> dict[str, str]
         )
     )
     user = await db.get(User, t.user_id)
-    if role is None or not can(role, "approvals.decide") or user is None or not user.is_active:
+    from ..scope import member_sees_agent
+
+    if (
+        role is None
+        or not can(role, "approvals.decide")
+        or user is None
+        or not user.is_active
+        or not await member_sees_agent(db, a.workspace_id, t.user_id, a.agent_id)
+    ):
         raise api_error(
             status.HTTP_403_FORBIDDEN, "forbidden", "You can no longer decide approvals."
         )

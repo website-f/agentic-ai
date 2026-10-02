@@ -61,6 +61,8 @@ async def database():
 
 
 TABLES = (
+    "reports",
+    "credentials",
     "incidents",
     "job_runs",
     "schedules",

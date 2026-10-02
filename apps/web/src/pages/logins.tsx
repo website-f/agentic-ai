@@ -1,0 +1,174 @@
+import { DotsThreeIcon, LockKeyIcon, PencilSimpleIcon, PlusIcon, ShieldCheckIcon, TrashIcon } from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { EmptyState, Page, PageHeader } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm";
+import { ResponsiveDialog } from "@/components/ui/dialog";
+import { Field, FormError } from "@/components/ui/field";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api, ApiError, errorMessage } from "@/lib/api";
+import { loginsQuery, officeKeys, type SavedLogin } from "@/lib/office-data";
+import { branchesQuery, meQuery } from "@/lib/queries";
+import { timeAgo } from "@/lib/utils";
+import { agentsQuery } from "@/lib/work";
+
+const WHOLE = "workspace";
+
+function LoginDialog({ open, onOpenChange, editing }: { open: boolean; onOpenChange: (o: boolean) => void; editing?: SavedLogin }) {
+  const qc = useQueryClient();
+  const { data: me } = useSuspenseQuery(meQuery);
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const { data: agents = [] } = useQuery(agentsQuery);
+  const manager = me.permissions.includes("vault.manage");
+  const everything = !me.scope || me.scope.kind === "all";
+  const [name, setName] = useState(editing?.name ?? "");
+  const [hosts, setHosts] = useState(editing?.hosts.join(", ") ?? "");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [personal, setPersonal] = useState(!manager);
+  const [branch, setBranch] = useState(everything ? WHOLE : me.scope?.branch_id ?? WHOLE);
+  const [only, setOnly] = useState<string[]>(editing?.agent_ids ?? []);
+  const mine = agents.filter((a) => !a.clone_of && (personal ? a.owner_user_id === me.user.id : branch === WHOLE || a.branch_id === branch));
+
+  const save = useMutation({
+    mutationFn: () => {
+      const list = hosts.split(/[\s,]+/).filter(Boolean);
+      if (editing) {
+        return api(`/api/vault/logins/${editing.id}`, "PATCH", {
+          hosts: list, agent_ids: only, ...(username ? { username } : {}), ...(password ? { password } : {}),
+        });
+      }
+      return api("/api/vault/logins", "POST", {
+        name, hosts: list, username, password, personal, agent_ids: only,
+        branch_id: personal || branch === WHOLE ? null : branch,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: officeKeys.logins });
+      toast.success(editing ? `${editing.name} saved.` : `${name} saved. Agents can now sign in with it.`);
+      onOpenChange(false);
+    },
+  });
+  const fields = save.error instanceof ApiError ? save.error.fields : {};
+  const ready = editing ? !!hosts.trim() : !!(name.trim() && hosts.trim() && username && password);
+
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={editing ? `Edit ${editing.name}` : "Save a login for agents"}
+      description="Agents never see it. The browser types it in for them, only on the sites you list."
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button loading={save.isPending} disabled={!ready} onClick={() => save.mutate()}>Save login</Button></>}>
+      <form className="grid gap-4" autoComplete="off" onSubmit={(e) => { e.preventDefault(); if (ready) save.mutate(); }}>
+        {editing ? null : <Field label="Name agents use" placeholder="supplier-portal" value={name} onChange={(e) => setName(e.target.value)} error={fields.name} hint="Letters, numbers, dashes. Tell the agent this name in its task or SOP." />}
+        <Field label="Site address" placeholder="portal.example.com" value={hosts} onChange={(e) => setHosts(e.target.value)} error={fields.hosts}
+          hint="The login is typed in only on this site (and its subdomains). Several: separate with commas." />
+        <Field label={editing ? "New username (blank keeps it)" : "Username"} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" error={fields.username} />
+        <Field label={editing ? "New password (blank keeps it)" : "Password"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" error={fields.password} />
+        {!editing && manager ? (
+          <div className="grid gap-3">
+            <label className="flex items-start gap-2.5 text-[13.5px]">
+              <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={personal} onChange={(e) => setPersonal(e.target.checked)} />
+              <span>My own login<span className="block text-[12.5px] text-muted">Only your personal agents may use it.</span></span>
+            </label>
+            {!personal && everything ? (
+              <div className="grid gap-1.5">
+                <span className="text-[13px] font-medium">Who may use it</span>
+                <Select value={branch} onValueChange={setBranch} label="Branch" options={[{ value: WHOLE, label: "Agents in every branch" }, ...branches.map((b) => ({ value: b.id, label: `Agents in ${b.name}` }))]} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {mine.length ? (
+          <fieldset className="grid gap-2">
+            <legend className="mb-1 text-[13px] font-medium">Only these agents (optional)</legend>
+            <div className="flex flex-wrap gap-2">
+              {mine.map((a) => {
+                const on = only.includes(a.id);
+                return (
+                  <button type="button" key={a.id} aria-pressed={on} onClick={() => setOnly((s) => (on ? s.filter((x) => x !== a.id) : [...s, a.id]))}
+                    className={on ? "rounded-full border border-accent bg-accent-soft px-3 py-1 text-[12.5px] font-medium text-accent" : "rounded-full border border-border px-3 py-1 text-[12.5px] hover:bg-surface-2"}>
+                    {a.name}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[12px] text-muted">None picked: any agent that may use logins here. Helpers count as the agent they help.</p>
+          </fieldset>
+        ) : null}
+        <FormError message={save.error && !Object.keys(fields).length ? errorMessage(save.error) : null} />
+      </form>
+    </ResponsiveDialog>
+  );
+}
+
+function LoginRow({ l, agentNames }: { l: SavedLogin; agentNames: Map<string, string> }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const del = useMutation({
+    mutationFn: () => api(`/api/vault/logins/${l.id}`, "DELETE"),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: officeKeys.logins }); toast.success(`${l.name} deleted.`); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const who = l.owner_user_id ? "Personal" : l.branch_name ? l.branch_name : "Every branch";
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-5">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><LockKeyIcon size={17} weight="duotone" /></span>
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium">
+          <span className="font-mono">{l.name}</span> <Pill>{who}</Pill>
+          {l.agent_ids.length ? <Pill tone="info">{l.agent_ids.map((a) => agentNames.get(a) ?? "agent").join(", ")}</Pill> : null}
+        </p>
+        <p className="truncate text-[12.5px] text-muted">
+          {l.hosts.join(", ")} · user {l.username_hint} · {l.last_used_at ? `used ${timeAgo(l.last_used_at).toLowerCase()}` : "not used yet"}
+        </p>
+      </div>
+      {l.can_manage ? (
+        <Menu>
+          <MenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Options for ${l.name}`}><DotsThreeIcon size={20} weight="bold" /></Button></MenuTrigger>
+          <MenuContent>
+            <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>Edit sites, agents or password</MenuItem>
+            <MenuSeparator />
+            <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Delete</MenuItem>
+          </MenuContent>
+        </Menu>
+      ) : null}
+      {editing ? <LoginDialog open={editing} onOpenChange={setEditing} editing={l} /> : null}
+      <ConfirmDialog open={removing} onOpenChange={setRemoving} title={`Delete ${l.name}?`} body="Agents that use it will ask a person to sign in instead." confirmLabel="Delete" danger onConfirm={async () => { await del.mutateAsync(); }} />
+    </li>
+  );
+}
+
+export function LoginsPage() {
+  const { data: logins = [], isLoading, error } = useQuery(loginsQuery);
+  const { data: agents = [] } = useQuery(agentsQuery);
+  const [adding, setAdding] = useState(0);
+  const names = new Map(agents.map((a) => [a.id, a.name]));
+  return (
+    <Page>
+      <PageHeader
+        title="Logins"
+        description="Website logins your agents may use. They are encrypted, never shown again, never sent to an AI model, and typed in only on the sites listed. Every use is in the activity log."
+        actions={<Button onClick={() => setAdding((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Save a login</Button>}
+      />
+      {isLoading ? <Skeleton className="h-40 rounded-[var(--radius-md)]" /> : error ? (
+        <p role="alert" className="text-danger">{errorMessage(error)}</p>
+      ) : !logins.length ? (
+        <EmptyState icon={ShieldCheckIcon} title="No saved logins" body="Save a login for a site your agents work on. On the sign-in page they call browser_login with its name, and the browser types it in for them."
+          action={<Button onClick={() => setAdding((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Save a login</Button>} />
+      ) : (
+        <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+          {logins.map((l) => <LoginRow key={l.id} l={l} agentNames={names} />)}
+        </ul>
+      )}
+      <p className="mt-6 max-w-[65ch] text-[12.5px] text-muted">
+        Only save logins you are allowed to share with software. Sites that need a one-time code, a captcha or a personal signing PIN stay with a person: the agent stops and asks.
+      </p>
+      {adding ? <LoginDialog key={adding} open onOpenChange={(o) => { if (!o) setAdding(0); }} /> : null}
+    </Page>
+  );
+}

@@ -118,13 +118,13 @@ def _model_out(m: AIModel) -> ModelOut:
 
 
 @router.get("/presets")
-async def presets(_: Principal = Depends(require("read"))) -> list[PresetOut]:
+async def presets(_: Principal = Depends(require("org.read"))) -> list[PresetOut]:
     return [PresetOut(**p.public(), primary=p.id in PRIMARY) for p in PRESETS]
 
 
 @router.get("/providers")
 async def list_providers(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
 ) -> list[ProviderOut]:
     rows = (
         await db.scalars(
@@ -405,7 +405,7 @@ async def refresh_models(
 async def list_models(
     provider_id: str | None = None,
     capability: str | None = None,
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("org.read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ModelOut]:
     q = select(AIModel).where(AIModel.workspace_id == principal.workspace_id)
@@ -560,7 +560,7 @@ async def playground(
 @router.get("/usage")
 async def usage(
     days: int = Query(default=7, ge=1, le=90),
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("org.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     since = datetime.now(UTC) - timedelta(days=days)

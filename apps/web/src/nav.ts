@@ -9,6 +9,9 @@ import {
   ClockCounterClockwiseIcon,
   EyeIcon,
   CpuIcon,
+  ChartBarIcon,
+  ClipboardTextIcon,
+  LockKeyIcon,
   GaugeIcon,
   GearSixIcon,
   KanbanIcon,
@@ -22,6 +25,9 @@ import {
 
 export type AppPath =
   | "/"
+  | "/overview"
+  | "/reports"
+  | "/logins"
   | "/office"
   | "/monitor"
   | "/agents"
@@ -48,8 +54,8 @@ export interface NavItem {
   /** Roadmap phase that ships this page; absent = live now. */
   phase?: string;
   blurb: string;
-  /** Permission needed to see it in navigation. */
-  perm?: string;
+  /** Permission needed to see it in navigation (any of them, when a list). */
+  perm?: string | string[];
 }
 
 export interface NavSection {
@@ -62,12 +68,14 @@ export const NAV: NavSection[] = [
     title: "Workspace",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
+      { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work, tenders and other work types, what is failing or waiting, and spend, with an AI briefing." },
       { to: "/office", label: "Office", icon: BuildingsIcon, blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
       { to: "/monitor", label: "Monitor", icon: EyeIcon, blurb: "Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen." },
       { to: "/agents", label: "Agents", icon: UsersThreeIcon, blurb: "Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom." },
       { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card onto an agent to assign it." },
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },
       { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, switch its model for a session, and turn a conversation into a task." },
+      { to: "/reports", label: "Reports", icon: ClipboardTextIcon, blurb: "What agents wrote up for you: summaries and tables you can sort and download." },
     ],
   },
   {
@@ -89,7 +97,8 @@ export const NAV: NavSection[] = [
     title: "Operations",
     items: [
       { to: "/schedules", label: "Schedules", icon: CalendarCheckIcon, blurb: "Recurring work and every run's result, with retries and grouped incidents." },
-      { to: "/ai-engine", label: "AI Engine", icon: CpuIcon, blurb: "Add provider keys, test the connection, choose models and see what every agent spends." },
+      { to: "/logins", label: "Logins", icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: "Website logins agents may use without ever seeing them, each locked to its own sites." },
+      { to: "/ai-engine", label: "AI Engine", icon: CpuIcon, perm: "org.read", blurb: "Add provider keys, test the connection, choose models and see what every agent spends." },
       { to: "/channels", label: "Channels", icon: PlugsConnectedIcon, blurb: "Phone notifications, Telegram, API tokens, and which agent answers where." },
     ],
   },

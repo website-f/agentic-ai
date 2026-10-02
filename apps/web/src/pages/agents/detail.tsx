@@ -173,9 +173,10 @@ export function AgentDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: me } = useSuspenseQuery(meQuery);
-  const canManage = me.permissions.includes("org.manage");
   const canWrite = me.permissions.includes("work.write");
   const { data: agent, isLoading, error } = useQuery(agentQuery(agentId));
+  // The server says whether this person may change this agent (scope and ownership).
+  const canManage = !!agent?.can_manage;
   const live = useLive((s) => s.agentStatus[agentId]);
   const [retiring, setRetiring] = useState(false);
   const tab: Tab = search.tab && TABS.includes(search.tab) ? search.tab : "overview";
@@ -207,7 +208,11 @@ export function AgentDetailPage() {
           <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight">
             {agent.name} <Pill tone={state.tone}>{state.label}</Pill>
           </h1>
-          <p className="text-[13.5px] text-muted">{agent.role} · {agent.department_name ?? "No department"}, {agent.branch_name}</p>
+          <p className="text-[13.5px] text-muted">
+            {agent.role} · {agent.department_name ?? "No department"}, {agent.branch_name}
+            {agent.owner_name ? ` · ${agent.owner_name}'s personal agent` : ""}
+            {agent.clone_of ? " · a helper, here while a big job runs" : ""}
+          </p>
           {agent.current_task ? (
             <Link to="/tasks" search={{ task: agent.current_task.id }} className="mt-1 inline-block text-[13px] text-accent hover:underline">
               {agent.current_task.status === "blocked" ? "Waiting on you: " : "Working on: "}{agent.current_task.title}

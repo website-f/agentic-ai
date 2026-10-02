@@ -96,11 +96,44 @@ async def _meeting_out(
     return out
 
 
-async def _meeting(db: AsyncSession, ws_id: str, meeting_id: str) -> Meeting:
+async def _visible(db: AsyncSession, principal: Principal) -> set[str] | None:
+    """Agent ids the person may see, or None for everything (workspace roles)."""
+    cond = principal.scope.agent_where()
+    if cond is None:
+        return None
+    return set(
+        (
+            await db.scalars(
+                select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
+            )
+        ).all()
+    )
+
+
+def _meeting_ok(m: Meeting, principal: Principal, visible: set[str] | None) -> bool:
+    return (
+        visible is None
+        or m.started_by == principal.actor
+        or any(p in visible for p in m.participant_ids or [])
+    )
+
+
+async def _meeting(db: AsyncSession, principal: Principal, meeting_id: str) -> Meeting:
     m = await db.get(Meeting, meeting_id)
-    if m is None or m.workspace_id != ws_id:
+    if (
+        m is None
+        or m.workspace_id != principal.workspace_id
+        or not _meeting_ok(m, principal, await _visible(db, principal))
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "meeting_not_found", "That meeting is not here.")
     return m
+
+
+async def _seen_agent(db: AsyncSession, principal: Principal, agent_id: str | None) -> Agent:
+    a = await db.get(Agent, agent_id) if agent_id else None
+    if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
+        raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
+    return a
 
 
 @router.get("/meetings")
@@ -116,6 +149,8 @@ async def list_meetings(
             .limit(100)
         )
     ).all()
+    visible = await _visible(db, principal)
+    rows = [m for m in rows if _meeting_ok(m, principal, visible)]
     ids = {i for m in rows for i in m.participant_ids}
     names = {a.id: a for a in (await db.scalars(select(Agent).where(Agent.id.in_(ids))))}
     return [await _meeting_out(db, m, names=names) for m in rows]
@@ -131,6 +166,8 @@ async def start_meeting(
         t = await db.get(Task, body.task_id)
         if t is None or t.workspace_id != principal.workspace_id:
             raise api_error(status.HTTP_400_BAD_REQUEST, "bad_task", "Pick a task from here.")
+    for aid in body.participant_ids:
+        await _seen_agent(db, principal, aid)
     try:
         people = await meetings.resolve_agents(db, principal.workspace_id, body.participant_ids)
         m = await meetings.create(
@@ -163,9 +200,7 @@ async def meeting_detail(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    return await _meeting_out(
-        db, await _meeting(db, principal.workspace_id, meeting_id), with_turns=True
-    )
+    return await _meeting_out(db, await _meeting(db, principal, meeting_id), with_turns=True)
 
 
 @router.post("/meetings/{meeting_id}/interject")
@@ -176,7 +211,7 @@ async def interject(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """A person adds a line; every agent reads it from its next turn."""
-    m = await _meeting(db, principal.workspace_id, meeting_id)
+    m = await _meeting(db, principal, meeting_id)
     if m.status != "running":
         raise api_error(status.HTTP_409_CONFLICT, "meeting_over", "This meeting has ended.")
     db.add(
@@ -194,7 +229,13 @@ async def interject(
     await events.publish(
         m.workspace_id,
         "meeting.turn",
-        {"meeting_id": m.id, "name": principal.user.name, "kind": "human", "content": body.text},
+        {
+            "meeting_id": m.id,
+            "name": principal.user.name,
+            "kind": "human",
+            "content": body.text,
+            "participants": m.participant_ids,
+        },
     )
     return await _meeting_out(db, m, with_turns=True)
 
@@ -205,7 +246,7 @@ async def cancel_meeting(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    m = await _meeting(db, principal.workspace_id, meeting_id)
+    m = await _meeting(db, principal, meeting_id)
     await meetings.cancel(db, m)  # the workflow stops at its next turn
     return await _meeting_out(db, m, with_turns=True)
 
@@ -263,9 +304,14 @@ async def _schedule_out(db: AsyncSession, s: Schedule) -> dict[str, Any]:
     }
 
 
-async def _schedule(db: AsyncSession, ws_id: str, schedule_id: str) -> Schedule:
+async def _schedule(db: AsyncSession, principal: Principal, schedule_id: str) -> Schedule:
     s = await db.get(Schedule, schedule_id)
-    if s is None or s.workspace_id != ws_id:
+    agent = await db.get(Agent, s.agent_id) if s else None
+    if (
+        s is None
+        or s.workspace_id != principal.workspace_id
+        or not principal.scope.sees_agent(agent)
+    ):
         raise api_error(
             status.HTTP_404_NOT_FOUND, "schedule_not_found", "That schedule is not here."
         )
@@ -296,7 +342,8 @@ async def list_schedules(
             .order_by(Schedule.created_at)
         )
     ).all()
-    return [await _schedule_out(db, s) for s in rows]
+    visible = await _visible(db, principal)
+    return [await _schedule_out(db, s) for s in rows if visible is None or s.agent_id in visible]
 
 
 @router.get("/schedules/preview")
@@ -319,9 +366,7 @@ async def create_schedule(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    agent = await db.get(Agent, body.agent_id)
-    if agent is None or agent.workspace_id != principal.workspace_id:
-        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_agent", "Pick an agent from here.")
+    agent = await _seen_agent(db, principal, body.agent_id)
     tz = body.timezone or (await _ws(db, principal.workspace_id)).timezone
     try:
         schedules.next_runs(body.cron, tz)
@@ -361,12 +406,10 @@ async def update_schedule(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    s = await _schedule(db, principal.workspace_id, schedule_id)
+    s = await _schedule(db, principal, schedule_id)
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
     if "agent_id" in changes:
-        agent = await db.get(Agent, changes["agent_id"])
-        if agent is None or agent.workspace_id != principal.workspace_id:
-            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_agent", "Pick an agent from here.")
+        await _seen_agent(db, principal, changes["agent_id"])
     if "cron" in changes:
         changes["cron"] = " ".join(changes["cron"].split())
     try:
@@ -397,7 +440,7 @@ async def delete_schedule(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    s = await _schedule(db, principal.workspace_id, schedule_id)
+    s = await _schedule(db, principal, schedule_id)
     try:
         await dispatch.delete_schedule(s.id)
     except Exception as e:
@@ -417,7 +460,7 @@ async def run_now(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    s = await _schedule(db, principal.workspace_id, schedule_id)
+    s = await _schedule(db, principal, schedule_id)
     try:
         await dispatch.run_schedule_now(s.id)
     except Exception as e:
@@ -467,6 +510,13 @@ async def list_runs(
         q = q.where(JobRun.schedule_id == schedule_id)
     if status_:
         q = q.where(JobRun.status.in_(status_.split(",")))
+    visible = await _visible(db, principal)
+    if visible is not None:  # office roles: only runs of schedules they can see
+        q = q.where(
+            JobRun.schedule_id.in_(
+                select(Schedule.id).where(Schedule.agent_id.in_(visible or {""}))
+            )
+        )
     rows = (await db.scalars(q.order_by(JobRun.id.desc()).limit(limit))).all()
     sids = {r.schedule_id for r in rows if r.schedule_id}
     tids = {r.task_id for r in rows if r.task_id}
@@ -479,7 +529,7 @@ async def list_runs(
 
 @router.get("/system-jobs")
 async def system_jobs(
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("org.read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     try:
@@ -513,7 +563,7 @@ async def system_jobs(
 @router.get("/incidents")
 async def list_incidents(
     open_only: bool = False,
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("org.read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     q = select(Incident).where(Incident.workspace_id == principal.workspace_id)
@@ -537,7 +587,7 @@ async def list_incidents(
 @router.post("/incidents/{incident_id}/resolve")
 async def resolve_incident(
     incident_id: int,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(require("org.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     i = await db.get(Incident, incident_id)
@@ -568,6 +618,9 @@ async def list_pings(
     )
     if not include_resolved:
         q = q.where(AgentPing.resolved_at.is_(None))
+    cond = principal.scope.agent_where()
+    if cond is not None:
+        q = q.where(cond)
     rows = (await db.execute(q.order_by(AgentPing.created_at.desc()).limit(100))).all()
     return [
         {
@@ -598,6 +651,7 @@ async def resolve_ping(
     p = await db.get(AgentPing, ping_id)
     if p is None or p.workspace_id != principal.workspace_id:
         raise api_error(status.HTTP_404_NOT_FOUND, "ping_not_found", "Not here.")
+    await _seen_agent(db, principal, p.agent_id)
     p.resolved_at, p.resolved_by = datetime.now(UTC), principal.actor
     await db.commit()
     await events.publish(principal.workspace_id, "agent.ping", {"id": p.id, "resolved": True})
@@ -632,9 +686,7 @@ async def agent_budget(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    a = await db.get(Agent, agent_id)
-    if a is None or a.workspace_id != principal.workspace_id:
-        raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
+    a = await _seen_agent(db, principal, agent_id)
     ws = await _ws(db, principal.workspace_id)
     st = await budget.state(db, a, ws.timezone)
     return {**st.dict(), "by_day": await _usage_by_day(db, a.id, ws.timezone)}
@@ -651,7 +703,12 @@ async def budgets(
     for a in (
         await db.scalars(
             select(Agent)
-            .where(Agent.workspace_id == ws.id, Agent.status != "retired")
+            .where(
+                Agent.workspace_id == ws.id,
+                Agent.status != "retired",
+                Agent.clone_of.is_(None),
+                *([c] if (c := principal.scope.agent_where()) is not None else []),
+            )
             .order_by(Agent.name)
         )
     ).all():

@@ -265,7 +265,11 @@ services:
     restart: unless-stopped
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
-      BROWSER_MAX_SESSIONS: ${BROWSER_MAX_SESSIONS:-3}
+      BROWSER_MAX_SESSIONS: ${BROWSER_MAX_SESSIONS:-6}
+      # Dev only: the practice portal (profile demo). Empty in production.
+      BROWSER_ALLOW_HOSTS: ${BROWSER_ALLOW_HOSTS:-}
+      # Humanized cursor: deadlocks with several agents clicking at once, so off by default.
+      BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-false}
     shm_size: 1gb  # Firefox
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/healthz', timeout=3)"]
@@ -286,6 +290,25 @@ services:
       - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
       - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
+    <<: *logging
+
+  practice-portal:
+    # A fake supplier portal (login + inbox, demo data) for testing agents end to end
+    # (P9). Profile demo only; reachable by the browser at http://practice-portal:8080.
+    image: agentic-py:dev
+    profiles: [demo]
+    restart: unless-stopped
+    working_dir: /demo
+    command: ["python", "-m", "uvicorn", "portal:app", "--host", "0.0.0.0", "--port", "8080"]
+    volumes:
+      - ./deploy/demo:/demo:ro
+    ports:
+      - "127.0.0.1:8509:8080"
+    networks: [browser]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 256m
     <<: *logging
 
   backup:

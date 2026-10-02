@@ -257,8 +257,12 @@ async def _answer_question(
     a = await db.get(Approval, d.payload.get("approval_id", ""))
     if a is None or a.kind != "question":
         return None
-    if not can(role, "approvals.decide"):
-        return "Your role cannot answer agents' questions."
+    from ..api.scope import member_sees_agent
+
+    if not can(role, "approvals.decide") or not await member_sees_agent(
+        db, a.workspace_id, link.user_id, a.agent_id
+    ):
+        return "Your role cannot answer this agent's questions."
     try:
         await decisions.decide(db, a, f"user:{link.user_id}", "answer", answer=text, via="telegram")
     except decisions.DecisionError as e:
@@ -293,6 +297,11 @@ async def _callback(db: AsyncSession, ch: Channel, cq: dict[str, Any]) -> None:
     a = await db.get(Approval, parts[1])
     if a is None or a.workspace_id != ch.workspace_id:
         await answer("That approval is gone.")
+        return
+    from ..api.scope import member_sees_agent
+
+    if not await member_sees_agent(db, a.workspace_id, link.user_id, a.agent_id):
+        await answer("This agent is outside your area.")
         return
     try:
         await decisions.decide(db, a, f"user:{link.user_id}", parts[2], "once", via="telegram")

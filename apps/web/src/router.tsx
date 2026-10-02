@@ -46,6 +46,9 @@ const page = {
   meetings: lazyRouteComponent(() => import("@/pages/meetings"), "MeetingsPage"),
   monitor: lazyRouteComponent(() => import("@/pages/monitor"), "MonitorPage"),
   schedules: lazyRouteComponent(() => import("@/pages/schedules"), "SchedulesPage"),
+  overview: lazyRouteComponent(() => import("@/pages/overview"), "OverviewPage"),
+  reports: lazyRouteComponent(() => import("@/pages/reports"), "ReportsPage"),
+  logins: lazyRouteComponent(() => import("@/pages/logins"), "LoginsPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -193,7 +196,7 @@ const agentNewRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agents/new",
   beforeLoad: ({ context }) => {
-    if (!context.me.permissions.includes("org.manage")) throw redirect({ to: "/agents" });
+    if (!["agents.manage", "agents.own"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
   },
   component: page.agentNew,
 });
@@ -277,7 +280,7 @@ const skillsRoute = createRoute({
 const monitorRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/monitor",
-  validateSearch: (s: Record<string, unknown>): { agent?: string } => ({ agent: str(s.agent) }),
+  validateSearch: (s: Record<string, unknown>): { agent?: string; wall?: number } => ({ agent: str(s.agent), wall: num(s.wall) }),
   component: page.monitor,
 });
 
@@ -299,6 +302,20 @@ const schedulesRoute = createRoute({
   }),
   component: page.schedules,
 });
+
+const overviewRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/overview",
+  validateSearch: (s: Record<string, unknown>): { days?: number } => ({ days: num(s.days) }),
+  component: page.overview,
+});
+const reportsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/reports",
+  validateSearch: (s: Record<string, unknown>): { r?: string } => ({ r: str(s.r) }),
+  component: page.reports,
+});
+const loginsRoute = createRoute({ getParentRoute: () => appRoute, path: "/logins", component: page.logins });
 
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
@@ -337,6 +354,9 @@ const routeTree = rootRoute.addChildren([
     meetingsRoute,
     schedulesRoute,
     monitorRoute,
+    overviewRoute,
+    reportsRoute,
+    loginsRoute,
   ]),
 ]);
 

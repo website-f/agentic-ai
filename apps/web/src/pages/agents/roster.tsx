@@ -47,6 +47,8 @@ function AgentCard({ agent }: { agent: Agent }) {
       </p>
       <div className="flex flex-wrap gap-1.5 text-[11.5px]">
         <Pill className="font-mono">{agent.model_group}</Pill>
+        {agent.clone_of ? <Pill tone="info">Helper</Pill> : null}
+        {agent.owner_name ? <Pill tone="info">{agent.owner_name}&apos;s agent</Pill> : null}
         {agent.autonomy === "auto" ? <Pill tone="accent">Auto</Pill> : null}
         {agent.role_kind === "orchestrator" ? <Pill tone="accent">Leads</Pill> : null}
         {agent.budget_daily_tokens || agent.budget_monthly_usd ? <Pill>Budget</Pill> : null}
@@ -58,7 +60,7 @@ function AgentCard({ agent }: { agent: Agent }) {
 
 export function AgentsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
-  const canManage = me.permissions.includes("org.manage");
+  const canManage = me.permissions.includes("agents.manage") || me.permissions.includes("agents.own");
   const { data: agents, isLoading, error } = useQuery(agentsQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
   const branchId = useBranch((s) => s.branchId);

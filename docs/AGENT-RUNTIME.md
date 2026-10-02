@@ -297,3 +297,53 @@ rate limits. Memory checks, page digests, fact extraction, reconciliation and sk
 reflection use the `fast` group, now the local model first: free work that would otherwise
 be paid tokens.
 
+## 17. As built in P9 (2026-10-02): office roles, logins, helpers, reports, overview
+
+**Office roles and scope** (`api/scope.py`). Workspace roles (owner, admin, operator,
+approver, viewer) see everything. Office roles see a slice: a **branch manager** their
+branch, a **head of department** and a **supervisor** their department, **staff** the
+agents they own (personal agents). Everyone also sees their own personal agents and the
+tasks they created. Tasks follow their agent, approvals follow the agent that asked. The
+scope filters every list in SQL, every single read (outside = 404, so nothing can be
+probed), the live event stream, phone pushes and Telegram buttons, meetings, schedules,
+broadcasts ("everyone" from a HOD means the department), reports and the overview. AI
+Engine, incidents and system jobs stay with the workspace roles (`org.read`). Branch
+managers and HODs add and change the people below them (`team.manage`); staff create
+personal agents (`agents.own`), which cannot lead, have no heartbeat and stay theirs.
+
+**Saved logins** (`agents/vault.py`, Logins page). A login is envelope-encrypted, bound
+to its sites, and belongs to the workspace, one branch, or one person (then only that
+person's agents may use it). `browser_login(login, username_element, password_element,
+submit_element)` makes the worker decrypt it and the browser service type it in: the
+service refuses unless the page is on one of the login's sites, puts the password only
+into a password field, and never returns either value (fields show "(filled, hidden)").
+With `submit_element` it signs in at once, without approval, because saving the login
+for that site allowed it; the service checks that the button belongs to the form holding
+the saved password, so no other form can be sent this way. Every use is in the audit log.
+The model only ever sees the login's name.
+
+**Helpers** (`split_work`, in `teams/delegation.py`). An agent with the tool splits a big
+job into 2 to 4 parts. Each part goes to a helper: a copy of the agent (soul, tools, SOPs,
+model, budget, and the original's memory: same recall identity, the task's frozen memory
+snapshot) named "Rafi #2". Helpers run in parallel as child workflows, each with its own
+browser, cannot split again, and are retired when the answers are collected; the next
+big job brings the same helpers back. The office, the roster and the monitor show them.
+
+**Asking the owner.** `ask_human` takes `options` (up to 6 short answers): the approval
+card shows them as buttons, and people can still type their own answer.
+
+**Reports** (`publish_report`, Reports page). A summary, a markdown body and tables
+(columns and rows, cleaned and capped), attached to the task, the agent and its branch;
+tables sort, filter and download as CSV (formula cells defused).
+
+**Company overview** (`GET /api/overview`, Company overview page). Every branch side by
+side for 1 to 90 days: agents and helpers (working, waiting), tasks created, done, failed
+and open, approvals waiting, issues (failed, waiting more than 2 hours, budget alerts,
+incidents), reports, AI spend, and work types from task labels ("tender"). "Most tender
+work / most work / most issues / most waiting / highest spend" are picked out. The AI
+briefing (`POST /api/overview/summary`) reads only these numbers (a few hundred tokens),
+uses the `smart` group then `fast`, and is cached 15 minutes per set of numbers.
+
+**Monitor wall.** `GET /api/monitor/wall`: every agent at work in the person's scope
+with its live browser screen and last step; the Monitor page opens on it.
+

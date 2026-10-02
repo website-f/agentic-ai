@@ -9,6 +9,7 @@ import {
   EyeIcon,
   HandIcon,
   LightningIcon,
+  SquaresFourIcon,
   TreeStructureIcon,
   UsersThreeIcon,
   WarningIcon,
@@ -24,7 +25,7 @@ import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { onLiveEvent, useLive } from "@/lib/live";
-import { activityQuery, belongsTo, mergeFeed, monitorKeys, type FeedEvent } from "@/lib/monitor";
+import { activityQuery, belongsTo, mergeFeed, monitorKeys, wallQuery, type FeedEvent, type WallItem } from "@/lib/monitor";
 import { tokensShort } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, type Agent } from "@/lib/work";
@@ -205,6 +206,21 @@ function Watch({ agent }: { agent: Agent }) {
           <p className="text-[13px] text-muted">
             {data.task ? <>On <Link to="/tasks" search={{ task: data.task.id }} className="text-accent hover:underline">{data.task.title}</Link>{data.task.tokens ? ` · ${data.task.calls} model calls, ${tokensShort(data.task.tokens)} tokens so far` : ""}</> : "No task right now."}
           </p>
+          {data.helpers?.length ? (
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted">
+              Helpers on this job:
+              {data.helpers.map((h) => (
+                <Link key={h.id} to="/monitor" search={{ agent: h.id }} className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-fg hover:bg-surface-2">
+                  <span aria-hidden className="size-2 rounded-full" style={{ background: h.color }} /> {h.name}
+                </Link>
+              ))}
+            </p>
+          ) : null}
+          {data.agent.clone_of ? (
+            <p className="mt-1 text-[12.5px] text-muted">
+              A helper. <Link to="/monitor" search={{ agent: data.agent.clone_of }} className="text-accent hover:underline">Watch the agent it helps</Link>
+            </p>
+          ) : null}
         </div>
         <div className="text-right text-[12px] text-muted tabular">
           <p>Last 24 h: {tokensShort(data.today.tokens)} tokens, ${data.today.usd.toFixed(3)}</p>
@@ -238,13 +254,83 @@ function Watch({ agent }: { agent: Agent }) {
   );
 }
 
+/** A small live screen for the wall: the browser frame, refreshed every two seconds. */
+function MiniScreen({ session, title }: { session: string; title: string }) {
+  const [tick, setTick] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 2000);
+    return () => clearInterval(t);
+  }, []);
+  return failed ? (
+    <p className="absolute inset-0 grid place-items-center text-[12px] text-muted">Opening the browser…</p>
+  ) : (
+    <img src={`/api/browser/${session}/frame.jpg?t=${tick}`} alt={`Browser: ${title}`} className="absolute inset-0 size-full object-contain object-top"
+      onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
+  );
+}
+
+function WallTile({ item, onOpen }: { item: WallItem; onOpen: () => void }) {
+  const line = item.last ? describe({ seq: 0, ts: item.last.ts, type: "agent.activity", data: item.last.data }) : null;
+  const Icon = line?.icon ?? EyeIcon;
+  const waiting = item.task.status === "blocked";
+  return (
+    <button onClick={onOpen} className="group grid overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface text-left hover:border-accent focus-visible:border-accent">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <AgentAvatar name={item.agent.name} color={item.agent.color} size="sm" working={!waiting} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 truncate text-[13px] font-medium">
+            {item.agent.name}
+            {item.agent.clone_of ? <Pill tone="info">Helper</Pill> : null}
+          </span>
+          <span className="block truncate text-[12px] text-muted">{item.task.title}</span>
+        </span>
+        <Pill tone={waiting ? "warn" : "accent"} live={!waiting}>{waiting ? "Waiting on you" : "Live"}</Pill>
+      </div>
+      <div className="relative aspect-[16/10] bg-surface-2">
+        {item.browser ? <MiniScreen session={item.browser.session} title={item.task.title} /> : (
+          <div className="absolute inset-0 grid place-items-center p-4 text-center">
+            <span className="grid justify-items-center gap-2">
+              <Icon size={24} weight="duotone" className={line?.tone ?? "text-muted"} />
+              <span className="line-clamp-2 text-[12.5px]">{line?.title ?? "Working"}</span>
+            </span>
+          </div>
+        )}
+      </div>
+      <p className="truncate border-t border-border px-3 py-1.5 text-[11.5px] text-muted">
+        {line ? `${line.title}${item.last ? ` · ${timeAgo(item.last.ts)}` : ""}` : "Starting…"}
+      </p>
+    </button>
+  );
+}
+
+/** Everyone at work, in one view: the owner's wall of screens. */
+function Wall({ onOpen }: { onOpen: (id: string) => void }) {
+  const qc = useQueryClient();
+  const { data = [], isLoading, error } = useQuery(wallQuery);
+  useEffect(() => onLiveEvent((ev) => {
+    if (ev.type === "agent.status" || ev.type === "task.updated") qc.invalidateQueries({ queryKey: monitorKeys.wall });
+  }), [qc]);
+  if (isLoading) return <Skeleton className="h-96 rounded-[var(--radius-md)]" />;
+  if (error) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
+  if (!data.length) {
+    return <EmptyState icon={SquaresFourIcon} title="Nobody is working right now" body="When agents start tasks, each one shows here with its live screen. Pick an agent on the left to see its history." />;
+  }
+  return (
+    <section aria-label="Agents at work" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+      {data.map((item) => <WallTile key={item.agent.id} item={item} onOpen={() => onOpen(item.agent.id)} />)}
+    </section>
+  );
+}
+
 export function MonitorPage() {
   const { data: agents = [], isLoading } = useQuery(agentsQuery);
   const statuses = useLive((s) => s.agentStatus);
-  const search = useSearch({ strict: false }) as { agent?: string };
+  const search = useSearch({ strict: false }) as { agent?: string; wall?: number };
   const navigate = useNavigate();
   const active = agents.filter((a) => a.status !== "retired");
-  const selected = active.find((a) => a.id === search.agent) ?? active.find((a) => a.current_task) ?? active[0];
+  const selected = search.agent ? active.find((a) => a.id === search.agent) : undefined;
+  const working = active.filter((a) => a.current_task).length;
   return (
     <Page className="max-w-7xl">
       <PageHeader title="Monitor" description="Watch any agent work, live: what it is thinking, every tool it uses, what it asks colleagues, and its browser screen when it works on the web." />
@@ -253,21 +339,29 @@ export function MonitorPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Agents" className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+            <button onClick={() => navigate({ to: "/monitor", search: {}, replace: true })} aria-current={!selected}
+              className={cn("flex shrink-0 items-center gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 text-left lg:w-full", !selected ? "border-accent bg-accent-soft/60" : "border-border bg-surface hover:bg-surface-2")}>
+              <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-accent"><SquaresFourIcon size={16} weight="duotone" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] font-medium">Everyone at work</span>
+                <span className="block truncate text-[12px] text-muted">{working} working now</span>
+              </span>
+            </button>
             {active.map((a) => {
               const st = agentState(a, statuses[a.id]);
               return (
                 <button key={a.id} onClick={() => navigate({ to: "/monitor", search: { agent: a.id }, replace: true })} aria-current={a.id === selected?.id}
                   className={cn("flex shrink-0 items-center gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 text-left lg:w-full", a.id === selected?.id ? "border-accent bg-accent-soft/60" : "border-border bg-surface hover:bg-surface-2")}>
                   <AgentAvatar name={a.name} color={a.color} size="sm" working={st.label === "Working"} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-medium">{a.name}</span>
+                  <span className={cn("min-w-0 flex-1", a.clone_of && "pl-1")}>
+                    <span className="block truncate text-[13.5px] font-medium">{a.clone_of ? "↳ " : ""}{a.name}</span>
                     <span className="block truncate text-[12px] text-muted">{st.label}{a.current_task ? ` · ${a.current_task.title}` : ""}</span>
                   </span>
                 </button>
               );
             })}
           </nav>
-          {selected ? <Watch key={selected.id} agent={selected} /> : null}
+          {selected ? <Watch key={selected.id} agent={selected} /> : <Wall onOpen={(id) => navigate({ to: "/monitor", search: { agent: id }, replace: true })} />}
         </div>
       )}
     </Page>

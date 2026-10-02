@@ -301,7 +301,7 @@ async def learn(
             v,
             text,
             branch_id=None if private else agent.branch_id,
-            agent_id=agent.id if private else None,
+            agent_id=(agent.clone_of or agent.id) if private else None,
             source_kind=source_kind,
             source_id=source_id,
             source_label=source_label,

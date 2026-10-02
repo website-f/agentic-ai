@@ -141,7 +141,9 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
         run.task_id = t.id
         await db.commit()
         await runtime.task_event(db, t, "created", "system", f"created by the schedule {s.name}")
-        await events.publish(s.workspace_id, "task.created", {"task_id": t.id})
+        await events.publish(
+            s.workspace_id, "task.created", {"task_id": t.id, "agent_id": t.assignee_agent_id}
+        )
         await _publish(run)
         return {"run_id": str(run.id), "task_id": t.id}
 

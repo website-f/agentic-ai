@@ -19,9 +19,9 @@ router = APIRouter(prefix="/api", tags=["monitor"])
 FEED_TYPES = ("agent.activity", "task.event", "meeting.turn", "approval.requested")
 
 
-async def _agent(db: AsyncSession, ws: str, agent_id: str) -> Agent:
+async def _agent(db: AsyncSession, principal: Principal, agent_id: str) -> Agent:
     a = await db.get(Agent, agent_id)
-    if a is None or a.workspace_id != ws:
+    if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
         raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
     return a
 
@@ -40,7 +40,7 @@ async def activity(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """The agent's recent steps (newest last), plus what it is working on and has spent."""
-    a = await _agent(db, principal.workspace_id, agent_id)
+    a = await _agent(db, principal, agent_id)
     mine = or_(
         Event.data["agent_id"].astext == a.id,
         and_(Event.type == "task.event", Event.data["actor"].astext == f"agent:{a.id}"),
@@ -82,7 +82,22 @@ async def activity(
         task_spent = {"calls": int(t[0]), "tokens": int(t[1])}
     sid = _s(await valkey().get(f"browser:agent:{a.id}"))
     return {
-        "agent": {"id": a.id, "name": a.name, "role": a.role, "color": a.color, "status": a.status},
+        "agent": {
+            "id": a.id,
+            "name": a.name,
+            "role": a.role,
+            "color": a.color,
+            "status": a.status,
+            "clone_of": a.clone_of,
+        },
+        "helpers": [
+            {"id": h.id, "name": h.name, "color": h.color}
+            for h in (
+                await db.scalars(
+                    select(Agent).where(Agent.clone_of == a.id, Agent.status == "active")
+                )
+            ).all()
+        ],
         "task": {
             "id": current.id,
             "title": current.title,
@@ -99,13 +114,70 @@ async def activity(
     }
 
 
+@router.get("/monitor/wall")
+async def wall(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Every agent at work right now (in scope), with its browser and last step: the
+    owner's wall of screens."""
+    q = select(Task).where(
+        Task.workspace_id == principal.workspace_id, Task.status.in_(("running", "blocked"))
+    )
+    cond = principal.scope.task_where()
+    if cond is not None:
+        q = q.where(cond)
+    tasks = (await db.scalars(q.order_by(Task.updated_at.desc()).limit(40))).all()
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for t in tasks:
+        a = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
+        if a is None or a.id in seen or not principal.scope.sees_agent(a):
+            continue
+        seen.add(a.id)
+        last = await db.scalar(
+            select(Event)
+            .where(
+                Event.workspace_id == principal.workspace_id,
+                Event.type == "agent.activity",
+                Event.data["agent_id"].astext == a.id,
+            )
+            .order_by(Event.seq.desc())
+            .limit(1)
+        )
+        sid = _s(await valkey().get(f"browser:agent:{a.id}"))
+        out.append(
+            {
+                "agent": {
+                    "id": a.id,
+                    "name": a.name,
+                    "role": a.role,
+                    "color": a.color,
+                    "branch_id": a.branch_id,
+                    "clone_of": a.clone_of,
+                },
+                "task": {"id": t.id, "title": t.title, "status": t.status},
+                "browser": {"session": sid} if sid else None,
+                "last": {"ts": last.ts, "data": last.data} if last else None,
+            }
+        )
+    return out
+
+
 @router.get("/browser/{session}/frame.jpg")
 async def frame(
     session: str,
     principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> Response:
     meta = _s(await valkey().get(f"browser:session:{session}"))
-    if not meta or json.loads(meta).get("workspace_id") != principal.workspace_id:
+    info = json.loads(meta) if meta else {}
+    owner = await db.get(Agent, info.get("agent_id")) if info.get("agent_id") else None
+    if (
+        not meta
+        or info.get("workspace_id") != principal.workspace_id
+        or not principal.scope.sees_agent(owner)
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "no_browser", "That browser is not open.")
     data = await valkey_bytes().get(f"browser:frame:{session}")
     if not data:

@@ -34,6 +34,8 @@ class AgentIn(BaseModel):
     budget_daily_tokens: int | None = Field(default=None, ge=1000, le=100_000_000)
     budget_monthly_usd: float | None = Field(default=None, ge=0.01, le=1_000_000)
     heartbeat: bool = False
+    # P9: the signed-in person's own agent (always, for staff).
+    personal: bool = False
 
 
 class AgentUpdateIn(BaseModel):
@@ -90,6 +92,10 @@ class AgentOut(BaseModel):
     current_task: TaskBrief | None
     open_tasks: int
     created_at: datetime
+    owner_user_id: str | None = None
+    owner_name: str | None = None
+    clone_of: str | None = None
+    can_manage: bool = False
 
 
 class PromptPreviewOut(BaseModel):
@@ -142,6 +148,7 @@ class TaskIn(BaseModel):
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
     requires_review: bool = True
     start: bool = False
+    labels: list[str] = Field(default_factory=list, max_length=8)
 
 
 class TaskUpdateIn(BaseModel):
@@ -151,6 +158,7 @@ class TaskUpdateIn(BaseModel):
     assignee_agent_id: str | None = None
     status: Literal["triage", "ready", "done", "cancelled"] | None = None
     position: float | None = None
+    labels: list[str] | None = Field(default=None, max_length=8)
 
 
 class TaskOut(BaseModel):
@@ -179,6 +187,8 @@ class TaskOut(BaseModel):
     depth: int = 0
     schedule_id: str | None = None
     has_output_schema: bool = False
+    labels: list[str] = []
+    branch_id: str | None = None
 
 
 class TaskEventOut(BaseModel):

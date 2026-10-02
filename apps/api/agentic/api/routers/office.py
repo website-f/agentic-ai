@@ -59,7 +59,15 @@ async def office_snapshot(
         (
             await db.scalars(
                 select(Agent)
-                .where(Agent.branch_id == branch.id, Agent.status != "retired")
+                .where(
+                    Agent.branch_id == branch.id,
+                    Agent.status != "retired",
+                    *(
+                        [principal.scope.agent_where()]
+                        if principal.scope.agent_where() is not None
+                        else []
+                    ),
+                )
                 .order_by(Agent.created_at)
             )
         ).all()
@@ -137,6 +145,8 @@ async def office_snapshot(
                 "color": a.color,
                 "department_id": a.department_id,
                 "status": a.status,
+                "clone_of": a.clone_of,
+                "owner_user_id": a.owner_user_id,
                 "state": derive_state(a, mine, pending.get(a.id, 0), a.id in meeting_of),
                 "meeting_id": meeting_of.get(a.id),
                 "pending_approvals": pending.get(a.id, 0),

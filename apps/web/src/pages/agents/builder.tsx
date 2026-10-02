@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, FileTextIcon, SparkleIcon } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { api, ApiError, errorMessage } from "@/lib/api";
-import { branchesQuery, keys } from "@/lib/queries";
+import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { useBranch } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { sopsQuery, templatesQuery, workKeys, type Agent, type Template, type ToolMode } from "@/lib/work";
@@ -34,6 +34,7 @@ interface Draft {
   tools: Record<string, ToolMode>;
   autonomy: "ask" | "auto";
   sop_ids: string[];
+  personal?: boolean;
 }
 
 function TemplateCard({ t, selected, onPick }: { t: Template | null; selected: boolean; onPick: () => void }) {
@@ -63,15 +64,19 @@ export function AgentBuilderPage() {
   const { data: templates = [] } = useQuery(templatesQuery);
   const { data: sops = [] } = useQuery(sopsQuery);
   const { data: groups = [] } = useQuery(groupsQuery);
+  const { data: me } = useSuspenseQuery(meQuery);
+  // Staff (agents.own) make personal agents; managers may make one for themselves too.
+  const ownOnly = !me.permissions.includes("agents.manage");
+  const scope = me.scope && me.scope.kind !== "all" ? me.scope : null;
   const branchId = useBranch((s) => s.branchId);
-  const startBranch = branches.find((b) => b.id === branchId) ?? branches[0];
+  const startBranch = branches.find((b) => b.id === (scope?.branch_id ?? branchId)) ?? branches[0];
 
   const [step, setStep] = useState(0);
   // undefined = nothing picked yet; null = blank agent; string = template id
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
   const [d, setD] = useState<Draft>(() => ({
-    template: null, branch_id: startBranch?.id ?? "", department_id: null, name: "", role: "", soul: "",
-    color: COLORS[0]!, model_group: "smart", tools: {}, autonomy: "ask", sop_ids: [],
+    template: null, branch_id: startBranch?.id ?? "", department_id: scope?.department_id ?? null, name: "", role: "", soul: "",
+    color: COLORS[0]!, model_group: "smart", tools: {}, autonomy: "ask", sop_ids: [], personal: ownOnly,
   }));
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }));
   const branch = branches.find((b) => b.id === (d.branch_id || startBranch?.id)) ?? startBranch;
@@ -176,6 +181,14 @@ export function AgentBuilderPage() {
               </div>
               <p className="text-[12.5px] text-muted">The department decides which SOPs apply automatically and where the agent sits in the office.</p>
             </fieldset>
+            {ownOnly ? (
+              <p className="rounded-sm bg-accent-soft px-3 py-2 text-[13px] text-accent">This will be your personal agent: you give it work and answer its questions, and your managers can see it.</p>
+            ) : (
+              <label className="flex items-start gap-2.5 text-[13.5px]">
+                <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={!!d.personal} onChange={(e) => set({ personal: e.target.checked })} />
+                <span>My personal agent<span className="block text-[12.5px] text-muted">It works for you: only you and your managers manage it.</span></span>
+              </label>
+            )}
           </section>
         ) : null}
 

@@ -136,6 +136,7 @@ async def task_event(
         "task.event",
         {
             "task_id": task.id,
+            "agent_id": task.assignee_agent_id,
             "kind": kind,
             "actor": actor,
             "text": text,
@@ -215,6 +216,21 @@ async def agent_status(agent: Agent, status: str, task: Task | None = None) -> N
     )
 
 
+ASK_NUDGE = (
+    "Your answer ends with a question for the person, but a task's final answer closes "
+    "the task and nobody will reply to it. If you need their answer before you can finish, "
+    "call ask_human now (with options if it is a choice). If not, give your final answer "
+    "without the question."
+)
+
+
+def ends_with_question(text: str | None) -> bool:
+    """The last line of an answer is a question (what an agent does instead of ask_human)."""
+    lines = [ln.strip().strip("*_>#` ").strip() for ln in (text or "").splitlines()]
+    last = next((ln for ln in reversed(lines) if ln), "")
+    return last.endswith("?")
+
+
 def _count(n: int, word: str) -> str:
     return f"{n} {word}" + ("" if n == 1 else "s")
 
@@ -239,7 +255,7 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
 
 
-TEAM_TOOLS = ("delegate", "consult", "ask_colleague")
+TEAM_TOOLS = ("delegate", "consult", "ask_colleague", "split_work")
 
 
 def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]]:
@@ -252,6 +268,8 @@ def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
         if n == "consult" and task is None:
+            continue
+        if n == "split_work" and not delegation.can_split(agent, task):
             continue
         if n == "ask_colleague" and (task is None or task.depth >= colleague.MAX_DEPTH):
             continue
@@ -421,6 +439,21 @@ async def _team_call(
             return None
         if known is not None:
             await add_tool_result(db, task.id, call_id, name, known)
+            return None
+        if not run:
+            await delegation.collect(db, task.id, call_id)
+            return None
+        return StepResult("delegate", call_id=call_id, children=run)
+    if name == "split_work":
+        if not delegation.can_split(agent, task):
+            await add_tool_result(
+                db, task.id, call_id, name, "Error: helpers cannot split their work again."
+            )
+            return None
+        try:
+            run = await delegation.plan(db, task, agent, call_id, args, helpers=True)
+        except delegation.DelegationError as e:
+            await add_tool_result(db, task.id, call_id, name, f"Error: {e}")
             return None
         if not run:
             await delegation.collect(db, task.id, call_id)
@@ -751,6 +784,24 @@ async def run_task_step(task_id: str) -> StepResult:
                     )
                     continue
                 answer = json.dumps(value, ensure_ascii=False)
+            elif task.depth == 0 and ends_with_question(answer):
+                # Once per task: a top-level agent that ends with a question meant to ask.
+                nudged = await db.scalar(
+                    select(TaskEvent.id).where(
+                        TaskEvent.task_id == task.id, TaskEvent.kind == "nudge"
+                    )
+                )
+                if nudged is None:
+                    _add(db, agent, "user", task_id=task.id, content=ASK_NUDGE)
+                    await db.commit()
+                    await task_event(
+                        db,
+                        task,
+                        "nudge",
+                        "system",
+                        "reminded it to ask with ask_human instead of ending on a question",
+                    )
+                    continue
             await activity(agent, task, "answer", text=_brief(answer or "", 600))
             return StepResult("done", answer)
         await db.commit()
@@ -934,7 +985,12 @@ async def expire_approval(approval_id: str) -> None:
             await events.publish(
                 a.workspace_id,
                 "approval.resolved",
-                {"approval_id": a.id, "status": "expired", "task_id": a.task_id},
+                {
+                    "approval_id": a.id,
+                    "status": "expired",
+                    "task_id": a.task_id,
+                    "agent_id": a.agent_id,
+                },
             )
 
 

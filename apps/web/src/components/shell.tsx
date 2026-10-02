@@ -45,7 +45,7 @@ function useVisibleNav() {
     () =>
       NAV.map((s) => ({
         ...s,
-        items: s.items.filter((i) => !i.perm || me.permissions.includes(i.perm)),
+        items: s.items.filter((i) => !i.perm || [i.perm].flat().some((p) => me.permissions.includes(p))),
       })).filter((s) => s.items.length),
     [me.permissions],
   );

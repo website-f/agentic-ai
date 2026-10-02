@@ -5,7 +5,17 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from ..core.security import MIN_PASSWORD_LENGTH
 
-Role = Literal["owner", "admin", "operator", "approver", "viewer"]
+Role = Literal[
+    "owner",
+    "admin",
+    "branch_manager",
+    "hod",
+    "supervisor",
+    "staff",
+    "operator",
+    "approver",
+    "viewer",
+]
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 
 
@@ -54,11 +64,21 @@ class WorkspaceOut(BaseModel):
     timezone: str
 
 
+class ScopeOut(BaseModel):
+    kind: Literal["all", "branch", "department", "own"]
+    label: str
+    branch_id: str | None = None
+    branch_name: str | None = None
+    department_id: str | None = None
+    department_name: str | None = None
+
+
 class MeOut(BaseModel):
     user: UserOut
     workspace: WorkspaceOut
     role: Role
     permissions: list[str]
+    scope: ScopeOut | None = None
 
 
 class MemberOut(BaseModel):
@@ -70,12 +90,19 @@ class MemberOut(BaseModel):
     must_change_password: bool
     last_login_at: datetime | None
     joined_at: datetime
+    branch_id: str | None = None
+    branch_name: str | None = None
+    department_id: str | None = None
+    department_name: str | None = None
+    agents: int = 0  # personal agents
 
 
 class MemberCreateIn(BaseModel):
     email: EmailStr
     name: str = Field(min_length=1, max_length=120)
     role: Role
+    branch_id: str | None = None
+    department_id: str | None = None
 
 
 class MemberCreateOut(BaseModel):
@@ -85,6 +112,8 @@ class MemberCreateOut(BaseModel):
 
 class MemberUpdateIn(BaseModel):
     role: Role
+    branch_id: str | None = None
+    department_id: str | None = None
 
 
 class TempPasswordOut(BaseModel):

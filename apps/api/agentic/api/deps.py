@@ -11,6 +11,7 @@ from ..core.config import settings
 from ..core.db import get_db
 from ..core.security import PERMISSIONS, can, new_token, token_hash
 from ..models import AuthSession, Membership, User
+from .scope import Scope
 
 SESSION_COOKIE = "agentic_session"
 CSRF_COOKIE = "agentic_csrf"
@@ -23,10 +24,16 @@ class Principal:
     workspace_id: str
     role: str
     session_id: str
+    branch_id: str | None = None  # P9: a scoped role's branch / department
+    department_id: str | None = None
 
     @property
     def actor(self) -> str:
         return f"user:{self.user.id}"
+
+    @property
+    def scope(self) -> Scope:
+        return Scope.of(self.role, self.user.id, self.branch_id, self.department_id)
 
     @property
     def permissions(self) -> list[str]:
@@ -97,7 +104,7 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         )
     row = (
         await db.execute(
-            select(User, Membership.role)
+            select(User, Membership)
             .join(Membership, Membership.user_id == User.id)
             .where(User.id == session.user_id, Membership.workspace_id == session.workspace_id)
         )
@@ -108,8 +115,15 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
             "access_removed",
             "This account no longer has access to the workspace.",
         )
-    user, role = row
-    return Principal(user=user, workspace_id=session.workspace_id, role=role, session_id=session.id)
+    user, m = row
+    return Principal(
+        user=user,
+        workspace_id=session.workspace_id,
+        role=m.role,
+        session_id=session.id,
+        branch_id=m.branch_id,
+        department_id=m.department_id,
+    )
 
 
 async def principal_allow_pw_change(

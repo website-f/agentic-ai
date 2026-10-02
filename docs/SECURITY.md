@@ -111,6 +111,16 @@ The agent browser (after P8): its own container and network, shared only with th
 address guard; downloads off; form submits only through `browser_submit`, which is high
 risk and always waits for a person; page text reaches the model fenced as untrusted.
 
+Office roles (P9): every list, single read, live event, push and Telegram button is
+filtered by the person's scope (`api/scope.py`); outside the scope is "not found". Tested
+per role in `tests/test_office_roles.py`.
+
+Saved logins (P9): envelope-encrypted with the row id as associated data; the API returns
+a hint only; the model sees the login's name only; the browser service types it only on
+the login's sites, only a password into a password field, never echoes either value, and
+signs in without approval only through the button of the form that holds the saved
+password. The live test checks that the password appears in no message and no event.
+
 Not built (still open): TOTP, OIDC, a master-key rotation tool, CI with Trivy on every
 build (no remote repository yet). Login rate limiting is in place (5 per email, 20 per IP,
 15 minutes).

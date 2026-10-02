@@ -53,6 +53,10 @@ export interface Agent {
   current_task: { id: string; title: string; status: TaskStatus } | null;
   open_tasks: number;
   created_at: string;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  clone_of?: string | null;
+  can_manage?: boolean;
 }
 
 export interface SOP {
@@ -93,6 +97,8 @@ export interface Task {
   depth: number;
   schedule_id: string | null;
   has_output_schema: boolean;
+  labels?: string[];
+  branch_id?: string | null;
 }
 
 export interface TaskEvent {

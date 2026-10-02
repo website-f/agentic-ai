@@ -8,6 +8,10 @@ every action returns a JPEG frame for the live monitor.
 
 Form submits are refused unless the call says allow_submit (the agent's browser_submit
 tool, which always needs a person's approval).
+
+Saved logins (P9) arrive as `secret` typing: the service types them only when the page is
+on one of the login's hosts, marks the field, and never returns a secret or password
+field's value, so neither the model nor the monitor ever sees it.
 """
 
 import asyncio
@@ -33,6 +37,20 @@ IDLE_SECONDS = int(os.environ.get("BROWSER_IDLE_SECONDS", "600"))
 VIEWPORT = {"width": 1280, "height": 800}
 MAX_ELEMENTS = 60
 TEXT_CHARS = 2500
+# Camoufox's humanized cursor deadlocks once 3+ contexts click at the same time (helpers
+# working in parallel), so it is off unless asked for.
+HUMANIZE = os.environ.get("BROWSER_HUMANIZE", "false").lower() in ("1", "true", "yes")
+# Self-healing: this many timeouts across sessions within WEDGE_WINDOW seconds means the
+# browser itself is stuck; it is restarted and agents' next step opens a fresh session.
+WEDGE_TIMEOUTS = 4
+WEDGE_WINDOW = 120
+# One browser, many agents: a screenshot in one context while another context clicks makes
+# Firefox's click wait forever once 3+ agents work at once (measured). Screenshots and
+# pointer actions therefore take turns; the wait for the next page happens outside it.
+PAINT = asyncio.Lock()
+# Dev only: extra host names allowed although they are private (the practice portal on the
+# browser network). Empty in production.
+ALLOW_HOSTS = {h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()}
 
 MARK_JS = """(max) => {
   const sel = 'a[href], button, input:not([type=hidden]), textarea, select, [role=button], ' +
@@ -52,7 +70,10 @@ MARK_JS = """(max) => {
     const submit = (tag === 'button' && (type === '' || type === 'submit') && !!el.form)
       || (tag === 'input' && (type === 'submit' || type === 'image'));
     const item = {n, tag, type, label, submit};
-    if (tag === 'input' || tag === 'textarea') item.value = String(el.value || '').slice(0, 60);
+    if (tag === 'input' || tag === 'textarea') {
+      const hide = type === 'password' || el.hasAttribute('data-agentic-secret');
+      item.value = hide ? (el.value ? '(filled, hidden)' : '') : String(el.value || '').slice(0, 60);
+    }
     if (type === 'checkbox' || type === 'radio') item.checked = !!el.checked;
     if (tag === 'select') item.options = Array.from(el.options).slice(0, 20).map(o => o.text.trim());
     out.push(item);
@@ -78,6 +99,8 @@ async def host_ok(host: str | None) -> bool:
     if not host:
         return False
     host = host.strip("[]").lower()
+    if host in ALLOW_HOSTS:
+        return True
     try:
         return _ip_ok(host)
     except ValueError:
@@ -114,14 +137,14 @@ class Session:
         self.lock = asyncio.Lock()
 
 
-state: dict[str, Any] = {"browser": None, "manager": None, "sessions": {}}
+state: dict[str, Any] = {"browser": None, "manager": None, "sessions": {}, "timeouts": [], "restarts": 0}
 
 
 async def _browser() -> Any:
     if state["browser"] is None:
         from camoufox.async_api import AsyncCamoufox
 
-        manager = AsyncCamoufox(headless=True, humanize=True, block_webrtc=True, i_know_what_im_doing=True)
+        manager = AsyncCamoufox(headless=True, humanize=HUMANIZE, block_webrtc=True, i_know_what_im_doing=True)
         state["manager"] = manager
         state["browser"] = await manager.__aenter__()
     return state["browser"]
@@ -143,6 +166,28 @@ async def _close(sid: str) -> None:
             await s.context.close()
         except Exception:  # noqa: BLE001
             log.warning("could not close %s", sid, exc_info=True)
+
+
+async def _restart_browser() -> None:
+    """Close every session and the browser; the next request launches a fresh one."""
+    log.warning("browser looks stuck (%d timeouts in %ds): restarting it", WEDGE_TIMEOUTS, WEDGE_WINDOW)
+    for sid in list(state["sessions"]):
+        await _close(sid)
+    manager, state["manager"], state["browser"] = state["manager"], None, None
+    state["timeouts"] = []
+    state["restarts"] += 1
+    if manager is not None:
+        try:
+            await asyncio.wait_for(manager.__aexit__(None, None, None), 20)
+        except Exception:  # noqa: BLE001 - it is being replaced anyway
+            log.warning("old browser did not close cleanly", exc_info=True)
+
+
+async def _note_timeout() -> None:
+    now = time.time()
+    state["timeouts"] = [t for t in state["timeouts"] if now - t < WEDGE_WINDOW] + [now]
+    if len(state["timeouts"]) >= WEDGE_TIMEOUTS:
+        await _restart_browser()
 
 
 @asynccontextmanager
@@ -177,11 +222,33 @@ class Act(BaseModel):
     key: str | None = None
     dy: int = 600
     allow_submit: bool = False
+    secret: bool = False  # a saved login: typed only on `hosts`, never echoed back
+    secret_kind: str = ""  # username | password (a password goes only into a password field)
+    hosts: list[str] = Field(default_factory=list, max_length=20)
+
+
+def host_matches(url: str, hosts: list[str]) -> bool:
+    h = (urlparse(url).hostname or "").lower()
+    return any(h == x.lower() or h.endswith("." + x.lower()) for x in hosts if x)
+
+
+async def _shot(page: Any) -> bytes:
+    async with PAINT:
+        return await page.screenshot(type="jpeg", quality=55, timeout=10_000, scale="css")
 
 
 async def _frame(page: Any) -> str:
-    jpg = await page.screenshot(type="jpeg", quality=55, timeout=10_000)
-    return base64.b64encode(jpg).decode()
+    return base64.b64encode(await _shot(page)).decode()
+
+
+async def _press(page: Any, loc: Any) -> None:
+    """Click, taking turns with screenshots, then wait for whatever page it opens."""
+    async with PAINT:
+        await loc.click(timeout=10_000, no_wait_after=True)
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=10_000)
+    except Exception:  # noqa: BLE001 - not every click opens a page
+        pass
 
 
 async def _observe(s: Session, point: dict[str, float] | None = None, read: bool = False) -> dict[str, Any]:
@@ -206,7 +273,7 @@ async def _observe(s: Session, point: dict[str, float] | None = None, read: bool
 
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
-    return {"ok": True, "sessions": len(state["sessions"])}
+    return {"ok": True, "sessions": len(state["sessions"]), "restarts": state["restarts"], "humanize": HUMANIZE}
 
 
 @app.post("/sessions")
@@ -244,6 +311,28 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 if u.scheme not in ("http", "https") or not await host_ok(u.hostname):
                     return {"error": "That address is not allowed (only public http/https sites)."}
                 await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+            elif body.action == "login_submit":
+                # The sign-in button of the form that holds the saved password: the only
+                # submit that needs no person, because saving the login allowed it.
+                if not body.hosts or not host_matches(page.url, body.hosts):
+                    return {"error": "This saved login is not for this site."}
+                loc = page.locator(f'[data-agentic-n="{body.element}"]')
+                if await loc.count() == 0:
+                    return {"error": f"There is no element {body.element} now. Look at the page again."}
+                same_form = await loc.evaluate(
+                    "(el) => { const f = el.form || el.closest('form');"
+                    " return !!f && !!f.querySelector('input[type=password][data-agentic-secret]'); }"
+                )
+                if not same_form:
+                    return {"error": "That is not the sign-in button of the login form."}
+                box = await loc.bounding_box()
+                if box:
+                    point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
+                await _press(page, loc)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=6000)
+                except Exception:  # noqa: BLE001
+                    pass
             elif body.action in ("click", "type", "select", "check"):
                 loc = page.locator(f'[data-agentic-n="{body.element}"]')
                 if await loc.count() == 0:
@@ -258,8 +347,16 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 if body.action == "click":
                     if info["submit"] and not body.allow_submit:
                         return {"error": "SUBMIT_NEEDS_APPROVAL: this button sends the form. Use browser_submit."}
-                    await loc.click(timeout=10_000)
+                    await _press(page, loc)
                 elif body.action == "type":
+                    if body.secret:
+                        if not body.hosts or not host_matches(page.url, body.hosts):
+                            return {"error": "This saved login is not for this site."}
+                        if body.secret_kind == "password" and not await loc.evaluate(
+                            "(el) => el.tagName === 'INPUT' && el.type === 'password'"
+                        ):
+                            return {"error": "The password can only go into a password field."}
+                        await loc.evaluate("(el) => el.setAttribute('data-agentic-secret', '1')")
                     await loc.fill(body.text or "", timeout=10_000)
                     if body.key == "Enter":
                         if not body.allow_submit:
@@ -271,7 +368,8 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     except Exception:  # noqa: BLE001 - try the value instead of the label
                         await loc.select_option(value=body.text or "", timeout=5000)
                 else:
-                    await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
+                    async with PAINT:
+                        await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=4000)
                 except Exception:  # noqa: BLE001
@@ -288,8 +386,16 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
             elif body.action not in ("read", "look"):
                 return {"error": f"unknown action {body.action}"}
         except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
-            obs = await _observe(s)
-            obs["error"] = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
+            err = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
+            if "Timeout" in e.__class__.__name__:
+                await _note_timeout()
+                if sid not in state["sessions"]:  # the browser was just restarted
+                    return {"error": f"{err}. The browser was stuck and has been restarted: open the page again."}
+            try:
+                obs = await asyncio.wait_for(_observe(s), 15)
+            except Exception:  # noqa: BLE001 - the page itself is unusable
+                return {"error": err}
+            obs["error"] = err
             return obs
         return await _observe(s, point, read=body.action == "read")
 
@@ -300,8 +406,7 @@ async def frame(sid: str, x_browser_token: str | None = Header(default=None)) ->
     s = state["sessions"].get(sid)
     if s is None:
         raise HTTPException(404, "no such session")
-    jpg = await s.page.screenshot(type="jpeg", quality=55, timeout=10_000)
-    return Response(jpg, media_type="image/jpeg")
+    return Response(await _shot(s.page), media_type="image/jpeg")
 
 
 @app.delete("/sessions/{sid}")

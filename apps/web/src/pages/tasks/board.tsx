@@ -78,6 +78,7 @@ function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void;
         ) : <span className="truncate text-[12px] text-muted">Unassigned</span>}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
+          {(task.labels ?? []).slice(0, 2).map((l) => <Pill key={l}>{l}</Pill>)}
           {task.priority === "high" || task.priority === "urgent" ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{PRIORITY_INFO[task.priority].label}</Pill> : null}
           <time dateTime={task.updated_at} title={`Updated ${timeAgo(task.updated_at).toLowerCase()}`} className="whitespace-nowrap text-[11px] text-muted tabular">{shortAge(task.updated_at)}</time>
         </span>

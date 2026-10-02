@@ -134,13 +134,25 @@ async def _out(db: AsyncSession, b: Broadcast, with_receipts: bool = False) -> B
     )
 
 
+async def scoped_audience(
+    db: AsyncSession, principal: Principal, body: BroadcastIn
+) -> tuple[list[Agent], str]:
+    """Office roles (P9) reach only the agents in their scope: "everyone" from a HOD means
+    everyone in the department."""
+    agents, label = await resolve_audience(db, principal.workspace_id, body)
+    sc = principal.scope
+    if sc.everything:
+        return agents, label
+    return [a for a in agents if sc.sees_agent(a)], f"{label} (in {sc.label})"[:300]
+
+
 @router.post("/preview")
 async def preview(
     body: BroadcastIn,
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    agents, label = await resolve_audience(db, principal.workspace_id, body)
+    agents, label = await scoped_audience(db, principal, body)
     return {
         "label": label,
         "count": len(agents),
@@ -154,7 +166,7 @@ async def send(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> BroadcastOut:
-    agents, label = await resolve_audience(db, principal.workspace_id, body)
+    agents, label = await scoped_audience(db, principal, body)
     if not agents:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -239,6 +251,18 @@ async def history(
             .limit(100)
         )
     ).all()
+    cond = principal.scope.agent_where()
+    if cond is not None:
+        reached = set(
+            (
+                await db.scalars(
+                    select(BroadcastReceipt.broadcast_id)
+                    .join(Agent, Agent.id == BroadcastReceipt.agent_id)
+                    .where(BroadcastReceipt.broadcast_id.in_([b.id for b in rows]), cond)
+                )
+            ).all()
+        )
+        rows = [b for b in rows if b.sender == principal.actor or b.id in reached]
     return [await _out(db, b) for b in rows]
 
 

@@ -11,7 +11,8 @@ export interface FeedEvent {
 }
 
 export interface AgentActivity {
-  agent: { id: string; name: string; role: string; color: string; status: string };
+  agent: { id: string; name: string; role: string; color: string; status: string; clone_of?: string | null };
+  helpers?: { id: string; name: string; color: string }[];
   task: { id: string; title: string; status: string; calls?: number; tokens?: number } | null;
   today: { calls: number; tokens: number; usd: number };
   browser: { session: string } | null;
@@ -20,7 +21,22 @@ export interface AgentActivity {
 
 export const monitorKeys = {
   activity: (id: string) => ["monitor", id] as const,
+  wall: ["monitor", "wall"] as const,
 };
+
+/** One tile of the wall: an agent at work right now. */
+export interface WallItem {
+  agent: { id: string; name: string; role: string; color: string; branch_id: string; clone_of: string | null };
+  task: { id: string; title: string; status: string };
+  browser: { session: string } | null;
+  last: { ts: string; data: Record<string, unknown> } | null;
+}
+
+export const wallQuery = queryOptions({
+  queryKey: monitorKeys.wall,
+  queryFn: () => api<WallItem[]>("/api/monitor/wall"),
+  refetchInterval: 5_000,
+});
 
 export const activityQuery = (id: string) =>
   queryOptions({

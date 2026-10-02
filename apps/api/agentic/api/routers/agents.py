@@ -12,8 +12,9 @@ from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import TOOLS
 from ...core.db import get_db
+from ...core.security import PERMISSIONS
 from ...engine import gateway
-from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task
+from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task, User
 from ...services import audit, events
 from ...services.text import slugify
 from ..agent_schemas import (
@@ -61,10 +62,14 @@ async def _work(db: AsyncSession, ids: list[str]) -> tuple[dict[str, Task], dict
 
 
 async def agent_out(
-    db: AsyncSession, a: Agent, work: tuple[dict[str, Task], dict[str, int]] | None = None
+    db: AsyncSession,
+    a: Agent,
+    work: tuple[dict[str, Task], dict[str, int]] | None = None,
+    principal: Principal | None = None,
 ) -> AgentOut:
     branch = await db.get(Branch, a.branch_id)  # identity map: one query per branch
     dept = await db.get(Department, a.department_id) if a.department_id else None
+    owner = await db.get(User, a.owner_user_id) if a.owner_user_id else None
     now, counts = work if work is not None else await _work(db, [a.id])
     current = now.get(a.id)
     open_tasks = counts.get(a.id, 0)
@@ -99,14 +104,55 @@ async def agent_out(
         else None,
         open_tasks=open_tasks,
         created_at=a.created_at,
+        owner_user_id=a.owner_user_id,
+        owner_name=owner.name if owner else None,
+        clone_of=a.clone_of,
+        can_manage=principal is not None and can_manage(principal, a),
     )
 
 
-async def get_agent(db: AsyncSession, workspace_id: str, agent_id: str) -> Agent:
+def can_manage(principal: Principal, a: Agent) -> bool:
+    return principal.scope.manages_agent(a, PERMISSIONS.get(principal.role, frozenset()))
+
+
+async def get_agent(db: AsyncSession, who: Principal | str, agent_id: str) -> Agent:
+    """The agent, if it is in this workspace and (given a person) inside their scope."""
+    ws = who if isinstance(who, str) else who.workspace_id
     a = await db.get(Agent, agent_id)
-    if a is None or a.workspace_id != workspace_id:
+    if (
+        a is None
+        or a.workspace_id != ws
+        or (not isinstance(who, str) and not who.scope.sees_agent(a))
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
     return a
+
+
+async def managed_agent(db: AsyncSession, principal: Principal, agent_id: str) -> Agent:
+    a = await get_agent(db, principal, agent_id)
+    if not can_manage(principal, a):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            f"Your role ({principal.role}) cannot change {a.name}.",
+        )
+    return a
+
+
+def manage_perm():
+    """Agents are added and changed by people with agents.manage, or agents.own (their own)."""
+
+    async def checker(principal: Principal = Depends(require("read"))) -> Principal:
+        perms = PERMISSIONS.get(principal.role, frozenset())
+        if "agents.manage" not in perms and "agents.own" not in perms:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "forbidden",
+                f"Your role ({principal.role}) cannot add or change agents.",
+            )
+        return principal
+
+    return checker
 
 
 async def _check_placement(
@@ -205,21 +251,32 @@ async def list_agents(
     db: AsyncSession = Depends(get_db),
 ) -> list[AgentOut]:
     q = select(Agent).where(Agent.workspace_id == principal.workspace_id)
+    cond = principal.scope.agent_where()
+    if cond is not None:
+        q = q.where(cond)
     if branch_id:
         q = q.where(Agent.branch_id == branch_id)
     if not include_retired:
         q = q.where(Agent.status != "retired")
     rows = (await db.scalars(q.order_by(Agent.created_at))).all()
     work = await _work(db, [a.id for a in rows])
-    return [await agent_out(db, a, work) for a in rows]
+    return [await agent_out(db, a, work, principal) for a in rows]
 
 
 @router.post("/agents", status_code=status.HTTP_201_CREATED)
 async def create_agent(
     body: AgentIn,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
+    perms = PERMISSIONS.get(principal.role, frozenset())
+    personal = body.personal or "agents.manage" not in perms
+    if not personal and not principal.scope.placement_ok(body.branch_id, body.department_id):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "outside_scope",
+            f"You can only place agents in {principal.scope.label}.",
+        )
     await _check_placement(
         db,
         principal.workspace_id,
@@ -236,7 +293,12 @@ async def create_agent(
         .where(Agent.workspace_id == principal.workspace_id, Agent.slug == slug)
     ):
         slug, n = f"{base}-{n}", n + 1
-    fields = body.model_dump()
+    fields = body.model_dump(exclude={"personal"})
+    if personal:
+        fields["owner_user_id"] = principal.user.id
+        if "agents.manage" not in perms:
+            # A personal agent works for its owner: no org-chart powers, no heartbeat.
+            fields.update(role_kind="leaf", heartbeat=False, reports_to=None)
     if body.template in BY_ID:
         tpl = BY_ID[body.template]
         if "role_kind" not in body.model_fields_set:
@@ -257,11 +319,12 @@ async def create_agent(
             "role": a.role,
             "branch_id": a.branch_id,
             "department_id": a.department_id,
+            "owner_user_id": a.owner_user_id,
         },
     )
     await db.commit()
     await db.refresh(a)
-    out = await agent_out(db, a)
+    out = await agent_out(db, a, None, principal)
     await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
     return out
 
@@ -272,24 +335,37 @@ async def read_agent(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
-    return await agent_out(db, await get_agent(db, principal.workspace_id, agent_id))
+    return await agent_out(db, await get_agent(db, principal, agent_id), None, principal)
 
 
 @router.patch("/agents/{agent_id}")
 async def update_agent(
     agent_id: str,
     body: AgentUpdateIn,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
-    a = await get_agent(db, principal.workspace_id, agent_id)
+    a = await managed_agent(db, principal, agent_id)
     changes = body.model_dump(exclude_unset=True)
+    if "agents.manage" not in PERMISSIONS.get(principal.role, frozenset()):
+        for k in ("role_kind", "heartbeat", "reports_to"):
+            changes.pop(k, None)
     if "tools" in changes:
         _check_tools(changes["tools"] or {})
     branch_id = changes.get("branch_id", a.branch_id)
     if branch_id != a.branch_id and "department_id" not in changes:
         changes["department_id"] = None  # the old department belongs to the old branch
     dept_id = changes.get("department_id", a.department_id)
+    if (
+        ("branch_id" in changes or "department_id" in changes)
+        and a.owner_user_id != principal.user.id
+        and not principal.scope.placement_ok(branch_id, dept_id)
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "outside_scope",
+            f"You can only place agents in {principal.scope.label}.",
+        )
     await _check_placement(
         db,
         principal.workspace_id,
@@ -329,7 +405,7 @@ async def update_agent(
     await db.commit()
     await db.refresh(a)
     await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
-    return await agent_out(db, a)
+    return await agent_out(db, a, None, principal)
 
 
 # ---------------------------------------------------------------- chat
@@ -341,7 +417,7 @@ async def list_sessions(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    await get_agent(db, principal.workspace_id, agent_id)
+    await get_agent(db, principal, agent_id)
     rows = (
         await db.scalars(
             select(ChatSession)
@@ -390,7 +466,7 @@ async def chat(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> ChatOut:
-    a = await get_agent(db, principal.workspace_id, agent_id)
+    a = await get_agent(db, principal, agent_id)
     if a.status != "active":
         raise api_error(status.HTTP_409_CONFLICT, "agent_inactive", f"{a.name} is {a.status}.")
     if body.session_id:

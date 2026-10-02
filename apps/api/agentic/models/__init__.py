@@ -63,6 +63,12 @@ class Membership(Timestamps, Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     role: Mapped[str] = mapped_column(String(16))
+    # P9 scope for office roles: a branch manager's branch, a HOD's or supervisor's
+    # department, a staff member's home (where their own agents are placed).
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL")
+    )
 
     user: Mapped[User] = relationship(lazy="joined")
 
@@ -314,6 +320,12 @@ class Agent(Timestamps, Base):
     budget_monthly_usd: Mapped[float | None] = mapped_column(Numeric(12, 4))
     # P7 heartbeat: wakes during work hours to pick up queued work or ask for some.
     heartbeat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P9: a staff member's personal agent (only they and their managers manage it), and
+    # helpers an agent duplicated itself into to share a big job (clone_of = the original).
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    clone_of: Mapped[str | None] = mapped_column(String(40), index=True)
 
 
 class ChatSession(Timestamps, Base):
@@ -371,6 +383,8 @@ class Task(Timestamps, Base):
     output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     correction_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     schedule_id: Mapped[str | None] = mapped_column(String(40))
+    # P9: what kind of work this is ("tender", "invoice"...), for the company overview.
+    labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
 
 class AgentMessage(Base):
@@ -994,3 +1008,52 @@ class Incident(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- P9 vault and reports
+
+
+class Credential(Timestamps, Base):
+    """A website login agents may use without ever seeing it. The username and password are
+    envelope-encrypted; the browser types them in only on the hosts listed here."""
+
+    __tablename__ = "credentials"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_credentials_ws_name"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))  # what agents call it: "supplier-portal"
+    hosts: Mapped[list[str]] = mapped_column(JSONB, default=list)  # e.g. ["portal.example.com"]
+    username_enc: Mapped[str] = mapped_column(Text)
+    password_enc: Mapped[str] = mapped_column(Text)
+    username_hint: Mapped[str] = mapped_column(String(40), default="")
+    agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # empty = any agent in scope
+    created_by: Mapped[str] = mapped_column(String(80))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def aad(self) -> str:
+        return f"credential:{self.id}"
+
+
+class Report(Base):
+    """A finished piece of work written up for people: markdown plus optional tables."""
+
+    __tablename__ = "reports"
+    __table_args__ = (Index("ix_reports_ws_created", "workspace_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("rp"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    call_id: Mapped[str | None] = mapped_column(String(80))  # one report per tool call
+    title: Mapped[str] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(String(600), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    # [{"title": "...", "columns": [...], "rows": [[...], ...]}]
+    tables: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    labels: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

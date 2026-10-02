@@ -253,17 +253,20 @@ function SystemTab() {
 export function SchedulesPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
+  // Incidents and system jobs are the whole workspace's plumbing: workspace roles only.
+  const canOrg = me.permissions.includes("org.read");
+  const tabs = TABS.filter((t) => canOrg || (t !== "incidents" && t !== "system"));
   const search = useSearch({ strict: false }) as { tab?: Tab };
   const navigate = useNavigate();
-  const tab: Tab = search.tab && TABS.includes(search.tab) ? search.tab : "schedules";
-  const { data: incidents = [] } = useQuery(incidentsQuery);
+  const tab: Tab = search.tab && tabs.includes(search.tab) ? search.tab : "schedules";
+  const { data: incidents = [] } = useQuery({ ...incidentsQuery, enabled: canOrg });
   const open = incidents.filter((i) => !i.resolved_at).length;
   return (
     <Page>
       <PageHeader title="Schedules" description="Recurring work for your agents, and a ledger of every run: when it started, how it ended, and failures grouped into incidents." />
       <Tabs.Root value={tab} onValueChange={(v) => navigate({ to: "/schedules", search: { tab: v as Tab }, replace: true })}>
         <Tabs.List aria-label="Schedule sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <Tabs.Trigger key={t} value={t} className="-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
               {TAB_LABEL[t]}
               {t === "incidents" && open ? <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[10.5px] font-semibold text-white tabular">{open}</span> : null}
@@ -272,8 +275,8 @@ export function SchedulesPage() {
         </Tabs.List>
         <Tabs.Content value="schedules" className="outline-none"><SchedulesTab canWrite={canWrite} /></Tabs.Content>
         <Tabs.Content value="runs" className="outline-none"><RunsTab /></Tabs.Content>
-        <Tabs.Content value="incidents" className="outline-none"><IncidentsTab canWrite={canWrite} /></Tabs.Content>
-        <Tabs.Content value="system" className="outline-none"><SystemTab /></Tabs.Content>
+        {canOrg ? <Tabs.Content value="incidents" className="outline-none"><IncidentsTab canWrite={canWrite} /></Tabs.Content> : null}
+        {canOrg ? <Tabs.Content value="system" className="outline-none"><SystemTab /></Tabs.Content> : null}
       </Tabs.Root>
     </Page>
   );

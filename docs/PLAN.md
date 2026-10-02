@@ -63,7 +63,9 @@ Durations assume one developer working with Claude Code. Each phase ends with a 
 | **P7 Teams + governance** (done 2026-10-01) | 2 | Delegation trees (depth cap, leaf/orchestrator, output schema), meetings (bounded agent-to-agent discussions with decision summaries), org chart editor, budgets with auto-pause, heartbeats, cron ledger UI, bindings (channel to agent routing), OpenAI-compatible agent API | Orchestrator splits a task to 3 children in parallel and merges validated outputs; two agents hold a meeting and post one decision summary to the task; an agent over budget pauses and asks |
 | **P8 Hardening + deploy** (done 2026-10-02; VPS deploy prepared, not run) | 1 | `obs` profile (Langfuse), backups (restic to a local repo by default, any S3 target optional), security review, load test, optional VPS deploy behind `/opt/reverse-proxy`, runbook | Restore from backup on a fresh machine works; security checklist in SECURITY.md all green |
 
-**Total: about 14 weeks.** P1 comes before P2 because every agent depends on the gateway, and most of it is a port from CrawlOps. Everything through P7 runs entirely on the local dev PC.
+| **P9 Office roles + oversight** (done 2026-10-02) | 1 | Office roles with scope (branch manager, head of department, supervisor, staff with personal agents) on every list, live event, notification and button; saved website logins agents use without seeing them; helpers (an agent duplicates itself to split a big job); questions with answer buttons; reports with tables; company overview of every branch with an AI briefing; monitor wall of everyone at work; a practice supplier portal for end-to-end tests | A HOD sees and decides only their department's agents; a staff member manages only their own; an agent signs in with a saved login whose password never reaches a model; a big inbox job is split between helpers and comes back as one report |
+
+**Total: about 15 weeks.** P1 comes before P2 because every agent depends on the gateway, and most of it is a port from CrawlOps. Everything through P7 runs entirely on the local dev PC.
 
 ## 5. Milestone demos
 

@@ -1,11 +1,35 @@
-export type Role = "owner" | "admin" | "operator" | "approver" | "viewer";
+export type Role =
+  | "owner"
+  | "admin"
+  | "branch_manager"
+  | "hod"
+  | "supervisor"
+  | "staff"
+  | "operator"
+  | "approver"
+  | "viewer";
+
+/** Office roles see a slice of the workspace (P9). */
+export const SCOPED_ROLES: Role[] = ["branch_manager", "hod", "supervisor", "staff"];
+
+export interface Scope {
+  kind: "all" | "branch" | "department" | "own";
+  label: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  department_id: string | null;
+  department_name: string | null;
+}
 
 export interface Me {
   user: { id: string; email: string; name: string; must_change_password: boolean };
   workspace: { id: string; name: string; slug: string; timezone: string };
   role: Role;
   permissions: string[];
+  scope?: Scope | null;
 }
+
+export const hasAny = (me: Me, ...perms: string[]) => perms.some((p) => me.permissions.includes(p));
 
 export interface Member {
   user_id: string;
@@ -15,6 +39,11 @@ export interface Member {
   is_active: boolean;
   must_change_password: boolean;
   last_login_at: string | null;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  agents?: number;
   joined_at: string;
 }
 
@@ -70,7 +99,11 @@ export interface SystemStatus {
 export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
   owner: { label: "Owner", blurb: "Everything, including owner access and workspace-level budgets." },
   admin: { label: "Admin", blurb: "Members, organization, AI keys and policies." },
-  operator: { label: "Operator", blurb: "Creates and assigns work, instructs agents." },
-  approver: { label: "Approver", blurb: "Decides approvals and reviews what agents learn." },
-  viewer: { label: "Viewer", blurb: "Read only." },
+  branch_manager: { label: "Branch manager", blurb: "Runs one branch: its agents, work, approvals, logins and people." },
+  hod: { label: "Head of department", blurb: "Runs one department: its agents, work, approvals and people." },
+  supervisor: { label: "Supervisor", blurb: "Gives the department's agents work and decides what they ask. Does not change agents." },
+  staff: { label: "Staff", blurb: "Has personal agents: creates them, gives them work, answers them." },
+  operator: { label: "Operator", blurb: "Creates and assigns work across the workspace, instructs agents." },
+  approver: { label: "Approver", blurb: "Decides approvals across the workspace and reviews what agents learn." },
+  viewer: { label: "Viewer", blurb: "Read only, the whole workspace." },
 };

@@ -35,7 +35,8 @@ async def for_agent(db: AsyncSession, agent: Agent) -> Viewer:
                 )
             ).all()
         )
-    return Viewer(agent.workspace_id, agent.id, ids)
+    # A helper (P9) remembers what its original remembers.
+    return Viewer(agent.workspace_id, agent.clone_of or agent.id, ids)
 
 
 def for_people(workspace_id: str) -> Viewer:

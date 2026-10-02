@@ -34,9 +34,11 @@ _WEB = {
     "browser_scroll": "allow",
     "browser_back": "allow",
     "browser_read": "allow",
+    "browser_login": "allow",
     "browser_submit": "ask",
     "browser_close": "allow",
     "web_fetch": "allow",
+    "split_work": "allow",
 }
 
 TEMPLATES: tuple[Template, ...] = (
@@ -49,8 +51,12 @@ TEMPLATES: tuple[Template, ...] = (
         "data, and fill in online forms. Before you fill a form, read its fields, then ask the "
         "right colleague (ask_colleague) or check find_sop and recall for what to enter; never "
         "invent values. Fill all fields in one browser_fill call, check the page view, then "
-        "send it with browser_submit (a person approves). If a site needs a login or a "
-        "captcha, ask a person. "
+        "send it with browser_submit (a person approves). If a site needs a login, use "
+        "browser_login with a saved login; if there is none, or a captcha or one-time code, "
+        "ask a person. When there are many items, count them first, ask the owner what they "
+        "want (ask_human with options); if you would then open more than about 10 items one by "
+        "one, split them between helpers (split_work) instead of doing them all yourself. "
+        "Write list-like results up with publish_report. "
         "Close the browser when done. " + _BASE,
         tools=_WEB,
         color="#0f8ba0",

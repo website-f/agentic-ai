@@ -67,6 +67,7 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
   });
   const question = a.kind === "question";
   const budget = a.kind === "budget";
+  const options = Array.isArray(a.args.options) ? (a.args.options as unknown[]).map(String).filter(Boolean).slice(0, 6) : [];
   const pending = a.status === "pending";
   const expiresIn = timeAgo(a.expires_at);
 
@@ -109,8 +110,17 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
       {pending && canDecide ? (
         question ? (
           <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (answer.trim()) decide.mutate({ decision: "answer", answer }); }}>
+            {options.length ? (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Quick answers">
+                {options.map((o) => (
+                  <Button key={o} type="button" size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "answer", answer: o })}>
+                    {o}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             <label htmlFor={`ans-${a.id}`} className="sr-only">Your answer</label>
-            <textarea id={`ans-${a.id}`} value={answer} onChange={(e) => setAnswer(e.target.value)} rows={2} placeholder="Type your answer"
+            <textarea id={`ans-${a.id}`} value={answer} onChange={(e) => setAnswer(e.target.value)} rows={2} placeholder={options.length ? "Or type your own answer" : "Type your answer"}
               className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] focus-visible:border-accent focus-visible:outline-none" />
             <div className="flex flex-wrap gap-2">
               <Button type="submit" size="sm" disabled={!answer.trim()} loading={decide.isPending}><CheckIcon size={14} weight="bold" /> Send answer</Button>

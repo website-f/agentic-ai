@@ -26,17 +26,19 @@ export function NewTaskDialog({
 }) {
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
-  const active = agents.filter((a) => a.status === "active");
+  const active = agents.filter((a) => a.status === "active" && !a.clone_of);
   const [title, setTitle] = useState(initialBrief ? initialBrief.split("\n")[0]!.slice(0, 120) : "");
   const [brief, setBrief] = useState(initialBrief ?? "");
   const [agent, setAgent] = useState(initialAgent ?? "none");
   const [priority, setPriority] = useState<Priority>("normal");
   const [review, setReview] = useState(true);
   const [startNow, setStartNow] = useState(true);
+  const [labels, setLabels] = useState("");
 
   const create = useMutation({
     mutationFn: () => api<Task>("/api/tasks", "POST", {
       title, brief, priority, requires_review: review,
+      labels: labels.split(",").map((l) => l.trim()).filter(Boolean),
       assignee_agent_id: agent === "none" ? null : agent, start: agent !== "none" && startNow,
     }),
     onSuccess: (t) => {
@@ -80,6 +82,8 @@ export function NewTaskDialog({
               options={[{ value: "low", label: "Low" }, { value: "normal", label: "Normal" }, { value: "high", label: "High" }, { value: "urgent", label: "Urgent" }]} />
           </div>
         </div>
+        <Field label="Labels (optional)" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="e.g. tender, invoice"
+          hint="What kind of work this is. The company overview counts work by label per branch." />
         {agent !== "none" ? <SwitchField checked={startNow} onCheckedChange={setStartNow} label="Start now" hint="Otherwise it waits in Ready until you start it." /> : null}
         <SwitchField checked={review} onCheckedChange={setReview} label="I review the result" hint="Finished work waits in review until you accept it or send it back." />
         <FormError message={create.error && !Object.keys(fields).length ? errorMessage(create.error) : null} />

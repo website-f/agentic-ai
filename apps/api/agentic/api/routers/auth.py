@@ -24,10 +24,25 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeOut:
     from ...core.security import PERMISSIONS
+    from ...models import Branch, Department, Membership
+    from ..schemas import ScopeOut
+    from ..scope import Scope
 
     ws = await db.get(Workspace, workspace_id)
     assert ws is not None
+    m = await db.get(Membership, (workspace_id, user.id))
+    sc = Scope.of(role, user.id, m.branch_id if m else None, m.department_id if m else None)
+    b = await db.get(Branch, sc.branch_id) if sc.branch_id else None
+    d = await db.get(Department, sc.department_id) if sc.department_id else None
     return MeOut(
+        scope=ScopeOut(
+            kind=sc.kind,  # type: ignore[arg-type]
+            label=sc.label,
+            branch_id=sc.branch_id,
+            branch_name=b.name if b else None,
+            department_id=sc.department_id,
+            department_name=d.name if d else None,
+        ),
         user=UserOut(
             id=user.id,
             email=user.email,

@@ -114,7 +114,40 @@ Generate fresh values with `python deploy/scripts/gen-secrets.py`.
   falls back to Groq, then DeepSeek, automatically.
 - Re-check reliability after changing models: docs/RELIABILITY.md.
 
-## 8. Capacity (measured 2026-10-02, load test in deploy/loadtest)
+## 8. People, roles and personal agents
+
+| Role | Sees and manages |
+|---|---|
+| Owner, admin | Everything (admins cannot change owners) |
+| Branch manager | One branch: its agents, work, approvals, logins, and its HODs, supervisors and staff |
+| Head of department | One department: its agents, work, approvals, logins, and its supervisors and staff |
+| Supervisor | One department's work and approvals (does not change agents) |
+| Staff | Their own personal agents: create, give work, answer them |
+| Operator, approver, viewer | The whole workspace: work / approvals / read only |
+
+Add people on Settings > Members: pick the role, then the branch or department. A branch
+manager or HOD can add people below them in their own area. Phone pushes and Telegram
+buttons reach only the people whose area covers the asking agent.
+
+## 9. Saved logins
+
+Logins page: name (what agents call it), the site address, username and password. The
+password is never shown again and never reaches an AI model; the browser types it in only
+on that site, and every use is in Activity. Workspace-wide, one branch, or personal (only
+your own agents). Put the login's name in the agent's SOP or task ("sign in with the saved
+login 'supplier-portal'"). Only save logins you are allowed to give to software; sites
+that need a one-time code, a captcha or a personal signing PIN stay with a person (the
+agent stops and asks).
+
+## 10. Practice supplier portal (testing)
+
+A fake portal with a login and a 34-message inbox, for testing agents end to end:
+`docker compose --profile demo up -d practice-portal` (http://localhost:8509; login
+demo.supplier / practice-only-2026). Agents reach it as http://practice-portal:8080 because
+`.env` allows it (`AGENTIC_PRIVATE_HOSTS_ALLOWED` and `BROWSER_ALLOW_HOSTS`). Never set
+those two in production.
+
+## 11. Capacity (measured 2026-10-02, load test in deploy/loadtest)
 
 On the dev PC (16 GB Docker VM), api 1 CPU, worker 16 concurrent steps, a fake model with
 0.2 to 0.6 s replies, all at once: 50 people using the dashboard (about 100 requests/s),

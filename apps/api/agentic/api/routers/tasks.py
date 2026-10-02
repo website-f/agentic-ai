@@ -103,6 +103,8 @@ async def task_out(
         depth=t.depth,
         schedule_id=t.schedule_id,
         has_output_schema=t.output_schema is not None,
+        labels=list(t.labels or []),
+        branch_id=t.branch_id,
     )
 
 
@@ -138,22 +140,39 @@ async def approval_out(
     )
 
 
-async def _task(db: AsyncSession, ws: str, task_id: str) -> Task:
+async def _task(db: AsyncSession, principal: Principal, task_id: str) -> Task:
+    """The task, if it is in this workspace and inside the person's scope."""
     t = await db.get(Task, task_id)
-    if t is None or t.workspace_id != ws:
+    agent = await db.get(Agent, t.assignee_agent_id) if t and t.assignee_agent_id else None
+    if (
+        t is None
+        or t.workspace_id != principal.workspace_id
+        or not principal.scope.sees_task(t, agent)
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "task_not_found", "That task is not here.")
     return t
 
 
-async def _assignee(db: AsyncSession, ws: str, agent_id: str | None) -> Agent | None:
+async def _assignee(db: AsyncSession, principal: Principal, agent_id: str | None) -> Agent | None:
     if not agent_id:
         return None
     a = await db.get(Agent, agent_id)
-    if a is None or a.workspace_id != ws:
+    if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
         raise api_error(
-            status.HTTP_400_BAD_REQUEST, "bad_agent", "Pick an agent from this workspace."
+            status.HTTP_400_BAD_REQUEST,
+            "bad_agent",
+            f"Pick an agent from {principal.scope.label}.",
         )
     return a
+
+
+def clean_labels(labels: list[str]) -> list[str]:
+    out: list[str] = []
+    for raw in labels:
+        tag = " ".join(str(raw).lower().split())[:32]
+        if tag and tag not in out:
+            out.append(tag)
+    return out[:8]
 
 
 async def start(db: AsyncSession, t: Task, actor: str) -> None:
@@ -175,6 +194,9 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskOut]:
     q = select(Task).where(Task.workspace_id == principal.workspace_id)
+    cond = principal.scope.task_where()
+    if cond is not None:
+        q = q.where(cond)
     if status_:
         q = q.where(Task.status.in_(status_.split(",")))
     if agent_id:
@@ -216,7 +238,7 @@ async def create_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
-    agent = await _assignee(db, principal.workspace_id, body.assignee_agent_id)
+    agent = await _assignee(db, principal, body.assignee_agent_id)
     lowest = (
         await db.scalar(
             select(func.min(Task.position)).where(Task.workspace_id == principal.workspace_id)
@@ -229,8 +251,9 @@ async def create_task(
         brief=body.brief,
         priority=body.priority,
         assignee_agent_id=agent.id if agent else None,
-        branch_id=agent.branch_id if agent else None,
+        branch_id=agent.branch_id if agent else principal.branch_id,
         requires_review=body.requires_review,
+        labels=clean_labels(body.labels),
         created_by=principal.actor,
         status="ready" if agent else "triage",
         position=float(lowest) - 1,
@@ -247,7 +270,11 @@ async def create_task(
     )
     await db.commit()
     await runtime.task_event(db, t, "created", principal.actor, "created the task")
-    await events.publish(principal.workspace_id, "task.created", {"task_id": t.id})
+    await events.publish(
+        principal.workspace_id,
+        "task.created",
+        {"task_id": t.id, "agent_id": t.assignee_agent_id},
+    )
     if body.start and agent:
         await start(db, t, principal.actor)
     await db.refresh(t)
@@ -260,7 +287,7 @@ async def task_detail(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskDetailOut:
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     evs = (
         await db.scalars(select(TaskEvent).where(TaskEvent.task_id == t.id).order_by(TaskEvent.id))
     ).all()
@@ -334,14 +361,16 @@ async def update_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     changes = body.model_dump(exclude_unset=True)
+    if changes.get("labels") is not None:
+        t.labels = clean_labels(changes["labels"])
     if "assignee_agent_id" in changes:
         if t.status in RUNNING:
             raise api_error(
                 status.HTTP_409_CONFLICT, "running", "Cancel the run before reassigning."
             )
-        agent = await _assignee(db, principal.workspace_id, changes["assignee_agent_id"])
+        agent = await _assignee(db, principal, changes["assignee_agent_id"])
         t.assignee_agent_id = agent.id if agent else None
         t.branch_id = agent.branch_id if agent else t.branch_id
     for k in ("title", "brief", "priority", "position"):
@@ -368,7 +397,9 @@ async def update_task(
     await db.commit()
     await db.refresh(t)
     await events.publish(
-        principal.workspace_id, "task.updated", {"task_id": t.id, "status": t.status}
+        principal.workspace_id,
+        "task.updated",
+        {"task_id": t.id, "status": t.status, "agent_id": t.assignee_agent_id},
     )
     return await task_out(db, t)
 
@@ -379,7 +410,7 @@ async def start_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     await start(db, t, principal.actor)
     await db.refresh(t)
     return await task_out(db, t)
@@ -391,7 +422,7 @@ async def cancel_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     if t.status in RUNNING and t.workflow_id:
         try:
             await dispatch.cancel_task(t.workflow_id)
@@ -412,7 +443,7 @@ async def accept_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     if t.status != "review":
         raise api_error(
             status.HTTP_409_CONFLICT, "not_in_review", "Only work in review can be accepted."
@@ -440,7 +471,7 @@ async def revise_task(
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     """Send work back with feedback: the agent continues the same conversation."""
-    t = await _task(db, principal.workspace_id, task_id)
+    t = await _task(db, principal, task_id)
     if t.status not in ("review", "done", "failed"):
         raise api_error(
             status.HTTP_409_CONFLICT, "cannot_revise", "Only finished work can be sent back."
@@ -476,6 +507,9 @@ async def list_approvals(
     db: AsyncSession = Depends(get_db),
 ) -> list[ApprovalOut]:
     q = select(Approval).where(Approval.workspace_id == principal.workspace_id)
+    cond = principal.scope.approval_where()
+    if cond is not None:
+        q = q.where(cond)
     q = (
         q.where(Approval.status == "pending")
         if state == "pending"
@@ -494,7 +528,12 @@ async def decide(
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalOut:
     a = await db.get(Approval, approval_id)
-    if a is None or a.workspace_id != principal.workspace_id:
+    asker = await db.get(Agent, a.agent_id) if a is not None else None
+    if (
+        a is None
+        or a.workspace_id != principal.workspace_id
+        or not principal.scope.sees_agent(asker)
+    ):
         raise api_error(
             status.HTTP_404_NOT_FOUND, "approval_not_found", "That approval is not here."
         )

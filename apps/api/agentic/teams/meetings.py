@@ -460,7 +460,9 @@ async def close(meeting_id: str) -> dict[str, Any]:
 
 async def _ended(db: AsyncSession, m: Meeting) -> None:
     await events.publish(
-        m.workspace_id, "meeting.updated", {"meeting_id": m.id, "status": m.status}
+        m.workspace_id,
+        "meeting.updated",
+        {"meeting_id": m.id, "status": m.status, "participants": m.participant_ids},
     )
     for aid in m.participant_ids:
         await events.publish(

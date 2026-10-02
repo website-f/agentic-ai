@@ -46,41 +46,58 @@ def temp_password(length: int = 14) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-ROLES = ("owner", "admin", "operator", "approver", "viewer")
+ROLES = (
+    "owner",
+    "admin",
+    "branch_manager",
+    "hod",
+    "supervisor",
+    "staff",
+    "operator",
+    "approver",
+    "viewer",
+)
+
+# Office roles (P9) see and act only inside their scope (api/scope.py): a branch manager
+# their branch, a HOD and a supervisor their department, staff their own agents. The
+# workspace roles (owner, admin, operator, approver, viewer) see the whole workspace.
+SCOPED_ROLES = frozenset({"branch_manager", "hod", "supervisor", "staff"})
+
+_ADMIN = {
+    "read",
+    "org.read",
+    "members.manage",
+    "org.manage",
+    "audit.read",
+    "work.write",
+    "approvals.decide",
+    "agents.manage",
+    "engine.manage",
+    "brain.manage",
+    "channels.manage",
+    "vault.manage",
+}
 
 # Capabilities per role. Approver and operator are siblings, not a ladder:
 # operators drive work, approvers decide on it.
 PERMISSIONS: dict[str, frozenset[str]] = {
-    "owner": frozenset(
-        {
-            "read",
-            "members.manage",
-            "members.assign_owner",
-            "org.manage",
-            "audit.read",
-            "work.write",
-            "approvals.decide",
-            "engine.manage",
-            "brain.manage",
-            "channels.manage",
-        }
+    "owner": frozenset(_ADMIN | {"members.assign_owner"}),
+    "admin": frozenset(_ADMIN),
+    # Manage agents, work, approvals, logins and their own people, within the branch.
+    "branch_manager": frozenset(
+        {"read", "work.write", "approvals.decide", "agents.manage", "vault.manage", "team.manage"}
     ),
-    "admin": frozenset(
-        {
-            "read",
-            "members.manage",
-            "org.manage",
-            "audit.read",
-            "work.write",
-            "approvals.decide",
-            "engine.manage",
-            "brain.manage",
-            "channels.manage",
-        }
+    # The same within one department.
+    "hod": frozenset(
+        {"read", "work.write", "approvals.decide", "agents.manage", "vault.manage", "team.manage"}
     ),
-    "operator": frozenset({"read", "work.write"}),
-    "approver": frozenset({"read", "approvals.decide"}),
-    "viewer": frozenset({"read"}),
+    # Runs the department's work day to day, but does not change agents.
+    "supervisor": frozenset({"read", "work.write", "approvals.decide"}),
+    # Has personal agents: creates them, gives them work, decides what they ask.
+    "staff": frozenset({"read", "work.write", "approvals.decide", "agents.own", "vault.own"}),
+    "operator": frozenset({"read", "org.read", "work.write"}),
+    "approver": frozenset({"read", "org.read", "approvals.decide"}),
+    "viewer": frozenset({"read", "org.read"}),
 }
 
 

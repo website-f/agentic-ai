@@ -128,6 +128,8 @@ async def _act(ctx: Any, action: str, *, label: str = "", **body: Any) -> dict[s
     except httpx.HTTPError as e:
         return {"error": f"The browser service did not answer ({e.__class__.__name__})."}
     seq = await store_frame(sid, obs.pop("frame")) if obs.get("frame") else None
+    if obs.get("url"):
+        await valkey().set(f"browser:url:{sid}", str(obs["url"]), ex=SESSION_TTL)
     await runtime.activity(
         ctx.agent,
         ctx.task,
@@ -279,6 +281,101 @@ async def _digest(ctx: Any, text: str, focus: str) -> str | None:
     except gateway.GatewayUnavailable:
         return None
     return r.content.strip() or None
+
+
+async def browser_login(ctx: Any, args: dict[str, Any]) -> str:
+    """Type a saved login into the page. The model names the login; it never sees it."""
+    from ..services import audit
+    from . import vault
+
+    if ctx.task is None:
+        return "Error: the browser only works inside a task."
+    name = str(args.get("login", "")).strip()
+    sid = await _session(ctx)
+    raw = await valkey().get(f"browser:url:{sid}")
+    url = (raw.decode() if isinstance(raw, bytes) else str(raw)) if raw else ""
+    host = vault.host_of(url)
+    usable = await vault.for_agent(ctx.db, ctx.agent)
+    here = [c for c in usable if host and vault.host_matches(host, c.hosts)]
+    cred = next((c for c in usable if c.name.lower() == name.lower()), None)
+    if cred is None:
+        if here:
+            names = ", ".join(c.name for c in here)
+            return f"Error: no saved login called {name!r}. Logins for this site: {names}."
+        return (
+            "Error: there is no saved login you may use for this site. Ask a person to add "
+            "one on the Logins page, or to sign in for you (ask_human)."
+        )
+    if not url:
+        return "Error: open the sign-in page first (browser_open)."
+    if not vault.host_matches(host, cred.hosts):
+        return (
+            f"Error: the login {cred.name!r} is only for {', '.join(cred.hosts)}; this page is "
+            f"{host}. Open the right sign-in page first."
+        )
+    try:
+        user_el = int(args.get("username_element", 0))
+        pass_el = int(args.get("password_element", 0))
+    except (TypeError, ValueError):
+        return "Error: give username_element and password_element as element numbers."
+    username, password = vault.reveal(cred)
+    obs = await _act(
+        ctx,
+        "type",
+        element=user_el,
+        text=username,
+        secret=True,
+        secret_kind="username",  # noqa: S106 - a field kind, not a password
+        hosts=cred.hosts,
+        label=f"username from saved login {cred.name}",
+    )
+    if not obs.get("error"):
+        obs = await _act(
+            ctx,
+            "type",
+            element=pass_el,
+            text=password,
+            secret=True,
+            secret_kind="password",  # noqa: S106 - a field kind, not a password
+            hosts=cred.hosts,
+            label=f"password from saved login {cred.name}",
+        )
+    del username, password
+    if obs.get("error"):
+        return f"Error: {obs['error']}"
+    submit_el = args.get("submit_element")
+    signed = False
+    if submit_el not in (None, "", 0):
+        try:
+            obs = await _act(
+                ctx,
+                "login_submit",
+                element=int(submit_el),
+                hosts=cred.hosts,
+                label=f"sign in with {cred.name}",
+            )
+        except (TypeError, ValueError):
+            return "Error: submit_element must be an element number."
+        if obs.get("error"):
+            return f"Error: {obs['error']}"
+        signed = True
+    vault.touch(cred)
+    await audit.record(
+        ctx.db,
+        ctx.workspace.id,
+        f"agent:{ctx.agent.id}",
+        "credential.used",
+        target=cred.id,
+        after={"name": cred.name, "host": host, "task_id": ctx.task.id},
+    )
+    await ctx.db.commit()
+    if signed:
+        return f"Signed in with the saved login {cred.name!r} (hidden from you).\n" + view(obs)
+    return (
+        f"Typed the saved login {cred.name!r} (hidden from you) into elements {user_el} and "
+        f"{pass_el}. Sign in with submit_element next time, or press the sign-in button with "
+        "browser_submit.\n" + view(obs)
+    )
 
 
 async def browser_submit(ctx: Any, args: dict[str, Any]) -> str:

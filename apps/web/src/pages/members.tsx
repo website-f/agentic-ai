@@ -1,4 +1,4 @@
-import { CopyIcon, DotsThreeIcon, KeyIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react";
+import { CopyIcon, DotsThreeIcon, KeyIcon, PencilSimpleIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
@@ -14,19 +14,66 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError, errorMessage } from "@/lib/api";
-import { keys, meQuery, membersQuery } from "@/lib/queries";
-import { ROLE_INFO, type Member, type Role } from "@/lib/types";
+import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
+import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { initials, timeAgo } from "@/lib/utils";
 
-const ROLES: Role[] = ["owner", "admin", "operator", "approver", "viewer"];
+const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
+// What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
+const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
+const NONE = "none";
 
-function roleOptions(canAssignOwner: boolean) {
-  return ROLES.map((r) => ({
-    value: r,
-    label: ROLE_INFO[r].label,
-    hint: ROLE_INFO[r].blurb,
-    disabled: r === "owner" && !canAssignOwner,
-  }));
+function assignable(me: Me): Role[] {
+  if (me.permissions.includes("members.manage")) {
+    return ROLES.filter((r) => r !== "owner" || me.permissions.includes("members.assign_owner"));
+  }
+  return TEAM_ROLES[me.role] ?? [];
+}
+
+function roleOptions(roles: Role[]) {
+  return roles.map((r) => ({ value: r, label: ROLE_INFO[r].label, hint: ROLE_INFO[r].blurb }));
+}
+
+/** Where a scoped member sits: branch managers and staff pick a branch, HODs and supervisors a department. */
+function Placement({ role, branches, branchId, departmentId, onChange, lockBranch }: {
+  role: Role;
+  branches: Branch[];
+  branchId: string;
+  departmentId: string;
+  onChange: (b: string, d: string) => void;
+  lockBranch?: string | null;
+}) {
+  if (!SCOPED_ROLES.includes(role)) {
+    return <p className="text-[12.5px] text-muted">{ROLE_INFO[role].label}s see the whole workspace.</p>;
+  }
+  const list = lockBranch ? branches.filter((b) => b.id === lockBranch) : branches;
+  const branch = list.find((b) => b.id === branchId) ?? list[0];
+  const needsDept = role === "hod" || role === "supervisor";
+  const deptOptions = [
+    ...(needsDept ? [] : [{ value: NONE, label: "Any department" }]),
+    ...(branch?.departments ?? []).map((d) => ({ value: d.id, label: d.name })),
+  ];
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-1.5">
+        <span className="text-[13px] font-medium">Branch</span>
+        <Select value={branch?.id ?? ""} onValueChange={(v) => onChange(v, NONE)} label="Branch" placeholder="Pick a branch"
+          options={list.map((b) => ({ value: b.id, label: b.name }))} />
+      </div>
+      {role === "branch_manager" ? null : (
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">Department{needsDept ? "" : " (optional)"}</span>
+          <Select value={departmentId || (needsDept ? "" : NONE)} onValueChange={(v) => onChange(branch?.id ?? "", v)} label="Department"
+            placeholder="Pick a department" options={deptOptions} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function placementBody(role: Role, branchId: string, departmentId: string) {
+  if (!SCOPED_ROLES.includes(role)) return { branch_id: null, department_id: null };
+  return { branch_id: branchId || null, department_id: departmentId && departmentId !== NONE && role !== "branch_manager" ? departmentId : null };
 }
 
 function TempPassword({ email, password }: { email: string; password: string }) {
@@ -53,16 +100,20 @@ function TempPassword({ email, password }: { email: string; password: string }) 
   );
 }
 
-function AddMemberDialog({ open, onOpenChange, canAssignOwner }: { open: boolean; onOpenChange: (o: boolean) => void; canAssignOwner: boolean }) {
+function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChange: (o: boolean) => void; me: Me }) {
   const qc = useQueryClient();
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const roles = assignable(me);
+  const lockBranch = me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<Role>("operator");
+  const [role, setRole] = useState<Role>(roles.includes("staff") ? "staff" : roles[0] ?? "viewer");
+  const [branchId, setBranchId] = useState(lockBranch ?? "");
+  const [departmentId, setDepartmentId] = useState(me.scope?.kind === "department" ? me.scope.department_id ?? "" : "");
   const [result, setResult] = useState<{ email: string; password: string | null } | null>(null);
-  // Remounted with a fresh `key` per open, so fields always start empty.
 
   const add = useMutation({
-    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role }),
+    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, branchId || branches[0]?.id || "", departmentId) }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: keys.members });
       qc.invalidateQueries({ queryKey: keys.status });
@@ -100,35 +151,74 @@ function AddMemberDialog({ open, onOpenChange, canAssignOwner }: { open: boolean
         <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fields.email} />
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">Role</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(canAssignOwner)} label="Role" />
+          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label="Role" />
+          <p className="text-[12.5px] text-muted">{ROLE_INFO[role].blurb}</p>
         </div>
+        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
+          onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
         <FormError message={add.error && !Object.keys(fields).length ? errorMessage(add.error) : null} />
       </div>
     </ResponsiveDialog>
   );
 }
 
-function MemberRow({ member, meId, canManage, canAssignOwner }: { member: Member; meId: string; canManage: boolean; canAssignOwner: boolean }) {
+function AccessDialog({ member, me, open, onOpenChange }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
-  const isMe = member.user_id === meId;
-  const editable = canManage && !isMe && (member.role !== "owner" || canAssignOwner);
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const roles = assignable(me);
+  const lockBranch = me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
+  const [role, setRole] = useState<Role>(member.role);
+  const [branchId, setBranchId] = useState(member.branch_id ?? lockBranch ?? "");
+  const [departmentId, setDepartmentId] = useState(member.department_id ?? "");
+  const save = useMutation({
+    mutationFn: () => api(`/api/members/${member.user_id}`, "PATCH", { role, ...placementBody(role, branchId || branches[0]?.id || "", departmentId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.members });
+      toast.success(`${member.name} is now ${ROLE_INFO[role].label.toLowerCase()}.`);
+      onOpenChange(false);
+    },
+  });
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={`Access for ${member.name}`}
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button></>}>
+      <div className="grid gap-4">
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">Role</span>
+          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles.includes(member.role) ? roles : [member.role, ...roles])} label="Role" />
+          <p className="text-[12.5px] text-muted">{ROLE_INFO[role].blurb}</p>
+        </div>
+        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
+          onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
+        <FormError message={save.error ? errorMessage(save.error) : null} />
+      </div>
+    </ResponsiveDialog>
+  );
+}
+
+function where(m: Member): string | null {
+  if (m.department_name && m.branch_name) return `${m.department_name}, ${m.branch_name}`;
+  return m.branch_name ?? null;
+}
+
+function MemberRow({ member, me }: { member: Member; me: Me }) {
+  const qc = useQueryClient();
+  const isMe = member.user_id === me.user.id;
+  const roles = assignable(me);
+  const editable = !isMe && roles.includes(member.role) && hasAny(me, "members.manage", "team.manage");
   const [removing, setRemoving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [reset, setReset] = useState<string | null>(null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
     qc.invalidateQueries({ queryKey: keys.status });
   };
-  const changeRole = useMutation({
-    mutationFn: (role: Role) => api(`/api/members/${member.user_id}`, "PATCH", { role }),
-    onSuccess: (_, role) => { refresh(); toast.success(`${member.name} is now ${ROLE_INFO[role].label.toLowerCase()}.`); },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
   const resetPw = useMutation({
     mutationFn: () => api<{ temp_password: string }>(`/api/members/${member.user_id}/reset-password`, "POST"),
     onSuccess: (r) => { refresh(); setReset(r.temp_password); },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const place = where(member);
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-5">
@@ -137,29 +227,22 @@ function MemberRow({ member, meId, canManage, canAssignOwner }: { member: Member
           {initials(member.name)}
         </span>
         <div className="min-w-0">
-          <p className="flex items-center gap-2 truncate text-[13.5px] font-medium">
-            {member.name}
+          <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium">
+            <span className="truncate">{member.name}</span>
             {isMe ? <Pill tone="accent">You</Pill> : null}
             {member.must_change_password ? <Pill tone="warn">Temporary password</Pill> : null}
           </p>
           <p className="truncate text-[12.5px] text-muted">
             {member.email} · signed in {timeAgo(member.last_login_at).toLowerCase()}
+            {member.agents ? ` · ${member.agents} personal agent${member.agents === 1 ? "" : "s"}` : ""}
           </p>
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        {editable ? (
-          <Select
-            size="sm"
-            value={member.role}
-            onValueChange={(v) => changeRole.mutate(v as Role)}
-            options={roleOptions(canAssignOwner)}
-            label={`Role for ${member.name}`}
-            className="w-32"
-          />
-        ) : (
-          <Pill className="capitalize">{member.role}</Pill>
-        )}
+        <div className="text-right">
+          <Pill>{ROLE_INFO[member.role]?.label ?? member.role}</Pill>
+          {place ? <p className="mt-0.5 text-[12px] text-muted">{place}</p> : null}
+        </div>
         {editable ? (
           <Menu>
             <MenuTrigger asChild>
@@ -168,6 +251,7 @@ function MemberRow({ member, meId, canManage, canAssignOwner }: { member: Member
               </Button>
             </MenuTrigger>
             <MenuContent>
+              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>Change role or place</MenuItem>
               <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>Reset password</MenuItem>
               <MenuSeparator />
               <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Remove from workspace</MenuItem>
@@ -175,11 +259,12 @@ function MemberRow({ member, meId, canManage, canAssignOwner }: { member: Member
           </Menu>
         ) : null}
       </div>
+      {editing ? <AccessDialog member={member} me={me} open={editing} onOpenChange={setEditing} /> : null}
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
         title={`Remove ${member.name}?`}
-        body="They lose access to this workspace immediately and are signed out."
+        body="They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner."
         confirmLabel="Remove"
         danger
         onConfirm={async () => {
@@ -201,27 +286,27 @@ function MemberRow({ member, meId, canManage, canAssignOwner }: { member: Member
 
 export function MembersPage() {
   const { data: me } = useSuspenseQuery(meQuery);
-  const canManage = me.permissions.includes("members.manage");
-  const canAssignOwner = me.permissions.includes("members.assign_owner");
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
   const { data: members, isLoading, error } = useQuery(membersQuery);
   const search = useSearch({ strict: false }) as { add?: number };
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const [addKey, setAddKey] = useState(0);
   // "Add member" from the palette arrives as ?add=1.
-  const addOpen = adding || (!!search.add && canManage);
+  const addOpen = adding || (!!search.add && canAdd);
   const openAdd = () => { setAddKey((k) => k + 1); setAdding(true); };
   const setAddOpen = (o: boolean) => {
     setAdding(o);
     if (!o && search.add) navigate({ to: "/settings/members", search: {}, replace: true });
   };
+  const scoped = me.scope && me.scope.kind !== "all";
 
   return (
     <Page>
       <PageHeader
         title="Members"
-        description="People who can sign in to this workspace, and what their role lets them do."
-        actions={canManage ? (
+        description={scoped ? `People in ${me.scope?.label}, and what their role lets them do.` : "People who can sign in to this workspace, where they sit, and what their role lets them do."}
+        actions={canAdd ? (
           <Button onClick={openAdd}>
             <UserPlusIcon size={16} weight="bold" /> Add member
           </Button>
@@ -235,21 +320,23 @@ export function MembersPage() {
         </div>
       ) : (
         <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
-          {members?.map((m) => (
-            <MemberRow key={m.user_id} member={m} meId={me.user.id} canManage={canManage} canAssignOwner={canAssignOwner} />
-          ))}
+          {members?.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
         </ul>
       )}
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <h2 className="mt-8 mb-3 text-[15px] font-semibold">Roles</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {ROLES.map((r) => (
           <div key={r} className="rounded-[var(--radius-md)] border border-border px-4 py-3">
-            <p className="text-[13.5px] font-medium">{ROLE_INFO[r].label}</p>
+            <p className="flex items-center gap-2 text-[13.5px] font-medium">
+              {ROLE_INFO[r].label}
+              {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? "Own agents" : r === "branch_manager" ? "One branch" : "One department"}</Pill> : null}
+            </p>
             <p className="text-[12.5px] text-muted">{ROLE_INFO[r].blurb}</p>
           </div>
         ))}
       </div>
-      <AddMemberDialog key={addKey} open={addOpen} onOpenChange={setAddOpen} canAssignOwner={canAssignOwner} />
+      <AddMemberDialog key={addKey} open={addOpen} onOpenChange={setAddOpen} me={me} />
     </Page>
   );
 }

@@ -29,11 +29,14 @@ from .routers import (
     office,
     openai_compat,
     org,
+    overview,
+    reports,
     skills,
     sops,
     system,
     tasks,
     teams,
+    vault,
 )
 
 log = logging.getLogger("agentic.api")
@@ -142,6 +145,9 @@ for r in (
     channels.router,
     openai_compat.router,
     teams.router,
+    overview.router,
+    reports.router,
+    vault.router,
     events_stream.router,
 ):
     app.include_router(r)

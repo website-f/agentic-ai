@@ -24,6 +24,8 @@ or from your phone (installable PWA).
 
 - After P8 (2026-10-02): live **Monitor** (pick an agent, or "Watch live" in the office: its thinking, every tool and result, tokens and cost per step, and its browser screen with the click marker); a real browser for agents (**Camoufox**, isolated, every form submit approved by a person, forms filled in one step); **colleagues helping colleagues** (`ask_colleague`, memory checked first by the local model, answers saved for next time; `find_sop`); the local model as the office's free **backup brain** for memory, page digests and housekeeping. Measured with real models: docs/RELIABILITY.md.
 
+- P9 (2026-10-02): **office roles** (branch manager, head of department, supervisor, staff with personal agents), each seeing and deciding only their own area; **saved logins** agents use without ever seeing them; **helpers** (an agent duplicates itself to split a big job); questions with answer buttons; **reports** with tables; the **company overview** of every branch with an AI briefing; the monitor **wall** of everyone at work. Tested live on a practice supplier portal (docs/RELIABILITY.md).
+
 Optional next steps: deploy to the VPS (docs/DOCKER-AND-DEPLOY.md section 10), CI once there is a remote repository, TOTP sign-in.
 
 ## Run it

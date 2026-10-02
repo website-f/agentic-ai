@@ -252,7 +252,7 @@ async def _check_scope(
                 status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here."
             )
     if agent_id:
-        await get_agent(db, principal.workspace_id, agent_id)
+        await get_agent(db, principal, agent_id)
 
 
 def _dream_out(d: BrainDream, diary: str | None = None) -> DreamOut:
@@ -777,7 +777,7 @@ async def get_core_memory(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> CoreMemoryOut:
-    return await _core_out(db, await get_agent(db, principal.workspace_id, agent_id))
+    return await _core_out(db, await get_agent(db, principal, agent_id))
 
 
 @router.put("/agents/{agent_id}/memory")
@@ -787,7 +787,7 @@ async def put_core_memory(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> CoreMemoryOut:
-    agent = await get_agent(db, principal.workspace_id, agent_id)
+    agent = await get_agent(db, principal, agent_id)
     ws = await _ws(db, principal)
     try:
         for target in ("memory", "user"):
@@ -806,7 +806,7 @@ async def agent_facts(
     db: AsyncSession = Depends(get_db),
 ) -> list[FactOut]:
     """What this agent would recall: its private facts plus what its company shares."""
-    agent = await get_agent(db, principal.workspace_id, agent_id)
+    agent = await get_agent(db, principal, agent_id)
     v = await for_agent(db, agent)
     rows = list(
         (

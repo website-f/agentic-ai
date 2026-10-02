@@ -430,10 +430,20 @@ TOOLS: dict[str, Tool] = {
             "ask_human",
             "Ask a person",
             "Ask the people you work for a question when you are "
-            "missing information or need a decision. The task waits for the answer.",
+            "missing information or need a decision. The task waits for the answer. Offer "
+            "options (short button labels) when the answer is a choice, e.g. which items to "
+            "open next; people can still type their own answer.",
             {
                 "type": "object",
-                "properties": {"question": {"type": "string"}},
+                "properties": {
+                    "question": {"type": "string"},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 6,
+                        "description": "Up to 6 short answers to pick from",
+                    },
+                },
                 "required": ["question"],
             },
             "low",
@@ -671,7 +681,61 @@ TEAM["ask_colleague"] = Tool(
     "allow",
     _team_only,
 )
+TEAM["split_work"] = Tool(
+    "split_work",
+    "Call in helpers",
+    "Use it when you would otherwise open, read, check or fill more than about 10 items one "
+    "by one (messages, pages, records, forms): split them into 2 to 4 parts. Copies of you "
+    "(same tools, saved logins, SOPs and memory) do the parts at the same time, which is "
+    "faster and keeps your own context small, and you get every answer back to merge. Each "
+    "part needs a title and a brief that says exactly which items it covers (e.g. inbox page "
+    "2, or messages 11 to 20), where they are (URL, which saved login) and what to return.",
+    {
+        "type": "object",
+        "properties": {
+            "parts": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "brief": {"type": "string"},
+                    },
+                    "required": ["title", "brief"],
+                },
+            },
+            "why": {"type": "string"},
+        },
+        "required": ["parts"],
+    },
+    "low",
+    "deny",
+    _team_only,
+)
 TOOLS.update(TEAM)
+
+
+async def _publish_report(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from ..services import events
+    from .reports import save_report
+
+    try:
+        r, created = await save_report(ctx.db, ctx.agent, ctx.task, args)
+    except ValueError as e:
+        return f"Error: {e}"
+    if created:
+        await events.publish(
+            ctx.workspace.id,
+            "report.created",
+            {"report_id": r.id, "agent_id": ctx.agent.id, "title": r.title},
+        )
+    rows = sum(len(t.get("rows") or []) for t in r.tables)
+    return (
+        f"Report saved for the owner: {r.title!r} ({len(r.tables)} table(s), {rows} row(s)). "
+        "Finish with a short answer that points to it."
+    )
 
 
 async def _find_sop(ctx: ToolContext, args: dict[str, Any]) -> str:
@@ -781,6 +845,23 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
         "deny",
     ),
     (
+        "browser_login",
+        "Sign in with a saved login",
+        "On a sign-in page, type a saved login (you never see it) into the username and "
+        "password fields and, with submit_element (the sign-in button), sign in at once: a "
+        "saved login needs no approval. If you do not know the login's name, call it with "
+        "login empty to list the ones for this site.",
+        {
+            "login": {"type": "string", "description": "The saved login's name"},
+            "username_element": _EL,
+            "password_element": _EL,
+            "submit_element": {"type": "integer", "description": "The sign-in button"},
+        },
+        ["login", "username_element", "password_element"],
+        "medium",
+        "deny",
+    ),
+    (
         "browser_submit",
         "Send a form",
         "Press a button that sends a form (a person approves first). Fill and check every field "
@@ -826,6 +907,43 @@ TOOLS["find_sop"] = Tool(
     "low",
     "allow",
     _find_sop,
+)
+
+TOOLS["publish_report"] = Tool(
+    "publish_report",
+    "Publish a report",
+    "Write up finished work for people as a report they can read, sort and download: a "
+    "short summary, a markdown body, and tables (columns + rows) for anything list-like "
+    "(e.g. one row per message, item or company). Use it when the owner asked for a report "
+    "or the result has more than a few items.",
+    {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "summary": {"type": "string", "description": "2 to 4 sentences: the key findings"},
+            "body": {"type": "string", "description": "Markdown: details, notes, next steps"},
+            "tables": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "columns": {"type": "array", "items": {"type": "string"}},
+                        "rows": {
+                            "type": "array",
+                            "items": {"type": "array", "items": {"type": ["string", "number"]}},
+                        },
+                    },
+                    "required": ["columns", "rows"],
+                },
+            },
+            "labels": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["title", "summary"],
+    },
+    "low",
+    "allow",
+    _publish_report,
 )
 
 # Never offered to the model and never run, whatever any setting says.
