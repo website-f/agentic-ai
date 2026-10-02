@@ -103,7 +103,18 @@ Generate fresh values with `python deploy/scripts/gen-secrets.py`.
 | Live updates stop | Browser reconnects by itself and replays; if not, `logs api` for Valkey errors | Valkey restart |
 | Disk filling up | `docker system df`, `du -sh data/backups` | Old images: `docker image prune`; backups follow retention |
 
-## 7. Capacity (measured 2026-10-02, load test in deploy/loadtest)
+## 7. Agents on the web and the local model
+
+- The `browser` service runs Camoufox for agents. `docker compose logs browser`; at most
+  `BROWSER_MAX_SESSIONS` (3) browsers at once. A stuck page closes after 10 idle minutes.
+- Give an agent the browser: Agents > the agent > Permissions (browser tools), or create it
+  from the Web Operator template. Form submits always come to Approvals.
+- The local model is Ollama on this PC (`http://host.docker.internal:11434/v1`, allowed by
+  `AGENTIC_PRIVATE_HOSTS_ALLOWED` in `.env`). If Ollama is not running, the `fast` group
+  falls back to Groq, then DeepSeek, automatically.
+- Re-check reliability after changing models: docs/RELIABILITY.md.
+
+## 8. Capacity (measured 2026-10-02, load test in deploy/loadtest)
 
 On the dev PC (16 GB Docker VM), api 1 CPU, worker 16 concurrent steps, a fake model with
 0.2 to 0.6 s replies, all at once: 50 people using the dashboard (about 100 requests/s),

@@ -88,6 +88,7 @@ async def _request(
             ok=False,
             latency_ms=_ms(t0),
             status=r.status_code,
+            data={"error_text": r.text[:2000]},  # read by chat() to adapt parameters
             rate=rate,
             failure=classify_response(r.status_code, r.text, host, r.headers.get("retry-after")),
         )
@@ -143,6 +144,19 @@ class ChatResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     reasoning_retry: bool = False
+    quirks: frozenset[str] = frozenset()  # parameter fixes this model needed (remembered)
+
+
+def _quirk_for(error_text: str) -> str | None:
+    """Newer models reject some classic parameters with a 400. Name the fix, if known."""
+    t = error_text.lower()
+    if "max_completion_tokens" in t and "max_tokens" in t:
+        return "max_completion_tokens"
+    if "temperature" in t and any(
+        w in t for w in ("unsupported", "not support", "only the default", "does not support")
+    ):
+        return "no_temperature"
+    return None
 
 
 async def chat(
@@ -157,9 +171,12 @@ async def chat(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: Any = None,
     timeout: float = 120,
+    quirks: frozenset[str] = frozenset(),
 ) -> ChatResult:
-    body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens}
-    if temperature is not None:
+    q = set(quirks)
+    tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
+    body: dict[str, Any] = {"model": model, "messages": messages, tokens_key: max_tokens}
+    if temperature is not None and "no_temperature" not in q:
         body["temperature"] = temperature
     if json_mode:
         body["response_format"] = {"type": "json_object"}
@@ -169,7 +186,20 @@ async def chat(
             body["tool_choice"] = tool_choice
 
     url = _url(base_url, "/chat/completions")
-    result = _parse(await _request("POST", url, key, body, timeout), model)
+    call = await _request("POST", url, key, body, timeout)
+    for _ in range(2):  # at most two parameter fixes, each tried once
+        fix = _quirk_for(str(call.data.get("error_text", ""))) if call.status == 400 else None
+        if fix is None or fix in q:
+            break
+        q.add(fix)
+        if fix == "max_completion_tokens":
+            body["max_completion_tokens"] = body.pop("max_tokens", max_tokens)
+        else:
+            body.pop("temperature", None)
+        call = await _request("POST", url, key, body, timeout)
+    tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
+    result = _parse(call, model)
+    result.quirks = frozenset(q)
     # Empty + cut off = hidden reasoning ate the budget. One retry with room to think.
     if (
         result.call.ok
@@ -178,9 +208,10 @@ async def chat(
         and result.finish_reason == "length"
         and max_tokens < REASONING_FLOOR
     ):
-        body["max_tokens"] = REASONING_FLOOR
+        body[tokens_key] = REASONING_FLOOR
         retry = _parse(await _request("POST", url, key, body, timeout), model)
         retry.reasoning_retry = True
+        retry.quirks = frozenset(q)
         retry.call.latency_ms += result.call.latency_ms
         return retry
     return result

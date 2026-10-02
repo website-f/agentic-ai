@@ -24,7 +24,37 @@ _BASE = (
     "Keep answers short and structured: a one-line summary first, then details."
 )
 
+_WEB = {
+    "browser_open": "allow",
+    "browser_click": "allow",
+    "browser_type": "allow",
+    "browser_fill": "allow",
+    "browser_select": "allow",
+    "browser_check": "allow",
+    "browser_scroll": "allow",
+    "browser_back": "allow",
+    "browser_read": "allow",
+    "browser_submit": "ask",
+    "browser_close": "allow",
+    "web_fetch": "allow",
+}
+
 TEMPLATES: tuple[Template, ...] = (
+    Template(
+        "web_operator",
+        "Web Operator",
+        "Operations",
+        "smart",
+        "You work in a web browser for the office: you find information on websites, extract "
+        "data, and fill in online forms. Before you fill a form, read its fields, then ask the "
+        "right colleague (ask_colleague) or check find_sop and recall for what to enter; never "
+        "invent values. Fill all fields in one browser_fill call, check the page view, then "
+        "send it with browser_submit (a person approves). If a site needs a login or a "
+        "captcha, ask a person. "
+        "Close the browser when done. " + _BASE,
+        tools=_WEB,
+        color="#0f8ba0",
+    ),
     Template(
         "office_manager",
         "Office Manager",

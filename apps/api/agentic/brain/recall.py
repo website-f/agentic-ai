@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.fence import defuse, fence
+from ..core.fence import INJECTION, defuse, fence
 from ..models import Agent
 from . import embed
 from .facts import mark_used
@@ -37,8 +37,17 @@ def _fact_line(h: Hit, tz: str) -> str:
     return defuse(f"- {h.title}" + (f" ({tail})" if tail else ""))
 
 
+WITHHELD = (
+    "[withheld: this page contains instructions aimed at AI agents; "
+    "open it with read_page only if you need it]"
+)
+
+
 def _page_line(h: Hit) -> str:
-    return defuse(f"- {h.path}: {h.snippet}")
+    # Pages can hold text copied from the web. One that tries to give orders to agents is
+    # never pasted into another task's memory block (where it would ride along unasked).
+    snippet = WITHHELD if INJECTION.search(h.snippet or "") else h.snippet
+    return defuse(f"- {h.path}: {snippet}")
 
 
 async def gather(

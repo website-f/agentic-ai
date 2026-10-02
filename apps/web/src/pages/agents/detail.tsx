@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, CheckIcon, EyeIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { Tabs } from "radix-ui";
@@ -214,6 +214,7 @@ export function AgentDetailPage() {
             </Link>
           ) : null}
         </div>
+        <Button variant="outline" asChild><Link to="/monitor" search={{ agent: agent.id }}><EyeIcon size={15} /> Watch live</Link></Button>
         {canManage ? (
           <div className="flex gap-2">
             {agent.status === "active" ? (

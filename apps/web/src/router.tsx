@@ -44,6 +44,7 @@ const page = {
   channels: lazyRouteComponent(() => import("@/pages/channels"), "ChannelsPage"),
   approve: lazyRouteComponent(() => import("@/pages/approve"), "ApprovePage"),
   meetings: lazyRouteComponent(() => import("@/pages/meetings"), "MeetingsPage"),
+  monitor: lazyRouteComponent(() => import("@/pages/monitor"), "MonitorPage"),
   schedules: lazyRouteComponent(() => import("@/pages/schedules"), "SchedulesPage"),
 };
 
@@ -273,6 +274,13 @@ const skillsRoute = createRoute({
   component: page.skills,
 });
 
+const monitorRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/monitor",
+  validateSearch: (s: Record<string, unknown>): { agent?: string } => ({ agent: str(s.agent) }),
+  component: page.monitor,
+});
+
 const meetingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/meetings",
@@ -328,6 +336,7 @@ const routeTree = rootRoute.addChildren([
     approveRoute,
     meetingsRoute,
     schedulesRoute,
+    monitorRoute,
   ]),
 ]);
 

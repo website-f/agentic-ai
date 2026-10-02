@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.fence import INJECTION
 from ..engine import gateway
 from ..models import Agent, BrainFact
 from . import embed
@@ -69,7 +70,9 @@ def scope_filter(v: Viewer, include_ended: bool = False) -> Any:
 
 def clean(text: str) -> str | None:
     t = re.sub(r"\s+", " ", text).strip().strip("-• ").strip()
-    if len(t) < 8 or _SECRET.search(t):
+    # No secrets, and no "facts" that are really instructions to agents (prompt injection
+    # copied from a page would otherwise be recalled into every related task).
+    if len(t) < 8 or _SECRET.search(t) or INJECTION.search(t):
         return None
     return t[:MAX_FACT_CHARS]
 

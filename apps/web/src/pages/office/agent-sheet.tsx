@@ -1,4 +1,4 @@
-import { PaperPlaneRightIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
+import { EyeIcon, PaperPlaneRightIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -78,6 +78,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
               {agent.status === "paused" ? <><PlayIcon size={14} /> Resume</> : <><PauseIcon size={14} /> Pause</>}
             </Button>
           ) : null}
+          <Button size="sm" variant="outline" asChild><Link to="/monitor" search={{ agent: agent.id }}><EyeIcon size={14} /> Watch live</Link></Button>
           <Button size="sm" variant="ghost" asChild><Link to="/agents/$agentId" params={{ agentId: agent.id }}>Profile</Link></Button>
         </>
       }

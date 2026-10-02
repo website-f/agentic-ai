@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=10, ge=0, le=100)
     worker_max_activities: int = Field(default=16, ge=1, le=200)
 
+    # The browser service (Camoufox), reached by the worker only.
+    browser_url: str = "http://browser:8600"
+    browser_token: str = "dev-browser-token"  # noqa: S105 - dev default, required outside dev
+
     # Observability (P8, compose profile `obs`): empty host = no tracing.
     langfuse_host: str = ""
     langfuse_public_key: str = ""
@@ -94,6 +98,8 @@ def check(s: Settings) -> None:
         key = b""
     if len(key) != 32:
         problems.append("AGENTIC_MASTER_KEY must be 32 random bytes, base64url encoded")
+    if s.browser_token == "dev-browser-token":  # noqa: S105 - the known dev value
+        problems.append("AGENTIC_BROWSER_TOKEN must be set to a random value")
     if not s.cookie_secure:
         problems.append("AGENTIC_COOKIE_SECURE must be true (serve it over HTTPS)")
     if problems:

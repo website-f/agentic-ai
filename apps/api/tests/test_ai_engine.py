@@ -412,3 +412,101 @@ async def test_public_model_list_does_not_count_as_key_check(client: httpx.Async
 
     for preset_id in ("openrouter", "huggingface"):
         assert BY_ID[preset_id].key_check != "/models", preset_id
+
+
+async def test_new_models_get_the_parameters_they_accept(monkeypatch):
+    """GPT-5-style models reject max_tokens and custom temperature with a 400: adapt once."""
+    from agentic.engine import client as engine_client
+
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "max_tokens" in body:
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "Unsupported parameter: 'max_tokens' is not supported "
+                        "with this model. Use 'max_completion_tokens' instead."
+                    }
+                },
+            )
+        if "temperature" in body:
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "Unsupported value: 'temperature' does not support 0.2 "
+                        "with this model. Only the default (1) value is supported."
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": body["model"],
+                "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            },
+        )
+
+    engine_client.use_transport(httpx.MockTransport(handler))
+    try:
+        r = await engine_client.chat(
+            "https://good.fake/v1", "k", "gpt-5.4-mini", [{"role": "user", "content": "x"}]
+        )
+    finally:
+        engine_client.use_transport(None)
+    assert r.call.ok and r.content == "hi"
+    assert r.quirks == frozenset({"max_completion_tokens", "no_temperature"})
+    assert (
+        "max_completion_tokens" in bodies[-1]
+        and "temperature" not in bodies[-1]
+        and len(bodies) == 3
+    )
+
+
+async def test_short_rate_limit_is_waited_out_not_failed(client: httpx.AsyncClient, monkeypatch):
+    """A single-model group on a free tier: the per-minute limit resets, the work goes on."""
+    import asyncio as _asyncio
+
+    from agentic.engine import gateway
+
+    await setup_owner(client)
+    p = await add_provider(client, "Free", "flaky.fake")
+    await _set_group(client, "smart", [(p["id"], "good-model")])
+    calls = {"n": 0}
+    slept: list[float] = []
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "flaky.fake" and request.url.path.endswith("/chat/completions"):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(
+                    429, headers={"retry-after": "6"}, json={"error": {"message": "rate limited"}}
+                )
+        return fake_provider(
+            httpx.Request(
+                request.method,
+                str(request.url).replace("flaky.fake", "good.fake"),
+                headers=request.headers,
+                content=request.content,
+            )
+        )
+
+    async def no_sleep(s: float) -> None:  # time passes: the cooldown runs out
+        from agentic.core.valkey import valkey
+
+        slept.append(s)
+        for k in await valkey().keys("ai_cool*"):
+            await valkey().delete(k)
+
+    monkeypatch.setattr(gateway.asyncio, "sleep", no_sleep)
+    engine_client.use_transport(httpx.MockTransport(flaky))
+    r = await client.post(
+        "/api/ai/playground", json={"group": "smart", "prompt": "hi"}, headers=csrf(client)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["content"] == "OK" and calls["n"] == 2 and slept and slept[0] <= 31
+    _ = _asyncio

@@ -17,6 +17,7 @@ x-prod-env: &prod-env
   AGENTIC_COOKIE_SECURE: "true"
   AGENTIC_DEV_SEED: "false"
   AGENTIC_DATABASE_URL: postgresql+asyncpg://agentic:${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}@postgres:5432/agentic
+  AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
 
 services:
   postgres:
@@ -46,6 +47,10 @@ services:
 
   web:
     ports: !override ["127.0.0.1:${AGENTIC_PORT:-8500}:8080"]
+
+  browser:
+    environment:
+      BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
 
   backup:
     environment:

@@ -29,6 +29,9 @@ These rules apply to everyone:
 - You have a memory. Relevant facts and pages are recalled for you inside <memory>; use
   recall for more before asking a person. Save durable facts with remember, shared
   knowledge with write_page, and lessons about working here with memory.
+- You work in a team. When you need knowledge a colleague has (what to put in a form,
+  a past case, another department's procedure), use ask_colleague; find_sop searches the
+  written procedures. For a decision with trade-offs, consult (a short meeting).
 - Finish with a clear final answer: one-line summary first, then details. No preamble."""
 
 

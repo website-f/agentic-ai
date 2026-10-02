@@ -16,7 +16,7 @@ os.environ["AGENTIC_DATABASE_URL"] = f"postgresql+asyncpg://{PG}/agentic_test"
 os.environ["AGENTIC_VALKEY_URL"] = os.environ.get("TEST_VALKEY", "redis://localhost:8507/15")
 os.environ["AGENTIC_ENV"] = "dev"
 # Fake provider hosts used by test_ai_engine.py skip DNS in the SSRF guard.
-os.environ["AGENTIC_PRIVATE_HOSTS_ALLOWED"] = "good.fake,ratelimit.fake,broken.fake"
+os.environ["AGENTIC_PRIVATE_HOSTS_ALLOWED"] = "good.fake,ratelimit.fake,broken.fake,flaky.fake"
 # Brain: deterministic word-hash embeddings (no model download) and a throwaway vault.
 os.environ["AGENTIC_EMBED_BACKEND"] = "hash"
 # Channels: a fake push service and a fake Telegram API (see test_channels.py).

@@ -214,6 +214,39 @@ async def collect(db: AsyncSession, task_id: str, call_id: str) -> str:
         return "Error: the delegated tasks are gone."
     parts: list[str] = []
     ok = 0
+    if (ev.data or {}).get("kind") == "question":
+        from .colleague import answer_block, remember_answer
+
+        child = await db.get(Task, ((ev.data or {}).get("children") or [""])[0])
+        who = (
+            await db.get(Agent, child.assignee_agent_id)
+            if child and child.assignee_agent_id
+            else None
+        )
+        question = str((ev.data or {}).get("question", ""))
+        if child is not None and child.status in ("done", "review") and child.result:
+            result = answer_block(
+                who.name if who else "your colleague", question[:120], child.result
+            )
+            path = await remember_answer(db, task, child, question)
+            if path:
+                result += f"\nSaved for next time as {path}."
+            ok = 1
+        else:
+            why = (child.error if child else None) or "no answer"
+            result = f"{who.name if who else 'Your colleague'} could not answer: {why}."
+        if await runtime.add_tool_result(db, task.id, call_id, "ask_colleague", result):
+            await runtime.task_event(
+                db,
+                task,
+                "delegation_done",
+                f"agent:{task.assignee_agent_id}",
+                f"got the answer from {who.name if who else 'a colleague'}"
+                if ok
+                else "the question went unanswered",
+                {"call_id": call_id, "ok": ok, "total": 1},
+            )
+        return result
     for cid in (ev.data or {}).get("children", []):
         c = await db.get(Task, cid)
         if c is None:

@@ -7,6 +7,7 @@ import {
   ChatsCircleIcon,
   TreeStructureIcon,
   ClockCounterClockwiseIcon,
+  EyeIcon,
   CpuIcon,
   GaugeIcon,
   GearSixIcon,
@@ -22,6 +23,7 @@ import {
 export type AppPath =
   | "/"
   | "/office"
+  | "/monitor"
   | "/agents"
   | "/tasks"
   | "/approvals"
@@ -61,6 +63,7 @@ export const NAV: NavSection[] = [
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
       { to: "/office", label: "Office", icon: BuildingsIcon, blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
+      { to: "/monitor", label: "Monitor", icon: EyeIcon, blurb: "Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen." },
       { to: "/agents", label: "Agents", icon: UsersThreeIcon, blurb: "Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom." },
       { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card onto an agent to assign it." },
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },

@@ -37,6 +37,9 @@ x-app-env: &app-env
   AGENTIC_DREAM_HOUR: ${AGENTIC_DREAM_HOUR:-2}
   AGENTIC_DEV_SEED: ${AGENTIC_DEV_SEED:-true}
   AGENTIC_SEED_PASSWORD: ${AGENTIC_SEED_PASSWORD:-agentic-test-2026}
+  # The browser service agents drive (worker only).
+  AGENTIC_BROWSER_URL: http://browser:8600
+  AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
   # Traces (profile obs). Empty host = off.
   AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
   AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
@@ -225,7 +228,7 @@ services:
       start_period: 20s
     mem_limit: 1280m  # agent loops + the embedding model
     cpus: 1.0
-    networks: [data, edge]
+    networks: [data, edge, browser]
     <<: [*app-hardening, *logging]
 
   web:
@@ -250,6 +253,40 @@ services:
     cap_drop: [ALL]
     read_only: true
     tmpfs: ["/tmp:size=16m"]
+
+  browser:
+    # A real browser (Camoufox) that agents drive. Its own network, shared only with the
+    # worker (which listens on nothing), so a hostile page has nothing internal to reach;
+    # every page request also passes a public-address guard inside the service.
+    build:
+      context: .
+      dockerfile: deploy/browser.Dockerfile
+    image: agentic-browser:dev
+    restart: unless-stopped
+    environment:
+      BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
+      BROWSER_MAX_SESSIONS: ${BROWSER_MAX_SESSIONS:-3}
+    shm_size: 1gb  # Firefox
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 2g
+    cpus: 1.5
+    networks: [browser]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - "/tmp:size=768m"
+      # Firefox writes these at launch; everything else stays read-only.
+      - "/home/app/.cache/camoufox/fontconfig:size=16m,uid=10001,gid=10001"
+      - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
+      - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
+      - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
+    <<: *logging
 
   backup:
     # Nightly pg_dump + vault archive into an encrypted restic repository (P8).
@@ -466,6 +503,7 @@ services:
 networks:
   data: {}
   edge: {}
+  browser: {}  # browser <-> worker only; has internet egress for the browser
 
 volumes:
   pgdata: {}

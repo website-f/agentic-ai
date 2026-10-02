@@ -6,6 +6,7 @@ down. On 401/403/429/5xx it cools the provider and moves on; a model the provide
 no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
 """
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,6 +18,8 @@ from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
 from . import client, store
 from .client import REASONING_FLOOR, Usage
+
+MAX_WAIT = 60.0  # seconds a call may wait for rate limits to reset
 
 
 class GatewayUnavailable(Exception):
@@ -54,6 +57,7 @@ async def chat(
     accept: Callable[[str], bool] | None = None,
     agent_id: str | None = None,
     task_id: str | None = None,
+    _waited: float = 0.0,
 ) -> GatewayReply:
     # Default groups are created lazily; a fresh workspace may not have them yet.
     await store.ensure_default_groups(db, workspace_id)
@@ -80,6 +84,8 @@ async def chat(
     }
 
     attempts: list[dict[str, Any]] = []
+    waits: list[int] = []  # seconds until a cooling or rate-limited member is usable again
+    blocked = 0  # members that only need time, not a fix
     for member in g.members:
         p = providers.get(member["provider_id"])
         model_id = member["model_id"]
@@ -96,6 +102,8 @@ async def chat(
             continue
         if wait := await store.cooling_for(p.id):
             attempts.append({"member": label, "skipped": f"cooling down for {wait} s"})
+            waits.append(wait)
+            blocked += 1
             continue
         model_row = await store.model_row(db, p.id, model_id)
         if model_row is not None and model_row.stale:
@@ -107,6 +115,7 @@ async def chat(
             if await store.is_reasoning(p.id, model_id)
             else max_tokens
         )
+        known = await store.quirks(p.id, model_id)
         r = await client.chat(
             p.base_url,
             key,
@@ -116,7 +125,10 @@ async def chat(
             temperature=temperature,
             json_mode=json_mode,
             tools=tools,
+            quirks=known,
         )
+        if r.quirks - known:
+            await store.remember_quirks(p.id, model_id, r.quirks - known)
         if r.reasoning_retry:
             await store.remember_reasoning(p.id, model_id)
         usable = r.call.ok and (
@@ -177,12 +189,35 @@ async def chat(
             if f.error_class == "model_not_found":
                 await _mark_stale(db, p, model_id)
             await store.cool(p.id, f.cool_seconds)
+            if f.error_class == "rate_limited" and f.cool_seconds:
+                waits.append(f.cool_seconds)
+                blocked += 1
             attempts.append({"member": label, "failed": f.message, "error_class": f.error_class})
         else:
             attempts.append(
                 {"member": label, "failed": "reply was empty or did not pass the check"}
             )
 
+    # Every member only needs a short wait (a per-minute rate limit, a brief cooldown):
+    # wait it out instead of failing the work, up to MAX_WAIT in total.
+    if waits and blocked == len(g.members) and _waited + min(waits) <= MAX_WAIT:
+        pause = min(waits) + 0.5
+        await asyncio.sleep(pause)
+        return await chat(
+            db,
+            workspace_id,
+            group,
+            messages,
+            task=task,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            json_mode=json_mode,
+            tools=tools,
+            accept=accept,
+            agent_id=agent_id,
+            task_id=task_id,
+            _waited=_waited + pause,
+        )
     raise GatewayUnavailable(f"No model in the {g.label} group could answer.", attempts)
 
 

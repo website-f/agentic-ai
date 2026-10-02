@@ -106,6 +106,11 @@ Fixed during the review (each has a test):
 | ~20 open browser tabs exhausted the database pool (denial of service by normal use) | Event streams hold no database connection; one Valkey subscription per process |
 | Traces would have carried secret values | `core/redact.py` masks values before anything leaves |
 
+The agent browser (after P8): its own container and network, shared only with the worker
+(nothing listening); a token on every call; every page request checked against a public-
+address guard; downloads off; form submits only through `browser_submit`, which is high
+risk and always waits for a person; page text reaches the model fenced as untrusted.
+
 Not built (still open): TOTP, OIDC, a master-key rotation tool, CI with Trivy on every
 build (no remote repository yet). Login rate limiting is in place (5 per email, 20 per IP,
 15 minutes).

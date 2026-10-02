@@ -11,3 +11,4 @@ print(f"AGENTIC_MASTER_KEY={base64.urlsafe_b64encode(secrets.token_bytes(32)).de
 print(f"AGENTIC_DB_PASSWORD={secrets.token_urlsafe(24)}")
 print(f"TEMPORAL_DB_PASSWORD={secrets.token_urlsafe(24)}")
 print(f"RESTIC_PASSWORD={secrets.token_urlsafe(32)}")
+print(f"AGENTIC_BROWSER_TOKEN={secrets.token_urlsafe(32)}")

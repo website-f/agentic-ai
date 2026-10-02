@@ -22,6 +22,8 @@ or from your phone (installable PWA).
 
 - P8: Hardening. Nightly encrypted backups (restic, a local folder by default, any S3/B2 target optional) with a tested restore onto a fresh stack. A security review with a test for every checklist item; it fixed DNS-rebinding in the URL guard, fence break-outs in untrusted text, prompt injection into agent memory and a database-pool exhaustion from open browser tabs. Every container non-root with all capabilities dropped; production refuses to start on unsafe settings; zero critical vulnerabilities in our images (Trivy). A load test (50 dashboard users, 200 live streams, 30 parallel agent tasks: p95 203 ms, no errors). Optional Langfuse traces of every model call (`COMPOSE_PROFILES=obs`). A VPS override for the shared reverse proxy, ready but not deployed. Operations: docs/RUNBOOK.md.
 
+- After P8 (2026-10-02): live **Monitor** (pick an agent, or "Watch live" in the office: its thinking, every tool and result, tokens and cost per step, and its browser screen with the click marker); a real browser for agents (**Camoufox**, isolated, every form submit approved by a person, forms filled in one step); **colleagues helping colleagues** (`ask_colleague`, memory checked first by the local model, answers saved for next time; `find_sop`); the local model as the office's free **backup brain** for memory, page digests and housekeeping. Measured with real models: docs/RELIABILITY.md.
+
 Optional next steps: deploy to the VPS (docs/DOCKER-AND-DEPLOY.md section 10), CI once there is a remote repository, TOTP sign-in.
 
 ## Run it
@@ -102,6 +104,7 @@ On Windows without admin rights, call pnpm as `corepack pnpm` (`corepack enable`
 | 12 | [docs/DOCKER-AND-DEPLOY.md](docs/DOCKER-AND-DEPLOY.md) | Optimized images, compose profiles, resource budget, ports, VPS deploy, backups |
 | 13 | [docs/SECURITY.md](docs/SECURITY.md) | Auth, RBAC, secrets, policy floor, prompt injection, supply chain |
 | 14 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operating it: start, upgrade, backups and restore, secrets, fixes, capacity |
+| 15 | [docs/RELIABILITY.md](docs/RELIABILITY.md) | Real-model reliability results, the office scenario, how to re-run |
 
 ## Decisions in one screen
 

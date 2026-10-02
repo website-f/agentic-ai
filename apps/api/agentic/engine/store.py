@@ -163,6 +163,18 @@ async def is_reasoning(provider_id: str, model: str) -> bool:
     return bool(await valkey().exists(f"ai_reasoning:{provider_id}:{model}"))
 
 
+async def quirks(provider_id: str, model: str) -> frozenset[str]:
+    found = await valkey().smembers(f"ai_quirks:{provider_id}:{model}") or set()
+    return frozenset(x.decode() if isinstance(x, bytes) else str(x) for x in found)
+
+
+async def remember_quirks(provider_id: str, model: str, found: frozenset[str]) -> None:
+    if found:
+        key = f"ai_quirks:{provider_id}:{model}"
+        await valkey().sadd(key, *found)
+        await valkey().expire(key, 30 * 86400)
+
+
 async def remember_reasoning(provider_id: str, model: str) -> None:
     await valkey().set(f"ai_reasoning:{provider_id}:{model}", "1", ex=7 * 86400)
 

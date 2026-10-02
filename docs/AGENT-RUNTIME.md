@@ -266,3 +266,34 @@ tokens and asked, and asked again after the extra allowance ran out; a schedule 
 "Run now"; two failures of a paused agent's schedule became one incident with count 2; the
 heartbeat started a queued task and asked for work once.
 
+## 16. As built after P8 (2026-10-02): watching agents, the browser, colleagues
+
+**Live activity.** Every step publishes an `agent.activity` event (kept 7 days with the
+other events): `think` (what the model said, the tools it chose, model, tokens, cached
+tokens, cost), `tool_call` and `tool_result` (redacted, short), `browser`, `ask`, `answer`.
+`GET /api/agents/{id}/activity` replays them with the current task and the last 24 hours'
+spend; the Monitor page follows them live.
+
+**Browser.** `apps/browser/service.py`, its own container (Camoufox, MIT; Firefox engine).
+It shares a network only with the worker, which listens on no port; the service checks a
+token, refuses every page request to a non-public address (so a hostile page cannot reach
+anything internal), and refuses form submits unless the call allows it. Pages come back as
+numbered elements; tools: `browser_open`, `_fill` (many fields, one call), `_type`,
+`_select`, `_check`, `_click`, `_scroll`, `_back`, `_read` (with `focus`, long pages are
+condensed by the local model), `_submit` (high risk: a person approves, whatever the
+agent's autonomy), `_close`. All are hidden unless an agent is given them (the Web Operator
+template does). One session per task, closed when the task ends, idle sessions after 10
+minutes. Frames go worker -> Valkey -> `GET /api/browser/{session}/frame.jpg`.
+
+**Colleagues.** `ask_colleague(agent, question, context)` works for every agent inside a
+task (depth below 3, at most 6 per task). The local model first checks whether the office
+memory already answers it; if so the colleague is never woken. Otherwise the colleague gets a
+small question task (the delegation machinery), answers from recall, pages, SOPs and past
+work, and the answer is saved as `wiki/answers/...` so it is found next time. `find_sop`
+searches the SOPs the agent may follow, across departments and the library.
+
+**Models.** The gateway adapts to GPT-5-style parameters once per model and waits out short
+rate limits. Memory checks, page digests, fact extraction, reconciliation and skill
+reflection use the `fast` group, now the local model first: free work that would otherwise
+be paid tokens.
+

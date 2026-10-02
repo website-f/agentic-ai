@@ -237,8 +237,12 @@ async def create_agent(
     ):
         slug, n = f"{base}-{n}", n + 1
     fields = body.model_dump()
-    if "role_kind" not in body.model_fields_set and body.template in BY_ID:
-        fields["role_kind"] = BY_ID[body.template].role_kind  # e.g. office manager: orchestrator
+    if body.template in BY_ID:
+        tpl = BY_ID[body.template]
+        if "role_kind" not in body.model_fields_set:
+            fields["role_kind"] = tpl.role_kind  # e.g. office manager: orchestrator
+        if "tools" not in body.model_fields_set:
+            fields["tools"] = dict(tpl.tools)  # e.g. the web operator's browser tools
     a = Agent(workspace_id=principal.workspace_id, slug=slug, **fields)
     db.add(a)
     await db.flush()

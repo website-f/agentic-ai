@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..brain import core as core_memory
 from ..brain.recall import recall_block
 from ..core.db import SessionLocal
+from ..core.redact import redact
 from ..engine import gateway
 from ..models import (
     Agent,
@@ -32,7 +33,7 @@ from ..models import (
 )
 from ..services import events
 from ..skills import store as skills_store
-from ..teams import budget, delegation, meetings
+from ..teams import budget, colleague, delegation, meetings
 from . import policy
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
@@ -178,6 +179,29 @@ async def agent_thinking(agent: Agent, on: bool) -> None:
     await events.publish(agent.workspace_id, "agent.thinking", {"agent_id": agent.id, "on": on})
 
 
+def _brief(value: Any, limit: int = 300) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    text = redact(text)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+async def activity(agent: Agent, task: Task | None, kind: str, **data: Any) -> None:
+    """One line of what an agent is doing, for the live monitor (persisted for replay).
+    kind: think | tool_call | tool_result | answer | ask | browser | wait"""
+    await events.publish(
+        agent.workspace_id,
+        "agent.activity",
+        {
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "task_id": task.id if task else None,
+            "task_title": task.title if task else None,
+            "kind": kind,
+            **data,
+        },
+    )
+
+
 async def agent_status(agent: Agent, status: str, task: Task | None = None) -> None:
     """Live state for the dashboard and, later, the office view."""
     await events.publish(
@@ -215,7 +239,7 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
 
 
-TEAM_TOOLS = ("delegate", "consult")
+TEAM_TOOLS = ("delegate", "consult", "ask_colleague")
 
 
 def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]]:
@@ -228,6 +252,8 @@ def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
         if n == "consult" and task is None:
+            continue
+        if n == "ask_colleague" and (task is None or task.depth >= colleague.MAX_DEPTH):
             continue
         out.append(TOOLS[n].schema())
     return out
@@ -361,9 +387,13 @@ async def _resolve_calls(
                 )
             )
 
+        await activity(
+            agent, task, "tool_call", tool=name, label=TOOLS[name].label, args=_brief(args)
+        )
         result = await run_tool(ctx, name, args)
         _add(db, agent, "tool", task_id=task.id, content=result, tool_call_id=call_id, name=name)
         await db.commit()
+        await activity(agent, task, "tool_result", tool=name, preview=_brief(result, 400))
         if name == "report_progress":
             await task_event(db, task, "progress", f"agent:{agent.id}", str(args.get("update", "")))
         else:
@@ -383,6 +413,19 @@ async def _team_call(
 ) -> StepResult | None:
     """delegate / consult: hand the work to the workflow, or answer with the reason it can't."""
     agent = ctx.agent
+    if name == "ask_colleague":
+        try:
+            run, known = await colleague.plan(db, task, agent, ctx.workspace, call_id, args)
+        except colleague.ColleagueError as e:
+            await add_tool_result(db, task.id, call_id, name, f"Error: {e}")
+            return None
+        if known is not None:
+            await add_tool_result(db, task.id, call_id, name, known)
+            return None
+        if not run:
+            await delegation.collect(db, task.id, call_id)
+            return None
+        return StepResult("delegate", call_id=call_id, children=run)
     if name == "delegate":
         if not delegation.can_delegate(agent, task):
             await add_tool_result(
@@ -643,6 +686,24 @@ async def run_task_step(task_id: str) -> StepResult:
             finally:
                 await agent_thinking(agent, False)
             task.steps_used += 1
+            await activity(
+                agent,
+                task,
+                "think",
+                text=_brief(reply.content or "", 600),
+                tools=[
+                    {
+                        "tool": str((c.get("function") or {}).get("name", "")),
+                        "args": _brief((c.get("function") or {}).get("arguments", ""), 160),
+                    }
+                    for c in reply.tool_calls or []
+                ],
+                model=reply.model,
+                provider=reply.provider_name,
+                tokens=reply.usage.prompt + reply.usage.completion,
+                cached=reply.usage.cached,
+                cost_usd=reply.cost_usd,
+            )
             if reply.tool_calls:
                 _add(
                     db,
@@ -690,6 +751,7 @@ async def run_task_step(task_id: str) -> StepResult:
                     )
                     continue
                 answer = json.dumps(value, ensure_ascii=False)
+            await activity(agent, task, "answer", text=_brief(answer or "", 600))
             return StepResult("done", answer)
         await db.commit()
         return StepResult("continue")
@@ -714,6 +776,9 @@ async def start_run(task_id: str) -> None:
 
 
 async def finish(task_id: str, state: str, message: str | None) -> None:
+    from . import browser_tools  # late: browser_tools imports this module
+
+    await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
     async with SessionLocal() as db:
         task, agent, _ = await _load(db, task_id)
         if state == "done":
@@ -814,6 +879,9 @@ async def apply_approval(approval_id: str) -> None:
                 agent.tools = {**(agent.tools or {}), a.tool_name: "allow"}
             result = await run_tool(
                 ToolContext(db=db, agent=agent, workspace=ws, task=task), a.tool_name, a.args
+            )
+            await activity(
+                agent, task, "tool_result", tool=a.tool_name, preview=_brief(result, 400)
             )
             await task_event(
                 db,
