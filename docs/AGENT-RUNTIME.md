@@ -194,9 +194,11 @@ have been a second source of truth next to that.
 | `AgentTaskWorkflow` (approval signal, 24 h wait, cancel) and `BroadcastRepliesWorkflow` | `workflows/agent_workflows.py` |
 | Routes: agents, sops, tasks, approvals, broadcasts, `/api/events` (SSE with replay) | `api/routers/` |
 
-Limits: 6 tool calls per step, 30 per task, approvals expire after 24 h. Fetched web
-content is fenced as untrusted text before the model sees it. Internal and metadata
-addresses are blocked by the hardline even when the agent runs on auto.
+Limits: 6 tool calls per step, 30 model calls per task by default, and approvals expire
+after 24 h. The per-task model-call limit is configurable in AI Engine > Settings, with
+a hard ceiling of 200. Fetched web content is fenced as untrusted text before the model
+sees it. Internal and metadata addresses are blocked by the hardline even when the agent
+runs on auto.
 
 Verified: 53 API tests, plus an end-to-end run on the full stack where a task waiting
 for approval kept waiting across an api and worker restart and finished after approval.
@@ -370,4 +372,29 @@ with its live browser screen and last step; the Monitor page opens on it.
   now (once per task).
 - *Reply room.* Task steps may write up to 4,000 tokens: at 1,500 a 34-row report was cut off
   mid-call and the fallback model then claimed it was done.
+
+**Browse for me** (`POST /api/agents/{id}/web-task`, `api/routers/web_tasks.py`). A person
+gives a link, what they want, read or interact, values to fill, a saved login and the answer
+format; the server checks the address, gives the agent the browser tools when the person
+manages it (else 409 with who to ask), writes a fixed-shape brief (where, what, exact values,
+rules, how to answer) and starts the task, labelled `web`. A `browser_submit` approval
+carries the page and every field with its current value (`browser_tools.form_preview`), so
+people approve what will actually be sent. The office side panel, the agent page and the
+Monitor share one live view (`components/agent-live.tsx`): screen, steps, outcome.
+
+**Blueprints** (`/api/blueprints`, `api/routers/blueprints.py`, Knowledge > Blueprints). A
+reusable role package: name, job title, instructions (soul), model group, **tool scope**
+(the allow/ask/deny map — "deny" removes a tool so an agent from the blueprint can never use
+it), autonomy, attached SOPs and skills. Applying it to an agent copies all of that onto the
+agent and grants the blueprint's skills; `used_by` counts the agents wearing it. People with
+`agents.manage` or `agents.own` create and apply them. This replaces one-off agent setup with
+trained specialists stamped from a shared definition.
+
+**Workflows** (`/api/workflows`, `api/routers/workflows.py`, `workflows/procedure.py`,
+Knowledge > Workflows). A visual procedure: a graph of steps (start / step / decision /
+hand-off / end) connected by labelled edges, drawn on a canvas (`pages/workflows`) or drafted
+by an analyst agent from a plain-language description (`POST /draft`, smart group, JSON graph,
+truncation-tolerant parse). `compile_text` turns the graph into a numbered procedure; when a
+workflow is `active` and attached to agents, `agents/prompt.py` layers that procedure into
+their prompt like an SOP. It is guidance the agent follows, never an execution engine.
 

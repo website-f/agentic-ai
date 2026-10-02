@@ -112,10 +112,28 @@ Generate fresh values with `python deploy/scripts/gen-secrets.py`.
   checks 6 agents signing in at once on the practice portal.
 - Give an agent the browser: Agents > the agent > Permissions (browser tools), or create it
   from the Web Operator template. Form submits always come to Approvals.
+- **Browse for me** (Office: click the agent; or the agent's page): a link, what you want,
+  *Find information* (reads only) or *Interact and fill in* (with the values to use), an
+  optional saved login, and a short answer or a report. It starts at once and the panel
+  shows the browser live. Agents without the browser get it if you manage them. Before a
+  form is sent, the approval lists every field and value it is about to send.
 - The local model is Ollama on this PC (`http://host.docker.internal:11434/v1`, allowed by
   `AGENTIC_PRIVATE_HOSTS_ALLOWED` in `.env`). If Ollama is not running, the `fast` group
   falls back to Groq, then DeepSeek, automatically.
 - Re-check reliability after changing models: docs/RELIABILITY.md.
+
+## 8. Workflows (how a job is done)
+
+Knowledge > Workflows: draw a procedure as connected steps (or click "Draft with AI" and
+describe it), set it Active, and attach agents. Attached agents get the compiled procedure
+in their prompt and follow it. It is guidance, not an automation that runs on its own.
+
+## 8. Blueprints (reusable roles)
+
+Knowledge > Blueprints: define a role once — instructions, model, tool scope, SOPs and
+skills — and apply it to any agent, or stamp new agents from it. The tool scope's "Never"
+column is how you hard-limit what a role can ever do. Managed by anyone who can manage
+agents.
 
 ## 8. People, roles and personal agents
 

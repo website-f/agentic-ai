@@ -75,7 +75,11 @@ MARK_JS = """(max) => {
       item.value = hide ? (el.value ? '(filled, hidden)' : '') : String(el.value || '').slice(0, 60);
     }
     if (type === 'checkbox' || type === 'radio') item.checked = !!el.checked;
-    if (tag === 'select') item.options = Array.from(el.options).slice(0, 20).map(o => o.text.trim());
+    if (tag === 'select') {
+      item.options = Array.from(el.options).slice(0, 20).map(o => o.text.trim());
+      const chosen = el.options[el.selectedIndex];
+      item.value = chosen && chosen.value !== '' ? chosen.text.trim().slice(0, 60) : '';
+    }
     out.push(item);
     if (n >= max) break;
   }
@@ -297,6 +301,25 @@ async def _press(page: Any, loc: Any) -> None:
         pass
 
 
+async def _marked(page: Any, element: int) -> Any | None:
+    """Resolve a numbered element without letting a damaged DOM strand the task.
+
+    The page is re-rendered by some portal applications between observation and action.
+    That can briefly leave more than one node carrying the same marker.  Playwright's
+    normal locator is strict and raises in that case; the agent then burns model steps
+    retrying the same impossible click.  Prefer a visible match and, if a portal still
+    exposes duplicates, use the first current match and let the next observation refresh
+    the numbered view.
+    """
+    loc = page.locator(f'[data-agentic-n="{element}"]:visible')
+    count = await loc.count()
+    if count == 0:
+        return None
+    if count > 1:
+        log.warning("element marker %s matched %d visible nodes; using the first", element, count)
+    return loc.first
+
+
 async def _observe(s: Session, point: dict[str, float] | None = None, read: bool = False) -> dict[str, Any]:
     page = s.page
     try:
@@ -382,8 +405,8 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 # submit that needs no person, because saving the login allowed it.
                 if not body.hosts or not host_matches(page.url, body.hosts):
                     return {"error": "This saved login is not for this site."}
-                loc = page.locator(f'[data-agentic-n="{body.element}"]')
-                if await loc.count() == 0:
+                loc = await _marked(page, int(body.element or 0))
+                if loc is None:
                     return {"error": f"There is no element {body.element} now. Look at the page again."}
                 same_form = await loc.evaluate(
                     "(el) => { const f = el.form || el.closest('form');"
@@ -400,8 +423,8 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 except Exception:  # noqa: BLE001
                     pass
             elif body.action in ("click", "type", "select", "check"):
-                loc = page.locator(f'[data-agentic-n="{body.element}"]')
-                if await loc.count() == 0:
+                loc = await _marked(page, int(body.element or 0))
+                if loc is None:
                     return {"error": f"There is no element {body.element} now. Look at the page again."}
                 info = await loc.evaluate(
                     "(el) => ({submit: (el.tagName === 'BUTTON' && (!el.type || el.type === 'submit') && !!el.form)"

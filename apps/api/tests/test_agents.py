@@ -468,6 +468,31 @@ async def test_revise_continues_same_conversation(client: httpx.AsyncClient, llm
     ] == "Feedback on your last answer: Add the tax line."
 
 
+# ---------------------------------------------------------------- retry behavior
+
+
+async def test_retry_resets_the_previous_run_call_budget(client: httpx.AsyncClient, temporal):
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    task = await new_task(client, agent)
+    from agentic.core.db import SessionLocal
+
+    async with SessionLocal() as db:
+        row = await db.get(Task, task["id"])
+        assert row is not None
+        row.status = "failed"
+        row.steps_used = 30
+        row.correction_used = True
+        row.error = "Stopped after 30 model calls without finishing."
+        await db.commit()
+
+    r = await client.post(f"/api/tasks/{task['id']}/start", json={}, headers=csrf(client))
+    assert r.status_code == 200, r.text
+    async with SessionLocal() as db:
+        row = await db.get(Task, task["id"])
+        assert row is not None and row.steps_used == 0 and not row.correction_used
+
+
 # ---------------------------------------------------------------- broadcasts
 
 

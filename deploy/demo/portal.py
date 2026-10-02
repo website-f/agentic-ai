@@ -112,7 +112,12 @@ def _signed_in(req: Request) -> bool:
 
 
 def page(title: str, body: str, signed_in: bool = True) -> HTMLResponse:
-    nav = '<a href="/inbox">Inbox</a> · <a href="/logout">Sign out</a>' if signed_in else ""
+    nav = (
+        '<a href="/inbox">Inbox</a> · <a href="/profile">Company profile</a> · '
+        '<a href="/logout">Sign out</a>'
+        if signed_in
+        else ""
+    )
     return HTMLResponse(
         f"<!doctype html><html><head><meta charset=utf-8><title>{html.escape(title)} | Practice "
         f"Supplier Portal</title>{STYLE}</head><body><header><b>Practice Supplier Portal "
@@ -205,4 +210,60 @@ def message(req: Request, mid: int):
         f"<p><a href=/inbox>Back to inbox</a></p><h1>{html.escape(m['subject'])}</h1>"
         f"<p class=note>From {html.escape(m['from'])}, {m['date']}</p>"
         f"<pre>{html.escape(m['body'])}</pre>",
+    )
+
+
+# ---------------------------------------------------------------- a form to fill (P9 demo)
+
+CATEGORIES = ["Office supplies", "Cleaning services", "ICT equipment", "Building works", "Catering"]
+PROFILE: dict[str, str] = {
+    "company": "", "reg_no": "", "phone": "", "email": "", "address": "", "category": "",
+}
+SUBMISSIONS: list[dict[str, str]] = []
+
+
+@app.get("/profile")
+def profile_form(req: Request):
+    if not _signed_in(req):
+        return RedirectResponse("/login", 302)
+    v = {k: html.escape(x) for k, x in PROFILE.items()}
+    opts = "".join(
+        f'<option{" selected" if c == PROFILE["category"] else ""}>{html.escape(c)}</option>'
+        for c in CATEGORIES
+    )
+    return page(
+        "Company profile",
+        "<h1>Update company profile</h1><p class=note>Keep these details current so agencies "
+        "can contact you.</p><form method=post action=/profile>"
+        f'<label for=company>Company name</label><input id=company name=company value="{v["company"]}">'
+        f'<label for=reg>SSM registration no.</label><input id=reg name=reg_no value="{v["reg_no"]}">'
+        f'<label for=phone>Telephone</label><input id=phone name=phone value="{v["phone"]}">'
+        f'<label for=email>E-mail</label><input id=email name=email type=email value="{v["email"]}">'
+        f'<label for=address>Business address</label><textarea id=address name=address rows=3 '
+        f'style="width:420px">{v["address"]}</textarea>'
+        f"<label for=cat>Business category</label><select id=cat name=category>"
+        f"<option value=''>Choose…</option>{opts}</select>"
+        '<label><input type=checkbox name=confirm value=yes style="width:auto"> I confirm these '
+        "details are correct</label><button type=submit>Save profile</button></form>",
+    )
+
+
+@app.post("/profile")
+async def profile_save(req: Request):
+    if not _signed_in(req):
+        return RedirectResponse("/login", 302)
+    form = {k: v[0] for k, v in parse_qs((await req.body()).decode("utf-8", "replace")).items()}
+    if form.get("confirm") != "yes":
+        return page("Not saved", "<h1>Not saved</h1><p>Tick the confirmation box and try again."
+                    " <a href=/profile>Back</a></p>")
+    for k in PROFILE:
+        PROFILE[k] = form.get(k, "")[:300]
+    SUBMISSIONS.append(dict(PROFILE))
+    rows = "".join(
+        f"<tr><th>{html.escape(k)}</th><td>{html.escape(v)}</td></tr>" for k, v in PROFILE.items()
+    )
+    return page(
+        "Profile saved",
+        f"<h1>Profile saved</h1><p>Reference UPD-{len(SUBMISSIONS):04d}. We received:</p>"
+        f"<table>{rows}</table><p><a href=/profile>Edit again</a></p>",
     )

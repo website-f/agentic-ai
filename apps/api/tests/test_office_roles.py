@@ -611,3 +611,214 @@ async def test_an_agent_that_promises_work_is_told_to_do_it(client, llm, tempora
     assert r.state == "done" and r.message.startswith("Opened all 34")
     users = [m.content for m in await messages(t["id"]) if m.role == "user"]
     assert "nothing happens after it" in users[-1]
+
+
+async def test_browse_for_me_writes_the_brief_and_gives_the_browser(client, llm, temporal):
+    o = await office(client)
+    rafi = await new_agent(client, o, "Rafi", "Research")  # no browser tools yet
+    r = await client.post(
+        f"/api/agents/{rafi['id']}/web-task",
+        json={
+            "url": "good.fake/profile",
+            "instructions": "Update our company profile",
+            "mode": "interact",
+            "values": "Company: Qbot Studio\nPhone: +60 3-2710 4455",
+            "output": "report",
+        },
+        headers=csrf(client),
+    )
+    assert r.status_code == 201, r.text
+    t = r.json()
+    assert t["labels"] == ["web"] and t["assignee_agent_id"] == rafi["id"]
+    assert temporal["start"]  # started at once
+    async with SessionLocal() as db:
+        task = await db.get(Task, t["id"])
+        agent = await db.get(Agent, rafi["id"])
+    assert "Open this page in your browser: https://good.fake/profile" in task.brief
+    assert "Use exactly these values" in task.brief and "Qbot Studio" in task.brief
+    assert "browser_submit" in task.brief and "publish_report" in task.brief
+    assert agent.tools["browser_fill"] == "allow" and agent.tools["browser_submit"] == "ask"
+
+    # Read only: no form tools needed or promised; internal addresses refused.
+    r = await client.post(
+        f"/api/agents/{rafi['id']}/web-task",
+        json={"url": "https://good.fake/news", "instructions": "List today's headlines"},
+        headers=csrf(client),
+    )
+    async with SessionLocal() as db:
+        brief = (await db.get(Task, r.json()["id"])).brief
+    assert "Only read: do not fill in or send any form" in brief
+    r = await client.post(
+        f"/api/agents/{rafi['id']}/web-task",
+        json={"url": "http://127.0.0.1:8501/api", "instructions": "Look inside"},
+        headers=csrf(client),
+    )
+    assert r.status_code == 422 and r.json()["code"] == "bad_url"
+    r = await client.post(
+        f"/api/agents/{rafi['id']}/web-task",
+        json={"url": "https://good.fake", "instructions": "Sign in", "login": "nope"},
+        headers=csrf(client),
+    )
+    assert r.status_code == 422 and r.json()["code"] == "bad_login"
+
+    # A supervisor may give work but not change agents: told to ask, nothing changed.
+    other = await new_agent(client, o, "Fina", "Finance")
+    sup = await as_role(
+        client, "sup@example.com", "supervisor", department_id=o["depts"]["Finance"]
+    )
+    try:
+        r = await sup.post(
+            f"/api/agents/{other['id']}/web-task",
+            json={"url": "https://good.fake", "instructions": "Read the page"},
+            headers=csrf(sup),
+        )
+        assert r.status_code == 409 and r.json()["code"] == "no_browser"
+    finally:
+        await sup.aclose()
+
+
+async def test_send_form_approval_shows_the_filled_form(client, llm, temporal, browser):
+    o = await office(client)
+    wira = await new_agent(client, o, "Wira", "Operations", template="web_operator")
+    t = await new_task(client, wira, "Order lunch")
+    llm.call("browser_open", url="https://good.fake/form")
+    llm.call("browser_submit", element=3, why="send the order")
+    assert (await runtime.run_task_step(t["id"])).state == "needs_approval"
+    a = (await client.get("/api/approvals")).json()[0]
+    assert a["args"]["element"] == 3 and a["args"]["page"] == "https://good.fake/form"
+    assert {"label": "Customer name", "value": ""} in a["args"]["form"]
+    assert all(f["label"] != "Submit order" for f in a["args"]["form"])  # buttons are not fields
+
+
+async def test_blueprint_applies_a_role_to_an_agent(client, llm, temporal):
+    o = await office(client)
+    sop = (
+        await client.post(
+            "/api/sops",
+            json={"scope": "library", "title": "Inbox SOP", "body": "x"},
+            headers=csrf(client),
+        )
+    ).json()
+    r = await client.post(
+        "/api/blueprints",
+        json={
+            "name": "Inbox Reader",
+            "description": "Reads and summarises inboxes.",
+            "role": "Inbox Analyst",
+            "soul": "You read inboxes and summarise them. You never fill or send forms.",
+            "model_group": "smart",
+            "tools": {"browser_open": "allow", "browser_read": "allow", "browser_submit": "deny"},
+            "autonomy": "ask",
+            "sop_ids": [sop["id"]],
+        },
+        headers=csrf(client),
+    )
+    assert r.status_code == 201, r.text
+    bp = r.json()
+    assert bp["tools"]["browser_submit"] == "deny" and bp["used_by"] == 0
+
+    a = await new_agent(client, o, "Rafi", "Research")
+    applied = await client.post(
+        f"/api/blueprints/{bp['id']}/apply", json={"agent_id": a["id"]}, headers=csrf(client)
+    )
+    assert applied.status_code == 200 and applied.json()["used_by"] == 1
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        assert agent.role == "Inbox Analyst" and agent.template == "Inbox Reader"
+        assert agent.tools["browser_submit"] == "deny" and agent.tools["browser_read"] == "allow"
+        assert agent.sop_ids == [sop["id"]] and "never fill or send forms" in agent.soul
+
+    # Bad tool / bad sop are rejected; staff without agents.manage cannot create one.
+    bad = await client.post(
+        "/api/blueprints", json={"name": "X", "tools": {"nope": "allow"}}, headers=csrf(client)
+    )
+    assert bad.status_code == 400 and bad.json()["code"] == "unknown_tool"
+    staff = await as_role(client, "staff@example.com", "staff", branch_id=o["branch"]["id"])
+    try:
+        r = await staff.post(
+            "/api/blueprints", json={"name": "Y", "role": "Z"}, headers=csrf(staff)
+        )
+        assert r.status_code == 201  # staff manage their own agents, so may define blueprints
+    finally:
+        await staff.aclose()
+
+
+def test_workflow_compiles_to_a_numbered_procedure():
+    from agentic.workflows.procedure import clean_graph, compile_text
+
+    graph = {
+        "nodes": [
+            {"id": "n1", "type": "start", "title": "New invitation arrives", "role": "Operations"},
+            {"id": "n2", "type": "decision", "title": "Relevant to us?"},
+            {
+                "id": "n3",
+                "type": "step",
+                "title": "Research it",
+                "body": "Check requirements.",
+                "role": "Research",
+            },
+            {"id": "n4", "type": "end", "title": "Archive"},
+            {"id": "x9", "type": "step", "title": "Orphan"},  # disconnected, still listed
+        ],
+        "edges": [
+            {"from": "n1", "to": "n2"},
+            {"from": "n2", "to": "n3", "label": "yes"},
+            {"from": "n2", "to": "n4", "label": "no"},
+        ],
+    }
+    cleaned = clean_graph(graph)
+    assert len(cleaned["nodes"]) == 5 and len(cleaned["edges"]) == 3
+    text = compile_text("Invitation triage", graph)
+    assert "Procedure: Invitation triage" in text
+    assert "1. [Operations] New invitation arrives" in text
+    assert "if yes: go to" in text and "if no: go to" in text
+    assert "Check requirements." in text and "Orphan" in text  # body + disconnected node kept
+
+
+async def test_workflow_crud_and_attaches_to_the_agent_prompt(client, llm, temporal):
+    from agentic.agents.prompt import system_prompt
+
+    o = await office(client)
+    a = await new_agent(client, o, "Rafi", "Operations")
+    r = await client.post(
+        "/api/workflows",
+        json={
+            "name": "Invitation triage",
+            "description": "How we handle a new invitation.",
+            "status": "active",
+            "agent_ids": [a["id"]],
+            "graph": {
+                "nodes": [
+                    {"id": "n1", "type": "start", "title": "Invitation arrives"},
+                    {
+                        "id": "n2",
+                        "type": "step",
+                        "title": "Summarise it",
+                        "body": "Note the deadline.",
+                    },
+                    {"id": "n3", "type": "end", "title": "Report to owner"},
+                ],
+                "edges": [{"from": "n1", "to": "n2"}, {"from": "n2", "to": "n3"}],
+            },
+        },
+        headers=csrf(client),
+    )
+    assert r.status_code == 201, r.text
+    wf = r.json()
+    assert wf["steps"] == 3 and "Note the deadline." in wf["procedure"]
+
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        prompt = await system_prompt(db, agent, "task")
+    assert (
+        "Invitation triage" in prompt and "Note the deadline." in prompt
+    )  # layered in like an SOP
+
+    # A draft-only (not active) or unattached workflow does not reach the prompt.
+    await client.patch(
+        f"/api/workflows/{wf['id']}", json={**wf, "status": "draft"}, headers=csrf(client)
+    )
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        prompt = await system_prompt(db, agent, "task")
+    assert "Note the deadline." not in prompt

@@ -95,6 +95,36 @@ async def _follow(sid: str) -> None:
         return
 
 
+def form_fields(obs: dict[str, Any]) -> list[dict[str, str]]:
+    """The page's fillable fields and what is in them now (passwords stay hidden)."""
+    out = []
+    for e in obs.get("elements") or []:
+        if e.get("tag") not in ("input", "textarea", "select") or e.get("submit"):
+            continue
+        if e.get("type") in ("checkbox", "radio"):
+            value = "ticked" if e.get("checked") else "not ticked"
+        else:
+            value = str(e.get("value") or "")
+        out.append({"label": str(e.get("label") or e.get("n")), "value": value[:120]})
+    return out[:30]
+
+
+async def form_preview(task_id: str) -> dict[str, Any]:
+    """For a send-form approval: the page and the fields as they are about to be sent."""
+    raw = await valkey().get(f"browser:task:{task_id}")
+    if not raw:
+        return {}
+    sid = raw.decode() if isinstance(raw, bytes) else str(raw)
+    url = await valkey().get(f"browser:url:{sid}")
+    fields = await valkey().get(f"browser:fields:{sid}")
+    out: dict[str, Any] = {"session": sid}
+    if url:
+        out["page"] = url.decode() if isinstance(url, bytes) else str(url)
+    if fields:
+        out["form"] = json.loads(fields)
+    return out
+
+
 def view(obs: dict[str, Any], full_text: bool = False) -> str:
     """The page as the model sees it: title, numbered elements, a little text."""
     lines = [f"Page: {obs.get('title') or '(no title)'} | {obs.get('url')}"]
@@ -157,6 +187,8 @@ async def _act(ctx: Any, action: str, *, label: str = "", **body: Any) -> dict[s
     seq = await store_frame(sid, obs.pop("frame")) if obs.get("frame") else None
     if obs.get("url"):
         await valkey().set(f"browser:url:{sid}", str(obs["url"]), ex=SESSION_TTL)
+    if obs.get("elements") is not None:
+        await valkey().set(f"browser:fields:{sid}", json.dumps(form_fields(obs)), ex=SESSION_TTL)
     await runtime.activity(
         ctx.agent,
         ctx.task,

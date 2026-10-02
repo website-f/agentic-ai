@@ -175,12 +175,13 @@ export function Screen({ session, events, live = true }: { session: string; even
         <span className="shrink-0">{live ? <Pill tone="accent" live>Live</Pill> : <Pill>Last screen</Pill>}</span>
       </figcaption>
       <div ref={box} className="relative aspect-[16/10] bg-surface-2">
+        {/* Always requested (it retries every tick); a message covers it while nothing loads. */}
+        <img src={`/api/browser/${session}/frame.jpg?t=${tick}`} alt={`The agent's browser: ${d.title ?? "a web page"}`}
+          className={cn("absolute inset-0 size-full object-contain object-top", failed && "invisible")}
+          onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
         {failed ? (
           <p className="absolute inset-0 grid place-items-center text-[13px] text-muted">{live ? "The browser is starting…" : "The browser was closed."}</p>
-        ) : (
-          <img src={`/api/browser/${session}/frame.jpg?t=${tick}`} alt={`The agent's browser: ${d.title ?? "a web page"}`} className="absolute inset-0 size-full object-contain object-top"
-            onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
-        )}
+        ) : null}
         {d.point && fresh ? (
           <span aria-hidden className="pointer-events-none absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-accent/25 motion-safe:animate-ping"
             style={{ left: d.point.x * scale, top: d.point.y * scale }} />
@@ -227,7 +228,7 @@ export function AgentLive({ agentId, name }: { agentId: string; name: string }) 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       {f.browser ? (
-        <Screen session={f.browser} events={f.feed} live={working} />
+        <Screen key={f.browser} session={f.browser} events={f.feed} live={working} />
       ) : (
         <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/50 px-4 py-3">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-full bg-surface", f.thinking ? "text-accent motion-safe:animate-pulse" : last?.tone ?? "text-muted")}>
@@ -283,9 +284,7 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
     .slice(0, 5);
   const first = recent[0]?.id ?? null;
   const shown = open ?? first;
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
-      {reports.data?.length ? (
+  const reportList = reports.data?.length ? (
         <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
           {reports.data.map((r) => (
             <li key={r.id}>
@@ -300,7 +299,9 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
             </li>
           ))}
         </ul>
-      ) : null}
+      ) : null;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       {tasks.isLoading ? <Skeleton className="h-24 rounded-[var(--radius-md)]" /> : recent.length ? (
         <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
           {recent.map((t) => {
@@ -327,6 +328,8 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
           })}
         </ul>
       ) : <p className="text-[13px] text-muted">{name} has not finished any work yet.</p>}
+      {reportList ? <h4 className="mt-1 text-[12.5px] font-semibold text-muted">Reports</h4> : null}
+      {reportList}
     </div>
   );
 }

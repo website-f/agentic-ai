@@ -153,6 +153,29 @@ async def test_ssrf_guard_blocks_internal_targets(url):
 # ---------------------------------------------------------------- providers
 
 
+async def test_task_call_limit_is_a_workspace_ai_setting(client: httpx.AsyncClient):
+    await setup_owner(client)
+
+    current = await client.get("/api/ai/settings")
+    assert current.status_code == 200
+    assert current.json() == {"max_task_model_calls": 30, "hard_max_task_model_calls": 200}
+
+    saved = await client.patch(
+        "/api/ai/settings",
+        json={"max_task_model_calls": 60},
+        headers=csrf(client),
+    )
+    assert saved.status_code == 200
+    assert saved.json()["max_task_model_calls"] == 60
+    assert (await client.get("/api/ai/settings")).json()["max_task_model_calls"] == 60
+
+    for invalid in (0, 201):
+        rejected = await client.patch(
+            "/api/ai/settings", json={"max_task_model_calls": invalid}, headers=csrf(client)
+        )
+        assert rejected.status_code == 422
+
+
 async def test_key_is_encrypted_and_never_returned(client: httpx.AsyncClient):
     await setup_owner(client)
     p = await add_provider(client, "Groq", "good.fake")

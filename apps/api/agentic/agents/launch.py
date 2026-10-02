@@ -26,6 +26,10 @@ async def launch(db: AsyncSession, t: Task, actor: str) -> None:
     t.run_count += 1
     t.status = "ready"
     t.result = t.error = t.blocked_reason = None
+    # A retry is a fresh agent run. Keeping the previous run's call budget would make
+    # a task that stopped at MAX_CALLS_PER_TASK fail again before the model gets a turn.
+    t.steps_used = 0
+    t.correction_used = False
     await db.commit()
     try:
         t.workflow_id = await dispatch.start_task(t.id, t.run_count)

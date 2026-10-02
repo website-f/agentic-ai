@@ -14,7 +14,27 @@ import { AgentAvatar } from "./agent-avatar";
 import { Button } from "./ui/button";
 import { Pill } from "./ui/pill";
 
+function FormPreview({ fields, page }: { fields: { label: string; value: string }[]; page?: string }) {
+  return (
+    <div className="overflow-hidden rounded-sm border border-border">
+      <p className="truncate border-b border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-muted">
+        It will send this form{page ? <> on <span className="font-mono">{page}</span></> : null}:
+      </p>
+      <dl className="grid max-h-56 grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-3 gap-y-1 overflow-y-auto px-2.5 py-2 text-[12.5px]">
+        {fields.map((f, i) => (
+          <div key={i} className="contents">
+            <dt className="truncate text-muted" title={f.label}>{f.label}</dt>
+            <dd className={f.value ? "break-words" : "text-muted italic"}>{f.value || "empty"}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function ArgsPreview({ a }: { a: Approval }) {
+  const form = Array.isArray(a.args.form) ? (a.args.form as { label: string; value: string }[]) : null;
+  if (form?.length) return <FormPreview fields={form} page={typeof a.args.page === "string" ? a.args.page : undefined} />;
   const url = typeof a.args.url === "string" ? a.args.url : null;
   if (url) {
     return (

@@ -37,6 +37,11 @@ export interface Provider {
   recent_checks: { ts: string; ok: boolean; latency_ms: number | null }[];
 }
 
+export interface AISettings {
+  max_task_model_calls: number;
+  hard_max_task_model_calls: number;
+}
+
 export interface AIModel {
   id: string;
   provider_id: string;
@@ -129,12 +134,18 @@ export interface Attempt {
 }
 
 export const aiKeys = {
+  settings: ["ai", "settings"] as const,
   presets: ["ai", "presets"] as const,
   providers: ["ai", "providers"] as const,
   models: (providerId?: string) => ["ai", "models", providerId ?? "all"] as const,
   groups: ["ai", "groups"] as const,
   usage: (days: number) => ["ai", "usage", days] as const,
 };
+
+export const aiSettingsQuery = queryOptions({
+  queryKey: aiKeys.settings,
+  queryFn: () => api<AISettings>("/api/ai/settings"),
+});
 
 export const presetsQuery = queryOptions({
   queryKey: aiKeys.presets,

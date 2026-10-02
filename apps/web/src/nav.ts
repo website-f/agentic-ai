@@ -1,5 +1,7 @@
 import {
   BrainIcon,
+  BlueprintIcon,
+  FlowArrowIcon,
   FileTextIcon,
   BroadcastIcon,
   BuildingsIcon,
@@ -39,6 +41,8 @@ export type AppPath =
   | "/brain"
   | "/sops"
   | "/skills"
+  | "/blueprints"
+  | "/workflows"
   | "/schedules"
   | "/ai-engine"
   | "/channels"
@@ -63,19 +67,32 @@ export interface NavSection {
   items: NavItem[];
 }
 
+// Grouped as a top-to-bottom flow: start at Home, look in on the Office and its agents,
+// give and track Work, watch them Collaborate, back them with Knowledge, wire up Operations,
+// and Admin at the bottom. Each group is one step of running the office.
 export const NAV: NavSection[] = [
   {
-    title: "Workspace",
+    title: "Home",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
-      { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work, tenders and other work types, what is failing or waiting, and spend, with an AI briefing." },
-      { to: "/office", label: "Office", icon: BuildingsIcon, blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
+      { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing." },
+    ],
+  },
+  {
+    title: "Office",
+    items: [
+      { to: "/office", label: "Office floor", icon: BuildingsIcon, blurb: "A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you." },
       { to: "/monitor", label: "Monitor", icon: EyeIcon, blurb: "Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen." },
       { to: "/agents", label: "Agents", icon: UsersThreeIcon, blurb: "Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom." },
+    ],
+  },
+  {
+    title: "Work",
+    items: [
       { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card onto an agent to assign it." },
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },
-      { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, switch its model for a session, and turn a conversation into a task." },
       { to: "/reports", label: "Reports", icon: ClipboardTextIcon, blurb: "What agents wrote up for you: summaries and tables you can sort and download." },
+      { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, switch its model for a session, and turn a conversation into a task." },
     ],
   },
   {
@@ -91,6 +108,8 @@ export const NAV: NavSection[] = [
       { to: "/sops", label: "SOPs", icon: FileTextIcon, blurb: "Written procedures agents follow: for every company, one company, one department, or attached to specific agents." },
       { to: "/brain", label: "Brain", icon: BrainIcon, blurb: "What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian." },
       { to: "/skills", label: "Skills", icon: LightningIcon, blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
+      { to: "/blueprints", label: "Blueprints", icon: BlueprintIcon, perm: ["agents.manage", "agents.own"], blurb: "Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists." },
+      { to: "/workflows", label: "Workflows", icon: FlowArrowIcon, perm: ["agents.manage", "agents.own"], blurb: "Draw how a job is done as connected steps, or let an analyst agent draft it, then attach it to agents as the procedure they follow." },
     ],
   },
   {

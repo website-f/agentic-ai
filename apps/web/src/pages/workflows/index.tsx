@@ -1,0 +1,239 @@
+import { ArrowLeftIcon, FlowArrowIcon, PlusIcon, SparkleIcon, TrashIcon } from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { EmptyState, Page, PageHeader } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm";
+import { ResponsiveDialog } from "@/components/ui/dialog";
+import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
+import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SwitchField } from "@/components/ui/switch";
+import { api, ApiError, errorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { agentsQuery, workKeys } from "@/lib/work";
+import {
+  NODE_TYPES, newNodeId, workflowKeys, workflowsQuery,
+  type Graph, type NodeType, type WNode, type Workflow,
+} from "@/lib/workflows";
+import { meQuery } from "@/lib/queries";
+
+import { Canvas } from "./canvas";
+
+type Sel = { kind: "node" | "edge"; id: string } | null;
+const BLANK: Graph = { nodes: [], edges: [] };
+
+function DraftDialog({ open, onOpenChange, onDraft }: { open: boolean; onOpenChange: (o: boolean) => void; onDraft: (g: Graph) => void }) {
+  const [text, setText] = useState("");
+  const draft = useMutation({
+    mutationFn: () => api<{ graph: Graph }>("/api/workflows/draft", "POST", { description: text }),
+    onSuccess: (r) => { onDraft(r.graph); toast.success("Drafted. Edit it on the canvas, then save."); onOpenChange(false); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title="Draft from a description"
+      description="Describe the job in plain words. An analyst agent turns it into steps you can edit."
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <Button loading={draft.isPending} disabled={text.trim().length < 10} onClick={() => draft.mutate()}><SparkleIcon size={15} /> Draft it</Button></>}>
+      <TextareaField label="What is the procedure?" value={text} onChange={(e) => setText(e.target.value)} rows={6}
+        placeholder="e.g. When a new client enquiry comes in: a sales agent qualifies it, research checks the company, if it fits finance prepares a quote, otherwise we send a polite decline." />
+    </ResponsiveDialog>
+  );
+}
+
+function NodePanel({ node, onChange, onDelete }: { node: WNode; onChange: (n: Partial<WNode>) => void; onDelete: () => void }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[13px] font-semibold">Step</h3>
+        <Button size="sm" variant="ghost" onClick={onDelete}><TrashIcon size={14} /> Delete</Button>
+      </div>
+      <Field label="Title" value={node.title} onChange={(e) => onChange({ title: e.target.value })} />
+      <div className="grid gap-1.5">
+        <span className="text-[13px] font-medium">Type</span>
+        <Select value={node.type} onValueChange={(v) => onChange({ type: v as NodeType })} label="Type"
+          options={NODE_TYPES.map((t) => ({ value: t.type, label: t.label }))} />
+      </div>
+      <Field label="Who does it (optional)" value={node.role} onChange={(e) => onChange({ role: e.target.value })} placeholder="e.g. Finance" />
+      <TextareaField label="Details" value={node.body} onChange={(e) => onChange({ body: e.target.value })} rows={4}
+        placeholder="What happens at this step." />
+    </div>
+  );
+}
+
+function Editor({ existing, onDone }: { existing: Workflow | null; onDone: () => void }) {
+  const qc = useQueryClient();
+  const { data: agents = [] } = useQuery(agentsQuery);
+  const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage);
+  const [name, setName] = useState(existing?.name ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [graph, setGraph] = useState<Graph>(existing?.graph ?? BLANK);
+  const [status, setStatus] = useState<"draft" | "active">(existing?.status ?? "draft");
+  const [agentIds, setAgentIds] = useState<string[]>(existing?.agent_ids ?? []);
+  const [sel, setSel] = useState<Sel>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const save = useMutation({
+    mutationFn: () => {
+      const payload = { name, description, graph, status, agent_ids: agentIds };
+      return existing
+        ? api<Workflow>(`/api/workflows/${existing.id}`, "PATCH", payload)
+        : api<Workflow>("/api/workflows", "POST", payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: workflowKeys.all });
+      qc.invalidateQueries({ queryKey: workKeys.agents });
+      toast.success(existing ? "Workflow saved." : `Workflow "${name}" created.`);
+      onDone();
+    },
+  });
+  const del = useMutation({
+    mutationFn: () => api(`/api/workflows/${existing!.id}`, "DELETE"),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: workflowKeys.all }); toast.success("Workflow deleted."); onDone(); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const fields = save.error instanceof ApiError ? save.error.fields : {};
+
+  const addNode = (type: NodeType) => {
+    const n: WNode = { id: newNodeId(), type, title: NODE_TYPES.find((t) => t.type === type)!.label, body: "", role: "", x: 60 + graph.nodes.length % 3 * 250, y: 60 + Math.floor(graph.nodes.length / 3) * 140 };
+    setGraph((g) => ({ ...g, nodes: [...g.nodes, n] }));
+    setSel({ kind: "node", id: n.id });
+  };
+  const patchNode = (id: string, p: Partial<WNode>) =>
+    setGraph((g) => ({ ...g, nodes: g.nodes.map((n) => (n.id === id ? { ...n, ...p } : n)) }));
+  const deleteNode = (id: string) =>
+    setGraph((g) => ({ nodes: g.nodes.filter((n) => n.id !== id), edges: g.edges.filter((e) => e.from !== id && e.to !== id) }));
+  const selectedNode = sel?.kind === "node" ? graph.nodes.find((n) => n.id === sel.id) ?? null : null;
+  const selectedEdge = sel?.kind === "edge" ? graph.edges.find((e) => e.id === sel.id) ?? null : null;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <button onClick={onDone} className="inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All workflows</button>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <Field label="Workflow name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. New client enquiry" error={fields.name} />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setDrafting(true)}><SparkleIcon size={15} /> Draft with AI</Button>
+          {existing ? <Button variant="ghost" onClick={() => setRemoving(true)}><TrashIcon size={15} /> Delete</Button> : null}
+          <Button loading={save.isPending} disabled={!name.trim()} onClick={() => save.mutate()}>Save</Button>
+        </div>
+      </div>
+      <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One line: what this procedure is for" aria-label="Description" />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12.5px] text-muted">Add:</span>
+        {NODE_TYPES.map((t) => (
+          <button key={t.type} onClick={() => addNode(t.type)} className="inline-flex items-center gap-1.5 rounded-sm border border-border px-2.5 py-1 text-[12.5px] hover:bg-surface-2">
+            <span className="size-2 rounded-full" style={{ background: t.color }} /> {t.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[12px] text-muted">Drag a card to move it; drag from its bottom dot to another card to connect.</span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <Canvas graph={graph} onChange={setGraph} selected={sel} onSelect={setSel} />
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          {selectedNode ? (
+            <NodePanel node={selectedNode} onChange={(p) => patchNode(selectedNode.id, p)} onDelete={() => { deleteNode(selectedNode.id); setSel(null); }} />
+          ) : selectedEdge ? (
+            <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+              <h3 className="text-[13px] font-semibold">Connection</h3>
+              <Field label="Label (for a decision branch)" value={selectedEdge.label}
+                onChange={(e) => setGraph((g) => ({ ...g, edges: g.edges.map((ed) => ed.id === selectedEdge.id ? { ...ed, label: e.target.value } : ed) }))}
+                placeholder="e.g. yes / no" />
+            </div>
+          ) : (
+            <p className="rounded-[var(--radius-md)] border border-dashed border-border px-3 py-4 text-center text-[13px] text-muted">Click a step to edit it.</p>
+          )}
+
+          <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+            <h3 className="text-[13px] font-semibold">When it's ready</h3>
+            <SwitchField checked={status === "active"} onCheckedChange={(v) => setStatus(v ? "active" : "draft")}
+              label="Active" hint="Active workflows are followed by the agents you attach below." />
+            <fieldset className="mt-1 grid gap-2">
+              <legend className="text-[13px] font-medium">Agents that follow it</legend>
+              {mine.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {mine.map((a) => {
+                    const on = agentIds.includes(a.id);
+                    return (
+                      <button key={a.id} type="button" aria-pressed={on} onClick={() => setAgentIds((s) => on ? s.filter((x) => x !== a.id) : [...s, a.id])}
+                        className={cn("rounded-full border px-3 py-1 text-[12.5px]", on ? "border-accent bg-accent-soft font-medium text-accent" : "border-border hover:bg-surface-2")}>
+                        {a.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : <p className="text-[12.5px] text-muted">No agents you can manage yet.</p>}
+            </fieldset>
+          </div>
+        </div>
+      </div>
+      <FormError message={save.error && !Object.keys(fields).length ? errorMessage(save.error) : null} />
+
+      {drafting ? <DraftDialog open onOpenChange={setDrafting} onDraft={(g) => { setGraph(g); setSel(null); }} /> : null}
+      {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={`Delete ${existing.name}?`}
+        body="Agents following it stop following it. Their past work is unaffected." confirmLabel="Delete" danger onConfirm={async () => { await del.mutateAsync(); }} /> : null}
+    </div>
+  );
+}
+
+function Card({ wf, onOpen }: { wf: Workflow; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-4 text-left hover:border-accent">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[14px] font-semibold">{wf.name}</span>
+        <Pill tone={wf.status === "active" ? "accent" : "neutral"}>{wf.status}</Pill>
+      </div>
+      {wf.description ? <span className="line-clamp-2 text-[12.5px] text-muted">{wf.description}</span> : null}
+      <div className="flex flex-wrap gap-1.5">
+        <Pill>{wf.steps} steps</Pill>
+        {wf.agent_ids.length ? <Pill tone="accent">{wf.agent_ids.length} agents</Pill> : null}
+        {wf.source === "analyst" ? <Pill tone="info">AI-drafted</Pill> : null}
+      </div>
+    </button>
+  );
+}
+
+export function WorkflowsPage() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const canManage = me.permissions.includes("agents.manage") || me.permissions.includes("agents.own");
+  const { data: workflows = [], isLoading, error } = useQuery(workflowsQuery);
+  const search = useSearch({ strict: false }) as { w?: string };
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+
+  const open = (id?: string) => navigate({ to: "/workflows", search: id ? { w: id } : {}, replace: true });
+  const editing = search.w ? workflows.find((w) => w.id === search.w) ?? null : null;
+
+  if (creating || editing) {
+    return (
+      <Page className="max-w-6xl">
+        <Editor existing={editing} onDone={() => { setCreating(false); open(); }} />
+      </Page>
+    );
+  }
+
+  return (
+    <Page>
+      <PageHeader title="Workflows"
+        description="Draw how a job is done — steps, decisions, hand-offs — then attach it to agents so they follow the procedure. Or describe it and let an analyst agent draft it."
+        actions={canManage ? <Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New workflow</Button> : null} />
+      {isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 rounded-[var(--radius-md)]" />)}</div>
+        : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
+        : !workflows.length ? (
+          <EmptyState icon={FlowArrowIcon} title="No workflows yet"
+            body="A workflow is a map of how a job gets done: each step, who does it, and where decisions branch. Agents you attach follow it like a trained process."
+            action={canManage ? <Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> Create first workflow</Button> : undefined} />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {workflows.map((wf) => <Card key={wf.id} wf={wf} onOpen={() => open(wf.id)} />)}
+          </div>
+        )}
+    </Page>
+  );
+}

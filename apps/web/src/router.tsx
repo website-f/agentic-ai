@@ -49,12 +49,14 @@ const page = {
   overview: lazyRouteComponent(() => import("@/pages/overview"), "OverviewPage"),
   reports: lazyRouteComponent(() => import("@/pages/reports"), "ReportsPage"),
   logins: lazyRouteComponent(() => import("@/pages/logins"), "LoginsPage"),
+  blueprints: lazyRouteComponent(() => import("@/pages/blueprints"), "BlueprintsPage"),
+  workflows: lazyRouteComponent(() => import("@/pages/workflows"), "WorkflowsPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const num = (v: unknown) => (v ? Number(v) : undefined);
 
-const AI_TABS = ["providers", "groups", "usage", "playground"] as const;
+const AI_TABS = ["providers", "groups", "usage", "playground", "settings"] as const;
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -316,6 +318,23 @@ const reportsRoute = createRoute({
   component: page.reports,
 });
 const loginsRoute = createRoute({ getParentRoute: () => appRoute, path: "/logins", component: page.logins });
+const workflowsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/workflows",
+  validateSearch: (s: Record<string, unknown>): { w?: string } => ({ w: str(s.w) }),
+  beforeLoad: ({ context }) => {
+    if (!["agents.manage", "agents.own"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
+  },
+  component: page.workflows,
+});
+const blueprintsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/blueprints",
+  beforeLoad: ({ context }) => {
+    if (!["agents.manage", "agents.own"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
+  },
+  component: page.blueprints,
+});
 
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
@@ -357,6 +376,8 @@ const routeTree = rootRoute.addChildren([
     overviewRoute,
     reportsRoute,
     loginsRoute,
+    blueprintsRoute,
+    workflowsRoute,
   ]),
 ]);
 

@@ -20,6 +20,7 @@ from ..brain import core as core_memory
 from ..brain.recall import recall_block
 from ..core.db import SessionLocal
 from ..core.redact import redact
+from ..core.workspace_settings import max_task_model_calls
 from ..engine import gateway
 from ..models import (
     Agent,
@@ -42,13 +43,13 @@ from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 log = logging.getLogger("agentic.runtime")
 
 MAX_CALLS_PER_STEP = 6
-MAX_CALLS_PER_TASK = 30
 # Room for a long final answer or a big report in one reply (billed only for what is
 # written). 1,500 cut a 34-row report off mid-call, and the fallback model then claimed it
 # was done.
 TASK_REPLY_TOKENS = 4000
 APPROVAL_TTL = timedelta(hours=24)
 TOOL_TIMEOUT = 45
+BROWSER_ERROR_LIMIT = 3
 
 
 @dataclass
@@ -282,6 +283,25 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
 
 
+def _browser_tool_error(text: str) -> bool:
+    """Whether a browser result is a real failure, rather than an approval hint."""
+    return text.lstrip().startswith("Error:") and "SUBMIT_NEEDS_APPROVAL:" not in text
+
+
+def _browser_error_streak(history: list[AgentMessage]) -> int:
+    """Count the latest consecutive browser failures across model turns."""
+    streak = 0
+    for message in reversed(history):
+        if message.role == "assistant":
+            continue
+        if message.role != "tool" or not (message.name or "").startswith("browser_"):
+            break
+        if not _browser_tool_error(message.content or ""):
+            break
+        streak += 1
+    return streak
+
+
 TEAM_TOOLS = ("delegate", "consult", "ask_colleague", "split_work")
 
 
@@ -417,6 +437,11 @@ async def _resolve_calls(
             continue
         if decision.effect == "ask":
             reason = str(args.get("why") or args.get("reason") or "")
+            shown = args
+            if name == "browser_submit":
+                from . import browser_tools  # late: browser_tools imports this module
+
+                shown = {**args, **(await browser_tools.form_preview(task.id))}
             return _waiting(
                 await _create_approval(
                     db,
@@ -425,7 +450,7 @@ async def _resolve_calls(
                     "tool",
                     name,
                     call_id,
-                    args,
+                    shown,
                     reason,
                     TOOLS[name].risk,
                     decision.rule,
@@ -439,6 +464,14 @@ async def _resolve_calls(
         _add(db, agent, "tool", task_id=task.id, content=result, tool_call_id=call_id, name=name)
         await db.commit()
         await activity(agent, task, "tool_result", tool=name, preview=_brief(result, 400))
+        if name.startswith("browser_") and _browser_tool_error(result):
+            streak = _browser_error_streak(await _history(db, task_id=task.id))
+            if streak >= BROWSER_ERROR_LIMIT:
+                return StepResult(
+                    "failed",
+                    "The browser did not recover after "
+                    f"{BROWSER_ERROR_LIMIT} consecutive errors. Last result: {_brief(result, 280)}",
+                )
         if name == "report_progress":
             await task_event(db, task, "progress", f"agent:{agent.id}", str(args.get("update", "")))
         else:
@@ -711,10 +744,11 @@ async def run_task_step(task_id: str) -> StepResult:
         if pending:
             return pending
 
+        task_call_limit = max_task_model_calls(ws.settings)
         for _ in range(MAX_CALLS_PER_STEP):
-            if task.steps_used >= MAX_CALLS_PER_TASK:
+            if task.steps_used >= task_call_limit:
                 return StepResult(
-                    "failed", f"Stopped after {MAX_CALLS_PER_TASK} model calls without finishing."
+                    "failed", f"Stopped after {task_call_limit} model calls without finishing."
                 )
             gate = await _budget_gate(db, task, agent, ws)
             if gate:

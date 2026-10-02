@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, EyeIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, BrowserIcon, CheckIcon, EyeIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { Tabs } from "radix-ui";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
+import { WebTaskDialog } from "@/components/web-task-dialog";
 import { Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -180,6 +181,7 @@ export function AgentDetailPage() {
   const canManage = !!agent?.can_manage;
   const live = useLive((s) => s.agentStatus[agentId]);
   const [retiring, setRetiring] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const tab: Tab = search.tab && TABS.includes(search.tab) ? search.tab : "overview";
 
   const setStatus = useMutation({
@@ -220,6 +222,7 @@ export function AgentDetailPage() {
             </Link>
           ) : null}
         </div>
+        {canWrite && agent.status === "active" ? <Button variant="outline" onClick={() => setBrowsing(true)}><BrowserIcon size={15} /> Browse for me</Button> : null}
         <Button variant="outline" asChild><Link to="/monitor" search={{ agent: agent.id }}><EyeIcon size={15} /> Watch live</Link></Button>
         {canManage ? (
           <div className="flex gap-2">
@@ -262,6 +265,7 @@ export function AgentDetailPage() {
         <Tabs.Content value="sops" className="outline-none"><SOPs agent={agent} canManage={canManage} /></Tabs.Content>
       </Tabs.Root>
 
+      {browsing ? <WebTaskDialog agent={agent} open onOpenChange={setBrowsing} onStarted={() => navigate({ to: "/agents/$agentId", params: { agentId }, search: { tab: "overview" }, replace: true })} /> : null}
       <ConfirmDialog
         open={retiring}
         onOpenChange={setRetiring}

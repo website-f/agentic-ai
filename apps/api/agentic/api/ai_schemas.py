@@ -51,6 +51,15 @@ class ProviderOut(BaseModel):
     recent_checks: list[CheckOut]
 
 
+class AISettingsOut(BaseModel):
+    max_task_model_calls: int
+    hard_max_task_model_calls: int
+
+
+class AISettingsUpdateIn(BaseModel):
+    max_task_model_calls: int = Field(ge=1, le=200)
+
+
 class ProviderCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     preset: str | None = None

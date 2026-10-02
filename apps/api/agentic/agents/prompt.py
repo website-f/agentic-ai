@@ -72,6 +72,23 @@ async def build_parts(
         }.get(sop.scope, sop.scope)
         parts.append(PromptPart(f"{sop.title} ({where})", sop.body.strip(), sop=True))
 
+    from ..models import Workflow as _Workflow  # late: keep import local to this use
+    from ..workflows.procedure import compile_text
+
+    flows = (
+        await db.scalars(
+            select(_Workflow).where(
+                _Workflow.workspace_id == agent.workspace_id,
+                _Workflow.status == "active",
+                _Workflow.agent_ids.contains([agent.id]),
+            )
+        )
+    ).all()
+    for wf in flows:
+        parts.append(
+            PromptPart(f"Workflow: {wf.name}", compile_text(wf.name, wf.graph or {}), sop=True)
+        )
+
     who = (
         f"Your name is {agent.name}. Your role is {agent.role}"
         + (f" in the {dept.name} department" if dept else "")

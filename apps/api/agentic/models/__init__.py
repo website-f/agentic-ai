@@ -1057,3 +1057,51 @@ class Report(Base):
     tables: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Blueprint(Timestamps, Base):
+    """A reusable role package people define once and apply to agents (P9): the role, its
+    instructions (soul), model group, tool scope, and the SOPs and skills it should follow.
+    Applying it to an agent copies these onto the agent; an isolated branch keeps its own."""
+
+    __tablename__ = "blueprints"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_blueprints_ws_name"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("bp"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    role: Mapped[str] = mapped_column(String(120), default="")
+    soul: Mapped[str] = mapped_column(Text, default="")
+    model_group: Mapped[str] = mapped_column(String(40), default="smart")
+    # {tool_name: "allow" | "ask" | "deny"} — the capability scope this role is limited to.
+    tools: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict)
+    autonomy: Mapped[str] = mapped_column(String(8), default="ask")
+    sop_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    skill_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    color: Mapped[str] = mapped_column(String(16), default="#13895f")
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | analyst
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class Workflow(Timestamps, Base):
+    """A visual procedure (P9): a graph of steps describing how a job is done. People draw it
+    on a canvas or an analyst agent drafts it from a prompt. When attached to agents it is
+    compiled to a numbered procedure and layered into their prompt, like an SOP — it is
+    guidance the agent follows, never an automation engine."""
+
+    __tablename__ = "workflows"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_workflows_ws_name"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("wf"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    # {"nodes": [{id,type,title,body,role,x,y}], "edges": [{id,from,to,label}]}
+    graph: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="draft")  # draft | active
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | analyst
+    agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # agents that follow it
+    created_by: Mapped[str] = mapped_column(String(80))

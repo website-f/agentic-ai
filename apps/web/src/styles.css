@@ -112,6 +112,33 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Our own scrollbars everywhere, in the theme — never the default OS ones.
+     Thin, quiet, and darker on hover; they fade into the surface until used. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--border) 85%, var(--text)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--border) 80%, var(--text));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--accent) 55%, var(--text-muted));
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 /* Tailwind v4 positions with the `translate` property, so these only touch `transform`

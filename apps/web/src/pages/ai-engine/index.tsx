@@ -10,11 +10,12 @@ import { meQuery } from "@/lib/queries";
 import { GroupsTab } from "./groups";
 import { PlaygroundTab } from "./playground";
 import { ProvidersTab } from "./providers";
+import { SettingsTab } from "./settings";
 
 // Charts (Recharts) load only when the Usage tab is opened.
 const UsageTab = lazy(() => import("./usage").then((m) => ({ default: m.UsageTab })));
 
-export const AI_TABS = ["providers", "groups", "usage", "playground"] as const;
+export const AI_TABS = ["providers", "groups", "usage", "playground", "settings"] as const;
 export type AITab = (typeof AI_TABS)[number];
 
 const LABELS: Record<AITab, string> = {
@@ -22,6 +23,7 @@ const LABELS: Record<AITab, string> = {
   groups: "Model groups",
   usage: "Usage",
   playground: "Playground",
+  settings: "Settings",
 };
 
 export function AIEnginePage() {
@@ -62,6 +64,9 @@ export function AIEnginePage() {
         </Tabs.Content>
         <Tabs.Content value="playground" className="outline-none">
           <PlaygroundTab canRun={me.permissions.includes("work.write")} />
+        </Tabs.Content>
+        <Tabs.Content value="settings" className="outline-none">
+          <SettingsTab canManage={canManage} />
         </Tabs.Content>
       </Tabs.Root>
     </Page>

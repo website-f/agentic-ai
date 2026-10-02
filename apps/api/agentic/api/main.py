@@ -20,6 +20,7 @@ from .routers import (
     ai_engine,
     audit_log,
     auth,
+    blueprints,
     brain,
     broadcasts,
     channels,
@@ -37,6 +38,8 @@ from .routers import (
     tasks,
     teams,
     vault,
+    web_tasks,
+    workflows,
 )
 
 log = logging.getLogger("agentic.api")
@@ -130,6 +133,7 @@ async def unhandled(_: Request, exc: Exception) -> JSONResponse:
 for r in (
     system.router,
     auth.router,
+    blueprints.router,
     members.router,
     org.router,
     audit_log.router,
@@ -148,6 +152,8 @@ for r in (
     overview.router,
     reports.router,
     vault.router,
+    web_tasks.router,
+    workflows.router,
     events_stream.router,
 ):
     app.include_router(r)

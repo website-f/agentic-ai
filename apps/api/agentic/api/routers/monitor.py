@@ -81,6 +81,11 @@ async def activity(
         ).one()
         task_spent = {"calls": int(t[0]), "tokens": int(t[1])}
     sid = _s(await valkey().get(f"browser:agent:{a.id}"))
+    if sid and current is not None:
+        # While it works, show only this task's browser, not the last screen of an older one.
+        meta = _s(await valkey().get(f"browser:session:{sid}"))
+        if not meta or json.loads(meta).get("task_id") != current.id:
+            sid = None
     return {
         "agent": {
             "id": a.id,

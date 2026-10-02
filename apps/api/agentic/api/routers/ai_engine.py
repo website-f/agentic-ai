@@ -13,11 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import SessionLocal, get_db
 from ...core.ssrf import BlockedURL, guard_url
+from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
 from ...engine import client, gateway, store, tester
 from ...engine.presets import BY_ID, PRESETS, PRIMARY
-from ...models import AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck
+from ...models import AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck, Workspace
 from ...services import audit
 from ..ai_schemas import (
+    AISettingsOut,
+    AISettingsUpdateIn,
     CheckOut,
     DiscoverIn,
     GroupMember,
@@ -40,6 +43,15 @@ router = APIRouter(prefix="/api/ai", tags=["ai-engine"])
 
 
 # ------------------------------------------------------------------ helpers
+
+
+async def _workspace(db: AsyncSession, workspace_id: str) -> Workspace:
+    ws = await db.get(Workspace, workspace_id)
+    if ws is None:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "workspace_not_found", "That workspace is not here."
+        )
+    return ws
 
 
 async def _provider(db: AsyncSession, workspace_id: str, provider_id: str) -> AIProvider:
@@ -115,6 +127,42 @@ def _model_out(m: AIModel) -> ModelOut:
 
 
 # ------------------------------------------------------------------ presets + providers
+
+
+@router.get("/settings")
+async def get_ai_settings(
+    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+) -> AISettingsOut:
+    ws = await _workspace(db, principal.workspace_id)
+    return AISettingsOut(
+        max_task_model_calls=max_task_model_calls(ws.settings),
+        hard_max_task_model_calls=HARD_MAX_TASK_MODEL_CALLS,
+    )
+
+
+@router.patch("/settings")
+async def update_ai_settings(
+    body: AISettingsUpdateIn,
+    principal: Principal = Depends(require("engine.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> AISettingsOut:
+    ws = await _workspace(db, principal.workspace_id)
+    before = max_task_model_calls(ws.settings)
+    ws.settings = {**(ws.settings or {}), "max_task_model_calls": body.max_task_model_calls}
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "ai.settings_updated",
+        target=ws.id,
+        before={"max_task_model_calls": before},
+        after={"max_task_model_calls": body.max_task_model_calls},
+    )
+    await db.commit()
+    return AISettingsOut(
+        max_task_model_calls=body.max_task_model_calls,
+        hard_max_task_model_calls=HARD_MAX_TASK_MODEL_CALLS,
+    )
 
 
 @router.get("/presets")
