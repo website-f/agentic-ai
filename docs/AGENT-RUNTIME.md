@@ -347,3 +347,27 @@ uses the `smart` group then `fast`, and is cached 15 minutes per set of numbers.
 **Monitor wall.** `GET /api/monitor/wall`: every agent at work in the person's scope
 with its live browser screen and last step; the Monitor page opens on it.
 
+**Found by the live tests and fixed (P9):**
+
+- *Browser pool.* Firefox stalls (clicks and page loads never finish, then the whole browser
+  stays stuck) once 3 or more pages in one browser process work at the same time, whatever
+  the CPU, locks or prefs (measured). The browser service now runs a pool of Camoufox
+  processes, at most `BROWSER_PER_PROCESS` (2) agents each, up to `BROWSER_MAX_SESSIONS` (6);
+  a full pool answers 503 and the tools wait 30 s, then tell the agent all browsers are in
+  use. Four timeouts in two minutes restart that one process. Camoufox's humanized cursor is
+  off (`BROWSER_HUMANIZE`): it deadlocks with parallel clicks.
+- *Reasoning hand-back.* DeepSeek's thinking mode rejects a conversation unless every earlier
+  assistant step carries its `reasoning_content`, so after a fallback model wrote one step,
+  DeepSeek (and with the field, Groq and OpenAI) refused the task. The runtime now stores the
+  reasoning with each step; the client learns the `echo_reasoning` quirk from the error and
+  adds the field (empty for steps another model wrote) only for that model, removing it for
+  every other provider.
+- *Ending on a question.* Agents asked the owner inside their final answer, which closes the
+  task. A top-level answer whose last line is a question gets one reminder to use
+  `ask_human` (once per task).
+- *Promising instead of doing.* "I'm now opening all 34 messages and will report" closed a
+  task with the work undone. An answer that announces more work gets one reminder to do it
+  now (once per task).
+- *Reply room.* Task steps may write up to 4,000 tokens: at 1,500 a 34-row report was cut off
+  mid-call and the fallback model then claimed it was done.
+

@@ -12,10 +12,12 @@ interface Props {
   description?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  /** Wider panel on desktop (e.g. to show an agent's live browser). */
+  wide?: boolean;
 }
 
 /** Detail panel: docked right on tablet/desktop, a tall bottom sheet on phones. */
-export function SideSheet({ open, onOpenChange, title, description, actions, children }: Props) {
+export function SideSheet({ open, onOpenChange, title, description, actions, children, wide }: Props) {
   const phone = useIsPhone();
   if (phone) {
     return (
@@ -42,7 +44,7 @@ export function SideSheet({ open, onOpenChange, title, description, actions, chi
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
-        <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-[min(100vw,40rem)] flex-col border-l border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[sheet-in_220ms_cubic-bezier(0.16,1,0.3,1)]">
+        <Dialog.Content className={`fixed inset-y-0 right-0 z-50 flex ${wide ? "w-[min(100vw,52rem)]" : "w-[min(100vw,40rem)]"} flex-col border-l border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[sheet-in_220ms_cubic-bezier(0.16,1,0.3,1)]`}>
           <div className="shrink-0 border-b border-border px-6 pt-5 pb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">

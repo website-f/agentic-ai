@@ -8,6 +8,7 @@ All state lives in the database, so a crashed worker simply re-runs the step.
 import asyncio
 import json
 import logging
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -42,6 +43,10 @@ log = logging.getLogger("agentic.runtime")
 
 MAX_CALLS_PER_STEP = 6
 MAX_CALLS_PER_TASK = 30
+# Room for a long final answer or a big report in one reply (billed only for what is
+# written). 1,500 cut a 34-row report off mid-call, and the fallback model then claimed it
+# was done.
+TASK_REPLY_TOKENS = 4000
 APPROVAL_TTL = timedelta(hours=24)
 TOOL_TIMEOUT = 45
 
@@ -72,6 +77,9 @@ def to_openai(m: AgentMessage) -> dict[str, Any]:
     d: dict[str, Any] = {"role": m.role, "content": m.content}
     if m.role == "assistant" and m.tool_calls:
         d["tool_calls"] = m.tool_calls
+    if m.role == "assistant" and (m.meta or {}).get("reasoning_content"):
+        # The engine sends it back only to models that need it (engine/client.py).
+        d["reasoning_content"] = m.meta["reasoning_content"]
     if m.role == "tool":
         d["tool_call_id"] = m.tool_call_id
         if m.name:
@@ -222,6 +230,25 @@ ASK_NUDGE = (
     "call ask_human now (with options if it is a choice). If not, give your final answer "
     "without the question."
 )
+
+
+WORK_NUDGE = (
+    "Your answer says you will still do some of the work, but a final answer closes the "
+    "task: nothing happens after it. Do that work now with your tools (split_work if there "
+    "are many items), then give the final answer. If you cannot, say plainly what is left "
+    "and why."
+)
+# "I'm now opening all 34 messages and will report them" closes a task with the work undone.
+_PROMISE = re.compile(
+    r"\b(i'll|i will|i am going to|i'm going to|i am now|i'm now|i'll do that next|"
+    r"next,? i(?:'ll| will))\b[^.?!\n]{0,80}\b(open|do|start|check|read|go through|"
+    r"continue|proceed|compile|prepare|report|send|fill|look)",
+    re.I,
+)
+
+
+def promises_more_work(text: str | None) -> bool:
+    return bool(_PROMISE.search((text or "").replace("\u2019", "'")))
 
 
 def ends_with_question(text: str | None) -> bool:
@@ -707,7 +734,7 @@ async def run_task_step(task_id: str) -> StepResult:
                     messages,
                     task="agent.task",
                     tools=offered_tools(agent, task),
-                    max_tokens=1500,
+                    max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,
                     task_id=task.id,
                 )
@@ -745,7 +772,15 @@ async def run_task_step(task_id: str) -> StepResult:
                     task_id=task.id,
                     content=reply.content or None,
                     tool_calls=reply.tool_calls,
-                    meta={"provider": reply.provider_name, "model": reply.model},
+                    meta={
+                        "provider": reply.provider_name,
+                        "model": reply.model,
+                        **(
+                            {"reasoning_content": reply.reasoning_content[:20_000]}
+                            if reply.reasoning_content
+                            else {}
+                        ),
+                    },
                 )
                 await db.commit()
                 history = await _history(db, task_id=task.id)
@@ -784,22 +819,31 @@ async def run_task_step(task_id: str) -> StepResult:
                     )
                     continue
                 answer = json.dumps(value, ensure_ascii=False)
-            elif task.depth == 0 and ends_with_question(answer):
-                # Once per task: a top-level agent that ends with a question meant to ask.
-                nudged = await db.scalar(
-                    select(TaskEvent.id).where(
-                        TaskEvent.task_id == task.id, TaskEvent.kind == "nudge"
-                    )
+            elif (asks := ends_with_question(answer)) or promises_more_work(answer):
+                # Once per kind and task: an agent that ends on a question meant to ask
+                # (top-level tasks only: helpers and colleagues answer their caller), and one
+                # that promises work meant to do it.
+                kind = "nudge" if asks else "nudge_work"
+                nudged = (asks and task.depth > 0) or await db.scalar(
+                    select(TaskEvent.id).where(TaskEvent.task_id == task.id, TaskEvent.kind == kind)
                 )
-                if nudged is None:
-                    _add(db, agent, "user", task_id=task.id, content=ASK_NUDGE)
+                if not nudged:
+                    _add(
+                        db,
+                        agent,
+                        "user",
+                        task_id=task.id,
+                        content=ASK_NUDGE if asks else WORK_NUDGE,
+                    )
                     await db.commit()
                     await task_event(
                         db,
                         task,
-                        "nudge",
+                        kind,
                         "system",
-                        "reminded it to ask with ask_human instead of ending on a question",
+                        "reminded it to ask with ask_human instead of ending on a question"
+                        if asks
+                        else "reminded it to do the work it said it would, before answering",
                     )
                     continue
             await activity(agent, task, "answer", text=_brief(answer or "", 600))

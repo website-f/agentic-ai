@@ -69,6 +69,9 @@ function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void;
       ) : task.status === "failed" && task.error ? (
         <p className="line-clamp-2 text-[12px] text-danger">{task.error}</p>
       ) : null}
+      {task.labels?.length ? (
+        <span className="flex flex-wrap gap-1">{task.labels.slice(0, 3).map((l) => <Pill key={l}>{l}</Pill>)}</span>
+      ) : null}
       <div className="flex min-w-0 items-center gap-2">
         {task.assignee_name ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
@@ -78,7 +81,6 @@ function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void;
         ) : <span className="truncate text-[12px] text-muted">Unassigned</span>}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
-          {(task.labels ?? []).slice(0, 2).map((l) => <Pill key={l}>{l}</Pill>)}
           {task.priority === "high" || task.priority === "urgent" ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{PRIORITY_INFO[task.priority].label}</Pill> : null}
           <time dateTime={task.updated_at} title={`Updated ${timeAgo(task.updated_at).toLowerCase()}`} className="whitespace-nowrap text-[11px] text-muted tabular">{shortAge(task.updated_at)}</time>
         </span>
@@ -96,17 +98,18 @@ function Column({ status, hint, tasks, onOpen, canWrite, dragFrom }: { status: T
       ref={setNodeRef}
       aria-label={info.label}
       className={cn(
-        "flex w-[82vw] max-w-[19rem] shrink-0 snap-start flex-col rounded-[var(--radius-md)] border border-transparent bg-surface-2/50 sm:w-72 xl:w-auto xl:max-w-none xl:min-w-0",
+        // Fixed height (fits the screen); the cards scroll inside the column, header stays.
+        "flex h-[max(24rem,calc(100dvh-16rem))] w-[82vw] max-w-[19rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-transparent bg-surface-2/50 sm:w-72 xl:w-auto xl:max-w-none xl:min-w-0",
         dragFrom && allowed && "border-dashed border-accent/50",
         isOver && allowed && "border-solid border-accent bg-accent-soft/40",
         dragFrom && !allowed && dragFrom !== status && "opacity-60",
       )}
     >
-      <header className="grid gap-0.5 px-3 pt-3 pb-2">
+      <header className="grid shrink-0 gap-0.5 border-b border-border/60 px-3 pt-3 pb-2">
         <h2 className="text-[13px] font-semibold">{info.label} <span className="ml-1 font-normal text-muted tabular">{tasks.length}</span></h2>
         <p className="text-[11.5px] text-muted">{hint}</p>
       </header>
-      <div className="grid min-h-24 grid-cols-[minmax(0,1fr)] content-start gap-2 px-2 pb-2">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain px-2 py-2">
         {tasks.map((t) => (
           <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} />
         ))}
@@ -199,7 +202,7 @@ export function TasksPage() {
               <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-[13px] font-medium">
                 <WarningIcon size={15} className="text-muted" /> Failed and cancelled <span className="font-normal text-muted">{closed.length}</span>
               </summary>
-              <div className="grid gap-2 border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid max-h-[28rem] gap-2 overflow-y-auto border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3">
                 {closed.map((t) => <TaskCard key={t.id} task={t} onOpen={() => navigate({ to: "/tasks", search: { task: t.id } })} draggable={false} />)}
               </div>
             </details>

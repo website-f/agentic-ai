@@ -270,15 +270,17 @@ services:
       BROWSER_ALLOW_HOSTS: ${BROWSER_ALLOW_HOSTS:-}
       # Humanized cursor: deadlocks with several agents clicking at once, so off by default.
       BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-false}
-    shm_size: 1gb  # Firefox
+      # Agents per Firefox process: 3+ working at once in one process stall (measured).
+      BROWSER_PER_PROCESS: ${BROWSER_PER_PROCESS:-2}
+    shm_size: 2gb  # Firefox, up to 3 processes
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/healthz', timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    mem_limit: 2g
-    cpus: 1.5
+    mem_limit: 3g  # up to 3 Firefox processes (2 agents each)
+    cpus: 3
     networks: [browser]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]

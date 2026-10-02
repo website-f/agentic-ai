@@ -563,3 +563,51 @@ def test_report_cells_keep_numbers_as_numbers():
         ]
     )[0]
     assert t["rows"] == [["PQ1", 132000.0, "0123"], ["PQ2", 50, ""]]
+
+
+async def test_busy_browsers_are_explained_not_crashed(client, llm, temporal, monkeypatch):
+    calls = []
+
+    def busy(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(503, json={"detail": "All browsers are busy."})
+
+    monkeypatch.setattr(browser_tools, "transport", httpx.MockTransport(busy))
+    monkeypatch.setattr(browser_tools, "BUSY_WAIT", 0)
+    o = await office(client)
+    wira = await new_agent(client, o, "Wira", "Operations", template="web_operator")
+    t = await new_task(client, wira)
+    llm.call("browser_open", url="https://good.fake/form").say("Will try later.")
+    assert (await runtime.run_task_step(t["id"])).state == "done"
+    tool = [m.content for m in await messages(t["id"]) if m.role == "tool"][0]
+    assert "in use by other agents" in tool
+    assert calls.count("/sessions") == browser_tools.BUSY_RETRIES  # it waited and retried
+
+
+def test_reasoning_goes_back_only_to_models_that_want_it():
+    from agentic.engine import client
+
+    msgs = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": None, "tool_calls": [], "reasoning_content": "thought"},
+        {"role": "assistant", "content": "written by another model"},
+    ]
+    plain = client.shape_messages(msgs, frozenset())
+    assert all("reasoning_content" not in m for m in plain)  # Groq/OpenAI reject the field
+    echo = client.shape_messages(msgs, frozenset({"echo_reasoning"}))
+    assert [m.get("reasoning_content") for m in echo] == [None, "thought", ""]
+    assert msgs[1]["reasoning_content"] == "thought"  # the stored history is not changed
+    err = "The `reasoning_content` in the thinking mode must be passed back to the API."
+    assert client._quirk_for(err) == "echo_reasoning"
+
+
+async def test_an_agent_that_promises_work_is_told_to_do_it(client, llm, temporal):
+    o = await office(client)
+    rafi = await new_agent(client, o, "Rafi", "Research")
+    t = await new_task(client, rafi, "Open all 34 messages and report")
+    llm.say("Inbox checked: 34 messages; I'm now opening all 34 messages and will report them.")
+    llm.say("Opened all 34 messages: 14 invitations to quote.")
+    r = await runtime.run_task_step(t["id"])
+    assert r.state == "done" and r.message.startswith("Opened all 34")
+    users = [m.content for m in await messages(t["id"]) if m.role == "user"]
+    assert "nothing happens after it" in users[-1]

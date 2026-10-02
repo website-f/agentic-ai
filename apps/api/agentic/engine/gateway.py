@@ -41,6 +41,7 @@ class GatewayReply:
     cost_usd: float | None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    reasoning_content: str = ""
 
 
 async def chat(
@@ -184,6 +185,7 @@ async def chat(
                 cost_usd=float(cost) if cost is not None else None,
                 tool_calls=r.tool_calls,
                 attempts=attempts,
+                reasoning_content=r.reasoning_content,
             )
         if f is not None:
             if f.error_class == "model_not_found":

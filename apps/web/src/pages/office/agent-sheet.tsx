@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
   return (
     <SideSheet
       open
+      wide
       onOpenChange={(o) => !o && onClose()}
       title={
         <span className="flex items-center gap-3">
@@ -78,7 +80,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
               {agent.status === "paused" ? <><PlayIcon size={14} /> Resume</> : <><PauseIcon size={14} /> Pause</>}
             </Button>
           ) : null}
-          <Button size="sm" variant="outline" asChild><Link to="/monitor" search={{ agent: agent.id }}><EyeIcon size={14} /> Watch live</Link></Button>
+          <Button size="sm" variant="outline" asChild><Link to="/monitor" search={{ agent: agent.id }}><EyeIcon size={14} /> Full monitor</Link></Button>
           <Button size="sm" variant="ghost" asChild><Link to="/agents/$agentId" params={{ agentId: agent.id }}>Profile</Link></Button>
         </>
       }
@@ -90,6 +92,11 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
             {mine.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={canDecide} showTask={false} />)}
           </section>
         ) : null}
+
+        <section className="grid gap-2">
+          <h3 className="text-[13.5px] font-semibold">Right now</h3>
+          <AgentLive agentId={agent.id} name={agent.name} />
+        </section>
 
         <section className="grid gap-2">
           <h3 className="text-[13.5px] font-semibold">Current work</h3>
@@ -110,6 +117,11 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
               ) : null}
             </div>
           ) : <p className="text-[13px] text-muted">No task right now.</p>}
+        </section>
+
+        <section className="grid gap-2">
+          <h3 className="text-[13.5px] font-semibold">What came out of it</h3>
+          <AgentOutcome agentId={agent.id} name={agent.name} />
         </section>
 
         {canWrite ? (

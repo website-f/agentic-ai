@@ -105,8 +105,11 @@ Generate fresh values with `python deploy/scripts/gen-secrets.py`.
 
 ## 7. Agents on the web and the local model
 
-- The `browser` service runs Camoufox for agents. `docker compose logs browser`; at most
-  `BROWSER_MAX_SESSIONS` (3) browsers at once. A stuck page closes after 10 idle minutes.
+- The `browser` service runs Camoufox for agents: a pool of browser processes, 2 agents
+  each (`BROWSER_PER_PROCESS`), at most `BROWSER_MAX_SESSIONS` (6) at once (3 GB). When all
+  are busy agents wait, then say so. A stuck process restarts itself; an idle page closes
+  after 10 minutes. `docker compose exec worker python - 6 < deploy/demo/browser_load.py`
+  checks 6 agents signing in at once on the practice portal.
 - Give an agent the browser: Agents > the agent > Permissions (browser tools), or create it
   from the Web Operator template. Form submits always come to Approvals.
 - The local model is Ollama on this PC (`http://host.docker.internal:11434/v1`, allowed by

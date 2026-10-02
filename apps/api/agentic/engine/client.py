@@ -145,6 +145,27 @@ class ChatResult:
     usage: Usage = field(default_factory=Usage)
     reasoning_retry: bool = False
     quirks: frozenset[str] = frozenset()  # parameter fixes this model needed (remembered)
+    reasoning_content: str = ""  # thinking-mode models (DeepSeek) that want it sent back
+
+
+def shape_messages(
+    messages: list[dict[str, Any]], quirks: set[str] | frozenset[str]
+) -> list[dict[str, Any]]:
+    """One conversation, many providers. DeepSeek's thinking mode requires every assistant
+    step to carry its reasoning_content back (empty when another model wrote it); others
+    reject the field. So it is added for the models that asked for it and removed for all
+    the rest."""
+    echo = "echo_reasoning" in quirks
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if m.get("role") == "assistant" and (echo or "reasoning_content" in m):
+            m = dict(m)
+            if echo:
+                m["reasoning_content"] = m.get("reasoning_content") or ""
+            else:
+                m.pop("reasoning_content", None)
+        out.append(m)
+    return out
 
 
 def _quirk_for(error_text: str) -> str | None:
@@ -152,6 +173,8 @@ def _quirk_for(error_text: str) -> str | None:
     t = error_text.lower()
     if "max_completion_tokens" in t and "max_tokens" in t:
         return "max_completion_tokens"
+    if "reasoning_content" in t and ("passed back" in t or "must be" in t):
+        return "echo_reasoning"
     if "temperature" in t and any(
         w in t for w in ("unsupported", "not support", "only the default", "does not support")
     ):
@@ -175,7 +198,11 @@ async def chat(
 ) -> ChatResult:
     q = set(quirks)
     tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
-    body: dict[str, Any] = {"model": model, "messages": messages, tokens_key: max_tokens}
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": shape_messages(messages, q),
+        tokens_key: max_tokens,
+    }
     if temperature is not None and "no_temperature" not in q:
         body["temperature"] = temperature
     if json_mode:
@@ -194,6 +221,8 @@ async def chat(
         q.add(fix)
         if fix == "max_completion_tokens":
             body["max_completion_tokens"] = body.pop("max_tokens", max_tokens)
+        elif fix == "echo_reasoning":
+            body["messages"] = shape_messages(messages, q)
         else:
             body.pop("temperature", None)
         call = await _request("POST", url, key, body, timeout)
@@ -230,6 +259,7 @@ def _parse(call: CallResult, model: str) -> ChatResult:
         finish_reason=choice.get("finish_reason"),
         tool_calls=msg.get("tool_calls") or [],
         usage=Usage.parse(call.data),
+        reasoning_content=str(msg.get("reasoning_content") or ""),
     )
 
 

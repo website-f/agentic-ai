@@ -29,7 +29,14 @@ TEXT_IN_VIEW = 700
 READ_CHARS = 6000
 DIGEST_OVER = 3000  # longer page reads are condensed by the cheap model first
 
+BUSY_RETRIES = 6
+BUSY_WAIT = 5  # seconds; under the 45 s tool timeout in all
+
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake browser
+
+
+class BrowsersBusy(Exception):
+    """Every browser is in use by other agents."""
 
 
 def _client(timeout: float = 60) -> httpx.AsyncClient:
@@ -49,7 +56,13 @@ async def _session(ctx: Any) -> str:
     if sid:
         return sid.decode() if isinstance(sid, bytes) else str(sid)
     async with _client() as c:
-        r = await c.post("/sessions", json={"task_id": task_id, "agent_id": ctx.agent.id})
+        for _ in range(BUSY_RETRIES):  # every browser in use by other agents: wait a little
+            r = await c.post("/sessions", json={"task_id": task_id, "agent_id": ctx.agent.id})
+            if r.status_code != 503:
+                break
+            await asyncio.sleep(BUSY_WAIT)
+        if r.status_code == 503:
+            raise BrowsersBusy()
         r.raise_for_status()
         sid = r.json()["id"]
     meta = json.dumps(
@@ -100,6 +113,10 @@ def view(obs: dict[str, Any], full_text: bool = False) -> str:
         if e.get("submit"):
             bits.append("(sends the form: use browser_submit)")
         lines.append(" ".join(bits))
+    bold = [str(b) for b in (obs.get("bold_rows") or [])][:30]
+    if bold:
+        lines.append(f"Table rows shown in bold ({len(bold)}; often unread or new):")
+        lines.append(fence("\n".join(bold)))
     text = obs.get("text") or ""
     limit = READ_CHARS if full_text else TEXT_IN_VIEW
     more = obs.get("text_chars", len(text)) - min(len(text), limit)
@@ -115,7 +132,13 @@ async def _act(ctx: Any, action: str, *, label: str = "", **body: Any) -> dict[s
 
     if ctx.task is None:
         return {"error": "The browser only works inside a task."}
-    sid = await _session(ctx)
+    try:
+        sid = await _session(ctx)
+    except BrowsersBusy:
+        return {
+            "error": "All browsers are in use by other agents right now. Do the parts that "
+            "need no browser first, or try again in a minute."
+        }
     try:
         async with _client() as c:
             r = await c.post(f"/sessions/{sid}/act", json={"action": action, **body})
@@ -125,6 +148,10 @@ async def _act(ctx: Any, action: str, *, label: str = "", **body: Any) -> dict[s
                 r = await c.post(f"/sessions/{sid}/act", json={"action": action, **body})
             r.raise_for_status()
             obs = r.json()
+    except BrowsersBusy:
+        return {
+            "error": "All browsers are in use by other agents right now. Try again in a minute."
+        }
     except httpx.HTTPError as e:
         return {"error": f"The browser service did not answer ({e.__class__.__name__})."}
     seq = await store_frame(sid, obs.pop("frame")) if obs.get("frame") else None
@@ -291,8 +318,9 @@ async def browser_login(ctx: Any, args: dict[str, Any]) -> str:
     if ctx.task is None:
         return "Error: the browser only works inside a task."
     name = str(args.get("login", "")).strip()
-    sid = await _session(ctx)
-    raw = await valkey().get(f"browser:url:{sid}")
+    raw_sid = await valkey().get(f"browser:task:{ctx.task.id}")
+    sid = (raw_sid.decode() if isinstance(raw_sid, bytes) else str(raw_sid)) if raw_sid else ""
+    raw = await valkey().get(f"browser:url:{sid}") if sid else None
     url = (raw.decode() if isinstance(raw, bytes) else str(raw)) if raw else ""
     host = vault.host_of(url)
     usable = await vault.for_agent(ctx.db, ctx.agent)

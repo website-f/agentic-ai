@@ -32,7 +32,11 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger("browser")
 TOKEN = os.environ.get("BROWSER_TOKEN", "dev-browser-token")
-MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "4"))
+MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "6"))
+# Firefox stalls (clicks and page loads never finish) once 3 or more pages in one browser
+# process work at the same time (measured: 2 per process always fine, 3+ not), so agents
+# get their own processes, at most this many sessions each.
+PER_PROCESS = max(1, int(os.environ.get("BROWSER_PER_PROCESS", "2")))
 IDLE_SECONDS = int(os.environ.get("BROWSER_IDLE_SECONDS", "600"))
 VIEWPORT = {"width": 1280, "height": 800}
 MAX_ELEMENTS = 60
@@ -40,14 +44,10 @@ TEXT_CHARS = 2500
 # Camoufox's humanized cursor deadlocks once 3+ contexts click at the same time (helpers
 # working in parallel), so it is off unless asked for.
 HUMANIZE = os.environ.get("BROWSER_HUMANIZE", "false").lower() in ("1", "true", "yes")
-# Self-healing: this many timeouts across sessions within WEDGE_WINDOW seconds means the
-# browser itself is stuck; it is restarted and agents' next step opens a fresh session.
+# Self-healing: this many timeouts in one browser process within WEDGE_WINDOW seconds means
+# it is stuck; it is restarted and its agents' next step opens a fresh session.
 WEDGE_TIMEOUTS = 4
 WEDGE_WINDOW = 120
-# One browser, many agents: a screenshot in one context while another context clicks makes
-# Firefox's click wait forever once 3+ agents work at once (measured). Screenshots and
-# pointer actions therefore take turns; the wait for the next page happens outside it.
-PAINT = asyncio.Lock()
 # Dev only: extra host names allowed although they are private (the practice portal on the
 # browser network). Empty in production.
 ALLOW_HOSTS = {h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()}
@@ -78,6 +78,19 @@ MARK_JS = """(max) => {
     if (tag === 'select') item.options = Array.from(el.options).slice(0, 20).map(o => o.text.trim());
     out.push(item);
     if (n >= max) break;
+  }
+  return out;
+}"""
+
+
+BOLD_ROWS_JS = """() => {
+  const out = [];
+  for (const tr of document.querySelectorAll('tr')) {
+    const cells = tr.querySelectorAll('td');
+    if (!cells.length) continue;
+    const w = parseInt(getComputedStyle(cells[0]).fontWeight, 10) || 400;
+    if (w >= 600) out.push(String(tr.innerText).replace(/\\s+/g, ' ').trim().slice(0, 100));
+    if (out.length >= 30) break;
   }
   return out;
 }"""
@@ -130,64 +143,99 @@ async def _route(route: Any) -> None:
 # ---------------------------------------------------------------- sessions
 
 
+class Slot:
+    """One Camoufox process, holding at most PER_PROCESS agents' sessions."""
+
+    def __init__(self, n: int) -> None:
+        self.n, self.manager, self.browser = n, None, None
+        self.sessions: set[str] = set()
+        self.timeouts: list[float] = []
+        self.starting = asyncio.Lock()
+
+    async def get(self) -> Any:
+        async with self.starting:
+            if self.browser is None:
+                from camoufox.async_api import AsyncCamoufox
+
+                self.manager = AsyncCamoufox(
+                    headless=True, humanize=HUMANIZE, block_webrtc=True, i_know_what_im_doing=True
+                )
+                self.browser = await self.manager.__aenter__()
+        return self.browser
+
+    async def stop(self) -> None:
+        manager, self.manager, self.browser, self.timeouts = self.manager, None, None, []
+        if manager is not None:
+            try:
+                await asyncio.wait_for(manager.__aexit__(None, None, None), 20)
+            except Exception:  # noqa: BLE001 - it is being replaced anyway
+                log.warning("browser %d did not close cleanly", self.n, exc_info=True)
+
+
 class Session:
-    def __init__(self, sid: str, context: Any, page: Any, owner: dict[str, str]) -> None:
-        self.id, self.context, self.page, self.owner = sid, context, page, owner
+    def __init__(self, sid: str, context: Any, page: Any, owner: dict[str, str], slot: Slot) -> None:
+        self.id, self.context, self.page, self.owner, self.slot = sid, context, page, owner, slot
         self.last = time.time()
         self.lock = asyncio.Lock()
 
 
-state: dict[str, Any] = {"browser": None, "manager": None, "sessions": {}, "timeouts": [], "restarts": 0}
+state: dict[str, Any] = {"slots": [], "sessions": {}, "restarts": 0}
 
 
-async def _browser() -> Any:
-    if state["browser"] is None:
-        from camoufox.async_api import AsyncCamoufox
-
-        manager = AsyncCamoufox(headless=True, humanize=HUMANIZE, block_webrtc=True, i_know_what_im_doing=True)
-        state["manager"] = manager
-        state["browser"] = await manager.__aenter__()
-    return state["browser"]
+def _slot_for_new() -> Slot | None:
+    """A browser process with room, preferring a running one; None when all are full."""
+    slots: list[Slot] = state["slots"]
+    running = [x for x in slots if x.browser is not None and len(x.sessions) < PER_PROCESS]
+    if running:
+        return min(running, key=lambda x: len(x.sessions))
+    idle = [x for x in slots if len(x.sessions) < PER_PROCESS]
+    if idle:
+        return idle[0]
+    if len(slots) * PER_PROCESS < MAX_SESSIONS:
+        slot = Slot(len(slots))
+        slots.append(slot)
+        return slot
+    return None
 
 
 async def _reaper() -> None:
     while True:
         await asyncio.sleep(30)
         now = time.time()
-        for sid, s in list(state["sessions"].items()):
-            if now - s.last > IDLE_SECONDS:
+        for sid, sess in list(state["sessions"].items()):
+            if now - sess.last > IDLE_SECONDS:
                 await _close(sid)
 
 
 async def _close(sid: str) -> None:
-    s = state["sessions"].pop(sid, None)
-    if s is not None:
-        try:
-            await s.context.close()
-        except Exception:  # noqa: BLE001
-            log.warning("could not close %s", sid, exc_info=True)
+    sess = state["sessions"].pop(sid, None)
+    if sess is None:
+        return
+    sess.slot.sessions.discard(sid)
+    try:
+        await asyncio.wait_for(sess.context.close(), 15)
+    except Exception:  # noqa: BLE001
+        log.warning("could not close %s", sid, exc_info=True)
+    # Keep the first browser warm; stop the others when they empty (memory).
+    if not sess.slot.sessions and sess.slot.n > 0:
+        await sess.slot.stop()
 
 
-async def _restart_browser() -> None:
-    """Close every session and the browser; the next request launches a fresh one."""
-    log.warning("browser looks stuck (%d timeouts in %ds): restarting it", WEDGE_TIMEOUTS, WEDGE_WINDOW)
-    for sid in list(state["sessions"]):
+async def _restart_slot(slot: Slot) -> None:
+    """Close the stuck browser's sessions and the browser; agents reopen on their next step."""
+    log.warning("browser %d looks stuck (%d timeouts in %ds): restarting it", slot.n, WEDGE_TIMEOUTS, WEDGE_WINDOW)
+    for sid in list(slot.sessions):
         await _close(sid)
-    manager, state["manager"], state["browser"] = state["manager"], None, None
-    state["timeouts"] = []
+    await slot.stop()
     state["restarts"] += 1
-    if manager is not None:
-        try:
-            await asyncio.wait_for(manager.__aexit__(None, None, None), 20)
-        except Exception:  # noqa: BLE001 - it is being replaced anyway
-            log.warning("old browser did not close cleanly", exc_info=True)
 
 
-async def _note_timeout() -> None:
+async def _note_timeout(sess: Session) -> None:
     now = time.time()
-    state["timeouts"] = [t for t in state["timeouts"] if now - t < WEDGE_WINDOW] + [now]
-    if len(state["timeouts"]) >= WEDGE_TIMEOUTS:
-        await _restart_browser()
+    slot = sess.slot
+    slot.timeouts = [t for t in slot.timeouts if now - t < WEDGE_WINDOW] + [now]
+    if len(slot.timeouts) >= WEDGE_TIMEOUTS:
+        await _restart_slot(slot)
 
 
 @asynccontextmanager
@@ -197,8 +245,8 @@ async def lifespan(_: FastAPI):
     task.cancel()
     for sid in list(state["sessions"]):
         await _close(sid)
-    if state["manager"] is not None:
-        await state["manager"].__aexit__(None, None, None)
+    for slot in state["slots"]:
+        await slot.stop()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -233,8 +281,7 @@ def host_matches(url: str, hosts: list[str]) -> bool:
 
 
 async def _shot(page: Any) -> bytes:
-    async with PAINT:
-        return await page.screenshot(type="jpeg", quality=55, timeout=10_000, scale="css")
+    return await page.screenshot(type="jpeg", quality=55, timeout=10_000, scale="css")
 
 
 async def _frame(page: Any) -> str:
@@ -242,9 +289,8 @@ async def _frame(page: Any) -> str:
 
 
 async def _press(page: Any, loc: Any) -> None:
-    """Click, taking turns with screenshots, then wait for whatever page it opens."""
-    async with PAINT:
-        await loc.click(timeout=10_000, no_wait_after=True)
+    """Click (Playwright waits for a page the click starts), then for that page to load."""
+    await loc.click(timeout=10_000)
     try:
         await page.wait_for_load_state("domcontentloaded", timeout=10_000)
     except Exception:  # noqa: BLE001 - not every click opens a page
@@ -260,12 +306,15 @@ async def _observe(s: Session, point: dict[str, float] | None = None, read: bool
     elements = await page.evaluate(MARK_JS, MAX_ELEMENTS)
     text = await page.evaluate("() => (document.body ? document.body.innerText : '')")
     text = " ".join(str(text).split())
+    # Table rows in bold usually mean unread or new; the plain text loses that.
+    bold = await page.evaluate(BOLD_ROWS_JS)
     return {
         "url": page.url,
         "title": await page.title(),
         "elements": elements,
         "text": text[: (12_000 if read else TEXT_CHARS)],
         "text_chars": len(text),
+        "bold_rows": bold,
         "point": point,
         "frame": await _frame(page),
     }
@@ -273,25 +322,42 @@ async def _observe(s: Session, point: dict[str, float] | None = None, read: bool
 
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
-    return {"ok": True, "sessions": len(state["sessions"]), "restarts": state["restarts"], "humanize": HUMANIZE}
+    return {
+        "ok": True,
+        "sessions": len(state["sessions"]),
+        "processes": sum(1 for x in state["slots"] if x.browser is not None),
+        "restarts": state["restarts"],
+        "humanize": HUMANIZE,
+    }
 
 
 @app.post("/sessions")
 async def open_session(body: Open, x_browser_token: str | None = Header(default=None)) -> dict[str, str]:
     _auth(x_browser_token)
-    for s in state["sessions"].values():
-        if s.owner["task_id"] == body.task_id:
-            s.last = time.time()
-            return {"id": s.id}
-    if len(state["sessions"]) >= MAX_SESSIONS:
-        oldest = min(state["sessions"].values(), key=lambda x: x.last)
-        await _close(oldest.id)
-    browser = await _browser()
-    context = await browser.new_context(viewport=VIEWPORT, accept_downloads=False)
-    await context.route("**/*", _route)
-    page = await context.new_page()
+    for sess in state["sessions"].values():
+        if sess.owner["task_id"] == body.task_id:
+            sess.last = time.time()
+            return {"id": sess.id}
+    slot = _slot_for_new()
+    if slot is None:
+        # Full: free the longest-idle session, but never one used in the last minute.
+        idle = [x for x in state["sessions"].values() if time.time() - x.last > 60]
+        if not idle:
+            raise HTTPException(503, "All browsers are busy. Try again in a minute.")
+        await _close(min(idle, key=lambda x: x.last).id)
+        slot = _slot_for_new()
+        assert slot is not None
     sid = "bs_" + secrets.token_hex(8)
-    state["sessions"][sid] = Session(sid, context, page, body.model_dump())
+    slot.sessions.add(sid)  # reserve the place before the (slow) launch
+    try:
+        browser = await slot.get()
+        context = await browser.new_context(viewport=VIEWPORT, accept_downloads=False)
+        await context.route("**/*", _route)
+        page = await context.new_page()
+    except Exception:
+        slot.sessions.discard(sid)
+        raise
+    state["sessions"][sid] = Session(sid, context, page, body.model_dump(), slot)
     return {"id": sid}
 
 
@@ -368,8 +434,7 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     except Exception:  # noqa: BLE001 - try the value instead of the label
                         await loc.select_option(value=body.text or "", timeout=5000)
                 else:
-                    async with PAINT:
-                        await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
+                    await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
                 try:
                     await page.wait_for_load_state("networkidle", timeout=4000)
                 except Exception:  # noqa: BLE001
@@ -388,7 +453,7 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
         except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
             err = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
             if "Timeout" in e.__class__.__name__:
-                await _note_timeout()
+                await _note_timeout(s)
                 if sid not in state["sessions"]:  # the browser was just restarted
                     return {"error": f"{err}. The browser was stuck and has been restarted: open the page again."}
             try:

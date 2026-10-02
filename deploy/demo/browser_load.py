@@ -18,7 +18,11 @@ PORTAL = "http://practice-portal:8080"
 
 async def agent(c: httpx.AsyncClient, n: int, out: list) -> None:
     t0 = time.time()
-    sid = (await c.post("/sessions", json={"task_id": f"load-{n}", "agent_id": f"a{n}"})).json()["id"]
+    r = await c.post("/sessions", json={"task_id": f"load-{n}", "agent_id": f"a{n}"})
+    if r.status_code != 200:
+        out.append((n, round(time.time() - t0, 1), [("session", f"HTTP {r.status_code}: {r.text[:80]}")]))
+        return
+    sid = r.json()["id"]
 
     async def act(**body):
         r = await c.post(f"/sessions/{sid}/act", json=body)
@@ -48,7 +52,10 @@ async def main(k: int) -> None:
         t0 = time.time()
         await asyncio.gather(*(agent(c, i, out) for i in range(k)))
         for n, secs, steps in sorted(out):
-            bad = [s for s in steps if s[1] and "Inbox" not in str(s[1]) and "Sign in" not in str(s[1])]
+            # Signed in means the sign-in step and every page after it show the inbox.
+            bad = [s for s in steps[3:] if "Inbox" not in str(s[1])] + [s for s in steps[:3] if s[1]]
+            if steps and steps[0][0] == "session":
+                bad = steps
             print(f"agent {n}: {secs}s {'OK' if not bad else 'FAILED ' + str(bad)}")
         print(f"{k} agents in {time.time() - t0:.1f}s")
 

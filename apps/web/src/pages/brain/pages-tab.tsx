@@ -56,34 +56,35 @@ function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: s
   }, [pages, filter]);
 
   return (
-    <div className="grid content-start gap-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
       <label className="relative block">
         <span className="sr-only">Filter pages</span>
         <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
         <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter pages" className="h-9 pl-8 text-[13px]" />
       </label>
-      <nav aria-label="Vault pages" className="grid gap-1">
+      <nav aria-label="Vault pages" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
         {groups.map(([folder, items]) => (
-          <details key={folder || "(top)"} open className="group">
+          <details key={folder || "(top)"} open className="group min-w-0">
             <summary className="flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-[12.5px] font-medium text-muted select-none hover:bg-surface-2/60 [&::-webkit-details-marker]:hidden">
               <CaretRightIcon size={11} weight="bold" className="transition-transform group-open:rotate-90" />
               <FolderSimpleIcon size={14} />
-              <span className="truncate">{folder || "Vault"}</span>
+              <span className="min-w-0 truncate">{folder || "Vault"}</span>
               <span className="ml-auto tabular">{items.length}</span>
             </summary>
-            <ul className="mt-0.5 grid gap-px pl-4">
+            <ul className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-px pl-4">
               {items.map((p) => (
-                <li key={p.path}>
+                <li key={p.path} className="min-w-0">
                   <button
+                    title={p.title}
                     onClick={() => onSelect(p.path)}
                     aria-current={p.path === selected ? "page" : undefined}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-surface-2/70",
+                      "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-surface-2/70",
                       p.path === selected && "bg-accent-soft/70 font-medium text-fg",
                     )}
                   >
                     <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: KIND_INFO[p.kind].color }} />
-                    <span className="truncate">{p.title}</span>
+                    <span className="min-w-0 truncate">{p.title}</span>
                   </button>
                 </li>
               ))}
@@ -269,8 +270,8 @@ export function PagesTab({ selected, onSelect, canWrite }: { selected: string | 
   if (error || !pages) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <aside className={cn("grid content-start gap-3", selected && "max-lg:hidden")}>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <aside className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3", selected && "max-lg:hidden")}>
         {canWrite ? <Button variant="outline" onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> New page</Button> : null}
         <Tree pages={pages} selected={selected} onSelect={onSelect} />
       </aside>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -240,7 +241,19 @@ export function AgentDetailPage() {
             </Tabs.Trigger>
           ))}
         </Tabs.List>
-        <Tabs.Content value="overview" className="outline-none"><Overview agent={agent} /></Tabs.Content>
+        <Tabs.Content value="overview" className="outline-none">
+          <div className="mb-6 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
+              <h2 className="text-[15px] font-semibold">Right now</h2>
+              <AgentLive agentId={agent.id} name={agent.name} />
+            </section>
+            <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
+              <h2 className="text-[15px] font-semibold">What came out of it</h2>
+              <AgentOutcome agentId={agent.id} name={agent.name} />
+            </section>
+          </div>
+          <Overview agent={agent} />
+        </Tabs.Content>
         <Tabs.Content value="chat" className="outline-none"><ChatPanel agent={agent} canWrite={canWrite} className="h-[min(70dvh,44rem)]" /></Tabs.Content>
         <Tabs.Content value="memory" className="outline-none"><MemoryTab agent={agent} canWrite={canWrite} /></Tabs.Content>
         <Tabs.Content value="profile" className="outline-none"><Profile key={agent.id + agent.created_at} agent={agent} canManage={canManage} /></Tabs.Content>
