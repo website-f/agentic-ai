@@ -10,14 +10,10 @@ import re
 from typing import Any
 
 from ..brain.facts import _SECRET  # same secret patterns as facts
+from ..core.fence import INJECTION
 from .format import MAX_BODY, missing_sections
 
-_INJECTION = re.compile(
-    r"(ignore (all |any )?(previous|prior|above) (instructions|rules)|disregard (the|your) "
-    r"(rules|instructions|sops?)|you are now|new system prompt|reveal (the|your) (system )?prompt"
-    r"|bypass (the )?(approval|policy)|do not tell (the )?(user|person))",
-    re.I,
-)
+_INJECTION = INJECTION
 _INTERNAL = re.compile(
     r"(169\.254\.\d+\.\d+|\blocalhost\b|127\.0\.0\.1|\b10\.\d+\.\d+\.\d+|\b192\.168\.\d+\.\d+"
     r"|metadata\.google|file://|/etc/passwd)",

@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AIModel, AIProvider, ModelGroup
+from ..obs import langfuse
 from . import client, store
 from .client import REASONING_FLOOR, Usage
 
@@ -138,6 +139,26 @@ async def chat(
             cost=cost,
             agent_id=agent_id,
             task_id=task_id,
+        )
+        langfuse.generation(
+            workspace_id=workspace_id,
+            kind=task,
+            group=group,
+            provider=p.name,
+            model=r.served_model or model_id,
+            messages=messages,
+            output=r.content,
+            tool_calls=r.tool_calls,
+            prompt_tokens=r.usage.prompt,
+            completion_tokens=r.usage.completion,
+            cost_usd=float(cost) if cost is not None else None,
+            latency_ms=r.call.latency_ms,
+            ok=usable,
+            error_class=f.error_class if f else None,
+            agent_id=agent_id,
+            task_id=task_id,
+            max_tokens=budget,
+            temperature=temperature,
         )
         if usable:
             attempts.append({"member": label, "ok": True, "latency_ms": r.call.latency_ms})

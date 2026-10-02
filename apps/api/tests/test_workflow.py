@@ -31,7 +31,10 @@ class FakeRun:
         @activity.defn(name="task_step")
         async def task_step(task_id: str) -> dict:
             self.log.append(("step",))
-            return self.steps.pop(0)
+            step = self.steps[0] if self.steps[0].get("raise") else self.steps.pop(0)
+            if step.get("raise"):
+                raise RuntimeError("QueuePool limit reached")
+            return step
 
         @activity.defn(name="task_apply_approval")
         async def task_apply_approval(approval_id: str) -> None:
@@ -136,3 +139,11 @@ async def test_learning_failure_does_not_fail_the_task(env):
     kinds = [x[0] for x in fake.log]
     # one retry, then the task stays done and still reflects
     assert kinds[-4:] == ["finish", "learn", "learn", "reflect"]
+
+
+async def test_step_out_of_retries_marks_the_task_failed(env):
+    """A step that keeps crashing (database down) must not leave the task 'running'."""
+    fake = FakeRun([{"raise": True}])
+    assert await _run(env, fake) == "failed"
+    assert [x[0] for x in fake.log].count("step") == 3  # STEP_RETRY attempts
+    assert fake.log[-1][0:2] == ("finish", "failed") and "could not run the step" in fake.log[-1][2]

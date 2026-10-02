@@ -3,6 +3,7 @@ the wait lives in Temporal, the conversation lives in Postgres."""
 
 import asyncio
 from datetime import timedelta
+from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -50,12 +51,21 @@ class AgentTaskWorkflow:
         for _ in range(MAX_STEPS):
             if self.cancelled:
                 break
-            r = await workflow.execute_activity(
-                task_step,
-                task_id,
-                start_to_close_timeout=timedelta(minutes=10),
-                retry_policy=STEP_RETRY,
-            )
+            try:
+                r = await workflow.execute_activity(
+                    task_step,
+                    task_id,
+                    start_to_close_timeout=timedelta(minutes=10),
+                    retry_policy=STEP_RETRY,
+                )
+            except ActivityError as e:
+                # Out of retries (database or worker trouble): never leave the task looking
+                # like it is still running. Retry from the board once things are healthy.
+                cause = str(e.cause or e)[:300]
+                r: dict[str, Any] = {
+                    "state": "failed",
+                    "message": f"The worker could not run the step ({cause}).",
+                }
             state = r["state"]
             if state == "delegate":
                 # P7: child tasks run in parallel as child workflows; a cancel reaches them.

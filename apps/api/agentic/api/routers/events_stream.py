@@ -9,12 +9,24 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
 from ...core.db import SessionLocal
-from ...core.valkey import valkey
+from ...core.security import can
 from ...models import Event
-from ...services.events import channel
-from ..deps import Principal, require
+from ...services.hub import CLOSE, hub
+from ..deps import Principal, api_error, current_principal
 
 router = APIRouter(tags=["events"])
+
+
+async def stream_principal(request: Request) -> Principal:
+    """Sign-in check on a session that closes at once. The usual get_db dependency keeps
+    its connection until the response ends, and a live stream never ends: 20 open tabs
+    would hold the whole pool and stall every other request."""
+    async with SessionLocal() as db:
+        principal = await current_principal(request, db)
+    if not can(principal.role, "read"):
+        raise api_error(403, "forbidden", "Your role cannot read this workspace.")
+    return principal
+
 
 HEARTBEAT = 15
 REPLAY_LIMIT = 500
@@ -28,7 +40,7 @@ def _frame(seq: int, payload: dict) -> str:
 async def stream(
     request: Request,
     since: int | None = Query(default=None),
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(stream_principal),
 ) -> StreamingResponse:
     last_id = request.headers.get("last-event-id")
     start = (
@@ -37,8 +49,7 @@ async def stream(
     ws = principal.workspace_id
 
     async def gen() -> AsyncIterator[str]:
-        pubsub = valkey().pubsub()
-        await pubsub.subscribe(channel(ws))  # subscribe first so nothing falls in the gap
+        q = await hub.join(ws)  # listen first so nothing falls in the gap
         try:
             async with SessionLocal() as db:
                 if start is None:
@@ -64,19 +75,20 @@ async def stream(
                         )
             yield f": connected at {cursor}\nretry: 3000\n\n"
             while not await request.is_disconnected():
-                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=HEARTBEAT)
-                if msg is None:
+                try:
+                    payload = await asyncio.wait_for(q.get(), HEARTBEAT)
+                except TimeoutError:
                     yield ": ping\n\n"
                     continue
-                payload = json.loads(msg["data"])
+                if payload is CLOSE:
+                    break  # the browser reconnects and replays from its last event id
                 if payload["seq"] > cursor:
                     cursor = payload["seq"]
                     yield _frame(cursor, payload)
         except asyncio.CancelledError:
             pass
         finally:
-            await pubsub.unsubscribe()
-            await pubsub.aclose()
+            hub.leave(ws, q)
 
     return StreamingResponse(
         gen(),

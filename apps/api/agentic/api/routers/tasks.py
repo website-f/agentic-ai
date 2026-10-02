@@ -55,16 +55,28 @@ async def _names(db: AsyncSession, actors: set[str]) -> dict[str, str]:
     return out
 
 
-async def task_out(db: AsyncSession, t: Task) -> TaskOut:
-    agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
-    pending = (
-        await db.scalar(
-            select(func.count())
-            .select_from(Approval)
-            .where(Approval.task_id == t.id, Approval.status == "pending")
+async def task_out(
+    db: AsyncSession,
+    t: Task,
+    agents: dict[str, Agent] | None = None,
+    pending_by_task: dict[str, int] | None = None,
+) -> TaskOut:
+    """One task. Lists pass preloaded agents and pending counts (no queries per row)."""
+    if agents is not None:
+        agent = agents.get(t.assignee_agent_id or "")
+    else:
+        agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
+    if pending_by_task is not None:
+        pending = pending_by_task.get(t.id, 0)
+    else:
+        pending = (
+            await db.scalar(
+                select(func.count())
+                .select_from(Approval)
+                .where(Approval.task_id == t.id, Approval.status == "pending")
+            )
+            or 0
         )
-        or 0
-    )
     return TaskOut(
         id=t.id,
         title=t.title,
@@ -170,7 +182,32 @@ async def list_tasks(
     if branch_id:
         q = q.where(Task.branch_id == branch_id)
     rows = (await db.scalars(q.order_by(Task.position, Task.created_at.desc()).limit(500))).all()
-    return [await task_out(db, t) for t in rows]
+    return await tasks_out(db, list(rows))
+
+
+async def tasks_out(db: AsyncSession, rows: list[Task]) -> list[TaskOut]:
+    """Many tasks in three queries, whatever the board size."""
+    ids = [t.id for t in rows]
+    agent_ids = {t.assignee_agent_id for t in rows if t.assignee_agent_id}
+    agents = (
+        {a.id: a for a in (await db.scalars(select(Agent).where(Agent.id.in_(agent_ids)))).all()}
+        if agent_ids
+        else {}
+    )
+    pending = (
+        dict(
+            (
+                await db.execute(
+                    select(Approval.task_id, func.count())
+                    .where(Approval.task_id.in_(ids), Approval.status == "pending")
+                    .group_by(Approval.task_id)
+                )
+            ).all()
+        )
+        if ids
+        else {}
+    )
+    return [await task_out(db, t, agents, pending) for t in rows]
 
 
 @router.post("/tasks", status_code=status.HTTP_201_CREATED)
@@ -266,14 +303,16 @@ async def task_detail(
         ],
         approvals=[await approval_out(db, a, names) for a in aps],
         transcript=transcript,
-        children=[
-            await task_out(db, c)
-            for c in (
-                await db.scalars(
-                    select(Task).where(Task.parent_task_id == t.id).order_by(Task.created_at)
-                )
-            ).all()
-        ],
+        children=await tasks_out(
+            db,
+            list(
+                (
+                    await db.scalars(
+                        select(Task).where(Task.parent_task_id == t.id).order_by(Task.created_at)
+                    )
+                ).all()
+            ),
+        ),
         parent=await task_out(db, parent)
         if t.parent_task_id and (parent := await db.get(Task, t.parent_task_id))
         else None,

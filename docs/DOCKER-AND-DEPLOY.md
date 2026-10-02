@@ -14,9 +14,9 @@ v1 is developed and used on the dev PC. No domain, VPS or paid service is requir
 
 | Profile | Services | When |
 |---|---|---|
-| (default) | web, api, worker, temporal, temporal-ui, postgres, valkey | Always (no `--profile` flag needed). rustfs joins in P3 when file storage is needed |
-| `obs` | langfuse-web, langfuse-worker, clickhouse | When deep tracing is needed (adds about 2.5 GB RAM) |
-| `llm` | ollama | Optional and off by default; the stack runs on hosted APIs |
+| (default) | web, api, worker, temporal, temporal-ui, postgres, valkey, backup | Always (no `--profile` flag needed) |
+| `obs` | langfuse-web, langfuse-worker, clickhouse, rustfs, langfuse-valkey (+ two one-shot jobs) | Traces of every model call; adds about 4 GB RAM. `COMPOSE_PROFILES=obs` + `AGENTIC_LANGFUSE_HOST` in `.env` |
+| `llm` | ollama | Planned, not built; the stack runs on hosted APIs |
 
 `docker compose up -d` is the whole product.
 
@@ -29,9 +29,9 @@ All bound to `127.0.0.1` on the VPS. Only `8500` goes through the shared Caddy.
 | 8500 | web (SPA + `/api` proxy) | Public via `/opt/reverse-proxy` |
 | 8501 | api | Internal (reached through web) |
 | 8502 | temporal-ui | Tailscale only |
-| 8503 | langfuse | Tailscale only (profile `obs`) |
-| 8504 | ollama | Internal (profile `llm`) |
-| 8505 | rustfs console (P3) | Tailscale only |
+| 8503 | langfuse | Tailscale / SSH tunnel only (profile `obs`) |
+| 8504 | ollama | Reserved (profile `llm`, not built) |
+| 8505 | spare (rustfs is internal only, no console) | |
 | 8506 | Postgres | Dev only, so host tools and tests can connect; dropped in the VPS override |
 | 8507 | Valkey | Dev only |
 | 8508 | Temporal gRPC | Dev only, for a worker run from the host |
@@ -139,11 +139,12 @@ Temporal uses the official server image with SQL persistence pointed at this Pos
 - `docker-compose.override.yml` (dev, auto-loaded): bind mounts for hot reload, Vite dev server on 5173, api with `--reload`, ports on localhost.
 - `docker-compose.vps.yml` (prod): `ports: !override` binding to `127.0.0.1:<port>` per the shared reverse-proxy convention.
 
-Prod deploy (on the VPS, `/opt/agentic-ai/`):
+Prod deploy (on the VPS, `/opt/agentic-ai/`), see section 10 for the full steps:
 
 ```bash
-cp .env.vps.example .env && nano .env
-docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile core up -d --build
+cp .env.vps.example .env && python3 deploy/scripts/gen-secrets.py   # paste into .env
+install -d -o 10001 -g 10001 data/backups data/restore
+docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
 # then in /opt/reverse-proxy: add AGENTIC_DOMAIN + upstream 127.0.0.1:8500, ./deploy-vps.sh
 ```
 
@@ -162,3 +163,77 @@ Nightly `deploy/scripts/backup.sh` (host cron):
 ## 9. CI
 
 GitHub Actions: ruff + pyright + pytest (with Temporal test server), eslint + tsc + vitest, Playwright e2e (desktop + mobile viewports), build both images with BuildKit cache, Trivy image scan (fail on critical), license check, push to GHCR on tags.
+
+## 10. As built in P8 (2026-10-02)
+
+**Hardening.** Every service runs as a non-root user with `cap_drop: ALL` and
+`no-new-privileges` (Postgres as 999, Valkey as 999, Temporal and its UI as 1000, api,
+worker and backup as 10001, web as 101). App containers also have a read-only root.
+Outside `AGENTIC_ENV=dev` the api refuses to start without a random 32+ character secret
+key, a valid 32-byte master key and Secure cookies. The images are built on Debian 13
+(trixie) with `apt-get upgrade`, and the backup image drops the unused `gosu`: Trivy
+finds no critical vulnerabilities in any of the three images (44 high in Debian base
+packages with no fix published yet; re-scan before each deploy).
+
+**Backups.** Built as a service (`deploy/backup/`: pg_dump 17 + restic), not a host cron,
+so it runs the same on Windows and Linux. Details and commands: docs/RUNBOOK.md section 3.
+Restore drill done on 2026-10-02: a brand-new stack (fresh volumes, other ports) restored
+from a copy of the backup folder had the same agents, tasks, facts and brain pages, a
+valid audit chain, a provider key that decrypted, the vault with its git history and the
+user's schedule back in Temporal. The worker also re-syncs every schedule into Temporal on
+start, so recurring work survives even a restore without Temporal's databases.
+
+**VPS override.** `docker-compose.vps.yml` publishes only `web` (127.0.0.1:8500) and the
+Temporal UI (127.0.0.1:8502, for an SSH tunnel); Postgres, Valkey, Temporal and the api
+publish nothing, and the `data` network is `internal: true`, so the databases have no
+route to the internet. Every secret is `${VAR:?}`: a missing one stops the deploy. Verified
+locally: production mode starts, no dev seed, Secure + HttpOnly cookies, the worker
+reaches AI providers, Postgres cannot reach anything outside.
+
+**Observability.** Langfuse v4 (MIT core) with ClickHouse, rustfs (S3, Apache-2.0) and its
+own Valkey (`noeviction`), all permissive licences. The gateway sends one OTLP span per
+model call (`agentic/obs/langfuse.py`, no SDK): a generation with the model, token usage,
+cost, the prompt and answer with secret values masked, grouped into one trace per task.
+Off unless `AGENTIC_LANGFUSE_HOST` is set; a slow or absent Langfuse never affects agents.
+Langfuse web needs 2 GB: with 1 GB it ran out of heap and crash-looped.
+
+**Capacity fixes found by the load test** (numbers in docs/RUNBOOK.md section 7):
+the worker's database pool ran dry with 20+ concurrent task steps (now 16 steps, pool
+24 + 16, and a step that keeps failing marks the task failed instead of leaving it
+"running"); every open live stream held a database connection and its own Valkey
+subscription, so about 20 open tabs stalled the app (now no connection, and one shared
+subscription per process); the task and agent lists ran two queries per row (now batched).
+
+### VPS deploy behind the shared reverse proxy
+
+Not deployed yet: this is the recipe for when it is wanted.
+
+1. On the VPS: `git clone` into `/opt/agentic-ai`, `cp .env.vps.example .env`, fill it
+   (`python3 deploy/scripts/gen-secrets.py`), set `AGENTIC_DOMAIN`.
+2. `install -d -o 10001 -g 10001 data/backups data/restore` (better: `BACKUP_DIR` on a
+   second disk, or an offsite `RESTIC_REPOSITORY`).
+3. `docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build`, then
+   `docker compose ... ps` and `ss -ltnp | grep 85` (must show 127.0.0.1 only).
+4. In `/opt/reverse-proxy`: add to `.env` `AGENTIC_DOMAIN=...` and
+   `AGENTIC_UPSTREAM=127.0.0.1:8500`; add to `Caddyfile`:
+
+   ```caddy
+   {$AGENTIC_DOMAIN} {
+       import common_headers
+       header Strict-Transport-Security "max-age=31536000"
+       request_body {
+           max_size 25MB
+       }
+       reverse_proxy {$AGENTIC_UPSTREAM} {
+           flush_interval -1   # live updates (server-sent events) stream without buffering
+       }
+   }
+   ```
+
+   Add the port to the table in `ADD-NEW-PROJECT.md` (8500, block 8500-8509), point the
+   DNS record at the VPS, then `./deploy-vps.sh`.
+5. Open `https://$AGENTIC_DOMAIN/setup` to create the owner (no dev logins exist in prod).
+6. Temporal UI and Langfuse: `ssh -L 8502:127.0.0.1:8502 -L 8503:127.0.0.1:8503 vps`.
+
+CI (section 9) is not set up: the project has no remote repository yet.
+

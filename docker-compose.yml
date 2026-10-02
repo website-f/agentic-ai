@@ -18,6 +18,11 @@ x-app-hardening: &app-hardening
   read_only: true
   tmpfs: ["/tmp:size=64m"]
 
+# Upstream services: same floor, without read_only (they write config at start).
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
 x-app-env: &app-env
   AGENTIC_ENV: ${AGENTIC_ENV:-dev}
   AGENTIC_SECRET_KEY: ${AGENTIC_SECRET_KEY:-dev-only-change-me}
@@ -32,11 +37,47 @@ x-app-env: &app-env
   AGENTIC_DREAM_HOUR: ${AGENTIC_DREAM_HOUR:-2}
   AGENTIC_DEV_SEED: ${AGENTIC_DEV_SEED:-true}
   AGENTIC_SEED_PASSWORD: ${AGENTIC_SEED_PASSWORD:-agentic-test-2026}
+  # Traces (profile obs). Empty host = off.
+  AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
+  AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
+  AGENTIC_LANGFUSE_SECRET_KEY: ${AGENTIC_LANGFUSE_SECRET_KEY:-sk-lf-agentic-dev}
+
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: ${LANGFUSE_URL:-http://localhost:8503}
+  DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse_dev}@postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:-agentic-dev-salt}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_dev}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_KEY:-langfuse}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET:-langfuse_s3_dev}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://rustfs:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_KEY:-langfuse}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET:-langfuse_s3_dev}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://rustfs:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  REDIS_HOST: langfuse-valkey
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis_dev}
 
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg17-trixie
     restart: unless-stopped
+    # The image's postgres user. The named volume is created owned by it, so no root
+    # entrypoint step (chown, gosu) is needed and every capability can be dropped.
+    user: "999:999"
     shm_size: 256mb
     command: >
       postgres
@@ -64,11 +105,13 @@ services:
     mem_limit: 1536m
     cpus: 1.0
     networks: [data]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   valkey:
     image: valkey/valkey:8.1.10-alpine
     restart: unless-stopped
+    user: "999:1000"  # the image's valkey user (otherwise tini stays root)
+    read_only: true
     # Every key we write carries a TTL, so volatile-lru can evict safely under pressure.
     command: valkey-server --appendonly yes --maxmemory 200mb --maxmemory-policy volatile-lru
     volumes:
@@ -82,7 +125,7 @@ services:
     mem_limit: 256m
     cpus: 0.25
     networks: [data]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   temporal:
     # auto-setup creates and migrates its own schemas on our Postgres. 1.29.7 is the last
@@ -113,7 +156,7 @@ services:
     mem_limit: 768m
     cpus: 0.75
     networks: [data]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   temporal-ui:
     image: temporalio/ui:2.54.1
@@ -127,7 +170,7 @@ services:
     mem_limit: 128m
     cpus: 0.25
     networks: [data]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   api:
     build:
@@ -152,7 +195,7 @@ services:
       retries: 12
       start_period: 15s
     mem_limit: 1g  # includes the ~300 MB embedding model
-    cpus: 0.75
+    cpus: 1.0  # one Python process uses one core at most
     networks: [data, edge]
     <<: [*app-hardening, *logging]
 
@@ -164,7 +207,11 @@ services:
     image: agentic-py:dev
     restart: unless-stopped
     command: ["python", "-m", "agentic.workflows.worker"]
-    environment: *app-env
+    environment:
+      <<: *app-env
+      AGENTIC_WORKER_MAX_ACTIVITIES: ${AGENTIC_WORKER_MAX_ACTIVITIES:-16}
+      AGENTIC_DB_POOL_SIZE: ${AGENTIC_WORKER_DB_POOL:-24}
+      AGENTIC_DB_MAX_OVERFLOW: "16"
     volumes: ["${AGENTIC_VAULT_DIR:-vault}:/data/vault"]
     depends_on:
       api: { condition: service_healthy }   # api runs the migrations first
@@ -204,6 +251,218 @@ services:
     read_only: true
     tmpfs: ["/tmp:size=16m"]
 
+  backup:
+    # Nightly pg_dump + vault archive into an encrypted restic repository (P8).
+    # On demand: docker compose run --rm backup backup | snapshots | check | restore
+    build:
+      context: .
+      dockerfile: deploy/backup/Dockerfile
+    image: agentic-backup:dev
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: agentic
+      PGPASSWORD: ${AGENTIC_DB_PASSWORD:-agentic_dev}
+      TZ: ${BACKUP_TZ:-Asia/Kuala_Lumpur}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_INCLUDE_SECRETS: ${BACKUP_INCLUDE_SECRETS:-true}
+      # A local folder by default (free). For an offsite copy point it at s3:/b2:/sftp:
+      # and add the provider's variables (AWS_ACCESS_KEY_ID, B2_ACCOUNT_ID, ...) to .env.
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-/repo}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:-dev-only-backup-password}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      B2_ACCOUNT_ID: ${B2_ACCOUNT_ID:-}
+      B2_ACCOUNT_KEY: ${B2_ACCOUNT_KEY:-}
+      # Copied into the (encrypted) backup so a new machine can read stored secrets.
+      AGENTIC_SECRET_KEY: ${AGENTIC_SECRET_KEY:-dev-only-change-me}
+      AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:-}
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${BACKUP_DIR:-./data/backups}:/repo"
+      - "./data/restore:/restore"
+      - backupwork:/work
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(( $$(date +%s) - $$(stat -c %Y /tmp/alive 2>/dev/null || echo 0) )) -lt 180 ]"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [data, edge]  # edge only for offsite repositories
+    <<: [*app-hardening, *logging]
+
+  # ---------------------------------------------------------------- profile: obs
+  # Profile `obs` (P8): self-hosted Langfuse traces of every model call.
+  # Off by default. Opt in with two lines in .env:
+  #   COMPOSE_PROFILES=obs
+  #   AGENTIC_LANGFUSE_HOST=http://langfuse-web:3000
+  # then `docker compose up -d` and open http://localhost:8503 (about 4 GB more RAM).
+  # Every image here is permissively licensed (Langfuse MIT core, ClickHouse and rustfs
+  # Apache-2.0, Valkey BSD, rclone MIT); no AGPL service is used.
+  obs-init:
+    profiles: [obs]
+    image: agentic-backup:dev  # has psql; creates Langfuse's role and database once
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d agentic -tAc "SELECT 1 FROM pg_roles WHERE rolname='langfuse'" | grep -q 1 \
+          || psql -d agentic -c "CREATE ROLE langfuse LOGIN PASSWORD '$$LANGFUSE_DB_PASSWORD'"
+        psql -d agentic -tAc "SELECT 1 FROM pg_database WHERE datname='langfuse'" | grep -q 1 \
+          || psql -d agentic -c "CREATE DATABASE langfuse OWNER langfuse"
+        echo langfuse database ready
+    environment:
+      PGHOST: postgres
+      PGUSER: agentic
+      PGPASSWORD: ${AGENTIC_DB_PASSWORD:-agentic_dev}
+      LANGFUSE_DB_PASSWORD: ${LANGFUSE_DB_PASSWORD:-langfuse_dev}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    read_only: true
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  rustfs:
+    profiles: [obs]
+    image: rustfs/rustfs:1.0.0  # S3-compatible store for Langfuse event files
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${LANGFUSE_S3_KEY:-langfuse}
+      RUSTFS_SECRET_KEY: ${LANGFUSE_S3_SECRET:-langfuse_s3_dev}
+      RUSTFS_VOLUMES: /data
+    volumes: [rustfsdata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9000"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  obs-bucket:
+    profiles: [obs]
+    image: rclone/rclone:1.71
+    command: ["mkdir", "store:langfuse"]
+    user: "10001:10001"
+    environment:
+      XDG_CONFIG_HOME: /tmp
+      XDG_CACHE_HOME: /tmp
+      RCLONE_CONFIG_STORE_TYPE: s3
+      RCLONE_CONFIG_STORE_PROVIDER: Other
+      RCLONE_CONFIG_STORE_ENDPOINT: http://rustfs:9000
+      RCLONE_CONFIG_STORE_ACCESS_KEY_ID: ${LANGFUSE_S3_KEY:-langfuse}
+      RCLONE_CONFIG_STORE_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET:-langfuse_s3_dev}
+    depends_on:
+      rustfs: { condition: service_healthy }
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  clickhouse:
+    profiles: [obs]
+    image: clickhouse/clickhouse-server:25.12.11.4
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_dev}
+    volumes:
+      - clickhousedata:/var/lib/clickhouse
+      - clickhouselogs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    ulimits: { nofile: { soft: 262144, hard: 262144 } }
+    mem_limit: 1536m
+    cpus: 1.0
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  langfuse-valkey:
+    profiles: [obs]
+    image: valkey/valkey:8.1.10-alpine
+    restart: unless-stopped
+    user: "999:1000"
+    read_only: true
+    # Langfuse's job queue (BullMQ) must never have keys evicted.
+    command: ["valkey-server", "--requirepass", "${LANGFUSE_REDIS_PASSWORD:-langfuse_redis_dev}", "--maxmemory-policy", "noeviction", "--maxmemory", "128mb"]
+    volumes: [langfusevalkey:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$$REDISCLI_AUTH\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDISCLI_AUTH: ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis_dev}
+    mem_limit: 160m
+    cpus: 0.25
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  langfuse-worker:
+    profiles: [obs]
+    image: langfuse/langfuse-worker:4.49.0
+    restart: unless-stopped
+    depends_on: &langfuse-deps
+      obs-init: { condition: service_completed_successfully }
+      obs-bucket: { condition: service_completed_successfully }
+      clickhouse: { condition: service_healthy }
+      langfuse-valkey: { condition: service_healthy }
+    environment:
+      <<: *langfuse-env
+      NODE_OPTIONS: --max-old-space-size=768
+    mem_limit: 1g
+    cpus: 0.75
+    networks: [data]
+    <<: [*hardening, *logging]
+
+  langfuse-web:
+    profiles: [obs]
+    image: langfuse/langfuse:4.49.0
+    restart: unless-stopped
+    depends_on: *langfuse-deps
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-agentic-dev-nextauth-secret}
+      HOSTNAME: 0.0.0.0
+      # First start creates the org, the project with the keys the api and worker use,
+      # and one login (the same dev owner as the app; change both outside dev).
+      LANGFUSE_INIT_ORG_ID: agentic
+      LANGFUSE_INIT_ORG_NAME: Agentic-AI
+      LANGFUSE_INIT_PROJECT_ID: agentic
+      LANGFUSE_INIT_PROJECT_NAME: Agents
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${AGENTIC_LANGFUSE_SECRET_KEY:-sk-lf-agentic-dev}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_ADMIN_EMAIL:-owner@example.com}
+      LANGFUSE_INIT_USER_NAME: Owner
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD:-agentic-test-2026}
+      AUTH_DISABLE_SIGNUP: "true"
+      # Next.js needs room: with 1 GB it ran out of heap and crash-looped.
+      NODE_OPTIONS: --max-old-space-size=1536
+    ports: ["127.0.0.1:${LANGFUSE_PORT:-8503}:3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/public/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    mem_limit: 2g
+    cpus: 1.0
+    networks: [data, edge]
+    <<: [*hardening, *logging]
+
 networks:
   data: {}
   edge: {}
@@ -212,3 +471,8 @@ volumes:
   pgdata: {}
   valkeydata: {}
   vault: {}
+  backupwork: {}
+  rustfsdata: {}
+  clickhousedata: {}
+  clickhouselogs: {}
+  langfusevalkey: {}

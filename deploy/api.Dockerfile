@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # One image for both `api` and `worker` (different commands). Build context: repo root.
 
-FROM python:3.12-slim-bookworm AS build
+FROM python:3.12-slim-trixie AS build
 COPY --from=ghcr.io/astral-sh/uv:0.10.7 /uv /bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -30,10 +30,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
 
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-trixie AS runtime
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
  && apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends tini \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

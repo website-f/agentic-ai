@@ -5,7 +5,7 @@ Analyst, Finance, Data Entry, Writer, Reviewer, Ops) that remember, write their 
 and get better over time. You watch and direct them in a pixel-art office on the web dashboard
 or from your phone (installable PWA).
 
-**Status:** P0 to P7 done (2026-10-01): foundations, AI engine, agent runtime, brain, skills, pixel office, channels, teams and governance.
+**Status:** P0 to P8 done (2026-10-02): the whole roadmap. Foundations, AI engine, agent runtime, brain, skills, pixel office, channels, teams and governance, hardening.
 - P0: monorepo, Docker stack, sign-in with 5 roles, branches and departments, members, tamper-evident activity log, responsive PWA shell.
 - P1: provider keys (envelope-encrypted), 3-step streamed connection test, model discovery and pricing, model groups with fallback and cooldowns, playground, usage and cost, 30-minute scheduled health checks.
 - P2: SOPs (workspace/branch/department/library) layered into prompts, 6-step agent builder with templates, per-agent tool permissions, agent chat, durable tasks on Temporal (survive restarts, approvals wait 24 h), Kanban board, approvals and questions with a hardline policy floor, broadcasts with receipts and replies, live updates over SSE.
@@ -20,7 +20,9 @@ or from your phone (installable PWA).
 
 - P7: Teams and governance. Agents marked Leads split a task into up to 10 parallel sub-tasks for other agents (depth cap of 1 to 3 levels), optionally with a JSON Schema the answer must match (one correction turn, then the sub-task fails), and merge the answers. Meetings: 2 to 5 agents discuss for a few rounds (only memory search allowed, a token cap, early stop when nobody adds anything, people can interject) and the chair writes one decision summary (decision, why, options, dissent, next steps) that lands on the task and in the brain as a decision page; meetings only recommend. A drag-and-drop org chart. Budgets per agent (tokens per day, dollars per month): an alert at 80 %, and at 100 % the agent pauses and asks; approving allows half the limit again. Heartbeats: hourly during work hours an agent picks up its queued work or asks for some, once a day. Schedules on Temporal (cron + time zone) with a run ledger, retries at 5/15/30 minutes, and failures grouped into incidents.
 
-Next: P8 Hardening and deploy (observability, backups, security review, load test, optional VPS).
+- P8: Hardening. Nightly encrypted backups (restic, a local folder by default, any S3/B2 target optional) with a tested restore onto a fresh stack. A security review with a test for every checklist item; it fixed DNS-rebinding in the URL guard, fence break-outs in untrusted text, prompt injection into agent memory and a database-pool exhaustion from open browser tabs. Every container non-root with all capabilities dropped; production refuses to start on unsafe settings; zero critical vulnerabilities in our images (Trivy). A load test (50 dashboard users, 200 live streams, 30 parallel agent tasks: p95 203 ms, no errors). Optional Langfuse traces of every model call (`COMPOSE_PROFILES=obs`). A VPS override for the shared reverse proxy, ready but not deployed. Operations: docs/RUNBOOK.md.
+
+Optional next steps: deploy to the VPS (docs/DOCKER-AND-DEPLOY.md section 10), CI once there is a remote repository, TOTP sign-in.
 
 ## Run it
 
@@ -99,6 +101,7 @@ On Windows without admin rights, call pnpm as `corepack pnpm` (`corepack enable`
 | 11 | [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Postgres schema |
 | 12 | [docs/DOCKER-AND-DEPLOY.md](docs/DOCKER-AND-DEPLOY.md) | Optimized images, compose profiles, resource budget, ports, VPS deploy, backups |
 | 13 | [docs/SECURITY.md](docs/SECURITY.md) | Auth, RBAC, secrets, policy floor, prompt injection, supply chain |
+| 14 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operating it: start, upgrade, backups and restore, secrets, fixes, capacity |
 
 ## Decisions in one screen
 

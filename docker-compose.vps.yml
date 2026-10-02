@@ -1,0 +1,61 @@
+# VPS overrides, behind the shared /opt/reverse-proxy Caddy (which terminates TLS).
+#
+#   cp .env.vps.example .env && nano .env
+#   install -d -o 10001 -g 10001 data/backups data/restore
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+#
+# What changes from the local stack:
+#   - only `web` is published, on 127.0.0.1:${AGENTIC_PORT}; Caddy is the only way in
+#   - Postgres, Valkey, Temporal and the api publish nothing; the data network is internal
+#   - Temporal UI stays on 127.0.0.1:8502 for an SSH tunnel / Tailscale, never public
+#   - production mode: the api refuses to start without real secrets and Secure cookies
+#   - every secret is required (`:?`), so a missing value stops the deploy, not the app
+x-prod-env: &prod-env
+  AGENTIC_ENV: prod
+  AGENTIC_SECRET_KEY: ${AGENTIC_SECRET_KEY:?set AGENTIC_SECRET_KEY in .env}
+  AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:?set AGENTIC_MASTER_KEY in .env}
+  AGENTIC_COOKIE_SECURE: "true"
+  AGENTIC_DEV_SEED: "false"
+  AGENTIC_DATABASE_URL: postgresql+asyncpg://agentic:${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}@postgres:5432/agentic
+
+services:
+  postgres:
+    ports: !override []
+    environment:
+      POSTGRES_PASSWORD: ${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD in .env}
+
+  valkey:
+    ports: !override []
+
+  temporal:
+    ports: !override []
+    environment:
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD in .env}
+
+  temporal-ui:
+    ports: !override ["127.0.0.1:${TEMPORAL_UI_PORT:-8502}:8080"]
+    networks: [data, edge]  # the data network is internal, so publishing needs edge
+
+  api:
+    ports: !override []
+    environment: *prod-env
+
+  worker:
+    environment: *prod-env
+
+  web:
+    ports: !override ["127.0.0.1:${AGENTIC_PORT:-8500}:8080"]
+
+  backup:
+    environment:
+      PGPASSWORD: ${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:?set RESTIC_PASSWORD in .env}
+      AGENTIC_SECRET_KEY: ${AGENTIC_SECRET_KEY:?set AGENTIC_SECRET_KEY in .env}
+      AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:?set AGENTIC_MASTER_KEY in .env}
+
+networks:
+  # Postgres, Valkey and Temporal get no route to the internet at all. api, worker and
+  # backup reach out (AI providers, push services, Telegram, offsite backups) via edge.
+  data:
+    internal: true

@@ -14,6 +14,7 @@ import jsonschema
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.fence import fence
 from ..models import Agent, Task, TaskEvent
 
 HARD_MAX_CHILDREN = 10
@@ -222,7 +223,7 @@ async def collect(db: AsyncSession, task_id: str, call_id: str) -> str:
         if c.status in ("done", "review") and c.result is not None:
             ok += 1
             body = c.result[:MAX_RESULT_CHARS]
-            parts.append(f"## {c.title} ({name}, done)\n<<<\n{body}\n>>>")
+            parts.append(f"## {c.title} ({name}, done)\n{fence(body)}")
         else:
             why = c.error or c.status
             parts.append(f"## {c.title} ({name}, {c.status})\nNo answer: {why}")

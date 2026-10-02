@@ -34,23 +34,40 @@ log = logging.getLogger("agentic.api.agents")
 OPEN = ("triage", "ready", "running", "blocked", "review")
 
 
-async def agent_out(db: AsyncSession, a: Agent) -> AgentOut:
-    branch = await db.get(Branch, a.branch_id)
-    dept = await db.get(Department, a.department_id) if a.department_id else None
-    current = await db.scalar(
-        select(Task)
-        .where(Task.assignee_agent_id == a.id, Task.status.in_(("running", "blocked")))
-        .order_by(Task.updated_at.desc())
-        .limit(1)
-    )
-    open_tasks = (
-        await db.scalar(
-            select(func.count())
-            .select_from(Task)
-            .where(Task.assignee_agent_id == a.id, Task.status.in_(OPEN))
+async def _work(db: AsyncSession, ids: list[str]) -> tuple[dict[str, Task], dict[str, int]]:
+    """Current task and open-task count for many agents, in two queries."""
+    if not ids:
+        return {}, {}
+    current: dict[str, Task] = {}
+    for t in (
+        await db.scalars(
+            select(Task)
+            .where(Task.assignee_agent_id.in_(ids), Task.status.in_(("running", "blocked")))
+            .order_by(Task.updated_at.desc())
         )
-        or 0
-    )
+    ).all():
+        current.setdefault(t.assignee_agent_id or "", t)
+    counts = {
+        str(aid): int(n)
+        for aid, n in (
+            await db.execute(
+                select(Task.assignee_agent_id, func.count())
+                .where(Task.assignee_agent_id.in_(ids), Task.status.in_(OPEN))
+                .group_by(Task.assignee_agent_id)
+            )
+        ).all()
+    }
+    return current, counts
+
+
+async def agent_out(
+    db: AsyncSession, a: Agent, work: tuple[dict[str, Task], dict[str, int]] | None = None
+) -> AgentOut:
+    branch = await db.get(Branch, a.branch_id)  # identity map: one query per branch
+    dept = await db.get(Department, a.department_id) if a.department_id else None
+    now, counts = work if work is not None else await _work(db, [a.id])
+    current = now.get(a.id)
+    open_tasks = counts.get(a.id, 0)
     return AgentOut(
         id=a.id,
         slug=a.slug,
@@ -193,7 +210,8 @@ async def list_agents(
     if not include_retired:
         q = q.where(Agent.status != "retired")
     rows = (await db.scalars(q.order_by(Agent.created_at))).all()
-    return [await agent_out(db, a) for a in rows]
+    work = await _work(db, [a.id for a in rows])
+    return [await agent_out(db, a, work) for a in rows]
 
 
 @router.post("/agents", status_code=status.HTTP_201_CREATED)

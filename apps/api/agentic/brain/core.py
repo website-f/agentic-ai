@@ -11,7 +11,9 @@ agent to consolidate instead of hoarding; anything bigger belongs in facts or th
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.fence import INJECTION
 from ..models import Agent, BrainPage, Workspace
+from .facts import _SECRET
 from .store import Author, save_page
 
 CAPS = {"memory": 2200, "user": 1400}
@@ -124,6 +126,11 @@ async def edit(
             new[matches[0]] = text
     else:
         return "Error: action must be add, replace or remove."
+    # Core memory goes into every future system prompt: refuse overrides and secrets there.
+    if text and INJECTION.search(text):
+        return "Error: not saved. Core memory cannot change the rules, approvals or SOPs."
+    if text and _SECRET.search(text):
+        return "Error: not saved. Never keep passwords, keys, card or IC numbers in memory."
     try:
         await write(db, ws, agent, target, new, Author(f"agent:{agent.id}", agent.name))
     except MemoryFull:

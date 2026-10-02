@@ -4,6 +4,7 @@ Defaults target local development against the compose stack's dev ports
 (Postgres 8506, Valkey 8507, Temporal 8508), so `uv run` works with no .env.
 """
 
+import base64
 from functools import lru_cache
 
 from pydantic import Field
@@ -60,6 +61,17 @@ class Settings(BaseSettings):
     seed_email_domain: str = "example.com"
     seed_password: str = "agentic-test-2026"  # noqa: S105 - dev-only test login
 
+    # Connections per process. A task step can hold two at once (its own session plus the
+    # llm_calls log), so the worker needs a pool of at least 2 x worker_max_activities.
+    db_pool_size: int = Field(default=10, ge=1, le=100)
+    db_max_overflow: int = Field(default=10, ge=0, le=100)
+    worker_max_activities: int = Field(default=16, ge=1, le=200)
+
+    # Observability (P8, compose profile `obs`): empty host = no tracing.
+    langfuse_host: str = ""
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+
     login_max_fails_per_email: int = 5
     login_max_fails_per_ip: int = 20
     login_lock_seconds: int = 900
@@ -69,11 +81,29 @@ class Settings(BaseSettings):
         return self.env == "dev"
 
 
+def check(s: Settings) -> None:
+    """Outside dev, refuse to start on settings that would be unsafe in front of people."""
+    if s.is_dev:
+        return
+    problems = []
+    if s.secret_key == DEV_SECRET or len(s.secret_key) < 32:
+        problems.append("AGENTIC_SECRET_KEY must be a random string of 32+ characters")
+    try:
+        key = base64.urlsafe_b64decode(s.master_key + "=" * (-len(s.master_key) % 4))
+    except ValueError:
+        key = b""
+    if len(key) != 32:
+        problems.append("AGENTIC_MASTER_KEY must be 32 random bytes, base64url encoded")
+    if not s.cookie_secure:
+        problems.append("AGENTIC_COOKIE_SECURE must be true (serve it over HTTPS)")
+    if problems:
+        raise RuntimeError(f"Refusing to start with env={s.env}: " + "; ".join(problems))
+
+
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    if not s.is_dev and s.secret_key == DEV_SECRET:
-        raise RuntimeError("AGENTIC_SECRET_KEY must be set outside env=dev")
+    check(s)
     return s
 
 

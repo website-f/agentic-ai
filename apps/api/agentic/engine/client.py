@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from ..core.ssrf import guard_url
+from ..core.ssrf import pinned
 from .errors import Failure, classify_exception, classify_response, rate_limits
 
 REASONING_FLOOR = 2048  # thinking models spend max_tokens on hidden reasoning first
@@ -75,9 +75,11 @@ async def _request(
     t0 = time.perf_counter()
     host = host_of(url)
     try:
-        await guard_url(url)
+        target, pin, ext = await pinned(url)
         async with _client(timeout) as http:
-            r = await http.request(method, url, headers=_headers(key), json=json)
+            r = await http.request(
+                method, target, headers={**_headers(key), **pin}, json=json, extensions=ext
+            )
     except Exception as e:  # noqa: BLE001 - every failure becomes a classified result
         return CallResult(ok=False, latency_ms=_ms(t0), failure=classify_exception(e, host))
     rate = rate_limits(r.headers)

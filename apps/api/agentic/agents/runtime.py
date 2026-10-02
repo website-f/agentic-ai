@@ -35,7 +35,7 @@ from ..skills import store as skills_store
 from ..teams import budget, delegation, meetings
 from . import policy
 from .prompt import system_prompt
-from .tools import TOOLS, ToolContext, modes_for
+from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
 log = logging.getLogger("agentic.runtime")
 
@@ -223,7 +223,7 @@ def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]
     delegate only for orchestrators above their depth cap."""
     out = []
     for n, mode in modes_for(agent).items():
-        if mode == "deny":
+        if mode == "deny" or n in GLOBAL_DENY:
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue

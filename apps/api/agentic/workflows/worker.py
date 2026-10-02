@@ -128,6 +128,27 @@ async def ensure_schedules(client: Client) -> None:
             log.info("created schedule %s (every %s)", schedule_id, every)
         except ScheduleAlreadyRunningError:
             pass
+    await resync_user_schedules()
+
+
+async def resync_user_schedules() -> None:
+    """Postgres is the truth for schedules: mirror every row into Temporal on start, so a
+    restore (or a lost Temporal database) never leaves recurring work silently stopped."""
+    from sqlalchemy import select
+
+    from ..agents import dispatch
+    from ..core.db import SessionLocal
+    from ..models import Schedule
+
+    async with SessionLocal() as db:
+        rows = (await db.scalars(select(Schedule))).all()
+    for s in rows:
+        try:
+            await dispatch.upsert_schedule(s.id, s.cron, s.timezone, s.enabled, s.name)
+        except Exception:  # noqa: BLE001 - one bad row must not stop the worker
+            log.warning("could not sync schedule %s", s.id, exc_info=True)
+    if rows:
+        log.info("synced %d user schedules", len(rows))
 
 
 async def _connect() -> Client:
@@ -154,7 +175,12 @@ async def main() -> None:
     await ensure_schedules(client)
     asyncio.create_task(embed.warm())  # noqa: RUF006 - fire and forget; logs its own failure
     worker = Worker(
-        client, task_queue=settings.temporal_task_queue, workflows=WORKFLOWS, activities=ACTIVITIES
+        client,
+        task_queue=settings.temporal_task_queue,
+        workflows=WORKFLOWS,
+        activities=ACTIVITIES,
+        # Bounded so the database pool (2 connections per busy step) never runs dry.
+        max_concurrent_activities=settings.worker_max_activities,
     )
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
