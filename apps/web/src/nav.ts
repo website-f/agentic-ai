@@ -131,7 +131,7 @@ export const NAV: NavSection[] = [
       { to: "/brain", label: "Brain", icon: BrainIcon, blurb: "What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian." },
       { to: "/skills", label: "Skills", icon: LightningIcon, blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
       { to: "/blueprints", label: "Blueprints", icon: BlueprintIcon, perm: ["agents.manage", "agents.own"], blurb: "Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists." },
-      { to: "/workflows", label: "Workflows", icon: FlowArrowIcon, perm: ["agents.manage", "agents.own"], blurb: "Draw how a job is done as connected steps, or let an analyst agent draft it, then attach it to agents as the procedure they follow." },
+      { to: "/workflows", label: "Workflows", icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: "Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions." },
     ],
   },
   {

@@ -326,9 +326,9 @@ const loginsRoute = createRoute({ getParentRoute: () => appRoute, path: "/logins
 const workflowsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/workflows",
-  validateSearch: (s: Record<string, unknown>): { w?: string } => ({ w: str(s.w) }),
+  validateSearch: (s: Record<string, unknown>): { w?: string; run?: string } => ({ w: str(s.w), run: str(s.run) }),
   beforeLoad: ({ context }) => {
-    if (!["agents.manage", "agents.own"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
+    if (!["agents.manage", "agents.own", "work.write"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
   },
   component: page.workflows,
 });

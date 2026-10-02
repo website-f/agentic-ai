@@ -4,7 +4,23 @@ import { XIcon } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { NODE_COLOR, type Graph, type WNode } from "@/lib/workflows";
+import { NODE_COLOR, type Graph, type StepStatus, type WNode } from "@/lib/workflows";
+
+/** How a step looks during a run. */
+const RUN_LOOK: Partial<Record<StepStatus, string>> = {
+  running: "border-info ring-2 ring-info/25",
+  ready: "border-info",
+  waiting: "border-warn ring-2 ring-warn/30",
+  review: "border-warn ring-2 ring-warn/30",
+  blocked: "border-warn ring-2 ring-warn/30",
+  done: "border-ok",
+  failed: "border-danger ring-2 ring-danger/25",
+  skipped: "opacity-45",
+};
+const RUN_DOT: Partial<Record<StepStatus, string>> = {
+  running: "bg-info animate-pulse", ready: "bg-info", waiting: "bg-warn animate-pulse", review: "bg-warn animate-pulse",
+  blocked: "bg-warn", done: "bg-ok", failed: "bg-danger",
+};
 
 export const NODE_W = 216;
 export const NODE_H = 76;
@@ -35,12 +51,17 @@ export function Canvas({
   selected,
   onSelect,
   readOnly,
+  status,
+  taken,
 }: {
   graph: Graph;
   onChange: (g: Graph) => void;
   selected: { kind: "node" | "edge"; id: string } | null;
   onSelect: (s: { kind: "node" | "edge"; id: string } | null) => void;
   readOnly?: boolean;
+  /** During a run: each step's state, and the connections the run went along. */
+  status?: Record<string, StepStatus>;
+  taken?: Set<string>;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag>(null);
@@ -87,8 +108,9 @@ export function Canvas({
   }, [drag, graph, hover, onChange]);
 
   const startMove = (e: React.PointerEvent, n: WNode) => {
-    if (readOnly) return;
+    e.stopPropagation(); // the canvas behind would clear the selection again
     onSelect({ kind: "node", id: n.id });
+    if (readOnly) return;
     if (!box.current) return;
     const p = point(e, box.current);
     setDrag({ kind: "move", id: n.id, dx: p.x - n.x, dy: p.y - n.y });
@@ -116,7 +138,7 @@ export function Canvas({
             const a = byId[ed.from];
             const b = byId[ed.to];
             if (!a || !b) return null;
-            const on = selected?.kind === "edge" && selected.id === ed.id;
+            const on = (selected?.kind === "edge" && selected.id === ed.id) || !!taken?.has(ed.id);
             const mx = (a.x + b.x) / 2 + NODE_W / 2;
             const my = (a.y + NODE_H + b.y) / 2;
             return (
@@ -146,6 +168,7 @@ export function Canvas({
 
         {graph.nodes.map((n) => {
           const on = selected?.kind === "node" && selected.id === n.id;
+          const run = status?.[n.id];
           return (
             <div
               key={n.id}
@@ -154,7 +177,8 @@ export function Canvas({
               onPointerLeave={() => setHover((h) => (h === n.id ? null : h))}
               className={cn(
                 "absolute flex flex-col rounded-[var(--radius-sm)] border bg-surface px-3 py-2 shadow-[var(--shadow-soft)] select-none",
-                on ? "border-accent ring-2 ring-accent/30" : "border-border",
+                run && RUN_LOOK[run] ? RUN_LOOK[run] : on ? "border-accent ring-2 ring-accent/30" : "border-border",
+                run && on && "ring-accent/50",
                 drag?.kind === "link" && hover === n.id && hover !== drag.from && "ring-2 ring-accent",
                 readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing",
               )}
@@ -163,6 +187,7 @@ export function Canvas({
               <div className="flex items-center gap-1.5">
                 <span className="size-2 shrink-0 rounded-full" style={{ background: NODE_COLOR[n.type] }} />
                 <span className="truncate text-[13px] font-medium">{n.title || "Untitled"}</span>
+                {run && RUN_DOT[run] ? <span className={cn("ml-auto size-2 shrink-0 rounded-full", RUN_DOT[run])} aria-label={run} /> : null}
               </div>
               {n.role ? <span className="mt-0.5 truncate text-[11px] text-muted">{n.role}</span> : null}
               {n.body ? <span className="mt-0.5 line-clamp-2 text-[11.5px] text-muted">{n.body}</span> : null}

@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, FlowArrowIcon, PlusIcon, SparkleIcon, TrashIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, FlowArrowIcon, PlayIcon, PlusIcon, SparkleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
@@ -23,6 +23,7 @@ import {
 import { meQuery } from "@/lib/queries";
 
 import { Canvas } from "./canvas";
+import { RecentRuns, RunView, StartRunDialog } from "./run";
 
 type Sel = { kind: "node" | "edge"; id: string } | null;
 const BLANK: Graph = { nodes: [], edges: [] };
@@ -45,7 +46,19 @@ function DraftDialog({ open, onOpenChange, onDraft }: { open: boolean; onOpenCha
   );
 }
 
+const NOBODY = "__none";
+
 function NodePanel({ node, onChange, onDelete }: { node: WNode; onChange: (n: Partial<WNode>) => void; onDelete: () => void }) {
+  const { data: agents = [] } = useQuery(agentsQuery);
+  const usable = agents.filter((a) => a.status === "active" && !a.clone_of);
+  const work = node.type === "step" || node.type === "handoff";
+  const agentPick = (
+    <div className="grid gap-1.5">
+      <span className="text-[13px] font-medium">Agent when it runs</span>
+      <Select value={node.agent_id || NOBODY} onValueChange={(v) => onChange({ agent_id: v === NOBODY ? "" : v })} label="Agent"
+        options={[{ value: NOBODY, label: "Choose when the run starts" }, ...usable.map((a) => ({ value: a.id, label: a.name, hint: `${a.role}, ${a.branch_name}` }))]} />
+    </div>
+  );
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
@@ -61,11 +74,29 @@ function NodePanel({ node, onChange, onDelete }: { node: WNode; onChange: (n: Pa
       <Field label="Who does it (optional)" value={node.role} onChange={(e) => onChange({ role: e.target.value })} placeholder="e.g. Finance" />
       <TextareaField label="Details" value={node.body} onChange={(e) => onChange({ body: e.target.value })} rows={4}
         placeholder="What happens at this step." />
+      {work ? (
+        <>
+          {agentPick}
+          <SwitchField checked={!!node.review} onCheckedChange={(v) => onChange({ review: v })}
+            label="I review it before it moves on" hint="The run waits until you accept the result (or send it back)." />
+        </>
+      ) : null}
+      {node.type === "decision" ? (
+        <>
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">Who decides when it runs</span>
+            <Select value={node.decider ?? "person"} onValueChange={(v) => onChange({ decider: v as "person" | "agent" })} label="Who decides"
+              options={[{ value: "person", label: "A person (the run waits for you)" }, { value: "agent", label: "An agent picks a branch" }]} />
+          </div>
+          {node.decider === "agent" ? agentPick : null}
+          <p className="text-[12px] text-muted">Label each connection out of this step (e.g. yes / no): those are the choices.</p>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function Editor({ existing, onDone }: { existing: Workflow | null; onDone: () => void }) {
+function Editor({ existing, onDone, onOpenRun }: { existing: Workflow | null; onDone: () => void; onOpenRun: (id: string) => void }) {
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
   const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage);
@@ -77,6 +108,8 @@ function Editor({ existing, onDone }: { existing: Workflow | null; onDone: () =>
   const [sel, setSel] = useState<Sel>(null);
   const [drafting, setDrafting] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [running, setRunning] = useState(false);
+  const dirty = !!existing && JSON.stringify(graph) !== JSON.stringify(existing.graph);
 
   const save = useMutation({
     mutationFn: () => {
@@ -119,7 +152,12 @@ function Editor({ existing, onDone }: { existing: Workflow | null; onDone: () =>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setDrafting(true)}><SparkleIcon size={15} /> Draft with AI</Button>
           {existing ? <Button variant="ghost" onClick={() => setRemoving(true)}><TrashIcon size={15} /> Delete</Button> : null}
-          <Button loading={save.isPending} disabled={!name.trim()} onClick={() => save.mutate()}>Save</Button>
+          <Button variant={existing ? "outline" : "primary"} loading={save.isPending} disabled={!name.trim()} onClick={() => save.mutate()}>Save</Button>
+          {existing ? (
+            <Button disabled={dirty || !graph.nodes.length} title={dirty ? "Save your changes first" : undefined} onClick={() => setRunning(true)}>
+              <PlayIcon size={15} weight="fill" /> Run
+            </Button>
+          ) : null}
         </div>
       </div>
       <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One line: what this procedure is for" aria-label="Description" />
@@ -175,6 +213,8 @@ function Editor({ existing, onDone }: { existing: Workflow | null; onDone: () =>
       </div>
       <FormError message={save.error && !Object.keys(fields).length ? errorMessage(save.error) : null} />
 
+      {existing ? <RecentRuns workflowId={existing.id} onOpen={onOpenRun} /> : null}
+      {running && existing ? <StartRunDialog wf={existing} onClose={() => setRunning(false)} /> : null}
       {drafting ? <DraftDialog open onOpenChange={setDrafting} onDraft={(g) => { setGraph(g); setSel(null); }} /> : null}
       {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={`Delete ${existing.name}?`}
         body="Agents following it stop following it. Their past work is unaffected." confirmLabel="Delete" danger onConfirm={async () => { await del.mutateAsync(); }} /> : null}
@@ -203,17 +243,21 @@ export function WorkflowsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("agents.manage") || me.permissions.includes("agents.own");
   const { data: workflows = [], isLoading, error } = useQuery(workflowsQuery);
-  const search = useSearch({ strict: false }) as { w?: string };
+  const search = useSearch({ strict: false }) as { w?: string; run?: string };
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
 
   const open = (id?: string) => navigate({ to: "/workflows", search: id ? { w: id } : {}, replace: true });
+  const openRun = (id: string) => navigate({ to: "/workflows", search: { run: id } });
   const editing = search.w ? workflows.find((w) => w.id === search.w) ?? null : null;
 
+  if (search.run) {
+    return <Page className="max-w-7xl"><RunView key={search.run} id={search.run} /></Page>;
+  }
   if (creating || editing) {
     return (
       <Page className="max-w-6xl">
-        <Editor existing={editing} onDone={() => { setCreating(false); open(); }} />
+        <Editor existing={editing} onDone={() => { setCreating(false); open(); }} onOpenRun={openRun} />
       </Page>
     );
   }
@@ -221,7 +265,7 @@ export function WorkflowsPage() {
   return (
     <Page>
       <PageHeader title="Workflows"
-        description="Draw how a job is done — steps, decisions, hand-offs — then attach it to agents so they follow the procedure. Or describe it and let an analyst agent draft it."
+        description="Draw how a job is done — steps, decisions, hand-offs — or let an analyst agent draft it. Attach it to agents as the procedure they follow, or run a job through it: each step goes to its agent, and you take the decisions."
         actions={canManage ? <Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New workflow</Button> : null} />
       {isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 rounded-[var(--radius-md)]" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
@@ -234,6 +278,7 @@ export function WorkflowsPage() {
             {workflows.map((wf) => <Card key={wf.id} wf={wf} onOpen={() => open(wf.id)} />)}
           </div>
         )}
+      <RecentRuns onOpen={openRun} />
     </Page>
   );
 }

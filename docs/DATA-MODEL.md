@@ -86,6 +86,11 @@ docx_file_id, typed fields, numbering prefix, builtin starters), `documents` (bo
 draft|review|approved, number, version) with `document_versions`, and `packs` (items JSONB checklist,
 compiled_file_id).
 
+## Workflow runs (P11, migration 0012)
+
+`workflow_runs` (graph snapshot, assign node→agent, state node→{status, task_id, output, choice,
+error, by}, status running|waiting|done|failed|cancelled) and `tasks.workflow_run_id`.
+
 ## Indexes and housekeeping
 
 - GIN on every `tsv`; HNSW (`vector_cosine_ops`) on embeddings.

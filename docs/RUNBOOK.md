@@ -143,6 +143,14 @@ container should list `eng` and `msa`); use "Read again" on a file after fixing 
 
 ## 8. Workflows (how a job is done)
 
+**Running a job through a workflow:** open the workflow, set on each step the agent who does
+it (or pick when starting), mark steps you want to check with "I review it before it moves on",
+and on each decision choose a person or an agent. Save, then **Run**: describe the job, pick the
+company and any files, confirm who does each step, Start. The run page shows each step live;
+**Needs you** holds the decisions, the reviews and any question an agent asked. A run whose
+worker restarts carries on where it was.
+
+
 Knowledge > Workflows: draw a procedure as connected steps (or click "Draft with AI" and
 describe it), set it Active, and attach agents. Attached agents get the compiled procedure
 in their prompt and follow it. It is guidance, not an automation that runs on its own.

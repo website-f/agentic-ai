@@ -64,6 +64,7 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "agent.ping": [teamKeys.pings, teamKeys.budgets],
   "file.ready": [["files"]],
   "document.updated": [["documents"]],
+  "workflow_run.updated": [["workflow-runs"]],
 };
 
 export function useLiveEvents() {

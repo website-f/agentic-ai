@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from temporalio import activity
 
 from ..agents import runtime
@@ -38,6 +39,21 @@ async def task_expire_approval(approval_id: str) -> None:
 @activity.defn
 async def task_finish(task_id: str, state: str, message: str | None) -> None:
     await runtime.finish(task_id, state, message)
+    await _poke_run(task_id)
+
+
+async def _poke_run(task_id: str) -> None:
+    """A finished step wakes its workflow run at once instead of at the next tick (P11)."""
+    from ..agents import dispatch
+    from ..models import Task
+
+    async with SessionLocal() as db:
+        run_id = await db.scalar(select(Task.workflow_run_id).where(Task.id == task_id))
+    if run_id:
+        try:
+            await dispatch.poke_run(run_id)
+        except Exception:  # noqa: BLE001 - the run's own tick catches up within 15 s
+            log.info("could not poke workflow run %s", run_id)
 
 
 @activity.defn

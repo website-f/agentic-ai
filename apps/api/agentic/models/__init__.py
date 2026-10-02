@@ -386,6 +386,8 @@ class Task(Timestamps, Base):
     schedule_id: Mapped[str | None] = mapped_column(String(40))
     # P9: what kind of work this is ("tender", "invoice"...), for the company overview.
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    # P11: the workflow run this task is one step of.
+    workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
 
 
 class AgentMessage(Base):
@@ -1256,3 +1258,39 @@ class Pack(Timestamps, Base):
     compiled_file_id: Mapped[str | None] = mapped_column(String(40))
     compiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(80))
+
+
+class WorkflowRun(Timestamps, Base):
+    """One job carried through a workflow (P11). The graph is copied at start so later edits
+    to the workflow never change a run in flight. Each step becomes a task for its agent;
+    decisions wait for a person (or ask an agent, if the workflow says so); steps marked for
+    review wait until a person accepts the result. The worker ticks the run forward."""
+
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'waiting', 'done', 'failed', 'cancelled')",
+            name="ck_workflow_runs_status",
+        ),
+        Index("ix_workflow_runs_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("wr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    workflow_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workflows.id", ondelete="SET NULL"), index=True
+    )
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(80))  # the workflow's name when it started
+    title: Mapped[str] = mapped_column(String(200))
+    input: Mapped[str] = mapped_column(Text, default="")
+    file_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    graph: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    assign: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict)  # node id -> agent id
+    # node id -> {status, task_id, output, choice, error, started_at, finished_at, by}
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="running")
+    error: Mapped[str | None] = mapped_column(String(500))
+    temporal_id: Mapped[str | None] = mapped_column(String(120))
+    created_by: Mapped[str] = mapped_column(String(80))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

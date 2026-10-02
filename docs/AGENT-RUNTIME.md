@@ -403,3 +403,23 @@ their prompt like an SOP. It is guidance the agent follows, never an execution e
 `check_document`, `pack_status`, `pack_attach`. Files attached to a task are listed with their
 summaries in the task's first message, so the agent opens only what it needs.
 
+**Workflow runs** (P11, `workflows/runs.py`, `api/routers/workflow_runs.py`, migration 0012). A run
+carries one job through a workflow: the graph is copied at start (later edits never change a run
+in flight), and `WorkflowRunWorkflow` ticks it every 15 s, or at once when poked (a step's task
+finished, a person decided or accepted). Per node:
+
+- start: done at once; the job description is its output.
+- step / hand-off: a task for its agent (`tasks.workflow_run_id`, label `workflow`) briefed with the
+  job, the step, the last 6 steps' results and the job's files. Steps marked *review* wait in task
+  review until a person accepts (sending back re-runs it).
+- decision: waits for a person to pick a branch (labels of its outgoing connections), or, when the
+  node says an agent decides, a task whose `output_schema` allows only those labels.
+- end: done; the run finishes when nothing is still in progress (remaining nodes are *skipped*).
+
+A node starts when any connection into it comes from a finished node (for a decision, only the
+chosen branch) and runs once. A failed step fails the run once nothing else is active; *Try again*
+relaunches its task and restarts the driver. Ticks lock the run row and merge with what people
+changed meanwhile; a step whose task already exists is never started twice. Steps are ordinary
+agent tasks under the usual tool rules and approvals — nothing in a run acts outside the office on
+its own. An agent's question inside a step shows on the run page as well as in Approvals.
+

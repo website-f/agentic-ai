@@ -13,6 +13,10 @@ export interface WNode {
   role: string;
   x: number;
   y: number;
+  /** For runs: the agent who does it, whether a person reviews it, who takes a decision. */
+  agent_id?: string;
+  review?: boolean;
+  decider?: "person" | "agent";
 }
 
 export interface WEdge {
@@ -63,3 +67,86 @@ export const NODE_COLOR: Record<NodeType, string> = Object.fromEntries(
 
 let counter = 0;
 export const newNodeId = () => `n${Date.now().toString(36)}${(counter++).toString(36)}`;
+
+// ---------------------------------------------------------------- runs (P11)
+
+export type StepStatus = "pending" | "ready" | "running" | "waiting" | "review" | "blocked" | "done" | "failed" | "skipped";
+export type RunStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
+
+export interface RunOption { edge_id: string; label: string; to: string; to_title: string }
+
+export interface RunStep {
+  id: string;
+  type: NodeType;
+  title: string;
+  role: string;
+  body: string;
+  review: boolean;
+  decider: "person" | "agent";
+  status: StepStatus;
+  agent_id: string | null;
+  agent_name: string | null;
+  task_id: string | null;
+  task_status: string | null;
+  output: string | null;
+  error: string | null;
+  choice: string | null;
+  options: RunOption[];
+  by: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RunSummary {
+  id: string;
+  workflow_id: string | null;
+  name: string;
+  title: string;
+  status: RunStatus;
+  error: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  done: number;
+  total: number;
+  needs_you: number;
+}
+
+export interface Run extends RunSummary {
+  input: string;
+  graph: Graph;
+  steps: RunStep[];
+  files: { id: string; name: string }[];
+}
+
+export const runKeys = { all: ["workflow-runs"] as const, one: (id: string) => ["workflow-runs", id] as const };
+
+export const runsQuery = (workflowId?: string) =>
+  queryOptions({
+    queryKey: [...runKeys.all, "list", workflowId ?? "all"],
+    queryFn: () => api<RunSummary[]>(`/api/workflow-runs${workflowId ? `?workflow_id=${workflowId}` : ""}`),
+  });
+
+export const runQuery = (id: string) =>
+  queryOptions({
+    queryKey: runKeys.one(id),
+    queryFn: () => api<Run>(`/api/workflow-runs/${id}`),
+    refetchInterval: (q) => (q.state.data && ["running", "waiting"].includes(q.state.data.status) ? 4000 : false),
+  });
+
+export const RUN_STATUS: Record<RunStatus, { label: string; tone: "info" | "warn" | "ok" | "danger" | "neutral" }> = {
+  running: { label: "Running", tone: "info" },
+  waiting: { label: "Needs you", tone: "warn" },
+  done: { label: "Done", tone: "ok" },
+  failed: { label: "Failed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+};
+
+export const STEP_LABEL: Record<StepStatus, string> = {
+  pending: "Not reached", ready: "Starting", running: "Working", waiting: "Waiting for you",
+  review: "Waiting for your review", blocked: "Asked a question", done: "Done", failed: "Failed", skipped: "Skipped",
+};
+

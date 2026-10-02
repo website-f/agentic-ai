@@ -19,7 +19,7 @@ from ..core.temporal import temporal_client
 from ..workflows.agent_workflows import AgentTaskWorkflow, BroadcastRepliesWorkflow
 from ..workflows.brain_workflows import DreamWorkflow, LearnFromChatWorkflow
 from ..workflows.channel_workflows import DeliverWorkflow
-from ..workflows.document_workflows import FileExtractWorkflow
+from ..workflows.document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from ..workflows.skill_workflows import SkillEvalWorkflow
 from ..workflows.teams_workflows import MeetingWorkflow, ScheduledTaskWorkflow
 
@@ -188,3 +188,23 @@ async def start_file_extract(file_id: str) -> None:
         id=f"file-{file_id}",
         task_queue=settings.temporal_task_queue,
     )
+
+
+async def start_run(run_id: str) -> str:
+    """Drive a workflow run (P11); if its driver is already going, just wake it."""
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    client = await temporal_client()
+    workflow_id = f"wfrun-{run_id}"
+    try:
+        await client.start_workflow(
+            WorkflowRunWorkflow.run, run_id, id=workflow_id, task_queue=settings.temporal_task_queue
+        )
+    except WorkflowAlreadyStartedError:
+        await client.get_workflow_handle(workflow_id).signal(WorkflowRunWorkflow.poke)
+    return workflow_id
+
+
+async def poke_run(run_id: str) -> None:
+    client = await temporal_client()
+    await client.get_workflow_handle(f"wfrun-{run_id}").signal(WorkflowRunWorkflow.poke)

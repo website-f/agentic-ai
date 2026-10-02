@@ -42,6 +42,7 @@ from .routers import (
     teams,
     vault,
     web_tasks,
+    workflow_runs,
     workflows,
 )
 
@@ -168,6 +169,7 @@ for r in (
     files.router,
     documents.router,
     packs.router,
+    workflow_runs.router,
     events_stream.router,
 ):
     app.include_router(r)

@@ -61,6 +61,7 @@ async def database():
 
 
 TABLES = (
+    "workflow_runs",
     "packs",
     "document_versions",
     "documents",

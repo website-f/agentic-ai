@@ -34,6 +34,11 @@ def clean_graph(raw: Any) -> dict[str, Any]:
                 "role": str(n.get("role", ""))[:80],
                 "x": int(n.get("x", 0)) if str(n.get("x", "")).lstrip("-").isdigit() else 0,
                 "y": int(n.get("y", 0)) if str(n.get("y", "")).lstrip("-").isdigit() else 0,
+                # For runs (P11): who does the step, whether a person checks its result
+                # before the work moves on, and who takes a decision.
+                "agent_id": str(n.get("agent_id") or "")[:40],
+                "review": bool(n.get("review")),
+                "decider": "agent" if n.get("decider") == "agent" else "person",
             }
         )
     edges: list[dict[str, Any]] = []

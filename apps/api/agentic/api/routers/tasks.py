@@ -482,8 +482,19 @@ async def accept_task(
     await skills_store.settle(db, t.id, "accepted")
     await audit.record(db, principal.workspace_id, principal.actor, "task.accepted", target=t.id)
     await db.commit()
+    await _wake_run(t)
     await db.refresh(t)
     return await task_out(db, t)
+
+
+async def _wake_run(t: Task) -> None:
+    """A reviewed workflow step moves its run on at once (P11), not at the next tick."""
+    if not t.workflow_run_id:
+        return
+    try:
+        await dispatch.poke_run(t.workflow_run_id)
+    except Exception:  # noqa: BLE001 - the run's own tick catches up within 15 s
+        return
 
 
 @router.post("/tasks/{task_id}/revise")
