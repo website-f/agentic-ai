@@ -41,6 +41,8 @@ from .brain_activities import (
 from .brain_workflows import DreamTickWorkflow, DreamWorkflow, LearnFromChatWorkflow
 from .channel_activities import deliver_one
 from .channel_workflows import DeliverWorkflow
+from .document_activities import file_extract
+from .document_workflows import FileExtractWorkflow
 from .engine_activities import check_all_providers
 from .skill_activities import skill_eval, skill_reflect
 from .skill_workflows import SkillEvalWorkflow
@@ -74,6 +76,7 @@ WORKFLOWS = [
     MeetingWorkflow,
     HeartbeatWorkflow,
     ScheduledTaskWorkflow,
+    FileExtractWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -101,6 +104,7 @@ ACTIVITIES = [
     schedule_claim,
     schedule_attempt,
     schedule_finish,
+    file_extract,
 ]
 
 

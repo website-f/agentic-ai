@@ -15,13 +15,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from ..core.db import Base, Timestamps
 from ..core.ids import new_id
@@ -1104,4 +1105,154 @@ class Workflow(Timestamps, Base):
     status: Mapped[str] = mapped_column(String(16), default="draft")  # draft | active
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | analyst
     agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # agents that follow it
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+# ---------------------------------------------------------------- Document Studio (P10)
+
+
+class DocFile(Timestamps, Base):
+    """A file people uploaded (or the system generated, like a compiled pack). The bytes live
+    here so the API and the worker both reach them and the database backup covers them. The
+    worker reads each upload once (text, OCR for scans) and a cheap model summarises it; agents
+    then work from that text instead of re-reading the file."""
+
+    __tablename__ = "files"
+    __table_args__ = (
+        CheckConstraint("status IN ('reading', 'ready', 'failed')", name="ck_files_status"),
+        Index("ix_files_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fl"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), index=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(200))
+    mime: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), default="")
+    data: Mapped[bytes] = deferred(mapped_column(LargeBinary))
+    status: Mapped[str] = mapped_column(String(16), default="reading")
+    text: Mapped[str] = deferred(mapped_column(Text, default=""))
+    pages: Mapped[int] = mapped_column(Integer, default=0)
+    ocr: Mapped[bool] = mapped_column(Boolean, default=False)
+    # What the cheap model understood: "SSM certificate", a title, 2-3 sentences, key facts.
+    kind: Mapped[str] = mapped_column(String(80), default="")
+    title: Mapped[str] = mapped_column(String(200), default="")
+    summary: Mapped[str] = mapped_column(String(1000), default="")
+    fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    expires_on: Mapped[date | None] = mapped_column(Date)
+    error: Mapped[str | None] = mapped_column(String(300))
+    source: Mapped[str] = mapped_column(String(16), default="upload")  # upload | generated
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CompanyKit(Timestamps, Base):
+    """The facts every document about a company reuses: legal name, registration, address,
+    bank, signatory, logo. One per branch (one branch per company)."""
+
+    __tablename__ = "company_kits"
+
+    branch_id: Mapped[str] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    logo_file_id: Mapped[str | None] = mapped_column(String(40))
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class DocTemplate(Timestamps, Base):
+    """A reusable document: markdown with {{placeholders}} plus the fields that fill them, or
+    an uploaded Word file whose {{placeholders}} are filled in place (keeping its layout)."""
+
+    __tablename__ = "doc_templates"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_doc_templates_ws_name"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("tp"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(40), default="custom")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    # [{"key", "label", "type": text|longtext|date|number|money|items|choice, "required", ...}]
+    fields: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    docx_file_id: Mapped[str | None] = mapped_column(String(40))
+    prefix: Mapped[str] = mapped_column(String(12), default="")  # numbering, e.g. "QT"
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class Document(Timestamps, Base):
+    """A document being prepared: source markdown (placeholders intact) plus field values.
+    Drafted by people or agents, reviewed, then approved (locked). Exports to PDF, Word and
+    Excel are rendered on demand from the same source."""
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'review', 'approved')", name="ck_documents_status"),
+        Index("ix_documents_ws_updated", "workspace_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dc"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    template_id: Mapped[str | None] = mapped_column(
+        ForeignKey("doc_templates.id", ondelete="SET NULL")
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), index=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(40), default="custom")
+    number: Mapped[str] = mapped_column(String(40), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    values: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[str] = mapped_column(String(80))
+    approved_by: Mapped[str | None] = mapped_column(String(80))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DocumentVersion(Base):
+    __tablename__ = "document_versions"
+    __table_args__ = (Index("ix_document_versions_doc", "document_id", "version"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    values: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    author: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Pack(Timestamps, Base):
+    """A submission pack: a checklist of required items, each filled by an uploaded file or a
+    prepared document, compiled into one PDF with a cover and an index. People submit it."""
+
+    __tablename__ = "packs"
+    __table_args__ = (
+        CheckConstraint("status IN ('collecting', 'compiled')", name="ck_packs_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("pk"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    # [{"id", "label", "hint", "required", "file_id", "document_id", "status", "note", "auto"}]
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="collecting")
+    compiled_file_id: Mapped[str | None] = mapped_column(String(40))
+    compiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(80))

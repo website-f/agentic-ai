@@ -61,6 +61,14 @@ async def database():
 
 
 TABLES = (
+    "packs",
+    "document_versions",
+    "documents",
+    "doc_templates",
+    "company_kits",
+    "files",
+    "workflows",
+    "blueprints",
     "reports",
     "credentials",
     "incidents",

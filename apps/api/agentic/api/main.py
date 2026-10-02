@@ -24,13 +24,16 @@ from .routers import (
     brain,
     broadcasts,
     channels,
+    documents,
     events_stream,
+    files,
     members,
     monitor,
     office,
     openai_compat,
     org,
     overview,
+    packs,
     reports,
     skills,
     sops,
@@ -47,6 +50,9 @@ log = logging.getLogger("agentic.api")
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # No session exists yet on these, so there is no CSRF cookie to compare against.
 CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
+# File uploads send raw bytes. A cross-site form cannot send octet-stream either, so the
+# JSON-only guarantee holds; the CSRF token is still checked.
+RAW_UPLOAD_PATHS = {"/api/files"}
 
 
 @asynccontextmanager
@@ -79,7 +85,12 @@ async def csrf_guard(request: Request, call_next):
     path = request.url.path
     if request.method in UNSAFE_METHODS and path.startswith("/api/"):
         ctype = request.headers.get("content-type", "")
-        if not ctype.startswith("application/json"):
+        raw_ok = (
+            path in RAW_UPLOAD_PATHS
+            and request.method == "POST"
+            and ctype.startswith("application/octet-stream")
+        )
+        if not ctype.startswith("application/json") and not raw_ok:
             return _error(415, "json_required", "Send requests as application/json.")
         if path not in CSRF_EXEMPT and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
@@ -154,6 +165,9 @@ for r in (
     vault.router,
     web_tasks.router,
     workflows.router,
+    files.router,
+    documents.router,
+    packs.router,
     events_stream.router,
 ):
     app.include_router(r)

@@ -946,6 +946,11 @@ TOOLS["publish_report"] = Tool(
     _publish_report,
 )
 
+# Document Studio (P10): files, the company kit, templates, documents and packs.
+from .doc_tools import DOC_TOOLS  # noqa: E402 - needs Tool and ToolContext defined above
+
+TOOLS.update({t.name: t for t in DOC_TOOLS})
+
 # Never offered to the model and never run, whatever any setting says.
 GLOBAL_DENY: frozenset[str] = frozenset()
 

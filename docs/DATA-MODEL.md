@@ -78,6 +78,14 @@ All tables carry `workspace_id` (except global ones) and `created_at` / `updated
 | `events` | seq bigserial, workspace_id, type, payload jsonb, ts (kept 7 days, for SSE replay) |
 | `audit_log` | id, workspace_id, actor, action, target, before jsonb, after jsonb, ts, prev_hash, hash (hash chain, append-only) |
 
+## Document Studio (P10, migration 0011)
+
+`files` (bytes deferred, extracted text deferred, kind/summary/fields/expires_on from the one-time
+reading), `company_kits` (branch_id PK, data JSONB, logo_file_id), `doc_templates` (markdown body or
+docx_file_id, typed fields, numbering prefix, builtin starters), `documents` (body + values, status
+draft|review|approved, number, version) with `document_versions`, and `packs` (items JSONB checklist,
+compiled_file_id).
+
 ## Indexes and housekeeping
 
 - GIN on every `tsv`; HNSW (`vector_cosine_ops`) on embeddings.

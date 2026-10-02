@@ -149,6 +149,7 @@ class TaskIn(BaseModel):
     requires_review: bool = True
     start: bool = False
     labels: list[str] = Field(default_factory=list, max_length=8)
+    file_ids: list[str] = Field(default_factory=list, max_length=20)  # P10: files for the task
 
 
 class TaskUpdateIn(BaseModel):

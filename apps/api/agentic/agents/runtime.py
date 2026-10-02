@@ -706,6 +706,24 @@ async def _load(db: AsyncSession, task_id: str) -> tuple[Task, Agent, Workspace]
     return task, agent, ws
 
 
+async def _attached_files_note(db: AsyncSession, task: Task, tz: str) -> str:
+    """Files people gave this task (P10), already read and summarised: listed so the agent
+    knows they exist and reads only what it needs."""
+    from ..documents import service as doc_service
+    from ..models import DocFile
+
+    files = (
+        await db.scalars(
+            select(DocFile).where(DocFile.task_id == task.id).order_by(DocFile.created_at)
+        )
+    ).all()
+    if not files:
+        return ""
+    today = doc_service.today_in(tz)
+    lines = "\n".join(doc_service.file_line(f, today) for f in files[:20])
+    return f"\n\nFiles attached to this task (read them with read_file):\n{lines}"
+
+
 async def run_task_step(task_id: str) -> StepResult:
     async with SessionLocal() as db:
         task, agent, ws = await _load(db, task_id)
@@ -715,6 +733,7 @@ async def run_task_step(task_id: str) -> StepResult:
         history = await _history(db, task_id=task.id)
         if not history:
             content = f"Task: {task.title}\n\n{task.brief}".strip()
+            content += await _attached_files_note(db, task, ws.timezone)
             if task.output_schema:
                 content += "\n\n" + delegation.schema_note(task.output_schema)
             block, n_facts, n_pages = await recall_block(

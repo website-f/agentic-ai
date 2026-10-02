@@ -62,6 +62,8 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "job_run.updated": [["runs"], teamKeys.schedules],
   "incident.updated": [teamKeys.incidents],
   "agent.ping": [teamKeys.pings, teamKeys.budgets],
+  "file.ready": [["files"]],
+  "document.updated": [["documents"]],
 };
 
 export function useLiveEvents() {

@@ -51,6 +51,11 @@ const page = {
   logins: lazyRouteComponent(() => import("@/pages/logins"), "LoginsPage"),
   blueprints: lazyRouteComponent(() => import("@/pages/blueprints"), "BlueprintsPage"),
   workflows: lazyRouteComponent(() => import("@/pages/workflows"), "WorkflowsPage"),
+  companyKit: lazyRouteComponent(() => import("@/pages/documents/kit"), "CompanyKitPage"),
+  files: lazyRouteComponent(() => import("@/pages/documents/files"), "FilesPage"),
+  templates: lazyRouteComponent(() => import("@/pages/documents/templates"), "TemplatesPage"),
+  documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
+  packs: lazyRouteComponent(() => import("@/pages/documents/packs"), "PacksPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -327,6 +332,31 @@ const workflowsRoute = createRoute({
   },
   component: page.workflows,
 });
+const companyKitRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/company-kit",
+  validateSearch: (s: Record<string, unknown>): { b?: string } => ({ b: str(s.b) }),
+  component: page.companyKit,
+});
+const filesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/files",
+  validateSearch: (s: Record<string, unknown>): { f?: string } => ({ f: str(s.f) }),
+  component: page.files,
+});
+const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: "/templates", component: page.templates });
+const documentsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/documents",
+  validateSearch: (s: Record<string, unknown>): { d?: string; new?: number } => ({ d: str(s.d), new: num(s.new) }),
+  component: page.documents,
+});
+const packsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/packs",
+  validateSearch: (s: Record<string, unknown>): { p?: string } => ({ p: str(s.p) }),
+  component: page.packs,
+});
 const blueprintsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/blueprints",
@@ -378,6 +408,11 @@ const routeTree = rootRoute.addChildren([
     loginsRoute,
     blueprintsRoute,
     workflowsRoute,
+    companyKitRoute,
+    filesRoute,
+    templatesRoute,
+    documentsRoute,
+    packsRoute,
   ]),
 ]);
 

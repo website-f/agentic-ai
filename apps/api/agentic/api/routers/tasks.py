@@ -175,6 +175,28 @@ def clean_labels(labels: list[str]) -> list[str]:
     return out[:8]
 
 
+async def _attach_files(db: AsyncSession, principal: Principal, t: Task, ids: list[str]) -> None:
+    """Hand files to a task (P10): the agent sees them in its brief and can read them."""
+    from ...documents import service as doc_service
+    from ...models import DocFile
+
+    for fid in dict.fromkeys(ids):
+        f = await db.scalar(
+            doc_service.scoped(
+                select(DocFile).where(
+                    DocFile.id == fid, DocFile.workspace_id == principal.workspace_id
+                ),
+                DocFile,
+                principal,
+            )
+        )
+        if f is None:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_file", "Pick files you can see.")
+        f.task_id = t.id
+        if f.branch_id is None:
+            f.branch_id = t.branch_id
+
+
 async def start(db: AsyncSession, t: Task, actor: str) -> None:
     try:
         await launch.launch(db, t, actor)
@@ -260,6 +282,7 @@ async def create_task(
     )
     db.add(t)
     await db.flush()
+    await _attach_files(db, principal, t, body.file_ids)
     await audit.record(
         db,
         principal.workspace_id,

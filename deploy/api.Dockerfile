@@ -31,11 +31,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 FROM python:3.12-slim-trixie AS runtime
+# Document Studio needs OCR for scans and photos (Tesseract, English + Malay) and a
+# TrueType sans (Liberation) so generated PDFs print any Latin text.
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
  && apt-get update \
  && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends tini \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=app:app /app /app

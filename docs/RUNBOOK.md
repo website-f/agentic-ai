@@ -122,6 +122,25 @@ Generate fresh values with `python deploy/scripts/gen-secrets.py`.
   falls back to Groq, then DeepSeek, automatically.
 - Re-check reliability after changing models: docs/RELIABILITY.md.
 
+## 8. Preparing documents and packs
+
+Sidebar > Documents, top to bottom (details: DOCUMENT-STUDIO.md):
+
+1. **Company kit** — fill each company's facts and logo once. Every letterhead uses them.
+2. **Files** — drop the papers a company keeps (registration certificate, bank statements,
+   licences). Each is read once, scans included, and summarised; expiry dates are flagged.
+3. **Templates** — use the starters, write your own with `{{placeholders}}`, or upload a
+   Word file with `{{placeholders}}` typed where values go.
+4. **Documents** — New document → pick the company and a template (or "Write it with AI").
+   Optionally describe it and AI fills the fields. Fix what the checks list, then Approve.
+   Export PDF, Word or Excel.
+5. **Packs** — list what a submission needs (or "Draft it with AI"), Auto-fill from files,
+   "Draft it" for items we write ourselves, or "Ask an agent" to prepare the rest. Compile
+   PDF, check it, and submit it yourself.
+
+Scans stay unread if the image has no Tesseract (`tesseract --list-langs` inside the api
+container should list `eng` and `msa`); use "Read again" on a file after fixing that.
+
 ## 8. Workflows (how a job is done)
 
 Knowledge > Workflows: draw a procedure as connected steps (or click "Draft with AI" and

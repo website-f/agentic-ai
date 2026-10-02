@@ -3,6 +3,11 @@ import {
   BlueprintIcon,
   FlowArrowIcon,
   FileTextIcon,
+  FilesIcon,
+  FolderOpenIcon,
+  IdentificationCardIcon,
+  PackageIcon,
+  StackIcon,
   BroadcastIcon,
   BuildingsIcon,
   CalendarCheckIcon,
@@ -29,6 +34,11 @@ export type AppPath =
   | "/"
   | "/overview"
   | "/reports"
+  | "/company-kit"
+  | "/files"
+  | "/templates"
+  | "/documents"
+  | "/packs"
   | "/logins"
   | "/office"
   | "/monitor"
@@ -93,6 +103,18 @@ export const NAV: NavSection[] = [
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },
       { to: "/reports", label: "Reports", icon: ClipboardTextIcon, blurb: "What agents wrote up for you: summaries and tables you can sort and download." },
       { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, switch its model for a session, and turn a conversation into a task." },
+    ],
+  },
+  {
+    // Step by step: set up the company once, give the office its files, keep templates,
+    // prepare documents, then compile submission packs.
+    title: "Documents",
+    items: [
+      { to: "/company-kit", label: "Company kit", icon: IdentificationCardIcon, blurb: "Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo." },
+      { to: "/files", label: "Files", icon: FolderOpenIcon, blurb: "Certificates, statements, letters and photos the office keeps. Each one is read once (scans too) and summarised for agents." },
+      { to: "/templates", label: "Templates", icon: StackIcon, blurb: "Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill." },
+      { to: "/documents", label: "Documents", icon: FilesIcon, blurb: "Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel." },
+      { to: "/packs", label: "Packs", icon: PackageIcon, blurb: "Submission packs: a checklist matched to real files and documents, compiled into one PDF with a cover and contents." },
     ],
   },
   {

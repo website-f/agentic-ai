@@ -398,3 +398,8 @@ truncation-tolerant parse). `compile_text` turns the graph into a numbered proce
 workflow is `active` and attached to agents, `agents/prompt.py` layers that procedure into
 their prompt like an SOP. It is guidance the agent follows, never an execution engine.
 
+**Document tools** (P10, `agents/doc_tools.py`, see DOCUMENT-STUDIO.md): `list_files`,
+`read_file`, `company_kit`, `list_templates`, `draft_document`, `revise_document`,
+`check_document`, `pack_status`, `pack_attach`. Files attached to a task are listed with their
+summaries in the task's first message, so the agent opens only what it needs.
+

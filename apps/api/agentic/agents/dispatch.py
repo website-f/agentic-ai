@@ -19,6 +19,7 @@ from ..core.temporal import temporal_client
 from ..workflows.agent_workflows import AgentTaskWorkflow, BroadcastRepliesWorkflow
 from ..workflows.brain_workflows import DreamWorkflow, LearnFromChatWorkflow
 from ..workflows.channel_workflows import DeliverWorkflow
+from ..workflows.document_workflows import FileExtractWorkflow
 from ..workflows.skill_workflows import SkillEvalWorkflow
 from ..workflows.teams_workflows import MeetingWorkflow, ScheduledTaskWorkflow
 
@@ -174,5 +175,16 @@ async def start_deliveries(delivery_ids: list[str]) -> None:
         DeliverWorkflow.run,
         delivery_ids,
         id=f"deliver-{delivery_ids[0]}-{len(delivery_ids)}",
+        task_queue=settings.temporal_task_queue,
+    )
+
+
+async def start_file_extract(file_id: str) -> None:
+    """Read an upload in the background (text, OCR, summary)."""
+    client = await temporal_client()
+    await client.start_workflow(
+        FileExtractWorkflow.run,
+        file_id,
+        id=f"file-{file_id}",
         task_queue=settings.temporal_task_queue,
     )

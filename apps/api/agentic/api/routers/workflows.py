@@ -246,19 +246,18 @@ async def draft_workflow(
             "smart",
             messages,
             task="workflow.draft",
-            max_tokens=2000,
+            max_tokens=4000,  # reasoning models spend part of this before the JSON
             json_mode=True,
         )
     except gateway.GatewayUnavailable as e:
         raise api_error(status.HTTP_502_BAD_GATEWAY, "no_model_available", str(e)) from e
-    try:
-        raw = json.loads(r.content)
-    except ValueError:
+    raw = _loads_lenient(r.content or "")
+    if raw is None:
         raise api_error(
             status.HTTP_502_BAD_GATEWAY,
             "bad_draft",
             "The model did not return a usable draft. Try again.",
-        ) from None
+        )
     graph = clean_graph(raw)
     if not graph["nodes"]:
         raise api_error(
