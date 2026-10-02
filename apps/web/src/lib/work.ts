@@ -99,6 +99,8 @@ export interface Task {
   has_output_schema: boolean;
   labels?: string[];
   branch_id?: string | null;
+  goal?: string | null;
+  goal_tries?: number;
 }
 
 export interface TaskEvent {

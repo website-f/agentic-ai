@@ -10,7 +10,8 @@ import re
 from typing import Any
 
 from ..brain.facts import _SECRET  # same secret patterns as facts
-from ..core.fence import INJECTION
+from ..core import threats
+from ..core.fence import INJECTION  # noqa: F401
 from .format import MAX_BODY, missing_sections
 
 _INJECTION = INJECTION
@@ -35,7 +36,7 @@ def scan(body: str, description: str, known_tools: set[str]) -> list[dict[str, A
 
     if _SECRET.search(text):
         add("block", "secret", "Looks like it contains a password, key, card or IC number.")
-    if _INJECTION.search(text):
+    if threats.scan(text, "strict"):
         add("block", "override", "Tries to override the rules or skip approvals.")
     if _INTERNAL.search(text):
         add("block", "internal_address", "Points at an internal or metadata address.")

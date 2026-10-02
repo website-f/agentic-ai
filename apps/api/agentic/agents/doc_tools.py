@@ -2,6 +2,7 @@
 check documents from templates, and fill submission packs. Everything stays inside the
 office as drafts; people approve documents and submit packs themselves."""
 
+import json
 import re
 from typing import Any
 
@@ -331,9 +332,203 @@ async def _pack_attach(ctx: ToolContext, args: dict[str, Any]) -> str:
     return f"Attached {what} to {it['label']!r}. {prog['ready']} ready, {prog['missing']} missing."
 
 
+async def _view_image(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from sqlalchemy.orm import undefer
+
+    from . import vision
+
+    f = await _file(ctx, str(args.get("file_id") or ""))
+    if f is None:
+        return "Error: no such file for you. Use list_files to see the ids."
+    if not f.mime.startswith("image/"):
+        return f"Error: {f.name} is not an image. Use read_file for documents."
+    full = await ctx.db.scalar(
+        select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.data))
+    )
+    data = bytes(full.data) if full else b""
+    if not data or len(data) > vision.MAX_IMAGE_BYTES:
+        return "Error: the image is empty or too large to view."
+    question = str(args.get("question") or "").strip()
+    answer = await vision.describe(
+        ctx.db, ctx.agent, data, f.mime, question, task_id=ctx.task.id if ctx.task else None
+    )
+    if answer:
+        return f"Looking at {f.name}:\n{fence(answer)}"
+    # No vision-capable model: fall back to the OCR text Document Studio already extracted.
+    text = await ctx.db.scalar(select(DocFile.text).where(DocFile.id == f.id)) or ""
+    if text.strip():
+        return (
+            f"(No image-reading model is set up, so this is the text read from {f.name} by OCR "
+            f"instead:)\n{fence(text[:MAX_READ])}"
+        )
+    return (
+        f"Error: no model in your group can read images, and no text could be read from "
+        f"{f.name}. Ask a person to set up a vision-capable model in AI Engine."
+    )
+
+
+# ---------------------------------------------------------------- MCP bridge (P13)
+
+
+async def _mcp_servers(ctx: ToolContext) -> list[Any]:
+    from ..models import McpServer
+
+    rows = (
+        await ctx.db.scalars(
+            select(McpServer).where(
+                McpServer.workspace_id == ctx.workspace.id, McpServer.enabled.is_(True)
+            )
+        )
+    ).all()
+    out = []
+    for s in rows:
+        if not s.agent_ids or ctx.agent.id in s.agent_ids:
+            out.append(s)
+    return out
+
+
+def _score(query: str, text: str) -> int:
+    words = [w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 1]
+    hay = text.lower()
+    return sum(hay.count(w) for w in words)
+
+
+async def _tool_search(ctx: ToolContext, args: dict[str, Any]) -> str:
+    query = str(args.get("query", "")).strip()
+    servers = await _mcp_servers(ctx)
+    if not servers:
+        return "No external (MCP) tools are connected for you."
+    hits: list[tuple[int, str, dict[str, Any]]] = []
+    for s in servers:
+        for t in s.tools or []:
+            score = _score(query, f"{t['name']} {t.get('description', '')}") if query else 1
+            if score or not query:
+                hits.append((score, s.name, t))
+    hits.sort(key=lambda h: -h[0])
+    if not hits:
+        return f"No external tools match {query!r}. Try other words, or tool_search with no query."
+    lines = ["External tools (use tool_describe for details, tool_call to run one):"]
+    for _, server, t in hits[:20]:
+        lines.append(f"- {server}.{t['name']}: {t.get('description', '')[:160]}")
+    return "\n".join(lines)
+
+
+async def _find_tool(ctx: ToolContext, server: str, tool: str) -> tuple[Any, dict[str, Any]] | None:
+    for s in await _mcp_servers(ctx):
+        if s.name == server:
+            for t in s.tools or []:
+                if t["name"] == tool:
+                    return s, t
+    return None
+
+
+async def _tool_describe(ctx: ToolContext, args: dict[str, Any]) -> str:
+    found = await _find_tool(ctx, str(args.get("server", "")), str(args.get("tool", "")))
+    if found is None:
+        return "Error: no such external tool. Use tool_search to find one (server.tool)."
+    _, t = found
+    return (
+        f"{args['server']}.{t['name']}\n{t.get('description', '')}\n\n"
+        f"Arguments (JSON schema):\n{fence(json.dumps(t.get('schema', {}), indent=2)[:3000])}\n"
+        "Run it with tool_call(server, tool, arguments)."
+    )
+
+
+async def _tool_call(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from ..core import crypto
+    from . import mcp
+
+    found = await _find_tool(ctx, str(args.get("server", "")), str(args.get("tool", "")))
+    if found is None:
+        return "Error: no such external tool. Use tool_search first."
+    server, t = found
+    raw_args = args.get("arguments")
+    arguments: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+    header = crypto.decrypt(server.auth_header_enc, server.aad) if server.auth_header_enc else ""
+    try:
+        return await mcp.call_tool(server.url, header, t["name"], arguments)
+    except mcp.McpError as e:
+        return f"Error from {server.name}.{t['name']}: {e}"
+
+
 # ---------------------------------------------------------------- registry
 
 _ID = {"type": "string"}
+
+MCP_TOOLS: list[Tool] = [
+    Tool(
+        "tool_search",
+        "Find an external tool",
+        "Search the external (MCP) tools connected to this office — things like a project "
+        "tracker, CRM or a company's own server. Returns matches as server.tool.",
+        {"type": "object", "properties": {"query": {"type": "string"}}},
+        "low",
+        "allow",
+        _tool_search,
+    ),
+    Tool(
+        "tool_describe",
+        "Describe an external tool",
+        "Show what one external tool does and the arguments it takes.",
+        {
+            "type": "object",
+            "properties": {"server": _ID, "tool": _ID},
+            "required": ["server", "tool"],
+        },
+        "low",
+        "allow",
+        _tool_describe,
+    ),
+    Tool(
+        "tool_call",
+        "Run an external tool",
+        "Run one external (MCP) tool with its arguments. This acts on an outside system, so it "
+        "asks for approval first. Find and describe the tool before calling it.",
+        {
+            "type": "object",
+            "properties": {"server": _ID, "tool": _ID, "arguments": {"type": "object"}},
+            "required": ["server", "tool"],
+        },
+        "high",
+        "ask",
+        _tool_call,
+    ),
+]
+
+
+async def _run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from .codetool import run_python
+
+    return await run_python(ctx, args)
+
+
+CODE_TOOLS: list[Tool] = [
+    Tool(
+        "run_python",
+        "Run Python code",
+        "Run a short Python script in a sealed sandbox to do real work: add up a spreadsheet, "
+        "reshape data, draw a chart, convert a file. The sandbox has NO internet and NO access "
+        "to the office's data — pass what it needs as file_ids (opened in the working folder by "
+        "name). Write files to the ./out folder to return them; print() results to see them. "
+        "openpyxl, matplotlib, pillow and python-docx are available.",
+        {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "The Python script"},
+                "file_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Files to place in the working folder",
+                },
+                "stdin": {"type": "string"},
+            },
+            "required": ["code"],
+        },
+        "high",
+        "ask",
+        _run_python,
+    ),
+]
 
 DOC_TOOLS: list[Tool] = [
     Tool(
@@ -369,6 +564,24 @@ DOC_TOOLS: list[Tool] = [
         "low",
         "allow",
         _read_file,
+    ),
+    Tool(
+        "view_image",
+        "Look at an image",
+        "Look at an uploaded image — a scan, a photo, a screenshot — and answer a question about "
+        "it, or describe it. Give the file id from list_files. Falls back to the file's read "
+        "text if no image-reading model is available.",
+        {
+            "type": "object",
+            "properties": {
+                "file_id": _ID,
+                "question": {"type": "string", "description": "What to look for (optional)"},
+            },
+            "required": ["file_id"],
+        },
+        "low",
+        "allow",
+        _view_image,
     ),
     Tool(
         "company_kit",

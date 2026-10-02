@@ -61,6 +61,7 @@ async def database():
 
 
 TABLES = (
+    "mcp_servers",
     "workflow_runs",
     "packs",
     "document_versions",

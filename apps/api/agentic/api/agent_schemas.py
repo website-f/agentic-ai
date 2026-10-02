@@ -150,6 +150,7 @@ class TaskIn(BaseModel):
     start: bool = False
     labels: list[str] = Field(default_factory=list, max_length=8)
     file_ids: list[str] = Field(default_factory=list, max_length=20)  # P10: files for the task
+    goal: str | None = Field(default=None, max_length=2000)  # P13: keep going until this is met
 
 
 class TaskUpdateIn(BaseModel):
@@ -190,6 +191,8 @@ class TaskOut(BaseModel):
     has_output_schema: bool = False
     labels: list[str] = []
     branch_id: str | None = None
+    goal: str | None = None
+    goal_tries: int = 0
 
 
 class TaskEventOut(BaseModel):

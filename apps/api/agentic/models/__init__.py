@@ -398,6 +398,10 @@ class Task(Timestamps, Base):
     ctx_summary: Mapped[str | None] = mapped_column(Text)
     ctx_summary_upto: Mapped[int | None] = mapped_column(BigInteger)
     ctx_cut: Mapped[int | None] = mapped_column(BigInteger)
+    # P13 goal loop: a model checks the result against this "done when…" after each finish; if
+    # not met and under the cap, the agent is nudged and continues the same work.
+    goal: Mapped[str | None] = mapped_column(Text)
+    goal_tries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class AgentMessage(Base):
@@ -1304,3 +1308,31 @@ class WorkflowRun(Timestamps, Base):
     temporal_id: Mapped[str | None] = mapped_column(String(120))
     created_by: Mapped[str] = mapped_column(String(80))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class McpServer(Timestamps, Base):
+    """An external MCP (Model Context Protocol) server the office connects to (P13). Its tools
+    are discovered over HTTP and offered to agents through the tool_search / tool_describe /
+    tool_call bridge, so their schemas never fill the prompt. A call to one is approval-gated
+    like any other outward action. Any auth header is envelope-encrypted."""
+
+    __tablename__ = "mcp_servers"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_mcp_servers_ws_name"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mcp"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))  # how agents refer to it: "linear"
+    url: Mapped[str] = mapped_column(String(400))  # the server's Streamable-HTTP endpoint
+    description: Mapped[str] = mapped_column(String(300), default="")
+    auth_header_enc: Mapped[str] = mapped_column(Text, default="")  # e.g. "Authorization: Bearer …"
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Cached from tools/list: [{"name","description","schema"}]; refreshed on demand.
+    tools: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # empty = any agent in scope
+    health: Mapped[str] = mapped_column(String(16), default="unknown")
+    last_error: Mapped[str | None] = mapped_column(String(300))
+    created_by: Mapped[str] = mapped_column(String(80))
+
+    @property
+    def aad(self) -> str:
+        return f"mcp_server:{self.id}"

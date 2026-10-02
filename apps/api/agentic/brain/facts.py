@@ -15,7 +15,8 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.fence import INJECTION
+from ..core import threats
+from ..core.fence import INJECTION  # noqa: F401
 from ..engine import gateway
 from ..models import Agent, BrainFact
 from . import embed
@@ -72,7 +73,7 @@ def clean(text: str) -> str | None:
     t = re.sub(r"\s+", " ", text).strip().strip("-• ").strip()
     # No secrets, and no "facts" that are really instructions to agents (prompt injection
     # copied from a page would otherwise be recalled into every related task).
-    if len(t) < 8 or _SECRET.search(t) or INJECTION.search(t):
+    if len(t) < 8 or _SECRET.search(t) or threats.scan(t, "strict"):
         return None
     return t[:MAX_FACT_CHARS]
 

@@ -105,6 +105,8 @@ async def task_out(
         has_output_schema=t.output_schema is not None,
         labels=list(t.labels or []),
         branch_id=t.branch_id,
+        goal=t.goal,
+        goal_tries=t.goal_tries,
     )
 
 
@@ -275,6 +277,7 @@ async def create_task(
         assignee_agent_id=agent.id if agent else None,
         branch_id=agent.branch_id if agent else principal.branch_id,
         requires_review=body.requires_review,
+        goal=(body.goal or "").strip() or None,
         labels=clean_labels(body.labels),
         created_by=principal.actor,
         status="ready" if agent else "triage",

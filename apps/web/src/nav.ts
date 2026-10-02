@@ -24,6 +24,7 @@ import {
   KanbanIcon,
   LightningIcon,
   PlugsConnectedIcon,
+  PuzzlePieceIcon,
   SealCheckIcon,
   UsersIcon,
   UsersThreeIcon,
@@ -55,6 +56,7 @@ export type AppPath =
   | "/workflows"
   | "/schedules"
   | "/ai-engine"
+  | "/mcp-servers"
   | "/channels"
   | "/organization"
   | "/activity"
@@ -140,6 +142,7 @@ export const NAV: NavSection[] = [
       { to: "/schedules", label: "Schedules", icon: CalendarCheckIcon, blurb: "Recurring work and every run's result, with retries and grouped incidents." },
       { to: "/logins", label: "Logins", icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: "Website logins agents may use without ever seeing them, each locked to its own sites." },
       { to: "/ai-engine", label: "AI Engine", icon: CpuIcon, perm: "org.read", blurb: "Add provider keys, test the connection, choose models and see what every agent spends." },
+      { to: "/mcp-servers", label: "MCP tools", icon: PuzzlePieceIcon, perm: "engine.manage", blurb: "Connect external tool servers (MCP) — a tracker, CRM, or a company's own server. Agents reach them through a search-and-call bridge, every call approved." },
       { to: "/channels", label: "Channels", icon: PlugsConnectedIcon, blurb: "Phone notifications, Telegram, API tokens, and which agent answers where." },
     ],
   },

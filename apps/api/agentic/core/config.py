@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     browser_url: str = "http://browser:8600"
     browser_token: str = "dev-browser-token"  # noqa: S105 - dev default, required outside dev
 
+    # The code sandbox (P13): a sealed container with no internet and no secrets.
+    sandbox_url: str = ""  # empty = the run_python tool is off
+    sandbox_token: str = "dev-sandbox-token"  # noqa: S105 - dev default, required outside dev
+
     # Observability (P8, compose profile `obs`): empty host = no tracing.
     langfuse_host: str = ""
     langfuse_public_key: str = ""
@@ -79,6 +83,14 @@ class Settings(BaseSettings):
     login_max_fails_per_email: int = 5
     login_max_fails_per_ip: int = 20
     login_lock_seconds: int = 900
+
+    # Web search (P13). Backends are tried in this order; the keyless DuckDuckGo fallback is
+    # always last so search works with no setup. A self-hosted SearXNG is the recommended
+    # private option. Set keys to use a paid API.
+    searxng_url: str = ""  # e.g. http://searxng:8080 (its JSON API)
+    brave_search_key: str = ""
+    tavily_key: str = ""
+    web_search_enabled: bool = True
 
     @property
     def is_dev(self) -> bool:

@@ -27,6 +27,7 @@ from .routers import (
     documents,
     events_stream,
     files,
+    mcp_servers,
     members,
     monitor,
     office,
@@ -169,6 +170,7 @@ for r in (
     files.router,
     documents.router,
     packs.router,
+    mcp_servers.router,
     workflow_runs.router,
     events_stream.router,
 ):

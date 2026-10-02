@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import core as core_memory
 from ..brain.recall import recall_block
+from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
@@ -36,7 +37,7 @@ from ..models import (
 from ..services import events
 from ..skills import store as skills_store
 from ..teams import budget, colleague, delegation, meetings
-from . import context, policy
+from . import context, goals, policy
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
@@ -305,12 +306,34 @@ def _browser_error_streak(history: list[AgentMessage]) -> int:
 TEAM_TOOLS = ("delegate", "consult", "ask_colleague", "split_work")
 
 
-def offered_tools(agent: Agent, task: Task | None = None) -> list[dict[str, Any]]:
+MCP_BRIDGE = ("tool_search", "tool_describe", "tool_call")
+
+
+async def _has_mcp(db: AsyncSession, workspace_id: str) -> bool:
+    from ..models import McpServer
+
+    return bool(
+        await db.scalar(
+            select(McpServer.id).where(
+                McpServer.workspace_id == workspace_id, McpServer.enabled.is_(True)
+            )
+        )
+    )
+
+
+def offered_tools(
+    agent: Agent, task: Task | None = None, *, mcp: bool = False
+) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
-    delegate only for orchestrators above their depth cap."""
+    delegate only for orchestrators above their depth cap. The MCP bridge is shown only when
+    the workspace has a connected MCP server, so offices that use none pay no prompt tokens."""
     out = []
     for n, mode in modes_for(agent).items():
         if mode == "deny" or n in GLOBAL_DENY:
+            continue
+        if n in MCP_BRIDGE and not mcp:
+            continue
+        if n == "run_python" and not settings.sandbox_url:
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
@@ -797,7 +820,7 @@ async def run_task_step(task_id: str) -> StepResult:
                     agent.model_group,
                     messages,
                     task="agent.task",
-                    tools=offered_tools(agent, task),
+                    tools=offered_tools(agent, task, mcp=await _has_mcp(db, ws.id)),
                     max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,
                     task_id=task.id,
@@ -935,11 +958,26 @@ async def start_run(task_id: str) -> None:
 
 
 async def finish(task_id: str, state: str, message: str | None) -> None:
-    from . import browser_tools  # late: browser_tools imports this module
+    from . import browser_tools, launch  # late: both import this module
 
     await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
     async with SessionLocal() as db:
         task, agent, _ = await _load(db, task_id)
+        if state == "done" and task.goal and task.goal_tries < goals.MAX_GOAL_TRIES:
+            met, missing = await goals.judge(db, task, agent, message)
+            if not met:
+                task.goal_tries += 1
+                _add(db, agent, "user", task_id=task.id, content=goals.nudge(missing))
+                await db.commit()
+                await task_event(
+                    db,
+                    task,
+                    "goal",
+                    "system",
+                    f"goal not met ({task.goal_tries}/{goals.MAX_GOAL_TRIES}): {missing}"[:300],
+                )
+                await launch.launch(db, task, "goal-loop")
+                return
         if state == "done":
             status = "review" if task.requires_review else "done"
             if status == "done":
@@ -1174,7 +1212,7 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 agent.model_group,
                 messages,
                 task="agent.chat",
-                tools=offered_tools(agent),
+                tools=offered_tools(agent, mcp=await _has_mcp(db, ws.id)),
                 max_tokens=1200,
                 agent_id=agent.id,
             )

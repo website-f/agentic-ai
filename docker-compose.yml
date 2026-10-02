@@ -40,6 +40,8 @@ x-app-env: &app-env
   # The browser service agents drive (worker only).
   AGENTIC_BROWSER_URL: http://browser:8600
   AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
+  AGENTIC_SANDBOX_URL: http://sandbox:8610
+  AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:-dev-sandbox-token}
   # Traces (profile obs). Empty host = off.
   AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
   AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
@@ -228,7 +230,7 @@ services:
       start_period: 20s
     mem_limit: 1536m  # agent loops + the embedding model + OCR of uploads
     cpus: 1.0
-    networks: [data, edge, browser]
+    networks: [data, edge, browser, sandbox]
     <<: [*app-hardening, *logging]
 
   web:
@@ -292,6 +294,37 @@ services:
       - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
       - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
+    <<: *logging
+
+  sandbox:
+    # Runs agents' Python in a sealed box: a private network with NO internet (sandbox net is
+    # internal), no database, no secrets. Each run is rlimit-capped and ephemeral.
+    build:
+      context: .
+      dockerfile: deploy/sandbox.Dockerfile
+    image: agentic-sandbox:dev
+    restart: unless-stopped
+    environment:
+      SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:-dev-sandbox-token}
+      SANDBOX_CPU_SECONDS: ${SANDBOX_CPU_SECONDS:-15}
+      SANDBOX_WALL_SECONDS: ${SANDBOX_WALL_SECONDS:-30}
+      SANDBOX_MEM_MB: ${SANDBOX_MEM_MB:-512}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 128
+    networks: [sandbox]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - "/tmp:size=64m"
+      - "/work:size=512m,uid=10001,gid=10001"
     <<: *logging
 
   practice-portal:
@@ -529,6 +562,8 @@ networks:
   data: {}
   edge: {}
   browser: {}  # browser <-> worker only; has internet egress for the browser
+  sandbox:
+    internal: true  # code sandbox <-> worker only; NO internet
 
 volumes:
   pgdata: {}

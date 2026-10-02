@@ -36,13 +36,14 @@ export function NewTaskDialog({
   const [review, setReview] = useState(true);
   const [startNow, setStartNow] = useState(true);
   const [labels, setLabels] = useState("");
+  const [goal, setGoal] = useState("");
   const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
   const branchId = active.find((a) => a.id === agent)?.branch_id ?? null;
 
   const create = useMutation({
     mutationFn: () => api<Task>("/api/tasks", "POST", {
-      title, brief, priority, requires_review: review,
+      title, brief, priority, requires_review: review, goal: goal.trim() || null,
       labels: labels.split(",").map((l) => l.trim()).filter(Boolean),
       assignee_agent_id: agent === "none" ? null : agent, start: agent !== "none" && startNow,
       file_ids: files.map((f) => f.id),
@@ -103,6 +104,9 @@ export function NewTaskDialog({
         </div>
         <Field label="Labels (optional)" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="e.g. tender, invoice"
           hint="What kind of work this is. The company overview counts work by label per branch." />
+        <Field label="Keep going until (optional)" value={goal} onChange={(e) => setGoal(e.target.value)}
+          placeholder="e.g. all 12 invoices are reconciled and the totals match"
+          hint="If set, the agent keeps working and a check re-runs it until this is true (up to a few tries)." />
         {agent !== "none" ? <SwitchField checked={startNow} onCheckedChange={setStartNow} label="Start now" hint="Otherwise it waits in Ready until you start it." /> : null}
         <SwitchField checked={review} onCheckedChange={setReview} label="I review the result" hint="Finished work waits in review until you accept it or send it back." />
         <FormError message={create.error && !Object.keys(fields).length ? errorMessage(create.error) : null} />

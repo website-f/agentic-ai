@@ -52,6 +52,7 @@ const page = {
   blueprints: lazyRouteComponent(() => import("@/pages/blueprints"), "BlueprintsPage"),
   workflows: lazyRouteComponent(() => import("@/pages/workflows"), "WorkflowsPage"),
   companyKit: lazyRouteComponent(() => import("@/pages/documents/kit"), "CompanyKitPage"),
+  mcpServers: lazyRouteComponent(() => import("@/pages/mcp-servers"), "McpServersPage"),
   files: lazyRouteComponent(() => import("@/pages/documents/files"), "FilesPage"),
   templates: lazyRouteComponent(() => import("@/pages/documents/templates"), "TemplatesPage"),
   documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
@@ -357,6 +358,14 @@ const packsRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { p?: string } => ({ p: str(s.p) }),
   component: page.packs,
 });
+const mcpServersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/mcp-servers",
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("engine.manage")) throw redirect({ to: "/" });
+  },
+  component: page.mcpServers,
+});
 const blueprintsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/blueprints",
@@ -407,6 +416,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     loginsRoute,
     blueprintsRoute,
+    mcpServersRoute,
     workflowsRoute,
     companyKitRoute,
     filesRoute,

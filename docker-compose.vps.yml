@@ -52,6 +52,10 @@ services:
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
 
+  sandbox:
+    environment:
+      SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:?set AGENTIC_SANDBOX_TOKEN in .env}
+
   backup:
     environment:
       PGPASSWORD: ${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}

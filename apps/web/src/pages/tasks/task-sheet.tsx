@@ -217,6 +217,14 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               <Markdown className="text-muted">{t.brief}</Markdown>
             </section>
           ) : null}
+          {t.goal ? (
+            <section className="grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-[13px] font-semibold">Keeps going until
+                {t.goal_tries ? <Pill tone="accent">{t.goal_tries} retr{t.goal_tries === 1 ? "y" : "ies"}</Pill> : null}
+              </h3>
+              <p className="text-[13px] text-muted">{t.goal}</p>
+            </section>
+          ) : null}
           <section className="grid gap-2">
             <h3 className="text-[13px] font-semibold">Timeline</h3>
             <Timeline events={data.events} />
