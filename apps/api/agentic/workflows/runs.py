@@ -9,7 +9,10 @@ every few seconds, and immediately when poked):
   (sending it back re-runs it).
 - a decision waits for a person to pick a branch, unless the workflow says an agent decides:
   then the agent answers with one of the branch labels (checked against a JSON schema).
+- an input step waits for a person to type the information it asks for (their answer is its
+  output); a wait step pauses the run for its set time ("scheduled") and then moves on.
 - an end node finishes the run once nothing else is still in progress.
+- notes are canvas annotations: a run never sees them.
 
 A node starts when any connection into it comes from a finished node (for a decision, only
 the branch it chose), and runs at most once. Nothing here acts outside the office: steps are
@@ -19,7 +22,7 @@ ordinary agent tasks under the agents' usual tool rules and approvals.
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -28,15 +31,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import launch
 from ..models import Agent, DocFile, Task, WorkflowRun
 from ..services import events
-from .procedure import clean_graph
+from .procedure import ACTIONS, WAIT_UNITS, clean_graph, runnable, wait_text
 
 log = logging.getLogger("agentic.runs")
 
-MAX_STEPS = 40
+MAX_STEPS = 60
 OUTPUT_CHARS = 6000
 BRIEF_PRIOR = 6  # earlier steps quoted in a step's brief
 TERMINAL = ("done", "failed", "cancelled")
-ACTIVE = ("running", "review", "blocked", "waiting")
+ACTIVE = ("running", "review", "blocked", "waiting", "scheduled")
 WORK_TYPES = ("step", "handoff")
 
 
@@ -128,7 +131,7 @@ async def start(
     file_ids: list[str],
     created_by: str,
 ) -> WorkflowRun:
-    graph = clean_graph(workflow.graph or {})
+    graph = runnable(clean_graph(workflow.graph or {}))
     nodes = graph["nodes"]
     if not nodes:
         raise RunError("This workflow has no steps yet.")
@@ -195,6 +198,9 @@ async def _brief(
     ]
     if node.get("body"):
         lines.append(node["body"])
+    hint = ACTIONS.get(node.get("action") or "", ("", ""))[1]
+    if hint and not decide:
+        lines.append(f"How: {hint}")
     done = sorted(
         (
             (s.get("finished_at") or "", nid, s)
@@ -314,6 +320,9 @@ async def tick(db: AsyncSession, run_id: str) -> bool:
 
     # 1. What did the steps' tasks do since the last tick?
     for nid, s in state.items():
+        if s["status"] == "scheduled" and s.get("until", "") <= _now():
+            s.update(status="done", output=f"Waited {wait_text(nodes[nid])}.", finished_at=_now())
+            continue
         if s["status"] not in ("running", "review", "blocked") or not s.get("task_id"):
             continue
         t = await db.get(Task, s["task_id"])
@@ -357,7 +366,11 @@ async def tick(db: AsyncSession, run_id: str) -> bool:
             continue
         if n["type"] in ("start", "end"):
             s.update(status="done", started_at=_now(), finished_at=_now())
-        elif n["type"] == "decision" and n.get("decider") != "agent":
+        elif n["type"] == "wait":
+            secs = n.get("wait_amount", 1) * WAIT_UNITS.get(n.get("wait_unit", "hours"), 3600)
+            until = (datetime.now(UTC) + timedelta(seconds=secs)).isoformat()
+            s.update(status="scheduled", started_at=_now(), until=until)
+        elif n["type"] == "input" or (n["type"] == "decision" and n.get("decider") != "agent"):
             s.update(status="waiting", started_at=_now())
         else:
             s.update(await _launch(db, run, n))
@@ -418,6 +431,32 @@ async def decide(
     )
     run.state = {**run.state, node_id: s}
     run.status = "running"
+    await db.commit()
+
+
+async def answer(db: AsyncSession, run: WorkflowRun, node_id: str, text: str, by: str) -> None:
+    """A person gives the information an input step asks for; it becomes the step's output."""
+    await db.refresh(run, attribute_names=["state", "status"], with_for_update=True)
+    s = dict((run.state or {}).get(node_id) or {})
+    node = next((n for n in run.graph["nodes"] if n["id"] == node_id), None)
+    if node is None or node["type"] != "input" or s.get("status") != "waiting":
+        raise RunError("That step is not waiting for an answer.")
+    if not text.strip():
+        raise RunError("Write the answer first.")
+    s.update(status="done", output=text.strip()[:OUTPUT_CHARS], finished_at=_now(), by=by)
+    run.state = {**run.state, node_id: s}
+    run.status = "running"
+    await db.commit()
+
+
+async def skip_wait(db: AsyncSession, run: WorkflowRun, node_id: str, by: str) -> None:
+    """Stop waiting now and move on."""
+    await db.refresh(run, attribute_names=["state", "status"], with_for_update=True)
+    s = dict((run.state or {}).get(node_id) or {})
+    if s.get("status") != "scheduled":
+        raise RunError("That step is not waiting.")
+    s.update(status="done", output=f"Moved on early ({by}).", finished_at=_now(), by=by)
+    run.state = {**run.state, node_id: s}
     await db.commit()
 
 

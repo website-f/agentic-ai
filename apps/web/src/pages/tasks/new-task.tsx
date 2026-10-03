@@ -1,5 +1,6 @@
-import { FileIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
+import { FileIcon, FlowArrowIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -7,11 +8,15 @@ import { FilePicker } from "@/components/file-drop";
 import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SwitchField } from "@/components/ui/switch";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { agentsQuery, workKeys, type Priority, type Task } from "@/lib/work";
+import { runKeys, workflowsQuery, type Run } from "@/lib/workflows";
+
+const NO_FLOW = "__none";
 
 export function NewTaskDialog({
   open,
@@ -39,14 +44,42 @@ export function NewTaskDialog({
   const [goal, setGoal] = useState("");
   const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
+  const [flow, setFlow] = useState(NO_FLOW);
+  const [flowMode, setFlowMode] = useState<"follow" | "run">("follow");
+  const { data: workflows = [] } = useQuery({ ...workflowsQuery, enabled: open });
+  const navigate = useNavigate();
   const branchId = active.find((a) => a.id === agent)?.branch_id ?? null;
+  const runMode = flow !== NO_FLOW && flowMode === "run";
+
+  // Run it step by step: each step to its suggested agent, else to the agent picked here.
+  const startRun = useMutation({
+    mutationFn: async () => {
+      const plan = await api<{ suggested: Record<string, string>; needs: { node_id: string }[] }>(
+        `/api/workflows/${flow}/assignments${branchId ? `?branch_id=${branchId}` : ""}`,
+      );
+      const fallback = agent === "none" ? null : agent;
+      const assign = Object.fromEntries(
+        plan.needs.map((n) => [n.node_id, plan.suggested[n.node_id] ?? fallback]).filter(([, v]) => v),
+      );
+      return api<Run>(`/api/workflows/${flow}/runs`, "POST", {
+        title, input: brief, branch_id: branchId, assign, file_ids: files.map((f) => f.id),
+      });
+    },
+    onSuccess: (run) => {
+      qc.invalidateQueries({ queryKey: runKeys.all });
+      qc.invalidateQueries({ queryKey: workKeys.tasks });
+      toast.success("Started. Each step goes to its agent; decisions come to you.");
+      onOpenChange(false);
+      navigate({ to: "/workflows", search: { run: run.id } });
+    },
+  });
 
   const create = useMutation({
     mutationFn: () => api<Task>("/api/tasks", "POST", {
       title, brief, priority, requires_review: review, goal: goal.trim() || null,
       labels: labels.split(",").map((l) => l.trim()).filter(Boolean),
       assignee_agent_id: agent === "none" ? null : agent, start: agent !== "none" && startNow,
-      file_ids: files.map((f) => f.id),
+      file_ids: files.map((f) => f.id), workflow_id: flow === NO_FLOW ? null : flow,
     }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: workKeys.tasks });
@@ -67,9 +100,15 @@ export function NewTaskDialog({
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!title.trim()} loading={create.isPending} onClick={() => create.mutate()}>
-            {agent !== "none" && startNow ? "Create and start" : "Create task"}
-          </Button>
+          {runMode ? (
+            <Button disabled={!title.trim()} loading={startRun.isPending} onClick={() => startRun.mutate()}>
+              <FlowArrowIcon size={15} /> Start the workflow
+            </Button>
+          ) : (
+            <Button disabled={!title.trim()} loading={create.isPending} onClick={() => create.mutate()}>
+              {agent !== "none" && startNow ? "Create and start" : "Create task"}
+            </Button>
+          )}
         </>
       }
     >
@@ -104,6 +143,26 @@ export function NewTaskDialog({
           </div>
           <p className="text-[12px] text-muted">Already read and summarised; the agent opens only what it needs.</p>
         </div>
+        {workflows.length ? (
+          <div className="grid min-w-0 gap-2 rounded-[var(--radius-md)] border border-border p-3">
+            <div className="grid gap-1.5">
+              <span className="text-[13px] font-medium">Follow a workflow (optional)</span>
+              <Select value={flow} onValueChange={setFlow} label="Workflow"
+                options={[{ value: NO_FLOW, label: "No, just this brief" }, ...workflows.map((w) => ({ value: w.id, label: w.name, hint: `${w.steps} steps${w.status === "active" ? " · active" : ""}` }))]} />
+            </div>
+            {flow !== NO_FLOW ? (
+              <>
+                <Segmented label="How" value={flowMode} onChange={setFlowMode} className="w-full [&>button]:flex-1 [&>button]:justify-center"
+                  options={[{ value: "follow", label: "Agent follows it" }, { value: "run", label: "Run step by step" }]} />
+                <p className="text-[12px] text-muted">
+                  {flowMode === "follow"
+                    ? "The agent gets the workflow's steps with this brief and works through them, asking you where a step needs a person."
+                    : "Each step becomes its own task for the right agent (the one picked above fills any gaps); decisions, answers and reviews come to you."}
+                </p>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <Field label="Labels (optional)" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="e.g. tender, invoice"
           hint="What kind of work this is. The company overview counts work by label per branch." />
         <Field label="Keep going until (optional)" value={goal} onChange={(e) => setGoal(e.target.value)}
@@ -111,7 +170,7 @@ export function NewTaskDialog({
           hint="If set, the agent keeps working and a check re-runs it until this is true (up to a few tries)." />
         {agent !== "none" ? <SwitchField checked={startNow} onCheckedChange={setStartNow} label="Start now" hint="Otherwise it waits in Ready until you start it." /> : null}
         <SwitchField checked={review} onCheckedChange={setReview} label="I review the result" hint="Finished work waits in review until you accept it or send it back." />
-        <FormError message={create.error && !Object.keys(fields).length ? errorMessage(create.error) : null} />
+        <FormError message={create.error && !Object.keys(fields).length ? errorMessage(create.error) : startRun.error ? errorMessage(startRun.error) : null} />
       </div>
       <FilePicker open={picking} onOpenChange={setPicking} branchId={branchId} title="Files for this task"
         onPick={(f) => setFiles((fs) => (fs.some((x) => x.id === f.id) ? fs : [...fs, { id: f.id, name: f.name }]))} />

@@ -151,6 +151,8 @@ class TaskIn(BaseModel):
     labels: list[str] = Field(default_factory=list, max_length=8)
     file_ids: list[str] = Field(default_factory=list, max_length=20)  # P10: files for the task
     goal: str | None = Field(default=None, max_length=2000)  # P13: keep going until this is met
+    # Follow this workflow as the task's procedure (its steps are added to the brief).
+    workflow_id: str | None = Field(default=None, max_length=40)
 
 
 class TaskUpdateIn(BaseModel):

@@ -256,6 +256,24 @@ async def tasks_out(db: AsyncSession, rows: list[Task]) -> list[TaskOut]:
     return [await task_out(db, t, agents, pending) for t in rows]
 
 
+async def _with_workflow(db: AsyncSession, principal: Principal, wf_id: str, brief: str) -> str:
+    """Add a workflow's procedure to a task's brief: the agent works through it step by step."""
+    from ...models import Workflow
+    from ...workflows.procedure import compile_text
+
+    wf = await db.get(Workflow, wf_id)
+    if wf is None or wf.workspace_id != principal.workspace_id:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_workflow", "Pick a workflow you can see.")
+    return (
+        f'{brief.rstrip()}\n\n## Follow the workflow "{wf.name}"\n'
+        "Work through these steps in order. Where a step is for a person (an approval, a "
+        "decision or information only they have), ask them with ask_human and wait for the "
+        "answer; where a step is another department's, ask that colleague (ask_colleague). "
+        "Report what each step produced.\n\n"
+        f"{compile_text(wf.name, wf.graph or {})}"
+    ).strip()
+
+
 @router.post("/tasks", status_code=status.HTTP_201_CREATED)
 async def create_task(
     body: TaskIn,
@@ -263,6 +281,10 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     agent = await _assignee(db, principal, body.assignee_agent_id)
+    brief, labels = body.brief, list(body.labels)
+    if body.workflow_id:
+        brief = await _with_workflow(db, principal, body.workflow_id, brief)
+        labels.append("workflow")
     lowest = (
         await db.scalar(
             select(func.min(Task.position)).where(Task.workspace_id == principal.workspace_id)
@@ -272,13 +294,13 @@ async def create_task(
     t = Task(
         workspace_id=principal.workspace_id,
         title=body.title.strip(),
-        brief=body.brief,
+        brief=brief,
         priority=body.priority,
         assignee_agent_id=agent.id if agent else None,
         branch_id=agent.branch_id if agent else principal.branch_id,
         requires_review=body.requires_review,
         goal=(body.goal or "").strip() or None,
-        labels=clean_labels(body.labels),
+        labels=clean_labels(labels),
         created_by=principal.actor,
         status="ready" if agent else "triage",
         position=float(lowest) - 1,

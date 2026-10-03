@@ -1,7 +1,7 @@
 /** Running a job through a workflow (P11): start it, watch each step, take the decisions. */
 import {
   ArrowClockwiseIcon, ArrowLeftIcon, CheckCircleIcon, CircleDashedIcon, CircleNotchIcon, FlowArrowIcon,
-  HandIcon, PaperclipIcon, PlayIcon, ProhibitIcon, SealCheckIcon, StopIcon, WarningCircleIcon, XIcon,
+  HandIcon, HourglassIcon, PaperclipIcon, PlayIcon, ProhibitIcon, SealCheckIcon, StopIcon, WarningCircleIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -142,6 +142,7 @@ function StepIcon({ s }: { s: StepStatus }) {
   if (s === "running" || s === "ready") return <CircleNotchIcon size={18} className="animate-spin text-info" />;
   if (s === "waiting" || s === "review" || s === "blocked") return <HandIcon size={18} weight="fill" className="text-warn" />;
   if (s === "skipped") return <ProhibitIcon size={18} className="text-muted" />;
+  if (s === "scheduled") return <HourglassIcon size={18} weight="fill" className="animate-pulse text-[var(--series-2)]" />;
   return <CircleDashedIcon size={18} className="text-muted" />;
 }
 
@@ -182,6 +183,38 @@ function Decision({ run, s }: { run: Run; s: RunStep }) {
           </Button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function Answer({ run, s }: { run: Run; s: RunStep }) {
+  const qc = useQueryClient();
+  const [text, setText] = useState("");
+  const go = useMutation({
+    mutationFn: () => api<Run>(`/api/workflow-runs/${run.id}/answer`, "POST", { node_id: s.id, text }),
+    onSuccess: (r) => { qc.setQueryData(runKeys.one(run.id), r); qc.invalidateQueries({ queryKey: runKeys.all }); toast.success("Thanks. The run carries on."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) go.mutate(); }}>
+      {s.body ? <p className="text-[13px] text-muted">{s.body}</p> : null}
+      <TextareaField label="Your answer" rows={2} value={text} onChange={(e) => setText(e.target.value)} hint="Every later step sees it." />
+      <Button size="sm" type="submit" className="w-fit max-sm:h-9" disabled={!text.trim()} loading={go.isPending}>Send answer</Button>
+    </form>
+  );
+}
+
+function Pause({ run, s }: { run: Run; s: RunStep }) {
+  const qc = useQueryClient();
+  const skip = useMutation({
+    mutationFn: () => api<Run>(`/api/workflow-runs/${run.id}/skip-wait`, "POST", { node_id: s.id }),
+    onSuccess: (r) => { qc.setQueryData(runKeys.one(run.id), r); toast.success("Moving on."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
+      <span>Waiting {s.wait}{s.until ? `, until ${new Date(s.until).toLocaleString()}` : ""}.</span>
+      <Button size="sm" variant="outline" className="h-8" loading={skip.isPending} onClick={(e) => { e.stopPropagation(); skip.mutate(); }}>Move on now</Button>
     </div>
   );
 }
@@ -305,9 +338,9 @@ export function RunView({ id }: { id: string }) {
           {asks.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={!!me?.permissions.includes("approvals.decide")} showTask={false} />)}
           {needs.map((s) => (
             <div key={s.id} className="grid min-w-0 gap-2 rounded-[var(--radius-sm)] border border-border bg-surface p-3">
-              <p className="text-[13.5px] font-medium break-words">{s.status === "waiting" ? `Decide: ${s.title}` : `Review: ${s.title}`}
+              <p className="text-[13.5px] font-medium break-words">{s.status === "review" ? `Review: ${s.title}` : s.type === "input" ? `Answer: ${s.title}` : `Decide: ${s.title}`}
                 {s.status === "review" && s.agent_name ? <span className="font-normal text-muted"> — by {s.agent_name}</span> : null}</p>
-              {s.status === "waiting" ? <Decision run={run} s={s} /> : <Review run={run} s={s} />}
+              {s.status === "review" ? <Review run={run} s={s} /> : s.type === "input" ? <Answer run={run} s={s} /> : <Decision run={run} s={s} />}
             </div>
           ))}
         </section>
@@ -329,7 +362,7 @@ export function RunView({ id }: { id: string }) {
               <div className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <span className="min-w-0 text-[13.5px] font-medium break-words">{s.type === "start" ? "The job" : s.title}</span>
                 <span className="text-[12px] text-muted">
-                  {[s.type === "decision" ? (s.decider === "agent" ? `${s.agent_name ?? "an agent"} decides` : "you decide") : s.agent_name, STEP_LABEL[s.status]].filter(Boolean).join(" · ")}
+                  {[s.type === "decision" ? (s.decider === "agent" ? `${s.agent_name ?? "an agent"} decides` : "you decide") : s.type === "input" ? "you answer" : s.type === "wait" ? s.wait : s.agent_name, STEP_LABEL[s.status]].filter(Boolean).join(" · ")}
                 </span>
               </div>
               <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5">
@@ -342,6 +375,7 @@ export function RunView({ id }: { id: string }) {
                   </details>
                 ) : null}
                 {s.error ? <p className="text-[12.5px] text-danger">{s.error}</p> : null}
+                {s.status === "scheduled" ? <Pause run={run} s={s} /> : null}
                 <div className="flex flex-wrap items-center gap-2">
                   {s.task_id ? <Link to="/tasks" search={{ task: s.task_id }} className="text-[12px] text-accent hover:underline">Open the task</Link> : null}
                   {s.status === "failed" && s.task_id ? (

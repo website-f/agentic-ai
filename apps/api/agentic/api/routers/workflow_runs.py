@@ -16,7 +16,7 @@ from ...core.security import can
 from ...models import Agent, Branch, DocFile, Task, Workflow, WorkflowRun
 from ...services import audit
 from ...workflows import runs
-from ...workflows.procedure import clean_graph
+from ...workflows.procedure import clean_graph, wait_text
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["workflow-runs"])
@@ -43,6 +43,9 @@ class StepOut(BaseModel):
     by: str | None
     started_at: str | None
     finished_at: str | None
+    action: str = ""
+    until: str | None = None
+    wait: str = ""
 
 
 class RunSummary(BaseModel):
@@ -129,6 +132,9 @@ async def run_out(db: AsyncSession, run: WorkflowRun) -> RunOut:
                 by=s.get("by"),
                 started_at=s.get("started_at"),
                 finished_at=s.get("finished_at"),
+                action=n.get("action", ""),
+                until=s.get("until"),
+                wait=wait_text(n) if n["type"] == "wait" else "",
             )
         )
     files = []
@@ -354,6 +360,55 @@ async def decide(
 
 class NodeIn(BaseModel):
     node_id: str
+
+
+class AnswerIn(BaseModel):
+    node_id: str
+    text: str = Field(min_length=1, max_length=6000)
+
+
+@router.post("/workflow-runs/{run_id}/answer")
+async def answer(
+    run_id: str,
+    body: AnswerIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> RunOut:
+    """A person supplies what an "ask a person" step needs; the run carries on."""
+    run = await _get(db, principal, run_id)
+    try:
+        await runs.answer(db, run, body.node_id, body.text, principal.user.name)
+    except runs.RunError as e:
+        raise api_error(status.HTTP_409_CONFLICT, "cannot_answer", str(e)) from e
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "workflow.run_answered",
+        target=run.id,
+        after={"node": body.node_id},
+    )
+    await db.commit()
+    await _poke(run.id)
+    await db.refresh(run)
+    return await run_out(db, run)
+
+
+@router.post("/workflow-runs/{run_id}/skip-wait")
+async def skip_wait(
+    run_id: str,
+    body: NodeIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> RunOut:
+    run = await _get(db, principal, run_id)
+    try:
+        await runs.skip_wait(db, run, body.node_id, principal.user.name)
+    except runs.RunError as e:
+        raise api_error(status.HTTP_409_CONFLICT, "cannot_skip", str(e)) from e
+    await _poke(run.id)
+    await db.refresh(run)
+    return await run_out(db, run)
 
 
 @router.post("/workflow-runs/{run_id}/retry")

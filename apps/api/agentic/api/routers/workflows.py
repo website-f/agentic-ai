@@ -15,7 +15,14 @@ from ...core.db import get_db
 from ...engine import gateway
 from ...models import Agent, Workflow
 from ...services import audit, events
-from ...workflows.procedure import DRAFT_SYSTEM, clean_graph, compile_text, draft_prompt
+from ...workflows.procedure import (
+    DRAFT_SYSTEM,
+    clean_graph,
+    compile_text,
+    draft_prompt,
+    layout,
+    revise_prompt,
+)
 from ..deps import Principal, api_error, require
 from .agents import manage_perm
 
@@ -221,7 +228,9 @@ async def delete_workflow(
 
 
 class DraftIn(BaseModel):
-    description: str = Field(min_length=10, max_length=4000)
+    description: str = Field(default="", max_length=4000)
+    # Improve this graph instead of starting from nothing (description = what to change).
+    graph: dict[str, Any] | None = None
 
 
 class DraftOut(BaseModel):
@@ -234,11 +243,19 @@ async def draft_workflow(
     principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> DraftOut:
-    """An analyst agent drafts a procedure graph from a plain-language description."""
-    messages = [
-        {"role": "system", "content": DRAFT_SYSTEM},
-        {"role": "user", "content": draft_prompt(body.description)},
-    ]
+    """An analyst agent drafts a procedure graph from a plain-language description, or
+    improves an existing one."""
+    improving = bool(body.graph and clean_graph(body.graph)["nodes"])
+    if not improving and len(body.description.strip()) < 10:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "too_short", "Describe the job in a sentence or two."
+        )
+    ask = (
+        revise_prompt(body.description, body.graph or {})
+        if improving
+        else draft_prompt(body.description)
+    )
+    messages = [{"role": "system", "content": DRAFT_SYSTEM}, {"role": "user", "content": ask}]
     try:
         r = await gateway.chat(
             db,
@@ -246,7 +263,7 @@ async def draft_workflow(
             "smart",
             messages,
             task="workflow.draft",
-            max_tokens=4000,  # reasoning models spend part of this before the JSON
+            max_tokens=8000,  # reasoning models spend thousands of tokens before the JSON
             json_mode=True,
         )
     except gateway.GatewayUnavailable as e:
@@ -263,7 +280,31 @@ async def draft_workflow(
         raise api_error(
             status.HTTP_502_BAD_GATEWAY, "empty_draft", "The draft had no steps. Try rephrasing."
         )
-    # Lay the drafted nodes out in a simple grid so they are readable before the person edits.
-    for i, n in enumerate(graph["nodes"]):
-        n["x"], n["y"] = 60 + (i % 3) * 260, 60 + (i // 3) * 150
-    return DraftOut(graph=graph)
+    # Only a decision's branches carry labels; models like to write "next" on every arrow.
+    deciders = {n["id"] for n in graph["nodes"] if n["type"] == "decision"}
+    for e in graph["edges"]:
+        if e["from"] not in deciders:
+            e["label"] = ""
+    if not graph["edges"] and len(graph["nodes"]) > 1:
+        # A reply cut off before its connections: link the steps in order so the draft is
+        # usable; people fix the branches on the board.
+        flow = [n for n in graph["nodes"] if n["type"] != "note"]
+        graph["edges"] = [
+            {"id": f"e{i}", "from": a["id"], "to": b["id"], "label": ""}
+            for i, (a, b) in enumerate(zip(flow, flow[1:], strict=False), 1)
+        ]
+    if improving:  # keep what people set on steps the model kept (agents, review, places)
+        old = {n["id"]: n for n in clean_graph(body.graph)["nodes"]}
+        for n in graph["nodes"]:
+            if n["id"] in old:
+                for k in ("agent_id", "review", "decider"):
+                    n[k] = n[k] or old[n["id"]][k]
+        # notes stay where people put them
+        keep = [n for n in old.values() if n["type"] == "note"]
+        graph["nodes"] += [n for n in keep if n["id"] not in {m["id"] for m in graph["nodes"]}]
+    # Lay it out top to bottom so it reads like a flowchart before the person edits it.
+    notes = [n for n in graph["nodes"] if n["type"] == "note"]
+    flow = layout(
+        {"nodes": [n for n in graph["nodes"] if n["type"] != "note"], "edges": graph["edges"]}
+    )
+    return DraftOut(graph={"nodes": flow["nodes"] + notes, "edges": graph["edges"]})

@@ -3,7 +3,8 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { api } from "./api";
 
-export type NodeType = "start" | "step" | "decision" | "handoff" | "end";
+export type NodeType = "start" | "step" | "decision" | "handoff" | "input" | "wait" | "end" | "note";
+export type WaitUnit = "minutes" | "hours" | "days";
 
 export interface WNode {
   id: string;
@@ -17,6 +18,10 @@ export interface WNode {
   agent_id?: string;
   review?: boolean;
   decider?: "person" | "agent";
+  /** What kind of office work a step is (see the step library); shapes the agent's brief. */
+  action?: string;
+  wait_amount?: number;
+  wait_unit?: WaitUnit;
 }
 
 export interface WEdge {
@@ -58,7 +63,10 @@ export const NODE_TYPES: { type: NodeType; label: string; color: string }[] = [
   { type: "step", label: "Step", color: "var(--series-1)" },
   { type: "decision", label: "Decision", color: "var(--series-4)" },
   { type: "handoff", label: "Hand off", color: "var(--series-7)" },
+  { type: "input", label: "Ask a person", color: "var(--series-5)" },
+  { type: "wait", label: "Wait", color: "var(--series-2)" },
   { type: "end", label: "End", color: "var(--series-8)" },
+  { type: "note", label: "Note", color: "var(--series-other)" },
 ];
 
 export const NODE_COLOR: Record<NodeType, string> = Object.fromEntries(
@@ -70,7 +78,7 @@ export const newNodeId = () => `n${Date.now().toString(36)}${(counter++).toStrin
 
 // ---------------------------------------------------------------- runs (P11)
 
-export type StepStatus = "pending" | "ready" | "running" | "waiting" | "review" | "blocked" | "done" | "failed" | "skipped";
+export type StepStatus = "pending" | "ready" | "running" | "waiting" | "scheduled" | "review" | "blocked" | "done" | "failed" | "skipped";
 export type RunStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
 
 export interface RunOption { edge_id: string; label: string; to: string; to_title: string }
@@ -95,6 +103,9 @@ export interface RunStep {
   by: string | null;
   started_at: string | null;
   finished_at: string | null;
+  action: string;
+  until: string | null;
+  wait: string;
 }
 
 export interface RunSummary {
@@ -146,7 +157,7 @@ export const RUN_STATUS: Record<RunStatus, { label: string; tone: "info" | "warn
 };
 
 export const STEP_LABEL: Record<StepStatus, string> = {
-  pending: "Not reached", ready: "Starting", running: "Working", waiting: "Waiting for you",
+  pending: "Not reached", ready: "Starting", running: "Working", waiting: "Waiting for you", scheduled: "Pausing",
   review: "Waiting for your review", blocked: "Asked a question", done: "Done", failed: "Failed", skipped: "Skipped",
 };
 
