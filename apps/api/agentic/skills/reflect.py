@@ -1,9 +1,10 @@
-"""After a task: should this become a skill (or improve one)?
+"""After a task or a conversation: should this become a skill (or improve one)?
 
-Deterministic trigger first, so most tasks cost nothing: the task used many tool calls, was
-sent back twice or more, or someone asked to "remember how to do this". Only then a cheap
-model drafts a proposal, which a person reviews. Evals (old vs new) run before review when
-the skill has test cases.
+Deterministic trigger first, so most work costs nothing: the task used many tool calls, was
+sent back, failed for a reason that is not the weather (P17), or someone asked to "remember
+how to do this" or corrected the agent in chat. Only then a model drafts a proposal. Evals
+(old vs new) run on it, and the learning autopilot (autopilot.py) switches it on when it has
+proven itself; otherwise a person reviews it.
 """
 
 import json
@@ -11,7 +12,7 @@ import logging
 import re
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import embed
@@ -28,7 +29,7 @@ from ..models import (
     Task,
     Workspace,
 )
-from . import evals
+from . import autopilot, evals
 from . import format as fmt
 from .store import SkillError, propose
 
@@ -38,6 +39,18 @@ REMEMBER = re.compile(
     r"remember how to do this|save (this|it) as a skill|make (this|it) a skill|ingat cara", re.I
 )
 CONTEXT_SIMILARITY = 0.5
+# A person correcting the agent in chat: the strongest learning signal there is (P17).
+CORRECTION = re.compile(
+    r"^\s*(no\b[,.!]?|nope|wrong|that'?s (not|wrong)|not like that|don'?t\b|do not\b|never\b|"
+    r"stop\b|instead\b|next time\b|always\b|salah|bukan|jangan|lain kali)",
+    re.I,
+)
+# Failures of the moment teach nothing reusable: never write them into a skill.
+TRANSIENT = re.compile(
+    r"time.?out|timed out|rate.?limit|429|50[0-9]\b|cool(ing)? ?down|budget|cancel|"
+    r"no model in the|could not answer|connection|unavailable|overloaded",
+    re.I,
+)
 
 DRAFT = """You turn finished office work into reusable procedures ("skills") for AI staff.
 Return JSON only:
@@ -47,6 +60,7 @@ Return JSON only:
  "eval_cases": [{"title": "...", "input": "a realistic request", "must_contain": ["..."]}]}
 
 Rules:
+- Write lessons, not logs: what to do next time, never a story of what happened.
 - Propose only if this kind of work will come again and the steps generalise.
   Otherwise return {"propose": false, "why": "..."}.
 - Write the general procedure. Never copy this task's client names, amounts, dates or secrets.
@@ -60,6 +74,9 @@ Rules:
 - A pitfall is a general rule plus a short reason, in plain imperative words. The same lesson
   appears once. If the skill was wrong, fix the wrong text in place; never append
   "update: actually...".
+- If the work FAILED, capture only a general rule that would have avoided the failure (a
+  missing step, a check to run first, a wrong assumption). If the cause was outside the
+  agent's control, return {"propose": false}.
 - Never capture: one-off failures of the moment (a site down, a timeout, a rate limit);
   claims that a tool is broken or useless (they harden into refusals); dead ends that were
   never solved, written up as if they were the way.
@@ -84,6 +101,11 @@ def _trigger(task: Task, msgs: list[AgentMessage], tasks_since: int = 0) -> str 
     if _proposed_itself(msgs):
         return None  # the agent already saved what it learned
     tool_calls = sum(1 for m in msgs if m.role == "tool")
+    if getattr(task, "status", None) == "failed":
+        error = (getattr(task, "error", None) or "").strip()
+        if tool_calls < 2 or not error or TRANSIENT.search(error):
+            return None  # nothing tried, or the weather: no lesson in it
+        return f"the task failed: {error[:200]}"
     if tool_calls >= settings.skill_min_tool_calls:
         return f"the task took {tool_calls} tool calls"
     if task.run_count >= 3:
@@ -127,8 +149,25 @@ def _transcript(task: Task, msgs: list[AgentMessage]) -> str:
     return "\n".join(out)[-9000:]
 
 
+def chat_trigger(msgs: list[AgentMessage], user_turns: int) -> str | None:
+    """Should this conversation become (or fix) a skill? Looks at the latest person turn."""
+    if _proposed_itself(msgs[-6:]):
+        return None
+    last = next((m for m in reversed(msgs) if m.role == "user"), None)
+    text = (last.content or "") if last is not None else ""
+    if REMEMBER.search(text):
+        return "someone asked to remember how to do this"
+    if CORRECTION.search(text) and len(text) >= 12 and user_turns >= 2:
+        return "a person corrected the agent"
+    tool_calls = sum(1 for m in msgs if m.role == "tool")
+    if user_turns and user_turns % CADENCE == 0 and tool_calls >= 3:
+        return f"a regular check after {user_turns} messages"
+    return None
+
+
 async def _ask(db: AsyncSession, agent: Agent, user: str) -> dict[str, Any]:
-    for group in dict.fromkeys(("fast", agent.model_group)):
+    # Skills are written once and used for months: the best model drafts them (P17).
+    for group in dict.fromkeys(("smart", agent.model_group, "fast")):
         try:
             r = await gateway.chat(
                 db,
@@ -139,6 +178,7 @@ async def _ask(db: AsyncSession, agent: Agent, user: str) -> dict[str, Any]:
                 max_tokens=1400,
                 temperature=0.2,
                 json_mode=True,
+                accept=lambda c: "propose" in parse_json(c),
                 agent_id=agent.id,
             )
             return parse_json(r.content)
@@ -175,7 +215,8 @@ async def evaluate(db: AsyncSession, p: SkillProposal) -> dict[str, Any] | None:
 
 async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | None:
     task = await db.get(Task, task_id)
-    if task is None or task.status not in ("review", "done") or not task.assignee_agent_id:
+    finished = ("review", "done", "failed")
+    if task is None or task.status not in finished or not task.assignee_agent_id:
         return None
     agent = await db.get(Agent, task.assignee_agent_id)
     ws = await db.get(Workspace, task.workspace_id)
@@ -195,15 +236,43 @@ async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | Non
         return None
     await _tasks_since(agent.id, reset=True)
 
-    used = (
-        await db.scalars(
-            select(Skill)
-            .join(SkillUse, SkillUse.skill_id == Skill.id)
-            .where(SkillUse.task_id == task.id)
-        )
-    ).all()
+    used = list(
+        (
+            await db.scalars(
+                select(Skill)
+                .join(SkillUse, SkillUse.skill_id == Skill.id)
+                .where(SkillUse.task_id == task.id)
+            )
+        ).all()
+    )
+    return await _draft(
+        db,
+        ws,
+        agent,
+        why,
+        about=f"{task.title}\n{task.brief}",
+        transcript=_transcript(task, msgs),
+        used=used,
+        source_task_id=task.id,
+        fallback_name=task.title,
+    )
+
+
+async def _draft(
+    db: AsyncSession,
+    ws: Workspace,
+    agent: Agent,
+    why: str,
+    *,
+    about: str,
+    transcript: str,
+    used: list[Skill],
+    source_task_id: str | None,
+    fallback_name: str,
+) -> SkillProposal | None:
+    """Ask for a proposal, queue it, test it, and let the autopilot decide (P17)."""
     related: dict[str, Skill] = {s.id: s for s in used}
-    vec = await embed.embed_one(f"{task.title}\n{task.brief}")
+    vec = await embed.embed_one(about[:2000])
     if vec is not None:
         dist = Skill.embedding.cosine_distance(vec)
         for s, sim in (
@@ -231,9 +300,7 @@ async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | Non
     )
 
     got = await _ask(
-        db,
-        agent,
-        f"Why this is being considered: {why}.\n\n{existing}\n\n{_transcript(task, msgs)}",
+        db, agent, f"Why this is being considered: {why}.\n\n{existing}\n\n{transcript}"
     )
     if not got.get("propose"):
         return None
@@ -241,20 +308,88 @@ async def reflect_on_task(db: AsyncSession, task_id: str) -> SkillProposal | Non
         p = await propose(
             db,
             ws,
-            name=str(got.get("name") or task.title),
+            name=str(got.get("name") or fallback_name),
             description=str(got.get("description") or ""),
             body=str(got.get("body") or ""),
             reason=f"{str(got.get('why') or '').strip()} (Trigger: {why}.)".strip(),
             proposed_by=f"agent:{agent.id}",
             agent=agent,
-            source_task_id=task.id,
+            source_task_id=source_task_id,
             eval_cases=got.get("eval_cases") if isinstance(got.get("eval_cases"), list) else [],
         )
     except (SkillError, fmt.SkillFormatError) as e:
-        log.info("no skill proposal for %s: %s", task_id, e)
+        log.info("no skill proposal from %s: %s", source_task_id or "chat", e)
         return None
     try:
         await evaluate(db, p)
     except Exception:  # noqa: BLE001 - evals are advice for the reviewer, never a blocker
         log.warning("evals failed for proposal %s", p.id, exc_info=True)
+    try:
+        await autopilot.consider(db, ws, p)
+    except Exception:  # noqa: BLE001 - if the autopilot trips, a person still sees it
+        log.warning("autopilot failed for proposal %s", p.id, exc_info=True)
     return p
+
+
+CHAT_WINDOW = 30  # messages of the conversation the drafter sees
+
+
+def _chat_transcript(msgs: list[AgentMessage]) -> str:
+    out = ["CONVERSATION"]
+    for m in msgs:
+        if m.role == "assistant" and m.tool_calls:
+            for c in m.tool_calls:
+                fn = c.get("function") or {}
+                args = fn.get("arguments")
+                args = args if isinstance(args, str) else json.dumps(args)
+                out.append(f"CALL {fn.get('name')}: {str(args)[:240]}")
+        elif m.role == "tool":
+            out.append(f"RESULT {m.name}: {(m.content or '')[:300]}")
+        elif m.role == "user":
+            out.append(f"PERSON: {(m.content or '')[:800]}")
+        elif m.content:
+            out.append(f"ANSWER: {m.content[:1500]}")
+    return "\n".join(out)[-9000:]
+
+
+async def reflect_on_chat(db: AsyncSession, message_id: int) -> SkillProposal | None:
+    """`message_id` is the agent's reply. Corrections and "remember this" in chat teach too."""
+    reply = await db.get(AgentMessage, message_id)
+    if reply is None or reply.session_id is None or reply.role != "assistant":
+        return None
+    agent = await db.get(Agent, reply.agent_id)
+    ws = await db.get(Workspace, reply.workspace_id)
+    if agent is None or ws is None:
+        return None
+    recent = (
+        await db.scalars(
+            select(AgentMessage)
+            .where(AgentMessage.session_id == reply.session_id, AgentMessage.id <= reply.id)
+            .order_by(AgentMessage.id.desc())
+            .limit(CHAT_WINDOW)
+        )
+    ).all()
+    msgs = list(reversed(recent))
+    user_turns = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(AgentMessage)
+            .where(AgentMessage.session_id == reply.session_id, AgentMessage.role == "user")
+        )
+        or 0
+    )
+    why = chat_trigger(msgs, user_turns)
+    if why is None:
+        return None
+    asked = [m.content or "" for m in msgs if m.role == "user"]
+    return await _draft(
+        db,
+        ws,
+        agent,
+        why,
+        about="\n".join(asked)[-2000:],
+        transcript=_chat_transcript(msgs),
+        used=[],
+        source_task_id=None,
+        fallback_name=(asked[0] if asked else "")[:60] or "chat-lesson",
+    )

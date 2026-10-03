@@ -2,8 +2,9 @@
 
 import logging
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -468,6 +469,24 @@ async def session_messages(
     ]
 
 
+@router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """A person deletes one of their own conversations (its messages cascade). What the agent
+    learned from it stays in its memory."""
+    s = await db.get(ChatSession, session_id)
+    if s is None or s.user_id != principal.user.id or s.workspace_id != principal.workspace_id:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "session_not_found", "That conversation is not here."
+        )
+    await db.delete(s)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/agents/{agent_id}/chat")
 async def chat(
     agent_id: str,
@@ -498,6 +517,9 @@ async def chat(
     except gateway.GatewayUnavailable as e:
         raise api_error(status.HTTP_502_BAD_GATEWAY, "no_model_available", str(e)) from e
     s.title = s.title or body.message[:80]
+    # Every turn moves the conversation up the list (nothing else on the row changes, so the
+    # updated_at onupdate would not fire by itself).
+    s.updated_at = datetime.now(UTC)
     await db.commit()
     if reply.message_id is not None:
         try:  # learning is best effort: chat must work even if Temporal is down

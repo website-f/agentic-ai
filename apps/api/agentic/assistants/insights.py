@@ -20,6 +20,7 @@ from ..models import (
     Branch,
     LLMCall,
     Membership,
+    SkillProposal,
     Task,
     TaskEvent,
     User,
@@ -27,6 +28,12 @@ from ..models import (
 )
 
 OPEN = ("triage", "ready", "running", "blocked", "review")
+SHOW = 10  # items listed per section; the header always carries the true total
+
+
+def _count(total: int, shown: int) -> str:
+    """'3' or '46 total (showing 10)': the assistant must never mistake a page for the whole."""
+    return f"{total} total (showing {shown})" if total > shown else str(total)
 
 
 def _ago(t: datetime | None, now: datetime) -> str:
@@ -97,6 +104,27 @@ def _user_id(actor: str) -> str | None:
     return actor[5:] if actor.startswith("user:") else None
 
 
+async def _pending_proposals(
+    db: AsyncSession, ws: str, scope: Scope, agents: dict[str, Agent]
+) -> list[SkillProposal]:
+    """Skill changes waiting for a person, oldest first. Outside the whole-company view, only
+    those proposed by agents in the person's scope."""
+    q = select(SkillProposal).where(
+        SkillProposal.workspace_id == ws, SkillProposal.status == "pending"
+    )
+    if not scope.everything:
+        q = q.where(SkillProposal.agent_id.in_(list(agents) or [""]))
+    return list((await db.scalars(q.order_by(SkillProposal.created_at))).all())
+
+
+def _proposer(p: SkillProposal, agents: dict[str, Agent], users: dict[str, str]) -> str:
+    if p.agent_id in agents:
+        return agents[p.agent_id].name
+    if p.proposed_by in ("curator", "vault"):
+        return {"curator": "the nightly curator", "vault": "a vault edit"}[p.proposed_by]
+    return users.get(_user_id(p.proposed_by) or "", "a person")
+
+
 async def company_pulse(db: AsyncSession, ws: str, scope: Scope, days: int = 7) -> str:
     now = datetime.now(UTC)
     since = now - timedelta(days=days)
@@ -126,6 +154,7 @@ async def company_pulse(db: AsyncSession, ws: str, scope: Scope, days: int = 7) 
         .select_from(WorkflowRun)
         .where(WorkflowRun.workspace_id == ws, WorkflowRun.status == "waiting")
     )
+    props = await _pending_proposals(db, ws, scope, agents)
     by_branch: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for t in created:
         by_branch[t.branch_id or ""][0] += 1
@@ -149,6 +178,8 @@ async def company_pulse(db: AsyncSession, ws: str, scope: Scope, days: int = 7) 
         f"- Approvals waiting for a person: {len(approvals)}"
         + (f" (oldest {_ago(min(a.created_at for a in approvals), now)})" if approvals else ""),
         f"- Workflow runs waiting on people: {runs_waiting or 0}",
+        f"- Skill proposals waiting for review: {len(props)}"
+        + (f" (oldest {_ago(props[0].created_at, now)})" if props else ""),
         f"- AI spend: USD {Decimal(spend):.2f}",
     ]
     if by_branch:
@@ -156,11 +187,11 @@ async def company_pulse(db: AsyncSession, ws: str, scope: Scope, days: int = 7) 
         for bid, (c, d, f) in sorted(by_branch.items(), key=lambda x: -x[1][0]):
             lines.append(f"| {names.get(bid, 'Unassigned')} | {c} | {d} | {f} |")
     if top:
-        lines += ["", "## Most work done"]
+        lines += ["", f"## Most work done (top {min(5, len(top))} of {len(top)} agents)"]
         for aid, n in sorted(top.items(), key=lambda x: -x[1])[:5]:
             lines.append(f"- {agents[aid].name} ({agents[aid].role}): {n} done")
     if failed:
-        lines += ["", "## Recent failures"]
+        lines += ["", f"## Recent failures: {_count(len(failed), min(5, len(failed)))}"]
         for t in sorted(failed, key=lambda t: t.updated_at, reverse=True)[:5]:
             who = (
                 agents[t.assignee_agent_id].name if t.assignee_agent_id in agents else "unassigned"
@@ -262,7 +293,8 @@ async def team_performance(db: AsyncSession, ws: str, scope: Scope, days: int = 
 
 
 async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7) -> str:
-    """Concrete things that are not moving, with who should move them."""
+    """Concrete things that are not moving, with who should move them. Each section header
+    carries the true total; the list under it shows at most SHOW of them."""
     now = datetime.now(UTC)
     since = now - timedelta(days=days)
     tasks = await _tasks(db, ws, scope, since)
@@ -270,7 +302,8 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
     users = {u.id: u.name for u, _ in await _people(db, ws, scope)}
     who = lambda t: agents[t.assignee_agent_id].name if t.assignee_agent_id in agents else "nobody"  # noqa: E731
     asked = lambda t: users.get(_user_id(t.created_by) or "", t.created_by)  # noqa: E731
-    sections: list[tuple[str, list[str]]] = []
+    # (title, total, shown lines, extra note after the total)
+    sections: list[tuple[str, int, list[str], str]] = []
     stuck = sorted(
         (
             t
@@ -282,10 +315,12 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
     sections.append(
         (
             "Stuck work (no progress for over 6 hours)",
+            len(stuck),
             [
                 f"{t.title}: {who(t)}, {t.status}{' (' + t.blocked_reason[:80] + ')' if t.blocked_reason else ''}, last moved {_ago(t.updated_at, now)}"
-                for t in stuck[:10]
+                for t in stuck[:SHOW]
             ],
+            "",
         )
     )
     waiting = sorted(
@@ -295,17 +330,24 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
     sections.append(
         (
             "Not started after a day",
+            len(waiting),
             [
                 f"{t.title}: {who(t)}, created {_ago(t.created_at, now)} by {asked(t)}"
-                for t in waiting[:10]
+                for t in waiting[:SHOW]
             ],
+            "",
         )
     )
-    triage = [t for t in tasks if t.status == "triage" and now - t.created_at > timedelta(hours=24)]
+    triage = sorted(
+        (t for t in tasks if t.status == "triage" and now - t.created_at > timedelta(hours=24)),
+        key=lambda t: t.created_at,
+    )
     sections.append(
         (
             "Nobody assigned for over a day",
-            [f"{t.title}: created {_ago(t.created_at, now)} by {asked(t)}" for t in triage[:10]],
+            len(triage),
+            [f"{t.title}: created {_ago(t.created_at, now)} by {asked(t)}" for t in triage[:SHOW]],
+            "",
         )
     )
     reviews = sorted(
@@ -315,10 +357,12 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
     sections.append(
         (
             "Finished but not reviewed for over a day (people)",
+            len(reviews),
             [
                 f"{t.title}: done by {who(t)}, waiting on {asked(t)} since {_ago(t.updated_at, now)}"
-                for t in reviews[:10]
+                for t in reviews[:SHOW]
             ],
+            "",
         )
     )
     appr_q = select(Approval).where(
@@ -332,17 +376,35 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
     sections.append(
         (
             "Decisions waiting over 4 hours",
+            len(approvals),
             [
                 f"{agents[a.agent_id].name if a.agent_id in agents else 'An agent'} asks: {(a.reason or a.tool_name or a.kind)[:100]} ({_ago(a.created_at, now)})"
-                for a in approvals[:10]
+                for a in approvals[:SHOW]
             ],
+            "",
         )
     )
-    failed = [t for t in tasks if t.status == "failed" and t.updated_at >= since]
+    failed = sorted(
+        (t for t in tasks if t.status == "failed" and t.updated_at >= since),
+        key=lambda t: t.updated_at,
+        reverse=True,
+    )
+    # A failed task leaves "failed" when someone retries it, so every one still here is
+    # unretried; older ones are outside the window but still waiting.
+    fail_q = (
+        select(func.count())
+        .select_from(Task)
+        .where(Task.workspace_id == ws, Task.status == "failed")
+    )
+    if (c := scope.task_where()) is not None:
+        fail_q = fail_q.where(c)
+    older = max(0, (await db.scalar(fail_q) or 0) - len(failed))
     sections.append(
         (
             "Failed and not retried",
-            [f"{t.title}: {who(t)}: {(t.error or '')[:100]}" for t in failed[:10]],
+            len(failed),
+            [f"{t.title}: {who(t)}: {(t.error or '')[:100]}" for t in failed[:SHOW]],
+            f"; {older} more failed earlier and were never retried" if older else "",
         )
     )
     busy = {t.assignee_agent_id for t in tasks if t.created_at >= since or t.status in OPEN}
@@ -350,26 +412,45 @@ async def slacking_report(db: AsyncSession, ws: str, scope: Scope, days: int = 7
         a for a in agents.values() if a.status == "active" and a.id not in busy and not a.private
     ]
     sections.append(
-        (f"Agents with no work in {days} days", [f"{a.name} ({a.role})" for a in idle[:15]])
+        (
+            f"Agents with no work in {days} days",
+            len(idle),
+            [f"{a.name} ({a.role})" for a in idle[:15]],
+            "",
+        )
     )
     runs_q = select(WorkflowRun).where(
         WorkflowRun.workspace_id == ws,
         WorkflowRun.status == "waiting",
         WorkflowRun.updated_at < now - timedelta(hours=24),
     )
-    runs = list((await db.scalars(runs_q)).all())
+    runs = list((await db.scalars(runs_q.order_by(WorkflowRun.updated_at))).all())
     sections.append(
         (
             "Workflow runs waiting on people for over a day",
-            [f"{r.title} ({r.name}), since {_ago(r.updated_at, now)}" for r in runs[:10]],
+            len(runs),
+            [f"{r.title} ({r.name}), since {_ago(r.updated_at, now)}" for r in runs[:SHOW]],
+            "",
+        )
+    )
+    props = await _pending_proposals(db, ws, scope, agents)
+    sections.append(
+        (
+            "Skill proposals waiting for review",
+            len(props),
+            [
+                f"{p.name} ({p.kind}), proposed by {_proposer(p, agents, users)}, waiting since {_ago(p.created_at, now)}"
+                for p in props[:SHOW]
+            ],
+            f", oldest waiting since {_ago(props[0].created_at, now)}" if props else "",
         )
     )
     lines = [f"# Where things are slipping ({scope.label}, last {days} days)"]
     total = 0
-    for title, items in sections:
-        if items:
-            total += len(items)
-            lines += ["", f"## {title}"] + [f"- {i}" for i in items]
-    if not total:
+    for title, n, items, note in sections:
+        if n or note:
+            total += n
+            lines += ["", f"## {title}: {_count(n, len(items))}{note}"] + [f"- {i}" for i in items]
+    if not total and not older:
         lines.append("\nNothing is stuck, waiting too long, or idle. Everything is moving.")
     return "\n".join(lines)

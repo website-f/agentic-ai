@@ -30,7 +30,11 @@ def _transcript(task: Task | None, msgs: list[AgentMessage]) -> str:
 
 async def learn_from_task(db: AsyncSession, task_id: str) -> facts.Learned | None:
     task = await db.get(Task, task_id)
-    if task is None or task.assignee_agent_id is None or task.status not in ("review", "done"):
+    if (
+        task is None
+        or task.assignee_agent_id is None
+        or task.status not in ("review", "done", "failed")
+    ):
         return None
     agent = await db.get(Agent, task.assignee_agent_id)
     ws = await db.get(Workspace, task.workspace_id)

@@ -41,6 +41,7 @@ const page = {
   sops: lazyRouteComponent(() => import("@/pages/sops"), "SopsPage"),
   brain: lazyRouteComponent(() => import("@/pages/brain"), "BrainPage"),
   skills: lazyRouteComponent(() => import("@/pages/skills"), "SkillsPage"),
+  learning: lazyRouteComponent(() => import("@/pages/learning"), "LearningPage"),
   office: lazyRouteComponent(() => import("@/pages/office"), "OfficePage"),
   channels: lazyRouteComponent(() => import("@/pages/channels"), "ChannelsPage"),
   approve: lazyRouteComponent(() => import("@/pages/approve"), "ApprovePage"),
@@ -297,6 +298,13 @@ const skillsRoute = createRoute({
   component: page.skills,
 });
 
+const learningRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/learning",
+  validateSearch: (s: Record<string, unknown>): { days?: number } => ({ days: [7, 30, 90].find((d) => d === Number(s.days)) }),
+  component: page.learning,
+});
+
 const monitorRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/monitor",
@@ -419,6 +427,7 @@ const routeTree = rootRoute.addChildren([
     sopsRoute,
     brainRoute,
     skillsRoute,
+    learningRoute,
     officeRoute,
     channelsRoute,
     approveRoute,

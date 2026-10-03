@@ -526,11 +526,12 @@ async def test_reports_and_the_company_overview(client, llm, temporal):
 
     ov = (await client.get("/api/overview?days=7")).json()
     maju = next(b for b in ov["branches"] if b["name"] == "Maju Sdn Bhd")
-    assert maju["tasks_created"] == 1 and maju["tasks_done"] == 1 and maju["reports"] == 1
+    assert maju["tasks_created"] == 1 and maju["reports"] == 1
+    assert maju["tasks_done"] == 0  # still in review: not done yet
     assert maju["labels"] == [{"label": "tender", "count": 1}]
     assert ov["labels"] == [{"label": "tender", "count": 1}] and ov["totals"]["agents"] == 3
     assert maju["calls"] >= 2 and len(maju["done_by_day"]) == 7
-    assert ov["top_agents"][0]["name"] == "Faiz"
+    assert ov["totals"]["in_review"] == 1 and ov["top_agents"] == []  # nothing accepted yet
 
     llm.say("- Maju Sdn Bhd has the only tender work.\n- Nothing is failing.")
     s = (await client.post("/api/overview/summary?days=7", json={}, headers=csrf(client))).json()

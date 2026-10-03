@@ -121,8 +121,9 @@ class AgentTaskWorkflow:
                     start_to_close_timeout=QUICK,
                 )
                 # P3: learn from finished work. `patched` keeps runs started before this
-                # existed replayable.
-                if state == "done" and workflow.patched("brain-learn-v1"):
+                # existed replayable. P17: a failure teaches too.
+                learn = state == "done" or workflow.patched("learn-failed-v1")
+                if learn and workflow.patched("brain-learn-v1"):
                     try:
                         await workflow.execute_activity(
                             brain_learn_task,
@@ -134,8 +135,8 @@ class AgentTaskWorkflow:
                         )
                     except ActivityError:
                         pass  # memory is best effort; the task itself is finished
-                # P4: was this worth a skill? Proposals wait for a person.
-                if state == "done" and workflow.patched("skill-reflect-v1"):
+                # P4: was this worth a skill? P17: the autopilot may switch it on.
+                if learn and workflow.patched("skill-reflect-v1"):
                     try:
                         await workflow.execute_activity(
                             skill_reflect,

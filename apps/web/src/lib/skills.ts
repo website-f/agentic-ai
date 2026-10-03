@@ -76,7 +76,18 @@ export interface ScanFinding {
   message: string;
 }
 
-export interface Proposal {
+/** A review-queue row (GET /api/skill-proposals), kept light: `body` is the first 1000
+ *  characters, eval suites carry their counts with an empty `cases` list, and the current /
+ *  merged skills come without bodies. The sheet loads ProposalDetail for everything. */
+export interface Proposal extends Omit<ProposalDetail, "current" | "other" | "eval_cases"> {
+  body_truncated: boolean;
+  current: { version: number; description: string; status: string } | null;
+  other: { name: string; description: string } | null;
+  eval_case_count: number;
+}
+
+/** One proposal in full (GET /api/skill-proposals/{id}). */
+export interface ProposalDetail {
   id: string;
   kind: ProposalKind;
   name: string;
@@ -116,7 +127,7 @@ export const skillQuery = (id: string) =>
 export const proposalsQuery = (state: "pending" | "decided" | "all" = "pending") =>
   queryOptions({ queryKey: skillKeys.proposals(state), queryFn: () => api<Proposal[]>(`/api/skill-proposals?state=${state}`) });
 export const proposalQuery = (id: string) =>
-  queryOptions({ queryKey: skillKeys.proposal(id), queryFn: () => api<Proposal>(`/api/skill-proposals/${id}`) });
+  queryOptions({ queryKey: skillKeys.proposal(id), queryFn: () => api<ProposalDetail>(`/api/skill-proposals/${id}`) });
 
 export const KIND_LABEL: Record<ProposalKind, string> = { new: "New skill", patch: "Update", merge: "Merge", retire: "Retire" };
 export const TRUST_LABEL: Record<Skill["trust"], string> = { builtin: "Built in", official: "Official", trusted: "Learned" };

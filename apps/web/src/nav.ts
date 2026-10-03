@@ -21,6 +21,7 @@ import {
   LockKeyIcon,
   GaugeIcon,
   GearSixIcon,
+  GraduationCapIcon,
   KanbanIcon,
   LightningIcon,
   PlugsConnectedIcon,
@@ -54,6 +55,7 @@ export type AppPath =
   | "/brain"
   | "/sops"
   | "/skills"
+  | "/learning"
   | "/blueprints"
   | "/workflows"
   | "/schedules"
@@ -135,6 +137,7 @@ export const NAV: NavSection[] = [
       { to: "/sops", label: "SOPs", icon: FileTextIcon, blurb: "Written procedures agents follow: for every company, one company, one department, or attached to specific agents." },
       { to: "/brain", label: "Brain", icon: BrainIcon, blurb: "What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian." },
       { to: "/skills", label: "Skills", icon: LightningIcon, blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
+      { to: "/learning", label: "Learning", icon: GraduationCapIcon, blurb: "What your agents learned, how each change was tested, what went live by itself, and what learning cost." },
       { to: "/blueprints", label: "Blueprints", icon: BlueprintIcon, perm: ["agents.manage", "agents.own"], blurb: "Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists." },
       { to: "/workflows", label: "Workflows", icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: "Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions." },
     ],

@@ -162,5 +162,7 @@ async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
         reply = await runtime.chat_turn(db, agent, session, msg.text)
         answer = reply.content or "(no answer)"
     except gateway.GatewayUnavailable as e:
-        answer = f"{agent.name} could not answer right now: {e}"
+        reply, answer = None, f"{agent.name} could not answer right now: {e}"
     await _reply(db, ch, msg.sender, f"*{agent.name}*: {answer}", key)
+    if reply is not None and reply.message_id is not None:
+        await deliver.learn_from_chat(reply.message_id)

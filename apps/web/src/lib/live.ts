@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import { brainKeys } from "./brain";
+import { learningKeys } from "./learning";
 import { keys } from "./queries";
 import { teamKeys } from "./teams";
 import { workKeys } from "./work";
@@ -46,6 +47,7 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "task.created": [workKeys.tasks, keys.status],
   "task.updated": [workKeys.tasks, workKeys.agents, keys.status, OFFICE],
   "task.event": [workKeys.tasks],
+  "task.deleted": [workKeys.tasks, keys.status],
   "approval.requested": [["approvals"], workKeys.tasks, keys.status, OFFICE],
   "approval.resolved": [["approvals"], workKeys.tasks, keys.status, OFFICE],
   "agent.upsert": [workKeys.agents, keys.status, OFFICE],
@@ -53,8 +55,8 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "broadcast.ack": [workKeys.broadcasts],
   "brain.page": [brainKeys.pages, brainKeys.graph, brainKeys.overview, ["brain", "page"]],
   "brain.dream": [brainKeys.dreams, brainKeys.overview, ["brain", "facts"]],
-  "skill.proposal": [["skills"], keys.status],
-  "skill.updated": [["skills"], keys.status],
+  "skill.proposal": [["skills"], keys.status, learningKeys.all],
+  "skill.updated": [["skills"], keys.status, learningKeys.all],
   "skill.used": [["skills"]],
   "delivery.updated": [["deliveries"]],
   "meeting.updated": [teamKeys.meetings, workKeys.tasks, OFFICE],

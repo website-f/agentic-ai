@@ -265,7 +265,7 @@ const DONE: Task["status"][] = ["review", "done", "failed"];
 export function AgentOutcome({ agentId, name }: { agentId: string; name: string }) {
   const tasks = useQuery({
     queryKey: ["agent-outcome", agentId, "tasks"],
-    queryFn: () => api<Task[]>(`/api/tasks?agent_id=${agentId}&status=${DONE.join(",")}`),
+    queryFn: () => api<Task[]>(`/api/tasks?agent_id=${agentId}&status=${DONE.join(",")}&full=true`),
   });
   const reports = useQuery({
     queryKey: ["agent-outcome", agentId, "reports"],

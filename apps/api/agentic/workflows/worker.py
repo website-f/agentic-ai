@@ -44,7 +44,7 @@ from .channel_workflows import DeliverWorkflow
 from .document_activities import file_extract, workflow_run_tick
 from .document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from .engine_activities import check_all_providers
-from .skill_activities import skill_eval, skill_reflect
+from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
 from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
 from .teams_activities import (
@@ -93,6 +93,7 @@ ACTIVITIES = [
     brain_dream_tick,
     brain_dream_run,
     skill_reflect,
+    skill_reflect_chat,
     skill_eval,
     deliver_one,
     task_collect_children,

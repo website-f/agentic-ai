@@ -171,6 +171,11 @@ async def whatsapp_status(
     cfg = _cfg(ch)
     manage = can(principal.role, "channels.manage")
     st = await _status(ch, cfg, with_qr=manage)
+    if cfg.provider == "waha" and st["status"] == "WORKING":
+        try:  # sessions made by an older version listen to fewer events
+            await whatsapp.waha_ensure_webhook(cfg, waha_hook(ch.id))
+        except Exception:  # noqa: BLE001 - next status check tries again
+            log.info("could not update the WAHA webhook for %s", ch.id)
     if st.get("number") and st["number"] != (ch.state or {}).get("number"):
         ch.state = {**(ch.state or {}), "number": st["number"]}
         await db.commit()

@@ -411,7 +411,10 @@ async def _propose_skill(ctx: ToolContext, args: dict[str, Any]) -> str:
     except (skill_store.SkillError, skill_format.SkillFormatError) as e:
         return f"Error: {e}"
     what = "an update to" if p.kind == "patch" else "a new skill,"
-    return f"Proposed {what} {p.name}. A person reviews it before anyone uses it."
+    return (
+        f"Proposed {what} {p.name}. It goes live when it passes its tests or a person "
+        "approves it."
+    )
 
 
 TOOLS: dict[str, Tool] = {

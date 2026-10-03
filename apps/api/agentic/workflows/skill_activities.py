@@ -7,9 +7,9 @@ from temporalio import activity
 
 from ..agents import runtime
 from ..core.db import SessionLocal
-from ..models import Skill, SkillEvalCase, SkillProposal, Task
+from ..models import Skill, SkillEvalCase, SkillProposal, Task, Workspace
 from ..services import events
-from ..skills import evals, reflect
+from ..skills import autopilot, evals, reflect
 
 log = logging.getLogger("agentic.worker.skills")
 
@@ -23,15 +23,27 @@ async def skill_reflect(task_id: str) -> str | None:
         task = await db.get(Task, task_id)
         if task is not None:
             what = "an update to the skill" if p.kind == "patch" else "a new skill"
+            done = (
+                f"learned {what} {p.name} and switched it on (it passed its tests)"
+                if p.status == "approved"
+                else f"proposed {what} {p.name} for review"
+            )
             await runtime.task_event(
                 db,
                 task,
                 "skill",
                 f"agent:{task.assignee_agent_id}",
-                f"proposed {what} {p.name} for review",
-                {"proposal_id": p.id, "name": p.name, "kind": p.kind},
+                done,
+                {"proposal_id": p.id, "name": p.name, "kind": p.kind, "status": p.status},
             )
         return p.id
+
+
+@activity.defn
+async def skill_reflect_chat(message_id: int) -> str | None:
+    async with SessionLocal() as db:
+        p = await reflect.reflect_on_chat(db, message_id)
+        return p.id if p else None
 
 
 @activity.defn
@@ -43,6 +55,9 @@ async def skill_eval(kind: str, target_id: str) -> dict:
             if p is None:
                 return {}
             result = await reflect.evaluate(db, p) or {}
+            ws = await db.get(Workspace, p.workspace_id)
+            if ws is not None:  # P17: proven drafts go live (per the workspace's mode)
+                await autopilot.consider(db, ws, p)
             await events.publish(p.workspace_id, "skill.proposal", {"proposal_id": p.id})
             return {"passed": result.get("new", {}).get("passed")}
         s = await db.get(Skill, target_id)

@@ -564,19 +564,150 @@ async def run_evals(
 # ---------------------------------------------------------------- proposals
 
 
+class ProposalListOut(BaseModel):
+    """A review-queue row: light. The full body, the skill's current and merged bodies, the
+    test cases and the per-case test outputs come from GET /api/skill-proposals/{id}."""
+
+    id: str
+    kind: str
+    name: str
+    description: str
+    body: str  # first BODY_PREVIEW characters
+    body_truncated: bool
+    base_version: int | None
+    current: dict[str, Any] | None  # version, description, status (no body)
+    other: dict[str, Any] | None  # name, description (no body)
+    stale: bool
+    reason: str
+    eval_case_count: int
+    scan: list[dict[str, Any]]
+    eval: dict[str, Any] | None  # suites keep passed/total/tokens/error; `cases` is emptied
+    proposed_by: str
+    proposed_by_name: str
+    agent_id: str | None
+    source_task: dict[str, Any] | None
+    status: str
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_note: str | None
+    created_at: datetime
+
+
+BODY_PREVIEW = 1000
+
+
+def _suite_summary(suite: Any) -> Any:
+    """An eval suite without its per-case outputs (the heavy part); same shape, empty cases."""
+    if not isinstance(suite, dict):
+        return suite
+    return {**suite, "cases": []} if "cases" in suite else suite
+
+
+async def _proposals_list(db: AsyncSession, rows: list[SkillProposal]) -> list[ProposalListOut]:
+    """Many proposals in four queries (not five per row)."""
+    from ...models import LLMCall
+
+    skill_ids = {x for sp in rows for x in (sp.skill_id, sp.other_skill_id) if x}
+    skills = (
+        {s.id: s for s in (await db.scalars(select(Skill).where(Skill.id.in_(skill_ids)))).all()}
+        if skill_ids
+        else {}
+    )
+    names = await _names(db, {x for sp in rows for x in (sp.proposed_by, sp.decided_by or "") if x})
+    task_ids = {sp.source_task_id for sp in rows if sp.source_task_id}
+    tasks = (
+        dict((await db.execute(select(Task.id, Task.title).where(Task.id.in_(task_ids)))).all())
+        if task_ids
+        else {}
+    )
+    tokens = (
+        dict(
+            (
+                await db.execute(
+                    select(
+                        LLMCall.task_id,
+                        func.coalesce(
+                            func.sum(LLMCall.prompt_tokens + LLMCall.completion_tokens), 0
+                        ),
+                    )
+                    .where(LLMCall.task_id.in_(list(tasks)), LLMCall.task == "agent.task")
+                    .group_by(LLMCall.task_id)
+                )
+            ).all()
+        )
+        if tasks
+        else {}
+    )
+    out = []
+    for sp in rows:
+        skill = skills.get(sp.skill_id or "")
+        other = skills.get(sp.other_skill_id or "")
+        ev = sp.eval
+        out.append(
+            ProposalListOut(
+                id=sp.id,
+                kind=sp.kind,
+                name=sp.name,
+                description=sp.description,
+                body=sp.body[:BODY_PREVIEW],
+                body_truncated=len(sp.body) > BODY_PREVIEW,
+                base_version=sp.base_version,
+                current={
+                    "version": skill.version,
+                    "description": skill.description,
+                    "status": skill.status,
+                }
+                if skill
+                else None,
+                other={"name": other.name, "description": other.description} if other else None,
+                stale=bool(
+                    skill
+                    and sp.base_version
+                    and skill.version != sp.base_version
+                    and sp.status == "pending"
+                ),
+                reason=sp.reason,
+                eval_case_count=len(sp.eval_cases or []),
+                scan=sp.scan or [],
+                eval={k: _suite_summary(v) for k, v in ev.items()}
+                if isinstance(ev, dict)
+                else None,
+                proposed_by=sp.proposed_by,
+                proposed_by_name={"curator": "Nightly curator", "vault": "Vault edit"}.get(
+                    sp.proposed_by
+                )
+                or names.get(sp.proposed_by, "Someone"),
+                agent_id=sp.agent_id,
+                source_task={
+                    "id": sp.source_task_id,
+                    "title": tasks[sp.source_task_id],
+                    "tokens": int(tokens.get(sp.source_task_id, 0)),
+                }
+                if sp.source_task_id in tasks
+                else None,
+                status=sp.status,
+                decided_by_name=names.get(sp.decided_by) if sp.decided_by else None,
+                decided_at=sp.decided_at,
+                decision_note=sp.decision_note,
+                created_at=sp.created_at,
+            )
+        )
+    return out
+
+
 @router.get("/skill-proposals")
 async def list_proposals(
     state: Literal["pending", "decided", "all"] = "pending",
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
-) -> list[ProposalOut]:
+) -> list[ProposalListOut]:
     q = select(SkillProposal).where(SkillProposal.workspace_id == principal.workspace_id)
     if state == "pending":
         q = q.where(SkillProposal.status == "pending")
     elif state == "decided":
         q = q.where(SkillProposal.status != "pending")
-    rows = (await db.scalars(q.order_by(SkillProposal.created_at.desc()).limit(100))).all()
-    return [await _proposal_out(db, sp) for sp in rows]
+    rows = list((await db.scalars(q.order_by(SkillProposal.created_at.desc()).limit(100))).all())
+    return await _proposals_list(db, rows)
 
 
 @router.get("/skill-proposals/{proposal_id}")

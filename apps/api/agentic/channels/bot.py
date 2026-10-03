@@ -191,8 +191,10 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
         reply = await runtime.chat_turn(db, agent, session, text)
         answer = reply.content or "(no answer)"
     except gateway.GatewayUnavailable as e:
-        answer = f"{agent.name} could not answer: {e}"
+        reply, answer = None, f"{agent.name} could not answer: {e}"
     await _reply(db, ch, chat_id, f"{agent.name}: {answer}", uid)
+    if reply is not None and reply.message_id is not None:
+        await deliver.learn_from_chat(reply.message_id)
 
 
 async def _link(

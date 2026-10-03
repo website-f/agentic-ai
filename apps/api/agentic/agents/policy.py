@@ -15,6 +15,8 @@ from ..models import Agent
 from .tools import GLOBAL_DENY, TOOLS, check_url_arg
 
 MAX_ARGS_CHARS = 20_000
+# Outward actions a person signs off every time, whatever an agent's settings say.
+ALWAYS_ASK = frozenset({"browser_submit"})
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,10 @@ async def evaluate(agent: Agent, tool_name: str, args: dict[str, Any]) -> Decisi
         if problem:
             return Decision("deny", "hardline.internal_address", problem, True)
 
+    if tool_name in ALWAYS_ASK:
+        return Decision(
+            "ask", f"hardline.{tool_name}", f"{tool.label} always waits for a person.", True
+        )
     mode = (agent.tools or {}).get(tool_name, tool.default_mode)
     if mode == "deny":
         return Decision(

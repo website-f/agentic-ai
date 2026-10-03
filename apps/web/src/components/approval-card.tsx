@@ -172,7 +172,8 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> Approve once</Button>
-            <Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "always" })}>Always allow for {a.agent_name}</Button>
+            {/* High-risk tools ask every time: "always" is only offered for the rest. */}
+            {a.risk !== "high" ? <Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "always" })}>Always allow for {a.agent_name}</Button> : null}
             <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => setDenying(true)}>Deny</Button>
           </div>
         )

@@ -28,6 +28,7 @@ from .routers import (
     documents,
     events_stream,
     files,
+    learning,
     mcp_servers,
     members,
     monitor,
@@ -179,6 +180,7 @@ for r in (
     workflow_runs.router,
     whatsapp.router,
     assistants.router,
+    learning.router,
     events_stream.router,
 ):
     app.include_router(r)

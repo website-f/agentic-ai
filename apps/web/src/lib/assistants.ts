@@ -17,7 +17,7 @@ export interface AssistantsHome {
   assistants: Agent[];
   presets: Preset[];
   google: GoogleState;
-  whatsapp: { channel_id: string | null; number: string | null; linked: boolean };
+  whatsapp: { channel_id: string | null; number: string | null; status: string | null; provider: string | null; linked: boolean };
   reach: ("app" | "telegram" | "whatsapp")[];
   drafts_pending: number;
 }

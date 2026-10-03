@@ -845,6 +845,7 @@ async def run_task_step(task_id: str) -> StepResult:
                 workspace_id=ws.id,
                 group=agent.model_group,
                 pinned_first=True,
+                window=await context.group_window(db, ws.id, agent.model_group),
                 agent_id=agent.id,
                 task_id=task.id,
             )
@@ -1000,23 +1001,32 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
     await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
     async with SessionLocal() as db:
         task, agent, _ = await _load(db, task_id)
+        unchecked = False
         if state == "done" and task.goal and task.goal_tries < goals.MAX_GOAL_TRIES:
-            met, missing = await goals.judge(db, task, agent, message)
-            if not met:
+            verdict = await goals.judge(db, task, agent, message)
+            if not verdict.met:
                 task.goal_tries += 1
-                _add(db, agent, "user", task_id=task.id, content=goals.nudge(missing))
+                _add(db, agent, "user", task_id=task.id, content=goals.nudge(verdict.missing))
                 await db.commit()
                 await task_event(
                     db,
                     task,
                     "goal",
                     "system",
-                    f"goal not met ({task.goal_tries}/{goals.MAX_GOAL_TRIES}): {missing}"[:300],
+                    f"goal not met ({task.goal_tries}/{goals.MAX_GOAL_TRIES}): {verdict.missing}"[
+                        :300
+                    ],
                 )
                 await launch.launch(db, task, "goal-loop")
                 return
+            if not verdict.checked:
+                # P17: never pass a goal nobody checked; a person looks instead.
+                unchecked = True
+                await task_event(
+                    db, task, "goal", "system", "no model could check the goal; sent for review"
+                )
         if state == "done":
-            status = "review" if task.requires_review else "done"
+            status = "review" if task.requires_review or unchecked else "done"
             if status == "done":
                 await skills_store.settle(db, task.id, "accepted")
             await set_task_status(
@@ -1109,7 +1119,10 @@ async def apply_approval(approval_id: str) -> None:
             user = await db.get(User, a.decided_by.removeprefix("user:"))
             who = user.name if user else who
         if a.status == "approved":
-            if a.scope == "always":
+            # "Always" never un-gates a high-risk tool from an approval card; a manager can
+            # still choose that deliberately in the agent's permissions.
+            tool = TOOLS.get(a.tool_name)
+            if a.scope == "always" and tool is not None and tool.risk != "high":
                 agent.tools = {**(agent.tools or {}), a.tool_name: "allow"}
             result = await run_tool(
                 ToolContext(db=db, agent=agent, workspace=ws, task=task), a.tool_name, a.args
@@ -1131,6 +1144,8 @@ async def apply_approval(approval_id: str) -> None:
                 + (f" Reason: {a.answer}" if a.answer else "")
                 + " Continue without it, or finish and explain what is missing."
             )
+            if (a.answer or "").strip():
+                await _learn_denial(db, agent, task, a, who)
         elif a.status == "answered":
             result = f"Answer from {who}: {a.answer}"
         else:  # expired
@@ -1156,6 +1171,34 @@ async def apply_approval(approval_id: str) -> None:
             blocked_reason=None,
         )
         await agent_status(agent, "working", task)
+
+
+async def _learn_denial(db: AsyncSession, agent: Agent, task: Task, a: Approval, who: str) -> None:
+    """A denial with a reason is a lesson: keep it as a private fact for this agent (P17)."""
+    from ..brain import facts as brain_facts  # late: the brain imports agent modules
+    from ..brain.scope import for_agent
+
+    tool = TOOLS.get(a.tool_name)
+    label = tool.label if tool else a.tool_name
+    text = brain_facts.clean(
+        f'{who} denied "{label}" on the task "{task.title[:80]}": {(a.answer or "").strip()}'
+    )
+    if not text:
+        return
+    try:
+        await brain_facts.add(
+            db,
+            await for_agent(db, agent),
+            text,
+            branch_id=None,
+            agent_id=agent.id,
+            source_kind="person",
+            source_id=task.id,
+            source_label=f"approval decision by {who}",
+            created_by=a.decided_by or "system",
+        )
+    except Exception:  # noqa: BLE001 - memory is best effort; the decision itself stands
+        log.warning("could not remember the denial of %s", a.id, exc_info=True)
 
 
 async def expire_approval(approval_id: str) -> None:
@@ -1265,6 +1308,7 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
             workspace_id=ws.id,
             group=agent.model_group,
             pinned_first=False,
+            window=await context.group_window(db, ws.id, agent.model_group),
             agent_id=agent.id,
         )
         messages += context.render(

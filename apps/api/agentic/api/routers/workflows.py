@@ -8,12 +8,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...engine import gateway
-from ...models import Agent, Workflow
+from ...models import Agent, Workflow, WorkflowRun
 from ...services import audit, events
 from ...workflows.procedure import (
     DRAFT_SYSTEM,
@@ -213,14 +213,32 @@ async def delete_workflow(
     principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    """Delete a workflow and its finished runs (no orphaned runs left behind; the tasks the
+    runs created stay on the board). Refused while a run of it is still going."""
     wf = await _get(db, principal.workspace_id, workflow_id)
+    active = await db.scalar(
+        select(func.count())
+        .select_from(WorkflowRun)
+        .where(WorkflowRun.workflow_id == wf.id, WorkflowRun.status.in_(("running", "waiting")))
+    )
+    if active:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "runs_active",
+            f"{active} run(s) of this workflow are still going. Cancel or finish them first.",
+        )
+    runs = await db.execute(
+        delete(WorkflowRun).where(
+            WorkflowRun.workflow_id == wf.id, WorkflowRun.workspace_id == wf.workspace_id
+        )
+    )
     await audit.record(
         db,
         principal.workspace_id,
         principal.actor,
         "workflow.deleted",
         target=wf.id,
-        before={"name": wf.name},
+        before={"name": wf.name, "runs_deleted": runs.rowcount or 0},  # type: ignore[attr-defined]
     )
     await db.delete(wf)
     await db.commit()

@@ -21,6 +21,7 @@ import {
   LightningIcon,
   PlayIcon,
   ProhibitIcon,
+  TrashIcon,
   WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
@@ -33,6 +34,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -133,10 +135,24 @@ function Timeline({ events }: { events: TaskEvent[] }) {
   );
 }
 
-function Actions({ task, canWrite }: { task: Task; canWrite: boolean }) {
+function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean; onDeleted: () => void }) {
   const qc = useQueryClient();
   const [feedback, setFeedback] = useState("");
   const [revising, setRevising] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const remove = async () => {
+    try {
+      await api(`/api/tasks/${task.id}`, "DELETE");
+    } catch (e) {
+      toast.error(errorMessage(e));
+      return;
+    }
+    qc.removeQueries({ queryKey: workKeys.task(task.id) });
+    qc.invalidateQueries({ queryKey: workKeys.tasks });
+    qc.invalidateQueries({ queryKey: keys.status });
+    toast.success("Task deleted.");
+    onDeleted();
+  };
   const act = useMutation({
     mutationFn: ({ path, body }: { path: string; body?: unknown }) => api<Task>(`/api/tasks/${task.id}/${path}`, "POST", body ?? {}),
     onSuccess: (_, v) => {
@@ -180,6 +196,11 @@ function Actions({ task, canWrite }: { task: Task; canWrite: boolean }) {
       {s === "running" || s === "blocked" || s === "ready" || s === "triage" ? (
         <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate({ path: "cancel" })}><HandIcon size={14} /> Cancel</Button>
       ) : null}
+      {s === "done" || s === "failed" || s === "cancelled" ? (
+        <Button size="sm" variant="ghost" className="text-muted hover:text-danger" disabled={act.isPending} onClick={() => setDeleting(true)}><TrashIcon size={14} /> Delete</Button>
+      ) : null}
+      <ConfirmDialog open={deleting} onOpenChange={setDeleting} title="Delete this task?" danger confirmLabel="Delete"
+        body="The task, its conversation, its history and any sub-tasks are removed for good. Reports and files it produced stay." onConfirm={remove} />
     </>
   );
 }
@@ -207,7 +228,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           {t.labels?.map((l) => <Pill key={l}>{l}</Pill>)}
         </span>
       ) : undefined}
-      actions={t ? <Actions task={t} canWrite={me.permissions.includes("work.write")} /> : undefined}
+      actions={t ? <Actions task={t} canWrite={me.permissions.includes("work.write")} onDeleted={onClose} /> : undefined}
     >
       {isLoading ? (
         <div className="grid gap-3">

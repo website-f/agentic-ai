@@ -400,6 +400,43 @@ function Drafts({ home }: { home: AssistantsHome }) {
 
 // ---------------------------------------------------------------- settings and connections
 
+const pretty = (n: string | null) => (n ? `+${n.replace(/^(\d{2})(\d{2})(\d{3,4})(\d{4})$/, "$1 $2-$3 $4")}` : "");
+
+/** Link my own WhatsApp to the office number, right here: a code, a wa.me link, and a wait. */
+function LinkWhatsApp({ home }: { home: AssistantsHome }) {
+  const qc = useQueryClient();
+  const [code, setCode] = useState<{ code: string; url: string | null; expires_in: number } | null>(null);
+  const get = useMutation({
+    mutationFn: () => api<{ code: string; url: string | null; expires_in: number }>(`/api/channels/${home.whatsapp.channel_id}/link-code`, "POST"),
+    onSuccess: setCode,
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  // While a code is out, look every few seconds for the link to land.
+  useEffect(() => {
+    if (!code || home.whatsapp.linked) return;
+    const t = setInterval(() => qc.invalidateQueries({ queryKey: assistantKeys.home }), 4000);
+    const stop = setTimeout(() => clearInterval(t), code.expires_in * 1000);
+    return () => { clearInterval(t); clearTimeout(stop); };
+  }, [code, home.whatsapp.linked, qc]);
+  const wasLinked = useRef(home.whatsapp.linked);
+  useEffect(() => {
+    if (home.whatsapp.linked && !wasLinked.current) toast.success("WhatsApp linked. Notices and your assistant are on WhatsApp now.");
+    wasLinked.current = home.whatsapp.linked;
+  }, [home.whatsapp.linked]);
+  if (home.whatsapp.linked) return <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Linked</Pill>;
+  if (home.whatsapp.status !== "WORKING") return <Button size="sm" variant="outline" asChild><Link to="/channels">Open Channels</Link></Button>;
+  if (!code) return <Button size="sm" loading={get.isPending} onClick={() => get.mutate()}>Link my WhatsApp</Button>;
+  return (
+    <div className="grid w-full gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
+      <p className="text-[12.5px]">From your phone, send this to <b>{pretty(home.whatsapp.number)}</b>:</p>
+      <p className="rounded-sm bg-surface px-3 py-2 text-center font-mono text-[18px] font-semibold tracking-[0.15em] select-all">LINK {code.code}</p>
+      {code.url ? <Button size="sm" asChild><a href={code.url} target="_blank" rel="noreferrer"><WhatsappLogoIcon size={15} /> Open WhatsApp</a></Button> : null}
+      <p className="text-[11.5px] text-muted">Is {pretty(home.whatsapp.number)} your own phone? Then open WhatsApp, tap <b>Message yourself</b> and send it there. You can chat with your assistant in that chat; messages to yourself don't ring, so for alerts link a different number.</p>
+      <p className="flex items-center gap-1.5 text-[11.5px] text-muted"><span className="size-1.5 animate-pulse rounded-full bg-accent" /> Waiting for your message… (code valid 10 minutes)</p>
+    </div>
+  );
+}
+
 function Connections({ home }: { home: AssistantsHome }) {
   const qc = useQueryClient();
   const [unlinking, setUnlinking] = useState(false);
@@ -414,10 +451,11 @@ function Connections({ home }: { home: AssistantsHome }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success("Gmail disconnected."); },
   });
   const row = (icon: Icon, tone: Tone, title: string, status: React.ReactNode, action: React.ReactNode) => (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+    // The card is narrow at every size: the action sits under the text, never squeezing it.
+    <li className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-4 py-3">
       <IconTile icon={icon} tone={tone} size="sm" />
       <span className="min-w-0"><span className="block text-[13.5px] font-medium">{title}</span><span className="block text-[12px] break-words text-muted">{status}</span></span>
-      <span className="flex flex-wrap gap-2 max-sm:col-start-2">{action}</span>
+      {action ? <span className="col-start-2 flex min-w-0 flex-wrap gap-2">{action}</span> : null}
     </li>
   );
   return (
@@ -435,8 +473,11 @@ function Connections({ home }: { home: AssistantsHome }) {
           ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>Connect Gmail</Button>
             : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">Set up</Link></Button> : null)}
         {row(WhatsappLogoIcon, "ok", "WhatsApp",
-          !home.whatsapp.channel_id ? "Not set up for the office yet." : home.whatsapp.linked ? "Linked. Notices and drafts reach your phone, and you can chat with your assistant there." : "Link your number to get notices and chat on WhatsApp.",
-          home.whatsapp.linked ? <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Linked</Pill> : <Button size="sm" variant="outline" asChild><Link to="/channels">{home.whatsapp.channel_id ? "Link my WhatsApp" : "Set up"}</Link></Button>)}
+          !home.whatsapp.channel_id ? "Not set up for the office yet."
+            : home.whatsapp.status !== "WORKING" ? `The office number is not connected (${(home.whatsapp.status ?? "unknown").toLowerCase().replace(/_/g, " ")}). An admin reconnects it on Channels.`
+            : home.whatsapp.linked ? <>Office number {pretty(home.whatsapp.number)} connected, and your phone is linked: notices, drafts and chat reach you there.</>
+            : <>Office number {pretty(home.whatsapp.number)} is connected. Link <b>your</b> number to get notices and chat with your assistant.</>,
+          home.whatsapp.channel_id ? <LinkWhatsApp home={home} /> : <Button size="sm" variant="outline" asChild><Link to="/channels">Set up</Link></Button>)}
         {row(ChatCircleDotsIcon, "neutral", "Where you get notices",
           home.reach.length ? home.reach.map((r) => (r === "app" ? "this app" : r === "whatsapp" ? "WhatsApp" : "Telegram")).join(", ") : "Nowhere yet: turn on phone notifications or link WhatsApp.",
           null)}
@@ -562,7 +603,15 @@ export function AssistantsPage() {
               <div className="mt-4 hidden gap-2 lg:grid">
                 <p className="text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">Connected</p>
                 <span className="flex items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={home.google.account ? "text-ok" : "text-muted"} /> {home.google.account ? home.google.account.email : "Gmail not connected"}</span>
-                <span className="flex items-center gap-2 text-[12.5px]"><WhatsappLogoIcon size={15} className={home.whatsapp.linked ? "text-ok" : "text-muted"} /> {home.whatsapp.linked ? "WhatsApp linked" : "WhatsApp not linked"}</span>
+                <span className="flex items-center gap-2 text-[12.5px]">
+                  <WhatsappLogoIcon size={15} className={home.whatsapp.status === "WORKING" ? "text-ok" : "text-muted"} />
+                  {!home.whatsapp.channel_id ? "WhatsApp not set up" : home.whatsapp.status === "WORKING" ? `Office ${pretty(home.whatsapp.number)}` : "Office WhatsApp offline"}
+                </span>
+                {home.whatsapp.status === "WORKING" ? (
+                  <button type="button" onClick={() => go({ tab: "settings" })} className={cn("flex items-center gap-2 pl-[23px] text-left text-[12px]", home.whatsapp.linked ? "text-ok" : "text-warn hover:underline")}>
+                    {home.whatsapp.linked ? "Your phone is linked" : "Link your phone →"}
+                  </button>
+                ) : null}
                 {home.drafts_pending ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {home.drafts_pending} draft{home.drafts_pending > 1 ? "s" : ""} to approve</button> : null}
               </div>
             </aside>

@@ -240,10 +240,14 @@ async def task_tokens(db: AsyncSession, task_id: str) -> int:
 
 
 async def settle(db: AsyncSession, task_id: str, outcome: str) -> None:
-    """Record how a task that used skills ended: accepted | sent_back | failed."""
+    """Record how a task that used skills ended: accepted | sent_back | failed. A send-back is
+    provisional: when the reworked task is finally accepted (or fails), that is the outcome."""
     uses = (
         await db.scalars(
-            select(SkillUse).where(SkillUse.task_id == task_id, SkillUse.outcome.is_(None))
+            select(SkillUse).where(
+                SkillUse.task_id == task_id,
+                or_(SkillUse.outcome.is_(None), SkillUse.outcome == "sent_back"),
+            )
         )
     ).all()
     if not uses:
@@ -351,6 +355,30 @@ async def propose(
         and skill.description == description
     ):
         raise SkillError(f"{skill.name} already says exactly this.")
+    findings = scan(body, description, known_tools()) if kind != "retire" else []
+    if blocked(findings):
+        # Never store a draft that carries a secret or an injection (P17): say why, keep nothing.
+        raise SkillError(
+            "The safety scan blocked it: "
+            + "; ".join(f["message"] for f in findings if f["level"] == "block")[:300]
+        )
+    # A new draft under the same name replaces any older pending one, whoever proposed it.
+    if skill is None:
+        for old in (
+            await db.scalars(
+                select(SkillProposal).where(
+                    SkillProposal.workspace_id == ws.id,
+                    SkillProposal.name == name,
+                    SkillProposal.status == "pending",
+                    SkillProposal.skill_id.is_(None),
+                )
+            )
+        ).all():
+            old.status, old.decided_at, old.decision_note = (
+                "superseded",
+                _now(),
+                "A newer draft of the same skill replaced it.",
+            )
     # One open proposal per proposer and skill: a newer draft replaces the older one.
     if skill is not None:
         for old in (
@@ -379,7 +407,7 @@ async def propose(
         base_version=skill.version if skill else None,
         reason=reason.strip()[:2000],
         eval_cases=[c for c in (eval_cases or []) if isinstance(c, dict)][:10],
-        scan=scan(body, description, known_tools()) if kind != "retire" else [],
+        scan=findings,
         proposed_by=proposed_by,
         agent_id=agent.id if agent else None,
         branch_id=await _branch_for(db, agent),

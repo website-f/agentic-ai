@@ -160,6 +160,8 @@ async def _names(db: AsyncSession, actors: set[str]) -> dict[str, str]:
     users = {a.removeprefix("user:") for a in actors if a.startswith("user:")}
     agents = {a.removeprefix("agent:") for a in actors if a.startswith("agent:")}
     out = {a: "Agentic Office" for a in actors if a == "system"}
+    fixed = {"system:autopilot": "Learning autopilot", "curator": "Nightly curator"}  # P17
+    out |= {a: fixed[a] for a in actors if a in fixed}
     if users:
         for uid, name in (
             await db.execute(select(User.id, User.name).where(User.id.in_(users)))

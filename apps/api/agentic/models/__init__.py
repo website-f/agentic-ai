@@ -241,6 +241,8 @@ class LLMCall(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(16))  # ok | error
     error_class: Mapped[str | None] = mapped_column(String(40))
+    # The provider's own words (keys redacted), so a 400 can be diagnosed after the fact.
+    error_detail: Mapped[str | None] = mapped_column(String(500))
 
 
 class ProviderCheck(Base):

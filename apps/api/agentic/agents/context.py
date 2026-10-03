@@ -17,6 +17,10 @@ between jumps and the provider's prompt cache keeps hitting.
 
 A tool call and its results are never separated, so the conversation always stays valid for
 every provider.
+
+P17: the limits above suit big-context models. When the group's models have a smaller window
+(known from the provider's model list), every limit shrinks with it, so a 16k or 32k model is
+never sent a history it cannot hold.
 """
 
 import hashlib
@@ -26,6 +30,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.fence import fence
@@ -45,6 +50,58 @@ STUB_OVER = 400  # tool results shorter than this are kept even when old
 DUP_OVER = 200
 ANCHOR_CHARS = 2_500
 SUMMARY_TOKENS = 2_500
+# Share of the smallest context window in the group that the history may use (the system
+# prompt, the tool list and the reply need the rest).
+HISTORY_SHARE = 0.45
+MIN_WINDOW = 4_096
+
+
+@dataclass(frozen=True)
+class Limits:
+    prune_at: int = PRUNE_AT
+    tail: int = TAIL_TOKENS
+    compact_at: int = COMPACT_AT
+    compact_tail: int = COMPACT_TAIL
+    min_middle: int = MIN_MIDDLE
+
+
+def limits_for(window: int | None) -> Limits:
+    """The limits for a model that reads `window` tokens (None = unknown: the defaults)."""
+    if not window:
+        return Limits()
+    room = int(max(window, MIN_WINDOW) * HISTORY_SHARE)
+    if room >= COMPACT_AT:
+        return Limits()
+    scale = room / COMPACT_AT
+    return Limits(
+        prune_at=int(PRUNE_AT * scale),
+        tail=int(TAIL_TOKENS * scale),
+        compact_at=room,
+        compact_tail=int(COMPACT_TAIL * scale),
+        min_middle=max(500, int(MIN_MIDDLE * scale)),
+    )
+
+
+async def group_window(db: AsyncSession, workspace_id: str, group: str) -> int | None:
+    """The smallest known context window among the group's models (the fallback may be it)."""
+    from ..models import AIModel, ModelGroup  # late: keeps this module light for tests
+
+    g = await db.scalar(
+        select(ModelGroup).where(ModelGroup.workspace_id == workspace_id, ModelGroup.name == group)
+    )
+    if g is None or not g.members:
+        return None
+    windows = []
+    for m in g.members:
+        w = await db.scalar(
+            select(AIModel.context_window).where(
+                AIModel.provider_id == m.get("provider_id"), AIModel.model_id == m.get("model_id")
+            )
+        )
+        if w:
+            windows.append(int(w))
+    return min(windows) if windows else None
+
 
 _ID = re.compile(r"\b(?:dc|fl|tk|pk|wr|ag|tp|rp|wf|ap|sk|br)_[0-9a-z]{20,30}\b")
 _URL = re.compile(r"https?://[^\s)\]>\"']{6,200}")
@@ -218,19 +275,21 @@ async def plan(
     workspace_id: str,
     group: str,
     pinned_first: bool,
+    window: int | None = None,
     **ids: Any,
 ) -> Window:
     """Move the checkpoint and the prune point forward when the history has grown enough.
     `owner` is the Task or ChatSession (it stores ctx_summary, ctx_summary_upto, ctx_cut)."""
+    lim = limits_for(window)
     upto = owner.ctx_summary_upto or 0
     head = history[:1] if pinned_first else []
     body = [m for m in history[len(head) :] if m.id > upto]
     summary = owner.ctx_summary
 
-    if sum(msg_tokens(m) for m in body) > COMPACT_AT:
-        start = tail_start(body, COMPACT_TAIL, user_first=not pinned_first)
+    if sum(msg_tokens(m) for m in body) > lim.compact_at:
+        start = tail_start(body, lim.compact_tail, user_first=not pinned_first)
         middle = body[:start]
-        if sum(msg_tokens(m) for m in middle) >= MIN_MIDDLE:
+        if sum(msg_tokens(m) for m in middle) >= lim.min_middle:
             text = await _summarise(db, workspace_id, group, summary, middle, **ids)
             found = anchors(middle)
             prior = owner.ctx_summary or ""
@@ -251,8 +310,8 @@ async def plan(
     cut = owner.ctx_cut or 0
     total = sum(msg_tokens(m) for m in body)
     fresh = sum(msg_tokens(m) for m in body if m.id > cut)
-    if total > PRUNE_AT and fresh > TAIL_TOKENS + PRUNE_STEP:
-        start = tail_start(body, TAIL_TOKENS)
+    if total > lim.prune_at and fresh > lim.tail + PRUNE_STEP * lim.tail // TAIL_TOKENS:
+        start = tail_start(body, lim.tail)
         if start > 0:
             owner.ctx_cut = body[start - 1].id
             await db.commit()

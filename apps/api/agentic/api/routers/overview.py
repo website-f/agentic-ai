@@ -36,7 +36,7 @@ from ..deps import Principal, api_error, require
 router = APIRouter(prefix="/api/overview", tags=["overview"])
 
 OPEN = ("triage", "ready", "running", "blocked", "review")
-DONE = ("done", "review")
+DONE = ("done",)  # accepted work only; review is still open (counted as in_review)
 STUCK_AFTER = timedelta(hours=2)
 SUMMARY_TTL = 900
 
@@ -304,6 +304,7 @@ async def build(db: AsyncSession, principal: Principal, days: int) -> dict[str, 
             "working": sum(s["working"] for s in out_branches),
             "tasks_created": sum(s["tasks_created"] for s in out_branches),
             "tasks_done": sum(s["tasks_done"] for s in out_branches),
+            "in_review": sum(s["open"]["review"] for s in out_branches),
             "tasks_failed": sum(s["tasks_failed"] for s in out_branches),
             "open": sum(sum(s["open"].values()) for s in out_branches),
             "approvals_pending": sum(s["approvals_pending"] for s in out_branches),
@@ -353,8 +354,9 @@ def _facts(o: dict[str, Any]) -> str:
     t = o["totals"]
     lines.append(
         f"Totals: {t['agents']} agents, {t['tasks_created']} tasks created, {t['tasks_done']} "
-        f"done, {t['tasks_failed']} failed, {t['open']} open, {t['approvals_pending']} "
-        f"approvals waiting, {t['reports']} reports, US${t['usd']:.2f} AI spend."
+        f"done, {t['in_review']} waiting for review, {t['tasks_failed']} failed, "
+        f"{t['open']} open, {t['approvals_pending']} approvals waiting, "
+        f"{t['reports']} reports, US${t['usd']:.2f} AI spend."
     )
     if o["labels"]:
         lines.append("Work types: " + ", ".join(f"{x['label']} {x['count']}" for x in o["labels"]))

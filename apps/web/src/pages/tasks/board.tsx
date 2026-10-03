@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { CaretRightIcon, KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, CaretRightIcon, KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
@@ -20,6 +20,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
@@ -27,7 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
 import { cn, shortAge, timeAgo } from "@/lib/utils";
-import { PRIORITY_INFO, STATUS_INFO, tasksQuery, workKeys, type Task, type TaskStatus } from "@/lib/work";
+import { PRIORITY_INFO, STATUS_INFO, tasksQuery, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { NewTaskDialog } from "./new-task";
 import { TaskSheet } from "./task-sheet";
@@ -172,6 +173,7 @@ export function TasksPage() {
   const [dragFrom, setDragFrom] = useState<TaskStatus | null>(null);
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<TaskStatus | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const board = useRef<HTMLDivElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const jumpedAt = useRef(0);
@@ -190,7 +192,23 @@ export function TasksPage() {
     }
     return m;
   }, [tasks, q]);
-  const closed = [...(byStatus.get("failed") ?? []), ...(byStatus.get("cancelled") ?? [])];
+  const failed = byStatus.get("failed") ?? [];
+  const closed = [...failed, ...(byStatus.get("cancelled") ?? [])];
+
+  /** Relaunch every failed task shown (the API takes up to 50 per call and says what it skipped). */
+  const retryFailed = async () => {
+    try {
+      const r = await api<RetryFailedResult>("/api/tasks/retry-failed", "POST", { task_ids: failed.map((t) => t.id) });
+      const why = r.skipped[0]?.reason;
+      if (r.retried) toast.success(`Retrying ${r.retried} task${r.retried === 1 ? "" : "s"}.`, why ? { description: `${r.skipped.length} not retried: ${why}` } : undefined);
+      else toast.error(why ? `None retried: ${why}` : "Nothing to retry.");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      qc.invalidateQueries({ queryKey: workKeys.tasks });
+      qc.invalidateQueries({ queryKey: keys.status });
+    }
+  };
   // On phones the board opens on the first column that has work in it, not an empty Triage.
   const firstBusy = COLUMNS.find((c) => byStatus.get(c.status)?.length)?.status ?? "triage";
   const col = picked ?? firstBusy;
@@ -319,11 +337,22 @@ export function TasksPage() {
                 <WarningIcon size={15} weight="duotone" className="shrink-0 text-muted" /> Failed and cancelled
                 <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-muted tabular">{closed.length}</span>
               </summary>
+              {canWrite && failed.length ? (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
+                  <p className="min-w-0 text-[12.5px] text-muted">{failed.length} failed {failed.length === 1 ? "task was" : "tasks were"} never retried.</p>
+                  <Button size="sm" variant="outline" className="min-h-9" onClick={() => setRetrying(true)}>
+                    <ArrowClockwiseIcon size={14} weight="bold" /> Retry all failed
+                  </Button>
+                </div>
+              ) : null}
               <div className="grid max-h-[28rem] grid-cols-[minmax(0,1fr)] gap-2 overflow-y-auto border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {closed.map((t) => <TaskCard key={t.id} task={t} onOpen={() => openTask(t.id)} draggable={false} />)}
               </div>
             </details>
           ) : null}
+          <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={`Retry ${failed.length} failed task${failed.length === 1 ? "" : "s"}?`} confirmLabel="Retry all"
+            body={<>Each one starts a fresh run with its agent, continuing the same conversation.{failed.length > 50 ? " Up to 50 start now; retry again for the rest." : ""}{q.trim() ? " Only the tasks matching your filter are retried." : ""}</>}
+            onConfirm={retryFailed} />
         </DndContext>
       )}
       {search.task ? <TaskSheet taskId={search.task} onClose={() => navigate({ to: "/tasks", search: {} })} /> : null}

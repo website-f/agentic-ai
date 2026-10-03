@@ -23,7 +23,7 @@ from ..services import events
 from ..skills import curator as skills_curator
 from ..skills import store as skills_store
 from . import store
-from .facts import end, parse_json, same_numbers
+from .facts import end, has_list, parse_json, same_numbers
 
 log = logging.getLogger("agentic.brain.dream")
 
@@ -79,9 +79,11 @@ async def _judge(
                     {"role": "user", "content": "\n".join(lines)},
                 ],
                 task="brain.dream",
-                max_tokens=60 + 25 * len(pairs),
+                # ~20 tokens a verdict plus the wrapper; thinking models get more anyway.
+                max_tokens=200 + 30 * len(pairs),
                 temperature=0,
                 json_mode=True,
+                accept=has_list("verdicts"),
             )
         except gateway.GatewayUnavailable:
             continue

@@ -675,3 +675,58 @@ async def test_owner_asks_assistant_to_chase_a_staff_agent_who_whatsapps_its_per
         assert cos["id"] not in {x["id"] for x in (await staff.get("/api/agents")).json()}
     finally:
         await staff.aclose()
+
+
+def test_waha_self_chat_counts_but_never_our_own_replies():
+    me = {"id": "601131068317@c.us", "lid": "70811847291126@lid", "pushName": "Boss"}
+
+    def ev(p):
+        return {"event": "message.any", "me": me, "payload": p}
+
+    # The owner writes in "Message yourself" (the office number is their phone).
+    got = whatsapp.parse_waha(
+        ev({"id": "a", "from": me["id"], "to": me["id"], "fromMe": True, "body": "LINK ABCD2345"})
+    )
+    assert [(m.sender, m.text) for m in got] == [(me["id"], "LINK ABCD2345")]
+    got = whatsapp.parse_waha(
+        ev({"id": "b", "from": me["lid"], "to": me["lid"], "fromMe": True, "body": "hi"})
+    )
+    assert got and got[0].sender == me["id"]
+    # The owner messaging someone else from the office phone: not for us.
+    assert (
+        whatsapp.parse_waha(
+            ev({"id": "c", "from": me["id"], "to": "60123@c.us", "fromMe": True, "body": "hi"})
+        )
+        == []
+    )
+    # Our own reply in the self chat carries the mark: never answered again (no loop).
+    assert (
+        whatsapp.parse_waha(
+            ev(
+                {
+                    "id": "d",
+                    "from": me["id"],
+                    "to": me["id"],
+                    "fromMe": True,
+                    "body": "*Chief*: ok" + whatsapp.MARK,
+                }
+            )
+        )
+        == []
+    )
+    # Incoming from people still works; groups and statuses do not.
+    assert (
+        whatsapp.parse_waha(
+            ev({"id": "e", "from": "60177@c.us", "fromMe": False, "body": "hello"})
+        )[0].sender
+        == "60177@c.us"
+    )
+    assert (
+        whatsapp.parse_waha(ev({"id": "f", "from": "123@g.us", "fromMe": False, "body": "x"})) == []
+    )
+    assert (
+        whatsapp.parse_waha(
+            ev({"id": "g", "from": "status@broadcast", "fromMe": False, "body": "x"})
+        )
+        == []
+    )

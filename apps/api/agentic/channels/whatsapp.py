@@ -22,6 +22,11 @@ from typing import Any
 import httpx
 
 GRAPH = "https://graph.facebook.com/v21.0"
+# Appended (invisibly) to everything we send through WAHA. When the office number is the
+# owner's own phone they talk to their assistant in "Message yourself", where our replies also
+# arrive as the owner's own messages: the mark stops the assistant answering itself.
+MARK = "\u2063"
+WAHA_EVENTS = ["message.any", "session.status"]
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake
 
 
@@ -99,7 +104,7 @@ async def waha_start(cfg: Config, webhook_url: str) -> dict[str, Any]:
         "webhooks": [
             {
                 "url": webhook_url,
-                "events": ["message", "session.status"],
+                "events": WAHA_EVENTS,
                 "hmac": {"key": cfg.webhook_secret},
             }
         ]
@@ -120,6 +125,29 @@ async def waha_start(cfg: Config, webhook_url: str) -> dict[str, Any]:
             if e2.status not in (409, 422):  # already started
                 raise
     return await waha_status(cfg)
+
+
+async def waha_ensure_webhook(cfg: Config, webhook_url: str) -> bool:
+    """Bring an existing session's webhook up to date (url and events). True if changed."""
+    try:
+        s = await _waha(cfg, "GET", f"/api/sessions/{cfg.session}") or {}
+    except WhatsAppError:
+        return False
+    hooks = ((s.get("config") or {}).get("webhooks")) or []
+    ok = any(
+        h.get("url") == webhook_url and set(h.get("events") or []) >= set(WAHA_EVENTS)
+        for h in hooks
+    )
+    if ok:
+        return False
+    config = {
+        **(s.get("config") or {}),
+        "webhooks": [
+            {"url": webhook_url, "events": WAHA_EVENTS, "hmac": {"key": cfg.webhook_secret}}
+        ],
+    }
+    await _waha(cfg, "PUT", f"/api/sessions/{cfg.session}", {"name": cfg.session, "config": config})
+    return True
 
 
 async def waha_qr(cfg: Config) -> str | None:
@@ -216,7 +244,7 @@ async def send_text(cfg: Config, to: str, text: str) -> str:
         cfg,
         "POST",
         "/api/sendText",
-        {"session": cfg.session, "chatId": waha_chat_id(to), "text": text},
+        {"session": cfg.session, "chatId": waha_chat_id(to), "text": text + MARK},
     )
     mid = (data or {}).get("id", "")
     return str(mid.get("_serialized", "") if isinstance(mid, dict) else mid)  # WAHA: object or str
@@ -244,17 +272,37 @@ class Inbound:
     text: str
 
 
+def _same_number(a: str, b: str) -> bool:
+    da, db = digits(a.split("@")[0]), digits(b.split("@")[0])
+    return bool(da) and da == db
+
+
 def parse_waha(payload: dict[str, Any]) -> list[Inbound]:
-    if payload.get("event") != "message":
+    """People's messages to the office number, plus the owner's own "Message yourself" chat
+    when the office number is their phone. Groups, statuses and our own sends are skipped."""
+    if payload.get("event") not in ("message", "message.any"):
         return []
     p = payload.get("payload") or {}
-    sender = str(p.get("from") or "")
-    if p.get("fromMe") or not sender or sender.endswith("@g.us") or "@" not in sender:
-        return []  # our own messages, and groups, are not for us
     text = str(p.get("body") or "").strip()
-    if not text:
+    if not text or MARK in text:
+        return []  # empty, or a message we sent
+    me = payload.get("me") or {}
+    sender = str(p.get("from") or "")
+    if p.get("fromMe"):
+        # Sent from the office phone itself: only its chat with itself counts.
+        to = str(p.get("to") or "")
+        mine = [x for x in (me.get("id"), me.get("lid")) if x]
+        if not mine or not (to in mine or any(_same_number(to, m) for m in mine)):
+            return []
+        sender = str(me.get("id") or to)
+    if not sender or "@" not in sender or sender.endswith(("@g.us", "@broadcast", "@newsletter")):
         return []
-    name = str(((p.get("_data") or {}).get("notifyName")) or (p.get("notifyName") or ""))
+    name = str(
+        ((p.get("_data") or {}).get("notifyName"))
+        or (p.get("notifyName") or "")
+        or me.get("pushName")
+        or ""
+    )
     return [Inbound(str(p.get("id") or ""), sender, name, text)]
 
 

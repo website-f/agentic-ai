@@ -180,6 +180,9 @@ async def assistants_home(
         "whatsapp": {
             "channel_id": wa.id if wa else None,
             "number": (wa.state or {}).get("number") if wa else None,
+            # The office number: connected (WORKING) or not, apart from this person's own link.
+            "status": (wa.state or {}).get("status") if wa else None,
+            "provider": (wa.state or {}).get("provider") if wa else None,
             "linked": bool(linked),
         },
         "reach": await deliver.reach(db, principal.workspace_id, principal.user.id),

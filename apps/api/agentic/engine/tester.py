@@ -1,8 +1,12 @@
-"""The "Test connection" button: three steps, streamed as they finish.
+"""The "Test connection" button and the scheduled health check, streamed as they finish.
 
 1. Key and reachability   (key endpoint / model list)
 2. Chat round-trip        (tiny prompt, auto-raises the budget for thinking models)
-3. Capabilities, optional (tool calling, JSON mode, embeddings)
+3. JSON mode              (background jobs depend on it; a failure marks the provider degraded)
+4. Capabilities, optional (tool calling, embeddings)
+
+A saved provider is tested with a model one of its model groups really uses, so a green
+check means the work it does will run, not that some other model answers.
 """
 
 import json
@@ -11,9 +15,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import AIProvider, ProviderCheck
+from ..models import AIProvider, ModelGroup, ProviderCheck
 from . import client, store
 from .presets import BY_ID
 
@@ -67,6 +72,31 @@ def pick_model(requested: str | None, preset_id: str | None, available: list[str
         )
     ]
     return (chatty or available or [None])[0]
+
+
+async def group_model(db: AsyncSession | None, p: AIProvider | None) -> str | None:
+    """The first model this provider serves in a chat group (Smart before Fast, ...)."""
+    if db is None or p is None:
+        return None
+    groups = (
+        await db.scalars(
+            select(ModelGroup)
+            .where(ModelGroup.workspace_id == p.workspace_id, ModelGroup.name != "embed")
+            .order_by(ModelGroup.position)
+        )
+    ).all()
+    for g in groups:
+        for m in g.members or []:
+            if m.get("provider_id") == p.id and m.get("model_id"):
+                return str(m["model_id"])
+    return None
+
+
+def parses_as_object(text: str) -> bool:
+    try:
+        return isinstance(json.loads(text.strip().strip("`").removeprefix("json")), dict)
+    except ValueError:
+        return False
 
 
 def _key_detail(path: str, data: dict[str, Any], model_count: int) -> str:
@@ -140,7 +170,11 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
 
     # ---- 2. chat
     label = "Chat round-trip"
-    model = pick_model(target.model, target.preset, ids)
+    # Scheduled checks follow the groups (the model last tested may no longer be used);
+    # a person testing by hand gets the model they typed.
+    used = await group_model(db, target.provider)
+    wanted = (used or target.model) if target.source == "scheduled" else (target.model or used)
+    model = pick_model(wanted, target.preset, ids)
     if not model:
         yield _event(
             "chat",
@@ -157,8 +191,10 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
         target.key,
         model,
         [{"role": "user", "content": "Reply with the word OK and nothing else."}],
-        max_tokens=16,
+        # A known thinking model would come back empty at 16 and need a second call.
+        max_tokens=client.REASONING_FLOOR if client.thinks(model) else 16,
         temperature=0,
+        reasoning_effort="low" if client.takes_effort(model) else None,
     )
     model_row = await store.model_row(db, pid, model) if db and pid else None
     cost = store.cost_usd(model_row, reply.usage, target.tier)
@@ -172,6 +208,7 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
         latency_ms=reply.call.latency_ms,
         ok=reply.call.ok and bool(reply.content.strip()),
         error_class=reply.call.failure.error_class if reply.call.failure else None,
+        error_detail=client.error_detail(reply.call) if not reply.call.ok else None,
         cost=cost,
     )
     chat_ok = reply.call.ok and bool(reply.content.strip())
@@ -210,8 +247,23 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
             rate=reply.call.rate,
         )
 
-    # ---- 3. capabilities
+    # ---- 3. JSON mode: what memory, skills and workflows run on
     caps: dict[str, bool] = {}
+    json_msg = ""
+    if chat_ok:
+        yield _event("json", "JSON mode", "running", model=model)
+        caps["json"], json_msg, latency = await _json_probe(target, model, reply, pid)
+        yield _event(
+            "json",
+            "JSON mode",
+            "ok" if caps["json"] else "failed",
+            latency_ms=latency,
+            model=model,
+            detail="Returned valid JSON." if caps["json"] else json_msg,
+        )
+    json_ok = caps.get("json", False)
+
+    # ---- 4. capabilities
     if target.capabilities and chat_ok:
         yield _event("tools", "Tool calling", "running")
         r = await client.chat(
@@ -237,32 +289,6 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
             ),
         )
 
-        yield _event("json", "JSON mode", "running")
-        r = await client.chat(
-            target.base_url,
-            target.key,
-            model,
-            [{"role": "user", "content": 'Return a JSON object {"ok": true} and nothing else.'}],
-            max_tokens=60,
-            temperature=0,
-            json_mode=True,
-        )
-        try:
-            caps["json"] = isinstance(
-                json.loads(r.content.strip().strip("`").removeprefix("json")), dict
-            )
-        except ValueError:
-            caps["json"] = False
-        yield _event(
-            "json",
-            "JSON mode",
-            "ok" if caps["json"] else "failed",
-            latency_ms=r.call.latency_ms,
-            detail="Returned valid JSON."
-            if caps["json"]
-            else (r.call.failure.message if r.call.failure else "Did not return valid JSON."),
-        )
-
         embed_model = next((m for m in ids if "embed" in m.lower()), None)
         if embed_model:
             yield _event("embed", "Embeddings", "running", model=embed_model)
@@ -280,27 +306,74 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
                 else (r2.failure.message if r2.failure else "No vector returned."),
             )
 
+    if not chat_ok:
+        error_class = reply.call.failure.error_class if reply.call.failure else "empty_reply"
+        summary = (
+            reply.call.failure.message
+            if reply.call.failure
+            else "The model returned an empty reply."
+        )
+    elif not json_ok:
+        error_class = "json_failed"
+        summary = f"Chat works, but {model} failed the JSON check: {json_msg}"
+    else:
+        error_class, summary = None, "Connection works."
     await _persist(
         db,
         target,
         ok_key=True,
-        ok_chat=chat_ok,
+        ok_chat=chat_ok and json_ok,
         latency=reply.call.latency_ms,
-        error_class=None
-        if chat_ok
-        else (reply.call.failure.error_class if reply.call.failure else "empty_reply"),
+        error_class=error_class,
         models=models,
-        summary="Connection works."
-        if chat_ok
-        else (
-            reply.call.failure.message
-            if reply.call.failure
-            else "The model returned an empty reply."
-        ),
+        summary=summary,
         tested_model=model,
         caps=caps,
     )
-    yield {"type": "done", "ok": chat_ok, "model": model, "models": ids}
+    yield {"type": "done", "ok": chat_ok and json_ok, "model": model, "models": ids}
+
+
+async def _json_probe(
+    target: Target, model: str, chat: client.ChatResult, pid: str | None
+) -> tuple[bool, str, int]:
+    """A tiny JSON-mode call shaped like the background jobs: thinking models get the same
+    budget and reasoning_effort the gateway would give them. Returns (ok, why not, ms)."""
+    thinker = chat.reasoning_retry or client.thinks(model)
+    if pid and not thinker:
+        thinker = await store.is_reasoning(pid, model)
+    r = await client.chat(
+        target.base_url,
+        target.key,
+        model,
+        [{"role": "user", "content": 'Return a JSON object {"ok": true} and nothing else.'}],
+        max_tokens=client.JSON_REASONING_FLOOR if thinker else 60,
+        temperature=0,
+        json_mode=True,
+        quirks=chat.quirks,
+        reasoning_effort="low" if thinker and client.takes_effort(model) else None,
+    )
+    ok = r.call.ok and r.finish_reason != "length" and parses_as_object(r.content)
+    if r.call.failure:
+        why = r.call.failure.message
+    elif r.call.ok and r.finish_reason == "length":
+        why = "The reply was cut off by the token limit (a thinking model needs more room)."
+    else:
+        why = "The reply was not valid JSON."
+    await store.record_call(
+        workspace_id=target.workspace_id,
+        task="engine.test",
+        provider_id=pid,
+        provider_name=target.name,
+        model=r.served_model or model,
+        usage=r.usage,
+        latency_ms=r.call.latency_ms,
+        ok=ok,
+        error_class=None
+        if ok
+        else (r.call.failure.error_class if r.call.failure else "json_failed"),
+        error_detail=None if ok else (client.error_detail(r.call) or why),
+    )
+    return ok, why, r.call.latency_ms
 
 
 async def _persist(

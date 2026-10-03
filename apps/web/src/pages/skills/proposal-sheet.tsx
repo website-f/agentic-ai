@@ -1,4 +1,4 @@
-import { ArchiveIcon, CheckIcon, FlaskIcon, GitDiffIcon, PencilSimpleIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, CheckIcon, FlaskIcon, GitDiffIcon, HourglassIcon, PencilSimpleIcon, QuestionIcon, RobotIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -13,8 +13,9 @@ import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
+import { isAutoApproved, learningKeys } from "@/lib/learning";
 import { keys } from "@/lib/queries";
-import { compact, KIND_LABEL, proposalQuery, skillKeys, type Proposal } from "@/lib/skills";
+import { compact, KIND_LABEL, proposalQuery, skillKeys, type ProposalDetail } from "@/lib/skills";
 import { timeAgo } from "@/lib/utils";
 
 import { EvalResults, SuiteBadge } from "./eval-results";
@@ -30,7 +31,7 @@ function Heading({ icon, tone = "neutral", children, actions }: { icon: typeof F
   );
 }
 
-function Scan({ p }: { p: Proposal }) {
+function Scan({ p }: { p: ProposalDetail }) {
   if (p.kind === "retire") return null;
   if (!p.scan.length) return <Pill tone="ok" className="w-fit"><CheckIcon size={12} weight="bold" /> Safety scan clean</Pill>;
   return (
@@ -53,6 +54,7 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
   const refresh = () => {
     qc.invalidateQueries({ queryKey: skillKeys.all });
     qc.invalidateQueries({ queryKey: keys.status });
+    qc.invalidateQueries({ queryKey: learningKeys.all });
   };
   const approve = useMutation({
     mutationFn: () => api(`/api/skill-proposals/${id}/approve`, "POST", editing ?? {}),
@@ -78,6 +80,7 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
 
   const blocked = p?.scan.some((f) => f.level === "block") && !editing;
   const pending = p?.status === "pending";
+  const auto = p ? isAutoApproved(p) : false;
 
   return (
     <SideSheet
@@ -88,6 +91,7 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
         <span className="flex flex-wrap items-center gap-2">
           <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
           <Pill tone={STATUS_TONE[p.status]}>{p.status}</Pill>
+          {auto ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> Auto-approved</Pill> : null}
           <span>from {p.proposed_by_name}, {timeAgo(p.created_at).toLowerCase()}</span>
         </span>
       ) : null}
@@ -126,6 +130,12 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
               <textarea id="reject-reason" value={rejecting} onChange={(e) => setRejecting(e.target.value)} rows={3} autoFocus
                 className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
             </div>
+          ) : null}
+          {pending && p.decision_note ? (
+            <p role="status" className="flex items-start gap-2 rounded-[var(--radius-sm)] bg-warn/10 px-3 py-2 text-[13px] text-warn">
+              <HourglassIcon size={16} weight="fill" className="mt-0.5 shrink-0" aria-hidden />
+              <span className="min-w-0 break-words">{p.decision_note}</span>
+            </p>
           ) : null}
           <FormError message={approve.error ? errorMessage(approve.error) : reject.error ? errorMessage(reject.error) : null} />
 
@@ -193,8 +203,8 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
           {p.status !== "pending" ? (
             <p className="text-[12.5px] text-muted">
               {p.status === "approved" ? "Approved" : p.status === "rejected" ? "Rejected" : "Replaced by a newer draft"}
-              {p.decided_by_name ? ` by ${p.decided_by_name}` : ""}{p.decided_at ? `, ${timeAgo(p.decided_at).toLowerCase()}` : ""}
-              {p.decision_note ? `: ${p.decision_note}` : "."}
+              {p.decided_by_name ? ` by ${p.decided_by_name}` : auto ? " by the learning autopilot" : ""}{p.decided_at ? `, ${timeAgo(p.decided_at).toLowerCase()}` : ""}
+              {p.decision_note ? `: ${auto ? p.decision_note.replace(/^Approved automatically:\s*/, "") : p.decision_note}` : "."}
             </p>
           ) : null}
         </div>

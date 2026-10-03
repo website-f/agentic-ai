@@ -105,6 +105,15 @@ export interface Task {
   branch_id?: string | null;
   goal?: string | null;
   goal_tries?: number;
+  /** Lists cut brief and result short; the detail (taskQuery) always has the full text. */
+  truncated?: boolean;
+}
+
+/** POST /api/tasks/retry-failed */
+export interface RetryFailedResult {
+  retried: number;
+  retried_ids: string[];
+  skipped: { id: string; reason: string }[];
 }
 
 export interface TaskEvent {
@@ -225,7 +234,7 @@ export const toolsQuery = queryOptions({
   staleTime: Infinity,
 });
 export const sopsQuery = queryOptions({ queryKey: workKeys.sops, queryFn: () => api<SOP[]>("/api/sops") });
-export const tasksQuery = queryOptions({ queryKey: workKeys.tasks, queryFn: () => api<Task[]>("/api/tasks") });
+export const tasksQuery = queryOptions({ queryKey: workKeys.tasks, queryFn: () => api<Task[]>("/api/tasks?limit=500") });
 export const taskQuery = (id: string) =>
   queryOptions({ queryKey: workKeys.task(id), queryFn: () => api<TaskDetail>(`/api/tasks/${id}`) });
 export const approvalsQuery = (state: "pending" | "history" = "pending") =>

@@ -152,6 +152,7 @@ async def record_call(
     latency_ms: int,
     ok: bool,
     error_class: str | None = None,
+    error_detail: str | None = None,
     group: str | None = None,
     cost: Decimal | None = None,
     agent_id: str | None = None,
@@ -179,6 +180,7 @@ async def record_call(
                     latency_ms=latency_ms,
                     status="ok" if ok else "error",
                     error_class=error_class,
+                    error_detail=(error_detail or "")[:500] or None,
                 )
             )
             await db.commit()

@@ -13,12 +13,14 @@ import { Markdown } from "@/components/markdown";
 import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
+import { learningKeys, revertSkill } from "@/lib/learning";
 import { compact, pct, skillKeys, skillQuery, TRUST_LABEL, type SkillDetail } from "@/lib/skills";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
@@ -191,6 +193,17 @@ export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; c
   const { data: s, isLoading, error } = useQuery(skillQuery(id));
   const [editing, setEditing] = useState(false);
   const [openVersion, setOpenVersion] = useState<number | null>(null);
+  const [restoring, setRestoring] = useState<number | null>(null);
+  const restore = async (version: number) => {
+    try {
+      const r = await revertSkill(id, version);
+      qc.invalidateQueries({ queryKey: skillKeys.all });
+      qc.invalidateQueries({ queryKey: learningKeys.all });
+      toast.success(`Version ${version} is live again (saved as version ${r.version}). Agents use it from their next step.`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
   const setStatus = useMutation({
     mutationFn: (status: "active" | "retired") => api(`/api/skills/${id}`, "PATCH", { status }),
     onSuccess: (_r, st) => { qc.invalidateQueries({ queryKey: skillKeys.all }); toast.success(st === "retired" ? "Retired. Agents no longer see it." : "Restored."); },
@@ -256,15 +269,23 @@ export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; c
                 const open = openVersion === v.version;
                 return (
                   <li key={v.version} className="min-w-0 overflow-hidden rounded-[var(--radius-sm)] border border-border bg-surface">
-                    <button type="button" onClick={() => setOpenVersion(open ? null : v.version)} disabled={!prev} aria-expanded={prev ? open : undefined}
-                      className={cn("flex w-full items-start gap-3 px-3 py-2.5 text-left", prev && "hover:bg-surface-2/60")}>
-                      <span className="rounded-full bg-surface-2 px-2 font-mono text-[12px] font-medium">v{v.version}</span>
-                      <span className="min-w-0 flex-1 text-[12.5px]">
-                        <span className="block break-words">{v.note ?? "—"}</span>
-                        <span className="block text-muted">{v.created_by_name}{v.approved_by_name ? `, approved by ${v.approved_by_name}` : ""} · {timeAgo(v.created_at).toLowerCase()}</span>
-                      </span>
-                      {prev ? <span className="shrink-0 text-[12px] font-medium text-accent">{open ? "Hide" : "Diff"}</span> : null}
-                    </button>
+                    <div className="flex items-start">
+                      <button type="button" onClick={() => setOpenVersion(open ? null : v.version)} disabled={!prev} aria-expanded={prev ? open : undefined}
+                        className={cn("flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left", prev && "hover:bg-surface-2/60")}>
+                        <span className="rounded-full bg-surface-2 px-2 font-mono text-[12px] font-medium">v{v.version}</span>
+                        <span className="min-w-0 flex-1 text-[12.5px]">
+                          <span className="block break-words">{v.note ?? "—"}</span>
+                          <span className="block text-muted">{v.created_by_name}{v.approved_by_name ? `, approved by ${v.approved_by_name}` : ""} · {timeAgo(v.created_at).toLowerCase()}</span>
+                        </span>
+                        {v.version === s.version ? <Pill tone="ok" className="shrink-0 px-2 text-[11px] leading-[18px]">Live</Pill>
+                          : prev ? <span className="shrink-0 text-[12px] font-medium text-accent">{open ? "Hide" : "Diff"}</span> : null}
+                      </button>
+                      {canDecide && v.version !== s.version ? (
+                        <Button size="sm" variant="ghost" className="my-1.5 mr-1.5 shrink-0 px-2.5" aria-label={`Restore version ${v.version}`} onClick={() => setRestoring(v.version)}>
+                          <ArrowCounterClockwiseIcon size={14} /> Restore<span className="max-sm:hidden">&nbsp;this version</span>
+                        </Button>
+                      ) : null}
+                    </div>
                     {open && prev ? <div className="min-w-0 overflow-x-auto border-t border-border p-3"><DiffView before={prev.body} after={v.body} labels={[`v${prev.version}`, `v${v.version}`]} /></div> : null}
                   </li>
                 );
@@ -291,6 +312,16 @@ export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; c
           ) : null}
         </div>
       )}
+      {restoring !== null && s ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(o) => !o && setRestoring(null)}
+          title={`Restore version ${restoring}?`}
+          body={`Its text goes live again as version ${s.version + 1}, and agents use it from their next step. Version ${s.version} stays in the history, so you can switch back at any time.`}
+          confirmLabel="Restore this version"
+          onConfirm={() => restore(restoring)}
+        />
+      ) : null}
     </SideSheet>
   );
 }

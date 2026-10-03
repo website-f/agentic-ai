@@ -16,7 +16,7 @@ def _verdicts(monkeypatch, seq):
     async def fake(db, task, agent, result):
         v = seq[min(calls["n"], len(seq) - 1)]
         calls["n"] += 1
-        return v
+        return goals.Verdict(*v)
 
     monkeypatch.setattr(goals, "judge", fake)
     return calls

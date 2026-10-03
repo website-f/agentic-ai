@@ -1,6 +1,6 @@
 import {
-  ArchiveIcon, ArrowsMergeIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, LightningIcon, PencilSimpleIcon, PlusIcon,
-  SealQuestionIcon, ShieldWarningIcon, SparkleIcon,
+  ArchiveIcon, ArrowsMergeIcon, BookOpenTextIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, LightningIcon, PencilSimpleIcon, PlusIcon,
+  RobotIcon, SealQuestionIcon, ShieldWarningIcon, SparkleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -18,9 +18,12 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
+import { isAutoApproved } from "@/lib/learning";
 import { keys, meQuery } from "@/lib/queries";
 import { compact, KIND_LABEL, pct, proposalsQuery, skillKeys, skillsQuery, TRUST_LABEL, type Proposal, type ProposalKind, type Skill } from "@/lib/skills";
 import { cn, timeAgo } from "@/lib/utils";
+
+import { LearnSourceDialog } from "@/pages/learning/learn-source-dialog";
 
 import { SuiteBadge } from "./eval-results";
 import { ProposalSheet } from "./proposal-sheet";
@@ -134,6 +137,8 @@ function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
   const blocks = p.scan.filter((f) => f.level === "block").length;
   const warns = p.scan.length - blocks;
   const look = KIND_LOOK[p.kind];
+  const auto = isAutoApproved(p);
+  const decider = p.decided_by_name ?? (/^(Approved|Closed) automatically/.test(p.decision_note ?? "") ? "the autopilot" : null);
   return (
     <li>
       <button type="button" onClick={onOpen} className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60">
@@ -143,17 +148,23 @@ function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
             <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{p.name}</span>
             <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
             {p.status !== "pending" ? <Pill tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "neutral"}>{p.status}</Pill> : null}
+            {auto ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> Auto-approved</Pill> : null}
             {blocks ? <Pill tone="danger"><ShieldWarningIcon size={12} weight="fill" /> Must fix</Pill> : warns ? <Pill tone="warn">{warns} to check</Pill> : null}
             {p.eval?.new ? <SuiteBadge suite={p.eval.new} label="Tests" /> : null}
             {p.stale ? <Pill tone="warn">Outdated draft</Pill> : null}
           </span>
           {p.reason ? <span className="line-clamp-2 text-[13px] break-words text-muted">{p.reason}</span> : null}
+          {p.decision_note ? (
+            <span className={cn("w-fit max-w-full rounded-sm px-2 py-1 text-[12.5px] break-words", p.status === "pending" ? "bg-warn/10 text-warn" : "bg-surface-2/70 text-fg/80")}>
+              {p.decision_note}
+            </span>
+          ) : null}
           <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">
             <Meta items={[
               p.proposed_by_name,
               p.source_task ? <span key="t" className="break-words">from “{p.source_task.title}”</span> : null,
               timeAgo(p.created_at).toLowerCase(),
-              p.decided_by_name ? `${p.status} by ${p.decided_by_name}` : null,
+              decider ? `${p.status} by ${decider}` : null,
             ]} />
           </span>
         </span>
@@ -171,6 +182,7 @@ export function SkillsPage() {
   const tab: SkillTab = search.tab && SKILL_TABS.includes(search.tab) ? search.tab : "library";
   const [state, setState] = useState<"active" | "retired">("active");
   const [creating, setCreating] = useState(0);
+  const [teaching, setTeaching] = useState(0);
   const { data: skills, isLoading, error } = useQuery(skillsQuery(state));
   const { data: pending = [] } = useQuery(proposalsQuery("pending"));
   const { data: decided = [] } = useQuery({ ...proposalsQuery("decided"), enabled: tab === "history" });
@@ -192,7 +204,12 @@ export function SkillsPage() {
       <PageHeader
         title="Skills"
         description="Procedures your agents load when a task matches, so the second time is faster and cheaper. Agents propose new ones from their work; nothing is used until a person approves it."
-        actions={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New skill</Button> : null}
+        actions={canWrite ? (
+          <>
+            <Button variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> Teach from a source</Button>
+            <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New skill</Button>
+          </>
+        ) : null}
       />
       {skills && state === "active" ? (
         <StatGrid>
@@ -248,6 +265,7 @@ export function SkillsPage() {
 
       {search.skill ? <SkillSheet key={search.skill} id={search.skill} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ skill: undefined })} /> : null}
       {search.proposal ? <ProposalSheet key={search.proposal} id={search.proposal} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ proposal: undefined })} /> : null}
+      {teaching ? <LearnSourceDialog key={teaching} open onOpenChange={(o) => !o && setTeaching(0)} /> : null}
       {creating ? <NewSkill key={creating} open canDecide={canDecide} onOpenChange={(o) => !o && setCreating(0)} /> : null}
     </Page>
   );

@@ -1,4 +1,4 @@
-import { ClipboardTextIcon, PaperPlaneRightIcon, PlusIcon } from "@phosphor-icons/react";
+import { ClipboardTextIcon, PaperPlaneRightIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { Select } from "@/components/ui/select";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [local, setLocal] = useState<Msg[]>([]);
+  const [deleting, setDeleting] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
   const sessions = useQuery({
@@ -63,6 +65,21 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [messages.length, send.isPending, reduce]);
 
+  const remove = async () => {
+    if (!sessionId) return;
+    try {
+      await api(`/api/chat/sessions/${sessionId}`, "DELETE");
+    } catch (e) {
+      toast.error(errorMessage(e));
+      return;
+    }
+    qc.removeQueries({ queryKey: workKeys.messages(sessionId) });
+    qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
+    setLocal([]);
+    setSessionId(null);
+    toast.success("Conversation deleted.");
+  };
+
   const submit = () => {
     const text = draft.trim();
     if (!text || send.isPending) return;
@@ -84,11 +101,19 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
           options={[{ value: "new", label: "New conversation" }, ...(sessions.data ?? []).map((s) => ({ value: s.id, label: s.title }))]}
         />
         {sessionId ? (
-          <Button size="sm" variant="ghost" onClick={() => { setLocal([]); setSessionId(null); }}>
-            <PlusIcon size={14} /> New
-          </Button>
+          <>
+            <Button size="sm" variant="ghost" onClick={() => { setLocal([]); setSessionId(null); }}>
+              <PlusIcon size={14} /> New
+            </Button>
+            <Button size="icon-sm" variant="ghost" className="size-9 shrink-0 text-muted hover:text-danger" disabled={send.isPending}
+              onClick={() => setDeleting(true)} aria-label="Delete this conversation" title="Delete this conversation">
+              <TrashIcon size={16} />
+            </Button>
+          </>
         ) : null}
       </div>
+      <ConfirmDialog open={deleting} onOpenChange={setDeleting} title="Delete this conversation?" danger confirmLabel="Delete"
+        body={`Its messages are removed for good. What ${agent.name} already learned from it stays in its memory.`} onConfirm={remove} />
 
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4" aria-live="polite">
         {!messages.length && !send.isPending ? (

@@ -1,19 +1,22 @@
 """Goal loop (P13, idea from Hermes Agent's /goal): a task with a "done when…" keeps working
 until a model judges the goal met, or a cap is reached.
 
-When a task that has a goal finishes, a judge (the agent's own model group, cheap one call)
-reads the goal and the result and returns met / not met with what is missing. If it is not met
+When a task that has a goal finishes, a judge (one call; P17: a different model group from the
+agent's own when one is set up, so the work is not graded by the model that wrote it) reads the
+goal and the result and returns met / not met with what is missing. If no judge can answer, the
+task is not passed silently: it goes to a person for review. If it is not met
 and the task is under the cap, the agent is nudged with what is missing and the same work
 continues (a fresh run on the same conversation, like a person's "send back"). Bounded by
 MAX_GOAL_TRIES so it can never loop forever, and every model call still counts against the
 task's call limit and the agent's budget.
 """
 
-import json
 import logging
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..brain.facts import parse_json
 from ..core.fence import fence
 from ..models import Agent, Task
 
@@ -29,8 +32,19 @@ JUDGE_SYSTEM = (
 )
 
 
-async def judge(db: AsyncSession, task: Task, agent: Agent, result: str | None) -> tuple[bool, str]:
-    """(met, what is missing). On any model trouble, treat as met so work never gets stuck."""
+@dataclass(frozen=True)
+class Verdict:
+    met: bool
+    missing: str = ""
+    checked: bool = True  # False: no judge could answer (the work goes to a person)
+
+
+def judge_groups(own: str) -> tuple[str, ...]:
+    """Another group first, so the model that did the work does not grade it."""
+    return tuple(dict.fromkeys([g for g in ("smart", "fast") if g != own] + [own]))
+
+
+async def judge(db: AsyncSession, task: Task, agent: Agent, result: str | None) -> Verdict:
     from ..engine import gateway
 
     user = (
@@ -38,26 +52,26 @@ async def judge(db: AsyncSession, task: Task, agent: Agent, result: str | None) 
         f"The result the agent produced:\n{fence((result or '').strip() or '(no result)')}"
     )
     try:
-        r = await gateway.chat(
+        r = await gateway.chat_first(
             db,
             agent.workspace_id,
-            agent.model_group,
+            judge_groups(agent.model_group),
             [{"role": "system", "content": JUDGE_SYSTEM}, {"role": "user", "content": user}],
             task="goal.judge",
             max_tokens=400,
             temperature=0,
             json_mode=True,
+            accept=lambda c: "met" in parse_json(c),
             agent_id=agent.id,
             task_id=task.id,
         )
     except gateway.GatewayUnavailable:
-        return True, ""
-    try:
-        data = json.loads(r.content or "{}")
-    except ValueError:
-        return True, ""
-    met = bool(data.get("met"))
-    return met, str(data.get("missing") or "")[:500]
+        log.warning("no judge could check the goal of %s", task.id)
+        return Verdict(True, "", checked=False)
+    data = parse_json(r.content or "")
+    if "met" not in data:
+        return Verdict(True, "", checked=False)
+    return Verdict(bool(data.get("met")), str(data.get("missing") or "")[:500])
 
 
 def nudge(missing: str) -> str:

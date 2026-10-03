@@ -747,7 +747,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       <ConfirmDialog open={leaving} onOpenChange={setLeaving} title="Leave without saving?" danger confirmLabel="Discard changes"
         body="Your changes to this workflow will be lost." onConfirm={async () => onClose()} />
       {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={`Delete ${existing.name}?`} danger confirmLabel="Delete"
-        body="Agents following it stop following it. Past runs and work stay." onConfirm={async () => { await del.mutateAsync(); }} /> : null}
+        body="Agents following it stop following it. Its finished runs are deleted; tasks they created stay on the board." onConfirm={async () => { await del.mutateAsync(); }} /> : null}
     </div>
   );
 }

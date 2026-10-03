@@ -1,6 +1,7 @@
 """OpenAI-compatible HTTP calls. Every function guards the URL first (core/ssrf.py) and
 never logs the key. Tests swap the transport with `use_transport`."""
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,6 +13,60 @@ from ..core.ssrf import pinned
 from .errors import Failure, classify_exception, classify_response, rate_limits
 
 REASONING_FLOOR = 2048  # thinking models spend max_tokens on hidden reasoning first
+# A JSON reply must think AND close every bracket. Measured: DeepSeek replies cut at
+# exactly 2048 were 80 wasted calls, and Groq gpt-oss fails at 600 but works at 2048.
+JSON_REASONING_FLOOR = 4096
+
+# Model families that think before answering (name only, provider prefix and :tag dropped).
+# A model missing here is still learned the first time it comes back empty (see chat()).
+_THINKS = re.compile(
+    r"gpt-oss|^o[134](?:$|-)|^gpt-5(?!.*chat)|deepseek-(?:reasoner|r1)|(?:^|-)r1(?:$|-)"
+    r"|qwq|qwen3|thinking|reasoner|reasoning|magistral|^glm-(?:4\.[5-9]|z1)|gemini-2\.5"
+    r"|grok-3-mini|^grok-4"
+)
+# Families whose API takes reasoning_effort "low" (Groq gpt-oss, OpenAI o-series and gpt-5,
+# Gemini 2.5, xAI grok-3-mini). DeepSeek has no such knob; others may reject it, which is
+# learned as the no_reasoning_effort quirk.
+_TAKES_EFFORT = re.compile(
+    r"gpt-oss|^o[34](?:$|-)|^o1(?:$|-\d)|^gpt-5(?!.*chat)|gemini-2\.5|grok-3-mini"
+)
+
+
+def _bare(model: str) -> str:
+    return model.lower().rsplit("/", 1)[-1].split(":", 1)[0]
+
+
+def thinks(model: str) -> bool:
+    """Known reasoning model, before it has had a chance to run out of tokens."""
+    return bool(_THINKS.search(_bare(model)))
+
+
+def takes_effort(model: str) -> bool:
+    return bool(_TAKES_EFFORT.search(_bare(model)))
+
+
+def reasoning_floor(json_mode: bool) -> int:
+    return JSON_REASONING_FLOOR if json_mode else REASONING_FLOOR
+
+
+_KEYLIKE = re.compile(
+    r"(sk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9]{8,}|AIza[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{8,}"
+    r"|(?:bearer|key|token)[\"']?\s*[:=\s]\s*[\"']?[A-Za-z0-9._-]{16,}"
+    r"|\b[A-Za-z0-9_-]{32,}\b)",
+    re.I,
+)
+
+
+def error_detail(call: "CallResult") -> str | None:
+    """What the provider actually said about a failed call, keys redacted, for llm_calls."""
+    text = str(call.data.get("error_text") or "") or (call.failure.message if call.failure else "")
+    return redact(text)[:500] or None
+
+
+def redact(text: str) -> str:
+    """One line, with anything that looks like a key or token replaced."""
+    return _KEYLIKE.sub("[redacted]", " ".join(text.split()))
+
 
 _transport: httpx.AsyncBaseTransport | None = None
 
@@ -175,11 +230,23 @@ def _quirk_for(error_text: str) -> str | None:
         return "max_completion_tokens"
     if "reasoning_content" in t and ("passed back" in t or "must be" in t):
         return "echo_reasoning"
+    if "reasoning_effort" in t:
+        return "no_reasoning_effort"
     if "temperature" in t and any(
         w in t for w in ("unsupported", "not support", "only the default", "does not support")
     ):
         return "no_temperature"
     return None
+
+
+def _out_of_tokens(error_text: str) -> bool:
+    """Groq checks JSON mode itself and answers 400 json_validate_failed, "max completion
+    tokens reached before generating a valid document", when thinking ate the budget."""
+    t = error_text.lower()
+    return "tokens reached" in t or ("json_validate_failed" in t and "token" in t)
+
+
+TRUNCATED = Failure("truncated", "The model ran out of tokens before finishing its reply.")
 
 
 async def chat(
@@ -195,6 +262,7 @@ async def chat(
     tool_choice: Any = None,
     timeout: float = 120,
     quirks: frozenset[str] = frozenset(),
+    reasoning_effort: str | None = None,
 ) -> ChatResult:
     q = set(quirks)
     tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
@@ -208,6 +276,8 @@ async def chat(
     if "no_think" in q:
         # Small local thinking models (qwen3) otherwise spend ~100 tokens thinking per answer.
         body["reasoning_effort"] = "none"
+    elif reasoning_effort and "no_reasoning_effort" not in q:
+        body["reasoning_effort"] = reasoning_effort
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     if tools:
@@ -217,7 +287,7 @@ async def chat(
 
     url = _url(base_url, "/chat/completions")
     call = await _request("POST", url, key, body, timeout)
-    for _ in range(2):  # at most two parameter fixes, each tried once
+    for _ in range(3):  # at most three parameter fixes, each tried once
         fix = _quirk_for(str(call.data.get("error_text", ""))) if call.status == 400 else None
         if fix is None or fix in q:
             break
@@ -226,26 +296,32 @@ async def chat(
             body["max_completion_tokens"] = body.pop("max_tokens", max_tokens)
         elif fix == "echo_reasoning":
             body["messages"] = shape_messages(messages, q)
+        elif fix == "no_reasoning_effort":
+            body.pop("reasoning_effort", None)
         else:
             body.pop("temperature", None)
         call = await _request("POST", url, key, body, timeout)
     tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
     result = _parse(call, model)
     result.quirks = frozenset(q)
-    # Empty + cut off = hidden reasoning ate the budget. One retry with room to think.
-    if (
+    floor = reasoning_floor(json_mode)
+    # Hidden reasoning ate the budget: an empty reply cut off by length, or the provider's
+    # own JSON check refusing an unfinished document. One retry with room to think.
+    starved = (
         result.call.ok
         and not result.content.strip()
         and not result.tool_calls
         and result.finish_reason == "length"
-        and max_tokens < REASONING_FLOOR
-    ):
-        body[tokens_key] = REASONING_FLOOR
+    ) or (call.status == 400 and _out_of_tokens(str(call.data.get("error_text", ""))))
+    if starved and max_tokens < floor:
+        body[tokens_key] = floor
         retry = _parse(await _request("POST", url, key, body, timeout), model)
         retry.reasoning_retry = True
         retry.quirks = frozenset(q)
         retry.call.latency_ms += result.call.latency_ms
-        return retry
+        result = retry
+    if result.call.status == 400 and _out_of_tokens(str(result.call.data.get("error_text", ""))):
+        result.call.failure = TRUNCATED
     return result
 
 

@@ -128,8 +128,9 @@ async def test_failed_step_finishes_task_as_failed(env):
         result = await _run(env, fake)
     except WorkflowFailureError:  # pragma: no cover - the workflow itself must not crash
         pytest.fail("workflow crashed instead of finishing the task")
-    assert result == "failed" and fake.log[-1] == ("finish", "failed", "No model could answer.")
-    assert "learn" not in [x[0] for x in fake.log]  # nothing to learn from a failed run
+    assert result == "failed" and fake.log[-3] == ("finish", "failed", "No model could answer.")
+    # P17: a failure teaches too (reflect itself skips failures of the moment like this one)
+    assert [x[0] for x in fake.log][-2:] == ["learn", "reflect"]
 
 
 async def test_learning_failure_does_not_fail_the_task(env):
@@ -146,4 +147,5 @@ async def test_step_out_of_retries_marks_the_task_failed(env):
     fake = FakeRun([{"raise": True}])
     assert await _run(env, fake) == "failed"
     assert [x[0] for x in fake.log].count("step") == 3  # STEP_RETRY attempts
-    assert fake.log[-1][0:2] == ("finish", "failed") and "could not run the step" in fake.log[-1][2]
+    finish = next(x for x in fake.log if x[0] == "finish")
+    assert finish[1] == "failed" and "could not run the step" in finish[2]

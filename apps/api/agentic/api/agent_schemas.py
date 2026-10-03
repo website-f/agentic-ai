@@ -198,6 +198,8 @@ class TaskOut(BaseModel):
     branch_id: str | None = None
     goal: str | None = None
     goal_tries: int = 0
+    # Lists cut brief and result short (GET /api/tasks/{id} has the full text).
+    truncated: bool = False
 
 
 class TaskEventOut(BaseModel):

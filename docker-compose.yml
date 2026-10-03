@@ -331,7 +331,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 15s
-    mem_limit: 1280m
+    mem_limit: 1536m
     cpus: 2
     networks: [llm]
     security_opt: ["no-new-privileges:true"]

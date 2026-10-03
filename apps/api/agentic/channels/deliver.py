@@ -491,6 +491,16 @@ async def start(delivery_ids: list[str]) -> None:
         log.warning("could not start deliveries", exc_info=True)
 
 
+async def learn_from_chat(message_id: int) -> None:
+    """Chats on Telegram and WhatsApp teach the agent like dashboard chat does (P17)."""
+    from ..agents import dispatch  # late: dispatch imports the workflows
+
+    try:
+        await dispatch.start_chat_learning(message_id)
+    except Exception:  # noqa: BLE001 - learning is best effort; the answer went out already
+        log.warning("could not start chat learning", exc_info=True)
+
+
 def describe_payload(d: Delivery) -> dict[str, Any]:
     """What the ledger shows: never the action token."""
     return {k: v for k, v in d.payload.items() if k not in ("token", "token_enc")}
