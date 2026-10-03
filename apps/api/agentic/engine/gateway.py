@@ -117,6 +117,8 @@ async def chat(
             else max_tokens
         )
         known = await store.quirks(p.id, model_id)
+        if p.tier == "local" and model_id.lower().startswith("qwen3"):
+            known = known | {"no_think"}  # thinking off: measured 120 -> 3 tokens for "OK"
         r = await client.chat(
             p.base_url,
             key,
@@ -230,3 +232,30 @@ async def _mark_stale(db: AsyncSession, p: AIProvider, model_id: str) -> None:
         db.add(row)
     row.stale = True
     await db.commit()
+
+
+# The local model reads 4096 tokens; a longer prompt would be cut, instructions first.
+LOCAL_MAX_CHARS = 8000
+
+
+def cheap_groups(*texts: str) -> tuple[str, ...]:
+    """Side jobs: the free local model first when the prompt fits it, else straight to fast."""
+    return ("local", "fast") if sum(map(len, texts)) <= LOCAL_MAX_CHARS else ("fast",)
+
+
+async def chat_first(
+    db: AsyncSession,
+    workspace_id: str,
+    groups: tuple[str, ...],
+    messages: list[dict[str, Any]],
+    **kw: Any,
+) -> GatewayReply:
+    """Try groups in order (e.g. ("local", "fast")): the free local model takes simple side
+    jobs, and the next group answers when it cannot (none set up, down, or a bad reply)."""
+    last: GatewayUnavailable | None = None
+    for group in dict.fromkeys(groups):
+        try:
+            return await chat(db, workspace_id, group, messages, **kw)
+        except GatewayUnavailable as e:
+            last = e
+    raise last or GatewayUnavailable("No group could answer.", [])

@@ -27,7 +27,7 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [local, setLocal] = useState<Msg[]>([]);
-  const end = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
 
   const sessions = useQuery({
     queryKey: workKeys.sessions(agent.id),
@@ -58,7 +58,9 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
   });
 
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "end" });
+    // Scroll the message list itself, never the page around it.
+    const el = scroller.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [messages.length, send.isPending, reduce]);
 
   const submit = () => {
@@ -88,7 +90,7 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4" aria-live="polite">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4" aria-live="polite">
         {!messages.length && !send.isPending ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-10 text-center">
             <AgentAvatar name={agent.name} color={agent.color} size="lg" />
@@ -129,7 +131,6 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
             </li>
           ) : null}
         </ol>
-        <div ref={end} />
       </div>
 
       <form className="flex items-end gap-2 border-t border-border p-2.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>

@@ -1,24 +1,38 @@
-import { SealCheckIcon } from "@phosphor-icons/react";
+import { ClockCounterClockwiseIcon, SealCheckIcon } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Tabs } from "radix-ui";
 
 import { ApprovalCard } from "@/components/approval-card";
 import { EmptyState, Page, PageHeader } from "@/components/page";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 import { approvalsQuery } from "@/lib/work";
 
-function List({ state, canDecide }: { state: "pending" | "history"; canDecide: boolean }) {
+type Tab = "pending" | "history";
+
+function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
   const { data, isLoading, error } = useQuery(approvalsQuery(state));
-  if (isLoading) return <div className="grid gap-3">{[0, 1].map((i) => <Skeleton key={i} className="h-36 rounded-[var(--radius-md)]" />)}</div>;
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
+        {[0, 1].map((i) => (
+          <div key={i} className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+            <div className="flex items-center gap-3"><Skeleton className="size-8 rounded-full" /><Skeleton className="h-4 w-2/3" /></div>
+            <Skeleton className="h-16" />
+            <Skeleton className="h-8 w-1/2" />
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (error) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   if (!data?.length) {
     return state === "pending" ? (
       <EmptyState icon={SealCheckIcon} title="Nothing waiting on you" body="When an agent needs permission or has a question, it shows up here and as a notification." />
     ) : (
-      <p className="text-[13.5px] text-muted">No decisions yet.</p>
+      <EmptyState icon={ClockCounterClockwiseIcon} title="No decisions yet" body="Every approval, denial and answer is kept here with who made it and when." />
     );
   }
   return (
@@ -31,28 +45,28 @@ function List({ state, canDecide }: { state: "pending" | "history"; canDecide: b
 export function ApprovalsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canDecide = me.permissions.includes("approvals.decide");
-  const search = useSearch({ strict: false }) as { tab?: "pending" | "history" };
+  const search = useSearch({ strict: false }) as { tab?: Tab };
   const navigate = useNavigate();
-  const tab = search.tab === "history" ? "history" : "pending";
+  const tab: Tab = search.tab === "history" ? "history" : "pending";
   const { data: pending } = useQuery(approvalsQuery("pending"));
+  const { data: history } = useQuery({ ...approvalsQuery("history"), enabled: tab === "history" });
   return (
     <Page>
       <PageHeader
         title="Approvals"
         description={canDecide ? "Agents stop and wait here before risky actions, and when they need an answer from you." : "Your role can see decisions but not make them. Ask an approver or admin."}
       />
-      <Tabs.Root value={tab} onValueChange={(v) => navigate({ to: "/approvals", search: { tab: v as "pending" | "history" }, replace: true })}>
-        <Tabs.List className="mb-5 flex gap-1 border-b border-border" aria-label="Approvals">
-          {(["pending", "history"] as const).map((t) => (
-            <Tabs.Trigger key={t} value={t} className="-mb-px flex items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
-              {t === "pending" ? "Waiting" : "History"}
-              {t === "pending" && pending?.length ? <span className="rounded-full bg-warn/15 px-1.5 text-[11.5px] font-semibold text-warn tabular">{pending.length}</span> : null}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-        <Tabs.Content value="pending" className="outline-none"><List state="pending" canDecide={canDecide} /></Tabs.Content>
-        <Tabs.Content value="history" className="outline-none"><List state="history" canDecide={false} /></Tabs.Content>
-      </Tabs.Root>
+      <Segmented<Tab>
+        label="Approvals"
+        className="w-fit"
+        value={tab}
+        onChange={(v) => navigate({ to: "/approvals", search: { tab: v }, replace: true })}
+        options={[
+          { value: "pending", label: "Waiting", count: pending?.length },
+          { value: "history", label: "History", count: history?.length },
+        ]}
+      />
+      {tab === "pending" ? <List state="pending" canDecide={canDecide} /> : <List state="history" canDecide={false} />}
     </Page>
   );
 }

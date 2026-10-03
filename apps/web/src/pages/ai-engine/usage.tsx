@@ -1,11 +1,13 @@
-import { ChartBarIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, ChartBarIcon, CurrencyDollarIcon, LightningIcon, TextAaIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { RadioGroup } from "radix-ui";
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 
 import { EmptyState } from "@/components/page";
+import { Meta } from "@/components/ui/card";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat } from "@/components/ui/stat";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -64,37 +66,76 @@ function ChartTooltip({ active, payload, label }: TooltipContentProps<number, st
 
 function StatStrip({ t }: { t: UsageRow }) {
   const tokens = t.prompt + t.completion;
-  const items = [
-    { label: "Calls", value: compact(t.calls) },
-    { label: "Tokens", value: compact(tokens), note: `${compact(t.prompt)} in, ${compact(t.completion)} out` },
-    { label: "Served from cache", value: pct(t.cached, t.prompt), note: "Share of input tokens" },
-    { label: "Cost", value: usd(t.cost), note: t.unpriced ? `${t.unpriced} ${t.unpriced === 1 ? "call" : "calls"} unpriced` : "All calls priced" },
-    { label: "Errors", value: pct(t.errors, t.calls), note: `${t.errors} failed ${t.errors === 1 ? "call" : "calls"}`, bad: t.errors > 0 },
-  ];
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4 sm:grid-cols-3 lg:grid-cols-5">
-      {items.map((i) => (
-        <div key={i.label} className="min-w-0">
-          <p className="text-[12.5px] text-muted">{i.label}</p>
-          <p className={cn("mt-0.5 flex items-center gap-1.5 text-[22px] leading-tight font-semibold tabular", i.bad && "text-danger")}>
-            {i.bad ? <WarningCircleIcon size={18} weight="fill" aria-label="Has errors" /> : null}
-            {i.value}
-          </p>
-          {i.note ? <p className="truncate text-[12px] text-muted">{i.note}</p> : null}
-        </div>
-      ))}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <Stat label="Calls" value={compact(t.calls)} icon={LightningIcon} tone="accent" hint="Every model request" />
+      <Stat label="Tokens" value={compact(tokens)} icon={TextAaIcon} tone="info" hint={`${compact(t.prompt)} in, ${compact(t.completion)} out`} />
+      <Stat label="Served from cache" value={pct(t.cached, t.prompt)} icon={ArchiveIcon} tone="violet" hint="Share of input tokens" />
+      <Stat
+        label="Cost"
+        value={usd(t.cost)}
+        icon={CurrencyDollarIcon}
+        tone="ok"
+        hint={t.unpriced ? `${t.unpriced} ${t.unpriced === 1 ? "call" : "calls"} unpriced` : "All calls priced"}
+      />
+      <Stat
+        label="Errors"
+        value={pct(t.errors, t.calls)}
+        icon={WarningCircleIcon}
+        tone={t.errors > 0 ? "danger" : "neutral"}
+        hint={`${t.errors} failed ${t.errors === 1 ? "call" : "calls"}`}
+        className="col-span-2 sm:col-span-1"
+      />
     </div>
   );
 }
 
-function UsageTable({ title, rows, colors, label }: { title: string; rows: UsageRow[]; colors: Map<string, string>; label: (r: UsageRow) => { main: string; sub?: string; swatch?: string } }) {
-  if (!rows.length) return null;
+type RowLabel = (r: UsageRow) => { main: string; sub?: string; swatch?: string };
+type Breakdown = "provider" | "model" | "task";
+
+function Swatch({ color }: { color: string }) {
+  return <span aria-hidden className="mt-1.5 size-2.5 shrink-0 rounded-full" style={{ background: color }} />;
+}
+
+function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<string, string>; label: RowLabel }) {
+  const avg = (r: UsageRow) => (r.avg_latency ? `${(r.avg_latency / 1000).toFixed(1)} s` : "-");
+  const cost = (r: UsageRow) => (r.unpriced && !r.cost ? "Unpriced" : usd(r.cost));
   return (
-    <section className="grid gap-2">
-      <h3 className="text-[14px] font-semibold">{title}</h3>
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface">
+    <>
+      {/* Phones: one compact row each, headline numbers on the right, the rest underneath. */}
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border sm:hidden">
+        {rows.map((r, i) => {
+          const l = label(r);
+          return (
+            <li key={i} className="grid gap-1 px-4 py-3">
+              <div className="flex min-w-0 items-start gap-2">
+                {l.swatch ? <Swatch color={colors.get(l.swatch) ?? "var(--series-other)"} /> : null}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-medium break-words">{l.main}</span>
+                  {l.sub ? <span className="block font-mono text-[11.5px] break-all text-muted">{l.sub}</span> : null}
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block font-mono text-[13px] font-medium tabular">{compact(r.prompt + r.completion)}</span>
+                  <span className="block font-mono text-[11.5px] text-muted tabular">{cost(r)}</span>
+                </span>
+              </div>
+              <p className={cn("flex flex-wrap gap-x-1.5 text-[12px] text-muted tabular", l.swatch && "pl-[18px]")}>
+                <Meta
+                  items={[
+                    `${compact(r.calls)} ${r.calls === 1 ? "call" : "calls"}`,
+                    `${pct(r.cached, r.prompt)} cached`,
+                    r.errors > 0 ? <span className="text-danger">{r.errors} failed</span> : "no errors",
+                    `avg ${avg(r)}`,
+                  ]}
+                />
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="overflow-x-auto max-sm:hidden">
         <table className="w-full min-w-[40rem] text-left text-[13px]">
-          <thead className="bg-surface-2/60 text-[12px] text-muted">
+          <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
             <tr>
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-3 py-2 text-right font-medium">Calls</th>
@@ -109,36 +150,72 @@ function UsageTable({ title, rows, colors, label }: { title: string; rows: Usage
             {rows.map((r, i) => {
               const l = label(r);
               return (
-                <tr key={i}>
+                <tr key={i} className="transition-colors hover:bg-surface-2/40">
                   <td className="px-4 py-2.5">
-                    <span className="flex min-w-0 items-center gap-2">
-                      {l.swatch ? <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: colors.get(l.swatch) ?? "var(--series-other)" }} /> : null}
+                    <span className="flex min-w-0 items-start gap-2">
+                      {l.swatch ? <Swatch color={colors.get(l.swatch) ?? "var(--series-other)"} /> : null}
                       <span className="min-w-0">
-                        <span className="block truncate font-medium">{l.main}</span>
-                        {l.sub ? <span className="block truncate font-mono text-[11.5px] text-muted">{l.sub}</span> : null}
+                        <span className="block font-medium break-words">{l.main}</span>
+                        {l.sub ? <span className="block font-mono text-[11.5px] break-all text-muted">{l.sub}</span> : null}
                       </span>
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono tabular">{compact(r.calls)}</td>
                   <td className="px-3 py-2.5 text-right font-mono tabular">{compact(r.prompt + r.completion)}</td>
                   <td className="px-3 py-2.5 text-right font-mono tabular">{pct(r.cached, r.prompt)}</td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular">{r.unpriced && !r.cost ? "Unpriced" : usd(r.cost)}</td>
+                  <td className="px-3 py-2.5 text-right font-mono tabular">{cost(r)}</td>
                   <td className={cn("px-3 py-2.5 text-right font-mono tabular", r.errors > 0 && "text-danger")}>{r.errors}</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular">{r.avg_latency ? `${(r.avg_latency / 1000).toFixed(1)} s` : "-"}</td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular">{avg(r)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-    </section>
+    </>
   );
 }
 
 const TASK_LABELS: Record<string, string> = { "engine.test": "Connection tests", playground: "Playground" };
 
+function UsageBreakdown({
+  view,
+  onView,
+  colors,
+  sets,
+}: {
+  view: Breakdown;
+  onView: (v: Breakdown) => void;
+  colors: Map<string, string>;
+  sets: Record<Breakdown, { label: string; rows: UsageRow[]; row: RowLabel }>;
+}) {
+  const keys = (Object.keys(sets) as Breakdown[]).filter((k) => sets[k].rows.length);
+  if (!keys.length) return null;
+  const current = keys.includes(view) ? view : keys[0]!;
+  const set = sets[current];
+  return (
+    <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+        <div className="min-w-0">
+          <h3 className="text-[14px] font-semibold">Breakdown</h3>
+          <p className="text-[12.5px] text-muted">Calls, tokens and cost grouped by {set.label.toLowerCase()}.</p>
+        </div>
+        <Segmented
+          size="sm"
+          label="Group usage by"
+          value={current}
+          onChange={onView}
+          options={keys.map((k) => ({ value: k, label: sets[k].label, count: sets[k].rows.length }))}
+        />
+      </div>
+      <UsageTable rows={set.rows} colors={colors} label={set.row} />
+    </section>
+  );
+}
+
 export function UsageTab() {
   const [days, setDays] = useState<number>(7);
+  const [view, setView] = useState<Breakdown>("provider");
   const { data, isLoading, error } = useQuery(usageQuery(days));
   const { data: providers = [] } = useQuery(providersQuery);
   const colors = useMemo(() => providerColors(providers), [providers]);
@@ -161,27 +238,20 @@ export function UsageTab() {
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13.5px] text-muted">Every model call, including failures, connection tests and fallbacks.</p>
-        <RadioGroup.Root
+        <p className="min-w-0 text-[13.5px] text-muted">Every model call, including failures, connection tests and fallbacks.</p>
+        <Segmented
+          label="Time range"
           value={String(days)}
-          onValueChange={(v) => setDays(Number(v))}
-          aria-label="Time range"
-          className="inline-flex rounded-sm border border-border bg-surface p-0.5"
-        >
-          {RANGES.map((r) => (
-            <RadioGroup.Item
-              key={r}
-              value={String(r)}
-              className="rounded-[6px] px-3 py-1.5 text-[13px] text-muted data-[state=checked]:bg-accent-soft data-[state=checked]:font-medium data-[state=checked]:text-accent"
-            >
-              {r} days
-            </RadioGroup.Item>
-          ))}
-        </RadioGroup.Root>
+          onChange={(v) => setDays(Number(v))}
+          options={RANGES.map((r) => ({ value: String(r), label: `${r} days` }))}
+        />
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4"><Skeleton className="h-24" /><Skeleton className="h-72" /></div>
+        <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</div>
+          <Skeleton className="h-80 rounded-[var(--radius-md)]" />
+        </div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">Could not load usage. {errorMessage(error)}</div>
       ) : !data || data.totals.calls === 0 ? (
@@ -190,9 +260,12 @@ export function UsageTab() {
         <>
           <StatStrip t={data.totals} />
 
-          <section className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 sm:p-5">
+          <section className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[14px] font-semibold">Tokens per day by provider</h3>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold">Tokens per day by provider</h3>
+                <p className="text-[12.5px] text-muted">Last {days} days, stacked by provider.</p>
+              </div>
               <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" aria-label="Legend">
                 {series.map((s) => (
                   <li key={s} className="flex items-center gap-1.5">
@@ -202,12 +275,12 @@ export function UsageTab() {
                 ))}
               </ul>
             </div>
-            <div className="h-64 w-full">
+            <div className="h-56 w-full min-w-0 sm:h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={days > 30 ? "12%" : "24%"}>
+                <BarChart data={rows} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap={days > 30 ? "12%" : "24%"}>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
-                  <XAxis dataKey="day" tickFormatter={shortDay} tickLine={false} axisLine={false} minTickGap={24} tick={{ fill: "var(--text-muted)", fontSize: 11.5 }} />
-                  <YAxis tickFormatter={(v: number) => compact(v)} width={44} tickLine={false} axisLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11.5 }} />
+                  <XAxis dataKey="day" tickFormatter={shortDay} tickLine={false} axisLine={false} minTickGap={28} tick={{ fill: "var(--text-muted)", fontSize: 11.5 }} />
+                  <YAxis tickFormatter={(v: number) => compact(v)} width={46} tickLine={false} axisLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11.5 }} />
                   <Tooltip content={(p) => <ChartTooltip {...(p as TooltipContentProps<number, string>)} />} cursor={{ fill: "var(--surface-2)" }} />
                   {series.map((s, i) => (
                     <Bar
@@ -227,9 +300,16 @@ export function UsageTab() {
             </div>
           </section>
 
-          <UsageTable title="By provider" rows={data.by_provider} colors={colors} label={(r) => ({ main: r.provider ?? "", swatch: r.provider })} />
-          <UsageTable title="By model" rows={data.by_model} colors={colors} label={(r) => ({ main: r.provider ?? "", sub: r.model, swatch: r.provider })} />
-          <UsageTable title="By kind of work" rows={data.by_task} colors={colors} label={(r) => ({ main: TASK_LABELS[r.task ?? ""] ?? r.task ?? "" })} />
+          <UsageBreakdown
+            view={view}
+            onView={setView}
+            colors={colors}
+            sets={{
+              provider: { label: "Provider", rows: data.by_provider, row: (r) => ({ main: r.provider ?? "", swatch: r.provider }) },
+              model: { label: "Model", rows: data.by_model, row: (r) => ({ main: r.provider ?? "", sub: r.model, swatch: r.provider }) },
+              task: { label: "Kind of work", rows: data.by_task, row: (r) => ({ main: TASK_LABELS[r.task ?? ""] ?? r.task ?? "" }) },
+            }}
+          />
         </>
       )}
     </div>

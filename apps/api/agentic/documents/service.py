@@ -381,16 +381,18 @@ async def understand(db: AsyncSession, f: DocFile, text: str) -> dict[str, Any]:
 
     if len(text.strip()) < 30:
         return {}
+    prompt = understand_prompt(f.name, text)
     try:
-        r = await gateway.chat(
+        r = await gateway.chat_first(
             db,
             f.workspace_id,
-            "fast",
+            gateway.cheap_groups(prompt),
             [
                 {"role": "system", "content": UNDERSTAND_SYSTEM},
-                {"role": "user", "content": understand_prompt(f.name, text)},
+                {"role": "user", "content": prompt},
             ],
             task="file.understand",
+            accept=lambda raw: bool(parse_understanding(raw).get("kind")),
             max_tokens=900,
             temperature=0,
             json_mode=True,
@@ -400,6 +402,13 @@ async def understand(db: AsyncSession, f: DocFile, text: str) -> dict[str, Any]:
     except gateway.GatewayUnavailable:
         return {}
     return parse_understanding(r.content or "")
+
+
+EXPIRY_WORDS = re.compile(
+    r"expir|valid (?:until|till|to|through)|validity"
+    r"|tamat|sah (?:sehingga|hingga|sampai)|berakhir|luput",
+    re.I,
+)
 
 
 async def process_file(db: AsyncSession, file_id: str) -> str:
@@ -419,7 +428,10 @@ async def process_file(db: AsyncSession, file_id: str) -> str:
     info = await understand(db, f, out.text)
     if info:
         f.kind, f.title, f.summary = info["kind"], info["title"], info["summary"]
-        f.fields, f.expires_on = info["fields"], info["expires_on"]
+        f.fields = info["fields"]
+        # Models fill this with any date they see (a report's last day): keep it only when
+        # the document itself talks about expiry or validity.
+        f.expires_on = info["expires_on"] if EXPIRY_WORDS.search(out.text) else None
     elif not f.title:
         f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
     f.status = "ready"

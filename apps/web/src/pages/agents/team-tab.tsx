@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ActionBar } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { SwitchField } from "@/components/ui/switch";
 import { api, errorMessage } from "@/lib/api";
@@ -98,7 +99,7 @@ export function TeamTab({ agent, canManage }: { agent: Agent; canManage: boolean
   });
 
   return (
-    <div className="grid max-w-2xl gap-8">
+    <div className="grid max-w-2xl grid-cols-[minmax(0,1fr)] gap-8">
       <section className="grid gap-3">
         <h2 className="text-[14px] font-semibold">Role in the team</h2>
         <RadioGroup.Root value={d.role_kind} disabled={!canManage} onValueChange={(v) => setD({ ...d, role_kind: v as Agent["role_kind"] })} aria-label="Role in the team" className="grid gap-2 sm:grid-cols-2">
@@ -152,9 +153,11 @@ export function TeamTab({ agent, canManage }: { agent: Agent; canManage: boolean
       </section>
 
       {canManage ? (
-        <Button className="w-fit" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>
-          <CheckIcon size={15} weight="bold" /> Save
-        </Button>
+        <ActionBar className="justify-start">
+          <Button disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>
+            <CheckIcon size={15} weight="bold" /> Save
+          </Button>
+        </ActionBar>
       ) : null}
     </div>
   );

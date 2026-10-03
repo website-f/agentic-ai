@@ -42,6 +42,9 @@ x-app-env: &app-env
   AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
   AGENTIC_SANDBOX_URL: http://sandbox:8610
   AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:-dev-sandbox-token}
+  # The local backup brain (P14). Empty AGENTIC_LOCAL_LLM_URL turns it off.
+  AGENTIC_LOCAL_LLM_URL: ${AGENTIC_LOCAL_LLM_URL:-http://ollama:11434/v1}
+  AGENTIC_LOCAL_LLM_MODEL: ${AGENTIC_LOCAL_LLM_MODEL:-qwen3:0.6b}
   # Traces (profile obs). Empty host = off.
   AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
   AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
@@ -201,7 +204,7 @@ services:
       start_period: 15s
     mem_limit: 1g  # includes the ~300 MB embedding model
     cpus: 1.0  # one Python process uses one core at most
-    networks: [data, edge]
+    networks: [data, edge, llm]
     <<: [*app-hardening, *logging]
 
   worker:
@@ -230,7 +233,7 @@ services:
       start_period: 20s
     mem_limit: 1536m  # agent loops + the embedding model + OCR of uploads
     cpus: 1.0
-    networks: [data, edge, browser, sandbox]
+    networks: [data, edge, browser, sandbox, llm]
     <<: [*app-hardening, *logging]
 
   web:
@@ -294,6 +297,47 @@ services:
       - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
       - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
+    <<: *logging
+
+  ollama:
+    # The local backup brain (P14): one small model (qwen3:0.6b, ~0.8 GB RAM loaded) for free
+    # side jobs (picking the note that answers a question, page digests, file summaries) and
+    # chat backup mode when cloud models are down. Private network only; never published.
+    image: ollama/ollama:0.34.0
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: 24h  # stay loaded: a cold load costs seconds on a small VPS
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_LOADED_MODELS: 1
+      OLLAMA_CONTEXT_LENGTH: 4096
+      # 8-bit attention cache: 0.82 GB resident instead of 1.47 GB at the same context
+      # (measured), with no visible change in answers.
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0
+    volumes: ["ollamadata:/root/.ollama"]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 1280m
+    cpus: 2
+    networks: [llm]
+    security_opt: ["no-new-privileges:true"]
+    <<: *logging
+
+  ollama-pull:
+    # One-shot: fetches the model into the volume (instant when it is already there).
+    image: ollama/ollama:0.34.0
+    restart: "no"
+    entrypoint: ["ollama", "pull", "${AGENTIC_LOCAL_LLM_MODEL:-qwen3:0.6b}"]
+    environment:
+      OLLAMA_HOST: ollama:11434
+    depends_on:
+      ollama: { condition: service_healthy }
+    networks: [llm]
     <<: *logging
 
   sandbox:
@@ -564,6 +608,7 @@ networks:
   browser: {}  # browser <-> worker only; has internet egress for the browser
   sandbox:
     internal: true  # code sandbox <-> worker only; NO internet
+  llm: {}  # api/worker <-> ollama; egress only so ollama-pull can fetch the model
 
 volumes:
   pgdata: {}
@@ -574,3 +619,4 @@ volumes:
   clickhousedata: {}
   clickhouselogs: {}
   langfusevalkey: {}
+  ollamadata: {}

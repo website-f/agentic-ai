@@ -1,11 +1,12 @@
-import { ArrowsClockwiseIcon, DownloadSimpleIcon, MoonStarsIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, DownloadSimpleIcon, FileTextIcon, GraphIcon, LightbulbIcon, MoonStarsIcon, WarningIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Tabs } from "radix-ui";
 import { toast } from "sonner";
 
 import { Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { brainKeys, overviewQuery } from "@/lib/brain";
 import { meQuery } from "@/lib/queries";
@@ -59,49 +60,63 @@ export function BrainPage() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
-  const summary = ov
-    ? `${ov.pages} pages, ${ov.facts} facts, ${ov.links} links${ov.last_dream ? `. Last dream ${timeAgo(ov.last_dream.started_at).toLowerCase()}` : ""}.`
-    : null;
+  const counts: Partial<Record<BrainTab, number>> = ov ? { pages: ov.pages, facts: ov.facts } : {};
 
   return (
     <Page className="max-w-7xl">
       <PageHeader
         title="Brain"
-        description={<>What the office knows: facts agents learned, wiki pages, and a nightly dream that keeps it tidy. Stored as markdown in a git vault that also opens in Obsidian. {summary}</>}
+        description="What the office knows: facts agents learned, wiki pages, and a nightly dream that keeps it tidy. Stored as markdown in a git vault that also opens in Obsidian."
         actions={canManage ? (
           <>
-            <Button variant="outline" size="sm" loading={sync.isPending} onClick={() => sync.mutate()}><ArrowsClockwiseIcon size={15} /> <span className="max-sm:sr-only">Sync vault</span></Button>
-            <Button variant="outline" size="sm" asChild><a href="/api/brain/vault.zip" download><DownloadSimpleIcon size={15} /> <span className="max-sm:sr-only">Download vault</span></a></Button>
-            <Button size="sm" loading={dream.isPending} onClick={() => dream.mutate()}><MoonStarsIcon size={15} /> Dream now</Button>
+            <Button variant="outline" size="sm" className="max-sm:h-9" loading={sync.isPending} onClick={() => sync.mutate()}><ArrowsClockwiseIcon size={15} /> Sync vault</Button>
+            <Button variant="outline" size="sm" className="max-sm:h-9" asChild><a href="/api/brain/vault.zip" download><DownloadSimpleIcon size={15} /> Download</a></Button>
+            <Button size="sm" className="max-sm:h-9" loading={dream.isPending} onClick={() => dream.mutate()}><MoonStarsIcon size={15} /> Dream now</Button>
           </>
         ) : null}
       />
+
+      {ov ? (
+        <StatGrid>
+          <Stat label="Pages" value={ov.pages} icon={FileTextIcon} tone="accent" hint="Wiki pages in the vault" onClick={() => go({ tab: "pages" })} active={tab === "pages"} />
+          <Stat label="Facts" value={ov.facts} icon={LightbulbIcon} tone="warn" hint="Agents recall these" onClick={() => go({ tab: "facts" })} active={tab === "facts"} />
+          <Stat label="Links" value={ov.links} icon={GraphIcon} tone="info" hint="Between pages" onClick={() => go({ tab: "graph" })} active={tab === "graph"} />
+          <Stat label="Last dream" icon={MoonStarsIcon} tone="violet"
+            value={<span className="text-[19px] leading-tight">{ov.last_dream ? timeAgo(ov.last_dream.started_at) : "Never"}</span>}
+            hint={`Nightly at ${String(ov.dream_hour).padStart(2, "0")}:00`} onClick={() => go({ tab: "dreams" })} active={tab === "dreams"} />
+        </StatGrid>
+      ) : null}
+
       {ov && !ov.search.vectors ? (
-        <p role="status" className="mb-4 rounded-sm border border-warn/30 bg-warn/10 px-3 py-2 text-[13px] text-warn">
-          The embedding model is not loaded, so search matches words and links but not meaning. Check the api logs.
+        <p role="status" className="flex items-start gap-2 rounded-[var(--radius-md)] border border-warn/30 bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn">
+          <WarningIcon size={16} weight="fill" className="mt-0.5 shrink-0" />
+          <span className="min-w-0">The embedding model is not loaded, so search matches words and links but not meaning. Check the api logs.</span>
         </p>
       ) : null}
-      <Tabs.Root value={tab} onValueChange={(v) => go({ tab: v as BrainTab })}>
-        <Tabs.List aria-label="Brain sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border">
-          {BRAIN_TABS.map((t) => (
-            <Tabs.Trigger key={t} value={t} className="-mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
-              {LABELS[t]}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-        <Tabs.Content value="pages" className="outline-none">
-          <PagesTab selected={search.path ?? null} canWrite={canWrite} onSelect={(path) => go({ tab: "pages", path: path ?? undefined })} />
-        </Tabs.Content>
-        <Tabs.Content value="facts" className="outline-none"><FactsTab canWrite={canWrite} /></Tabs.Content>
-        <Tabs.Content value="search" className="outline-none">
-          <SearchTab initial={search.q} onOpenPage={(path) => go({ tab: "pages", path })} />
-        </Tabs.Content>
-        <Tabs.Content value="graph" className="outline-none"><GraphTab onOpenPage={(path) => go({ tab: "pages", path })} /></Tabs.Content>
-        <Tabs.Content value="dreams" className="outline-none">
-          <DreamsTab selected={search.dream ?? null} onSelect={(id) => go({ tab: "dreams", dream: id })} canManage={canManage}
-            hour={ov?.dream_hour ?? 2} timezone={ov?.timezone ?? ""} />
-        </Tabs.Content>
-      </Tabs.Root>
+
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
+        <Segmented<BrainTab>
+          label="Brain sections"
+          value={tab}
+          onChange={(v) => go({ tab: v })}
+          options={BRAIN_TABS.map((t) => ({ value: t, label: LABELS[t], count: counts[t] }))}
+          className="w-fit"
+        />
+        <div role="tabpanel" aria-label={LABELS[tab]} className="min-w-0">
+          {tab === "pages" ? (
+            <PagesTab selected={search.path ?? null} canWrite={canWrite} onSelect={(path) => go({ tab: "pages", path: path ?? undefined })} />
+          ) : tab === "facts" ? (
+            <FactsTab canWrite={canWrite} />
+          ) : tab === "search" ? (
+            <SearchTab initial={search.q} onOpenPage={(path) => go({ tab: "pages", path })} />
+          ) : tab === "graph" ? (
+            <GraphTab onOpenPage={(path) => go({ tab: "pages", path })} />
+          ) : (
+            <DreamsTab selected={search.dream ?? null} onSelect={(id) => go({ tab: "dreams", dream: id })} canManage={canManage}
+              hour={ov?.dream_hour ?? 2} timezone={ov?.timezone ?? ""} />
+          )}
+        </div>
+      </div>
     </Page>
   );
 }

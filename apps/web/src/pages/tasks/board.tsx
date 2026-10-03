@@ -9,16 +9,20 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useReducedMotion } from "motion/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Toolbar } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
@@ -28,14 +32,24 @@ import { PRIORITY_INFO, STATUS_INFO, tasksQuery, workKeys, type Task, type TaskS
 import { NewTaskDialog } from "./new-task";
 import { TaskSheet } from "./task-sheet";
 
-const COLUMNS: { status: TaskStatus; hint: string }[] = [
-  { status: "triage", hint: "Not started" },
-  { status: "ready", hint: "Queued to run" },
-  { status: "running", hint: "Agents working" },
-  { status: "blocked", hint: "Needs a decision" },
-  { status: "review", hint: "Check and accept" },
-  { status: "done", hint: "Accepted" },
+const COLUMNS: { status: TaskStatus; hint: string; empty: string }[] = [
+  { status: "triage", hint: "Not started", empty: "New tasks without an agent land here." },
+  { status: "ready", hint: "Queued to run", empty: "Nothing queued." },
+  { status: "running", hint: "Agents working", empty: "No agent is working right now." },
+  { status: "blocked", hint: "Needs a decision", empty: "Nothing is waiting on you." },
+  { status: "review", hint: "Check and accept", empty: "Nothing to review." },
+  { status: "done", hint: "Accepted", empty: "Accepted work shows here." },
 ];
+
+/** The status colour as a small dot beside the column name (the label carries the meaning). */
+const DOT: Record<(typeof STATUS_INFO)[TaskStatus]["tone"], string> = {
+  neutral: "bg-muted/60",
+  info: "bg-info",
+  accent: "bg-accent",
+  warn: "bg-warn",
+  ok: "bg-ok",
+  danger: "bg-danger",
+};
 
 /** Same rules as the API (routers/tasks.py MANUAL_MOVES). Running and blocked are agent-driven. */
 const MOVES: Partial<Record<TaskStatus, TaskStatus[]>> = {
@@ -49,6 +63,7 @@ const MOVES: Partial<Record<TaskStatus, TaskStatus[]>> = {
 
 function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void; draggable: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, disabled: !draggable, data: { status: task.status } });
+  const urgent = task.priority === "high" || task.priority === "urgent";
   return (
     <button
       ref={setNodeRef}
@@ -58,63 +73,90 @@ function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void;
       {...(draggable ? { ...listeners, ...attributes } : {})}
       onClick={onOpen}
       className={cn(
-        "grid w-full min-w-0 gap-2 rounded-[var(--radius-sm)] border border-border bg-surface p-3 text-left shadow-[0_1px_0_hsl(var(--shadow)/0.04)] transition-shadow hover:border-accent/40",
-        draggable && "cursor-grab active:cursor-grabbing touch-manipulation",
+        "grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-[var(--radius-sm)] border border-border bg-surface p-3 text-left shadow-[0_1px_2px_hsl(var(--shadow)/0.05)]",
+        "transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-[var(--shadow-soft)] focus-visible:border-accent focus-visible:outline-none",
+        draggable && "cursor-grab touch-manipulation active:cursor-grabbing",
         isDragging && "relative z-20 shadow-[var(--shadow-pop)] ring-2 ring-accent/40",
       )}
     >
-      <p className="line-clamp-2 text-[13.5px] font-medium">{task.title}</p>
+      <p className="line-clamp-3 text-[13.5px] leading-snug font-medium break-words">{task.title}</p>
       {task.status === "blocked" && task.blocked_reason ? (
-        <p className="line-clamp-2 text-[12px] text-warn">{task.blocked_reason}</p>
+        <p className="line-clamp-2 rounded-[6px] bg-warn/10 px-2 py-1 text-[12px] break-words text-warn">{task.blocked_reason}</p>
       ) : task.status === "failed" && task.error ? (
-        <p className="line-clamp-2 text-[12px] text-danger">{task.error}</p>
+        <p className="line-clamp-2 rounded-[6px] bg-danger/8 px-2 py-1 text-[12px] break-words text-danger">{task.error}</p>
       ) : null}
-      {task.labels?.length ? (
-        <span className="flex flex-wrap gap-1">{task.labels.slice(0, 3).map((l) => <Pill key={l}>{l}</Pill>)}</span>
+      {task.labels?.length || urgent || task.pending_approvals ? (
+        <span className="flex min-w-0 flex-wrap gap-1">
+          {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
+          {urgent ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{PRIORITY_INFO[task.priority].label}</Pill> : null}
+          {task.labels?.slice(0, 3).map((l) => <Pill key={l} className="max-w-full truncate">{l}</Pill>)}
+        </span>
       ) : null}
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2">
         {task.assignee_name ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
             <AgentAvatar name={task.assignee_name} color={task.assignee_color ?? "#888"} size="xs" working={task.status === "running"} />
             <span className="truncate">{task.assignee_name}</span>
           </span>
-        ) : <span className="truncate text-[12px] text-muted">Unassigned</span>}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
-          {task.priority === "high" || task.priority === "urgent" ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{PRIORITY_INFO[task.priority].label}</Pill> : null}
-          <time dateTime={task.updated_at} title={`Updated ${timeAgo(task.updated_at).toLowerCase()}`} className="whitespace-nowrap text-[11px] text-muted tabular">{shortAge(task.updated_at)}</time>
-        </span>
+        ) : <span className="truncate text-[12px] text-muted italic">Unassigned</span>}
+        <time dateTime={task.updated_at} title={`Updated ${timeAgo(task.updated_at).toLowerCase()}`} className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-muted tabular">{shortAge(task.updated_at)}</time>
       </div>
     </button>
   );
 }
 
-function Column({ status, hint, tasks, onOpen, canWrite, dragFrom }: { status: TaskStatus; hint: string; tasks: Task[]; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null }) {
+function Column({ status, hint, empty, tasks, onOpen, canWrite, dragFrom }: { status: TaskStatus; hint: string; empty: string; tasks: Task[]; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const allowed = dragFrom ? (MOVES[dragFrom] ?? []).includes(status) : false;
   const info = STATUS_INFO[status];
   return (
     <section
       ref={setNodeRef}
+      data-col={status}
       aria-label={info.label}
       className={cn(
         // Fixed height (fits the screen); the cards scroll inside the column, header stays.
-        "flex h-[max(24rem,calc(100dvh-16rem))] w-[82vw] max-w-[19rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-transparent bg-surface-2/50 sm:w-72 xl:w-auto xl:max-w-none xl:min-w-0",
-        dragFrom && allowed && "border-dashed border-accent/50",
+        "flex h-[max(20rem,calc(100dvh-27.5rem))] w-[84vw] max-w-[20rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-border/60 bg-surface-2/50 transition-colors",
+        "md:h-[max(24rem,calc(100dvh-19rem))] sm:w-72 xl:w-auto xl:max-w-none xl:min-w-0",
+        dragFrom && allowed && "border-dashed border-accent/60",
         isOver && allowed && "border-solid border-accent bg-accent-soft/40",
-        dragFrom && !allowed && dragFrom !== status && "opacity-60",
+        dragFrom && !allowed && dragFrom !== status && "opacity-55",
       )}
     >
-      <header className="grid shrink-0 gap-0.5 border-b border-border/60 px-3 pt-3 pb-2">
-        <h2 className="text-[13px] font-semibold">{info.label} <span className="ml-1 font-normal text-muted tabular">{tasks.length}</span></h2>
-        <p className="text-[11.5px] text-muted">{hint}</p>
+      <header className="flex shrink-0 items-start justify-between gap-2 border-b border-border/60 px-3 pt-3 pb-2.5">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[13px] font-semibold">
+            <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[info.tone])} />
+            <span className="truncate">{info.label}</span>
+          </h2>
+          <p className="mt-0.5 truncate pl-4 text-[11.5px] text-muted">{hint}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-muted tabular ring-1 ring-border/70">{tasks.length}</span>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain px-2 py-2">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain p-2">
         {tasks.map((t) => (
           <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} />
         ))}
+        {!tasks.length ? (
+          <p className={cn("grid min-h-24 place-items-center rounded-[var(--radius-sm)] border border-dashed border-border px-3 py-6 text-center text-[12px] text-muted", dragFrom && allowed && "border-accent/60 text-accent")}>
+            {dragFrom && allowed ? "Drop here" : empty}
+          </p>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden" aria-hidden>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="grid w-[84vw] max-w-[20rem] shrink-0 content-start gap-2 rounded-[var(--radius-md)] bg-surface-2/50 p-2 sm:w-72 xl:w-auto xl:flex-1">
+          <Skeleton className="mx-1 my-1.5 h-8 w-2/3" />
+          {Array.from({ length: 3 - (i % 3) }, (_, k) => <Skeleton key={k} className="h-24 rounded-[var(--radius-sm)]" />)}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -123,21 +165,82 @@ export function TasksPage() {
   const canWrite = me.permissions.includes("work.write");
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string };
   const { data: tasks, isLoading, error } = useQuery(tasksQuery);
   const [creating, setCreating] = useState(0);
   const [dragFrom, setDragFrom] = useState<TaskStatus | null>(null);
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<TaskStatus | null>(null);
+  const board = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLDivElement>(null);
+  const jumpedAt = useRef(0);
+  const didInit = useRef(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
   );
 
   const byStatus = useMemo(() => {
+    const needle = q.trim().toLowerCase();
     const m = new Map<TaskStatus, Task[]>();
-    for (const t of tasks ?? []) m.set(t.status, [...(m.get(t.status) ?? []), t]);
+    for (const t of tasks ?? []) {
+      if (needle && !`${t.title} ${t.assignee_name ?? ""} ${(t.labels ?? []).join(" ")}`.toLowerCase().includes(needle)) continue;
+      m.set(t.status, [...(m.get(t.status) ?? []), t]);
+    }
     return m;
-  }, [tasks]);
+  }, [tasks, q]);
   const closed = [...(byStatus.get("failed") ?? []), ...(byStatus.get("cancelled") ?? [])];
+  // On phones the board opens on the first column that has work in it, not an empty Triage.
+  const firstBusy = COLUMNS.find((c) => byStatus.get(c.status)?.length)?.status ?? "triage";
+  const col = picked ?? firstBusy;
+
+  /** Scroll the swipeable board so `status` sits at its left edge. */
+  const scrollTo = (status: TaskStatus, smooth: boolean) => {
+    const el = board.current;
+    const target = el?.querySelector<HTMLElement>(`[data-col="${status}"]`);
+    if (!el || !target || el.scrollWidth <= el.clientWidth) return;
+    const pad = parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0;
+    el.scrollBy({ left: target.getBoundingClientRect().left - el.getBoundingClientRect().left - pad, behavior: smooth && !reduce ? "smooth" : "auto" });
+  };
+  /** Keep the chosen tab visible in the (sideways-scrolling) column switcher. */
+  const revealTab = (status: TaskStatus) => {
+    const list = tabs.current?.querySelector<HTMLElement>('[role="tablist"]');
+    const tab = list?.children[COLUMNS.findIndex((c) => c.status === status)] as HTMLElement | undefined;
+    if (!list || !tab) return;
+    const l = tab.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
+    if (l < list.scrollLeft) list.scrollTo({ left: l - 8 });
+    else if (l + tab.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollTo({ left: l + tab.offsetWidth - list.clientWidth + 8 });
+  };
+  const jump = (status: TaskStatus) => {
+    jumpedAt.current = Date.now();
+    setPicked(status);
+    scrollTo(status, true);
+    revealTab(status);
+  };
+  // Swiping updates the column switcher (ignored while a tap-triggered scroll is animating).
+  const onBoardScroll = () => {
+    const el = board.current;
+    if (!el || Date.now() - jumpedAt.current < 600) return;
+    const left = el.getBoundingClientRect().left + (parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0);
+    let best: { s: TaskStatus; d: number } | null = null;
+    for (const node of el.querySelectorAll<HTMLElement>("[data-col]")) {
+      const d = Math.abs(node.getBoundingClientRect().left - left);
+      if (!best || d < best.d) best = { s: node.dataset.col as TaskStatus, d };
+    }
+    if (best && best.s !== col) {
+      setPicked(best.s);
+      revealTab(best.s);
+    }
+  };
+  // First load on a narrow screen: start on the first busy column (DOM scroll only, no state).
+  useEffect(() => {
+    if (didInit.current || !tasks?.length) return;
+    didInit.current = true;
+    scrollTo(firstBusy, false);
+    revealTab(firstBusy);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once, when the tasks first arrive
+  }, [tasks]);
 
   const move = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => api<Task>(`/api/tasks/${id}`, "PATCH", { status }),
@@ -174,16 +277,17 @@ export function TasksPage() {
     setCreating(0);
     if (search.new) navigate({ to: "/tasks", search: {}, replace: true });
   };
+  const openTask = (id: string) => navigate({ to: "/tasks", search: { task: id } });
 
   return (
-    <Page className="max-w-none">
+    <Page wide>
       <PageHeader
         title="Tasks"
-        description="Everything your agents are working on. Drag a card to move it; agents move running work themselves."
+        description="Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves."
         actions={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New task</Button> : null}
       />
       {isLoading ? (
-        <div className="flex gap-3 overflow-hidden">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-64 w-72 shrink-0 rounded-[var(--radius-md)]" />)}</div>
+        <BoardSkeleton />
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : !tasks?.length ? (
@@ -191,19 +295,32 @@ export function TasksPage() {
           action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Create first task</Button> : undefined} />
       ) : (
         <DndContext sensors={sensors} onDragStart={(e) => setDragFrom((e.active.data.current?.status as TaskStatus) ?? null)} onDragCancel={() => setDragFrom(null)} onDragEnd={onDragEnd}>
-          {/* Phones and tablets swipe between columns; wide screens see all six at once. */}
-          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0">
+          <Toolbar className="xl:max-w-md">
+            <SearchInput value={q} onChange={setQ} placeholder="Filter by title, agent or label" />
+            {/* Column switcher for the swipeable board; wide screens see all six columns at once. */}
+            <div ref={tabs} className="min-w-0 xl:hidden">
+              <Segmented size="sm" label="Board columns" value={col} onChange={jump}
+                options={COLUMNS.map((c) => ({ value: c.status, label: STATUS_INFO[c.status].label, count: byStatus.get(c.status)?.length ?? 0 }))} />
+            </div>
+          </Toolbar>
+          <div
+            ref={board}
+            onScroll={onBoardScroll}
+            className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:thin] sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-8 lg:scroll-px-8 lg:px-8 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0"
+          >
             {COLUMNS.map((c) => (
-              <Column key={c.status} status={c.status} hint={c.hint} tasks={byStatus.get(c.status) ?? []} onOpen={(id) => navigate({ to: "/tasks", search: { task: id } })} canWrite={canWrite} dragFrom={dragFrom} />
+              <Column key={c.status} status={c.status} hint={c.hint} empty={q.trim() ? "No match in this column." : c.empty} tasks={byStatus.get(c.status) ?? []} onOpen={openTask} canWrite={canWrite} dragFrom={dragFrom} />
             ))}
           </div>
           {closed.length ? (
-            <details className="mt-2 rounded-[var(--radius-md)] border border-border bg-surface">
-              <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-[13px] font-medium">
-                <WarningIcon size={15} className="text-muted" /> Failed and cancelled <span className="font-normal text-muted">{closed.length}</span>
+            <details className="group min-w-0 rounded-[var(--radius-md)] border border-border bg-surface">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+                <CaretRightIcon size={13} weight="bold" className="shrink-0 text-muted transition-transform group-open:rotate-90" />
+                <WarningIcon size={15} weight="duotone" className="shrink-0 text-muted" /> Failed and cancelled
+                <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-muted tabular">{closed.length}</span>
               </summary>
-              <div className="grid max-h-[28rem] gap-2 overflow-y-auto border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3">
-                {closed.map((t) => <TaskCard key={t.id} task={t} onOpen={() => navigate({ to: "/tasks", search: { task: t.id } })} draggable={false} />)}
+              <div className="grid max-h-[28rem] grid-cols-[minmax(0,1fr)] gap-2 overflow-y-auto border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {closed.map((t) => <TaskCard key={t.id} task={t} onOpen={() => openTask(t.id)} draggable={false} />)}
               </div>
             </details>
           ) : null}

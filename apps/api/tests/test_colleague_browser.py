@@ -62,7 +62,7 @@ async def test_ask_colleague_then_memory_answers_next_time(client, llm, temporal
     await set_fast(client, o)
     t2 = await new_task(client, wira, "Place the Friday lunch order again")
     llm.call("ask_colleague", agent="Rafi", question=q)
-    llm.say(json.dumps({"answered": True, "answer": "Large pizza, bacon and mushroom, 12:30."}))
+    llm.say(json.dumps({"note": 1}))  # the cheap model only picks the note; it is quoted as is
     llm.say("Ordered from what the office already knew.")
     r2 = await runtime.run_task_step(t2["id"])
     assert r2.state == "done"
@@ -70,13 +70,14 @@ async def test_ask_colleague_then_memory_answers_next_time(client, llm, temporal
     assert (
         "From the office memory" in tool2[0].content
         and "Rafi was not disturbed" in tool2[0].content
+        and "bacon and mushroom" in tool2[0].content  # the saved answer, word for word
     )
     async with SessionLocal() as db:
         kids = (await db.scalars(select(Task).where(Task.parent_task_id == t2["id"]))).all()
         assert kids == []
     # The cheap check ran on the fast group, not the agent's smart model.
     assert any(
-        "office notes already answer" in str(r["messages"][0]["content"]) for r in llm.requests
+        "Which numbered note answers" in str(r["messages"][0]["content"]) for r in llm.requests
     )
 
 

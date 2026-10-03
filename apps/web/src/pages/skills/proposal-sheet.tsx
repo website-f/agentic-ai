@@ -1,4 +1,4 @@
-import { CheckIcon, FlaskIcon, PencilSimpleIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, CheckIcon, FlaskIcon, GitDiffIcon, PencilSimpleIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { DiffView } from "@/components/diff-view";
 import { Markdown } from "@/components/markdown";
+import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -20,15 +21,24 @@ import { EvalResults, SuiteBadge } from "./eval-results";
 
 const STATUS_TONE = { pending: "warn", approved: "ok", rejected: "danger", superseded: "neutral" } as const;
 
+function Heading({ icon, tone = "neutral", children, actions }: { icon: typeof FlaskIcon; tone?: Tone; children: React.ReactNode; actions?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="flex min-w-0 items-center gap-2 text-[14px] font-semibold"><IconTile icon={icon} tone={tone} size="sm" /> <span className="min-w-0 break-words">{children}</span></h3>
+      {actions ? <span className="flex flex-wrap items-center gap-2">{actions}</span> : null}
+    </div>
+  );
+}
+
 function Scan({ p }: { p: Proposal }) {
   if (p.kind === "retire") return null;
   if (!p.scan.length) return <Pill tone="ok" className="w-fit"><CheckIcon size={12} weight="bold" /> Safety scan clean</Pill>;
   return (
     <ul className="grid gap-1.5">
       {p.scan.map((f) => (
-        <li key={f.code} className={f.level === "block" ? "flex gap-2 text-[13px] text-danger" : "flex gap-2 text-[13px] text-warn"}>
+        <li key={f.code} className={f.level === "block" ? "flex gap-2 rounded-sm bg-danger/8 px-3 py-2 text-[13px] text-danger" : "flex gap-2 rounded-sm bg-warn/10 px-3 py-2 text-[13px] text-warn"}>
           <ShieldWarningIcon size={16} weight="fill" className="mt-0.5 shrink-0" />
-          <span><span className="font-medium">{f.level === "block" ? "Must fix" : "Check"}:</span> {f.message}</span>
+          <span className="min-w-0 break-words"><span className="font-medium">{f.level === "block" ? "Must fix" : "Check"}:</span> {f.message}</span>
         </li>
       ))}
     </ul>
@@ -73,7 +83,7 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
     <SideSheet
       open
       onOpenChange={(o) => !o && onClose()}
-      title={p ? <span className="font-mono">{p.name}</span> : "Proposal"}
+      title={p ? <span className="font-mono break-all">{p.name}</span> : "Proposal"}
       description={p ? (
         <span className="flex flex-wrap items-center gap-2">
           <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
@@ -101,7 +111,12 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
         )
       ) : null}
     >
-      {isLoading ? <Skeleton className="h-96 rounded-[var(--radius-md)]" /> : error || !p ? (
+      {isLoading ? (
+        <div className="grid gap-4">
+          <Skeleton className="h-20 rounded-[var(--radius-md)]" />
+          <Skeleton className="h-72 rounded-[var(--radius-md)]" />
+        </div>
+      ) : error || !p ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -114,16 +129,16 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
           ) : null}
           <FormError message={approve.error ? errorMessage(approve.error) : reject.error ? errorMessage(reject.error) : null} />
 
-          <section className="grid gap-2">
-            <h3 className="text-[13.5px] font-semibold">Why</h3>
-            <p className="text-[13.5px]">{p.reason || "No reason given."}</p>
+          <section className="grid min-w-0 gap-2.5">
+            <Heading icon={QuestionIcon} tone="accent">Why</Heading>
+            <p className="text-[13.5px] break-words">{p.reason || "No reason given."}</p>
             {p.source_task ? (
               <p className="text-[12.5px] text-muted">
                 Learned from <Link to="/tasks" search={{ task: p.source_task.id }} className="text-accent hover:underline">{p.source_task.title}</Link>
                 {p.source_task.tokens ? <>, which took {compact(p.source_task.tokens)} tokens</> : null}.
               </p>
             ) : null}
-            {p.stale ? <p className="text-[12.5px] text-warn">The skill changed since this was drafted (now version {p.current?.version}). Review the diff against the current text.</p> : null}
+            {p.stale ? <p className="rounded-sm bg-warn/10 px-3 py-2 text-[12.5px] text-warn">The skill changed since this was drafted (now version {p.current?.version}). Review the diff against the current text.</p> : null}
             <Scan p={p} />
           </section>
 
@@ -137,37 +152,36 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
               </div>
             </section>
           ) : p.kind === "retire" ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13.5px] font-semibold">Skill to retire</h3>
+            <section className="grid min-w-0 gap-2.5">
+              <Heading icon={ArchiveIcon}>Skill to retire</Heading>
               <p className="text-[13px] text-muted">{p.description}</p>
               <p className="text-[13px] text-muted">Retired skills disappear from agents' lists. You can restore one at any time.</p>
             </section>
           ) : (
-            <section className="grid gap-2">
-              <h3 className="text-[13.5px] font-semibold">{p.current ? `Changes to version ${p.current.version}` : "Proposed skill"}</h3>
-              <p className="text-[13px]"><span className="text-muted">Description:</span> {p.description}</p>
+            <section className="grid min-w-0 gap-2.5">
+              <Heading icon={GitDiffIcon} tone="info">{p.current ? `Changes to version ${p.current.version}` : "Proposed skill"}</Heading>
+              <p className="text-[13px] break-words"><span className="text-muted">Description:</span> {p.description}</p>
               {p.current && p.current.description !== p.description ? (
                 <p className="text-[12.5px] text-muted line-through">{p.current.description}</p>
               ) : null}
               {p.current ? (
-                <DiffView before={p.kind === "merge" && p.other ? `${p.current.body}\n${p.other.body}` : p.current.body} after={p.body}
-                  labels={[p.kind === "merge" && p.other ? `${p.name} + ${p.other.name}` : `Version ${p.current.version}`, "Proposed"]} />
+                <div className="min-w-0 overflow-x-auto"><DiffView before={p.kind === "merge" && p.other ? `${p.current.body}\n${p.other.body}` : p.current.body} after={p.body}
+                  labels={[p.kind === "merge" && p.other ? `${p.name} + ${p.other.name}` : `Version ${p.current.version}`, "Proposed"]} /></div>
               ) : (
-                <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4"><Markdown>{p.body}</Markdown></div>
+                <div className="min-w-0 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{p.body}</Markdown></div>
               )}
             </section>
           )}
 
           {p.kind !== "retire" ? (
-            <section className="grid gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="flex items-center gap-1.5 text-[13.5px] font-semibold"><FlaskIcon size={15} /> Tests</h3>
-                <span className="flex flex-wrap gap-2">
+            <section className="grid min-w-0 gap-2.5">
+              <Heading icon={FlaskIcon} tone="info" actions={(
+                <>
                   {p.eval?.old ? <SuiteBadge suite={p.eval.old} label={`Version ${p.eval.old_version}`} /> : null}
                   <SuiteBadge suite={p.eval?.new} label="Proposed" />
                   {canWrite && pending ? <Button size="sm" variant="outline" loading={evaluate.isPending} onClick={() => evaluate.mutate()}>Run tests</Button> : null}
-                </span>
-              </div>
+                </>
+              )}>Tests</Heading>
               {p.eval?.new ? <EvalResults suite={p.eval.new} before={p.eval.old} />
                 : <p className="text-[13px] text-muted">{p.eval_cases.length || p.current ? "Not run yet." : "No test cases yet. Approving adds the ones proposed here; you can add more on the skill."}</p>}
               {p.eval_cases.length ? (

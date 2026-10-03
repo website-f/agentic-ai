@@ -109,7 +109,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
         ) : null}
 
         <Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-          <Tabs.List aria-label={`${agent.name} panel`} className="mb-4 flex gap-1 border-b border-border">
+          <Tabs.List aria-label={`${agent.name} panel`} className="mb-4 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => (
               <Tabs.Trigger key={t.id} value={t.id}
                 className="-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">

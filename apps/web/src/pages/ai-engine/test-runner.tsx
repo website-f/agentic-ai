@@ -89,8 +89,8 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
   }
   if (!steps.length) return null;
   return (
-    <div className="grid gap-2" aria-live="polite">
-      <ol className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-2" aria-live="polite">
+      <ol className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
         <AnimatePresence initial={false}>
           {steps.map((s) => (
             <motion.li
@@ -103,16 +103,16 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
               <StepIcon status={s.status} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-[13.5px] font-medium">
+                  <p className="min-w-0 text-[13.5px] font-medium break-words">
                     {s.label}
-                    {s.model ? <span className="ml-2 font-mono text-[12px] font-normal text-muted">{s.model}</span> : null}
+                    {s.model ? <span className="ml-2 font-mono text-[12px] font-normal break-all text-muted">{s.model}</span> : null}
                   </p>
                   {s.latency_ms !== undefined ? (
                     <span className="shrink-0 font-mono text-[12px] text-muted tabular">{s.latency_ms} ms</span>
                   ) : null}
                 </div>
                 {s.detail ? (
-                  <p className={cn("mt-0.5 text-[12.5px]", s.status === "failed" ? "text-danger" : "text-muted")}>{s.detail}</p>
+                  <p className={cn("mt-0.5 text-[12.5px] break-words", s.status === "failed" ? "text-danger" : "text-muted")}>{s.detail}</p>
                 ) : null}
                 {s.usage ? (
                   <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11.5px] text-muted tabular">
@@ -139,7 +139,8 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
         </AnimatePresence>
       </ol>
       {done ? (
-        <p className={cn("text-[13px] font-medium", done.ok ? "text-ok" : "text-danger")}>
+        <p className={cn("flex items-start gap-1.5 rounded-sm px-3 py-2 text-[13px] font-medium", done.ok ? "bg-ok/10 text-ok" : "bg-danger/8 text-danger")}>
+          {done.ok ? <CheckCircleIcon size={16} weight="fill" className="mt-px shrink-0" /> : <XCircleIcon size={16} weight="fill" className="mt-px shrink-0" />}
           {done.ok ? "Connection works." : "The connection is not working yet. Fix the step marked in red and test again."}
         </p>
       ) : null}
@@ -168,7 +169,7 @@ export function TestControls({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="grid gap-1.5">
         <label htmlFor="test-model" className="text-[13px] font-medium">
           Model to test with

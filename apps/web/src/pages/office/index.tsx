@@ -3,10 +3,8 @@ import {
   BroadcastIcon,
   BuildingsIcon,
   KanbanIcon,
-  ListIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
-  MapTrifoldIcon,
   SealCheckIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -15,9 +13,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { EmptyState } from "@/components/page";
+import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ListCard, ListRow, Meta } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
@@ -61,29 +61,32 @@ function TaskTray({ snap, canWrite, onAssign }: { snap: OfficeSnapshot; canWrite
   const [picking, setPicking] = useState<string | null>(null);
   if (!canWrite) return null;
   return (
-    <section aria-label="Tasks to hand out" className="grid content-start gap-2">
-      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold"><KanbanIcon size={15} /> To hand out <span className="font-normal text-muted">{open.length}</span></h2>
+    <section aria-label="Tasks to hand out" className="grid min-w-0 content-start gap-2.5">
+      <h2 className="flex items-center gap-2 text-[13.5px] font-semibold">
+        <IconTile icon={KanbanIcon} tone="info" size="sm" className="size-7" /> To hand out
+        <span className="ml-auto rounded-full bg-surface-2 px-2 text-[12px] font-medium text-muted tabular">{open.length}</span>
+      </h2>
       {open.length ? (
         <>
           <p className="text-[12px] text-muted max-md:hidden">Drag a card onto someone in the office.</p>
-          <ul className="grid gap-1.5">
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
             {open.map((t: Task) => (
               <li key={t.id}
                 draggable
                 onDragStart={(e) => { e.dataTransfer.setData("application/x-agentic-task", t.id); e.dataTransfer.effectAllowed = "move"; }}
-                className="grid cursor-grab gap-1 rounded-sm border border-border bg-surface px-3 py-2 active:cursor-grabbing">
-                <span className="line-clamp-2 text-[13px] font-medium">{t.title}</span>
+                className="grid cursor-grab gap-1.5 rounded-sm border border-border bg-surface px-3 py-2.5 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-[var(--shadow-soft)] active:cursor-grabbing">
+                <span className="line-clamp-2 text-[13px] font-medium break-words">{t.title}</span>
                 {picking === t.id ? (
                   <Select value="" onValueChange={(v) => { setPicking(null); onAssign(t.id, v); }} label="Assign to" size="sm"
                     options={snap.agents.filter((a) => a.status !== "paused").map((a) => ({ value: a.id, label: `${a.name} (${a.role})` }))} />
                 ) : (
-                  <button onClick={() => setPicking(t.id)} className="w-fit text-[12px] text-accent hover:underline">Assign to…</button>
+                  <button onClick={() => setPicking(t.id)} className="-mx-1 h-7 w-fit rounded-sm px-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft">Assign to…</button>
                 )}
               </li>
             ))}
           </ul>
         </>
-      ) : <p className="text-[12.5px] text-muted">Nothing waiting. New tasks without an agent show up here.</p>}
+      ) : <p className="rounded-sm border border-dashed border-border px-3 py-3 text-[12.5px] text-muted">Nothing waiting. New tasks without an agent show up here.</p>}
     </section>
   );
 }
@@ -93,34 +96,51 @@ function ListView({ snap, onOpen }: { snap: OfficeSnapshot; onOpen: (id: string)
   const dept = new Map(snap.departments.map((d) => [d.id, d.name]));
   const rows = [...snap.agents].sort((a, b) =>
     sort === "name" ? a.name.localeCompare(b.name) : STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name));
+  const deptOf = (a: OfficeSnapshot["agents"][number]) => (a.department_id ? dept.get(a.department_id) ?? "—" : "Hot desks");
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface">
-      <table className="w-full text-left text-[13px]">
-        <thead className="border-b border-border text-[12px] text-muted">
-          <tr>
-            <th className="px-4 py-2 font-medium"><button onClick={() => setSort("name")} className={cn(sort === "name" && "text-fg")}>Agent</button></th>
-            <th className="px-4 py-2 font-medium">Department</th>
-            <th className="px-4 py-2 font-medium"><button onClick={() => setSort("state")} className={cn(sort === "state" && "text-fg")}>Doing</button></th>
-            <th className="px-4 py-2 font-medium">Task</th>
-            <th className="px-4 py-2 font-medium max-md:hidden">Last activity</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((a) => (
-            <tr key={a.id}>
-              <td className="px-4 py-2.5">
-                <button onClick={() => onOpen(a.id)} className="flex items-center gap-2 font-medium hover:text-accent">
-                  <AgentAvatar name={a.name} color={a.color} size="xs" working={a.state === "working"} /> {a.name}
-                </button>
-              </td>
-              <td className="px-4 py-2.5 text-muted">{a.department_id ? dept.get(a.department_id) ?? "—" : "Hot desks"}</td>
-              <td className="px-4 py-2.5"><Pill tone={STATE_INFO[a.state].tone}>{STATE_INFO[a.state].label}</Pill></td>
-              <td className="max-w-64 truncate px-4 py-2.5">{a.task ? <Link to="/tasks" search={{ task: a.task.id }} className="text-accent hover:underline">{a.task.title}</Link> : <span className="text-muted">—</span>}</td>
-              <td className="max-w-72 truncate px-4 py-2.5 text-muted max-md:hidden">{a.last ? `${a.last.text} · ${timeAgo(a.last.ts).toLowerCase()}` : "—"}</td>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
+      <Segmented label="Sort agents" size="sm" value={sort} onChange={setSort} className="w-fit"
+        options={[{ value: "state", label: "By what they are doing" }, { value: "name", label: "By name" }]} />
+      {/* Phones: one card per agent. */}
+      <ListCard className="md:hidden">
+        {rows.map((a) => (
+          <ListRow key={a.id} onClick={() => onOpen(a.id)}
+            leading={<AgentAvatar name={a.name} color={a.color} size="sm" working={a.state === "working"} />}
+            title={a.name}
+            meta={<Meta items={[deptOf(a), a.last ? timeAgo(a.last.ts) : null]} />}
+            trailing={<Pill tone={STATE_INFO[a.state].tone}>{STATE_INFO[a.state].label}</Pill>}>
+            {a.task ? <span className="line-clamp-2 text-[12.5px] break-words">On: {a.task.title}</span> : null}
+          </ListRow>
+        ))}
+      </ListCard>
+      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface max-md:hidden">
+        <table className="w-full text-left text-[13px]">
+          <thead className="border-b border-border bg-surface-2/50 text-[12px] text-muted">
+            <tr>
+              <th className="px-4 py-2 font-medium">Agent</th>
+              <th className="px-4 py-2 font-medium">Department</th>
+              <th className="px-4 py-2 font-medium">Doing</th>
+              <th className="px-4 py-2 font-medium">Task</th>
+              <th className="px-4 py-2 font-medium">Last activity</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((a) => (
+              <tr key={a.id} className="hover:bg-surface-2/40">
+                <td className="px-4 py-2.5">
+                  <button onClick={() => onOpen(a.id)} className="flex items-center gap-2 font-medium whitespace-nowrap hover:text-accent">
+                    <AgentAvatar name={a.name} color={a.color} size="xs" working={a.state === "working"} /> {a.name}
+                  </button>
+                </td>
+                <td className="px-4 py-2.5 whitespace-nowrap text-muted">{deptOf(a)}</td>
+                <td className="px-4 py-2.5"><Pill tone={STATE_INFO[a.state].tone}>{STATE_INFO[a.state].label}</Pill></td>
+                <td className="w-[30%] max-w-0 px-4 py-2.5">{a.task ? <Link to="/tasks" search={{ task: a.task.id }} className="block truncate text-accent hover:underline" title={a.task.title}>{a.task.title}</Link> : <span className="text-muted">—</span>}</td>
+                <td className="w-[30%] max-w-0 px-4 py-2.5 text-muted"><span className="block truncate" title={a.last?.text}>{a.last ? `${a.last.text} · ${timeAgo(a.last.ts).toLowerCase()}` : "—"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -222,33 +242,35 @@ export function OfficePage() {
   return (
     // Fills the screen below the header (and above the phone tab bar).
     <div className="flex h-[calc(100dvh-3.5rem-4.5rem-env(safe-area-inset-bottom))] min-h-80 flex-col md:h-[calc(100dvh-3.5rem)]">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-6 sm:py-2.5">
+      <div className="flex items-center gap-2 border-b border-border bg-surface/60 px-3 py-2 sm:px-6 sm:py-2.5">
         <h1 className="mr-2 text-[17px] font-semibold max-sm:sr-only">Office</h1>
-        <nav aria-label="Companies" className="flex min-w-0 gap-1 overflow-x-auto">
+        <nav aria-label="Companies" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {branches.map((b) => (
             <button key={b.id} onClick={() => setBranchId(b.id)} aria-current={b.id === branch.id ? "page" : undefined}
-              className={cn("flex shrink-0 items-center gap-1.5 rounded-sm px-2.5 py-1 text-[13px]", b.id === branch.id ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
+              className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-[13px] transition-colors", b.id === branch.id ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
               <span aria-hidden className="size-2 rounded-full" style={{ background: b.color }} />{b.name}
             </button>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {waiting ? (
             <Button size="sm" variant="outline" asChild><Link to="/approvals"><SealCheckIcon size={15} className="text-warn" /> {waiting}<span className="max-sm:sr-only"> waiting</span></Link></Button>
           ) : null}
-          {canWrite ? <Button size="icon-sm" variant="ghost" aria-label="Send a broadcast" asChild><Link to="/broadcasts"><BroadcastIcon size={17} /></Link></Button> : null}
-          <Button size="icon-sm" variant="ghost" aria-label={view === "map" ? "Show as a list" : "Show the office"}
-            onClick={() => navigate({ to: "/office", search: { ...search, view: view === "map" ? "list" : undefined }, replace: true })}>
-            {view === "map" ? <ListIcon size={17} /> : <MapTrifoldIcon size={17} />}
-          </Button>
+          {canWrite ? <Button size="icon-sm" variant="ghost" aria-label="Send a broadcast" title="Send a broadcast" asChild><Link to="/broadcasts"><BroadcastIcon size={17} /></Link></Button> : null}
+          <Segmented label="Office view" size="sm" value={view}
+            onChange={(v) => navigate({ to: "/office", search: { ...search, view: v === "list" ? "list" : undefined }, replace: true })}
+            options={[{ value: "map", label: "Map" }, { value: "list", label: "List" }]} />
         </div>
       </div>
 
       {error ? <p role="alert" className="p-6 text-danger">{errorMessage(error)}</p> : !snap ? (
         <div className="p-6"><Skeleton className="h-[70dvh] rounded-[var(--radius-md)]" /></div>
       ) : view === "list" ? (
-        <div className="grid gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
-          {snap.agents.length ? <ListView snap={snap} onOpen={(id) => openAgent(id)} /> : <p className="text-muted">No agents in {snap.branch.name} yet.</p>}
+        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+          {snap.agents.length ? <ListView snap={snap} onOpen={(id) => openAgent(id)} /> : (
+            <EmptyState icon={BuildingsIcon} title={`No agents in ${snap.branch.name} yet`} body="Add agents to its departments and they take a desk here."
+              action={canWrite ? <Button size="sm" asChild><Link to="/agents/new">Add an agent</Link></Button> : undefined} />
+          )}
           <TaskTray snap={snap} canWrite={canWrite} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
         </div>
       ) : (
@@ -262,7 +284,7 @@ export function OfficePage() {
                 </span>
               </div>
             ) : null}
-            <div className="absolute top-3 right-3 flex flex-col gap-1 rounded-sm border border-border bg-surface/95 p-1 shadow-[var(--shadow-soft)]">
+            <div className="absolute top-3 right-3 flex flex-col gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface/95 p-1 shadow-[var(--shadow-soft)] backdrop-blur-sm">
               <Button size="icon-sm" variant="ghost" aria-label="Zoom in" onClick={() => office.current?.zoom(1)}><MagnifyingGlassPlusIcon size={17} /></Button>
               <Button size="icon-sm" variant="ghost" aria-label="Zoom out" onClick={() => office.current?.zoom(-1)}><MagnifyingGlassMinusIcon size={17} /></Button>
               <Button size="icon-sm" variant="ghost" aria-label="Fit the office" onClick={() => office.current?.fit()}><ArrowsInIcon size={17} /></Button>
@@ -275,10 +297,10 @@ export function OfficePage() {
               </div>
             ) : null}
             {/* Roster: tap to fly the camera there. */}
-            <nav aria-label="People in the office" className="absolute inset-x-0 bottom-0 flex gap-1.5 overflow-x-auto border-t border-border bg-surface/95 px-3 py-2">
+            <nav aria-label="People in the office" className="absolute inset-x-0 bottom-0 flex gap-1.5 overflow-x-auto border-t border-border bg-surface/95 px-3 py-2 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {snap.agents.map((a) => (
                 <button key={a.id} onClick={() => { office.current?.focus(a.id); openAgent(a.id); }}
-                  className={cn("flex shrink-0 items-center gap-2 rounded-full border px-1.5 py-1 pr-3 text-[12.5px]", a.id === search.agent ? "border-accent bg-accent-soft/60" : "border-border hover:bg-surface-2")}>
+                  className={cn("flex h-9 shrink-0 items-center gap-2 rounded-full border bg-surface pr-3 pl-1.5 text-[12.5px] transition-colors", a.id === search.agent ? "border-accent bg-accent-soft/60" : "border-border hover:bg-surface-2")}>
                   <AgentAvatar name={a.name} color={a.color} size="xs" working={a.state === "working"} />
                   <span className="font-medium">{a.name}</span>
                   <span aria-hidden className={cn("size-2 rounded-full", a.state === "working" || a.state === "in_meeting" ? "bg-accent" : a.state === "waiting_approval" ? "bg-warn" : a.state === "error" ? "bg-danger" : a.state === "paused" ? "bg-border" : "bg-info")} />
@@ -287,7 +309,7 @@ export function OfficePage() {
               ))}
             </nav>
           </div>
-          <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-border p-4 xl:block">
+          <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-border bg-surface/50 p-4 xl:block">
             <TaskTray snap={snap} canWrite={canWrite} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
           </aside>
         </div>

@@ -35,7 +35,10 @@ def _public(ip: str) -> bool:
 
 
 def _allowed_hosts() -> set[str]:
-    return {h.strip().lower() for h in settings.private_hosts_allowed.split(",") if h.strip()}
+    hosts = {h.strip().lower() for h in settings.private_hosts_allowed.split(",") if h.strip()}
+    if settings.local_llm_url:  # the server's own local model (set by an admin, never a model)
+        hosts.add((urlparse(settings.local_llm_url).hostname or "").lower())
+    return hosts - {""}
 
 
 async def guard_url(url: str) -> str | None:

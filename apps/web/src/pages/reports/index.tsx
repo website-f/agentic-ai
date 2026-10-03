@@ -1,13 +1,15 @@
-import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, ClipboardTextIcon, DownloadSimpleIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, ArrowsDownUpIcon, ClipboardTextIcon, DownloadSimpleIcon, KanbanIcon, MagnifyingGlassIcon, SparkleIcon, TableIcon } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Markdown } from "@/components/markdown";
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Meta } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
@@ -31,14 +33,17 @@ function DataTable({ reportId, table, n }: { reportId: string; table: ReportTabl
     return out;
   }, [table.rows, sort, q]);
   return (
-    <section aria-label={table.title || `Table ${n + 1}`} className="overflow-hidden rounded-[var(--radius-md)] border border-border">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2/50 px-3 py-2">
-        <h3 className="flex-1 text-[13.5px] font-semibold">{table.title || `Table ${n + 1}`} <span className="font-normal text-muted">· {table.rows.length} rows</span></h3>
+    <section aria-label={table.title || `Table ${n + 1}`} className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2/50 px-3 py-2.5 sm:px-4">
+        <h3 className="flex min-w-0 flex-1 basis-48 items-center gap-2 text-[13.5px] font-semibold">
+          <TableIcon size={15} weight="duotone" className="shrink-0 text-muted" />
+          <span className="min-w-0 break-words">{table.title || `Table ${n + 1}`} <span className="font-normal whitespace-nowrap text-muted">· {table.rows.length} rows</span></span>
+        </h3>
         {table.rows.length > 8 ? (
-          <label className="relative">
+          <label className="relative max-sm:flex-1">
             <span className="sr-only">Filter rows</span>
-            <MagnifyingGlassIcon size={13} className="absolute top-1/2 left-2 -translate-y-1/2 text-muted" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter" className="h-7 w-36 rounded-sm border border-border bg-surface pr-2 pl-6 text-[12.5px] focus-visible:border-accent focus-visible:outline-none" />
+            <MagnifyingGlassIcon size={13} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter rows" className="h-8 w-full rounded-sm border border-border bg-surface pr-2 pl-7 text-[12.5px] focus-visible:border-accent focus-visible:outline-none sm:w-40" />
           </label>
         ) : null}
         <Button size="sm" variant="outline" asChild>
@@ -47,13 +52,13 @@ function DataTable({ reportId, table, n }: { reportId: string; table: ReportTabl
       </div>
       <div className="max-h-[32rem] overflow-auto">
         <table className="w-full text-[12.5px]">
-          <thead className="sticky top-0 bg-surface text-left text-muted shadow-[0_1px_0_var(--color-border)]">
+          <thead className="sticky top-0 z-10 bg-surface text-left text-muted shadow-[0_1px_0_var(--color-border)]">
             <tr>
               {table.columns.map((c, i) => (
                 <th key={i} scope="col" className={cn("px-3 py-2 font-medium whitespace-nowrap", numeric[i] && "text-right")}
                   aria-sort={sort?.col === i ? (sort.desc ? "descending" : "ascending") : "none"}>
-                  <button className="inline-flex items-center gap-1 hover:text-fg" onClick={() => setSort((s) => ({ col: i, desc: s?.col === i ? !s.desc : !!numeric[i] }))}>
-                    {c}{sort?.col === i ? (sort.desc ? <ArrowDownIcon size={11} /> : <ArrowUpIcon size={11} />) : null}
+                  <button className={cn("group inline-flex items-center gap-1 py-0.5 hover:text-fg", sort?.col === i && "text-fg")} onClick={() => setSort((s) => ({ col: i, desc: s?.col === i ? !s.desc : !!numeric[i] }))}>
+                    {c}{sort?.col === i ? (sort.desc ? <ArrowDownIcon size={11} /> : <ArrowUpIcon size={11} />) : <ArrowsDownUpIcon size={11} className="opacity-0 transition-opacity group-hover:opacity-60" />}
                   </button>
                 </th>
               ))}
@@ -63,7 +68,7 @@ function DataTable({ reportId, table, n }: { reportId: string; table: ReportTabl
             {rows.map((r, ri) => (
               <tr key={ri} className="align-top hover:bg-surface-2/40">
                 {table.columns.map((_, ci) => (
-                  <td key={ci} className={cn("px-3 py-1.5", numeric[ci] ? "text-right font-mono tabular" : "max-w-[28rem] break-words")}>
+                  <td key={ci} className={cn("px-3 py-2", numeric[ci] ? "text-right font-mono whitespace-nowrap tabular" : "max-w-[28rem] min-w-[8rem] break-words")}>
                     {typeof r[ci] === "number" ? Number(r[ci]).toLocaleString() : String(r[ci] ?? "")}
                   </td>
                 ))}
@@ -79,24 +84,45 @@ function DataTable({ reportId, table, n }: { reportId: string; table: ReportTabl
 
 function Reader({ id, onBack }: { id: string; onBack: () => void }) {
   const { data: r, isLoading, error } = useQuery(reportQuery(id));
-  if (isLoading) return <Skeleton className="h-96 rounded-[var(--radius-md)]" />;
+  if (isLoading) {
+    return (
+      <div className="grid content-start gap-4" aria-hidden>
+        <Skeleton className="h-7 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-24 rounded-[var(--radius-md)]" />
+        <Skeleton className="h-64 rounded-[var(--radius-md)]" />
+      </div>
+    );
+  }
   if (error || !r) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   return (
-    <article className="grid min-w-0 gap-4">
-      <button onClick={onBack} className="inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg lg:hidden"><ArrowLeftIcon size={14} /> All reports</button>
-      <header className="grid gap-2">
-        <h2 className="text-[19px] font-semibold tracking-tight">{r.title}</h2>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
-          {r.agent_name ? <span className="inline-flex items-center gap-1.5"><AgentAvatar name={r.agent_name} color={r.agent_color ?? "#888"} size="xs" /> {r.agent_name}</span> : null}
-          {r.branch_name ? <span>· {r.branch_name}</span> : null}
-          <span>· {timeAgo(r.created_at)}</span>
-          {r.task_id ? <>· <Link to="/tasks" search={{ task: r.task_id }} className="text-accent hover:underline">{r.task_title ?? "the task"}</Link></> : null}
-          {r.labels.map((l) => <Pill key={l}>{l}</Pill>)}
+    <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
+      <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2 w-fit lg:hidden"><ArrowLeftIcon size={14} /> All reports</Button>
+      <header className="grid min-w-0 gap-2.5">
+        <h2 className="text-[19px] leading-snug font-semibold tracking-tight break-words sm:text-[21px]">{r.title}</h2>
+        <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-muted">
+          <Meta
+            items={[
+              r.agent_name ? <span className="inline-flex items-center gap-1.5 text-fg"><AgentAvatar name={r.agent_name} color={r.agent_color ?? "#888"} size="xs" /> {r.agent_name}</span> : null,
+              r.branch_name,
+              <time dateTime={r.created_at}>{timeAgo(r.created_at)}</time>,
+              r.task_id ? <Link to="/tasks" search={{ task: r.task_id }} className="inline-flex min-w-0 items-center gap-1 text-accent hover:underline"><KanbanIcon size={13} className="shrink-0" /><span className="truncate">{r.task_title ?? "the task"}</span></Link> : null,
+            ]}
+          />
         </p>
+        {r.labels.length ? <div className="flex flex-wrap gap-1.5">{r.labels.map((l) => <Pill key={l}>{l}</Pill>)}</div> : null}
       </header>
-      {r.summary ? <p className="rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/50 px-4 py-3 text-[14px]">{r.summary}</p> : null}
+      {r.summary ? (
+        <section aria-label="Summary" className="flex min-w-0 gap-3 rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/50 p-4">
+          <IconTile icon={SparkleIcon} size="sm" className="max-sm:hidden" />
+          <div className="min-w-0">
+            <p className="text-[11.5px] font-semibold tracking-[0.06em] text-accent uppercase">Summary</p>
+            <p className="mt-1 text-[14px] leading-relaxed break-words">{r.summary}</p>
+          </div>
+        </section>
+      ) : null}
       {(r.tables ?? []).map((t, n) => <DataTable key={n} reportId={r.id} table={t} n={n} />)}
-      {r.body ? <Markdown className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">{r.body}</Markdown> : null}
+      {r.body ? <Markdown className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-4 sm:px-5">{r.body}</Markdown> : null}
     </article>
   );
 }
@@ -104,14 +130,19 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
 function Row({ r, active, onOpen }: { r: Report; active: boolean; onOpen: () => void }) {
   return (
     <li>
-      <button onClick={onOpen} aria-current={active} className={cn("grid w-full gap-1 px-4 py-3 text-left hover:bg-surface-2/60", active && "bg-accent-soft/50")}>
-        <span className="truncate text-[13.5px] font-medium">{r.title}</span>
-        <span className="line-clamp-2 text-[12.5px] text-muted">{r.summary}</span>
-        <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted">
-          {r.agent_name} · {r.branch_name ?? "Office"} · {timeAgo(r.created_at)}
-          {r.row_count ? <Pill>{r.row_count} rows</Pill> : null}
-          {r.labels.slice(0, 2).map((l) => <Pill key={l}>{l}</Pill>)}
+      <button onClick={onOpen} aria-current={active} className={cn("relative grid w-full grid-cols-[minmax(0,1fr)] gap-1 px-4 py-3 text-left transition-colors hover:bg-surface-2/60", active && "bg-accent-soft/50 hover:bg-accent-soft/60")}>
+        {active ? <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent" /> : null}
+        <span className="line-clamp-2 text-[13.5px] leading-snug font-medium break-words">{r.title}</span>
+        {r.summary ? <span className="line-clamp-2 text-[12.5px] text-muted">{r.summary}</span> : null}
+        <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-muted">
+          <Meta items={[r.agent_name, r.branch_name ?? "Office", timeAgo(r.created_at)]} />
         </span>
+        {r.row_count || r.labels.length ? (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {r.row_count ? <Pill tone="info"><TableIcon size={11} weight="bold" /> {r.row_count} rows</Pill> : null}
+            {r.labels.slice(0, 2).map((l) => <Pill key={l}>{l}</Pill>)}
+          </span>
+        ) : null}
       </button>
     </li>
   );
@@ -133,22 +164,28 @@ export function ReportsPage() {
   return (
     <Page className="max-w-7xl">
       <PageHeader title="Reports" description="What agents wrote up for you: a summary first, then tables you can sort, filter and download as CSV." />
-      {isLoading ? <Skeleton className="h-96 rounded-[var(--radius-md)]" /> : error ? (
+      {isLoading ? (
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
+          <div className="grid content-start gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-[var(--radius-md)]" />)}</div>
+          <Skeleton className="h-96 rounded-[var(--radius-md)] max-lg:hidden" />
+        </div>
+      ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : !reports.length ? (
         <EmptyState icon={ClipboardTextIcon} title="No reports yet" body="Ask an agent for a report (for example, a summary of an inbox) and it publishes one here." />
       ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
-          <div className={cn("grid content-start gap-3", current && "hidden lg:grid")}>
-            <label className="relative">
-              <span className="sr-only">Search reports</span>
-              <MagnifyingGlassIcon size={14} className="absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reports" className="h-9 w-full rounded-sm border border-border bg-surface pr-3 pl-8 text-[13.5px] focus-visible:border-accent focus-visible:outline-none" />
-            </label>
-            <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-              {shown.map((r) => <Row key={r.id} r={r} active={r.id === current} onOpen={() => open(r.id)} />)}
-              {!shown.length ? <li className="px-4 py-6 text-center text-[13px] text-muted">No report matches.</li> : null}
-            </ul>
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
+          <div className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]", current && "hidden lg:grid")}>
+            <SearchInput value={q} onChange={setQ} placeholder="Search reports" className="flex-none basis-auto" />
+            <div className="min-h-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+              <p className="border-b border-border px-4 py-2 text-[12px] text-muted tabular">
+                {shown.length === reports.length ? `${reports.length} ${reports.length === 1 ? "report" : "reports"}` : `${shown.length} of ${reports.length} reports`}
+              </p>
+              <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:overscroll-contain">
+                {shown.map((r) => <Row key={r.id} r={r} active={r.id === current} onOpen={() => open(r.id)} />)}
+                {!shown.length ? <li className="px-4 py-8 text-center text-[13px] text-muted">No report matches.</li> : null}
+              </ul>
+            </div>
           </div>
           {current ? <Reader key={current} id={current} onBack={() => open()} /> : null}
         </div>

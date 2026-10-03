@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Page } from "@/components/page";
+import { Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
@@ -43,15 +43,20 @@ function TemplateCard({ t, selected, onPick }: { t: Template | null; selected: b
       onClick={onPick}
       aria-pressed={selected}
       className={cn(
-        "flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors",
-        selected ? "border-accent bg-accent-soft/50" : "border-border bg-surface hover:border-accent/40",
+        "flex min-w-0 items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-[border-color,background-color,box-shadow]",
+        selected ? "border-accent bg-accent-soft/50 ring-2 ring-accent/15" : "border-border bg-surface hover:border-accent/40 hover:shadow-[var(--shadow-soft)]",
       )}
     >
       {t ? <AgentAvatar name={t.role} color={t.color} size="sm" /> : <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-muted"><SparkleIcon size={16} /></span>}
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className="block text-[13.5px] font-medium">{t ? t.role : "Blank agent"}</span>
         <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-muted">{t ? t.soul.split(". ")[0] + "." : "Start from nothing and write the personality yourself."}</span>
       </span>
+      {selected ? (
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
+          <CheckIcon size={12} weight="bold" />
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -126,33 +131,41 @@ export function AgentBuilderPage() {
 
   return (
     <Page className="max-w-3xl">
-      <Link to="/agents" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-fg">
+      <Link to="/agents" className="-my-1 inline-flex h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg">
         <ArrowLeftIcon size={14} /> Agents
       </Link>
-      <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">New agent</h1>
+      <PageHeader title="New agent" description="Six short steps: a starting point, where it sits, who it is, its SOPs and what it may do." />
 
-      <ol className="mt-5 mb-6 flex gap-1.5" aria-label="Steps">
-        {STEPS.map((s, i) => (
-          <li key={s} className="min-w-0 flex-1">
-            <button
-              onClick={() => i < step && setStep(i)}
-              disabled={i > step}
-              className={cn("w-full text-left", i < step && "cursor-pointer")}
-              aria-current={i === step ? "step" : undefined}
-            >
-              <span className={cn("block h-1 rounded-full transition-colors", i <= step ? "bg-accent" : "bg-border")} />
-              <span className={cn("mt-1.5 hidden truncate text-[12px] sm:block", i === step ? "font-medium text-fg" : "text-muted")}>{s}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-      <p className="mb-4 text-[12.5px] text-muted sm:hidden">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
+      <nav aria-label="Steps" className="rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4">
+        <ol className="flex gap-1.5">
+          {STEPS.map((s, i) => (
+            <li key={s} className="min-w-0 flex-1">
+              <button
+                onClick={() => i < step && setStep(i)}
+                disabled={i > step}
+                className={cn("grid w-full gap-1.5 text-left", i < step && "cursor-pointer")}
+                aria-current={i === step ? "step" : undefined}
+                aria-label={`Step ${i + 1}: ${s}${i < step ? " (done)" : ""}`}
+              >
+                <span className={cn("block h-1 rounded-full transition-colors", i <= step ? "bg-accent" : "bg-border")} />
+                <span className={cn("hidden items-center gap-1 truncate text-[12px] sm:flex", i === step ? "font-medium text-fg" : i < step ? "text-accent" : "text-muted")}>
+                  {i < step ? <CheckIcon size={12} weight="bold" className="shrink-0" /> : <span className="tabular">{i + 1}.</span>}
+                  <span className="truncate">{s}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-2 text-[12.5px] text-muted sm:hidden">
+          Step {step + 1} of {STEPS.length}: <span className="font-medium text-fg">{STEPS[step]}</span>
+        </p>
+      </nav>
 
       <motion.div key={step} initial={reduce ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
         {step === 0 ? (
           <section className="grid gap-3">
             <p className="text-[13.5px] text-muted">Pick a starting point. You can change everything afterwards.</p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
               {templates.map((t) => <TemplateCard key={t.id} t={t} selected={picked === t.id} onPick={() => pickTemplate(t)} />)}
               <TemplateCard t={null} selected={picked === null} onPick={() => pickTemplate(null)} />
             </div>
@@ -170,12 +183,12 @@ export function AgentBuilderPage() {
               <div className="flex flex-wrap gap-2">
                 {branch?.departments.map((dep) => (
                   <button key={dep.id} onClick={() => set({ department_id: dep.id })} aria-pressed={d.department_id === dep.id}
-                    className={cn("rounded-full border px-3.5 py-1.5 text-[13px]", d.department_id === dep.id ? "border-accent bg-accent-soft font-medium text-accent" : "border-border bg-surface hover:bg-surface-2")}>
+                    className={cn("min-h-9 rounded-full border px-3.5 py-1.5 text-[13px]", d.department_id === dep.id ? "border-accent bg-accent-soft font-medium text-accent" : "border-border bg-surface hover:bg-surface-2")}>
                     {dep.name}
                   </button>
                 ))}
                 <button onClick={() => set({ department_id: null })} aria-pressed={d.department_id === null}
-                  className={cn("rounded-full border px-3.5 py-1.5 text-[13px]", d.department_id === null ? "border-accent bg-accent-soft font-medium text-accent" : "border-dashed border-border text-muted")}>
+                  className={cn("min-h-9 rounded-full border px-3.5 py-1.5 text-[13px]", d.department_id === null ? "border-accent bg-accent-soft font-medium text-accent" : "border-dashed border-border text-muted")}>
                   No department
                 </button>
               </div>
@@ -194,7 +207,7 @@ export function AgentBuilderPage() {
 
         {step === 2 ? (
           <section className="grid gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
               <Field label="Name" value={d.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Aina" autoFocus error={fieldErrors.name} />
               <Field label="Job title" value={d.role} onChange={(e) => set({ role: e.target.value })} placeholder="e.g. Senior Accountant" error={fieldErrors.role} />
             </div>
@@ -237,10 +250,10 @@ export function AgentBuilderPage() {
                     const on = d.sop_ids.includes(s.id);
                     return (
                       <li key={s.id}>
-                        <label className={cn("flex cursor-pointer items-center gap-2.5 rounded-sm border px-3 py-2 text-[13px]", on ? "border-accent bg-accent-soft/40" : "border-border bg-surface")}>
-                          <input type="checkbox" checked={on} onChange={() => set({ sop_ids: on ? d.sop_ids.filter((x) => x !== s.id) : [...d.sop_ids, s.id] })} className="size-4 accent-[var(--accent)]" />
-                          <FileTextIcon size={15} className="text-muted" />
-                          <span className="font-medium">{s.title}</span>
+                        <label className={cn("flex min-h-10 cursor-pointer items-center gap-2.5 rounded-sm border px-3 py-2 text-[13px]", on ? "border-accent bg-accent-soft/40" : "border-border bg-surface")}>
+                          <input type="checkbox" checked={on} onChange={() => set({ sop_ids: on ? d.sop_ids.filter((x) => x !== s.id) : [...d.sop_ids, s.id] })} className="size-4 shrink-0 accent-[var(--accent)]" />
+                          <FileTextIcon size={15} className="shrink-0 text-muted" />
+                          <span className="min-w-0 flex-1 font-medium break-words">{s.title}</span>
                         </label>
                       </li>
                     );
@@ -268,7 +281,7 @@ export function AgentBuilderPage() {
             <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
               <AgentAvatar name={d.name || "?"} color={d.color} size="lg" />
               <div className="min-w-0">
-                <p className="text-[16px] font-semibold">{d.name}</p>
+                <p className="text-[16px] font-semibold break-words">{d.name}</p>
                 <p className="text-[13px] text-muted">{d.role} · {branch?.departments.find((x) => x.id === d.department_id)?.name ?? "No department"}, {branch?.name}</p>
                 <p className="mt-1 text-[12.5px] text-muted">Model group <span className="font-mono">{d.model_group}</span> · {autoSops.length + d.sop_ids.length} SOPs · {d.autonomy === "auto" ? "works on auto" : "asks before risky tools"}</p>
               </div>
@@ -286,7 +299,7 @@ export function AgentBuilderPage() {
         ) : null}
       </motion.div>
 
-      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] mt-8 flex justify-between gap-3 border-t border-border bg-bg/90 py-3 backdrop-blur-sm md:bottom-0">
+      <div className="sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 -mx-4 flex justify-between gap-3 border-t border-border bg-bg/90 px-4 py-3 backdrop-blur-md sm:mx-0 sm:px-0 md:bottom-0">
         <Button variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
           <ArrowLeftIcon size={15} /> Back
         </Button>

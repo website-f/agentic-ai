@@ -1,14 +1,15 @@
-import { PlusIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { HandIcon, LightningIcon, PauseCircleIcon, PlusIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { RadioGroup } from "radix-ui";
 import { useMemo } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { errorMessage } from "@/lib/api";
 import { useLive } from "@/lib/live";
 import { branchesQuery, meQuery } from "@/lib/queries";
@@ -32,20 +33,20 @@ function AgentCard({ agent }: { agent: Agent }) {
     <Link
       to="/agents/$agentId"
       params={{ agentId: agent.id }}
-      className="group flex flex-col gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 transition-colors hover:border-accent/40"
+      className="group flex min-w-0 flex-col gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-accent/40 hover:shadow-[var(--shadow-soft)]"
     >
       <div className="flex items-start gap-3">
         <AgentAvatar name={agent.name} color={agent.color} working={state.label === "Working"} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14.5px] font-semibold group-hover:text-accent">{agent.name}</p>
-          <p className="truncate text-[12.5px] text-muted">{agent.role}</p>
+          <p className="text-[14.5px] leading-snug font-semibold break-words group-hover:text-accent">{agent.name}</p>
+          <p className="truncate text-[12.5px] text-muted" title={agent.role}>{agent.role}</p>
         </div>
-        <Pill tone={state.tone}>{state.label}</Pill>
+        <Pill tone={state.tone} className="shrink-0">{state.label}</Pill>
       </div>
-      <p className="line-clamp-1 text-[12.5px] text-muted">
+      <p className="line-clamp-2 rounded-sm bg-surface-2/60 px-2.5 py-1.5 text-[12.5px] text-muted">
         {agent.current_task ? <>On: <span className="text-fg">{agent.current_task.title}</span></> : agent.open_tasks ? `${agent.open_tasks} open ${agent.open_tasks === 1 ? "task" : "tasks"}` : "No open tasks"}
       </p>
-      <div className="flex flex-wrap gap-1.5 text-[11.5px]">
+      <div className="mt-auto flex flex-wrap gap-1.5 text-[11.5px]">
         <Pill className="font-mono">{agent.model_group}</Pill>
         {agent.clone_of ? <Pill tone="info">Helper</Pill> : null}
         {agent.owner_name ? <Pill tone="info">{agent.owner_name}&apos;s agent</Pill> : null}
@@ -77,6 +78,16 @@ export function AgentsPage() {
     return out;
   }, [agents, branch]);
   const total = sections.reduce((n, s) => n + s.agents.length, 0);
+  const statuses = useLive((s) => s.agentStatus);
+  const counts = useMemo(() => {
+    const here = sections.flatMap((s) => s.agents);
+    const labels = here.map((a) => agentState(a, statuses[a.id]).label);
+    return {
+      working: labels.filter((l) => l === "Working" || l === "In a meeting").length,
+      waiting: labels.filter((l) => l === "Waiting on you").length,
+      paused: labels.filter((l) => l === "Paused").length,
+    };
+  }, [sections, statuses]);
 
   return (
     <Page>
@@ -92,7 +103,7 @@ export function AgentsPage() {
         ) : null}
       />
       {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-32 rounded-[var(--radius-md)]" />)}</div>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-40 rounded-[var(--radius-md)]" />)}</div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">Could not load agents. {errorMessage(error)}</div>
       ) : !branch ? (
@@ -105,33 +116,44 @@ export function AgentsPage() {
           action={canManage ? <Button asChild><Link to="/agents/new"><PlusIcon size={16} weight="bold" /> Create first agent</Link></Button> : undefined}
         />
       ) : (
-        <div className="grid gap-6">
-          <RadioGroup.Root value={view ?? "departments"} onValueChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
-            aria-label="Show agents by" className="inline-flex w-fit rounded-sm border border-border p-0.5">
-            {([["departments", "By department"], ["org", "Org chart"]] as const).map(([v, label]) => (
-              <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-3 py-1 text-[13px] text-muted data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{label}</RadioGroup.Item>
-            ))}
-          </RadioGroup.Root>
+        <>
+          <StatGrid>
+            <Stat label="Agents" value={total} hint={`In ${sections.filter((s) => s.agents.length).length} departments`} icon={UsersThreeIcon} tone="accent" />
+            <Stat label="Working now" value={counts.working} hint="On a task or in a meeting" icon={LightningIcon} tone="info" />
+            <Stat label="Waiting on you" value={counts.waiting} hint={counts.waiting ? "Open Approvals to decide" : "Nothing to decide"} icon={HandIcon} tone={counts.waiting ? "warn" : "neutral"} />
+            <Stat label="Paused" value={counts.paused} hint="Not taking work" icon={PauseCircleIcon} tone="neutral" />
+          </StatGrid>
+          <Segmented
+            label="Show agents by"
+            value={view === "org" ? "org" : "departments"}
+            onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
+            options={[
+              { value: "departments", label: "By department", count: total },
+              { value: "org", label: "Org chart" },
+            ]}
+            className="w-fit"
+          />
           {view === "org" ? <OrgChart agents={(agents ?? []).filter((a) => a.branch_id === branch.id && a.status !== "retired")} manage={canManage} /> : (
-        <div className="grid gap-8">
-          {sections.filter((s) => s.agents.length).map((s) => (
-            <section key={s.id} className="grid gap-3">
-              <h2 className="flex items-baseline gap-2 text-[15px] font-semibold">
-                {s.name} <span className="text-[12.5px] font-normal text-muted">{s.agents.length}</span>
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {s.agents.map((a) => <AgentCard key={a.id} agent={a} />)}
-              </div>
-            </section>
-          ))}
-          {sections.some((s) => !s.agents.length) ? (
-            <p className="text-[12.5px] text-muted">
-              Empty departments: {sections.filter((s) => !s.agents.length).map((s) => s.name).join(", ")}.
-            </p>
-          ) : null}
-        </div>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+              {sections.filter((s) => s.agents.length).map((s) => (
+                <section key={s.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+                  <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                    {s.name} <span className="rounded-full bg-surface-2 px-2 text-[12px] font-medium text-muted tabular">{s.agents.length}</span>
+                    <span aria-hidden className="h-px flex-1 bg-border" />
+                  </h2>
+                  <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {s.agents.map((a) => <AgentCard key={a.id} agent={a} />)}
+                  </div>
+                </section>
+              ))}
+              {sections.some((s) => !s.agents.length) ? (
+                <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-3 text-[12.5px] text-muted">
+                  Empty departments: {sections.filter((s) => !s.agents.length).map((s) => s.name).join(", ")}.
+                </p>
+              ) : null}
+            </div>
           )}
-        </div>
+        </>
       )}
     </Page>
   );

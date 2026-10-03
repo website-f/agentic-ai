@@ -11,7 +11,9 @@ import { toast } from "sonner";
 import { ApprovalCard } from "@/components/approval-card";
 import { FilePicker } from "@/components/file-drop";
 import { Markdown } from "@/components/markdown";
+import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ListCard, ListRow, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
@@ -31,6 +33,7 @@ import {
 import { Canvas } from "./canvas";
 
 const ANY = "__any";
+const RUN_TONE_TILE: Record<Run["status"], Tone> = { running: "info", waiting: "warn", done: "ok", failed: "danger", cancelled: "neutral" };
 
 /** Documents a step drafted, mentioned by id, become links to them. */
 const linkDocs = (md: string) => md.replace(/`?\b(dc_[0-9a-z]{20,30})\b`?/g, "[open the document](/documents?d=$1)");
@@ -95,9 +98,10 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
             hint="Every step's agent sees this, plus what the steps before it produced." />
           <div className="flex flex-wrap items-center gap-2">
             {files.map((f) => (
-              <span key={f.id} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[12.5px]">
-                {f.name}
-                <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
+              <span key={f.id} className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border py-0.5 pr-1 pl-2.5 text-[12.5px]">
+                <span className="min-w-0 truncate">{f.name}</span>
+                <button type="button" aria-label={`Remove ${f.name}`} className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
+                  onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
               </span>
             ))}
             <Button size="sm" variant="ghost" onClick={() => setPicking(true)}><PaperclipIcon size={14} /> Files for this job</Button>
@@ -105,14 +109,14 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
           <fieldset className="grid gap-2">
             <legend className="mb-1 text-[13px] font-medium">Who does each step</legend>
             {!needs.length ? <p className="text-[12.5px] text-muted">No steps need an agent — every step is a person's decision.</p> : (
-              <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+              <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border rounded-[var(--radius-md)] border border-border">
                 {needs.map((n) => (
                   <li key={n.node_id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 px-3 py-2 max-sm:grid-cols-1">
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-medium">{n.title}</span>
                       <span className="block truncate text-[12px] text-muted">{n.type === "decision" ? "An agent decides" : n.role || "No role set"}</span>
                     </span>
-                    <Select size="sm" value={assign[n.node_id] ?? ""} onValueChange={(v) => setPicked((a) => ({ ...a, [n.node_id]: v }))}
+                    <Select value={assign[n.node_id] ?? ""} onValueChange={(v) => setPicked((a) => ({ ...a, [n.node_id]: v }))}
                       label={`Agent for ${n.title}`} placeholder="Pick an agent"
                       options={usable.map((a) => ({ value: a.id, label: a.name, hint: `${a.role}${branchId ? "" : `, ${a.branch_name}`}` }))} />
                   </li>
@@ -169,10 +173,10 @@ function Decision({ run, s }: { run: Run; s: RunStep }) {
   return (
     <div className="grid gap-2">
       {s.body ? <p className="text-[13px] text-muted">{s.body}</p> : null}
-      <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why (optional) — the next step sees it" aria-label="Reason" />
+      <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why (optional), the next step sees it" aria-label="Reason" />
       <div className="flex flex-wrap gap-2">
         {s.options.map((o) => (
-          <Button key={o.edge_id} size="sm" variant={o.label.toLowerCase().match(/^(no|decline|reject)/) ? "outline" : "primary"}
+          <Button key={o.edge_id} size="sm" className="h-auto min-h-9 py-1.5 whitespace-normal" variant={o.label.toLowerCase().match(/^(no|decline|reject)/) ? "outline" : "primary"}
             loading={go.isPending && go.variables === o.edge_id} onClick={() => go.mutate(o.edge_id)}>
             {o.label}{o.to_title ? <span className="font-normal opacity-75">→ {o.to_title}</span> : null}
           </Button>
@@ -198,11 +202,11 @@ function Review({ run, s }: { run: Run; s: RunStep }) {
   });
   return (
     <div className="grid gap-2">
-      {s.output ? <div className="max-h-56 overflow-y-auto rounded-sm border border-border bg-surface p-3"><Markdown className="text-[13px]">{linkDocs(s.output)}</Markdown></div> : null}
+      {s.output ? <div className="max-h-56 min-w-0 overflow-auto rounded-sm border border-border bg-surface p-3"><Markdown className="text-[13px]">{linkDocs(s.output)}</Markdown></div> : null}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" loading={accept.isPending} onClick={() => accept.mutate()}><SealCheckIcon size={14} /> Accept</Button>
-        <Input value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Or say what to change…" className="h-8 min-w-0 flex-1 basis-40" aria-label="Feedback" />
-        <Button size="sm" variant="outline" disabled={feedback.trim().length < 3} loading={back.isPending} onClick={() => back.mutate()}>Send back</Button>
+        <Button size="sm" className="max-sm:h-9" loading={accept.isPending} onClick={() => accept.mutate()}><SealCheckIcon size={14} /> Accept</Button>
+        <Input value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Or say what to change…" className="h-9 min-w-0 flex-1 basis-40" aria-label="Feedback" />
+        <Button size="sm" variant="outline" className="max-sm:h-9" disabled={feedback.trim().length < 3} loading={back.isPending} onClick={() => back.mutate()}>Send back</Button>
       </div>
     </div>
   );
@@ -243,42 +247,65 @@ export function RunView({ id }: { id: string }) {
   }, [run]);
 
   if (error) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
-  if (!run) return <div className="grid gap-4"><Skeleton className="h-12" /><Skeleton className="h-96" /></div>;
+  if (!run) {
+    return (
+      <div className="grid gap-4">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-14 rounded-[var(--radius-md)]" />
+        <Skeleton className="h-2 rounded-full" />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"><Skeleton className="h-96 rounded-[var(--radius-md)]" /><Skeleton className="h-96 rounded-[var(--radius-md)]" /></div>
+      </div>
+    );
+  }
   const status = RUN_STATUS[run.status];
   const needs = steps.filter((s) => s.status === "waiting" || s.status === "review");
   const live = run.status === "running" || run.status === "waiting";
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <Link to="/workflows" className="inline-flex w-fit items-center gap-1 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All workflows</Link>
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1 basis-80">
-          <h1 className="text-[22px] font-semibold tracking-tight">{run.title}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-            <Pill tone={status.tone} live={run.status === "running"}>{status.label}</Pill>
-            <span>{run.name}</span>
-            {run.branch_name ? <span>· {run.branch_name}</span> : null}
-            <span>· started {timeAgo(run.created_at)}</span>
-            <span>· {run.done} of {run.total} steps done</span>
+      <Link to="/workflows" className="inline-flex min-h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All workflows</Link>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <IconTile icon={FlowArrowIcon} tone={RUN_TONE_TILE[run.status]} size="lg" className="hidden sm:grid" />
+          <div className="min-w-0">
+            <p className="text-[11.5px] font-medium tracking-[0.06em] text-accent uppercase">Workflow run</p>
+            <h1 className="text-[22px] leading-tight font-semibold tracking-tight break-words sm:text-[26px]">{run.title}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
+              <Pill tone={status.tone} live={run.status === "running"}>{status.label}</Pill>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+                <Meta items={[run.name, run.branch_name, `started ${timeAgo(run.created_at).toLowerCase()}`]} />
+              </span>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          {run.workflow_id ? <Button variant="outline" size="sm" asChild><Link to="/workflows" search={{ w: run.workflow_id }}><FlowArrowIcon size={14} /> Workflow</Link></Button> : null}
-          {live ? <Button variant="outline" size="sm" onClick={() => setStopping(true)}><StopIcon size={14} /> Stop the run</Button> : null}
+        <div className="flex shrink-0 flex-wrap gap-2 max-sm:[&>*]:flex-1">
+          {run.workflow_id ? <Button variant="outline" size="sm" className="max-sm:h-9" asChild><Link to="/workflows" search={{ w: run.workflow_id }}><FlowArrowIcon size={14} /> Workflow</Link></Button> : null}
+          {live ? <Button variant="outline" size="sm" className="max-sm:h-9 hover:text-danger" onClick={() => setStopping(true)}><StopIcon size={14} /> Stop the run</Button> : null}
+        </div>
+      </div>
+
+      <div className="grid gap-1.5">
+        <div className="flex items-center justify-between text-[12.5px] text-muted">
+          <span>Progress</span>
+          <span className="tabular"><span className="font-medium text-fg">{run.done}</span> of {run.total} steps done</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuemin={0} aria-valuemax={run.total} aria-valuenow={run.done} aria-label="Steps done">
+          <div className={cn("h-full rounded-full transition-[width] duration-500", run.status === "failed" ? "bg-danger" : run.status === "cancelled" ? "bg-muted" : "bg-accent")}
+            style={{ width: `${run.total ? Math.round((run.done / run.total) * 100) : 0}%` }} />
         </div>
       </div>
 
       {run.error && run.status !== "done" ? (
-        <p className="rounded-sm bg-danger/10 px-3 py-2 text-[13px] text-danger">{run.error}</p>
+        <p role="alert" className="flex items-start gap-2 rounded-[var(--radius-md)] border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] break-words text-danger"><WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0" /><span className="min-w-0">{run.error}</span></p>
       ) : null}
 
       {needs.length || asks.length ? (
-        <section aria-label="Needs you" className="grid gap-3 rounded-[var(--radius-md)] border border-warn/40 bg-warn/8 p-4">
+        <section aria-label="Needs you" className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-warn/40 bg-warn/8 p-3 sm:p-4">
           <h2 className="flex items-center gap-2 text-[14px] font-semibold"><HandIcon size={17} weight="fill" className="text-warn" /> Needs you</h2>
           {asks.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={!!me?.permissions.includes("approvals.decide")} showTask={false} />)}
           {needs.map((s) => (
-            <div key={s.id} className="grid gap-2 rounded-[var(--radius-sm)] border border-border bg-surface p-3">
-              <p className="text-[13.5px] font-medium">{s.status === "waiting" ? `Decide: ${s.title}` : `Review: ${s.title}`}
+            <div key={s.id} className="grid min-w-0 gap-2 rounded-[var(--radius-sm)] border border-border bg-surface p-3">
+              <p className="text-[13.5px] font-medium break-words">{s.status === "waiting" ? `Decide: ${s.title}` : `Review: ${s.title}`}
                 {s.status === "review" && s.agent_name ? <span className="font-normal text-muted"> — by {s.agent_name}</span> : null}</p>
               {s.status === "waiting" ? <Decision run={run} s={s} /> : <Review run={run} s={s} />}
             </div>
@@ -286,18 +313,21 @@ export function RunView({ id }: { id: string }) {
         </section>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <Canvas graph={run.graph} onChange={() => {}} readOnly selected={sel ? { kind: "node", id: sel } : null}
-          onSelect={(x) => setSel(x?.kind === "node" ? x.id : null)}
-          status={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))} taken={taken} />
-        <ol className="grid content-start grid-cols-[minmax(0,1fr)] gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-2 max-xl:order-2">
+          <h2 className="text-[14px] font-semibold xl:sr-only">Map</h2>
+          <Canvas graph={run.graph} onChange={() => {}} readOnly selected={sel ? { kind: "node", id: sel } : null}
+            onSelect={(x) => setSel(x?.kind === "node" ? x.id : null)} className="max-sm:h-[26rem]"
+            status={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))} taken={taken} />
+        </div>
+        <ol aria-label="Steps" className="grid grid-cols-[minmax(0,1fr)] content-start gap-2">
           {steps.filter((s) => s.type !== "start" || s.output).map((s) => (
             <li key={s.id} onClick={() => setSel(s.id)}
-              className={cn("grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-[var(--radius-md)] border bg-surface p-3",
-                sel === s.id ? "border-accent" : "border-border")}>
+              className={cn("grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-[var(--radius-md)] border bg-surface p-3 transition-colors",
+                sel === s.id ? "border-accent ring-2 ring-accent/15" : "border-border hover:border-accent/40")}>
               <span className="row-span-2 mt-0.5"><StepIcon s={s.status} /></span>
               <div className="flex min-w-0 flex-wrap items-center gap-x-2">
-                <span className="truncate text-[13.5px] font-medium">{s.type === "start" ? "The job" : s.title}</span>
+                <span className="min-w-0 text-[13.5px] font-medium break-words">{s.type === "start" ? "The job" : s.title}</span>
                 <span className="text-[12px] text-muted">
                   {[s.type === "decision" ? (s.decider === "agent" ? `${s.agent_name ?? "an agent"} decides` : "you decide") : s.agent_name, STEP_LABEL[s.status]].filter(Boolean).join(" · ")}
                 </span>
@@ -315,7 +345,7 @@ export function RunView({ id }: { id: string }) {
                 <div className="flex flex-wrap items-center gap-2">
                   {s.task_id ? <Link to="/tasks" search={{ task: s.task_id }} className="text-[12px] text-accent hover:underline">Open the task</Link> : null}
                   {s.status === "failed" && s.task_id ? (
-                    <Button size="sm" variant="outline" className="h-7" loading={retry.isPending} onClick={(e) => { e.stopPropagation(); retry.mutate(s.id); }}>
+                    <Button size="sm" variant="outline" className="h-8" loading={retry.isPending} onClick={(e) => { e.stopPropagation(); retry.mutate(s.id); }}>
                       <ArrowClockwiseIcon size={13} /> Try again
                     </Button>
                   ) : null}
@@ -326,9 +356,9 @@ export function RunView({ id }: { id: string }) {
         </ol>
       </div>
       {run.input ? (
-        <details className="rounded-[var(--radius-md)] border border-border bg-surface p-3 text-[13px]">
-          <summary className="cursor-pointer font-medium">The job as given</summary>
-          <p className="mt-2 whitespace-pre-wrap">{run.input}</p>
+        <details className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3 text-[13px]">
+          <summary className="min-h-7 cursor-pointer font-medium">The job as given</summary>
+          <p className="mt-2 break-words whitespace-pre-wrap">{run.input}</p>
           {run.files.length ? <p className="mt-2 text-muted">Files: {run.files.map((f) => f.name).join(", ")}</p> : null}
         </details>
       ) : null}
@@ -342,25 +372,23 @@ export function RunView({ id }: { id: string }) {
 
 export function RunList({ runs, onOpen }: { runs: RunSummary[]; onOpen: (id: string) => void }) {
   return (
-    <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+    <ListCard>
       {runs.map((r) => {
         const s = RUN_STATUS[r.status];
         return (
-          <li key={r.id}>
-            <button type="button" onClick={() => onOpen(r.id)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/60">
-              <span className="min-w-0">
-                <span className="block truncate text-[14px] font-medium">{r.title}</span>
-                <span className="block truncate text-[12.5px] text-muted">{[r.name, r.branch_name, `${r.done}/${r.total} steps`, timeAgo(r.created_at)].filter(Boolean).join(" · ")}</span>
-              </span>
-              <span className="flex items-center gap-2">
+          <ListRow key={r.id} onClick={() => onOpen(r.id)}
+            leading={<IconTile icon={r.needs_you ? HandIcon : FlowArrowIcon} tone={r.needs_you ? "warn" : RUN_TONE_TILE[r.status]} size="sm" />}
+            title={<span className="block whitespace-normal break-words">{r.title}</span>}
+            meta={<Meta items={[r.name, r.branch_name, `${r.done}/${r.total} steps`, timeAgo(r.created_at)]} />}
+            trailing={(
+              <>
                 {r.needs_you ? <Pill tone="warn">{r.needs_you} for you</Pill> : null}
                 <Pill tone={s.tone} live={r.status === "running"}>{s.label}</Pill>
-              </span>
-            </button>
-          </li>
+              </>
+            )} />
         );
       })}
-    </ul>
+    </ListCard>
   );
 }
 
@@ -368,8 +396,11 @@ export function RecentRuns({ workflowId, onOpen }: { workflowId?: string; onOpen
   const { data: runs = [] } = useQuery(runsQuery(workflowId));
   if (!runs.length) return null;
   return (
-    <section className="grid gap-2">
-      <h2 className="text-[15px] font-semibold">Runs</h2>
+    <section className="grid min-w-0 gap-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h2 className="text-[15px] font-semibold">Runs <span className="font-normal text-muted tabular">{runs.length}</span></h2>
+        {runs.length > 20 ? <p className="text-[12.5px] text-muted">Showing the latest 20</p> : null}
+      </div>
       <RunList runs={runs.slice(0, 20)} onOpen={onOpen} />
     </section>
   );

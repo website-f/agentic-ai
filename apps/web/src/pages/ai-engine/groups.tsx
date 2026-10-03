@@ -10,13 +10,14 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { DotsSixVerticalIcon, PlusIcon, SnowflakeIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsDownUpIcon, DotsSixVerticalIcon, PlusIcon, SnowflakeIcon, StackIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import { Popover } from "radix-ui";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { IconTile } from "@/components/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ function MemberRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex min-w-0 items-center gap-2 rounded-sm border border-border bg-surface px-2 py-2",
+        "flex min-w-0 items-center gap-2 rounded-sm border border-border bg-surface px-1.5 py-1.5 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]",
         isDragging && "relative z-10 shadow-[var(--shadow-pop)]",
       )}
     >
@@ -64,28 +65,28 @@ function MemberRow({
           {...attributes}
           {...listeners}
           aria-label={`Reorder ${member.model_id}`}
-          className="cursor-grab touch-none rounded-sm p-1 text-muted hover:bg-surface-2 active:cursor-grabbing"
+          className="grid size-9 shrink-0 cursor-grab touch-none place-items-center rounded-sm text-muted hover:bg-surface-2 active:cursor-grabbing sm:size-8"
         >
           <DotsSixVerticalIcon size={16} weight="bold" />
         </button>
       ) : null}
-      <span className="w-4 text-center font-mono text-[11.5px] text-muted tabular">{index + 1}</span>
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-[11px] text-muted tabular">{index + 1}</span>
       <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-[12.5px]" title={member.model_id}>{member.model_id}</span>
         <span className="block truncate text-[11.5px] text-muted">{provider?.name ?? "Removed provider"}</span>
       </span>
       {warning ? (
-        <span className="flex items-center gap-1 text-[11.5px] text-warn" title={warning}>
+        <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-warn" title={warning}>
           <WarningIcon size={13} weight="fill" /> <span className="hidden sm:inline">{warning}</span>
         </span>
       ) : provider && provider.cooling_seconds > 0 ? (
-        <span className="flex items-center gap-1 text-[11.5px] text-info" title="Resting after an error">
+        <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-info" title="Resting after an error">
           <SnowflakeIcon size={13} />
         </span>
       ) : null}
       {canManage ? (
-        <button onClick={onRemove} aria-label={`Remove ${member.model_id}`} className="rounded-sm p-1 text-muted hover:bg-danger/10 hover:text-danger">
+        <button type="button" onClick={onRemove} aria-label={`Remove ${member.model_id}`} className="grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-danger/10 hover:text-danger sm:size-8">
           <XIcon size={14} />
         </button>
       ) : null}
@@ -119,7 +120,7 @@ function ModelPicker({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <button className="flex h-9 w-full items-center justify-center gap-1.5 rounded-sm border border-dashed border-border text-[13px] text-muted hover:border-accent hover:text-accent">
+        <button type="button" className="flex h-10 w-full items-center justify-center gap-1.5 rounded-sm border border-dashed border-border bg-surface/60 text-[13px] text-muted transition-colors hover:border-accent hover:text-accent">
           <PlusIcon size={14} /> Add model
         </button>
       </Popover.Trigger>
@@ -204,14 +205,21 @@ function GroupCard({
   };
 
   return (
-    <section className="flex min-w-0 flex-col rounded-[var(--radius-md)] border border-border bg-surface-2/40 p-3">
-      <header className="mb-2.5 px-1">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[14px] font-semibold">{group.label}</h3>
-          <span className="font-mono text-[11.5px] text-muted">{group.name}</span>
+    <section className="flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]">
+      <header className="flex items-start gap-3 border-b border-border px-4 py-3.5">
+        <IconTile icon={StackIcon} size="sm" tone={group.members.length ? "accent" : "neutral"} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+            <h3 className="min-w-0 text-[14px] font-semibold break-words">{group.label}</h3>
+            <span className="font-mono text-[11.5px] text-muted">{group.name}</span>
+          </div>
+          <p className="text-[12.5px] text-muted">{group.description}</p>
+          <p className="mt-1 text-[12px] text-muted tabular">
+            {group.members.length ? `${group.members.length} ${group.members.length === 1 ? "model" : "models"} in fallback order` : "No models yet"}
+          </p>
         </div>
-        <p className="text-[12.5px] text-muted">{group.description}</p>
       </header>
+      <div className="flex flex-1 flex-col bg-surface-2/30 p-3">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <ol className="grid min-w-0 gap-1.5">
@@ -231,15 +239,16 @@ function GroupCard({
         </SortableContext>
       </DndContext>
       {!group.members.length ? (
-        <p className="mb-2 rounded-sm border border-dashed border-border px-3 py-4 text-center text-[12.5px] text-muted">
+        <p className="rounded-sm border border-dashed border-border bg-surface/60 px-3 py-4 text-center text-[12.5px] text-muted">
           Empty. Agents asking for {group.label.toLowerCase()} will get an error until you add a model.
         </p>
       ) : null}
       {canManage ? (
-        <div className="mt-2">
+        <div className="mt-auto pt-2">
           <ModelPicker models={models} providers={providers} exclude={new Set(ids)} onPick={(m) => save.mutate([...group.members, m])} />
         </div>
       ) : null}
+      </div>
     </section>
   );
 }
@@ -251,14 +260,18 @@ export function GroupsTab({ canManage }: { canManage: boolean }) {
   const providers = useMemo(() => new Map(providerList.map((p) => [p.id, p])), [providerList]);
   const colors = useMemo(() => providerColors(providerList), [providerList]);
 
-  if (isLoading) return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-[var(--radius-md)]" />)}</div>;
+  if (isLoading) return <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-[var(--radius-md)]" />)}</div>;
 
   return (
     <div className="grid gap-4">
-      <p className="max-w-[70ch] text-[13.5px] text-muted">
-        Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does. Drag to change the order.
-      </p>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
+        <IconTile icon={ArrowsDownUpIcon} size="sm" tone="info" />
+        <p className="min-w-0 text-[13px] text-muted">
+          Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does.{" "}
+          {canManage ? <span className="text-fg">Drag the handle to change the order.</span> : null}
+        </p>
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups?.map((g) => (
           <GroupCard key={g.name} group={g} providers={providers} models={models} colors={colors} canManage={canManage} />
         ))}

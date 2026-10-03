@@ -1,10 +1,11 @@
-import { ShieldCheckIcon } from "@phosphor-icons/react";
+import { HardDrivesIcon, LockSimpleIcon, ShieldCheckIcon, SignInIcon, UsersThreeIcon, type Icon } from "@phosphor-icons/react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Wordmark } from "@/components/logo";
+import { IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { api, ApiError } from "@/lib/api";
@@ -12,39 +13,60 @@ import { keys, meQuery } from "@/lib/queries";
 import type { Me } from "@/lib/types";
 import { useSignOut } from "@/lib/use-sign-out";
 
+const POINTS: { icon: Icon; title: string; body: string }[] = [
+  { icon: ShieldCheckIcon, title: "Tamper-evident", body: "Every change is recorded in a hash-chained log." },
+  { icon: UsersThreeIcon, title: "Roles that fit", body: "Roles decide who can create work and who approves it." },
+  { icon: HardDrivesIcon, title: "Yours to run", body: "Runs on your own machine. Nothing to buy." },
+];
+
 function AuthLayout({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)]">
-      <aside className="relative hidden overflow-hidden border-r border-border bg-surface lg:flex lg:flex-col lg:justify-between lg:p-10">
-        <Wordmark />
-        <div className="max-w-md">
-          <h2 className="text-[28px] leading-tight font-semibold tracking-tight">
+    <div className="grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)]">
+      <aside className="relative hidden overflow-hidden border-r border-border bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(ellipse_at_top_left,black,transparent_70%)]"
+        />
+        <div aria-hidden className="pointer-events-none absolute -top-40 -left-40 size-[34rem] rounded-full bg-[radial-gradient(circle,var(--accent-soft),transparent_65%)]" />
+        <Wordmark className="relative" />
+        <div className="relative max-w-lg">
+          <h2 className="text-[34px] leading-[1.1] font-semibold tracking-tight text-balance">
             Run your AI agents like an office.
           </h2>
-          <p className="mt-3 text-[14.5px] text-muted">
+          <p className="mt-4 max-w-md text-[15px] text-muted">
             Branches for every company, departments with their own SOPs, and agents that ask before they act.
           </p>
-          <ul className="mt-8 grid gap-3 text-[13.5px]">
-            {[
-              "Every change is recorded in a tamper-evident log.",
-              "Roles decide who can create work and who approves it.",
-              "Runs on your own machine. Nothing to buy.",
-            ].map((line) => (
-              <li key={line} className="flex items-start gap-2.5">
-                <ShieldCheckIcon size={18} weight="duotone" className="mt-px shrink-0 text-accent" />
-                <span>{line}</span>
+          <ul className="mt-10 grid gap-3">
+            {POINTS.map((pt) => (
+              <li key={pt.title} className="flex items-start gap-3.5 rounded-[var(--radius-md)] border border-border bg-bg/60 p-3.5 backdrop-blur-sm">
+                <IconTile icon={pt.icon} size="sm" />
+                <span className="min-w-0">
+                  <span className="block text-[13.5px] font-medium">{pt.title}</span>
+                  <span className="block text-[13px] text-muted">{pt.body}</span>
+                </span>
               </li>
             ))}
           </ul>
         </div>
-        <p className="text-[12px] text-muted">Self-hosted. Your data stays in your Postgres.</p>
+        <p className="relative flex items-center gap-2 text-[12px] text-muted">
+          <LockSimpleIcon size={14} /> Self-hosted. Your data stays in your Postgres.
+        </p>
       </aside>
-      <main className="flex items-center justify-center px-5 py-10" style={{ paddingTop: "max(2.5rem, env(safe-area-inset-top))" }}>
-        <div className="w-full max-w-sm">
-          <Wordmark className="mb-8 lg:hidden" />
-          <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 mb-6 text-[13.5px] text-muted">{subtitle}</p>
-          {children}
+      <main
+        className="relative flex flex-col items-center justify-center overflow-hidden px-4 py-10 sm:px-6"
+        style={{ paddingTop: "max(2.5rem, env(safe-area-inset-top))", paddingBottom: "max(2.5rem, env(safe-area-inset-bottom))" }}
+      >
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,var(--accent-soft),transparent_70%)] lg:hidden" />
+        <div className="relative w-full max-w-[25rem]">
+          <Wordmark className="mb-8 justify-center lg:hidden" />
+          <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-6 shadow-[var(--shadow-soft)] sm:p-8">
+            <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
+            <p className="mt-1.5 mb-6 text-[13.5px] text-muted">{subtitle}</p>
+            {children}
+          </div>
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-[12px] text-muted lg:hidden">
+            <LockSimpleIcon size={13} /> Self-hosted. Your data stays in your Postgres.
+          </p>
         </div>
       </main>
     </div>
@@ -121,8 +143,9 @@ export function LoginPage() {
         <Field label="Password" name="password" type="password" required autoComplete="current-password" error={fields.password} />
         <FormError message={error} />
         <Button type="submit" size="lg" loading={busy} className="mt-1">
-          Sign in
+          {!busy ? <SignInIcon size={17} weight="bold" /> : null} Sign in
         </Button>
+        <p className="text-center text-[12.5px] text-muted">Forgot your password? Ask an admin or your manager to reset it.</p>
       </form>
     </AuthLayout>
   );

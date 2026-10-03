@@ -1,11 +1,12 @@
-import { CopyIcon, DotsThreeIcon, KeyIcon, PencilSimpleIcon, TrashIcon, UserPlusIcon } from "@phosphor-icons/react";
+import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, KeyIcon, PencilSimpleIcon, RobotIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Page, PageHeader } from "@/components/page";
+import { Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
@@ -13,10 +14,11 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/compo
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
-import { initials, timeAgo } from "@/lib/utils";
+import { cn, initials, timeAgo } from "@/lib/utils";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -54,7 +56,7 @@ function Placement({ role, branches, branchId, departmentId, onChange, lockBranc
     ...(branch?.departments ?? []).map((d) => ({ value: d.id, label: d.name })),
   ];
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">Branch</span>
         <Select value={branch?.id ?? ""} onValueChange={(v) => onChange(v, NONE)} label="Branch" placeholder="Pick a branch"
@@ -91,7 +93,7 @@ function TempPassword({ email, password }: { email: string; password: string }) 
         Give this temporary password to <span className="font-medium text-fg">{email}</span>. It is shown only once. They will pick their own password the first time they sign in.
       </p>
       <div className="flex items-center gap-2 rounded-sm border border-border bg-surface-2 p-1.5 pl-3">
-        <code className="flex-1 font-mono text-[15px] tracking-wide select-all">{password}</code>
+        <code className="min-w-0 flex-1 font-mono text-[15px] tracking-wide break-all select-all">{password}</code>
         <Button size="sm" variant="outline" onClick={copy}>
           <CopyIcon size={15} /> Copy
         </Button>
@@ -221,32 +223,40 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
   const place = where(member);
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-5">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-[12.5px] font-semibold text-accent">
-          {initials(member.name)}
-        </span>
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium">
-            <span className="truncate">{member.name}</span>
-            {isMe ? <Pill tone="accent">You</Pill> : null}
-            {member.must_change_password ? <Pill tone="warn">Temporary password</Pill> : null}
-          </p>
-          <p className="truncate text-[12.5px] text-muted">
-            {member.email} · signed in {timeAgo(member.last_login_at).toLowerCase()}
-            {member.agents ? ` · ${member.agents} personal agent${member.agents === 1 ? "" : "s"}` : ""}
-          </p>
-        </div>
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-5">
+      <span
+        className={cn(
+          "row-span-2 grid size-10 shrink-0 place-items-center self-start rounded-full text-[12.5px] font-semibold ring-1 sm:row-span-1 sm:self-center",
+          isMe ? "bg-accent text-accent-fg ring-accent/30" : "bg-accent-soft text-accent ring-accent/15",
+        )}
+      >
+        {initials(member.name)}
+      </span>
+      <div className="col-start-2 row-start-1 min-w-0">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
+          <span className="min-w-0 break-words">{member.name}</span>
+          {isMe ? <Pill tone="accent">You</Pill> : null}
+          {member.must_change_password ? <Pill tone="warn">Temporary password</Pill> : null}
+        </p>
+        <p className="text-[12.5px] break-all text-muted">{member.email}</p>
+        <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
+          <Meta
+            items={[
+              member.last_login_at ? `Signed in ${timeAgo(member.last_login_at).toLowerCase()}` : "Never signed in",
+              member.agents ? `${member.agents} personal agent${member.agents === 1 ? "" : "s"}` : null,
+            ]}
+          />
+        </p>
       </div>
-      <div className="flex items-center gap-1.5">
-        <div className="text-right">
-          <Pill>{ROLE_INFO[member.role]?.label ?? member.role}</Pill>
-          {place ? <p className="mt-0.5 text-[12px] text-muted">{place}</p> : null}
-        </div>
+      <div className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:col-start-3 sm:row-start-1 sm:grid sm:justify-items-end sm:gap-0.5 sm:text-right">
+        <Pill tone={member.role === "owner" || member.role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[member.role]?.label ?? member.role}</Pill>
+        {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
+      </div>
+      <div className="col-start-3 row-start-1 sm:col-start-4">
         {editable ? (
           <Menu>
             <MenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`Options for ${member.name}`}>
+              <Button variant="ghost" size="icon" aria-label={`Options for ${member.name}`}>
                 <DotsThreeIcon size={20} weight="bold" />
               </Button>
             </MenuTrigger>
@@ -257,7 +267,7 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
               <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Remove from workspace</MenuItem>
             </MenuContent>
           </Menu>
-        ) : null}
+        ) : <span aria-hidden className="block size-10" />}
       </div>
       {editing ? <AccessDialog member={member} me={me} open={editing} onOpenChange={setEditing} /> : null}
       <ConfirmDialog
@@ -300,6 +310,7 @@ export function MembersPage() {
     if (!o && search.add) navigate({ to: "/settings/members", search: {}, replace: true });
   };
   const scoped = me.scope && me.scope.kind !== "all";
+  const list = members ?? [];
 
   return (
     <Page>
@@ -313,29 +324,45 @@ export function MembersPage() {
         ) : null}
       />
       {isLoading ? (
-        <Skeleton className="h-48 rounded-[var(--radius-md)]" />
+        <div className="grid gap-4">
+          <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>
+          <Skeleton className="h-64 rounded-[var(--radius-md)]" />
+        </div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
           Could not load members. {errorMessage(error)}
         </div>
       ) : (
-        <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
-          {members?.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
-        </ul>
+        <>
+          <StatGrid>
+            <Stat label="Members" value={list.length} icon={UsersIcon} hint="Can sign in here" />
+            <Stat label="Owners and admins" value={list.filter((m) => m.role === "owner" || m.role === "admin").length} icon={CrownSimpleIcon} tone="violet" hint="Full workspace access" />
+            <Stat label="Temporary password" value={list.filter((m) => m.must_change_password).length} icon={KeyIcon} tone={list.some((m) => m.must_change_password) ? "warn" : "neutral"} hint="Yet to pick their own" />
+            <Stat label="Personal agents" value={list.reduce((n, m) => n + (m.agents ?? 0), 0)} icon={RobotIcon} tone="info" hint="Owned by members" />
+          </StatGrid>
+          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+            {list.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
+          </ul>
+        </>
       )}
 
-      <h2 className="mt-8 mb-3 text-[15px] font-semibold">Roles</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {ROLES.map((r) => (
-          <div key={r} className="rounded-[var(--radius-md)] border border-border px-4 py-3">
-            <p className="flex items-center gap-2 text-[13.5px] font-medium">
-              {ROLE_INFO[r].label}
-              {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? "Own agents" : r === "branch_manager" ? "One branch" : "One department"}</Pill> : null}
-            </p>
-            <p className="text-[12.5px] text-muted">{ROLE_INFO[r].blurb}</p>
-          </div>
-        ))}
-      </div>
+      <Section title="Roles" description="What each role lets a person do. Scoped roles only see their own part of the workspace.">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {ROLES.map((r) => {
+            const count = list.filter((m) => m.role === r).length;
+            return (
+              <div key={r} className="grid content-start gap-1 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
+                  <span className="min-w-0 flex-1">{ROLE_INFO[r].label}</span>
+                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? "Own agents" : r === "branch_manager" ? "One branch" : "One department"}</Pill> : null}
+                </p>
+                <p className="text-[12.5px] text-muted">{ROLE_INFO[r].blurb}</p>
+                <p className="text-[12px] text-muted tabular">{count ? `${count} ${count === 1 ? "member" : "members"}` : "Nobody yet"}</p>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
       <AddMemberDialog key={addKey} open={addOpen} onOpenChange={setAddOpen} me={me} />
     </Page>
   );

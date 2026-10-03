@@ -205,6 +205,9 @@ async def chat(
     }
     if temperature is not None and "no_temperature" not in q:
         body["temperature"] = temperature
+    if "no_think" in q:
+        # Small local thinking models (qwen3) otherwise spend ~100 tokens thinking per answer.
+        body["reasoning_effort"] = "none"
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     if tools:

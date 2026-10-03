@@ -334,7 +334,14 @@ async def collect(db: AsyncSession, task_id: str, call_id: str) -> str:
             result = answer_block(
                 who.name if who else "your colleague", question[:120], child.result
             )
-            path = await remember_answer(db, task, child, question)
+            path = await remember_answer(
+                db,
+                task,
+                child,
+                question,
+                helping=bool((ev.data or {}).get("help")),
+                context=str((ev.data or {}).get("context") or ""),
+            )
             if path:
                 result += f"\nSaved for next time as {path}."
             ok = 1

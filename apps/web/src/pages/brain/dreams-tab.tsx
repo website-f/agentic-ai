@@ -1,12 +1,14 @@
-import { ArrowCounterClockwiseIcon, MoonStarsIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon, ArrowsMergeIcon, BookOpenTextIcon, DownloadSimpleIcon, LightbulbIcon, MoonStarsIcon, ScalesIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
-import { EmptyState } from "@/components/page";
+import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader, ListCard } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { brainKeys, dreamQuery, dreamsQuery, type Dream, type DreamChange } from "@/lib/brain";
 import { cn } from "@/lib/utils";
@@ -44,23 +46,23 @@ function ChangeRow({ dream, change, index, canManage }: { dream: Dream; change: 
       vault_edit: `${change.name} was edited in the vault; waiting for review`,
     }[change.action ?? "merge"];
     return (
-      <li className="grid gap-1 px-4 py-3">
-        <p className="text-[13px]">{text}</p>
+      <li className="grid min-w-0 gap-1 px-4 py-3">
+        <p className="text-[13px] break-words">{text}</p>
         <p className="text-[12px] text-muted">Skill curator · review in <a href="/skills?tab=proposals" className="text-accent hover:underline">Skills &gt; Proposals</a></p>
       </li>
     );
   }
   return (
-    <li className="grid gap-1 px-4 py-3">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1 text-[13px]">
+    <li className="grid min-w-0 gap-1.5 px-4 py-3">
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="grid min-w-0 flex-1 basis-56 gap-0.5 text-[13px] break-words">
           {fact ? (
             <>
               <p className={cn("text-muted", !change.undone && "line-through decoration-muted/60")}>{change.ended_text}</p>
               <p>{change.kind === "merge" ? "Kept: " : "Now: "}{change.kept_text}</p>
             </>
           ) : (
-            <p className="font-mono text-[12.5px]">{change.path}</p>
+            <p className="font-mono text-[12.5px] break-all">{change.path}</p>
           )}
         </div>
         {fact && canManage ? (
@@ -79,43 +81,44 @@ function ChangeRow({ dream, change, index, canManage }: { dream: Dream; change: 
 
 function DreamDetail({ id, canManage }: { id: string; canManage: boolean }) {
   const { data: d, isLoading, error } = useQuery(dreamQuery(id));
-  if (isLoading) return <Skeleton className="h-72 rounded-[var(--radius-md)]" />;
+  if (isLoading) {
+    return (
+      <div className="grid gap-4">
+        <Skeleton className="h-7 w-56" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-[var(--radius-md)]" />)}</div>
+        <Skeleton className="h-48 rounded-[var(--radius-md)]" />
+      </div>
+    );
+  }
   if (error || !d) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   const c = counts(d);
-  const stats = [
-    { label: "Facts learned", value: d.stats.facts_learned ?? 0 },
-    { label: "Duplicates merged", value: c.merged },
-    { label: "Contradictions settled", value: c.settled },
-    { label: "Vault edits imported", value: c.imported },
-  ];
   return (
-    <div className="grid min-w-0 gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-[18px] font-semibold">{dayLabel(d.day)}</h2>
-        <Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill>
+        <h2 className="text-[18px] font-semibold tracking-tight">{dayLabel(d.day)}</h2>
+        <Pill tone={STATUS_TONE[d.status]} live={d.status === "running"}>{d.status}</Pill>
       </div>
-      {d.error ? <p role="alert" className="text-[13px] text-danger">{d.error}</p> : null}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
-            <dt className="text-[12px] text-muted">{s.label}</dt>
-            <dd className="text-[22px] font-semibold tabular">{s.value}</dd>
-          </div>
-        ))}
-      </dl>
+      {d.error ? <p role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] break-words text-danger">{d.error}</p> : null}
+      <StatGrid>
+        <Stat label="Facts learned" value={d.stats.facts_learned ?? 0} icon={LightbulbIcon} tone="warn" />
+        <Stat label="Duplicates merged" value={c.merged} icon={ArrowsMergeIcon} tone="info" />
+        <Stat label="Contradictions settled" value={c.settled} icon={ScalesIcon} tone="violet" />
+        <Stat label="Vault edits imported" value={c.imported} icon={DownloadSimpleIcon} tone="ok" />
+      </StatGrid>
       {d.changes.length ? (
-        <section className="grid gap-2">
-          <h3 className="text-[13.5px] font-semibold">What changed</h3>
-          <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+        <section className="grid min-w-0 gap-2">
+          <h3 className="text-[14px] font-semibold">What changed <span className="font-normal text-muted tabular">{d.changes.length}</span></h3>
+          <ListCard>
             {d.changes.map((ch, i) => <ChangeRow key={i} dream={d} change={ch} index={i} canManage={canManage} />)}
-          </ul>
+          </ListCard>
         </section>
       ) : null}
       {d.diary ? (
-        <section className="grid gap-2">
-          <h3 className="text-[13.5px] font-semibold">Diary <span className="font-mono text-[12px] font-normal text-muted">{d.diary_path}</span></h3>
-          <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4"><Markdown>{stripFrontmatter(d.diary).replace(/^#\s+Dream diary[^\n]*\n+/, "")}</Markdown></div>
-        </section>
+        <Card>
+          <CardHeader icon={<IconTile icon={BookOpenTextIcon} size="sm" tone="violet" />} title="Diary"
+            description={d.diary_path ? <span className="font-mono break-all">{d.diary_path}</span> : undefined} />
+          <div className="min-w-0 overflow-x-auto px-4 py-4 sm:px-5"><Markdown>{stripFrontmatter(d.diary).replace(/^#\s+Dream diary[^\n]*\n+/, "")}</Markdown></div>
+        </Card>
       ) : null}
     </div>
   );
@@ -138,19 +141,28 @@ export function DreamsTab({ selected, onSelect, canManage, hour, timezone }: {
   }
   const current = selected ?? dreams[0]?.id ?? "";
   return (
-    <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <nav aria-label="Dreams" className="grid content-start gap-1">
-        <p className="mb-1 text-[12.5px] text-muted">Runs nightly at {when}.</p>
-        {dreams.map((d) => {
-          const c = counts(d);
-          return (
-            <button key={d.id} onClick={() => onSelect(d.id)} aria-current={d.id === current ? "page" : undefined}
-              className={cn("grid rounded-sm px-3 py-2 text-left hover:bg-surface-2/70", d.id === current && "bg-accent-soft/70")}>
-              <span className="text-[13px] font-medium">{dayLabel(d.day)}</span>
-              <span className="text-[12px] text-muted">{d.status === "done" ? `${c.merged} merged · ${c.settled} settled · ${c.imported} imported` : d.status}</span>
-            </button>
-          );
-        })}
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <nav aria-label="Dreams" className="grid min-w-0 content-start gap-2">
+        <p className="flex items-center gap-1.5 text-[12.5px] text-muted"><MoonStarsIcon size={14} /> Runs nightly at {when}.</p>
+        <ul className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] lg:grid lg:overflow-visible lg:pb-0 [&::-webkit-scrollbar]:hidden">
+          {dreams.map((d) => {
+            const c = counts(d);
+            const on = d.id === current;
+            return (
+              <li key={d.id} className="shrink-0 lg:shrink">
+                <button type="button" onClick={() => onSelect(d.id)} aria-current={on ? "page" : undefined}
+                  className={cn("grid w-full min-w-0 gap-0.5 rounded-[var(--radius-sm)] border px-3 py-2 text-left transition-colors max-lg:w-52",
+                    on ? "border-accent/50 bg-accent-soft/60" : "border-border bg-surface hover:bg-surface-2/70")}>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] font-medium">{dayLabel(d.day)}</span>
+                    {d.status !== "done" ? <Pill tone={STATUS_TONE[d.status]} className="px-2 text-[11px]">{d.status}</Pill> : null}
+                  </span>
+                  <span className="truncate text-[12px] text-muted tabular">{c.merged} merged · {c.settled} settled · {c.imported} imported</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
       <DreamDetail key={current} id={current} canManage={canManage} />
     </div>

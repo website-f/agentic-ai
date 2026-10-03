@@ -53,6 +53,7 @@ export function Canvas({
   readOnly,
   status,
   taken,
+  className,
 }: {
   graph: Graph;
   onChange: (g: Graph) => void;
@@ -62,6 +63,7 @@ export function Canvas({
   /** During a run: each step's state, and the connections the run went along. */
   status?: Record<string, StepStatus>;
   taken?: Set<string>;
+  className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag>(null);
@@ -126,91 +128,95 @@ export function Canvas({
   const linkFrom = drag?.kind === "link" ? byId[drag.from] : null;
 
   return (
-    <div
-      ref={box}
-      onPointerDown={() => onSelect(null)}
-      className="relative h-[clamp(24rem,60vh,42rem)] overflow-auto rounded-[var(--radius-md)] border border-border bg-surface-2/40"
-      style={{ backgroundImage: "radial-gradient(var(--color-border) 1px, transparent 1px)", backgroundSize: "22px 22px" }}
-    >
-      <div className="relative" style={{ width, height }}>
-        <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
-          {graph.edges.map((ed) => {
-            const a = byId[ed.from];
-            const b = byId[ed.to];
-            if (!a || !b) return null;
-            const on = (selected?.kind === "edge" && selected.id === ed.id) || !!taken?.has(ed.id);
-            const mx = (a.x + b.x) / 2 + NODE_W / 2;
-            const my = (a.y + NODE_H + b.y) / 2;
+    <div className="relative min-w-0">
+      <div
+        ref={box}
+        onPointerDown={() => onSelect(null)}
+        className={cn("relative h-[clamp(22rem,60dvh,42rem)] min-w-0 overflow-auto overscroll-contain rounded-[var(--radius-md)] border border-border bg-surface-2/40", className)}
+        style={{ backgroundImage: "radial-gradient(var(--color-border) 1px, transparent 1px)", backgroundSize: "22px 22px" }}
+      >
+        <div className="relative" style={{ width, height }}>
+          <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
+            {graph.edges.map((ed) => {
+              const a = byId[ed.from];
+              const b = byId[ed.to];
+              if (!a || !b) return null;
+              const on = (selected?.kind === "edge" && selected.id === ed.id) || !!taken?.has(ed.id);
+              const mx = (a.x + b.x) / 2 + NODE_W / 2;
+              const my = (a.y + NODE_H + b.y) / 2;
+              return (
+                <g key={ed.id}>
+                  <path d={edgePath(a, b)} fill="none" stroke={on ? "var(--color-accent)" : "var(--color-border)"} strokeWidth={on ? 3 : 2} />
+                  <path
+                    d={edgePath(a, b)} fill="none" stroke="transparent" strokeWidth={14}
+                    className={cn("pointer-events-auto", !readOnly && "cursor-pointer")}
+                    onPointerDown={(e) => { e.stopPropagation(); onSelect({ kind: "edge", id: ed.id }); }}
+                  />
+                  {ed.label ? (
+                    <text x={mx} y={my} textAnchor="middle" className="pointer-events-none fill-fg text-[11px]"
+                      style={{ paintOrder: "stroke", stroke: "var(--color-surface)", strokeWidth: 4 }}>
+                      {ed.label}
+                    </text>
+                  ) : null}
+                </g>
+              );
+            })}
+            {linkFrom && drag?.kind === "link" ? (
+              <path
+                d={`M ${linkFrom.x + NODE_W / 2} ${linkFrom.y + NODE_H} L ${drag.x} ${drag.y}`}
+                fill="none" stroke="var(--color-accent)" strokeWidth={2} strokeDasharray="4 4"
+              />
+            ) : null}
+          </svg>
+
+          {graph.nodes.map((n) => {
+            const on = selected?.kind === "node" && selected.id === n.id;
+            const run = status?.[n.id];
             return (
-              <g key={ed.id}>
-                <path d={edgePath(a, b)} fill="none" stroke={on ? "var(--color-accent)" : "var(--color-border)"} strokeWidth={on ? 3 : 2} />
-                <path
-                  d={edgePath(a, b)} fill="none" stroke="transparent" strokeWidth={14}
-                  className={cn("pointer-events-auto", !readOnly && "cursor-pointer")}
-                  onPointerDown={(e) => { e.stopPropagation(); onSelect({ kind: "edge", id: ed.id }); }}
-                />
-                {ed.label ? (
-                  <text x={mx} y={my} textAnchor="middle" className="pointer-events-none fill-fg text-[11px]"
-                    style={{ paintOrder: "stroke", stroke: "var(--color-surface)", strokeWidth: 4 }}>
-                    {ed.label}
-                  </text>
+              <div
+                key={n.id}
+                onPointerDown={(e) => startMove(e, n)}
+                onPointerEnter={() => setHover(n.id)}
+                onPointerLeave={() => setHover((h) => (h === n.id ? null : h))}
+                className={cn(
+                  "absolute flex flex-col rounded-[var(--radius-sm)] border bg-surface px-3 py-2 shadow-[var(--shadow-soft)] select-none",
+                  run && RUN_LOOK[run] ? RUN_LOOK[run] : on ? "border-accent ring-2 ring-accent/30" : "border-border",
+                  run && on && "ring-accent/50",
+                  drag?.kind === "link" && hover === n.id && hover !== drag.from && "ring-2 ring-accent",
+                  // Editing: a finger on a card drags it (the dotted background still pans). Viewing: cards pan too.
+                  readOnly ? "cursor-pointer" : "cursor-grab touch-none active:cursor-grabbing",
+                )}
+                style={{ left: n.x, top: n.y, width: NODE_W, minHeight: NODE_H }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2 shrink-0 rounded-full" style={{ background: NODE_COLOR[n.type] }} />
+                  <span className="min-w-0 truncate text-[13px] font-medium" title={n.title}>{n.title || "Untitled"}</span>
+                  {run && RUN_DOT[run] ? <span className={cn("ml-auto size-2 shrink-0 rounded-full", RUN_DOT[run])} aria-label={run} /> : null}
+                </div>
+                {n.role ? <span className="mt-0.5 truncate text-[11px] text-muted">{n.role}</span> : null}
+                {n.body ? <span className="mt-0.5 line-clamp-2 text-[11.5px] text-muted">{n.body}</span> : null}
+                {!readOnly ? (
+                  <button
+                    aria-label="Drag to connect"
+                    onPointerDown={(e) => startLink(e, n)}
+                    className="absolute -bottom-2 left-1/2 size-4 -translate-x-1/2 touch-none rounded-full border-2 border-surface bg-accent before:absolute before:-inset-2.5 before:content-[''] hover:scale-125"
+                  />
                 ) : null}
-              </g>
+              </div>
             );
           })}
-          {linkFrom && drag?.kind === "link" ? (
-            <path
-              d={`M ${linkFrom.x + NODE_W / 2} ${linkFrom.y + NODE_H} L ${drag.x} ${drag.y}`}
-              fill="none" stroke="var(--color-accent)" strokeWidth={2} strokeDasharray="4 4"
-            />
-          ) : null}
-        </svg>
-
-        {graph.nodes.map((n) => {
-          const on = selected?.kind === "node" && selected.id === n.id;
-          const run = status?.[n.id];
-          return (
-            <div
-              key={n.id}
-              onPointerDown={(e) => startMove(e, n)}
-              onPointerEnter={() => setHover(n.id)}
-              onPointerLeave={() => setHover((h) => (h === n.id ? null : h))}
-              className={cn(
-                "absolute flex flex-col rounded-[var(--radius-sm)] border bg-surface px-3 py-2 shadow-[var(--shadow-soft)] select-none",
-                run && RUN_LOOK[run] ? RUN_LOOK[run] : on ? "border-accent ring-2 ring-accent/30" : "border-border",
-                run && on && "ring-accent/50",
-                drag?.kind === "link" && hover === n.id && hover !== drag.from && "ring-2 ring-accent",
-                readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing",
-              )}
-              style={{ left: n.x, top: n.y, width: NODE_W, minHeight: NODE_H }}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="size-2 shrink-0 rounded-full" style={{ background: NODE_COLOR[n.type] }} />
-                <span className="truncate text-[13px] font-medium">{n.title || "Untitled"}</span>
-                {run && RUN_DOT[run] ? <span className={cn("ml-auto size-2 shrink-0 rounded-full", RUN_DOT[run])} aria-label={run} /> : null}
-              </div>
-              {n.role ? <span className="mt-0.5 truncate text-[11px] text-muted">{n.role}</span> : null}
-              {n.body ? <span className="mt-0.5 line-clamp-2 text-[11.5px] text-muted">{n.body}</span> : null}
-              {!readOnly ? (
-                <button
-                  aria-label="Drag to connect"
-                  onPointerDown={(e) => startLink(e, n)}
-                  className="absolute -bottom-2 left-1/2 size-4 -translate-x-1/2 rounded-full border-2 border-surface bg-accent hover:scale-125"
-                />
-              ) : null}
-            </div>
-          );
-        })}
+        </div>
       </div>
       {!graph.nodes.length ? (
-        <p className="pointer-events-none absolute inset-0 grid place-items-center text-[13px] text-muted">
+        <p className="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center text-[13px] text-muted">
           Add a step to start, or draft the whole thing from a description.
         </p>
       ) : null}
       {selected?.kind === "edge" && !readOnly ? (
         <button
           onClick={() => { onChange({ ...graph, edges: graph.edges.filter((e) => e.id !== selected.id) }); onSelect(null); }}
-          className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2.5 py-1 text-[12px] shadow-[var(--shadow-soft)] hover:border-danger hover:text-danger"
+          type="button"
+          className="absolute right-3 bottom-3 inline-flex min-h-9 items-center gap-1 rounded-sm border border-border bg-surface px-3 text-[12.5px] shadow-[var(--shadow-soft)] hover:border-danger hover:text-danger"
         >
           <XIcon size={13} /> Remove connection
         </button>

@@ -1,14 +1,16 @@
-import { ArrowCounterClockwiseIcon, LightbulbIcon, MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon, LightbulbIcon, PencilSimpleIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { RadioGroup } from "radix-ui";
 import { useDeferredValue, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/page";
+import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ListCard, Meta, Toolbar } from "@/components/ui/card";
 import { FormError, Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
@@ -45,11 +47,11 @@ function FactRow({ f, canWrite }: { f: Fact; canWrite: boolean }) {
   const ended = f.valid_to !== null;
 
   return (
-    <li className="grid gap-1.5 px-4 py-3">
+    <li className="grid min-w-0 gap-2 px-4 py-3">
       {editing !== null ? (
         <div className="grid gap-2">
           <Input value={editing} onChange={(e) => setEditing(e.target.value)} aria-label="Fact" autoFocus />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" loading={edit.isPending} disabled={editing.trim().length < 3 || editing === f.text} onClick={() => edit.mutate()}>Save correction</Button>
             <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
           </div>
@@ -57,9 +59,10 @@ function FactRow({ f, canWrite }: { f: Fact; canWrite: boolean }) {
         </div>
       ) : (
         <div className="flex items-start gap-3">
-          <p className={cn("min-w-0 flex-1 text-[13.5px]", ended && "text-muted line-through decoration-muted/60")}>{f.text}</p>
+          <IconTile icon={LightbulbIcon} size="sm" tone={ended ? "neutral" : "warn"} className="max-sm:hidden" />
+          <p className={cn("min-w-0 flex-1 pt-1 text-[13.5px] break-words sm:pt-1.5", ended && "text-muted line-through decoration-muted/60")}>{f.text}</p>
           {canWrite ? (
-            <div className="-mt-1 flex shrink-0 gap-1">
+            <div className="flex shrink-0 gap-1">
               {!ended ? (
                 <>
                   <Button size="icon-sm" variant="ghost" aria-label="Correct this fact" onClick={() => setEditing(f.text)}><PencilSimpleIcon size={14} /></Button>
@@ -72,12 +75,11 @@ function FactRow({ f, canWrite }: { f: Fact; canWrite: boolean }) {
           ) : null}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted sm:pl-11">
         <Pill tone={f.agent_id ? "info" : f.branch_id ? "neutral" : "accent"}>{factScope(f)}</Pill>
-        <Source f={f} />
-        <span aria-hidden>·</span>
-        <span>{timeAgo(f.valid_from)}</span>
-        {f.hits ? <><span aria-hidden>·</span><span>recalled {f.hits}×</span></> : null}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+          <Meta items={[<Source key="s" f={f} />, timeAgo(f.valid_from), f.hits ? `recalled ${f.hits}×` : null]} />
+        </span>
         {ended && f.end_reason ? <Pill tone="warn">{END_REASON[f.end_reason]} {timeAgo(f.valid_to).toLowerCase()}</Pill> : null}
       </div>
     </li>
@@ -98,10 +100,11 @@ function AddFact({ branches }: { branches: { id: string; name: string }[] }) {
     },
   });
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (text.trim().length >= 3) add.mutate(); }} className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Teach the office a fact, e.g. Maju Trading invoices on net-30 terms" aria-label="New fact" className="sm:flex-1" />
-        <Select value={scope} onValueChange={setScope} label="Who knows it" className="sm:w-56"
+    <form onSubmit={(e) => { e.preventDefault(); if (text.trim().length >= 3) add.mutate(); }} className="grid gap-2.5 rounded-[var(--radius-md)] border border-border bg-surface p-3 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] sm:p-4">
+      <p className="flex items-center gap-2 text-[13px] font-medium"><PlusIcon size={14} weight="bold" className="text-accent" /> Teach the office a fact</p>
+      <div className="flex flex-col gap-2 md:flex-row">
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Maju Trading invoices on net-30 terms" aria-label="New fact" className="min-w-0 md:flex-1" />
+        <Select value={scope} onValueChange={setScope} label="Who knows it" className="md:w-56"
           options={[{ value: "all", label: "Every company" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
         <Button type="submit" loading={add.isPending} disabled={text.trim().length < 3}><PlusIcon size={15} weight="bold" /> Add</Button>
       </div>
@@ -124,21 +127,18 @@ export function FactsTab({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="grid gap-4">
       {canWrite ? <AddFact branches={branches} /> : null}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <RadioGroup.Root value={state} onValueChange={(v) => setState(v as State)} aria-label="Which facts" className="inline-flex w-fit rounded-sm border border-border p-0.5">
-          {(["active", "ended", "all"] as const).map((v) => (
-            <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-3 py-1 text-[13px] text-muted capitalize data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{v}</RadioGroup.Item>
-          ))}
-        </RadioGroup.Root>
-        <Select value={branch} onValueChange={setBranch} label="Company" size="sm" className="sm:w-52"
+      <Toolbar>
+        <Segmented<State> label="Which facts" value={state} onChange={setState}
+          options={[{ value: "active", label: "Active" }, { value: "ended", label: "Ended" }, { value: "all", label: "All" }]} />
+        <Select value={branch} onValueChange={setBranch} label="Company" className="sm:w-52"
           options={[{ value: "all", label: "All companies" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
-        <label className="relative block sm:ml-auto sm:w-64">
-          <span className="sr-only">Filter facts</span>
-          <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter" className="h-8 pl-8 text-[13px]" />
-        </label>
-      </div>
-      {isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" /> : error || !data ? (
+        <SearchInput value={q} onChange={setQ} placeholder="Filter facts" className="sm:ml-auto sm:max-w-72" />
+      </Toolbar>
+      {isLoading ? (
+        <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
+          {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-none" />)}
+        </div>
+      ) : error || !data ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : !data.items.length ? (
         <EmptyState icon={LightbulbIcon} title={state === "ended" ? "Nothing has been replaced or forgotten" : "No facts yet"}
@@ -146,10 +146,10 @@ export function FactsTab({ canWrite }: { canWrite: boolean }) {
             : "Agents pick up facts as they finish tasks and chats: names, terms, prices, preferences. You can add them yourself too."} />
       ) : (
         <>
-          <p className="text-[12.5px] text-muted">{data.total} {data.total === 1 ? "fact" : "facts"}</p>
-          <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+          <p className="-mb-1 text-[12.5px] text-muted tabular">{data.total} {data.total === 1 ? "fact" : "facts"}{data.total > data.items.length ? `, showing the first ${data.items.length}` : ""}</p>
+          <ListCard>
             {data.items.map((f) => <FactRow key={f.id} f={f} canWrite={canWrite} />)}
-          </ul>
+          </ListCard>
         </>
       )}
     </div>

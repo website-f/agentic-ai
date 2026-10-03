@@ -284,6 +284,36 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
 
 
+HELP_HINT = (
+    "\n\n[Tip: if this is outside your expertise, do not keep retrying. A colleague can check it "
+    "for you: ask_colleague(agent='<the expertise you need, e.g. software engineer>', "
+    "kind='help', question='<what you need>', context='<what you tried and the exact error>'). "
+    "Fixes are saved as lessons, so the office learns it once.]"
+)
+_FAILED = re.compile(r"Traceback \(most recent call last\)|Exit code: -?[1-9]")
+_NO_HINT = frozenset({"ask_colleague", "consult", "delegate", "split_work", "ask_human"})
+
+
+def _stuck(name: str, result: str) -> bool:
+    """A tool result that means the agent hit a real problem (not an approval or a hint)."""
+    if name in _NO_HINT or name.startswith("browser_"):  # the browser has its own recovery
+        return False
+    return result.lstrip().startswith("Error") or bool(_FAILED.search(result))
+
+
+async def _help_hint_once(db: AsyncSession, task: Task, agent: Agent) -> bool:
+    """Show the ask-for-help tip at most once per task, and only when asking is possible."""
+    if task.depth >= colleague.MAX_DEPTH or modes_for(agent).get("ask_colleague") == "deny":
+        return False
+    shown = await db.scalar(
+        select(TaskEvent.id).where(TaskEvent.task_id == task.id, TaskEvent.kind == "hint")
+    )
+    if shown:
+        return False
+    await task_event(db, task, "hint", "system", "suggested asking a colleague for help")
+    return True
+
+
 def _browser_tool_error(text: str) -> bool:
     """Whether a browser result is a real failure, rather than an approval hint."""
     return text.lstrip().startswith("Error:") and "SUBMIT_NEEDS_APPROVAL:" not in text
@@ -334,6 +364,8 @@ def offered_tools(
         if n in MCP_BRIDGE and not mcp:
             continue
         if n == "run_python" and not settings.sandbox_url:
+            continue
+        if n.startswith("browser_") and not settings.browser_url:  # small servers: no browser
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
@@ -484,6 +516,8 @@ async def _resolve_calls(
             agent, task, "tool_call", tool=name, label=TOOLS[name].label, args=_brief(args)
         )
         result = await run_tool(ctx, name, args)
+        if _stuck(name, result) and await _help_hint_once(db, task, agent):
+            result += HELP_HINT
         _add(db, agent, "tool", task_id=task.id, content=result, tool_call_id=call_id, name=name)
         await db.commit()
         await activity(agent, task, "tool_result", tool=name, preview=_brief(result, 400))
@@ -1160,6 +1194,39 @@ class ChatReply:
     message_id: int | None = None
 
 
+BACKUP_NOTE = "(Backup mode: the main AI is unavailable, so a small local model answered.)"
+
+
+async def _backup_reply(
+    db: AsyncSession, ws: Workspace, agent: Agent, history: list[AgentMessage]
+) -> gateway.GatewayReply | None:
+    """When every cloud model in the agent's group is down, the small local model answers
+    simple chat (no tools, short context: it only has ~4k tokens) and says it is in backup
+    mode. Tasks never use it: they wait and retry, since a tiny model must not drive tools."""
+    if agent.model_group == "local":
+        return None
+    recent = [m for m in history if m.role in ("user", "assistant") and m.content][-6:]
+    msgs: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": f"You are {agent.name}, {agent.role} at {ws.name}. The office's main AI "
+            "is down, so you are answering with a small backup model. Keep answers short and "
+            "simple. For anything complex, needing tools, documents or exact figures, say it "
+            "will be handled as soon as the main AI is back. Never invent facts.",
+        },
+        *({"role": m.role, "content": (m.content or "")[:800]} for m in recent),
+    ]
+    try:
+        r = await gateway.chat(
+            db, ws.id, "local", msgs, task="agent.chat.backup", max_tokens=400, agent_id=agent.id
+        )
+    except gateway.GatewayUnavailable:
+        return None
+    r.content = f"{BACKUP_NOTE}\n\n{r.content.strip()}"
+    r.tool_calls = []
+    return r
+
+
 async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks."""
@@ -1216,6 +1283,11 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 max_tokens=1200,
                 agent_id=agent.id,
             )
+        except gateway.GatewayUnavailable:
+            backup = await _backup_reply(db, ws, agent, history)
+            if backup is None:
+                raise
+            reply = backup
         finally:
             await agent_thinking(agent, False)
         if not reply.tool_calls:

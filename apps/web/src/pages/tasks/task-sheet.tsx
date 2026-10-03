@@ -1,5 +1,12 @@
 import {
   ArrowCounterClockwiseIcon,
+  CaretRightIcon,
+  CheckCircleIcon,
+  ClockCounterClockwiseIcon,
+  NoteIcon,
+  SealWarningIcon,
+  TargetIcon,
+  WarningCircleIcon,
   ArrowElbowLeftUpIcon,
   BrainIcon,
   CoinsIcon,
@@ -19,7 +26,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -41,18 +48,51 @@ const EVENT_ICON: Record<string, typeof FlagIcon> = {
   correction: ArrowCounterClockwiseIcon, budget: CoinsIcon,
 };
 
+/** A titled block inside the sheet: small icon, heading, optional trailing note. */
+function SheetSection({ icon: IconCmp, title, note, tone, children }: { icon: typeof FlagIcon; title: string; note?: ReactNode; tone?: "warn"; children: ReactNode }) {
+  return (
+    <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5">
+      <h3 className={cn("flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-semibold", tone === "warn" && "text-warn")}>
+        <IconCmp size={15} weight="duotone" className={tone === "warn" ? "text-warn" : "text-muted"} />
+        {title}
+        {note ? <span className="font-normal text-muted">{note}</span> : null}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function Facts({ task: t }: { task: Task }) {
+  const items: [string, ReactNode][] = [
+    ["Created", timeAgo(t.created_at)],
+    ["Last update", timeAgo(t.updated_at)],
+    ["Runs", t.run_count],
+    ["Model calls", t.steps_used],
+  ];
+  return (
+    <dl className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface-2/40 sm:grid-cols-4">
+      {items.map(([k, v], i) => (
+        <div key={k} className={cn("grid min-w-0 gap-0.5 border-border px-3.5 py-2", i % 2 === 1 && "border-l", i >= 2 && "max-sm:border-t", i === 2 && "sm:border-l")}>
+          <dt className="truncate text-[11.5px] text-muted">{k}</dt>
+          <dd className="truncate text-[13px] font-medium tabular">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function SubTasks({ tasks }: { tasks: Task[] }) {
   return (
-    <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
+    <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
       {tasks.map((c) => (
         <li key={c.id}>
-          <Link to="/tasks" search={{ task: c.id }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-2/60">
+          <Link to="/tasks" search={{ task: c.id }} className="flex min-h-12 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-surface-2/60">
             {c.assignee_name ? <AgentAvatar name={c.assignee_name} color={c.assignee_color ?? "#888"} size="xs" /> : null}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">{c.title}</span>
-              <span className="block text-[12px] text-muted">{c.assignee_name ?? "Unassigned"}{c.has_output_schema ? " · structured answer" : ""}</span>
+              <span className="line-clamp-2 text-[13px] font-medium break-words">{c.title}</span>
+              <span className="block truncate text-[12px] text-muted">{c.assignee_name ?? "Unassigned"}{c.has_output_schema ? " · structured answer" : ""}</span>
             </span>
-            <Pill tone={STATUS_INFO[c.status].tone}>{STATUS_INFO[c.status].label}</Pill>
+            <Pill tone={STATUS_INFO[c.status].tone} className="shrink-0">{STATUS_INFO[c.status].label}</Pill>
           </Link>
         </li>
       ))}
@@ -62,17 +102,17 @@ function SubTasks({ tasks }: { tasks: Task[] }) {
 
 function Timeline({ events }: { events: TaskEvent[] }) {
   return (
-    <ol className="grid gap-0">
+    <ol className="grid grid-cols-[minmax(0,1fr)] gap-0">
       {events.map((e, i) => {
         const Icon = EVENT_ICON[e.kind] ?? CircleNotchIcon;
         return (
-          <li key={e.id} className="relative flex gap-3 pb-3">
-            {i < events.length - 1 ? <span aria-hidden className="absolute top-6 bottom-0 left-[11px] w-px bg-border" /> : null}
-            <span className={cn("relative grid size-6 shrink-0 place-items-center rounded-full bg-surface-2 text-muted", e.kind === "tool_blocked" && "bg-danger/12 text-danger", e.kind === "progress" && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill") && "bg-info/12 text-info")}>
+          <li key={e.id} className="relative flex min-w-0 gap-3 pb-3.5">
+            {i < events.length - 1 ? <span aria-hidden className="absolute top-7 bottom-0.5 left-[13px] w-px bg-border" /> : null}
+            <span className={cn("relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted ring-4 ring-surface", e.kind === "tool_blocked" && "bg-danger/12 text-danger", (e.kind === "progress" || e.kind === "decision") && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill") && "bg-info/12 text-info", e.kind === "feedback" && "bg-warn/12 text-warn")}>
               <Icon size={13} weight="bold" />
             </span>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-[13px]">
+            <div className="min-w-0 flex-1 pt-1">
+              <p className="text-[13px] break-words">
                 <span className="font-medium">{e.actor_name ?? (e.actor === "system" ? "System" : e.actor)}</span>{" "}
                 <span className="text-muted">
                   {e.kind === "progress" ? <>posted an update: <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>sent it back: <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>summed up the meeting: <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.text}
@@ -82,9 +122,9 @@ function Timeline({ events }: { events: TaskEvent[] }) {
                 <Link to="/meetings" search={{ m: e.data.meeting_id }} className="mt-1 inline-block text-[12.5px] text-accent hover:underline">Read the meeting</Link>
               ) : null}
               {e.kind === "tool" && typeof e.data?.result_preview === "string" ? (
-                <p className="mt-1 line-clamp-2 font-mono text-[11.5px] text-muted">{e.data.result_preview}</p>
+                <p className="mt-1 line-clamp-2 rounded-[6px] bg-surface-2/60 px-2 py-1 font-mono text-[11.5px] break-all text-muted">{e.data.result_preview}</p>
               ) : null}
-              <time className="text-[11.5px] text-muted" dateTime={e.ts}>{timeAgo(e.ts)}</time>
+              <time className="mt-0.5 block text-[11.5px] text-muted" dateTime={e.ts}>{timeAgo(e.ts)}</time>
             </div>
           </li>
         );
@@ -149,96 +189,120 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   const { data, isLoading, error } = useQuery({ ...taskQuery(taskId), refetchInterval: (q) => (q.state.data?.task.status === "running" ? 4000 : false) });
   const t = data?.task;
   const pending = data?.approvals.filter((a) => a.status === "pending") ?? [];
+  const childrenDone = data?.children.filter((c) => c.status === "done" || c.status === "review").length ?? 0;
 
   return (
     <SideSheet
       open
       onOpenChange={(o) => !o && onClose()}
-      title={t ? t.title : "Task"}
+      title={t ? <span className="line-clamp-3 break-words">{t.title}</span> : "Task"}
       description={t ? (
-        <span className="flex flex-wrap items-center gap-2">
-          <Pill tone={STATUS_INFO[t.status].tone}>{STATUS_INFO[t.status].label}</Pill>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <Pill tone={STATUS_INFO[t.status].tone} live={t.status === "running"}>{STATUS_INFO[t.status].label}</Pill>
           {t.priority !== "normal" ? <Pill tone={PRIORITY_INFO[t.priority].tone}>{PRIORITY_INFO[t.priority].label}</Pill> : null}
-          {t.assignee_name ? <span className="flex items-center gap-1.5"><AgentAvatar name={t.assignee_name} color={t.assignee_color ?? "#888"} size="xs" /> {t.assignee_name}</span> : <span>Unassigned</span>}
-          {t.run_count > 1 ? <span>Run {t.run_count}</span> : null}
+          {t.assignee_name ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AgentAvatar name={t.assignee_name} color={t.assignee_color ?? "#888"} size="xs" /> <span className="truncate">{t.assignee_name}</span></span>
+          ) : <span>Unassigned</span>}
+          {t.run_count > 1 ? <span className="tabular">Run {t.run_count}</span> : null}
+          {t.labels?.map((l) => <Pill key={l}>{l}</Pill>)}
         </span>
       ) : undefined}
       actions={t ? <Actions task={t} canWrite={me.permissions.includes("work.write")} /> : undefined}
     >
-      {isLoading ? <Skeleton className="h-40" /> : error || !data || !t ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
-        <div className="grid gap-6">
+      {isLoading ? (
+        <div className="grid gap-3">
+          <Skeleton className="h-16 rounded-[var(--radius-md)]" />
+          <Skeleton className="h-40 rounded-[var(--radius-md)]" />
+          <Skeleton className="h-24 rounded-[var(--radius-md)]" />
+        </div>
+      ) : error || !data || !t ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
           {pending.length ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold text-warn">Waiting on you</h3>
+            <SheetSection icon={SealWarningIcon} title="Waiting on you" note={pending.length > 1 ? `${pending.length} decisions` : undefined} tone="warn">
               {pending.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={me.permissions.includes("approvals.decide")} showTask={false} />)}
-            </section>
+            </SheetSection>
           ) : null}
-          {t.result ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold">Result</h3>
-              <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3"><Markdown>{t.result}</Markdown></div>
-            </section>
+          {t.error ? (
+            <p role="alert" className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 px-3.5 py-3 text-[13px] break-words text-danger">
+              <WarningCircleIcon size={17} weight="duotone" className="mt-px shrink-0" /> <span className="min-w-0">{t.error}</span>
+            </p>
           ) : null}
-          {t.error ? <p role="alert" className="rounded-sm border border-danger/30 bg-danger/8 px-3 py-2 text-[13px] text-danger">{t.error}</p> : null}
+          {t.status === "blocked" && t.blocked_reason && !pending.length ? (
+            <p className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-warn/30 bg-warn/8 px-3.5 py-3 text-[13px] break-words text-warn">
+              <HandIcon size={17} weight="duotone" className="mt-px shrink-0" /> <span className="min-w-0">{t.blocked_reason}</span>
+            </p>
+          ) : null}
           {t.status === "running" ? (
-            <p className="flex items-center gap-2 text-[13px] text-accent"><CircleNotchIcon size={15} className="motion-safe:animate-spin" /> {t.assignee_name} is working. This updates live.</p>
+            <p className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/50 px-3.5 py-3 text-[13px] text-accent">
+              <CircleNotchIcon size={16} className="shrink-0 motion-safe:animate-spin" /> {t.assignee_name} is working. This updates live.
+            </p>
           ) : null}
           {data.parent ? (
-            <Link to="/tasks" search={{ task: data.parent.id }} className="flex items-center gap-2 text-[13px] text-muted hover:text-fg">
-              <ArrowElbowLeftUpIcon size={14} /> Part of <span className="font-medium text-fg">{data.parent.title}</span> ({data.parent.assignee_name})
+            <Link to="/tasks" search={{ task: data.parent.id }} className="flex min-w-0 items-center gap-2.5 rounded-[var(--radius-md)] border border-border px-3.5 py-2.5 text-[13px] text-muted transition-colors hover:bg-surface-2/60 hover:text-fg">
+              <ArrowElbowLeftUpIcon size={15} className="shrink-0" />
+              <span className="min-w-0">Part of <span className="font-medium break-words text-fg">{data.parent.title}</span>{data.parent.assignee_name ? ` (${data.parent.assignee_name})` : ""}</span>
             </Link>
           ) : null}
+          <Facts task={t} />
+          {t.result ? (
+            <SheetSection icon={CheckCircleIcon} title="Result">
+              <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3.5"><Markdown>{t.result}</Markdown></div>
+            </SheetSection>
+          ) : null}
           {data.children.length ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold">
-                Handed out <span className="font-normal text-muted">· {data.children.filter((c) => c.status === "done" || c.status === "review").length} of {data.children.length} done</span>
-              </h3>
+            <SheetSection icon={TreeStructureIcon} title="Handed out" note={`${childrenDone} of ${data.children.length} done`}>
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Sub-tasks done" aria-valuemin={0} aria-valuemax={data.children.length} aria-valuenow={childrenDone}>
+                <div className="h-full rounded-full bg-ok transition-[width]" style={{ width: `${(childrenDone / data.children.length) * 100}%` }} />
+              </div>
               <SubTasks tasks={data.children} />
-            </section>
+            </SheetSection>
           ) : null}
           {data.meetings.length ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold">Meetings</h3>
-              <ul className="grid gap-2">
+            <SheetSection icon={UsersThreeIcon} title="Meetings">
+              <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {data.meetings.map((m) => (
                   <li key={m.id}>
-                    <Link to="/meetings" search={{ m: m.id }} className="block rounded-[var(--radius-md)] border border-border px-3 py-2.5 hover:bg-surface-2/60">
-                      <span className="flex items-center justify-between gap-2 text-[13px] font-medium">{m.topic}<Pill tone={m.status === "done" ? "ok" : m.status === "running" ? "accent" : "neutral"}>{m.status === "running" ? "In progress" : m.status}</Pill></span>
-                      {m.outcome ? <span className="mt-1 block text-[12.5px] text-muted">{m.outcome.decision}</span> : null}
+                    <Link to="/meetings" search={{ m: m.id }} className="grid gap-1 rounded-[var(--radius-md)] border border-border px-3.5 py-2.5 transition-colors hover:bg-surface-2/60">
+                      <span className="flex min-w-0 items-start justify-between gap-2">
+                        <span className="min-w-0 text-[13px] font-medium break-words">{m.topic}</span>
+                        <Pill className="shrink-0 capitalize" tone={m.status === "done" ? "ok" : m.status === "running" ? "accent" : "neutral"}>{m.status === "running" ? "In progress" : m.status}</Pill>
+                      </span>
+                      {m.outcome ? <span className="line-clamp-3 text-[12.5px] break-words text-muted">{m.outcome.decision}</span> : null}
                     </Link>
                   </li>
                 ))}
               </ul>
-            </section>
+            </SheetSection>
           ) : null}
           {t.brief ? (
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold">Brief</h3>
-              <Markdown className="text-muted">{t.brief}</Markdown>
-            </section>
+            <SheetSection icon={NoteIcon} title="Brief">
+              <Markdown className="text-[13.5px] text-muted">{t.brief}</Markdown>
+            </SheetSection>
           ) : null}
           {t.goal ? (
-            <section className="grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3">
-              <h3 className="flex items-center gap-2 text-[13px] font-semibold">Keeps going until
+            <section className="grid min-w-0 gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3">
+              <h3 className="flex flex-wrap items-center gap-2 text-[13px] font-semibold"><TargetIcon size={15} weight="duotone" className="text-muted" /> Keeps going until
                 {t.goal_tries ? <Pill tone="accent">{t.goal_tries} retr{t.goal_tries === 1 ? "y" : "ies"}</Pill> : null}
               </h3>
-              <p className="text-[13px] text-muted">{t.goal}</p>
+              <p className="text-[13px] break-words text-muted">{t.goal}</p>
             </section>
           ) : null}
-          <section className="grid gap-2">
-            <h3 className="text-[13px] font-semibold">Timeline</h3>
+          <SheetSection icon={ClockCounterClockwiseIcon} title="Timeline" note={`${data.events.length} events`}>
             <Timeline events={data.events} />
-          </section>
+          </SheetSection>
           {data.transcript.length ? (
-            <details className="rounded-[var(--radius-md)] border border-border">
-              <summary className="cursor-pointer px-4 py-2.5 text-[13px] font-medium">Full conversation ({data.transcript.length} messages, {t.steps_used} model calls)</summary>
-              <ol className="grid gap-3 border-t border-border px-4 py-3">
+            <details className="group min-w-0 rounded-[var(--radius-md)] border border-border">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+                <CaretRightIcon size={13} weight="bold" className="shrink-0 text-muted transition-transform group-open:rotate-90" />
+                <span className="min-w-0">Full conversation <span className="font-normal text-muted">({data.transcript.length} messages, {t.steps_used} model calls)</span></span>
+              </summary>
+              <ol className="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-border px-4 py-3">
                 {data.transcript.map((m) => (
-                  <li key={m.id} className="text-[12.5px]">
-                    <p className="mb-0.5 font-mono text-[11px] text-muted uppercase">
+                  <li key={m.id} className="min-w-0 text-[12.5px]">
+                    <p className="mb-0.5 font-mono text-[11px] break-words text-muted uppercase">
                       {m.role}{m.name ? ` · ${m.name}` : ""}{m.tool_calls.length ? ` · calls ${m.tool_calls.join(", ")}` : ""}{m.meta?.model ? ` · ${m.meta.model}` : ""}
                     </p>
-                    {m.content ? <p className={cn("whitespace-pre-wrap", m.role === "tool" && "font-mono text-[11.5px] text-muted")}>{m.content.length > 1500 ? m.content.slice(0, 1500) + "…" : m.content}</p> : null}
+                    {m.content ? <p className={cn("whitespace-pre-wrap [overflow-wrap:anywhere]", m.role === "tool" && "font-mono text-[11.5px] text-muted")}>{m.content.length > 1500 ? m.content.slice(0, 1500) + "…" : m.content}</p> : null}
                   </li>
                 ))}
               </ol>

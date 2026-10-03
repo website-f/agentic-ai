@@ -1,19 +1,25 @@
-import { LightningIcon, PlusIcon, SealQuestionIcon, ShieldWarningIcon } from "@phosphor-icons/react";
+import {
+  ArchiveIcon, ArrowsMergeIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, LightningIcon, PencilSimpleIcon, PlusIcon,
+  SealQuestionIcon, ShieldWarningIcon, SparkleIcon,
+} from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { RadioGroup, Tabs } from "radix-ui";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ListCard, Meta, Toolbar } from "@/components/ui/card";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
-import { compact, KIND_LABEL, pct, proposalsQuery, skillKeys, skillsQuery, TRUST_LABEL, type Proposal, type Skill } from "@/lib/skills";
+import { compact, KIND_LABEL, pct, proposalsQuery, skillKeys, skillsQuery, TRUST_LABEL, type Proposal, type ProposalKind, type Skill } from "@/lib/skills";
 import { cn, timeAgo } from "@/lib/utils";
 
 import { SuiteBadge } from "./eval-results";
@@ -26,6 +32,23 @@ export interface SkillsSearch {
   tab?: SkillTab;
   skill?: string;
   proposal?: string;
+}
+
+const TAB_LABEL: Record<SkillTab, string> = { library: "Library", proposals: "Proposals", history: "History" };
+const TRUST_TONE = { trusted: "info", official: "accent", builtin: "neutral" } as const;
+const KIND_LOOK: Record<ProposalKind, { icon: typeof LightningIcon; tone: Tone }> = {
+  new: { icon: SparkleIcon, tone: "accent" },
+  patch: { icon: PencilSimpleIcon, tone: "info" },
+  merge: { icon: ArrowsMergeIcon, tone: "violet" },
+  retire: { icon: ArchiveIcon, tone: "neutral" },
+};
+
+function ListSkeleton() {
+  return (
+    <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
+      {[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-none" />)}
+    </div>
+  );
 }
 
 const STARTER = `## When to use
@@ -79,18 +102,20 @@ function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
   const low = s.stats.success_rate !== null && judged >= 5 && s.stats.success_rate < 0.7;
   return (
     <li>
-      <button onClick={onOpen} className="grid w-full gap-2 px-4 py-3 text-left hover:bg-surface-2/60 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
-        <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[13.5px] font-medium">{s.name}</span>
-            <Pill tone={s.trust === "trusted" ? "info" : s.trust === "official" ? "accent" : "neutral"}>{TRUST_LABEL[s.trust]}</Pill>
-            <span className="text-[12px] text-muted">v{s.version}</span>
+      <button type="button" onClick={onOpen}
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-x-6">
+        <IconTile icon={LightningIcon} tone={s.status === "retired" ? "neutral" : low ? "danger" : "accent"} size="sm" className="md:size-10" />
+        <span className="grid min-w-0 gap-1">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{s.name}</span>
+            <Pill tone={TRUST_TONE[s.trust]}>{TRUST_LABEL[s.trust]}</Pill>
+            <span className="text-[12px] text-muted tabular">v{s.version}</span>
             {s.pending ? <Pill tone="warn">{s.pending} to review</Pill> : null}
             {low ? <Pill tone="danger">Often sent back</Pill> : null}
           </span>
-          <span className="mt-0.5 block text-[13px] text-muted">{s.description}</span>
+          <span className="line-clamp-2 text-[13px] break-words text-muted">{s.description}</span>
         </span>
-        <span className="grid grid-cols-3 gap-4 text-[12px] text-muted md:w-80">
+        <span className="col-span-2 grid grid-cols-3 gap-2 rounded-[var(--radius-sm)] bg-surface-2/60 px-3 py-2 text-[11.5px] text-muted md:col-span-1 md:w-72 md:bg-transparent md:p-0">
           <span><span className="block text-[15px] font-semibold text-fg tabular">{s.stats.uses}</span>uses</span>
           <span><span className="block text-[15px] font-semibold text-fg tabular">{pct(s.stats.success_rate)}</span>accepted</span>
           <span>
@@ -108,21 +133,29 @@ function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
 function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
   const blocks = p.scan.filter((f) => f.level === "block").length;
   const warns = p.scan.length - blocks;
+  const look = KIND_LOOK[p.kind];
   return (
     <li>
-      <button onClick={onOpen} className="grid w-full gap-1.5 px-4 py-3 text-left hover:bg-surface-2/60">
-        <span className="flex flex-wrap items-center gap-2">
-          <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
-          <span className="font-mono text-[13.5px] font-medium">{p.name}</span>
-          {p.status !== "pending" ? <Pill tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "neutral"}>{p.status}</Pill> : null}
-          {blocks ? <Pill tone="danger"><ShieldWarningIcon size={12} weight="fill" /> Must fix</Pill> : warns ? <Pill tone="warn">{warns} to check</Pill> : null}
-          {p.eval?.new ? <SuiteBadge suite={p.eval.new} label="Tests" /> : null}
-          {p.stale ? <Pill tone="warn">Outdated draft</Pill> : null}
-        </span>
-        <span className="line-clamp-2 text-[13px] text-muted">{p.reason}</span>
-        <span className="text-[12px] text-muted">
-          {p.proposed_by_name}{p.source_task ? ` · from “${p.source_task.title}”` : ""} · {timeAgo(p.created_at).toLowerCase()}
-          {p.decided_by_name ? ` · ${p.status} by ${p.decided_by_name}` : ""}
+      <button type="button" onClick={onOpen} className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60">
+        <IconTile icon={look.icon} tone={look.tone} size="sm" />
+        <span className="grid min-w-0 gap-1.5">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{p.name}</span>
+            <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
+            {p.status !== "pending" ? <Pill tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "neutral"}>{p.status}</Pill> : null}
+            {blocks ? <Pill tone="danger"><ShieldWarningIcon size={12} weight="fill" /> Must fix</Pill> : warns ? <Pill tone="warn">{warns} to check</Pill> : null}
+            {p.eval?.new ? <SuiteBadge suite={p.eval.new} label="Tests" /> : null}
+            {p.stale ? <Pill tone="warn">Outdated draft</Pill> : null}
+          </span>
+          {p.reason ? <span className="line-clamp-2 text-[13px] break-words text-muted">{p.reason}</span> : null}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">
+            <Meta items={[
+              p.proposed_by_name,
+              p.source_task ? <span key="t" className="break-words">from “{p.source_task.title}”</span> : null,
+              timeAgo(p.created_at).toLowerCase(),
+              p.decided_by_name ? `${p.status} by ${p.decided_by_name}` : null,
+            ]} />
+          </span>
         </span>
       </button>
     </li>
@@ -142,6 +175,17 @@ export function SkillsPage() {
   const { data: pending = [] } = useQuery(proposalsQuery("pending"));
   const { data: decided = [] } = useQuery({ ...proposalsQuery("decided"), enabled: tab === "history" });
   const go = (next: SkillsSearch) => navigate({ to: "/skills", search: { tab, ...next }, replace: true });
+  const [q, setQ] = useState("");
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return (skills ?? []).filter((s) => !needle || s.name.toLowerCase().includes(needle) || s.description.toLowerCase().includes(needle));
+  }, [skills, q]);
+  const totals = useMemo(() => {
+    const list = skills ?? [];
+    const accepted = list.reduce((n, s) => n + s.stats.accepted, 0);
+    const judged = list.reduce((n, s) => n + s.stats.accepted + s.stats.sent_back + s.stats.failed, 0);
+    return { uses: list.reduce((n, s) => n + s.stats.uses, 0), rate: judged ? accepted / judged : null, judged };
+  }, [skills]);
 
   return (
     <Page>
@@ -150,53 +194,57 @@ export function SkillsPage() {
         description="Procedures your agents load when a task matches, so the second time is faster and cheaper. Agents propose new ones from their work; nothing is used until a person approves it."
         actions={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New skill</Button> : null}
       />
-      <Tabs.Root value={tab} onValueChange={(v) => navigate({ to: "/skills", search: { tab: v as SkillTab }, replace: true })}>
-        <Tabs.List aria-label="Skills sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border">
-          {SKILL_TABS.map((t) => (
-            <Tabs.Trigger key={t} value={t} className="-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted capitalize hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
-              {t}
-              {t === "proposals" && pending.length ? <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-warn px-1 text-[10.5px] font-semibold text-white tabular">{pending.length}</span> : null}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+      {skills && state === "active" ? (
+        <StatGrid>
+          <Stat label="Active skills" value={skills.length} icon={LightningIcon} tone="accent" hint="Agents load these when a task matches" onClick={() => go({ tab: "library" })} active={tab === "library"} />
+          <Stat label="To review" value={pending.length} icon={SealQuestionIcon} tone={pending.length ? "warn" : "neutral"}
+            hint={pending.length ? "Waiting for a person" : "All caught up"} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
+          <Stat label="Uses" value={totals.uses} icon={ChartLineUpIcon} tone="info" hint="Across all active skills" />
+          <Stat label="Accepted" value={pct(totals.rate)} icon={CheckCircleIcon} tone="ok" hint={totals.judged ? `${totals.judged} results judged` : "Nothing judged yet"} />
+        </StatGrid>
+      ) : null}
 
-        <Tabs.Content value="library" className="grid gap-4 outline-none">
-          <RadioGroup.Root value={state} onValueChange={(v) => setState(v as "active" | "retired")} aria-label="Which skills" className="inline-flex w-fit rounded-sm border border-border p-0.5">
-            {(["active", "retired"] as const).map((v) => (
-              <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-3 py-1 text-[13px] text-muted capitalize data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{v}</RadioGroup.Item>
-            ))}
-          </RadioGroup.Root>
-          {isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" /> : error || !skills ? (
-            <p role="alert" className="text-danger">{errorMessage(error)}</p>
-          ) : !skills.length ? (
-            <EmptyState icon={LightningIcon} title={state === "retired" ? "Nothing retired" : "No skills yet"}
-              body={state === "retired" ? "Retired skills land here and can be restored." : "When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself."} />
-          ) : (
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
-              {skills.map((s) => <SkillRow key={s.id} s={s} onOpen={() => go({ skill: s.id })} />)}
-            </ul>
-          )}
-        </Tabs.Content>
+      <Segmented<SkillTab> label="Skills sections" value={tab} onChange={(v) => navigate({ to: "/skills", search: { tab: v }, replace: true })} className="w-fit"
+        options={SKILL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: t === "proposals" ? pending.length : t === "library" ? skills?.length : undefined }))} />
 
-        <Tabs.Content value="proposals" className="outline-none">
-          {pending.length ? (
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+      <div role="tabpanel" aria-label={TAB_LABEL[tab]} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+        {tab === "library" ? (
+          <>
+            <Toolbar>
+              <Segmented<"active" | "retired"> label="Which skills" size="sm" value={state} onChange={setState}
+                options={[{ value: "active", label: "Active" }, { value: "retired", label: "Retired" }]} />
+              <SearchInput value={q} onChange={setQ} placeholder="Search skills" className="sm:ml-auto sm:max-w-72" />
+            </Toolbar>
+            {isLoading ? <ListSkeleton /> : error || !skills ? (
+              <p role="alert" className="text-danger">{errorMessage(error)}</p>
+            ) : !skills.length ? (
+              <EmptyState icon={LightningIcon} title={state === "retired" ? "Nothing retired" : "No skills yet"}
+                body={state === "retired" ? "Retired skills land here and can be restored." : "When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself."} />
+            ) : !shown.length ? (
+              <EmptyState icon={LightningIcon} title="No skill matches" body="Try another word." />
+            ) : (
+              <ListCard>
+                {shown.map((s) => <SkillRow key={s.id} s={s} onOpen={() => go({ skill: s.id })} />)}
+              </ListCard>
+            )}
+          </>
+        ) : tab === "proposals" ? (
+          pending.length ? (
+            <ListCard>
               {pending.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
-            </ul>
+            </ListCard>
           ) : (
             <EmptyState icon={SealQuestionIcon} title="Nothing to review"
               body="Agents propose a skill after work that took many steps or several rounds of corrections, and the nightly curator proposes merges and retirements. They wait here for you." />
-          )}
-        </Tabs.Content>
-
-        <Tabs.Content value="history" className="outline-none">
-          {decided.length ? (
-            <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
-              {decided.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
-            </ul>
-          ) : <p className="text-[13.5px] text-muted">Decisions on proposals appear here.</p>}
-        </Tabs.Content>
-      </Tabs.Root>
+          )
+        ) : decided.length ? (
+          <ListCard>
+            {decided.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
+          </ListCard>
+        ) : (
+          <EmptyState icon={ClockCounterClockwiseIcon} title="No decisions yet" body="Decisions on proposals appear here." />
+        )}
+      </div>
 
       {search.skill ? <SkillSheet key={search.skill} id={search.skill} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ skill: undefined })} /> : null}
       {search.proposal ? <ProposalSheet key={search.proposal} id={search.proposal} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ proposal: undefined })} /> : null}

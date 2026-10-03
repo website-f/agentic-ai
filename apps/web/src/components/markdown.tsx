@@ -6,12 +6,12 @@ import { cn } from "@/lib/utils";
 /** Agent output and SOPs. Raw HTML is not rendered (react-markdown default), links open in a new tab. */
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (
-    <div className={cn("md text-[14px] leading-relaxed", className)}>
+    <div className={cn("md min-w-0 text-[14px] leading-relaxed break-words [&>*:first-child]:mt-0!", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children: c }) => (
-            <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-2">
+            <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-2 [overflow-wrap:anywhere]">
               {c}
             </a>
           ),

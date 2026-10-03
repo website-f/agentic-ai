@@ -1,7 +1,7 @@
 import {
   ArrowCounterClockwiseIcon, ArrowLeftIcon, CheckCircleIcon, ClockCounterClockwiseIcon, DownloadSimpleIcon,
-  FilePdfIcon, MagicWandIcon, PaperclipIcon, PlusIcon, SealCheckIcon, SparkleIcon, TextAaIcon, TrashIcon,
-  WarningCircleIcon, WarningIcon, XIcon,
+  FilePdfIcon, ListBulletsIcon, MagicWandIcon, PaperclipIcon, PencilSimpleLineIcon, PlusIcon, RobotIcon, SealCheckIcon,
+  SparkleIcon, TextAaIcon, TrashIcon, WarningCircleIcon, WarningIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -12,10 +12,12 @@ import { toast } from "sonner";
 import { FilePicker } from "@/components/file-drop";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { ActionBar, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Field, Input, TextareaField } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
@@ -25,6 +27,7 @@ import {
 } from "@/lib/documents";
 import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
+import { KindTile } from "./visuals";
 
 type Values = Record<string, FieldValue>;
 
@@ -55,12 +58,15 @@ function ItemsEditor({ value, onChange, disabled }: { value: LineItem[]; onChang
       </div>
       {rows.map((r, i) => (
         // Narrow column: description on its own row, numbers below. Wide: one row per line.
-        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_auto] items-center gap-2 rounded-sm border border-border p-2 @xl:grid-cols-[minmax(0,1fr)_3.75rem_4.25rem_6rem_6rem_2rem] @xl:rounded-none @xl:border-0 @xl:p-0">
+        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_auto] items-center gap-2 rounded-sm border border-border bg-surface-2/30 p-2 @xl:grid-cols-[minmax(0,1fr)_3.75rem_4.25rem_6rem_6rem_2rem] @xl:rounded-none @xl:border-0 @xl:p-0">
           <Input value={r.description} disabled={disabled} onChange={(e) => set(i, { description: e.target.value })} placeholder="What it is" aria-label="Description" className="col-span-4 h-9 @xl:col-span-1" />
-          <Input value={String(r.qty ?? "")} disabled={disabled} onChange={(e) => set(i, { qty: e.target.value })} inputMode="decimal" aria-label="Quantity" className="h-9" />
+          <Input value={String(r.qty ?? "")} disabled={disabled} onChange={(e) => set(i, { qty: e.target.value })} inputMode="decimal" placeholder="Qty" aria-label="Quantity" className="h-9" />
           <Input value={r.unit ?? ""} disabled={disabled} onChange={(e) => set(i, { unit: e.target.value })} placeholder="unit" aria-label="Unit" className="h-9" />
-          <Input value={String(r.unit_price ?? "")} disabled={disabled} onChange={(e) => set(i, { unit_price: e.target.value })} inputMode="decimal" aria-label="Unit price" className="h-9 text-right" />
-          <span className="col-span-3 text-right text-[13px] tabular-nums @xl:col-span-1">{money(num(r.qty || 1) * num(r.unit_price))}</span>
+          <Input value={String(r.unit_price ?? "")} disabled={disabled} onChange={(e) => set(i, { unit_price: e.target.value })} inputMode="decimal" placeholder="Price" aria-label="Unit price" className="h-9 text-right" />
+          <span className="order-last col-span-4 flex items-center justify-between text-[13px] tabular-nums @xl:order-none @xl:col-span-1 @xl:justify-end">
+            <span className="text-[12px] text-muted @xl:hidden">Amount</span>
+            <span className="font-medium">{money(num(r.qty || 1) * num(r.unit_price))}</span>
+          </span>
           <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label="Remove line" onClick={() => onChange(rows.filter((_, j) => j !== i))}><XIcon size={14} /></Button>
         </div>
       ))}
@@ -105,7 +111,7 @@ function Checks({ checks, review, reviewing, onReview }: { checks: Check[]; revi
   const errors = checks.filter((c) => c.level === "error");
   const warns = checks.filter((c) => c.level === "warn");
   return (
-    <section aria-label="Checks" className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3">
+    <section aria-label="Checks" className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3.5">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
           {errors.length ? <WarningCircleIcon size={17} weight="fill" className="text-danger" />
@@ -146,7 +152,7 @@ function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
   const md = useMemo(() => preview.replace(/\[\[([^\]\n]+)\]\]/g, "`$1`"), [preview]);
   const contact = [data.phone, data.email, data.website].filter(Boolean).join("  ·  ");
   return (
-    <article aria-label="Preview" className="paper min-h-[40rem] rounded-[var(--radius-md)] border border-border bg-white px-[7%] py-8 text-[#191919] shadow-[var(--shadow-soft)]">
+    <article aria-label="Preview" className="paper min-h-[40rem] min-w-0 rounded-[var(--radius-md)] border border-border bg-white px-4 py-6 text-[#191919] shadow-[var(--shadow-soft)] sm:px-[7%] sm:py-8">
       {data.legal_name ? (
         <header className="mb-6">
           <div className="flex items-start gap-4">
@@ -165,7 +171,7 @@ function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
           No letterhead yet — fill in the <Link to="/company-kit" search={{ b: doc.branch_id ?? undefined }} className="underline">company kit</Link>.
         </p>
       )}
-      <Markdown className="text-[13.5px]">{md || "*Empty*"}</Markdown>
+      <Markdown className="text-[12.5px] sm:text-[13.5px]">{md || "*Empty*"}</Markdown>
     </article>
   );
 }
@@ -191,6 +197,7 @@ export function DocumentEditor({ id }: { id: string }) {
   const [fillFiles, setFillFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [pane, setPane] = useState<"edit" | "preview">("edit");
   const area = useRef<HTMLTextAreaElement>(null);
   const loaded = useRef<string>("");
 
@@ -314,9 +321,9 @@ export function DocumentEditor({ id }: { id: string }) {
   const status = STATUS_LABEL[doc.status];
   const errors = shown.checks.filter((c) => c.level === "error").length;
   const tabs = [
-    ...(doc.fields.length ? [{ id: "fields", label: "Fields" }] : []),
-    ...(!doc.word_template ? [{ id: "text", label: "Text" }] : []),
-    { id: "history", label: "History" },
+    ...(doc.fields.length ? [{ id: "fields", label: "Fields", icon: ListBulletsIcon, count: doc.fields.length }] : []),
+    ...(!doc.word_template ? [{ id: "text", label: "Text", icon: PencilSimpleLineIcon, count: 0 }] : []),
+    { id: "history", label: "History", icon: ClockCounterClockwiseIcon, count: 0 },
   ];
   const onSelect = () => {
     const el = area.current;
@@ -324,57 +331,83 @@ export function DocumentEditor({ id }: { id: string }) {
     setSel(el.selectionEnd > el.selectionStart ? { a: el.selectionStart, b: el.selectionEnd } : null);
   };
 
+  const exportMenu = (
+    <Menu>
+      <MenuTrigger asChild><Button size="sm" variant="outline"><DownloadSimpleIcon size={14} /> Export</Button></MenuTrigger>
+      <MenuContent>
+        <MenuItem icon={<FilePdfIcon />} onSelect={() => window.open(exportUrl(id, "pdf", true), "_blank", "noopener")}>Open PDF</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "pdf"); }}>Download PDF</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "docx"); }}>Download Word</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "xlsx"); }}>Download Excel</MenuItem>
+        <MenuSeparator />
+        <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Delete document</MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+  const statusActions = (
+    <>
+      {doc.status === "draft" ? <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => setStatus.mutate("review")}>Send for review</Button> : null}
+      {doc.status !== "approved" && canApprove ? (
+        <Button size="sm" disabled={errors > 0} title={errors ? "Fix the checks first" : undefined} loading={setStatus.isPending} onClick={() => setStatus.mutate("approved")}>
+          <SealCheckIcon size={15} /> Approve
+        </Button>
+      ) : null}
+      {doc.status === "approved" ? <Button size="sm" variant="outline" loading={setStatus.isPending} onClick={() => setStatus.mutate("draft")}>Reopen</Button> : null}
+    </>
+  );
+  const saveButton = !locked ? <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={saveNow}>Save</Button> : null;
+  const actions = <>{saveButton}{exportMenu}{statusActions}</>;
+  const checkCount = shown.checks.length;
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Link to="/documents" className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All documents</Link>
         <span className="flex-1" />
-        {dirty ? <span className="text-[12px] text-muted">Unsaved changes</span> : null}
-        {!locked ? <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={saveNow}>Save</Button> : null}
-        <Menu>
-          <MenuTrigger asChild><Button size="sm" variant="outline"><DownloadSimpleIcon size={14} /> Export</Button></MenuTrigger>
-          <MenuContent>
-            <MenuItem icon={<FilePdfIcon />} onSelect={() => window.open(exportUrl(id, "pdf", true), "_blank", "noopener")}>Open PDF</MenuItem>
-            <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "pdf"); }}>Download PDF</MenuItem>
-            <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "docx"); }}>Download Word</MenuItem>
-            <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "xlsx"); }}>Download Excel</MenuItem>
-            <MenuSeparator />
-            <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Delete document</MenuItem>
-          </MenuContent>
-        </Menu>
-        {doc.status === "draft" ? <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => setStatus.mutate("review")}>Send for review</Button> : null}
-        {doc.status !== "approved" && canApprove ? (
-          <Button size="sm" disabled={errors > 0} title={errors ? "Fix the checks first" : undefined} loading={setStatus.isPending} onClick={() => setStatus.mutate("approved")}>
-            <SealCheckIcon size={15} /> Approve
-          </Button>
-        ) : null}
-        {doc.status === "approved" ? <Button size="sm" variant="outline" loading={setStatus.isPending} onClick={() => setStatus.mutate("draft")}>Reopen</Button> : null}
+        {dirty ? <span className="inline-flex items-center gap-1.5 text-[12px] text-warn"><span className="size-1.5 rounded-full bg-warn" />Unsaved changes</span> : null}
+        <div className="hidden items-center gap-2 md:flex">{actions}</div>
+        <span className="md:hidden">{exportMenu}</span>
       </div>
 
-      <div className="grid gap-1">
-        <input value={title} disabled={locked} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} aria-label="Title"
-          className="w-full bg-transparent text-[22px] font-semibold tracking-tight outline-none disabled:opacity-100" />
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-          <Pill tone={status.tone}>{status.label}</Pill>
-          {doc.number ? <Pill>{doc.number}</Pill> : null}
-          {doc.branch_name ? <span>{doc.branch_name}</span> : null}
-          {doc.template_name ? <span>· {doc.template_name}</span> : null}
-          <span>· {doc.agent_name ? `drafted by ${doc.agent_name}` : "by a person"}</span>
-          <span>· v{doc.version}, {timeAgo(doc.updated_at)}</span>
-          {doc.task_id ? <Link to="/tasks" search={{ task: doc.task_id }} className="text-accent underline-offset-2 hover:underline">· open the task</Link> : null}
+      <div className="flex items-start gap-3.5">
+        <span className="mt-1 hidden sm:block"><KindTile kind={doc.kind} size="lg" /></span>
+        <div className="grid min-w-0 flex-1 gap-1.5">
+          <textarea value={title} disabled={locked} rows={1} aria-label="Title"
+            onChange={(e) => { setTitle(e.target.value.replace(/\n/g, " ")); setDirty(true); }}
+            onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+            className="w-full resize-none bg-transparent text-[20px] leading-tight font-semibold tracking-tight outline-none [field-sizing:content] disabled:opacity-100 sm:text-[24px]" />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px] text-muted">
+            <Pill tone={status.tone}>{status.label}</Pill>
+            {doc.number ? <Pill className="font-mono">{doc.number}</Pill> : null}
+            <Meta items={[
+              doc.branch_name,
+              doc.template_name,
+              doc.agent_name ? <span className="inline-flex items-center gap-1"><RobotIcon size={13} weight="duotone" className="text-accent" />drafted by {doc.agent_name}</span> : "by a person",
+              `v${doc.version}, ${timeAgo(doc.updated_at)}`,
+              doc.task_id ? <Link to="/tasks" search={{ task: doc.task_id }} className="text-accent underline-offset-2 hover:underline">open the task</Link> : null,
+            ]} />
+          </div>
         </div>
       </div>
 
       {locked ? <p className="flex items-center gap-2 rounded-sm bg-ok/10 px-3 py-2 text-[13px] text-ok"><SealCheckIcon size={16} weight="fill" /> Approved — locked. Reopen it to make changes.</p> : null}
 
+      <Segmented<"edit" | "preview"> label="Pane" value={pane} onChange={setPane} className="w-full xl:hidden [&>button]:flex-1 [&>button]:justify-center"
+        options={[
+          { value: "edit", label: "Edit" },
+          { value: "preview", label: "Preview", ...(checkCount ? { count: checkCount } : {}) },
+        ]} />
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div className="grid min-w-0 content-start gap-3">
+        <div className={cn("grid min-w-0 content-start gap-3", pane !== "edit" && "max-xl:hidden")}>
           <Tabs.Root value={tab} onValueChange={setTab}>
-            <Tabs.List aria-label="Edit" className="mb-3 flex gap-1 border-b border-border">
+            <Tabs.List aria-label="Edit" className="mb-3 flex gap-1 overflow-x-auto border-b border-border">
               {tabs.map((t) => (
                 <Tabs.Trigger key={t.id} value={t.id}
-                  className="-mb-px border-b-2 border-transparent px-3 py-2 text-[13.5px] text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
+                  className="-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-[13.5px] text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
+                  <t.icon size={15} />
                   {t.label}
+                  {t.count ? <span className="rounded-full bg-surface-2 px-1.5 text-[11px] text-muted tabular">{t.count}</span> : null}
                 </Tabs.Trigger>
               ))}
             </Tabs.List>
@@ -466,11 +499,13 @@ export function DocumentEditor({ id }: { id: string }) {
           </Tabs.Root>
         </div>
 
-        <div className="grid min-w-0 content-start gap-3">
+        <div className={cn("grid min-w-0 content-start gap-3 xl:sticky xl:top-20", pane !== "preview" && "max-xl:hidden")}>
           <Checks checks={shown.checks} review={review} reviewing={aiReview.isPending} onReview={() => aiReview.mutate()} />
           <Paper doc={doc} preview={shown.preview} />
         </div>
       </div>
+
+      <ActionBar className="md:hidden">{saveButton}{statusActions}</ActionBar>
 
       <FilePicker open={picking} onOpenChange={setPicking} branchId={doc.branch_id} title="Fill from a file"
         onPick={(f) => setFillFiles((fs) => (fs.some((x) => x.id === f.id) ? fs : [...fs, { id: f.id, name: f.name }]))} />

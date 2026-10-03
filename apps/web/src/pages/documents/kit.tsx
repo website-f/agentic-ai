@@ -1,19 +1,33 @@
-import { IdentificationCardIcon, ImageSquareIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  BankIcon, CoinsIcon, IdentificationCardIcon, ImageSquareIcon, ListPlusIcon, PaletteIcon, PhoneIcon, PlusIcon, TrashIcon,
+  UsersIcon, type Icon,
+} from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ActionBar, Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { docKeys, fileUrl, kitQuery, kitsQuery, uploadFile, type CompanyKit, type CustomKitField } from "@/lib/documents";
 import { cn } from "@/lib/utils";
+import { DocSteps } from "./visuals";
 
 type KitData = Record<string, string>;
+
+const GROUP: Record<string, { icon: Icon; tone: Tone; hint: string }> = {
+  Identity: { icon: IdentificationCardIcon, tone: "accent", hint: "As registered" },
+  Contact: { icon: PhoneIcon, tone: "info", hint: "Shown on the letterhead" },
+  Bank: { icon: BankIcon, tone: "violet", hint: "Printed on invoices" },
+  People: { icon: UsersIcon, tone: "orange", hint: "Who signs" },
+  Money: { icon: CoinsIcon, tone: "warn", hint: "Currency, tax and terms" },
+  Brand: { icon: PaletteIcon, tone: "pink", hint: "Colour and footer" },
+};
 
 /** How the top of every document will look. Paper is white in both themes, like a page. */
 function Letterhead({ data, logo }: { data: KitData; logo: string | null }) {
@@ -74,12 +88,14 @@ function KitForm({ kit }: { kit: CompanyKit }) {
 
   const groups = [...new Set(kit.fields.map((f) => f.group))];
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <form className="grid gap-6" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <form className="grid min-w-0 gap-5" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
         {groups.map((g) => (
-          <fieldset key={g} disabled={ro} className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
-            <legend className="px-1 text-[13px] font-semibold">{g}</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
+          <Card key={g}>
+            <CardHeader title={g} description={GROUP[g]?.hint}
+              icon={<IconTile icon={GROUP[g]?.icon ?? IdentificationCardIcon} tone={GROUP[g]?.tone ?? "neutral"} size="sm" />} />
+            <CardBody>
+            <fieldset disabled={ro} className="grid gap-3 sm:grid-cols-2">
               {kit.fields.filter((f) => f.group === g).map((f) =>
                 f.type === "longtext" ? (
                   <TextareaField key={f.key} label={f.label} rows={3} value={data[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className="sm:col-span-2" />
@@ -98,15 +114,18 @@ function KitForm({ kit }: { kit: CompanyKit }) {
                     placeholder={f.key === "currency" ? "RM" : f.key === "tax_label" ? "SST" : f.key === "payment_terms" ? "e.g. 30 days from invoice" : undefined} />
                 ),
               )}
-            </div>
-          </fieldset>
+            </fieldset>
+            </CardBody>
+          </Card>
         ))}
 
-        <fieldset disabled={ro} className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
-          <legend className="px-1 text-[13px] font-semibold">More facts</legend>
-          <p className="-mt-1 text-[12.5px] text-muted">Anything else documents need — licence numbers, CIDB grade, MOF registration. Use them in templates as {"{{company.<key>}}"}.</p>
+        <Card>
+          <CardHeader title="More facts" icon={<IconTile icon={ListPlusIcon} tone="neutral" size="sm" />}
+            description={<>Licence numbers, CIDB grade, MOF registration… Use them in templates as {"{{company.<key>}}"}.</>} />
+          <CardBody>
+          <fieldset disabled={ro} className="grid gap-3">
           {custom.map((c, i) => (
-            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-end gap-2">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-end gap-2 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:[&>*:nth-child(2)]:col-start-1 max-sm:[&>*:nth-child(2)]:row-start-2">
               <Field label={i ? "" : "Name"} aria-label="Name" value={c.label} placeholder="e.g. CIDB grade"
                 onChange={(e) => { const label = e.target.value; setCustom((cs) => cs.map((x, j) => j === i ? { ...x, label, key: x.key || "" } : x)); setDirty(true); }} />
               <Field label={i ? "" : "Value"} aria-label="Value" value={c.value} placeholder="e.g. G7"
@@ -119,10 +138,18 @@ function KitForm({ kit }: { kit: CompanyKit }) {
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => setCustom((cs) => [...cs, { key: "", label: "", value: "" }])}>
             <PlusIcon size={14} /> Add a fact
           </Button>
-        </fieldset>
+          </fieldset>
+          </CardBody>
+        </Card>
+        {!ro ? (
+          <ActionBar className="lg:hidden">
+            <span className="text-[12.5px] text-muted max-md:hidden">{kit.filled} of {kit.total} filled</span>
+            <Button type="submit" loading={save.isPending} disabled={!dirty}>{dirty ? "Save kit" : "Saved"}</Button>
+          </ActionBar>
+        ) : null}
       </form>
 
-      <aside className="grid content-start gap-4 lg:sticky lg:top-4">
+      <aside className="grid content-start gap-4 max-lg:row-start-1 lg:sticky lg:top-20">
         <Letterhead data={data} logo={logo} />
         <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-4">
           <span className="text-[13px] font-semibold">Logo</span>
@@ -144,7 +171,7 @@ function KitForm({ kit }: { kit: CompanyKit }) {
             <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${Math.round((kit.filled / Math.max(1, kit.total)) * 100)}%` }} />
           </div>
           {ro ? <p className="text-[12.5px] text-muted">Only admins and this company's manager can change it.</p>
-            : <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>{dirty ? "Save kit" : "Saved"}</Button>}
+            : <Button className="max-lg:hidden" loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>{dirty ? "Save kit" : "Saved"}</Button>}
         </div>
       </aside>
     </div>
@@ -164,7 +191,8 @@ export function CompanyKitPage() {
   return (
     <Page>
       <PageHeader title="Company kit"
-        description="Step 1 of preparing documents: the facts every document about a company reuses — legal name, registration, address, bank, signatory, logo. Fill it once; templates and agents use it everywhere." />
+        description="The facts every document about a company reuses: legal name, registration, address, bank, signatory and logo. Fill it once; templates and agents use it everywhere." />
+      <DocSteps current="/company-kit" />
       {isLoading ? <Skeleton className="h-64" />
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !kits.length ? (
@@ -172,10 +200,10 @@ export function CompanyKitPage() {
         ) : (
           <>
             {kits.length > 1 && kits.length <= 12 ? (
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Companies">
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="tablist" aria-label="Companies">
                 {kits.map((k) => (
                   <button key={k.branch_id} role="tab" aria-selected={k.branch_id === current} onClick={() => navigate({ search: { b: k.branch_id } })}
-                    className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px]",
+                    className={cn("flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] whitespace-nowrap",
                       k.branch_id === current ? "border-accent bg-accent-soft font-medium text-accent" : "border-border hover:bg-surface-2")}>
                     {k.branch_name}
                     <span className={cn("text-[11.5px]", k.filled >= k.total - 3 ? "text-ok" : "text-muted")}>{k.filled}/{k.total}</span>

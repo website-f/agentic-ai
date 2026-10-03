@@ -27,6 +27,12 @@ DEFAULT_GROUPS: tuple[tuple[str, str, str], ...] = (
     ("reasoning", "Reasoning", "Thinking models for hard multi-step problems."),
     ("vision", "Vision", "Models that read images and scanned documents."),
     ("embed", "Embeddings", "Turns text into vectors for search and memory."),
+    (
+        "local",
+        "Local backup",
+        "A small model on this server: free and private. Does simple side jobs first, and is "
+        "the backup brain when cloud models are down.",
+    ),
 )
 
 
@@ -74,7 +80,45 @@ async def ensure_default_groups(db: AsyncSession, workspace_id: str) -> list[Mod
     if added:
         await db.commit()
         rows.sort(key=lambda g: g.position)
+    await _fill_local(db, workspace_id, rows)
     return rows
+
+
+LOCAL_PROVIDER = "Local backup"
+
+
+async def _fill_local(db: AsyncSession, workspace_id: str, rows: list[ModelGroup]) -> None:
+    """With a local model configured, register it once per workspace: it becomes the "local"
+    group (free side jobs, chat backup mode) and the last-resort member of "fast"."""
+    from ..core.config import settings
+
+    local = next((g for g in rows if g.name == "local"), None)
+    if not settings.local_llm_url or local is None or local.members:
+        return
+    p = await db.scalar(
+        select(AIProvider).where(
+            AIProvider.workspace_id == workspace_id, AIProvider.name == LOCAL_PROVIDER
+        )
+    )
+    if p is None:
+        p = AIProvider(
+            workspace_id=workspace_id,
+            name=LOCAL_PROVIDER,
+            base_url=settings.local_llm_url,
+            tier="local",
+            priority=990,
+            enabled=True,
+        )
+        db.add(p)
+        await db.flush()
+        set_provider_key(p, "local")  # Ollama ignores it; the gateway skips keyless providers
+    await upsert_models(db, p, [{"id": settings.local_llm_model, "context_window": 4096}])
+    member = {"provider_id": p.id, "model_id": settings.local_llm_model}
+    local.members = [member]
+    fast = next((g for g in rows if g.name == "fast"), None)
+    if fast is not None and member not in (fast.members or []):
+        fast.members = [*(fast.members or []), member]
+    await db.commit()
 
 
 def cost_usd(model: AIModel | None, usage: Usage, tier: str) -> Decimal | None:

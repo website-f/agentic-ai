@@ -1,12 +1,13 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Tabs } from "radix-ui";
 import { lazy, Suspense } from "react";
 
 import { Page, PageHeader } from "@/components/page";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { meQuery } from "@/lib/queries";
 
+import { groupsQuery, providersQuery } from "./data";
 import { GroupsTab } from "./groups";
 import { PlaygroundTab } from "./playground";
 import { ProvidersTab } from "./providers";
@@ -32,6 +33,9 @@ export function AIEnginePage() {
   const search = useSearch({ strict: false }) as { tab?: AITab };
   const tab: AITab = search.tab && AI_TABS.includes(search.tab) ? search.tab : "providers";
   const navigate = useNavigate();
+  const { data: providers } = useQuery(providersQuery);
+  const { data: groups } = useQuery(groupsQuery);
+  const counts: Partial<Record<AITab, number | undefined>> = { providers: providers?.length, groups: groups?.length };
 
   return (
     <Page className="max-w-7xl">
@@ -39,36 +43,24 @@ export function AIEnginePage() {
         title="AI Engine"
         description="Connect the AI providers your agents use, decide which models answer first, and see what every call costs."
       />
-      <Tabs.Root value={tab} onValueChange={(v) => navigate({ to: "/ai-engine", search: { tab: v as AITab }, replace: true })}>
-        <Tabs.List aria-label="AI Engine sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border">
-          {AI_TABS.map((t) => (
-            <Tabs.Trigger
-              key={t}
-              value={t}
-              className="-mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted transition-colors hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg"
-            >
-              {LABELS[t]}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-        <Tabs.Content value="providers" className="outline-none">
-          <ProvidersTab canManage={canManage} />
-        </Tabs.Content>
-        <Tabs.Content value="groups" className="outline-none">
-          <GroupsTab canManage={canManage} />
-        </Tabs.Content>
-        <Tabs.Content value="usage" className="outline-none">
+      <Segmented
+        label="AI Engine sections"
+        value={tab}
+        onChange={(v) => navigate({ to: "/ai-engine", search: { tab: v }, replace: true })}
+        options={AI_TABS.map((t) => ({ value: t, label: LABELS[t], count: counts[t] }))}
+        className="w-fit"
+      />
+      <div role="tabpanel" aria-label={LABELS[tab]} className="min-w-0 outline-none">
+        {tab === "providers" ? <ProvidersTab canManage={canManage} /> : null}
+        {tab === "groups" ? <GroupsTab canManage={canManage} /> : null}
+        {tab === "usage" ? (
           <Suspense fallback={<Skeleton className="h-72 rounded-[var(--radius-md)]" />}>
             <UsageTab />
           </Suspense>
-        </Tabs.Content>
-        <Tabs.Content value="playground" className="outline-none">
-          <PlaygroundTab canRun={me.permissions.includes("work.write")} />
-        </Tabs.Content>
-        <Tabs.Content value="settings" className="outline-none">
-          <SettingsTab canManage={canManage} />
-        </Tabs.Content>
-      </Tabs.Root>
+        ) : null}
+        {tab === "playground" ? <PlaygroundTab canRun={me.permissions.includes("work.write")} /> : null}
+        {tab === "settings" ? <SettingsTab canManage={canManage} /> : null}
+      </div>
     </Page>
   );
 }

@@ -421,7 +421,8 @@ TOOLS: dict[str, Tool] = {
             "calc",
             "Calculator",
             "Evaluate an arithmetic expression exactly. Use for any sums, "
-            "percentages, tax or totals instead of mental math.",
+            "percentages, tax or totals instead of mental math. Not needed for numbers "
+            "run_python already computed: trust its output, do not re-check each one.",
             {
                 "type": "object",
                 "properties": {
@@ -721,16 +722,22 @@ TEAM = {
 TEAM["ask_colleague"] = Tool(
     "ask_colleague",
     "Ask a colleague",
-    "Ask one colleague a question when you need knowledge they have: what to fill in a "
-    "form, a past case, a procedure from their department. The office memory is checked "
-    "first, so ask freely. Give the question in full and any context (e.g. the form's field "
-    "names). fresh=true skips the memory check.",
+    "Ask one colleague when you need knowledge they have (a form, a past case, a procedure: "
+    "kind=question) or when you are stuck on a problem outside your expertise, e.g. code that "
+    "fails or a tool error (kind=help: they check it with their own tools and send back the "
+    "cause and a fix, saved as a lesson for everyone). Name the colleague, or just the "
+    "expertise you need ('software engineer', 'finance'). The office memory is checked first, "
+    "so ask freely; fresh=true skips that check.",
     {
         "type": "object",
         "properties": {
-            "agent": {"type": "string", "description": "Colleague's name"},
+            "agent": {"type": "string", "description": "Colleague's name, or the expertise needed"},
             "question": {"type": "string"},
-            "context": {"type": "string", "description": "What they need to know to answer"},
+            "context": {
+                "type": "string",
+                "description": "What they need: for help, what you tried and the exact error",
+            },
+            "kind": {"type": "string", "enum": ["question", "help"]},
             "fresh": {"type": "boolean"},
         },
         "required": ["agent", "question"],

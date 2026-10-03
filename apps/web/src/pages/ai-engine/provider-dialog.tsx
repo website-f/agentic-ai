@@ -91,7 +91,7 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
         </>
       }
     >
-      <div className="grid gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
         {preset?.key_url ? (
           <a
             href={preset.key_url}
@@ -135,7 +135,7 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
           <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} error={fields.name} />
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">Billing</span>

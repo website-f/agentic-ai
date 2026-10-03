@@ -34,7 +34,7 @@ function Editor({ agent, mem, canWrite }: { agent: Agent; mem: CoreMemory; canWr
   });
 
   return (
-    <section className="grid content-start gap-4">
+    <section className="grid min-w-0 content-start gap-4">
       <div>
         <h2 className="text-[14px] font-semibold">Core memory</h2>
         <p className="text-[13px] text-muted">Always in {agent.name}'s prompt, so it stays short. {agent.name} edits it too, with the memory tool. One entry per line.</p>
@@ -73,25 +73,25 @@ export function MemoryTab({ agent, canWrite }: { agent: Agent; canWrite: boolean
   const { data: mem, isLoading, error } = useQuery(coreMemoryQuery(agent.id));
   const { data: facts = [] } = useQuery(agentFactsQuery(agent.id));
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       {isLoading ? <Skeleton className="h-72 rounded-[var(--radius-md)]" /> : error || !mem ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : (
         <Editor key={mem.memory.join("|") + mem.user.join("|")} agent={agent} mem={mem} canWrite={canWrite} />
       )}
-      <section className="grid content-start gap-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
+      <section className="grid min-w-0 content-start gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-56">
             <h2 className="text-[14px] font-semibold">Facts {agent.name} can recall <span className="font-normal text-muted">{facts.length}</span></h2>
             <p className="text-[13px] text-muted">Its own private facts plus what its company shares. Only relevant ones reach the prompt.</p>
           </div>
           <Button asChild size="sm" variant="outline"><Link to="/brain" search={{ tab: "facts" }}>All facts</Link></Button>
         </div>
         {facts.length ? (
-          <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
             {facts.slice(0, 40).map((f) => (
               <li key={f.id} className="grid gap-1 px-4 py-2.5">
-                <p className="text-[13px]">{f.text}</p>
+                <p className="text-[13px] break-words">{f.text}</p>
                 <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
                   <Pill tone={f.agent_id ? "info" : "neutral"}>{factScope(f)}</Pill>
                   <span>{timeAgo(f.valid_from)}</span>

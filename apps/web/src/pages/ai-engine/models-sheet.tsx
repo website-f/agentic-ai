@@ -41,7 +41,7 @@ function PriceInput({ model, field, label }: { model: AIModel; field: "price_in"
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
         placeholder="-"
         aria-label={`${label} for ${model.model_id}, dollars per million tokens`}
-        className="h-8 w-20 rounded-sm border border-border bg-surface px-2 font-mono text-[12.5px] tabular focus-visible:border-accent focus-visible:outline-none"
+        className="h-9 w-full rounded-sm border sm:w-20 border-border bg-surface px-2 font-mono text-[12.5px] tabular focus-visible:border-accent focus-visible:outline-none"
       />
     </label>
   );
@@ -73,9 +73,9 @@ export function ModelsSheet({ provider, open, onOpenChange }: { provider: Provid
       description="Set prices in US dollars per million tokens so costs are tracked. Leave blank if unknown."
       className="w-[min(94vw,52rem)]"
     >
-      <div className="grid gap-3">
-        <div className="flex gap-2">
-          <label className="relative flex-1">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+        <div className="flex flex-wrap gap-2">
+          <label className="relative min-w-0 flex-1 basis-48">
             <MagnifyingGlassIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
             <input
               value={q}
@@ -94,9 +94,9 @@ export function ModelsSheet({ provider, open, onOpenChange }: { provider: Provid
         ) : shown.length ? (
           <ul className="max-h-[52dvh] divide-y divide-border overflow-y-auto rounded-[var(--radius-md)] border border-border">
             {shown.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-end gap-x-4 gap-y-2 px-3.5 py-2.5">
+              <li key={m.id} className="flex flex-wrap items-end gap-x-4 gap-y-2 px-3.5 py-3">
                 <div className="min-w-0 flex-1 basis-56">
-                  <p className="truncate font-mono text-[13px]" title={m.model_id}>{m.model_id}</p>
+                  <p className="font-mono text-[13px] break-all" title={m.model_id}>{m.model_id}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {m.stale ? <Pill tone="warn">No longer offered</Pill> : null}
                     {m.context_window ? <Pill>{Math.round(m.context_window / 1000)}k context</Pill> : null}
@@ -109,7 +109,7 @@ export function ModelsSheet({ provider, open, onOpenChange }: { provider: Provid
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2 max-sm:w-full sm:flex">
                   <PriceInput model={m} field="price_in" label="Input" />
                   <PriceInput model={m} field="price_cached_in" label="Cached" />
                   <PriceInput model={m} field="price_out" label="Output" />

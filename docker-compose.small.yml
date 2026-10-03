@@ -1,0 +1,72 @@
+# Small server overlay (P14): the whole office on a 4 GB / 2 vCPU VPS. Stack it last:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml -f docker-compose.small.yml up -d --build
+#
+# Add 2 GB of swap first (docs/SMALL-SERVER.md): a busy minute can spike above 4 GB.
+#
+# What changes:
+#   - the browser is opt-in. Off: agents get no browser tools, so no prompt tokens for them.
+#     On: set AGENTIC_BROWSER_URL=http://browser:8600 in .env and add `--profile browser`
+#     (one Firefox, 2 agents at once, ~0.5-1 GB).
+#   - Temporal UI only with `--profile ops`
+#   - 4 agent steps at once instead of 16, smaller DB pools, smaller Postgres/Valkey caches
+#   - the local backup model (qwen3:0.6b, ~0.85 GB) stays: it answers when the cloud is down
+#   - every CPU limit fits 2 vCPUs (Docker refuses a limit above the host's core count)
+
+services:
+  postgres:
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=512MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c random_page_cost=1.1
+      -c wal_compression=on
+      -c max_connections=100
+    shm_size: 128mb
+    mem_limit: 640m
+
+  valkey:
+    command: valkey-server --appendonly yes --maxmemory 64mb --maxmemory-policy volatile-lru
+    mem_limit: 128m
+
+  temporal:
+    environment:
+      GOMEMLIMIT: 320MiB  # Go returns memory sooner instead of growing to the limit
+    mem_limit: 448m
+
+  temporal-ui:
+    profiles: [ops]
+
+  api:
+    environment:
+      AGENTIC_BROWSER_URL: ${AGENTIC_BROWSER_URL:-}
+      AGENTIC_DB_POOL_SIZE: "5"
+      AGENTIC_DB_MAX_OVERFLOW: "5"
+    mem_limit: 900m
+
+  worker:
+    environment:
+      AGENTIC_BROWSER_URL: ${AGENTIC_BROWSER_URL:-}
+      AGENTIC_WORKER_MAX_ACTIVITIES: "4"
+      AGENTIC_DB_POOL_SIZE: "8"  # two connections per running step
+      AGENTIC_DB_MAX_OVERFLOW: "4"
+    mem_limit: 1g
+
+  browser:
+    profiles: [browser]
+    environment:
+      BROWSER_MAX_SESSIONS: "2"
+      BROWSER_PER_PROCESS: "2"
+    shm_size: 512mb
+    mem_limit: 1g
+    cpus: 1.5
+
+  ollama:
+    mem_limit: 1152m
+    cpus: 1.5
+
+  sandbox:
+    mem_limit: 384m
+    cpus: 1

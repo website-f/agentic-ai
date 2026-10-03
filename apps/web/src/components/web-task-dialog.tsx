@@ -21,7 +21,7 @@ function Choice({ value, title, body, icon: Icon }: { value: string; title: stri
     <RadioGroup.Item value={value}
       className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 text-left data-[state=checked]:border-accent data-[state=checked]:bg-accent-soft/50">
       <Icon size={18} weight="duotone" className="mt-0.5 shrink-0 text-accent" />
-      <span>
+      <span className="min-w-0">
         <span className="block text-[13.5px] font-medium">{title}</span>
         <span className="block text-[12.5px] text-muted">{body}</span>
       </span>
@@ -86,7 +86,7 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
             placeholder={"One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455"}
             hint="It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them." />
         ) : null}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">Sign in with</span>
             <Select value={login} onValueChange={setLogin} label="Saved login"

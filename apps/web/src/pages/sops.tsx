@@ -1,4 +1,4 @@
-import { FileTextIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { BookBookmarkIcon, BuildingsIcon, FileTextIcon, GlobeHemisphereEastIcon, PlusIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
@@ -6,10 +6,13 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Field, FormError } from "@/components/ui/field";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +28,12 @@ const SCOPES: { value: Scope; label: string; hint: string }[] = [
   { value: "department", label: "One department", hint: "Every agent in that department." },
   { value: "library", label: "Library", hint: "Only agents you attach it to, like a skill pack." },
 ];
+const SCOPE_LOOK: Record<Scope, { icon: typeof FileTextIcon; tone: Tone }> = {
+  workspace: { icon: GlobeHemisphereEastIcon, tone: "accent" },
+  branch: { icon: BuildingsIcon, tone: "info" },
+  department: { icon: UsersThreeIcon, tone: "violet" },
+  library: { icon: BookBookmarkIcon, tone: "orange" },
+};
 
 const STARTER = `## Purpose
 What this procedure is for, in one sentence.
@@ -84,36 +93,38 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
           <>
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-[13px] font-medium">Who follows it</legend>
-              <RadioGroup.Root value={scope} onValueChange={(v) => { setScope(v as Scope); setScopeId(null); }} className="grid gap-2 sm:grid-cols-2">
+              <RadioGroup.Root value={scope} onValueChange={(v) => { setScope(v as Scope); setScopeId(null); }} className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
                 {SCOPES.map((s) => (
-                  <RadioGroup.Item key={s.value} value={s.value} className="rounded-sm border border-border px-3 py-2 text-left data-[state=checked]:border-accent data-[state=checked]:bg-accent-soft/50">
-                    <span className="block text-[13px] font-medium">{s.label}</span>
-                    <span className="block text-[12px] text-muted">{s.hint}</span>
+                  <RadioGroup.Item key={s.value} value={s.value} className="flex min-w-0 items-start gap-2.5 rounded-sm border border-border px-3 py-2.5 text-left transition-colors hover:bg-surface-2/60 data-[state=checked]:border-accent data-[state=checked]:bg-accent-soft/50">
+                    <IconTile icon={SCOPE_LOOK[s.value].icon} tone={SCOPE_LOOK[s.value].tone} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">{s.label}</span>
+                      <span className="block text-[12px] text-muted">{s.hint}</span>
+                    </span>
                   </RadioGroup.Item>
                 ))}
               </RadioGroup.Root>
             </fieldset>
             {scope === "branch" ? (
-              <Select value={scopeId ?? ""} onValueChange={setScopeId} label="Branch" options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <Select value={scopeId ?? ""} onValueChange={setScopeId} label="Branch" placeholder="Pick a company" options={branches.map((b) => ({ value: b.id, label: b.name }))} />
             ) : scope === "department" ? (
-              <Select value={scopeId ?? ""} onValueChange={setScopeId} label="Department" options={departments} />
+              <Select value={scopeId ?? ""} onValueChange={setScopeId} label="Department" placeholder="Pick a department" options={departments} />
             ) : null}
           </>
         ) : null}
         <div className="grid gap-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[13px] font-medium">Procedure</span>
-            <RadioGroup.Root value={view} onValueChange={(v) => setView(v as "write" | "preview")} className="inline-flex rounded-sm border border-border p-0.5" aria-label="Editor view">
-              {(["write", "preview"] as const).map((v) => (
-                <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-2.5 py-1 text-[12.5px] text-muted capitalize data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{v}</RadioGroup.Item>
-              ))}
-            </RadioGroup.Root>
+            {canManage ? (
+              <Segmented<"write" | "preview"> label="Editor view" size="sm" value={view} onChange={setView}
+                options={[{ value: "write", label: "Write" }, { value: "preview", label: "Preview" }]} />
+            ) : null}
           </div>
           {view === "write" && canManage ? (
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={18} aria-label="Procedure (Markdown)"
               className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
           ) : (
-            <div className="rounded-sm border border-border bg-surface px-4 py-3"><Markdown>{body || "_Empty_"}</Markdown></div>
+            <div className="min-w-0 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3"><Markdown>{body || "_Empty_"}</Markdown></div>
           )}
           <p className="text-[12px] text-muted">Markdown: ## headings, - lists, 1. steps, **bold**, tables.</p>
         </div>
@@ -144,16 +155,21 @@ export function SopsPage() {
   const search = useSearch({ strict: false }) as { sop?: string };
   const navigate = useNavigate();
   const [creating, setCreating] = useState(0);
+  const [filter, setFilter] = useState<Scope | "all">("all");
+  const [q, setQ] = useState("");
   const openSop = sops?.find((s) => s.id === search.sop) ?? null;
 
   const groups = useMemo(() => {
     const order: Scope[] = ["workspace", "branch", "department", "library"];
-    return order.map((scope) => ({
+    const needle = q.trim().toLowerCase();
+    return order.filter((scope) => filter === "all" || filter === scope).map((scope) => ({
       scope,
       label: SCOPES.find((s) => s.value === scope)!.label,
-      items: (sops ?? []).filter((s) => s.scope === scope),
+      hint: SCOPES.find((s) => s.value === scope)!.hint,
+      items: (sops ?? []).filter((s) => s.scope === scope && (!needle || s.title.toLowerCase().includes(needle) || s.scope_label.toLowerCase().includes(needle))),
     })).filter((g) => g.items.length);
-  }, [sops]);
+  }, [sops, filter, q]);
+  const count = (scope: Scope) => (sops ?? []).filter((s) => s.scope === scope).length;
 
   return (
     <Page>
@@ -162,32 +178,48 @@ export function SopsPage() {
         description="Written procedures your agents follow. Company and department SOPs apply automatically; library SOPs are attached to specific agents."
         actions={canManage ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New SOP</Button> : null}
       />
-      {isLoading ? <Skeleton className="h-40 rounded-[var(--radius-md)]" /> : error ? (
+      {isLoading ? (
+        <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-none" />)}
+        </div>
+      ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !groups.length ? (
+      ) : !sops?.length ? (
         <EmptyState icon={FileTextIcon} title="No SOPs yet" body="Write down how your company does things once (month-end close, quotation checks, report formats) and every agent in scope follows it."
           action={canManage ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Write the first SOP</Button> : undefined} />
       ) : (
-        <div className="grid gap-6">
-          {groups.map((g) => (
-            <section key={g.scope} className="grid gap-2">
-              <h2 className="text-[14px] font-semibold">{g.label}</h2>
-              <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
-                {g.items.map((s) => (
-                  <li key={s.id}>
-                    <button onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/60">
-                      <FileTextIcon size={18} className="shrink-0 text-accent" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13.5px] font-medium">{s.title}</span>
-                        <span className="block truncate text-[12px] text-muted">{s.scope_label} · v{s.version} · updated {timeAgo(s.updated_at).toLowerCase()}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+        <>
+          <Toolbar>
+            <Segmented<Scope | "all"> label="Who follows it" value={filter} onChange={setFilter}
+              options={[{ value: "all", label: "All", count: sops.length }, ...SCOPES.map((sc) => ({ value: sc.value, label: sc.label, count: count(sc.value) }))]} />
+            <SearchInput value={q} onChange={setQ} placeholder="Search SOPs" className="sm:ml-auto sm:max-w-72" />
+          </Toolbar>
+          {!groups.length ? (
+            <EmptyState icon={FileTextIcon} title="No SOP matches" body="Try another word, or show every scope." />
+          ) : (
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+              {groups.map((g) => {
+                const look = SCOPE_LOOK[g.scope];
+                return (
+                  <section key={g.scope} className="grid min-w-0 gap-2.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                      <h2 className="text-[15px] font-semibold">{g.label} <span className="font-normal text-muted tabular">{g.items.length}</span></h2>
+                      <p className="text-[12.5px] text-muted">{g.hint}</p>
+                    </div>
+                    <ListCard>
+                      {g.items.map((s) => (
+                        <ListRow key={s.id} onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} active={s.id === search.sop}
+                          leading={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
+                          title={<span className="block whitespace-normal break-words">{s.title}</span>}
+                          meta={<Meta items={[s.scope_label, <span key="v" className="tabular">v{s.version}</span>, `updated ${timeAgo(s.updated_at).toLowerCase()}`]} />} />
+                      ))}
+                    </ListCard>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
       {openSop ? <Editor key={openSop.id + openSop.version} sop={openSop} open canManage={canManage} onOpenChange={(o) => !o && navigate({ to: "/sops", search: {} })} /> : null}
       {creating ? <Editor key={`new-${creating}`} sop={null} open canManage={canManage} onOpenChange={(o) => !o && setCreating(0)} /> : null}

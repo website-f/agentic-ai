@@ -67,9 +67,14 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=10, ge=0, le=100)
     worker_max_activities: int = Field(default=16, ge=1, le=200)
 
-    # The browser service (Camoufox), reached by the worker only.
+    # The browser service (Camoufox), reached by the worker only. Empty = no browser tools.
     browser_url: str = "http://browser:8600"
     browser_token: str = "dev-browser-token"  # noqa: S105 - dev default, required outside dev
+
+    # The local backup brain (P14): a small model served by Ollama on this server, e.g.
+    # http://ollama:11434/v1. Empty = none. Registered in every workspace as "Local backup".
+    local_llm_url: str = ""
+    local_llm_model: str = "qwen3:0.6b"
 
     # The code sandbox (P13): a sealed container with no internet and no secrets.
     sandbox_url: str = ""  # empty = the run_python tool is off

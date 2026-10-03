@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { tokensShort } from "@/lib/teams";
-import { timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { workKeys, type Approval } from "@/lib/work";
 
 import { AgentAvatar } from "./agent-avatar";
@@ -68,6 +68,14 @@ export function BudgetUsage({ args }: { args: Record<string, unknown> }) {
   );
 }
 
+const DECIDED_TONE: Partial<Record<Approval["status"], "ok" | "danger" | "info" | "neutral">> = {
+  approved: "ok",
+  denied: "danger",
+  answered: "info",
+  expired: "neutral",
+  cancelled: "neutral",
+};
+
 export function ApprovalCard({ approval: a, canDecide, showTask = true }: { approval: Approval; canDecide: boolean; showTask?: boolean }) {
   const qc = useQueryClient();
   const [answer, setAnswer] = useState("");
@@ -92,29 +100,29 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
   const expiresIn = timeAgo(a.expires_at);
 
   return (
-    <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+    <article className={cn("flex h-full min-w-0 flex-col gap-3 rounded-[var(--radius-md)] border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]", pending && a.risk === "high" && !question && !budget ? "border-danger/35" : pending ? "border-warn/35" : "border-border")}>
       <header className="flex items-start gap-3">
         <AgentAvatar name={a.agent_name} color={a.agent_color} size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="text-[14px]">
+          <p className="text-[14px] leading-snug break-words">
             <span className="font-semibold">{a.agent_name}</span>{" "}
             <span className="text-muted">{question ? "has a question" : budget ? "is over budget and paused" : `wants to use ${a.tool_label}`}</span>
           </p>
           {showTask ? (
-            <Link to="/tasks" search={{ task: a.task_id }} className="block truncate text-[12.5px] text-accent hover:underline">{a.task_title}</Link>
+            <Link to="/tasks" search={{ task: a.task_id }} className="mt-0.5 block truncate text-[12.5px] text-accent hover:underline" title={a.task_title}>{a.task_title}</Link>
           ) : null}
         </div>
         {question ? (
-          <Pill tone="info"><QuestionIcon size={12} weight="bold" /> Question</Pill>
+          <Pill tone="info" className="shrink-0"><QuestionIcon size={12} weight="bold" /> Question</Pill>
         ) : budget ? (
-          <Pill tone="warn"><CoinsIcon size={12} weight="bold" /> Budget</Pill>
+          <Pill tone="warn" className="shrink-0"><CoinsIcon size={12} weight="bold" /> Budget</Pill>
         ) : a.risk !== "low" ? (
-          <Pill tone={a.risk === "high" ? "danger" : "warn"}><ShieldWarningIcon size={12} weight="bold" /> {a.risk === "high" ? "High" : "Medium"} risk</Pill>
+          <Pill tone={a.risk === "high" ? "danger" : "warn"} className="shrink-0"><ShieldWarningIcon size={12} weight="bold" /> {a.risk === "high" ? "High" : "Medium"} risk</Pill>
         ) : null}
       </header>
 
       {question ? (
-        <p className="rounded-sm bg-surface-2 px-3 py-2 text-[14px]">{a.reason}</p>
+        <p className="rounded-r-sm rounded-l-[3px] border-l-2 border-info/60 bg-surface-2 px-3 py-2.5 text-[14px] leading-relaxed break-words">{a.reason}</p>
       ) : budget ? (
         <div className="grid gap-2">
           <BudgetUsage args={a.args} />
@@ -123,7 +131,7 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
       ) : (
         <div className="grid gap-2">
           <ArgsPreview a={a} />
-          {a.reason ? <p className="text-[13px] text-muted"><span className="text-fg">Why:</span> {a.reason}</p> : null}
+          {a.reason ? <p className="text-[13px] break-words text-muted"><span className="font-medium text-fg">Why:</span> {a.reason}</p> : null}
         </div>
       )}
 
@@ -150,7 +158,7 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
         ) : denying ? (
           <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); decide.mutate({ decision: "deny", answer }); }}>
             <label htmlFor={`deny-${a.id}`} className="text-[12.5px] text-muted">Reason (optional, the agent reads it)</label>
-            <input id={`deny-${a.id}`} autoFocus value={answer} onChange={(e) => setAnswer(e.target.value)} className="h-9 rounded-sm border border-border bg-surface px-3 text-[13.5px] focus-visible:border-accent focus-visible:outline-none" />
+            <input id={`deny-${a.id}`} autoFocus value={answer} onChange={(e) => setAnswer(e.target.value)} className="h-10 rounded-sm border border-border bg-surface px-3 text-[13.5px] focus-visible:border-accent focus-visible:outline-none" />
             <div className="flex gap-2">
               <Button type="submit" size="sm" variant="danger" loading={decide.isPending}><XIcon size={14} weight="bold" /> Deny</Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setDenying(false)}>Back</Button>
@@ -170,17 +178,19 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
         )
       ) : null}
 
-      <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+      <footer className="mt-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/70 pt-3 text-[12px] text-muted">
         {pending ? (
           <span className="inline-flex items-center gap-1"><ClockIcon size={13} /> Asked {timeAgo(a.created_at).toLowerCase()}, expires {expiresIn.toLowerCase()}</span>
         ) : (
-          <span>
-            <span className="font-medium text-fg capitalize">{a.status}</span>
-            {a.scope === "always" ? " (always)" : ""}{a.decided_by_name ? ` by ${a.decided_by_name}` : ""}{a.decided_at ? ` ${timeAgo(a.decided_at).toLowerCase()}` : ""}
-            {a.answer ? `: "${a.answer}"` : ""}
-          </span>
+          <>
+            <Pill tone={DECIDED_TONE[a.status] ?? "neutral"} className="capitalize">{a.status}{a.scope === "always" ? " (always)" : ""}</Pill>
+            <span className="min-w-0 break-words">
+              {a.decided_by_name ? `by ${a.decided_by_name}` : ""}{a.decided_at ? ` ${timeAgo(a.decided_at).toLowerCase()}` : ""}
+              {a.answer ? <span className="mt-1 block text-fg">"{a.answer}"</span> : null}
+            </span>
+          </>
         )}
-        {!pending || !canDecide ? null : <span className="font-mono">{a.rule}</span>}
+        {!pending || !canDecide ? null : <span className="min-w-0 truncate font-mono" title={a.rule}>{a.rule}</span>}
       </footer>
     </article>
   );

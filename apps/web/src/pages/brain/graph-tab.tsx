@@ -157,24 +157,27 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
     return [...counts.entries()];
   }, [data]);
 
-  if (isLoading) return <Skeleton className="h-[60dvh] rounded-[var(--radius-md)]" />;
+  if (isLoading) return <Skeleton className="h-[min(64dvh,40rem)] min-h-80 rounded-[var(--radius-md)]" />;
   if (error || !data) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   if (!data.edges.length) {
     return <EmptyState icon={GraphIcon} title="No links yet" body="The graph shows how pages link to each other with [[page-name]]. It fills in as agents and people write linked pages." />;
   }
 
   return (
-    <div className="grid gap-3">
-      <ul aria-label="Legend" className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-muted">
-        {legend.map(([kind, n]) => (
-          <li key={kind} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-2.5 rounded-full" style={{ background: KIND_INFO[kind].color }} />
-            {KIND_INFO[kind].label} <span className="tabular">{n}</span>
-          </li>
-        ))}
-        <li className="ml-auto">{data.nodes.length} pages · {data.edges.length} links</li>
-      </ul>
-      <div ref={wrap} className="relative h-[min(68dvh,40rem)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+    <div className="grid min-w-0 gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <ul aria-label="Legend" className="flex flex-wrap gap-1.5">
+          {legend.map(([kind, n]) => (
+            <li key={kind} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-0.5 text-[12px] text-muted">
+              <span aria-hidden className="size-2.5 rounded-full" style={{ background: KIND_INFO[kind].color }} />
+              {KIND_INFO[kind].label} <span className="font-medium text-fg tabular">{n}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[12.5px] text-muted tabular">{data.nodes.length} pages · {data.edges.length} links · pick a dot to open it</p>
+      </div>
+      <div ref={wrap} className="relative h-[min(64dvh,40rem)] min-h-80 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]"
+        style={{ backgroundImage: "radial-gradient(var(--color-border) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
         <canvas
           ref={canvas}
           style={{ width: size.w, height: size.h }}
@@ -190,16 +193,16 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
         />
         {hover ? (
           <div className="pointer-events-none absolute z-10 max-w-64 rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[12.5px] shadow-[var(--shadow-pop)]"
-            style={{ left: Math.min(hover.x + 12, size.w - 200), top: Math.max(hover.y - 44, 4) }}>
-            <p className="font-medium">{hover.node.title}</p>
+            style={{ left: Math.max(4, Math.min(hover.x + 12, size.w - 200)), top: Math.max(hover.y - 44, 4) }}>
+            <p className="font-medium break-words">{hover.node.title}</p>
             <p className="truncate font-mono text-[11px] text-muted">{hover.node.path}</p>
             <p className="text-muted">{hover.node.degree} {hover.node.degree === 1 ? "link" : "links"} · click to open</p>
           </div>
         ) : null}
       </div>
       {data.unresolved.length ? (
-        <p className="text-[12.5px] text-muted">
-          Linked but not written yet: {data.unresolved.slice(0, 12).join(", ")}{data.unresolved.length > 12 ? ` and ${data.unresolved.length - 12} more` : ""}.
+        <p className="rounded-[var(--radius-md)] border border-dashed border-border px-3.5 py-2.5 text-[12.5px] break-words text-muted">
+          <span className="font-medium text-fg">Linked but not written yet:</span> {data.unresolved.slice(0, 12).join(", ")}{data.unresolved.length > 12 ? ` and ${data.unresolved.length - 12} more` : ""}.
         </p>
       ) : null}
     </div>

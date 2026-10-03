@@ -1,11 +1,13 @@
-import { CoinsIcon, HandWavingIcon, PlusIcon } from "@phosphor-icons/react";
+import { BellRingingIcon, CoinsIcon, HandWavingIcon, PlusIcon, WalletIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Section } from "@/components/page";
+import { IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Pill } from "@/components/ui/pill";
 import { api, errorMessage } from "@/lib/api";
 import { budgetsQuery, pingsQuery, teamKeys, tokensShort, type BudgetRow } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
@@ -21,21 +23,30 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
   });
   if (!pings.length) return null;
   return (
-    <Section title="Agents asking" description="Heartbeat check-ins and budget warnings.">
-      <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+    <Card className="overflow-hidden">
+      <CardHeader
+        icon={<IconTile icon={BellRingingIcon} tone="warn" size="sm" />}
+        title="Agents asking"
+        description="Heartbeat check-ins and budget warnings."
+        actions={<Pill tone="warn">{pings.length}</Pill>}
+      />
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
         {pings.map((p) => (
-          <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <li key={p.id} className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
             <AgentAvatar name={p.agent_name} color={p.agent_color} size="sm" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13.5px]">
-                <span className="font-medium">{p.agent_name}</span>{" "}
-                <span className="text-muted">{p.kind === "idle" ? <HandWavingIcon size={14} className="inline" /> : <CoinsIcon size={14} className="inline" />}</span>{" "}
-                {p.message}
+            <div className="min-w-0 flex-1 basis-52">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
+                <span className="font-medium">{p.agent_name}</span>
+                <Pill tone={p.kind === "idle" ? "info" : "warn"}>
+                  {p.kind === "idle" ? <HandWavingIcon size={12} weight="bold" /> : <CoinsIcon size={12} weight="bold" />}
+                  {p.kind === "idle" ? "Wants work" : "Budget"}
+                </Pill>
               </p>
+              <p className="mt-0.5 text-[13px] break-words">{p.message}</p>
               <p className="text-[12px] text-muted">{timeAgo(p.created_at)}</p>
             </div>
             {canWrite ? (
-              <div className="flex gap-2">
+              <div className="ml-11 flex flex-wrap gap-2 sm:ml-0">
                 {p.kind === "idle" ? (
                   <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: p.agent_id }}><PlusIcon size={14} weight="bold" /> Give a task</Link></Button>
                 ) : (
@@ -47,7 +58,7 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
           </li>
         ))}
       </ul>
-    </Section>
+    </Card>
   );
 }
 
@@ -57,14 +68,14 @@ function Row({ b }: { b: BudgetRow }) {
   const pct = Math.round(ratio * 100);
   return (
     <li>
-      <Link to="/agents/$agentId" params={{ agentId: b.agent_id }} search={{ tab: "team" }} className="grid gap-1.5 px-4 py-2.5 hover:bg-surface-2/60">
-        <span className="flex items-center gap-2 text-[13px]">
+      <Link to="/agents/$agentId" params={{ agentId: b.agent_id }} search={{ tab: "team" }} className="grid gap-1.5 px-4 py-3 hover:bg-surface-2/60 sm:px-5">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
           <AgentAvatar name={b.name} color={b.color} size="xs" />
           <span className="min-w-0 flex-1 truncate font-medium">{b.name}</span>
-          <span className={cn("tabular", ratio >= 1 ? "text-danger" : ratio >= 0.8 ? "text-warn" : "text-muted")}>
+          <span className="text-muted tabular">
             {daily ? `${tokensShort(b.tokens_today)} / ${tokensShort(b.token_limit)} today` : `$${b.usd_month.toFixed(2)} / $${(b.usd_limit ?? 0).toFixed(2)} this month`}
-            {ratio >= 1 ? " · paused" : ""}
           </span>
+          {ratio >= 1 ? <Pill tone="danger">Paused</Pill> : ratio >= 0.8 ? <Pill tone="warn">{pct}%</Pill> : null}
         </span>
         <span className="h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
           <span className={cn("block h-full rounded-full", ratio >= 1 ? "bg-danger" : ratio >= 0.8 ? "bg-warn" : "bg-accent")} style={{ width: `${Math.min(100, pct)}%` }} />
@@ -81,19 +92,40 @@ export function BudgetsCard() {
   const free = data.filter((b) => b.token_limit === null && b.usd_limit === null && b.tokens_today > 0).sort((x, y) => y.tokens_today - x.tokens_today);
   if (!data.length) return null;
   return (
-    <Section title="Spend vs budget" description="Alert at 80 %, pause and ask at 100 %.">
+    <Card className="overflow-hidden">
+      <CardHeader
+        icon={<IconTile icon={WalletIcon} tone="orange" size="sm" />}
+        title="Spend vs budget"
+        description="Alert at 80 %, pause and ask at 100 %."
+      />
       {limited.length ? (
-        <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">{limited.map((b) => <Row key={b.agent_id} b={b} />)}</ul>
+        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">{limited.map((b) => <Row key={b.agent_id} b={b} />)}</ul>
       ) : (
-        <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-4 text-[13px] text-muted">
+        <p className="mx-4 mt-4 rounded-sm border border-dashed border-border px-4 py-3 text-[13px] text-muted sm:mx-5">
           No agent has a budget yet. Set one on an agent's Team & budget tab.
         </p>
       )}
       {free.length ? (
-        <p className="text-[12.5px] text-muted">
-          No limit: {free.slice(0, 4).map((b) => `${b.name} ${tokensShort(b.tokens_today)}`).join(", ")} tokens today.
-        </p>
-      ) : null}
-    </Section>
+        <div className="grid gap-2 px-4 py-3.5 sm:px-5">
+          <p className="text-[12px] font-medium text-muted">No limit, tokens used today</p>
+          <ul className="flex flex-wrap gap-2">
+            {free.slice(0, 4).map((b) => (
+              <li key={b.agent_id}>
+                <Link
+                  to="/agents/$agentId"
+                  params={{ agentId: b.agent_id }}
+                  search={{ tab: "team" }}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-surface pr-3 pl-1.5 text-[12.5px] hover:border-accent/40 hover:bg-surface-2/60"
+                >
+                  <AgentAvatar name={b.name} color={b.color} size="xs" />
+                  <span className="font-medium">{b.name}</span>
+                  <span className="text-muted tabular">{tokensShort(b.tokens_today)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : limited.length ? null : <div className="h-4" />}
+    </Card>
   );
 }

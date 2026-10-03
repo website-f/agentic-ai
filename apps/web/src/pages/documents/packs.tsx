@@ -1,6 +1,6 @@
 import {
   ArrowLeftIcon, CheckCircleIcon, CircleDashedIcon, DotsThreeIcon, DownloadSimpleIcon, FileTextIcon, FolderOpenIcon,
-  MagicWandIcon, MinusCircleIcon, PackageIcon, PlusIcon, RobotIcon, StackIcon, TrashIcon, WarningIcon, XIcon,
+  ListChecksIcon, MagicWandIcon, MinusCircleIcon, PackageIcon, PlusIcon, RobotIcon, SealCheckIcon, StackIcon, TrashIcon, WarningIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
@@ -8,8 +8,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Card, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
@@ -17,6 +18,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/compo
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import {
   docKeys, documentsQuery, fileUrl, itemsIn, packQuery, packsQuery, STATUS_LABEL, templatesQuery,
@@ -25,6 +27,7 @@ import {
 import { branchesQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
+import { DocSteps } from "./visuals";
 
 function Progress({ p }: { p: Pack["progress"] }) {
   const pct = p.required ? Math.round(((p.required - p.missing) / p.required) * 100) : 100;
@@ -38,6 +41,23 @@ function Progress({ p }: { p: Pack["progress"] }) {
         <div className={cn("h-full rounded-full transition-[width]", p.missing ? "bg-accent" : "bg-ok")} style={{ width: `${pct}%` }} />
       </div>
     </div>
+  );
+}
+
+function Ring({ p, size = 44 }: { p: Pack["progress"]; size?: number }) {
+  const pct = p.required ? Math.round(((p.required - p.missing) / p.required) * 100) : 100;
+  const r = (size - 6) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }} aria-label={`${pct}% ready`}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={4} className="stroke-surface-2" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={4} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)}
+          className={cn("transition-[stroke-dashoffset] duration-500", p.missing ? "stroke-accent" : "stroke-ok")} />
+      </svg>
+      <span className="absolute text-[11px] font-semibold tabular">{pct}%</span>
+    </span>
   );
 }
 
@@ -200,29 +220,31 @@ function ItemRow({ it, onChange, onPickFile, onPickDoc, draftWith, onDraft, draf
 }) {
   const attached = it.file_name ?? it.document_title;
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 px-4 py-3 max-sm:grid-cols-[auto_minmax(0,1fr)]">
       <span className="mt-0.5">
         {it.status === "ready" ? (it.expired ? <WarningIcon size={19} weight="fill" className="text-danger" /> : it.auto ? <CheckCircleIcon size={19} className="text-ok" /> : <CheckCircleIcon size={19} weight="fill" className="text-ok" />)
           : it.status === "waived" ? <MinusCircleIcon size={19} className="text-muted" />
           : <CircleDashedIcon size={19} className={it.required ? "text-warn" : "text-muted"} />}
       </span>
       <div className="grid min-w-0 gap-0.5">
-        <p className={cn("text-[13.5px] font-medium", it.status === "waived" && "text-muted line-through")}>
+        <p className={cn("text-[13.5px] font-medium break-words", it.status === "waived" && "text-muted line-through")}>
           {it.label}{!it.required ? <span className="ml-1.5 text-[12px] font-normal text-muted">optional</span> : null}
         </p>
         {it.hint ? <p className="text-[12.5px] text-muted">{it.hint}</p> : null}
         {attached ? (
-          <p className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-            {it.file_id ? <FolderOpenIcon size={13} className="text-muted" /> : <FileTextIcon size={13} className="text-muted" />}
-            {it.file_id ? <a href={fileUrl(it.file_id, true)} target="_blank" rel="noreferrer" className="truncate text-accent hover:underline">{attached}</a>
-              : <Link to="/documents" search={{ d: it.document_id ?? undefined }} className="truncate text-accent hover:underline">{attached}</Link>}
+          <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12.5px]">
+            <span className="flex min-w-0 max-w-full items-center gap-1.5">
+              {it.file_id ? <FolderOpenIcon size={13} className="shrink-0 text-muted" /> : <FileTextIcon size={13} className="shrink-0 text-muted" />}
+              {it.file_id ? <a href={fileUrl(it.file_id, true)} target="_blank" rel="noreferrer" className="min-w-0 truncate text-accent hover:underline">{attached}</a>
+                : <Link to="/documents" search={{ d: it.document_id ?? undefined }} className="min-w-0 truncate text-accent hover:underline">{attached}</Link>}
+            </span>
             {it.auto ? <Pill tone="info">matched — confirm</Pill> : null}
             {it.expired ? <Pill tone="danger">expired</Pill> : null}
           </p>
         ) : null}
         {it.note && (it.auto || it.expired) ? <p className={cn("text-[12px]", it.expired ? "text-danger" : "text-muted")}>{it.note}</p> : null}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1 max-sm:col-start-2">
         {it.auto && it.status === "ready" ? <Button size="sm" variant="ghost" onClick={() => onChange({ auto: false, note: "" })}>Confirm</Button> : null}
         {it.status === "missing" && draftWith ? (
           <Button size="sm" variant="outline" loading={drafting} onClick={onDraft} title={`Start from the ${draftWith.name} template`}>
@@ -313,12 +335,17 @@ function PackDetail({ id }: { id: string }) {
     <div className="grid gap-5">
       <Link to="/packs" className="inline-flex w-fit items-center gap-1 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All packs</Link>
       <div className="flex flex-wrap items-start gap-4">
-        <div className="min-w-0 flex-1 basis-80">
-          <h1 className="text-[22px] font-semibold tracking-tight">{pack.title}</h1>
-          <p className="text-[13px] text-muted">{[pack.branch_name, `updated ${timeAgo(pack.updated_at)}`].filter(Boolean).join(" · ")}</p>
-          {pack.description ? <p className="mt-2 max-w-2xl text-[13.5px]">{pack.description}</p> : null}
+        <div className="flex min-w-0 flex-1 basis-80 items-start gap-3.5">
+          <IconTile icon={PackageIcon} size="lg" className="hidden sm:grid" />
+          <div className="min-w-0">
+            <h1 className="text-[22px] leading-tight font-semibold tracking-tight break-words sm:text-[24px]">{pack.title}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted">
+              <Meta items={[pack.branch_name, `${pack.progress.total} items`, `updated ${timeAgo(pack.updated_at)}`]} />
+            </p>
+            {pack.description ? <p className="mt-2 max-w-2xl text-[13.5px]">{pack.description}</p> : null}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 max-sm:w-full max-sm:[&>button:not([aria-label])]:flex-1">
           <Button variant="outline" disabled={!missingAny} loading={match.isPending} onClick={() => match.mutate()}><MagicWandIcon size={15} /> Auto-fill from files</Button>
           <Button variant="outline" onClick={() => setAsking(true)}><RobotIcon size={15} /> Ask an agent</Button>
           <Button loading={compile.isPending} onClick={() => compile.mutate()}><StackIcon size={15} /> Compile PDF</Button>
@@ -328,7 +355,7 @@ function PackDetail({ id }: { id: string }) {
           </Menu>
         </div>
       </div>
-      <div className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4">
+      <div className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]">
         <Progress p={pack.progress} />
         {pack.compiled_file_id ? (
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -347,7 +374,7 @@ function PackDetail({ id }: { id: string }) {
             onDraft={() => { const t = templateFor(it.label, templates); if (t) draft.mutate({ item: it, template: t }); }} />
         ))}
         <li className="px-4 py-3">
-          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (adding.trim()) { update.mutate([...itemsIn(pack.items), { label: adding.trim(), required: true }]); setAdding(""); } }}>
+          <form className="flex min-w-0 gap-2" onSubmit={(e) => { e.preventDefault(); if (adding.trim()) { update.mutate([...itemsIn(pack.items), { label: adding.trim(), required: true }]); setAdding(""); } }}>
             <Input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="Add an item to the checklist" aria-label="New item" className="h-9" />
             <Button size="sm" type="submit" variant="outline" className="h-9" disabled={!adding.trim()}><PlusIcon size={14} /> Add</Button>
           </form>
@@ -375,29 +402,45 @@ export function PacksPage() {
   return (
     <Page>
       <PageHeader title="Packs"
-        description="Step 4: everything a submission needs, in one PDF. List the items, let the office match the company's files and documents (or ask an agent to prepare the rest), then compile — with a cover and contents — for you to check and submit."
+        description="Everything a submission needs, in one PDF. List the items, let the office match the company's files and documents (or ask an agent to prepare the rest), then compile it with a cover and contents for you to check and submit."
         actions={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New pack</Button>} />
-      {isLoading ? <div className="grid gap-3 sm:grid-cols-2">{[0, 1].map((i) => <Skeleton key={i} className="h-32" />)}</div>
+      <DocSteps current="/packs" />
+      {packs.length ? (
+        <StatGrid className="lg:grid-cols-3">
+          <Stat label="Packs" value={packs.length} icon={PackageIcon} hint="Checklists in progress" />
+          <Stat label="Missing items" value={packs.reduce((n, p) => n + p.progress.missing, 0)} icon={ListChecksIcon}
+            tone={packs.some((p) => p.progress.missing) ? "warn" : "neutral"} hint="Required, not attached yet" />
+          <Stat label="Compiled" value={packs.filter((p) => p.status === "compiled").length} icon={SealCheckIcon} tone="ok" hint="PDF ready to check" className="max-lg:col-span-2" />
+        </StatGrid>
+      ) : null}
+      {isLoading ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{[0, 1].map((i) => <Skeleton key={i} className="h-36" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !packs.length ? (
           <EmptyState icon={PackageIcon} title="No packs yet"
-            body="A pack is a checklist — registration certificate, bank statements, profile, quotation, cover letter — matched to real files and compiled into one PDF."
+            body="A pack is a checklist (registration certificate, bank statements, profile, quotation, cover letter) matched to real files and compiled into one PDF."
             action={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New pack</Button>} />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {packs.map((p) => (
-              <button key={p.id} type="button" onClick={() => navigate({ search: { p: p.id } })}
-                className="grid content-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 text-left hover:border-accent/50">
-                <div className="flex items-start gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent-soft text-accent"><PackageIcon size={18} weight="duotone" /></span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[14px] font-semibold">{p.title}</span>
-                    <span className="block truncate text-[12.5px] text-muted">{[p.branch_name, `${p.progress.total} items`, timeAgo(p.updated_at)].filter(Boolean).join(" · ")}</span>
-                  </span>
-                </div>
-                <Progress p={p.progress} />
-                {p.status === "compiled" ? <Pill tone="ok" className="w-fit">Compiled</Pill> : null}
-              </button>
+              <Card key={p.id} interactive className="p-0">
+                <button type="button" onClick={() => navigate({ search: { p: p.id } })} className="grid h-full w-full content-start gap-4 p-4 text-left">
+                  <div className="flex items-start gap-3">
+                    <IconTile icon={PackageIcon} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="line-clamp-2 text-[14px] font-semibold break-words">{p.title}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted">
+                        <Meta items={[p.branch_name, `${p.progress.total} items`, timeAgo(p.updated_at)]} />
+                      </span>
+                    </span>
+                    <Ring p={p.progress} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {p.progress.missing ? <Pill tone="warn">{p.progress.missing} missing</Pill> : <Pill tone="ok">Everything required is ready</Pill>}
+                    {p.status === "compiled" ? <Pill tone="ok"><SealCheckIcon size={12} weight="fill" /> Compiled</Pill> : null}
+                    {p.task_id ? <Pill tone="info"><RobotIcon size={12} /> Agent on it</Pill> : null}
+                  </div>
+                </button>
+              </Card>
             ))}
           </div>
         )}

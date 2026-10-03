@@ -70,13 +70,13 @@ export function DiffView({ before, after, labels = ["Current", "Proposed"] }: { 
   const view = phone ? "unified" : mode;
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <div className="flex items-center justify-between gap-2 text-[12.5px]">
         <span className="text-muted"><span className="font-medium text-ok">+{added}</span> <span className="font-medium text-danger">−{removed}</span> lines</span>
         {!phone ? (
-          <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "split" | "unified")} aria-label="Diff layout" className="inline-flex rounded-sm border border-border p-0.5">
+          <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "split" | "unified")} aria-label="Diff layout" className="inline-flex gap-0.5 rounded-sm border border-border bg-surface-2/60 p-0.5">
             {(["split", "unified"] as const).map((v) => (
-              <RadioGroup.Item key={v} value={v} className="rounded-[6px] px-2.5 py-0.5 text-[12px] text-muted capitalize data-[state=checked]:bg-surface-2 data-[state=checked]:font-medium data-[state=checked]:text-fg">{v}</RadioGroup.Item>
+              <RadioGroup.Item key={v} value={v} className="h-7 rounded-[6px] px-2.5 text-[12px] text-muted capitalize transition-colors hover:text-fg data-[state=checked]:bg-surface data-[state=checked]:font-medium data-[state=checked]:text-fg data-[state=checked]:shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] data-[state=checked]:ring-1 data-[state=checked]:ring-border">{v}</RadioGroup.Item>
             ))}
           </RadioGroup.Root>
         ) : null}

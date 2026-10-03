@@ -5,7 +5,6 @@ import {
   FileTextIcon,
   FolderSimpleIcon,
   LinkSimpleIcon,
-  MagnifyingGlassIcon,
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
@@ -14,12 +13,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/page";
+import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
@@ -57,34 +58,31 @@ function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: s
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
-      <label className="relative block">
-        <span className="sr-only">Filter pages</span>
-        <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter pages" className="h-9 pl-8 text-[13px]" />
-      </label>
-      <nav aria-label="Vault pages" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
+      <SearchInput value={filter} onChange={setFilter} placeholder="Filter pages" className="basis-auto" />
+      <nav aria-label="Vault pages" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1.5">
         {groups.map(([folder, items]) => (
           <details key={folder || "(top)"} open className="group min-w-0">
-            <summary className="flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-[12.5px] font-medium text-muted select-none hover:bg-surface-2/60 [&::-webkit-details-marker]:hidden">
-              <CaretRightIcon size={11} weight="bold" className="transition-transform group-open:rotate-90" />
-              <FolderSimpleIcon size={14} />
-              <span className="min-w-0 truncate">{folder || "Vault"}</span>
-              <span className="ml-auto tabular">{items.length}</span>
+            <summary className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-[12.5px] font-medium text-muted select-none hover:bg-surface-2/60 [&::-webkit-details-marker]:hidden">
+              <CaretRightIcon size={11} weight="bold" className="shrink-0 transition-transform group-open:rotate-90" />
+              <FolderSimpleIcon size={15} weight="duotone" className="shrink-0" />
+              <span className="min-w-0 truncate" title={folder || "Vault"}>{folder || "Vault"}</span>
+              <span className="ml-auto shrink-0 rounded-full bg-surface-2 px-1.5 text-[11px] tabular">{items.length}</span>
             </summary>
-            <ul className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-px pl-4">
+            <ul className="mt-0.5 ml-[13px] grid min-w-0 grid-cols-[minmax(0,1fr)] gap-px border-l border-border pl-2">
               {items.map((p) => (
                 <li key={p.path} className="min-w-0">
                   <button
+                    type="button"
                     title={p.title}
                     onClick={() => onSelect(p.path)}
                     aria-current={p.path === selected ? "page" : undefined}
                     className={cn(
-                      "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-surface-2/70",
+                      "flex min-h-9 w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-surface-2/70",
                       p.path === selected && "bg-accent-soft/70 font-medium text-fg",
                     )}
                   >
                     <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: KIND_INFO[p.kind].color }} />
-                    <span className="min-w-0 truncate">{p.title}</span>
+                    <span className="line-clamp-2 min-w-0 break-words">{p.title}</span>
                   </button>
                 </li>
               ))}
@@ -155,95 +153,119 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
     },
   });
 
-  if (isLoading) return <Skeleton className="h-80 rounded-[var(--radius-md)]" />;
+  if (isLoading) {
+    return (
+      <div className="grid gap-4">
+        <Skeleton className="h-28 rounded-[var(--radius-md)]" />
+        <Skeleton className="h-72 rounded-[var(--radius-md)]" />
+      </div>
+    );
+  }
   if (error || !page) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   const editable = canWrite && path !== "index.md";
   const tags = page.frontmatter.tags;
 
   return (
-    <article className="grid min-w-0 gap-5">
-      <header className="grid gap-2">
-        <button onClick={onBack} className="inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg lg:hidden">
-          <ArrowLeftIcon size={14} /> All pages
-        </button>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-[20px] font-semibold tracking-tight">{page.title}</h2>
-            <p className="mt-0.5 truncate font-mono text-[12px] text-muted">{page.path}</p>
-          </div>
-          {editable ? (
-            <div className="flex gap-2">
-              {draft === null ? (
-                <Button size="sm" variant="outline" onClick={() => setDraft(page.body)}><PencilSimpleIcon size={14} /> Edit</Button>
-              ) : (
-                <>
-                  <Button size="sm" loading={save.isPending} disabled={draft === page.body} onClick={() => save.mutate()}>Save</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
-                </>
-              )}
-              {!PROTECTED.has(page.path) && draft === null ? (
-                <Button size="sm" variant="ghost" aria-label="Delete page" onClick={() => setDeleting(true)}><TrashIcon size={14} /></Button>
-              ) : null}
+    <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+      <button type="button" onClick={onBack} className="inline-flex min-h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg lg:hidden">
+        <ArrowLeftIcon size={14} /> All pages
+      </button>
+      <Card>
+        <header className="grid gap-3 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 basis-64 items-start gap-3">
+              <IconTile icon={FileTextIcon} size="md" tone="neutral" className="max-sm:hidden" />
+              <div className="min-w-0">
+                <h2 className="text-[20px] leading-tight font-semibold tracking-tight break-words">{page.title}</h2>
+                <p className="mt-1 font-mono text-[12px] break-all text-muted">{page.path}</p>
+              </div>
             </div>
-          ) : null}
+            {editable ? (
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {draft === null ? (
+                  <Button size="sm" variant="outline" onClick={() => setDraft(page.body)}><PencilSimpleIcon size={14} /> Edit</Button>
+                ) : (
+                  <>
+                    <Button size="sm" loading={save.isPending} disabled={draft === page.body} onClick={() => save.mutate()}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
+                  </>
+                )}
+                {!PROTECTED.has(page.path) && draft === null ? (
+                  <Button size="icon-sm" variant="ghost" aria-label="Delete page" onClick={() => setDeleting(true)}><TrashIcon size={15} /></Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
+            <Pill><span aria-hidden className="size-2 rounded-full" style={{ background: KIND_INFO[page.kind].color }} />{KIND_INFO[page.kind].label}</Pill>
+            {Array.isArray(tags) ? tags.map((t) => <Pill key={t} tone="neutral">#{t}</Pill>) : null}
+            <span className="min-w-0">Edited by {page.updated_by_name} {timeAgo(page.updated_at).toLowerCase()}</span>
+          </div>
+        </header>
+        <div className="border-t border-border">
+          {draft !== null ? (
+            <div className="grid gap-2 p-4 sm:p-5">
+              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={22} aria-label="Page (Markdown)" spellCheck
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
+              <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What changed (optional, kept in the history)" className="h-10 text-[13px]" />
+              <p className="text-[12px] text-muted">Markdown. Link pages with [[page-name]]; add tags in a --- frontmatter block.</p>
+              <FormError message={save.error ? errorMessage(save.error) : null} />
+            </div>
+          ) : (
+            <div className="min-w-0 overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
+              <WikiMarkdown body={page.body || "_Empty page_"} title={page.title} resolve={(n) => byName.get(n) ?? null}
+                onOpen={(p, name) => (p ? onOpen(p) : canWrite ? onCreate(name) : toast(`There is no page called “${name}” yet.`))} />
+            </div>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-          <Pill><span aria-hidden className="size-2 rounded-full" style={{ background: KIND_INFO[page.kind].color }} />{KIND_INFO[page.kind].label}</Pill>
-          {Array.isArray(tags) ? tags.map((t) => <Pill key={t} tone="neutral">#{t}</Pill>) : null}
-          <span>Edited by {page.updated_by_name} {timeAgo(page.updated_at).toLowerCase()}</span>
-        </div>
-      </header>
+      </Card>
 
-      {draft !== null ? (
-        <div className="grid gap-2">
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={22} aria-label="Page (Markdown)" spellCheck
-            className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
-          <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What changed (optional, kept in the history)" className="h-9 text-[13px]" />
-          <p className="text-[12px] text-muted">Markdown. Link pages with [[page-name]]; add tags in a --- frontmatter block.</p>
-          <FormError message={save.error ? errorMessage(save.error) : null} />
-        </div>
-      ) : (
-        <div className="rounded-[var(--radius-md)] border border-border bg-surface px-5 py-4">
-          <WikiMarkdown body={page.body || "_Empty page_"} title={page.title} resolve={(n) => byName.get(n) ?? null}
-            onOpen={(p, name) => (p ? onOpen(p) : canWrite ? onCreate(name) : toast(`There is no page called “${name}” yet.`))} />
-        </div>
-      )}
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <section className="grid content-start gap-2">
-          <h3 className="flex items-center gap-1.5 text-[13px] font-semibold"><LinkSimpleIcon size={14} /> Linked from <span className="font-normal text-muted">{page.backlinks.length}</span></h3>
-          {page.backlinks.length ? (
-            <ul className="grid gap-1">
-              {page.backlinks.map((b) => (
-                <li key={b.path}><button onClick={() => b.path && onOpen(b.path)} className="text-left text-[13px] text-accent hover:underline">{b.title ?? b.name}</button></li>
-              ))}
-            </ul>
-          ) : <p className="text-[12.5px] text-muted">No page links here yet.</p>}
-          {page.links.length ? (
-            <>
-              <h3 className="mt-2 text-[13px] font-semibold">Links to</h3>
-              <ul className="grid gap-1">
-                {page.links.map((l) => (
-                  <li key={l.name} className="text-[13px]">
-                    {l.path ? <button onClick={() => onOpen(l.path!)} className="text-left text-accent hover:underline">{l.title ?? l.name}</button>
-                      : <span className="text-muted">{l.name} <span className="text-[11.5px]">(no page yet)</span></span>}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </section>
-        <section className="grid content-start gap-2">
-          <h3 className="flex items-center gap-1.5 text-[13px] font-semibold"><ClockCounterClockwiseIcon size={14} /> History</h3>
-          <ol className="grid gap-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader icon={<IconTile icon={LinkSimpleIcon} size="sm" tone="info" />} title="Links"
+            description={`${page.backlinks.length} in · ${page.links.length} out`} />
+          <CardBody className="grid gap-4">
+            <section className="grid content-start gap-1.5">
+              <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">Linked from</h3>
+              {page.backlinks.length ? (
+                <ul className="grid gap-0.5">
+                  {page.backlinks.map((b) => (
+                    <li key={b.path} className="min-w-0">
+                      <button type="button" onClick={() => b.path && onOpen(b.path)} className="min-h-8 text-left text-[13px] break-words text-accent hover:underline">{b.title ?? b.name}</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-[12.5px] text-muted">No page links here yet.</p>}
+            </section>
+            {page.links.length ? (
+              <section className="grid content-start gap-1.5">
+                <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">Links to</h3>
+                <ul className="grid gap-0.5">
+                  {page.links.map((l) => (
+                    <li key={l.name} className="min-w-0 text-[13px]">
+                      {l.path ? <button type="button" onClick={() => onOpen(l.path!)} className="min-h-8 text-left break-words text-accent hover:underline">{l.title ?? l.name}</button>
+                        : <span className="break-words text-muted">{l.name} <span className="text-[11.5px]">(no page yet)</span></span>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader icon={<IconTile icon={ClockCounterClockwiseIcon} size="sm" tone="neutral" />} title="History"
+            description={`${page.history.length} ${page.history.length === 1 ? "version" : "versions"} in git`} />
+          <ol className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
             {page.history.map((h) => (
-              <li key={h.commit} className="grid text-[12.5px]">
-                <span className="truncate">{h.message}</span>
-                <span className="text-muted">{h.author} · {timeAgo(new Date(h.ts * 1000).toISOString()).toLowerCase()} · <span className="font-mono">{h.commit.slice(0, 7)}</span></span>
+              <li key={h.commit} className="grid min-w-0 gap-0.5 px-4 py-2.5 text-[12.5px] sm:px-5">
+                <span className="break-words">{h.message}</span>
+                <span className="flex flex-wrap items-center gap-x-1.5 text-muted">
+                  <Meta items={[h.author, timeAgo(new Date(h.ts * 1000).toISOString()).toLowerCase(), <span key="c" className="font-mono">{h.commit.slice(0, 7)}</span>]} />
+                </span>
               </li>
             ))}
           </ol>
-        </section>
+        </Card>
       </div>
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} danger title={`Delete ${page.title}?`} confirmLabel="Delete page"
         body="Agents stop finding it. The page stays in the vault's git history, so it can be brought back."
@@ -266,12 +288,22 @@ export function PagesTab({ selected, onSelect, canWrite }: { selected: string | 
   const [creating, setCreating] = useState<{ n: number; name?: string } | null>(null);
   const knowledge = (pages ?? []).filter((p) => !["root", "log"].includes(p.kind)).length;
 
-  if (isLoading) return <Skeleton className="h-96 rounded-[var(--radius-md)]" />;
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid content-start gap-2">
+          <Skeleton className="h-10" />
+          {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-8" />)}
+        </div>
+        <Skeleton className="h-72 rounded-[var(--radius-md)] max-lg:hidden" />
+      </div>
+    );
+  }
   if (error || !pages) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <aside className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3", selected && "max-lg:hidden")}>
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2", selected && "max-lg:hidden")}>
         {canWrite ? <Button variant="outline" onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> New page</Button> : null}
         <Tree pages={pages} selected={selected} onSelect={onSelect} />
       </aside>

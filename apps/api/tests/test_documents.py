@@ -206,7 +206,10 @@ async def test_upload_read_list_download_and_guard(client, llm, temporal, inline
             }
         )
     )
-    pdf = render_pdf.render("Certificate of incorporation\n\nMaju Sdn Bhd 201901012345", "Cert")
+    pdf = render_pdf.render(
+        "Certificate of incorporation\n\nMaju Sdn Bhd 201901012345\n\nValid until 1 January 2020",
+        "Cert",
+    )
     r = await upload(client, "ssm.pdf", pdf, branch_id=o["branch"]["id"])
     assert r.status_code == 201, r.text
     f = r.json()
@@ -237,6 +240,15 @@ async def test_upload_read_list_download_and_guard(client, llm, temporal, inline
     assert no_token.status_code == 403
     empty = await upload(client, "a.txt", b"")
     assert empty.status_code == 400
+
+    # A report's last date is not an expiry: kept only when the text talks about validity.
+    llm.say(
+        json.dumps(
+            {"kind": "CSV file", "title": "Ad spend", "summary": "x", "expires_on": "2020-09-30"}
+        )
+    )
+    rep = (await upload(client, "ads.csv", b"date,spend\n2020-09-30,10\n")).json()
+    assert rep["expires_on"] is None and rep["expired"] is False
 
 
 async def test_office_roles_only_see_their_files(client, llm, temporal, inline_reading):

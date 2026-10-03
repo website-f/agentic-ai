@@ -1,24 +1,33 @@
-import { ArrowClockwiseIcon, ArrowSquareOutIcon, DownloadSimpleIcon, FolderOpenIcon, MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ArrowSquareOutIcon, DownloadSimpleIcon, FolderOpenIcon, HourglassMediumIcon, SparkleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { FileDrop, FileGlyph, FileStatus } from "@/components/file-drop";
+import { FileDrop, FileStatus } from "@/components/file-drop";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
-import { Input } from "@/components/ui/field";
+import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { docKeys, fileQuery, fileSize, filesQuery, fileUrl, type DocFile } from "@/lib/documents";
 import { branchesQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
+import { DocSteps, FileTile } from "./visuals";
 
 const ALL = "__all";
+type Show = "all" | "upload" | "generated" | "expiring";
+
+function daysUntil(iso: string): number {
+  return (new Date(iso).getTime() - Date.now()) / 86_400_000;
+}
 
 function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const qc = useQueryClient();
@@ -47,7 +56,7 @@ function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <SideSheet open onOpenChange={(o) => !o && onClose()} wide
-      title={f ? <span className="flex min-w-0 items-center gap-2"><FileGlyph mime={f.mime} size={20} /><span className="truncate">{f.title || f.name}</span></span> : "File"}
+      title={f ? <span className="flex min-w-0 items-center gap-3"><FileTile mime={f.mime} name={f.name} size="sm" /><span className="min-w-0 break-words">{f.title || f.name}</span></span> : "File"}
       description={f ? [f.kind, f.pages ? `${f.pages} page${f.pages > 1 ? "s" : ""}` : "", fileSize(f.size), f.ocr ? "read with OCR" : ""].filter(Boolean).join(" · ") : undefined}
       actions={f ? (
         <div className="flex flex-wrap gap-2">
@@ -72,7 +81,7 @@ function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
           {Object.keys(f.fields).length ? (
             <section className="grid gap-1.5">
               <h3 className="text-[13px] font-semibold">Key facts</h3>
-              <dl className="grid grid-cols-[minmax(8rem,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[var(--radius-md)] border border-border p-3 text-[13px]">
+              <dl className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3 text-[13px] sm:grid-cols-[minmax(8rem,auto)_minmax(0,1fr)] sm:gap-y-1.5 max-sm:[&_dd]:mb-1.5">
                 {Object.entries(f.fields).map(([k, v]) => (
                   <div key={k} className="contents"><dt className="text-muted">{k}</dt><dd className="break-words">{v}</dd></div>
                 ))}
@@ -104,55 +113,74 @@ export function FilesPage() {
   const navigate = useNavigate({ from: "/files" });
   const [branch, setBranch] = useState(ALL);
   const [q, setQ] = useState("");
+  const [show, setShow] = useState<Show>("all");
   const { data: branches = [] } = useQuery(branchesQuery);
   const params: Record<string, string> = {};
   if (branch !== ALL) params.branch_id = branch;
   if (q.trim()) params.q = q.trim();
-  const { data: files = [], isLoading, error } = useQuery(filesQuery(params));
+  const { data: all = [], isLoading, error } = useQuery(filesQuery(params));
   const open = (id?: string) => navigate({ search: { f: id } });
+
+  const soon = (f: DocFile) => f.expired || (!!f.expires_on && daysUntil(f.expires_on) < 60);
+  const counts = {
+    upload: all.filter((f) => f.source === "upload").length,
+    generated: all.filter((f) => f.source === "generated").length,
+    expiring: all.filter(soon).length,
+    reading: all.filter((f) => f.status === "reading").length,
+  };
+  const files = all.filter((f) =>
+    show === "all" ? true : show === "expiring" ? soon(f) : f.source === show,
+  );
 
   return (
     <Page>
       <PageHeader title="Files"
-        description="Everything your companies hand the office — certificates, statements, letters, forms, photos. Each file is read once (scans too) and summarised, so agents work from it without re-reading." />
-      <FileDrop branchId={branch === ALL ? null : branch} onUploaded={(fs) => fs.length === 1 && open(fs[0]!.id)} />
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-0 flex-1 basis-56">
-          <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or type" className="pl-9" aria-label="Search files" />
-        </label>
-        <Select value={branch} onValueChange={setBranch} label="Company" className="w-56"
-          options={[{ value: ALL, label: "All companies" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+        description="Everything your companies hand the office: certificates, statements, letters, forms and photos. Each file is read once (scans too) and summarised, so agents work from it without re-reading." />
+      <DocSteps current="/files" />
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <FileDrop branchId={branch === ALL ? null : branch} onUploaded={(fs) => fs.length === 1 && open(fs[0]!.id)} />
+        <StatGrid className="grid-cols-2 lg:grid-cols-2">
+          <Stat label="Uploaded" value={counts.upload} icon={FolderOpenIcon} hint={counts.reading ? `${counts.reading} being read now` : "Read and summarised"}
+            onClick={() => setShow(show === "upload" ? "all" : "upload")} active={show === "upload"} />
+          <Stat label="Made by the office" value={counts.generated} icon={SparkleIcon} tone="violet" hint="Exports, packs, agent output"
+            onClick={() => setShow(show === "generated" ? "all" : "generated")} active={show === "generated"} />
+          <Stat label="Expiring or expired" value={counts.expiring} icon={HourglassMediumIcon} tone={counts.expiring ? "warn" : "neutral"}
+            hint="Within 60 days" onClick={() => setShow(show === "expiring" ? "all" : "expiring")} active={show === "expiring"}
+            className="col-span-2" />
+        </StatGrid>
       </div>
-      {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
+      <Toolbar>
+        <Segmented<Show> label="Show" value={show} onChange={setShow}
+          options={[
+            { value: "all", label: "All", count: all.length },
+            { value: "upload", label: "Uploaded", count: counts.upload },
+            { value: "generated", label: "Generated", count: counts.generated },
+            { value: "expiring", label: "Expiring", count: counts.expiring },
+          ]} />
+        <SearchInput value={q} onChange={setQ} placeholder="Search by name or type" />
+        <Select value={branch} onValueChange={setBranch} label="Company" className="sm:w-56"
+          options={[{ value: ALL, label: "All companies" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+      </Toolbar>
+      {isLoading ? <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !files.length ? (
-          <EmptyState icon={FolderOpenIcon} title={q ? "No files match" : "No files yet"}
+          <EmptyState icon={FolderOpenIcon} title={q || show !== "all" ? "No files match" : "No files yet"}
             body="Drop the documents a company keeps on hand: registration certificate, bank statements, licences, company profile. Agents use them to prepare documents and packs." />
         ) : (
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+          <ListCard>
             {files.map((f) => (
-              <li key={f.id}>
-                <button type="button" onClick={() => open(f.id)}
-                  className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/60">
-                  <FileGlyph mime={f.mime} size={22} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[14px] font-medium">{f.title || f.name}</span>
-                    <span className="block truncate text-[12.5px] text-muted">
-                      {f.summary || [f.kind, f.name].filter(Boolean).join(" · ")}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[12px] text-muted">
-                      {[f.kind, f.branch_name ?? "All companies", fileSize(f.size), timeAgo(f.created_at)].filter(Boolean).join(" · ")}
-                    </span>
-                  </span>
-                  <span className="flex flex-col items-end gap-1">
-                    <FileStatus f={f} />
-                    {f.source === "generated" ? <Pill tone="accent">Generated</Pill> : null}
-                  </span>
-                </button>
-              </li>
+              <ListRow key={f.id} onClick={() => open(f.id)} active={search.f === f.id}
+                leading={<FileTile mime={f.mime} name={f.name} />}
+                title={f.title || f.name}
+                meta={<Meta items={[f.kind, f.branch_name ?? "All companies", fileSize(f.size), timeAgo(f.created_at)]} />}
+                trailing={<>
+                  <FileStatus f={f} />
+                  {f.source === "generated" ? <Pill tone="accent">Generated</Pill> : null}
+                </>}>
+                {f.summary ? <span className="line-clamp-2 text-[12.5px] text-muted/90">{f.summary}</span> : null}
+              </ListRow>
             ))}
-          </ul>
+          </ListCard>
         )}
       {search.f ? <FileSheet id={search.f} onClose={() => open(undefined)} /> : null}
     </Page>

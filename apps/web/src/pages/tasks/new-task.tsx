@@ -1,4 +1,4 @@
-import { PaperclipIcon, XIcon } from "@phosphor-icons/react";
+import { FileIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -73,11 +73,11 @@ export function NewTaskDialog({
         </>
       }
     >
-      <div className="grid gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <Field label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Reconcile September bank statements" autoFocus error={fields.title} />
         <TextareaField label="Brief" value={brief} onChange={(e) => setBrief(e.target.value)} rows={5}
           placeholder="Context, inputs, constraints and the format you want back." hint="Markdown works." />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">Assign to</span>
             <Select value={agent} onValueChange={setAgent} label="Assign to"
@@ -89,16 +89,18 @@ export function NewTaskDialog({
               options={[{ value: "low", label: "Low" }, { value: "normal", label: "Normal" }, { value: "high", label: "High" }, { value: "urgent", label: "Urgent" }]} />
           </div>
         </div>
-        <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Files for the agent</span>
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="grid min-w-0 gap-1.5">
+          <span className="text-[13px] font-medium">Files for the agent {files.length ? <span className="font-normal text-muted">({files.length})</span> : null}</span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-sm border border-dashed border-border bg-surface-2/40 p-2">
             {files.map((f) => (
-              <span key={f.id} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[12.5px]">
-                {f.name}
-                <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
+              <span key={f.id} className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface py-0.5 pr-1 pl-2.5 text-[12.5px]">
+                <FileIcon size={13} className="shrink-0 text-muted" />
+                <span className="truncate">{f.name}</span>
+                <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}
+                  className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"><XIcon size={12} /></button>
               </span>
             ))}
-            <Button size="sm" variant="ghost" onClick={() => setPicking(true)}><PaperclipIcon size={14} /> Attach or upload</Button>
+            <Button size="sm" variant="outline" onClick={() => setPicking(true)}><PaperclipIcon size={14} /> {files.length ? "Add more" : "Attach or upload"}</Button>
           </div>
           <p className="text-[12px] text-muted">Already read and summarised; the agent opens only what it needs.</p>
         </div>

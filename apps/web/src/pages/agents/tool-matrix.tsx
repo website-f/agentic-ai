@@ -30,14 +30,14 @@ export function ToolMatrix({
 }) {
   const { data: registry = [] } = useQuery(toolsQuery);
   return (
-    <div className="grid gap-4">
-      <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
         {registry.map((t) => {
           const mode = tools[t.name] ?? t.default_mode;
           return (
             <li key={t.name} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
               <div className="min-w-0 flex-1 basis-56">
-                <p className="flex items-center gap-2 text-[13.5px] font-medium">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
                   {t.label}
                   {t.risk !== "low" ? <Pill tone={RISK_TONE[t.risk]}>{t.risk === "high" ? "High" : "Medium"} risk</Pill> : null}
                 </p>
@@ -55,7 +55,7 @@ export function ToolMatrix({
                     key={m.value}
                     value={m.value}
                     className={cn(
-                      "rounded-[6px] px-2.5 py-1 text-[12.5px] text-muted disabled:opacity-60",
+                      "h-8 rounded-[6px] px-3 text-[12.5px] text-muted transition-colors hover:text-fg disabled:opacity-60",
                       "data-[state=checked]:font-medium",
                       m.value === "allow" && "data-[state=checked]:bg-ok/12 data-[state=checked]:text-ok",
                       m.value === "ask" && "data-[state=checked]:bg-warn/14 data-[state=checked]:text-warn",

@@ -80,7 +80,7 @@ function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
         {sections.map((section) => (
           <div key={section.title} className="mt-4 first:mt-1">
-            <p className="hidden px-2.5 pb-1 text-[11.5px] font-medium text-muted xl:block">
+            <p className="hidden px-2.5 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
               {section.title}
             </p>
             <ul className="grid gap-0.5">
@@ -93,10 +93,10 @@ function Sidebar() {
                       to={item.to}
                       title={item.label}
                       className={cn(
-                        "flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-colors",
+                        "relative flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-colors",
                         "justify-center xl:justify-start",
                         active
-                          ? "bg-accent-soft font-medium text-accent"
+                          ? "bg-accent-soft font-medium text-accent before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-accent"
                           : "text-muted hover:bg-surface-2 hover:text-fg",
                       )}
                     >

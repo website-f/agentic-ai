@@ -5,7 +5,7 @@
 v1 is developed and used on the dev PC. No domain, VPS or paid service is required.
 
 - Requirements: Docker Desktop (WSL2 backend on Windows) or Docker Engine, about 8 GB free RAM.
-- `docker compose up -d --build`, then open `http://localhost:8500`. Core services carry no profile, so they always start; `obs` and `llm` stay opt-in.
+- `docker compose up -d --build`, then open `http://localhost:8500`. Core services carry no profile, so they always start; `obs` stays opt-in.
 - `localhost` is a secure context, so the PWA installs and Web Push works on the dev machine without HTTPS.
 - Phone testing without buying anything: share the dev machine over Tailscale (free tier) and use its HTTPS serve feature, or mkcert on the LAN.
 - The VPS sections below apply only when the stack later goes public.
@@ -14,9 +14,11 @@ v1 is developed and used on the dev PC. No domain, VPS or paid service is requir
 
 | Profile | Services | When |
 |---|---|---|
-| (default) | web, api, worker, temporal, temporal-ui, postgres, valkey, backup | Always (no `--profile` flag needed) |
+| (default) | web, api, worker, temporal, temporal-ui, postgres, valkey, backup, browser, sandbox, ollama (+ one-shot ollama-pull) | Always (no `--profile` flag needed) |
 | `obs` | langfuse-web, langfuse-worker, clickhouse, rustfs, langfuse-valkey (+ two one-shot jobs) | Traces of every model call; adds about 4 GB RAM. `COMPOSE_PROFILES=obs` + `AGENTIC_LANGFUSE_HOST` in `.env` |
-| `llm` | ollama | Planned, not built; the stack runs on hosted APIs |
+| `demo` | practice-portal | Dev only: a fake portal the browser agents practise on |
+
+A 4 GB server stacks `docker-compose.small.yml` last; there the browser moves to profile `browser` and Temporal UI to `ops` (see `docs/SMALL-SERVER.md`).
 
 `docker compose up -d` is the whole product.
 
@@ -30,7 +32,7 @@ All bound to `127.0.0.1` on the VPS. Only `8500` goes through the shared Caddy.
 | 8501 | api | Internal (reached through web) |
 | 8502 | temporal-ui | Tailscale only |
 | 8503 | langfuse | Tailscale / SSH tunnel only (profile `obs`) |
-| 8504 | ollama | Reserved (profile `llm`, not built) |
+| 8504 | spare (ollama is internal only: network `llm`, never published) | |
 | 8505 | spare (rustfs is internal only, no console) | |
 | 8506 | Postgres | Dev only, so host tools and tests can connect; dropped in the VPS override |
 | 8507 | Valkey | Dev only |

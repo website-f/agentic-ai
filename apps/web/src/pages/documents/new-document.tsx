@@ -1,9 +1,10 @@
-import { FileIcon, MagicWandIcon, NotePencilIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
+import { CheckCircleIcon, FileIcon, MagicWandIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
+import { IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
@@ -12,6 +13,7 @@ import { api, errorMessage } from "@/lib/api";
 import { docKeys, templatesQuery, type DocDetail, type DocTemplate, type FieldValue } from "@/lib/documents";
 import { branchesQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { KindTile } from "./visuals";
 
 type Start = { kind: "template"; id: string } | { kind: "ai" } | { kind: "blank" };
 
@@ -59,7 +61,11 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
   });
 
   const ready = !!company && (start.kind !== "template" || !!start.id) && (start.kind !== "ai" || request.trim().length > 5);
-  const option = (on: boolean) => cn("grid gap-1 rounded-[var(--radius-md)] border p-3 text-left", on ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2");
+  const option = (on: boolean) => cn(
+    "relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[var(--radius-md)] border p-3 text-left transition-colors",
+    on ? "border-accent bg-accent-soft/60 ring-2 ring-accent/15" : "border-border hover:border-accent/40 hover:bg-surface-2/60",
+  );
+  const tick = (on: boolean) => on ? <CheckCircleIcon size={18} weight="fill" className="absolute top-2.5 right-2.5 text-accent" /> : null;
 
   return (
     <>
@@ -81,23 +87,39 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
           {!template ? (
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-[13px] font-medium">Start from</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button type="button" className={option(start.kind === "ai")} onClick={() => setStart({ kind: "ai" })}>
-                  <span className="flex items-center gap-2 text-[13.5px] font-medium"><MagicWandIcon size={16} className="text-accent" /> Write it with AI</span>
-                  <span className="text-[12px] text-muted">Describe the document; an agent writes the whole draft.</span>
+                  <IconTile icon={MagicWandIcon} tone="violet" size="sm" />
+                  <span className="grid min-w-0 gap-0.5 pr-5">
+                    <span className="text-[13.5px] font-medium">Write it with AI</span>
+                    <span className="text-[12px] text-muted">Describe the document; an agent writes the whole draft.</span>
+                  </span>
+                  {tick(start.kind === "ai")}
                 </button>
                 <button type="button" className={option(start.kind === "blank")} onClick={() => setStart({ kind: "blank" })}>
-                  <span className="flex items-center gap-2 text-[13.5px] font-medium"><FileIcon size={16} /> Blank page</span>
-                  <span className="text-[12px] text-muted">Write it yourself on the letterhead.</span>
+                  <IconTile icon={FileIcon} tone="neutral" size="sm" />
+                  <span className="grid min-w-0 gap-0.5 pr-5">
+                    <span className="text-[13.5px] font-medium">Blank page</span>
+                    <span className="text-[12px] text-muted">Write it yourself on the letterhead.</span>
+                  </span>
+                  {tick(start.kind === "blank")}
                 </button>
               </div>
-              <div className="grid max-h-60 gap-2 overflow-y-auto sm:grid-cols-2">
-                {templates.map((t) => (
-                  <button key={t.id} type="button" className={option(start.kind === "template" && start.id === t.id)} onClick={() => setStart({ kind: "template", id: t.id })}>
-                    <span className="flex items-center gap-2 text-[13.5px] font-medium"><NotePencilIcon size={16} /> {t.name}</span>
-                    <span className="line-clamp-2 text-[12px] text-muted">{t.description}</span>
-                  </button>
-                ))}
+              <p className="mt-1 text-[12px] font-medium text-muted">Or a template</p>
+              <div className="grid grid-cols-1 gap-2 p-0.5 sm:max-h-72 sm:grid-cols-2 sm:overflow-y-auto">
+                {templates.map((t) => {
+                  const on = start.kind === "template" && start.id === t.id;
+                  return (
+                    <button key={t.id} type="button" className={option(on)} onClick={() => setStart({ kind: "template", id: t.id })}>
+                      <KindTile kind={t.kind} size="sm" />
+                      <span className="grid min-w-0 gap-0.5 pr-5">
+                        <span className="truncate text-[13.5px] font-medium">{t.name}</span>
+                        <span className="line-clamp-2 text-[12px] text-muted">{t.description}</span>
+                      </span>
+                      {tick(on)}
+                    </button>
+                  );
+                })}
               </div>
             </fieldset>
           ) : null}
