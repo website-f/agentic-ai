@@ -9,6 +9,8 @@ export interface OfficeAgent {
   role: string;
   color: string;
   department_id: string | null;
+  /** A colleague's agent this person only watches (P16): no chat, no tasks. */
+  view_only?: boolean;
   status: string;
   state: AgentState;
   pending_approvals: number;

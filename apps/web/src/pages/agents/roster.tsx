@@ -1,8 +1,9 @@
 import { HandIcon, LightningIcon, PauseCircleIcon, PlusIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,8 @@ import { OrgChart } from "./org-chart";
 
 export function agentState(a: Agent, live?: { status: string } | undefined): { label: string; tone: "accent" | "warn" | "neutral" | "info" } {
   if (a.status === "paused") return { label: "Paused", tone: "neutral" };
-  if (a.current_task?.status === "blocked" || live?.status === "waiting_approval") return { label: "Waiting on you", tone: "warn" };
+  // A watched colleague's agent waits on its own manager, not on the viewer.
+  if (a.current_task?.status === "blocked" || live?.status === "waiting_approval") return { label: a.view_only ? "Waiting on approval" : "Waiting on you", tone: "warn" };
   if (live?.status === "in_meeting") return { label: "In a meeting", tone: "accent" };
   if (a.current_task?.status === "running" || live?.status === "working") return { label: "Working", tone: "accent" };
   return { label: "Available", tone: "info" };
@@ -48,6 +50,7 @@ function AgentCard({ agent }: { agent: Agent }) {
       </p>
       <div className="mt-auto flex flex-wrap gap-1.5 text-[11.5px]">
         <Pill className="font-mono">{agent.model_group}</Pill>
+        <AgentAccessPills agent={agent} />
         {agent.clone_of ? <Pill tone="info">Helper</Pill> : null}
         {agent.owner_name ? <Pill tone="info">{agent.owner_name}&apos;s agent</Pill> : null}
         {agent.autonomy === "auto" ? <Pill tone="accent">Auto</Pill> : null}
@@ -69,14 +72,22 @@ export function AgentsPage() {
   const { view } = useSearch({ strict: false }) as { view?: "org" };
   const navigate = useNavigate();
 
+  // Staff also see colleagues' agents (view only). When the list mixes both, offer Mine / Office.
+  const [whose, setWhose] = useState<"all" | "mine" | "office">("all");
+  const inBranch = useMemo(() => (agents ?? []).filter((a) => branch && a.branch_id === branch.id), [agents, branch]);
+  const ownCount = inBranch.filter((a) => !a.view_only).length;
+  const watchCount = inBranch.length - ownCount;
+  const mixed = ownCount > 0 && watchCount > 0;
+  const scope = mixed ? whose : "all";
+
   const sections = useMemo(() => {
     if (!branch) return [];
-    const mine = (agents ?? []).filter((a) => a.branch_id === branch.id);
+    const mine = inBranch.filter((a) => (scope === "mine" ? !a.view_only : scope === "office" ? a.view_only : true));
     const out = branch.departments.map((d) => ({ id: d.id, name: d.name, agents: mine.filter((a) => a.department_id === d.id) }));
     const loose = mine.filter((a) => !a.department_id);
     if (loose.length) out.push({ id: "none", name: "No department", agents: loose });
     return out;
-  }, [agents, branch]);
+  }, [inBranch, branch, scope]);
   const total = sections.reduce((n, s) => n + s.agents.length, 0);
   const statuses = useLive((s) => s.agentStatus);
   const counts = useMemo(() => {
@@ -85,6 +96,7 @@ export function AgentsPage() {
     return {
       working: labels.filter((l) => l === "Working" || l === "In a meeting").length,
       waiting: labels.filter((l) => l === "Waiting on you").length,
+      watching: here.filter((a) => a.view_only).length,
       paused: labels.filter((l) => l === "Paused").length,
     };
   }, [sections, statuses]);
@@ -118,22 +130,37 @@ export function AgentsPage() {
       ) : (
         <>
           <StatGrid>
-            <Stat label="Agents" value={total} hint={`In ${sections.filter((s) => s.agents.length).length} departments`} icon={UsersThreeIcon} tone="accent" />
+            <Stat label="Agents" value={total} hint={counts.watching ? `${counts.watching} you can only watch` : `In ${sections.filter((s) => s.agents.length).length} departments`} icon={UsersThreeIcon} tone="accent" />
             <Stat label="Working now" value={counts.working} hint="On a task or in a meeting" icon={LightningIcon} tone="info" />
             <Stat label="Waiting on you" value={counts.waiting} hint={counts.waiting ? "Open Approvals to decide" : "Nothing to decide"} icon={HandIcon} tone={counts.waiting ? "warn" : "neutral"} />
             <Stat label="Paused" value={counts.paused} hint="Not taking work" icon={PauseCircleIcon} tone="neutral" />
           </StatGrid>
-          <Segmented
-            label="Show agents by"
-            value={view === "org" ? "org" : "departments"}
-            onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
-            options={[
-              { value: "departments", label: "By department", count: total },
-              { value: "org", label: "Org chart" },
-            ]}
-            className="w-fit"
-          />
-          {view === "org" ? <OrgChart agents={(agents ?? []).filter((a) => a.branch_id === branch.id && a.status !== "retired")} manage={canManage} /> : (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Segmented
+              label="Show agents by"
+              value={view === "org" ? "org" : "departments"}
+              onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
+              options={[
+                { value: "departments", label: "By department", count: total },
+                { value: "org", label: "Org chart" },
+              ]}
+              className="w-fit max-w-full"
+            />
+            {mixed ? (
+              <Segmented
+                label="Whose agents"
+                value={scope}
+                onChange={(v) => setWhose(v as typeof whose)}
+                options={[
+                  { value: "all", label: "All", count: inBranch.length },
+                  { value: "mine", label: "Mine", count: ownCount },
+                  { value: "office", label: "Office", count: watchCount },
+                ]}
+                className="w-fit max-w-full"
+              />
+            ) : null}
+          </div>
+          {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={canManage} /> : (
             <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
               {sections.filter((s) => s.agents.length).map((s) => (
                 <section key={s.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">

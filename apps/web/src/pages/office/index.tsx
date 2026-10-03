@@ -25,7 +25,7 @@ import { onLiveEvent } from "@/lib/live";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { useBranch } from "@/lib/stores";
 import { cn, timeAgo } from "@/lib/utils";
-import { tasksQuery, workKeys, type Task } from "@/lib/work";
+import { agentsQuery, tasksQuery, workKeys, type Task } from "@/lib/work";
 import { createOffice, type Office } from "@/office/engine";
 import type { OfficeEvent, OfficeSnapshot } from "@/office/types";
 
@@ -55,7 +55,7 @@ function useDarkTheme(): boolean {
   return dark;
 }
 
-function TaskTray({ snap, canWrite, onAssign }: { snap: OfficeSnapshot; canWrite: boolean; onAssign: (taskId: string, agentId: string) => void }) {
+function TaskTray({ snap, canWrite, watchOnly, onAssign }: { snap: OfficeSnapshot; canWrite: boolean; watchOnly: Set<string>; onAssign: (taskId: string, agentId: string) => void }) {
   const { data: tasks = [] } = useQuery(tasksQuery);
   const open = tasks.filter((t) => (t.status === "triage" || t.status === "ready") && (!t.assignee_agent_id || t.status === "triage")).slice(0, 12);
   const [picking, setPicking] = useState<string | null>(null);
@@ -78,7 +78,7 @@ function TaskTray({ snap, canWrite, onAssign }: { snap: OfficeSnapshot; canWrite
                 <span className="line-clamp-2 text-[13px] font-medium break-words">{t.title}</span>
                 {picking === t.id ? (
                   <Select value="" onValueChange={(v) => { setPicking(null); onAssign(t.id, v); }} label="Assign to" size="sm"
-                    options={snap.agents.filter((a) => a.status !== "paused").map((a) => ({ value: a.id, label: `${a.name} (${a.role})` }))} />
+                    options={snap.agents.filter((a) => a.status !== "paused" && !watchOnly.has(a.id)).map((a) => ({ value: a.id, label: `${a.name} (${a.role})` }))} />
                 ) : (
                   <button onClick={() => setPicking(t.id)} className="-mx-1 h-7 w-fit rounded-sm px-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft">Assign to…</button>
                 )}
@@ -91,7 +91,7 @@ function TaskTray({ snap, canWrite, onAssign }: { snap: OfficeSnapshot; canWrite
   );
 }
 
-function ListView({ snap, onOpen }: { snap: OfficeSnapshot; onOpen: (id: string) => void }) {
+function ListView({ snap, watchOnly, onOpen }: { snap: OfficeSnapshot; watchOnly: Set<string>; onOpen: (id: string) => void }) {
   const [sort, setSort] = useState<"state" | "name">("state");
   const dept = new Map(snap.departments.map((d) => [d.id, d.name]));
   const rows = [...snap.agents].sort((a, b) =>
@@ -134,7 +134,9 @@ function ListView({ snap, onOpen }: { snap: OfficeSnapshot; onOpen: (id: string)
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap text-muted">{deptOf(a)}</td>
                 <td className="px-4 py-2.5"><Pill tone={STATE_INFO[a.state].tone}>{STATE_INFO[a.state].label}</Pill></td>
-                <td className="w-[30%] max-w-0 px-4 py-2.5">{a.task ? <Link to="/tasks" search={{ task: a.task.id }} className="block truncate text-accent hover:underline" title={a.task.title}>{a.task.title}</Link> : <span className="text-muted">—</span>}</td>
+                <td className="w-[30%] max-w-0 px-4 py-2.5">{a.task ? (watchOnly.has(a.id)
+                  ? <span className="block truncate" title={a.task.title}>{a.task.title}</span>
+                  : <Link to="/tasks" search={{ task: a.task.id }} className="block truncate text-accent hover:underline" title={a.task.title}>{a.task.title}</Link>) : <span className="text-muted">—</span>}</td>
                 <td className="w-[30%] max-w-0 px-4 py-2.5 text-muted"><span className="block truncate" title={a.last?.text}>{a.last ? `${a.last.text} · ${timeAgo(a.last.ts).toLowerCase()}` : "—"}</span></td>
               </tr>
             ))}
@@ -157,6 +159,9 @@ export function OfficePage() {
   const qc = useQueryClient();
   const view = search.view ?? "map";
   const { data: snap, error } = useQuery({ ...officeQuery(branch?.id ?? ""), enabled: !!branch });
+  // Staff watch colleagues' agents here too (view_only): they can't be handed tasks.
+  const { data: roster } = useQuery(agentsQuery);
+  const watchOnly = useMemo(() => new Set((roster ?? []).filter((a) => a.view_only).map((a) => a.id)), [roster]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const office = useRef<Office | null>(null);
   const dark = useDarkTheme();
@@ -165,6 +170,10 @@ export function OfficePage() {
 
   const assign = useMutation({
     mutationFn: async ({ taskId, agentId }: { taskId: string; agentId: string }) => {
+      if (watchOnly.has(agentId)) {
+        const who = snap?.agents.find((a) => a.id === agentId)?.name ?? "That agent";
+        throw new Error(`${who} isn't yours to instruct. You can only watch it.`);
+      }
       await api(`/api/tasks/${taskId}`, "PATCH", { assignee_agent_id: agentId });
       return api(`/api/tasks/${taskId}/start`, "POST");
     },
@@ -267,11 +276,11 @@ export function OfficePage() {
         <div className="p-6"><Skeleton className="h-[70dvh] rounded-[var(--radius-md)]" /></div>
       ) : view === "list" ? (
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-          {snap.agents.length ? <ListView snap={snap} onOpen={(id) => openAgent(id)} /> : (
+          {snap.agents.length ? <ListView snap={snap} watchOnly={watchOnly} onOpen={(id) => openAgent(id)} /> : (
             <EmptyState icon={BuildingsIcon} title={`No agents in ${snap.branch.name} yet`} body="Add agents to its departments and they take a desk here."
               action={canWrite ? <Button size="sm" asChild><Link to="/agents/new">Add an agent</Link></Button> : undefined} />
           )}
-          <TaskTray snap={snap} canWrite={canWrite} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
+          <TaskTray snap={snap} canWrite={canWrite} watchOnly={watchOnly} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -310,7 +319,7 @@ export function OfficePage() {
             </nav>
           </div>
           <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-border bg-surface/50 p-4 xl:block">
-            <TaskTray snap={snap} canWrite={canWrite} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
+            <TaskTray snap={snap} canWrite={canWrite} watchOnly={watchOnly} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
           </aside>
         </div>
       )}

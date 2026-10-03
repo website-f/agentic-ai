@@ -99,7 +99,23 @@ async def test_each_role_sees_only_its_slice(client, llm, temporal):
         assert names((await bm.get("/api/agents")).json()) == ["Faiz", "Ops One"]
         assert names((await hod.get("/api/agents")).json()) == ["Faiz"]
         assert names((await sup.get("/api/agents")).json()) == ["Faiz"]
-        assert (await staff.get("/api/agents")).json() == []
+        # Staff watch their branch's office (P16), view only, but act on none of it.
+        watched = (await staff.get("/api/agents")).json()
+        assert names(watched) == ["Faiz", "Ops One"] and all(x["view_only"] for x in watched)
+        assert not any(x["can_manage"] for x in watched)
+        assert (await staff.get(f"/api/agents/{fin['id']}")).status_code == 200
+        assert (await staff.get(f"/api/agents/{fin['id']}/activity")).status_code == 200
+        assert (await staff.get(f"/api/agents/{far['id']}")).status_code == 404  # other branch
+        r = await staff.post(
+            f"/api/agents/{fin['id']}/chat", json={"message": "hi"}, headers=csrf(staff)
+        )
+        assert r.status_code == 404  # watching is not chatting
+        r = await staff.post(
+            "/api/tasks",
+            json={"title": "x", "assignee_agent_id": fin["id"]},
+            headers=csrf(staff),
+        )
+        assert r.status_code in (400, 404)
         # Outside the scope is "not here", not "forbidden": nothing to probe.
         assert (await hod.get(f"/api/agents/{far['id']}")).status_code == 404
         assert (await hod.get(f"/api/agents/{ops['id']}/activity")).status_code == 404
@@ -154,7 +170,9 @@ async def test_staff_own_their_agents(client, llm, temporal):
         me = (await staff.get("/api/auth/me")).json()
         assert mine["owner_user_id"] == me["user"]["id"] and mine["can_manage"]
         assert mine["role_kind"] == "leaf" and mine["heartbeat"] is False  # no org powers
-        assert names((await staff.get("/api/agents")).json()) == ["My Helper"]
+        listed = {x["name"]: x for x in (await staff.get("/api/agents")).json()}
+        assert set(listed) == {"My Helper", "Faiz", "Ops One"}  # own + watched office
+        assert not listed["My Helper"]["view_only"] and listed["Faiz"]["view_only"]
         # The branch manager sees it; the Finance HOD does not (it sits in Operations).
         assert "My Helper" in names((await bm.get("/api/agents")).json())
         assert "My Helper" not in names((await hod.get("/api/agents")).json())

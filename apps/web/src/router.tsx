@@ -25,6 +25,7 @@ const page = {
   login: lazyRouteComponent(() => import("@/pages/auth"), "LoginPage"),
   changePassword: lazyRouteComponent(() => import("@/pages/auth"), "ChangePasswordPage"),
   home: lazyRouteComponent(() => import("@/pages/command-center"), "CommandCenterPage"),
+  assistants: lazyRouteComponent(() => import("@/pages/assistants"), "AssistantsPage"),
   organization: lazyRouteComponent(() => import("@/pages/organization"), "OrganizationPage"),
   settings: lazyRouteComponent(() => import("@/pages/settings"), "SettingsPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
@@ -159,6 +160,17 @@ const appRoute = createRoute({
 });
 
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: page.home });
+const assistantsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/assistants",
+  validateSearch: (s: Record<string, unknown>): { a?: string; tab?: "chat" | "drafts" | "settings"; google?: string; msg?: string } => ({
+    a: str(s.a),
+    tab: s.tab === "drafts" || s.tab === "settings" || s.tab === "chat" ? s.tab : undefined,
+    google: str(s.google),
+    msg: str(s.msg),
+  }),
+  component: page.assistants,
+});
 
 const organizationRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -391,6 +403,7 @@ const routeTree = rootRoute.addChildren([
   changePasswordRoute,
   appRoute.addChildren([
     homeRoute,
+    assistantsRoute,
     organizationRoute,
     settingsRoute,
     membersRoute,

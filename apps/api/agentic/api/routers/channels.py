@@ -312,6 +312,9 @@ async def _channel_out(db: AsyncSession, ch: Channel, principal: Principal) -> d
         "name": ch.name,
         "enabled": ch.enabled,
         "bot_username": st.get("username"),
+        "provider": st.get("provider"),
+        "number": st.get("number"),
+        "status": st.get("status"),
         "last_error": st.get("last_error"),
         "links": [
             {
@@ -434,12 +437,13 @@ async def link_code(
 ) -> dict[str, Any]:
     ch = await _channel(db, principal, channel_id)
     code = await bot.new_link_code(ch.id, principal.user.id)
-    username = (ch.state or {}).get("username")
-    return {
-        "code": code,
-        "url": f"https://t.me/{username}?start={code}" if username else None,
-        "expires_in": bot.LINK_TTL,
-    }
+    st = ch.state or {}
+    if ch.kind == "whatsapp":  # a wa.me link that opens WhatsApp with the code typed in
+        number = st.get("number")
+        url = f"https://wa.me/{number}?text=LINK%20{code}" if number else None
+    else:
+        url = f"https://t.me/{st['username']}?start={code}" if st.get("username") else None
+    return {"code": code, "url": url, "expires_in": bot.LINK_TTL}
 
 
 @router.delete("/channels/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)

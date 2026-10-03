@@ -62,11 +62,7 @@ async def office_snapshot(
                 .where(
                     Agent.branch_id == branch.id,
                     Agent.status != "retired",
-                    *(
-                        [principal.scope.agent_where()]
-                        if principal.scope.agent_where() is not None
-                        else []
-                    ),
+                    principal.scope.observe_where(),  # staff watch the whole office
                 )
                 .order_by(Agent.created_at)
             )
@@ -144,6 +140,7 @@ async def office_snapshot(
                 "role": a.role,
                 "color": a.color,
                 "department_id": a.department_id,
+                "view_only": not principal.scope.sees_agent(a),  # staff watching colleagues
                 "status": a.status,
                 "clone_of": a.clone_of,
                 "owner_user_id": a.owner_user_id,

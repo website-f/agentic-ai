@@ -22,7 +22,8 @@ export function ChatPage() {
   const navigate = useNavigate();
   const phone = useIsPhone();
   const [q, setQ] = useState("");
-  const active = (agents ?? []).filter((a) => a.status !== "retired");
+  // Colleagues' agents the viewer only watches can't be chatted with (the API answers 404).
+  const active = (agents ?? []).filter((a) => a.status !== "retired" && !a.view_only);
   const shown = active.filter((a) => `${a.name} ${a.role} ${a.department_name ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   const selected = active.find((a) => a.id === search.agent) ?? (phone ? undefined : active[0]);
   const canWrite = me.permissions.includes("work.write");

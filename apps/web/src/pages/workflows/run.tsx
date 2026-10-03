@@ -61,7 +61,8 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
   // The suggestions, with whatever the person picked on top.
   const assign: Record<string, string> = { ...(plan?.suggested ?? {}), ...picked };
 
-  const usable = agents.filter((a) => a.status === "active" && !a.clone_of && (!branchId || a.branch_id === branchId));
+  // Steps go only to agents the viewer may instruct (not colleagues' agents they just watch).
+  const usable = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only && (!branchId || a.branch_id === branchId));
   const needs = plan?.needs ?? [];
   const missing = needs.filter((n) => !assign[n.node_id]);
   const start = useMutation({

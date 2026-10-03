@@ -5,6 +5,13 @@ a slice: a branch manager their branch, a HOD and a supervisor their department,
 agents they own. Everyone also sees their own personal agents and the tasks they created.
 Tasks follow their agent; approvals follow the agent that asked.
 
+Two more rules (P16):
+- A private agent (someone's personal assistant) is seen only by its owner: not by admins,
+  not by the workspace owner, not in lists, the office, tasks, approvals or live events.
+- Seeing is not the same as watching: staff *watch* the other (non-private) agents of their
+  branch work (`observe_where` / `observes_agent`: lists, office floor, live activity) but
+  act only on what they see (`sees_agent`: chat, tasks, approvals, settings).
+
 Every list is filtered in SQL with `agent_where` / `task_where`; every single-row read and
 write checks `sees_agent` / `sees_task` / `manages_agent`, and answers 404 when the row is
 outside the scope (so a scoped user cannot probe what exists elsewhere).
@@ -13,7 +20,7 @@ outside the scope (so a scoped user cannot probe what exists elsewhere).
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ColumnElement, false, or_, select
+from sqlalchemy import ColumnElement, and_, or_, select, true
 
 from ..core.security import SCOPED_ROLES
 from ..models import Agent, Approval, Task
@@ -57,21 +64,45 @@ class Scope:
 
     # ------------------------------------------------------------ agents
 
-    def agent_where(self) -> ColumnElement[bool] | None:
-        """SQL condition on Agent, or None for no filter."""
-        if self.everything:
-            return None
+    def _open(self) -> ColumnElement[bool]:
+        """Not someone else's private assistant."""
+        return or_(Agent.private.is_(False), Agent.owner_user_id == self.user_id)
+
+    def agent_where(self) -> ColumnElement[bool]:
+        """SQL condition on Agent: the agents this person sees and acts on."""
         mine = Agent.owner_user_id == self.user_id
+        if self.everything:
+            return self._open()
         if self.kind == "branch":
-            return or_(Agent.branch_id == self.branch_id, mine) if self.branch_id else mine
-        if self.kind == "department":
-            return (
+            base = or_(Agent.branch_id == self.branch_id, mine) if self.branch_id else mine
+        elif self.kind == "department":
+            base = (
                 or_(Agent.department_id == self.department_id, mine) if self.department_id else mine
             )
-        return mine
+        else:
+            base = mine
+        return and_(base, self._open())
+
+    def observe_where(self) -> ColumnElement[bool]:
+        """The agents this person may watch working: what they see, plus (for staff) the
+        rest of their branch's office."""
+        if self.kind != "own":
+            return self.agent_where()
+        mine = Agent.owner_user_id == self.user_id
+        office = Agent.branch_id == self.branch_id if self.branch_id else true()
+        return and_(or_(mine, office), self._open())
+
+    def observes_agent(self, a: Agent | None) -> bool:
+        if a is None or (a.private and a.owner_user_id != self.user_id):
+            return False
+        if self.sees_agent(a):
+            return True
+        return self.kind == "own" and (not self.branch_id or a.branch_id == self.branch_id)
 
     def sees_agent(self, a: Agent | None) -> bool:
         if a is None:
+            return False
+        if a.private and a.owner_user_id != self.user_id:
             return False
         if self.everything or a.owner_user_id == self.user_id:
             return True
@@ -100,12 +131,21 @@ class Scope:
     # ------------------------------------------------------------ tasks and approvals
 
     def _visible_agent_ids(self) -> Any:
-        cond = self.agent_where()
-        return select(Agent.id).where(cond if cond is not None else false())
+        return select(Agent.id).where(self.agent_where())
+
+    def _others_private_ids(self) -> Any:
+        return select(Agent.id).where(
+            Agent.private.is_(True),
+            or_(Agent.owner_user_id.is_(None), Agent.owner_user_id != self.user_id),
+        )
 
     def task_where(self) -> ColumnElement[bool] | None:
-        if self.everything:
-            return None
+        if self.everything:  # everything but other people's assistants' work
+            return or_(
+                Task.assignee_agent_id.is_(None),
+                Task.assignee_agent_id.not_in(self._others_private_ids()),
+                Task.created_by == self.actor,
+            )
         parts: list[ColumnElement[bool]] = [
             Task.assignee_agent_id.in_(self._visible_agent_ids()),
             Task.created_by == self.actor,
@@ -115,7 +155,11 @@ class Scope:
         return or_(*parts)
 
     def sees_task(self, t: Task, agent: Agent | None) -> bool:
-        if self.everything or t.created_by == self.actor:
+        if t.created_by == self.actor:
+            return True
+        if agent is not None and agent.private and agent.owner_user_id != self.user_id:
+            return False
+        if self.everything:
             return True
         if agent is not None and self.sees_agent(agent):
             return True
@@ -123,27 +167,36 @@ class Scope:
 
     def approval_where(self) -> ColumnElement[bool] | None:
         if self.everything:
-            return None
+            return Approval.agent_id.not_in(self._others_private_ids())
         return Approval.agent_id.in_(self._visible_agent_ids())
 
     # ------------------------------------------------------------ live events
 
-    def event_visible(self, type_: str, data: dict[str, Any], agent_ids: set[str]) -> bool:
+    def event_visible(
+        self,
+        type_: str,
+        data: dict[str, Any],
+        agent_ids: set[str],
+        watched: frozenset[str] | set[str] = frozenset(),
+    ) -> bool:
         """Live events: an agent's events reach the people who see that agent; office
         knowledge (brain, skills) reaches everyone; workspace plumbing (deliveries, incidents,
         job runs, broadcasts) only the workspace roles."""
-        if self.everything:
-            return True
         if type_ in KNOWLEDGE_EVENTS:
             return True
         aid = data.get("agent_id") or data.get("assignee_agent_id")
         if aid:
-            return aid in agent_ids
+            return aid in agent_ids or (type_ in WATCH_EVENTS and aid in watched)
+        if self.everything:
+            return True
         parts = data.get("participants")
         if isinstance(parts, list):
             return any(p in agent_ids for p in parts)
         return False
 
+
+# What watching an agent shows: that it is working and on what step, not its tasks' contents.
+WATCH_EVENTS = frozenset({"agent.status", "agent.thinking", "agent.activity", "agent.upsert"})
 
 KNOWLEDGE_EVENTS = frozenset(
     {"brain.page", "brain.dream", "skill.proposal", "skill.updated", "skill.used"}

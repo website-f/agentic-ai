@@ -29,7 +29,7 @@ from ..models import (
     User,
 )
 from ..services import events
-from . import telegram, webpush
+from . import telegram, webpush, whatsapp
 
 log = logging.getLogger("agentic.channels.deliver")
 
@@ -165,6 +165,29 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
         ).all()
         for link, ch in links:
             task_line = f"\nTask: {task.title}" if task else ""
+            if ch.kind == "whatsapp":
+                from ..core.config import settings
+
+                verb = "answer" if a.kind == "question" else "approve or deny"
+                did = await _add(
+                    db,
+                    Delivery(
+                        workspace_id=a.workspace_id,
+                        channel="whatsapp",
+                        target=f"{ch.id}:{link.chat_id}",
+                        kind="approval",
+                        payload={
+                            "text": f"*{title}*{task_line}\n\n{body}\n\nOpen to {verb}: "
+                            f"{settings.public_url}/approve/{a.id}",
+                            "approval_id": a.id,
+                        },
+                        dedupe_key=f"approval:{a.id}:wa:{link.id}",
+                        created_at=now,
+                    ),
+                )
+                if did:
+                    ids.append(did)
+                continue
             if a.kind == "question":
                 text = f"❓ {title}{task_line}\n\n{body}\n\nReply to this message with your answer."
                 buttons = None
@@ -194,6 +217,67 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     return ids
 
 
+async def _queue_for_user(
+    db: AsyncSession, workspace_id: str, user_id: str, title: str, body: str, url: str, dedupe: str
+) -> list[str]:
+    """One person, every way they can be reached: each device, linked Telegram and WhatsApp."""
+    now = datetime.now(UTC)
+    ids: list[str] = []
+    for sub in (
+        await db.scalars(
+            select(PushSubscription).where(
+                PushSubscription.user_id == user_id, PushSubscription.workspace_id == workspace_id
+            )
+        )
+    ).all():
+        did = await _add(
+            db,
+            Delivery(
+                workspace_id=workspace_id,
+                channel="webpush",
+                target=sub.id,
+                kind="notice",
+                payload={"title": title, "body": body, "url": url, "tag": dedupe},
+                dedupe_key=f"{dedupe}:push:{sub.id}",
+                created_at=now,
+            ),
+        )
+        if did:
+            ids.append(did)
+    from ..core.config import settings
+
+    for link, ch in (
+        await db.execute(
+            select(ChannelLink, Channel)
+            .join(Channel, Channel.id == ChannelLink.channel_id)
+            .where(
+                ChannelLink.user_id == user_id,
+                Channel.workspace_id == workspace_id,
+                Channel.enabled.is_(True),
+            )
+        )
+    ).all():
+        wa = ch.kind == "whatsapp"
+        text = f"*{title}*\n\n{body}" if wa else f"{title}\n\n{body}"
+        if url and url.startswith("/"):
+            text += f"\n\n{settings.public_url}{url}"
+        did = await _add(
+            db,
+            Delivery(
+                workspace_id=workspace_id,
+                channel="whatsapp" if wa else "telegram",
+                target=f"{ch.id}:{link.chat_id}",
+                kind="notice",
+                payload={"text": text},
+                dedupe_key=f"{dedupe}:{'wa' if wa else 'tg'}:{link.id}",
+                created_at=now,
+            ),
+        )
+        if did:
+            ids.append(did)
+    return ids
+
+
 async def notify_people(
     db: AsyncSession,
     workspace_id: str,
@@ -204,8 +288,7 @@ async def notify_people(
     dedupe: str,
     perm: str = "approvals.decide",
 ) -> list[str]:
-    """A plain notice (no buttons) to everyone with `perm`: every device and linked Telegram."""
-    now = datetime.now(UTC)
+    """A plain notice (no buttons) to everyone with `perm`: every device, Telegram, WhatsApp."""
     ids: list[str] = []
     rows = (
         await db.execute(
@@ -215,57 +298,73 @@ async def notify_people(
         )
     ).all()
     for user, role in rows:
-        if not can(role, perm):
-            continue
-        for sub in (
-            await db.scalars(
-                select(PushSubscription).where(
-                    PushSubscription.user_id == user.id,
-                    PushSubscription.workspace_id == workspace_id,
-                )
-            )
-        ).all():
-            did = await _add(
-                db,
-                Delivery(
-                    workspace_id=workspace_id,
-                    channel="webpush",
-                    target=sub.id,
-                    kind="notice",
-                    payload={"title": title, "body": body, "url": url, "tag": dedupe},
-                    dedupe_key=f"{dedupe}:push:{sub.id}",
-                    created_at=now,
-                ),
-            )
-            if did:
-                ids.append(did)
-        for link, ch in (
-            await db.execute(
-                select(ChannelLink, Channel)
-                .join(Channel, Channel.id == ChannelLink.channel_id)
-                .where(
-                    ChannelLink.user_id == user.id,
-                    Channel.workspace_id == workspace_id,
-                    Channel.enabled.is_(True),
-                )
-            )
-        ).all():
-            did = await _add(
-                db,
-                Delivery(
-                    workspace_id=workspace_id,
-                    channel="telegram",
-                    target=f"{ch.id}:{link.chat_id}",
-                    kind="notice",
-                    payload={"text": f"{title}\n\n{body}"},
-                    dedupe_key=f"{dedupe}:tg:{link.id}",
-                    created_at=now,
-                ),
-            )
-            if did:
-                ids.append(did)
+        if can(role, perm):
+            ids += await _queue_for_user(db, workspace_id, user.id, title, body, url, dedupe)
     await db.commit()
     return ids
+
+
+async def notify_user(
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+    title: str,
+    body: str,
+    url: str,
+    *,
+    dedupe: str,
+) -> list[str]:
+    """A notice to one person on every channel they set up. Returns the delivery ids."""
+    ids = await _queue_for_user(db, workspace_id, user_id, title, body, url, dedupe)
+    await db.commit()
+    return ids
+
+
+async def reach(db: AsyncSession, workspace_id: str, user_id: str) -> list[str]:
+    """How a person can be reached: "app" (a device), "telegram", "whatsapp"."""
+    out = []
+    if await db.scalar(
+        select(PushSubscription.id).where(
+            PushSubscription.user_id == user_id, PushSubscription.workspace_id == workspace_id
+        )
+    ):
+        out.append("app")
+    kinds = (
+        await db.scalars(
+            select(Channel.kind)
+            .join(ChannelLink, ChannelLink.channel_id == Channel.id)
+            .where(
+                ChannelLink.user_id == user_id,
+                Channel.workspace_id == workspace_id,
+                Channel.enabled.is_(True),
+            )
+        )
+    ).all()
+    return out + sorted(set(kinds))
+
+
+async def queue_whatsapp(
+    db: AsyncSession,
+    ch: Channel,
+    chat_id: str,
+    text: str,
+    kind: str = "reply",
+    dedupe: str | None = None,
+) -> str | None:
+    did = await _add(
+        db,
+        Delivery(
+            workspace_id=ch.workspace_id,
+            channel="whatsapp",
+            target=f"{ch.id}:{chat_id}",
+            kind=kind,
+            payload={"text": text},
+            dedupe_key=dedupe,
+            created_at=datetime.now(UTC),
+        ),
+    )
+    await db.commit()
+    return did
 
 
 async def queue_telegram(
@@ -338,9 +437,19 @@ async def deliver(db: AsyncSession, delivery_id: str) -> str:
                 )
                 d.state, d.sent_at = "sent", datetime.now(UTC)
                 d.result = {"message_id": msg.get("message_id")}
+        elif d.channel == "whatsapp":
+            ch_id, _, chat_id = d.target.partition(":")
+            ch = await db.get(Channel, ch_id)
+            if ch is None or not ch.enabled:
+                d.state, d.last_error = "skipped", "WhatsApp is switched off."
+            else:
+                cfg = whatsapp.Config.load(channel_token(ch))
+                mid = await whatsapp.send_text(cfg, chat_id, d.payload.get("text", ""))
+                d.state, d.sent_at = "sent", datetime.now(UTC)
+                d.result = {"message_id": mid}
         else:
             d.state, d.last_error = "skipped", f"unknown channel {d.channel}"
-    except (Retry, telegram.TelegramError) as e:
+    except (Retry, telegram.TelegramError, whatsapp.WhatsAppError) as e:
         retryable = (
             isinstance(e, Retry)
             or getattr(e, "status", 0) in (0, 429)

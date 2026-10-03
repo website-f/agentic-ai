@@ -5,6 +5,7 @@ import { RadioGroup } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -180,7 +181,8 @@ function NewMeeting({ taskId, onClose, onStarted }: { taskId?: string; onClose: 
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
   const { data: task } = useQuery({ ...taskQuery(taskId ?? ""), enabled: !!taskId });
-  const active = agents.filter((a) => a.status === "active");
+  // Only the viewer's own shared agents attend: not colleagues' (view only) nor personal assistants.
+  const active = agents.filter((a) => a.status === "active" && canShare(a));
   const [topic, setTopic] = useState("");
   // Until someone picks, the task's own agent is in (and chairs).
   const [chosen, setChosen] = useState<string[] | null>(null);

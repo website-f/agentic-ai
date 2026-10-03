@@ -174,7 +174,7 @@ function BlueprintDialog({ editing, open, onOpenChange }: { editing?: Blueprint;
 function ApplyDialog({ bp, open, onOpenChange }: { bp: Blueprint; open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
-  const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage);
+  const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage && !a.view_only);
   const [agentId, setAgentId] = useState("");
   const apply = useMutation({
     mutationFn: () => api(`/api/blueprints/${bp.id}/apply`, "POST", { agent_id: agentId }),

@@ -98,7 +98,7 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
             <p className="max-w-xs text-[12.5px] text-muted">Ask questions or think out loud together. Anything that needs approval is suggested as a task.</p>
           </div>
         ) : null}
-        <ol className="grid gap-4">
+        <ol className="grid grid-cols-[minmax(0,1fr)] gap-4">
           <AnimatePresence initial={false}>
             {messages.map((m) => (
               <motion.li key={m.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cn("flex gap-2.5", m.role === "user" && "justify-end")}>

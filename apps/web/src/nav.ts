@@ -26,6 +26,7 @@ import {
   PlugsConnectedIcon,
   PuzzlePieceIcon,
   SealCheckIcon,
+  SparkleIcon,
   UsersIcon,
   UsersThreeIcon,
   type Icon,
@@ -33,6 +34,7 @@ import {
 
 export type AppPath =
   | "/"
+  | "/assistants"
   | "/overview"
   | "/reports"
   | "/company-kit"
@@ -87,6 +89,7 @@ export const NAV: NavSection[] = [
     title: "Home",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
+      { to: "/assistants", label: "My assistants", icon: SparkleIcon, perm: "work.write", blurb: "Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp." },
       { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing." },
     ],
   },

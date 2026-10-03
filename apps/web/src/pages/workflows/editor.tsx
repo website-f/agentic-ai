@@ -169,7 +169,7 @@ function NodeInspector({ node, graph, onPatch, onKind, onDelete, onDuplicate, on
   onSelect: (s: Sel) => void;
 }) {
   const { data: agents = [] } = useQuery(agentsQuery);
-  const usable = agents.filter((a) => a.status === "active" && !a.clone_of);
+  const usable = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only);
   const item = itemFor(node);
   const outs = graph.edges.filter((e) => e.from === node.id);
   const ins = graph.edges.filter((e) => e.to === node.id);
@@ -309,7 +309,7 @@ function WorkflowSettings({ description, setDescription, active, setActive, agen
   graph: Graph; procedure?: string;
 }) {
   const { data: agents = [] } = useQuery(agentsQuery);
-  const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage);
+  const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage && !a.view_only);
   const counts = GROUPS.map((g) => [g, graph.nodes.filter((n) => itemFor(n).group === g).length] as const).filter(([, c]) => c);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">

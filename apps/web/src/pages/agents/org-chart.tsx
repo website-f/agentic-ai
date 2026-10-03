@@ -10,7 +10,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { CrownSimpleIcon, DotsSixVerticalIcon, HeartbeatIcon, TreeStructureIcon } from "@phosphor-icons/react";
+import { CrownSimpleIcon, DotsSixVerticalIcon, EyeIcon, HeartbeatIcon, TreeStructureIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -68,7 +68,8 @@ function below(tree: Node[], id: string): Set<string> {
 
 function Card({ a, manage, managers, onMove, dragging }: { a: Agent; manage: boolean; managers: Agent[]; onMove: (to: string | null) => void; dragging?: boolean }) {
   const { setNodeRef: dragRef, listeners, attributes, isDragging } = useDraggable({ id: a.id, disabled: !manage });
-  const { setNodeRef: dropRef, isOver } = useDroppable({ id: a.id });
+  // A colleague's agent (view only) can't become the new manager of the viewer's agent.
+  const { setNodeRef: dropRef, isOver } = useDroppable({ id: a.id, disabled: a.view_only });
   return (
     <div ref={dropRef}
       className={cn("flex items-center gap-2.5 rounded-[var(--radius-md)] border bg-surface px-2.5 py-2 transition-colors",
@@ -86,6 +87,7 @@ function Card({ a, manage, managers, onMove, dragging }: { a: Agent; manage: boo
         <span className="block truncate text-[12px] text-muted">{a.role}</span>
       </Link>
       {a.role_kind === "orchestrator" ? <Pill tone="accent" title="Can hand out work to others"><CrownSimpleIcon size={12} weight="fill" /> Leads</Pill> : null}
+      {a.view_only ? <EyeIcon size={15} className="shrink-0 text-muted" aria-label="View only" /> : null}
       {a.heartbeat ? <HeartbeatIcon size={15} className="shrink-0 text-ok" aria-label="Heartbeat on" /> : null}
       {manage ? (
         <Menu>
@@ -110,8 +112,8 @@ function Branch({ nodes, depth, ...rest }: { nodes: Node[]; depth: number; manag
         const blocked = below(rest.tree, n.agent.id);
         return (
           <li key={n.agent.id} className="grid gap-2">
-            <Card a={n.agent} manage={rest.manage} dragging={rest.active === n.agent.id}
-              managers={rest.all.filter((m) => !blocked.has(m.id))} onMove={(to) => rest.move(n.agent, to)} />
+            <Card a={n.agent} manage={rest.manage && !n.agent.view_only} dragging={rest.active === n.agent.id}
+              managers={rest.all.filter((m) => !blocked.has(m.id) && !m.view_only)} onMove={(to) => rest.move(n.agent, to)} />
             {n.kids.length ? <Branch nodes={n.kids} depth={depth + 1} {...rest} /> : null}
           </li>
         );
@@ -161,7 +163,7 @@ export function OrgChart({ agents, manage }: { agents: Agent[]; manage: boolean 
   const onDragEnd = (e: DragEndEvent) => {
     setActive(null);
     const a = agents.find((x) => x.id === e.active.id);
-    if (!a || !e.over) return;
+    if (!a || !e.over || a.view_only) return;
     const to = e.over.id === TOP ? null : String(e.over.id);
     if (to && below(tree, a.id).has(to)) {
       toast.error(`${a.name} cannot report to someone who reports to them.`);

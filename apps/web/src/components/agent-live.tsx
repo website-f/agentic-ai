@@ -218,8 +218,9 @@ export function StepList({ lines, empty, className }: { lines: { e: FeedEvent; l
   );
 }
 
-/** Compact live view for side panels: screen (or what it is doing), and the latest steps. */
-export function AgentLive({ agentId, name }: { agentId: string; name: string }) {
+/** Compact live view for side panels: screen (or what it is doing), and the latest steps.
+ * `viewOnly`: the viewer only watches this agent (a colleague's), so nothing invites them to instruct it. */
+export function AgentLive({ agentId, name, viewOnly = false }: { agentId: string; name: string; viewOnly?: boolean }) {
   const f = useAgentFeed(agentId);
   if (f.isLoading) return <Skeleton className="h-64 rounded-[var(--radius-md)]" />;
   if (f.error || !f.data) return <p role="alert" className="text-[13px] text-danger">{errorMessage(f.error)}</p>;
@@ -252,7 +253,7 @@ export function AgentLive({ agentId, name }: { agentId: string; name: string }) 
           <span>Step by step <span className="font-normal text-muted">· {working ? "live" : "latest"}</span></span>
           <Link to="/monitor" search={{ agent: agentId }} className="inline-flex items-center gap-1 font-normal text-accent hover:underline">Full monitor <ArrowSquareOutIcon size={12} /></Link>
         </h4>
-        <StepList lines={f.lines.slice(-40)} empty={`Nothing yet. Give ${name} a task and watch it work here.`} className="flex-1" />
+        <StepList lines={f.lines.slice(-40)} empty={viewOnly ? `Nothing yet. When ${name} works, each step shows here.` : `Nothing yet. Give ${name} a task and watch it work here.`} className="flex-1" />
       </section>
     </div>
   );

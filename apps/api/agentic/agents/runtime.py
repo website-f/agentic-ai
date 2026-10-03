@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..assistants.names import ASSISTANT_ONLY
 from ..brain import core as core_memory
 from ..brain.recall import recall_block
 from ..core.config import settings
@@ -366,6 +367,8 @@ def offered_tools(
         if n == "run_python" and not settings.sandbox_url:
             continue
         if n.startswith("browser_") and not settings.browser_url:  # small servers: no browser
+            continue
+        if n in ASSISTANT_ONLY and not agent.private:  # a person's assistant only (P16)
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue

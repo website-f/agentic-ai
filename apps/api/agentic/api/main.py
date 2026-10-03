@@ -18,6 +18,7 @@ from .deps import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from .routers import (
     agents,
     ai_engine,
+    assistants,
     audit_log,
     auth,
     blueprints,
@@ -43,6 +44,7 @@ from .routers import (
     teams,
     vault,
     web_tasks,
+    whatsapp,
     workflow_runs,
     workflows,
 )
@@ -55,6 +57,7 @@ CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
 # File uploads send raw bytes. A cross-site form cannot send octet-stream either, so the
 # JSON-only guarantee holds; the CSRF token is still checked.
 RAW_UPLOAD_PATHS = {"/api/files"}
+WEBHOOK_PREFIX = "/api/whatsapp/hook/"
 
 
 @asynccontextmanager
@@ -94,7 +97,9 @@ async def csrf_guard(request: Request, call_next):
         )
         if not ctype.startswith("application/json") and not raw_ok:
             return _error(415, "json_required", "Send requests as application/json.")
-        if path not in CSRF_EXEMPT and request.cookies.get(SESSION_COOKIE):
+        # Signed webhooks (WhatsApp) never use the session cookie, so CSRF does not apply.
+        exempt = path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX)
+        if not exempt and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
             header = request.headers.get(CSRF_HEADER, "")
             if not cookie or not hmac.compare_digest(cookie, header):
@@ -172,6 +177,8 @@ for r in (
     packs.router,
     mcp_servers.router,
     workflow_runs.router,
+    whatsapp.router,
+    assistants.router,
     events_stream.router,
 ):
     app.include_router(r)

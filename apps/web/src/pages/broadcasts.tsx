@@ -5,6 +5,7 @@ import { RadioGroup } from "radix-ui";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -96,11 +97,12 @@ function Composer() {
                 </div>
               </div>
             ))}
-            {agents.length ? (
+            {agents.some(canShare) ? (
               <div className="grid gap-1.5">
                 <span className="text-[12px] text-muted">Individual agents</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {agents.filter((a) => a.status === "active").map((a) => (
+                  {/* Not colleagues' agents (view only) nor personal assistants. */}
+                  {agents.filter((a) => a.status === "active" && canShare(a)).map((a) => (
                     <Chip key={a.id} on={aud.agent_ids.includes(a.id)} onClick={() => toggle("agent_ids", a.id)}>
                       <AgentAvatar name={a.name} color={a.color} size="xs" className="-ml-1.5" /> {a.name}
                     </Chip>

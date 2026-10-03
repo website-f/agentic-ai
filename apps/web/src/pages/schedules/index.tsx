@@ -83,7 +83,7 @@ function ScheduleDialog({ s, onClose }: { s?: Schedule; onClose: () => void }) {
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">Agent</span>
           <Select label="Agent" value={agentId} onValueChange={setAgentId} placeholder="Pick an agent"
-            options={agents.filter((a) => a.status === "active").map((a) => ({ value: a.id, label: `${a.name} · ${a.role}` }))} />
+            options={agents.filter((a) => a.status === "active" && !a.view_only).map((a) => ({ value: a.id, label: `${a.name} · ${a.role}` }))} />
         </div>
         <Field label="Task title" value={title} onChange={(e) => setTitle(e.target.value)} hint="Each run's task gets the date added." />
         <TextareaField label="Brief" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="What to do each time, and what the result should look like." />

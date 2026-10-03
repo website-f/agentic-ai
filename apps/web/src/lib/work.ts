@@ -57,6 +57,10 @@ export interface Agent {
   owner_name?: string | null;
   clone_of?: string | null;
   can_manage?: boolean;
+  /** The viewer only watches this agent (a colleague's agent in their branch): no chat, tasks or edits. */
+  view_only: boolean;
+  /** A personal assistant: only ever returned to its owner. */
+  private: boolean;
 }
 
 export interface SOP {

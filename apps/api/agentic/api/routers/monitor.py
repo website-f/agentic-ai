@@ -20,8 +20,10 @@ FEED_TYPES = ("agent.activity", "task.event", "meeting.turn", "approval.requeste
 
 
 async def _agent(db: AsyncSession, principal: Principal, agent_id: str) -> Agent:
+    """An agent this person may watch (staff watch their whole office)."""
     a = await db.get(Agent, agent_id)
-    if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
+    sc = principal.scope
+    if a is None or a.workspace_id != principal.workspace_id or not sc.observes_agent(a):
         raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
     return a
 

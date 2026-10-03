@@ -35,7 +35,7 @@ function LoginDialog({ open, onOpenChange, editing }: { open: boolean; onOpenCha
   const [personal, setPersonal] = useState(!manager);
   const [branch, setBranch] = useState(everything ? WHOLE : me.scope?.branch_id ?? WHOLE);
   const [only, setOnly] = useState<string[]>(editing?.agent_ids ?? []);
-  const mine = agents.filter((a) => !a.clone_of && (personal ? a.owner_user_id === me.user.id : branch === WHOLE || a.branch_id === branch));
+  const mine = agents.filter((a) => !a.clone_of && !a.view_only && (personal ? a.owner_user_id === me.user.id : branch === WHOLE || a.branch_id === branch));
 
   const save = useMutation({
     mutationFn: () => {

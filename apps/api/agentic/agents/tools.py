@@ -1021,6 +1021,11 @@ from .doc_tools import CODE_TOOLS, MCP_TOOLS  # noqa: E402 - needs Tool/ToolCont
 TOOLS.update({t.name: t for t in MCP_TOOLS})
 TOOLS.update({t.name: t for t in CODE_TOOLS})
 
+# Personal assistants (P16): company insight, people and agents, Gmail drafts.
+from ..assistants.tools import ASSISTANT_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in ASSISTANT_TOOLS})
+
 # Never offered to the model and never run, whatever any setting says.
 GLOBAL_DENY: frozenset[str] = frozenset()
 

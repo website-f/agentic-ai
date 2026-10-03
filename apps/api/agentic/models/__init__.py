@@ -327,6 +327,8 @@ class Agent(Timestamps, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     clone_of: Mapped[str | None] = mapped_column(String(40), index=True)
+    # A personal assistant (P16): only its owner sees it, works with it and reads its work.
+    private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class ChatSession(Timestamps, Base):
@@ -803,7 +805,7 @@ class Channel(Timestamps, Base):
     """An outside messaging account, e.g. a Telegram bot. The token is encrypted at rest."""
 
     __tablename__ = "channels"
-    __table_args__ = (CheckConstraint("kind IN ('telegram')", name="ck_channels_kind"),)
+    __table_args__ = (CheckConstraint("kind IN ('telegram', 'whatsapp')", name="ck_channels_kind"),)
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ch"))
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
@@ -1336,3 +1338,73 @@ class McpServer(Timestamps, Base):
     @property
     def aad(self) -> str:
         return f"mcp_server:{self.id}"
+
+
+class Integration(Timestamps, Base):
+    """A workspace's connection settings for an outside service (P16), e.g. the Google OAuth
+    app (client id + secret) people sign in with to connect Gmail. Encrypted at rest."""
+
+    __tablename__ = "integrations"
+    __table_args__ = (UniqueConstraint("workspace_id", "kind", name="uq_integrations_ws_kind"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ig"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))  # google
+    config_enc: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+
+    @property
+    def aad(self) -> str:
+        return f"integration:{self.id}"
+
+
+class GoogleAccount(Timestamps, Base):
+    """A person's own Gmail, connected by them with Google sign-in (P16). Only their private
+    assistants use it. The refresh token is encrypted at rest; access tokens live in Valkey."""
+
+    __tablename__ = "google_accounts"
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_google_accounts_user"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ga"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(200))
+    scopes: Mapped[str] = mapped_column(Text, default="")
+    token_enc: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="connected")  # connected | error
+    last_error: Mapped[str | None] = mapped_column(String(300))
+
+    @property
+    def aad(self) -> str:
+        return f"google_account:{self.id}"
+
+
+class EmailDraft(Timestamps, Base):
+    """A reply an assistant drafted in the person's Gmail (P16). It is sent only when the
+    person approves it here; until then it sits in Gmail's Drafts."""
+
+    __tablename__ = "email_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'sent', 'discarded', 'failed')", name="ck_email_drafts_status"
+        ),
+        Index("ix_email_drafts_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ed"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    account_id: Mapped[str] = mapped_column(ForeignKey("google_accounts.id", ondelete="CASCADE"))
+    gmail_draft_id: Mapped[str] = mapped_column(String(120))
+    thread_id: Mapped[str] = mapped_column(String(120), default="")
+    in_reply_to: Mapped[str] = mapped_column(String(120), default="")  # the Gmail message id
+    to: Mapped[str] = mapped_column(Text, default="")
+    cc: Mapped[str] = mapped_column(Text, default="")
+    subject: Mapped[str] = mapped_column(String(400), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    original_from: Mapped[str] = mapped_column(String(300), default="")
+    original_snippet: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    error: Mapped[str | None] = mapped_column(String(500))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

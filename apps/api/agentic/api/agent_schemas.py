@@ -96,6 +96,9 @@ class AgentOut(BaseModel):
     owner_name: str | None = None
     clone_of: str | None = None
     can_manage: bool = False
+    # Watched, not acted on (staff seeing a colleague's agent work): no chat, no tasks.
+    view_only: bool = False
+    private: bool = False
 
 
 class PromptPreviewOut(BaseModel):

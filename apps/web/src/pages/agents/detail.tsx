@@ -19,6 +19,7 @@ import { Tabs } from "radix-ui";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { IconTile, Page, Section } from "@/components/page";
@@ -69,15 +70,17 @@ function useSaveAgent(agent: Agent) {
 }
 
 function Overview({ agent }: { agent: Agent }) {
-  const { data: tasks = [] } = useQuery(tasksQuery);
+  // A watched colleague's agent: its tasks and results are not the viewer's, so only the live view shows.
+  const viewOnly = agent.view_only;
+  const { data: tasks = [] } = useQuery({ ...tasksQuery, enabled: !viewOnly });
   const mine = tasks.filter((t) => t.assignee_agent_id === agent.id).slice(0, 12);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-5">
         <Section title="Right now" description="Its screen and every step, live." className="grid-cols-[minmax(0,1fr)] content-start">
-          <AgentLive agentId={agent.id} name={agent.name} />
+          <AgentLive agentId={agent.id} name={agent.name} viewOnly={viewOnly} />
         </Section>
-        <Card className="overflow-hidden">
+        {viewOnly ? null : <Card className="overflow-hidden">
           <CardHeader
             icon={<IconTile icon={KanbanIcon} tone="info" size="sm" />}
             title="Tasks"
@@ -110,12 +113,14 @@ function Overview({ agent }: { agent: Agent }) {
           ) : (
             <p className="px-4 py-8 text-center text-[13px] text-muted">No tasks yet. Give {agent.name} something to do.</p>
           )}
-        </Card>
+        </Card>}
       </div>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-5">
-        <Section title="What came out of it" description="Its latest finished work and reports." className="grid-cols-[minmax(0,1fr)] content-start">
-          <AgentOutcome agentId={agent.id} name={agent.name} />
-        </Section>
+        {viewOnly ? null : (
+          <Section title="What came out of it" description="Its latest finished work and reports." className="grid-cols-[minmax(0,1fr)] content-start">
+            <AgentOutcome agentId={agent.id} name={agent.name} />
+          </Section>
+        )}
         <Card className="overflow-hidden">
           <CardHeader icon={<IconTile icon={SmileyIcon} tone="violet" size="sm" />} title="Personality" description="How it thinks, writes and reports." />
           <CardBody>
@@ -310,14 +315,18 @@ export function AgentDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: me } = useSuspenseQuery(meQuery);
-  const canWrite = me.permissions.includes("work.write");
   const { data: agent, isLoading, error } = useQuery(agentQuery(agentId));
+  // A colleague's agent the viewer only watches: no chat, tasks, browsing or edits at all.
+  const viewOnly = !!agent?.view_only;
+  const canWrite = me.permissions.includes("work.write") && !viewOnly;
   // The server says whether this person may change this agent (scope and ownership).
-  const canManage = !!agent?.can_manage;
+  const canManage = !!agent?.can_manage && !viewOnly;
   const live = useLive((s) => s.agentStatus[agentId]);
   const [retiring, setRetiring] = useState(false);
   const [browsing, setBrowsing] = useState(false);
-  const tab: Tab = search.tab && TABS.includes(search.tab) ? search.tab : "overview";
+  // Watching only: chat and memory are the owner's; the rest stays readable.
+  const tabs: readonly Tab[] = viewOnly ? TABS.filter((t) => t !== "chat" && t !== "memory") : TABS;
+  const tab: Tab = search.tab && tabs.includes(search.tab) ? search.tab : "overview";
 
   const setStatus = useMutation({
     mutationFn: (status: Agent["status"]) => api<Agent>(`/api/agents/${agentId}`, "PATCH", { status }),
@@ -362,6 +371,7 @@ export function AgentDetailPage() {
             <div className="grid min-w-0 flex-1 gap-1">
               <h1 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[20px] leading-tight font-semibold tracking-tight break-words sm:text-[22px]">
                 {agent.name} <Pill tone={state.tone}>{state.label}</Pill>
+                <AgentAccessPills agent={agent} />
               </h1>
               <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted">
                 <Meta
@@ -412,7 +422,25 @@ export function AgentDetailPage() {
             ) : null}
           </div>
         </header>
-        {agent.current_task ? (
+        {agent.current_task && viewOnly ? (
+          // The viewer can't open a colleague's task, so this is a plain line, not a link.
+          <p
+            className={cn(
+              "mt-4 flex items-center gap-2.5 rounded-sm border px-3 py-2 text-[13px]",
+              agent.current_task.status === "blocked" ? "border-warn/30 bg-warn/8" : "border-accent/25 bg-accent-soft/50",
+            )}
+          >
+            {agent.current_task.status === "blocked" ? (
+              <HandIcon size={16} weight="duotone" className="shrink-0 text-warn" />
+            ) : (
+              <LightningIcon size={16} weight="duotone" className="shrink-0 text-accent" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="text-muted">{agent.current_task.status === "blocked" ? "Waiting on approval: " : "Working on: "}</span>
+              <span className="font-medium break-words">{agent.current_task.title}</span>
+            </span>
+          </p>
+        ) : agent.current_task ? (
           <Link
             to="/tasks"
             search={{ task: agent.current_task.id }}
@@ -433,6 +461,14 @@ export function AgentDetailPage() {
             <ArrowRightIcon size={14} className="shrink-0 text-muted" />
           </Link>
         ) : null}
+        {viewOnly ? (
+          <p role="note" className="mt-4 flex items-start gap-2.5 rounded-sm border border-border bg-surface-2/60 px-3 py-2.5 text-[13px] text-muted">
+            <EyeIcon size={16} weight="duotone" className="mt-0.5 shrink-0" />
+            <span className="min-w-0 flex-1 break-words">
+              You&apos;re watching <span className="font-medium text-fg">{agent.name}</span>. Only {agent.owner_name ?? "its manager"} can instruct or change it.
+            </span>
+          </p>
+        ) : null}
       </Card>
 
       <Tabs.Root
@@ -450,7 +486,7 @@ export function AgentDetailPage() {
           aria-label={`${agent.name} sections`}
           className="mb-5 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <Tabs.Trigger
               key={t}
               value={t}
@@ -463,12 +499,16 @@ export function AgentDetailPage() {
         <Tabs.Content value="overview" className="outline-none">
           <Overview agent={agent} />
         </Tabs.Content>
-        <Tabs.Content value="chat" className="outline-none">
-          <ChatPanel agent={agent} canWrite={canWrite} className="h-[min(70dvh,44rem)]" />
-        </Tabs.Content>
-        <Tabs.Content value="memory" className="outline-none">
-          <MemoryTab agent={agent} canWrite={canWrite} />
-        </Tabs.Content>
+        {viewOnly ? null : (
+          <>
+            <Tabs.Content value="chat" className="outline-none">
+              <ChatPanel agent={agent} canWrite={canWrite} className="h-[min(70dvh,44rem)]" />
+            </Tabs.Content>
+            <Tabs.Content value="memory" className="outline-none">
+              <MemoryTab agent={agent} canWrite={canWrite} />
+            </Tabs.Content>
+          </>
+        )}
         <Tabs.Content value="profile" className="outline-none">
           <Profile key={agent.id + agent.created_at} agent={agent} canManage={canManage} />
         </Tabs.Content>
@@ -483,7 +523,7 @@ export function AgentDetailPage() {
         </Tabs.Content>
       </Tabs.Root>
 
-      {browsing ? (
+      {browsing && !viewOnly ? (
         <WebTaskDialog
           agent={agent}
           open

@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -33,18 +34,18 @@ REPLAY_LIMIT = 500
 SCOPE_REFRESH = 30  # seconds: agents a scoped viewer may follow are re-read this often
 
 
-async def _visible_ids(principal: Principal) -> set[str]:
-    cond = principal.scope.agent_where()
-    if cond is None:
-        return set()
+async def _visible_ids(principal: Principal) -> tuple[set[str], set[str]]:
+    """Agents whose events this person gets in full, and those they only watch."""
     async with SessionLocal() as db:
-        return set(
-            (
-                await db.scalars(
-                    select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
+        rows = (
+            await db.execute(
+                select(Agent.id, principal.scope.agent_where()).where(
+                    Agent.workspace_id == principal.workspace_id,
+                    principal.scope.observe_where(),
                 )
-            ).all()
-        )
+            )
+        ).all()
+    return {i for i, full in rows if full}, {i for i, _ in rows}
 
 
 def _frame(seq: int, payload: dict) -> str:
@@ -64,14 +65,14 @@ async def stream(
     ws = principal.workspace_id
     scope = principal.scope
     loop = asyncio.get_running_loop()
-    seen: dict[str, object] = {"ids": await _visible_ids(principal), "at": loop.time()}
+    full, watched = await _visible_ids(principal)
+    seen: dict[str, Any] = {"ids": full, "watched": watched, "at": loop.time()}
 
     async def ok(type_: str, data: dict) -> bool:
-        if scope.everything:
-            return True
         if type_ == "agent.upsert" or loop.time() - float(seen["at"]) > SCOPE_REFRESH:
-            seen["ids"], seen["at"] = await _visible_ids(principal), loop.time()
-        return scope.event_visible(type_, data or {}, seen["ids"])  # type: ignore[arg-type]
+            seen["ids"], seen["watched"] = await _visible_ids(principal)
+            seen["at"] = loop.time()
+        return scope.event_visible(type_, data or {}, seen["ids"], seen["watched"])
 
     async def gen() -> AsyncIterator[str]:
         q = await hub.join(ws)  # listen first so nothing falls in the gap

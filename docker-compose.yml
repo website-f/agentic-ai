@@ -45,6 +45,15 @@ x-app-env: &app-env
   # The local backup brain (P14). Empty AGENTIC_LOCAL_LLM_URL turns it off.
   AGENTIC_LOCAL_LLM_URL: ${AGENTIC_LOCAL_LLM_URL:-http://ollama:11434/v1}
   AGENTIC_LOCAL_LLM_MODEL: ${AGENTIC_LOCAL_LLM_MODEL:-qwen3:0.6b}
+  # Personal assistants (P16): where people open the app (Google sign-in returns here, links
+  # in messages point here), the Google OAuth app for Gmail (or set it in the dashboard), and
+  # the WhatsApp gateway (WAHA) plus how it reaches our webhook.
+  AGENTIC_PUBLIC_URL: ${AGENTIC_PUBLIC_URL:-http://localhost:8500}
+  AGENTIC_GOOGLE_CLIENT_ID: ${AGENTIC_GOOGLE_CLIENT_ID:-}
+  AGENTIC_GOOGLE_CLIENT_SECRET: ${AGENTIC_GOOGLE_CLIENT_SECRET:-}
+  AGENTIC_WAHA_URL: ${AGENTIC_WAHA_URL:-http://waha:3000}
+  AGENTIC_WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:-dev-waha-key}
+  AGENTIC_INTERNAL_API_URL: http://api:8501
   # Traces (profile obs). Empty host = off.
   AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
   AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
@@ -325,6 +334,33 @@ services:
     mem_limit: 1280m
     cpus: 2
     networks: [llm]
+    security_opt: ["no-new-privileges:true"]
+    <<: *logging
+
+  waha:
+    # WhatsApp gateway (P16, devlikeapro/waha): the office phone scans a QR code shown on the
+    # Channels page. NOWEB engine: no browser inside, ~150 MB. Unofficial; for production at
+    # scale use the Meta Cloud API instead (no container needed). Never published.
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    environment:
+      WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:-dev-waha-key}
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"  # sessions come back after a restart
+      WAHA_DASHBOARD_ENABLED: "false"
+      WHATSAPP_SWAGGER_ENABLED: "false"
+      WAHA_PRINT_QR: "false"
+      WAHA_LOG_LEVEL: warn
+    volumes: ["wahadata:/app/.sessions"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 1
+    networks: [edge]  # reaches WhatsApp, and our api for webhooks
     security_opt: ["no-new-privileges:true"]
     <<: *logging
 
@@ -620,3 +656,4 @@ volumes:
   clickhouselogs: {}
   langfusevalkey: {}
   ollamadata: {}
+  wahadata: {}

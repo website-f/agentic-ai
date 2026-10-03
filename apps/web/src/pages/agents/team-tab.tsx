@@ -68,7 +68,8 @@ function Daily({ b }: { b: AgentBudget }) {
 
 export function TeamTab({ agent, canManage }: { agent: Agent; canManage: boolean }) {
   const qc = useQueryClient();
-  const { data: budget } = useQuery(agentBudgetQuery(agent.id));
+  // Spend is the owner's business: a watched colleague's agent shows its settings, not its usage.
+  const { data: budget } = useQuery({ ...agentBudgetQuery(agent.id), enabled: !agent.view_only });
   const initial = {
     role_kind: agent.role_kind,
     max_parallel_children: String(agent.max_parallel_children),

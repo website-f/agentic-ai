@@ -33,10 +33,13 @@ export function NewTaskDialog({
 }) {
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
-  const active = agents.filter((a) => a.status === "active" && !a.clone_of);
+  // Only agents the viewer may instruct: colleagues' agents they just watch (view_only) are left out.
+  const active = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only);
   const [title, setTitle] = useState(initialBrief ? initialBrief.split("\n")[0]!.slice(0, 120) : "");
   const [brief, setBrief] = useState(initialBrief ?? "");
-  const [agent, setAgent] = useState(initialAgent ?? "none");
+  const [picked, setAgent] = useState(initialAgent ?? "none");
+  // A link like ?agent=<a watched agent> falls back to triage instead of a task the API refuses.
+  const agent = agents.find((a) => a.id === picked)?.view_only ? "none" : picked;
   const [priority, setPriority] = useState<Priority>("normal");
   const [review, setReview] = useState(true);
   const [startNow, setStartNow] = useState(true);

@@ -5,6 +5,7 @@ import { Tabs } from "radix-ui";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { ApprovalCard } from "@/components/approval-card";
@@ -16,7 +17,7 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { WebTaskDialog } from "@/components/web-task-dialog";
 import { api, errorMessage } from "@/lib/api";
 import { timeAgo } from "@/lib/utils";
-import { agentQuery, approvalsQuery, STATUS_INFO, taskQuery, workKeys } from "@/lib/work";
+import { agentQuery, agentsQuery, approvalsQuery, STATUS_INFO, taskQuery, workKeys } from "@/lib/work";
 import type { OfficeAgent } from "@/office/types";
 
 export const STATE_INFO: Record<OfficeAgent["state"], { label: string; tone: "accent" | "warn" | "neutral" | "info" | "danger" }> = {
@@ -35,7 +36,7 @@ const TABS: { id: Tab; label: string; icon: typeof EyeIcon }[] = [
   { id: "chat", label: "Chat", icon: ChatsCircleIcon },
 ];
 
-export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose }: {
+export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecide, onClose }: {
   agent: OfficeAgent;
   departmentName: string | null;
   canWrite: boolean;
@@ -45,9 +46,18 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
   const qc = useQueryClient();
   const { data: approvals = [] } = useQuery(approvalsQuery("pending"));
   const mine = approvals.filter((a) => a.agent_id === agent.id);
-  const task = useQuery({ ...taskQuery(agent.task?.id ?? ""), enabled: !!agent.task });
   const full = useQuery(agentQuery(agent.id));
-  const [tab, setTab] = useState<Tab>("monitor");
+  const { data: roster } = useQuery(agentsQuery);
+  // Staff watch colleagues' agents (view_only, from the office snapshot): no chat, tasks,
+  // browsing or pausing, only the live monitor.
+  const known = full.data ?? roster?.find((a) => a.id === agent.id);
+  const viewOnly = agent.view_only ?? !!known?.view_only;
+  const decided = agent.view_only !== undefined || !!known;
+  const canWrite = mayWrite && decided && !viewOnly;
+  const task = useQuery({ ...taskQuery(agent.task?.id ?? ""), enabled: !!agent.task && decided && !viewOnly });
+  const tabs = viewOnly ? TABS.filter((t) => t.id !== "chat") : TABS;
+  const [picked, setTab] = useState<Tab>("monitor");
+  const tab: Tab = tabs.some((t) => t.id === picked) ? picked : "monitor";
   const [browsing, setBrowsing] = useState(false);
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<string | null>(null);
@@ -64,7 +74,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const state = STATE_INFO[agent.state];
+  const state = viewOnly && agent.state === "waiting_approval" ? { label: "Waiting on approval", tone: "warn" as const } : STATE_INFO[agent.state];
   const events = (task.data?.events ?? []).slice(-8).reverse();
 
   return (
@@ -82,6 +92,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
         <span className="flex flex-wrap items-center gap-2">
           <span>{agent.role}{departmentName ? ` · ${departmentName}` : ""}</span>
           <Pill tone={state.tone}>{state.label}</Pill>
+          {known ? <AgentAccessPills agent={known} /> : null}
         </span>
       }
       actions={
@@ -110,7 +121,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
 
         <Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
           <Tabs.List aria-label={`${agent.name} panel`} className="mb-4 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <Tabs.Trigger key={t.id} value={t.id}
                 className="-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
                 <t.icon size={15} weight="duotone" /> {t.label}
@@ -121,7 +132,7 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
 
           {/* Monitor: live screen (browser / what it is doing) + step by step. */}
           <Tabs.Content value="monitor" className="outline-none">
-            <AgentLive agentId={agent.id} name={agent.name} />
+            <AgentLive agentId={agent.id} name={agent.name} viewOnly={viewOnly} />
           </Tabs.Content>
 
           {/* Work: the task it is on now, and everything it has produced. */}
@@ -131,7 +142,11 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
               {agent.task ? (
                 <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link to="/tasks" search={{ task: agent.task.id }} className="text-[13.5px] font-medium text-accent hover:underline">{agent.task.title}</Link>
+                    {viewOnly ? (
+                      <span className="text-[13.5px] font-medium break-words">{agent.task.title}</span>
+                    ) : (
+                      <Link to="/tasks" search={{ task: agent.task.id }} className="text-[13.5px] font-medium text-accent hover:underline">{agent.task.title}</Link>
+                    )}
                     <Pill tone={STATUS_INFO[agent.task.status as keyof typeof STATUS_INFO]?.tone ?? "neutral"}>{STATUS_INFO[agent.task.status as keyof typeof STATUS_INFO]?.label ?? agent.task.status}</Pill>
                   </div>
                   {events.length ? (
@@ -150,14 +165,21 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
                 </p>
               )}
             </section>
-            <section className="grid gap-2">
-              <h3 className="text-[13px] font-semibold text-muted">What it produced</h3>
-              <AgentOutcome agentId={agent.id} name={agent.name} />
-            </section>
+            {viewOnly ? (
+              <p className="flex items-start gap-2 rounded-[var(--radius-md)] border border-border bg-surface-2/60 px-3 py-2.5 text-[12.5px] text-muted">
+                <EyeIcon size={15} weight="duotone" className="mt-0.5 shrink-0" />
+                <span className="min-w-0 flex-1">You&apos;re watching {agent.name}. Its results go to {known?.owner_name ?? "its manager"}.</span>
+              </p>
+            ) : (
+              <section className="grid gap-2">
+                <h3 className="text-[13px] font-semibold text-muted">What it produced</h3>
+                <AgentOutcome agentId={agent.id} name={agent.name} />
+              </section>
+            )}
           </Tabs.Content>
 
-          {/* Chat: a quick question or instruction, saved under Chat. */}
-          <Tabs.Content value="chat" className="outline-none">
+          {/* Chat: a quick question or instruction, saved under Chat (never for a watched agent). */}
+          {viewOnly ? null : <Tabs.Content value="chat" className="outline-none">
             {canWrite ? (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
                 <form onSubmit={(e) => { e.preventDefault(); if (message.trim()) chat.mutate(); }} className="flex gap-2">
@@ -168,10 +190,10 @@ export function AgentSheet({ agent, departmentName, canWrite, canDecide, onClose
                 <p className="text-[12px] text-muted">A quick chat. For work that needs tools or your approval, use <Link to="/tasks" search={{ new: 1, agent: agent.id }} className="text-accent hover:underline">a task</Link> or Browse for me. The full conversation is on the <Link to="/chat" search={{ agent: agent.id }} className="text-accent hover:underline">Chat page</Link>.</p>
               </div>
             ) : <p className="text-[13px] text-muted">You do not have permission to message agents.</p>}
-          </Tabs.Content>
+          </Tabs.Content>}
         </Tabs.Root>
       </div>
-      {browsing && full.data ? <WebTaskDialog agent={full.data} open onOpenChange={setBrowsing} /> : null}
+      {browsing && full.data && !viewOnly ? <WebTaskDialog agent={full.data} open onOpenChange={setBrowsing} /> : null}
     </SideSheet>
   );
 }

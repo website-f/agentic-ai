@@ -63,6 +63,9 @@ ignore = ["S101", "B008", "ASYNC109"]
 "tests/*" = ["S105", "S106", "F811"]
 # E501: the threat-pattern table reads best one regex per line.
 "agentic/core/threats.py" = ["E501"]
+# E501: tool descriptions and report rows read best on one line each.
+"agentic/assistants/tools.py" = ["E501"]
+"agentic/assistants/insights.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

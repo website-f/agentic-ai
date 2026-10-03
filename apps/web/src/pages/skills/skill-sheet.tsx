@@ -106,7 +106,7 @@ function Audience({ s, canDecide }: { s: SkillDetail; canDecide: boolean }) {
       {mode === "some" ? (
         <div className="grid gap-1.5">
           <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-            {agents.filter((a) => a.status !== "retired").map((a) => (
+            {agents.filter((a) => a.status !== "retired" && !a.view_only).map((a) => (
               <label key={a.id} className="inline-flex min-h-9 items-center gap-2 text-[13px]">
                 <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={ids.includes(a.id)}
                   onChange={(e) => setIds(e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id))} />

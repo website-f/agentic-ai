@@ -160,7 +160,8 @@ function AskAgentDialog({ pack, onClose }: { pack: Pack; onClose: () => void }) 
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: agents = [] } = useQuery(agentsQuery);
-  const usable = agents.filter((a) => a.status === "active" && !a.clone_of);
+  // Delegating makes a task: only agents the viewer may instruct.
+  const usable = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only);
   const here = usable.filter((a) => !pack.branch_id || a.branch_id === pack.branch_id);
   const [agentId, setAgentId] = useState("");
   const [note, setNote] = useState("");

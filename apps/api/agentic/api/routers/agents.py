@@ -108,6 +108,8 @@ async def agent_out(
         owner_name=owner.name if owner else None,
         clone_of=a.clone_of,
         can_manage=principal is not None and can_manage(principal, a),
+        view_only=principal is not None and not principal.scope.sees_agent(a),
+        private=bool(a.private),
     )
 
 
@@ -250,10 +252,10 @@ async def list_agents(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AgentOut]:
-    q = select(Agent).where(Agent.workspace_id == principal.workspace_id)
-    cond = principal.scope.agent_where()
-    if cond is not None:
-        q = q.where(cond)
+    # Staff also watch the rest of their office (marked view_only).
+    q = select(Agent).where(
+        Agent.workspace_id == principal.workspace_id, principal.scope.observe_where()
+    )
     if branch_id:
         q = q.where(Agent.branch_id == branch_id)
     if not include_retired:
@@ -335,7 +337,14 @@ async def read_agent(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
-    return await agent_out(db, await get_agent(db, principal, agent_id), None, principal)
+    a = await db.get(Agent, agent_id)
+    if (
+        a is None
+        or a.workspace_id != principal.workspace_id
+        or not principal.scope.observes_agent(a)
+    ):
+        raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
+    return await agent_out(db, a, None, principal)
 
 
 @router.patch("/agents/{agent_id}")

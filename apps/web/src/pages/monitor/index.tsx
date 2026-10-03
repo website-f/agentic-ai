@@ -1,8 +1,9 @@
-import { ArrowSquareOutIcon, BrainIcon, CoinsIcon, EyeIcon, ListChecksIcon, SquaresFourIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, BrainIcon, CoinsIcon, EyeIcon, ListChecksIcon, LockSimpleIcon, SquaresFourIcon } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
+import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { describe, Screen, StepList, useAgentFeed, type Line } from "@/components/agent-live";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
@@ -46,9 +47,12 @@ function Watch({ agent }: { agent: Agent }) {
       <Card className="flex flex-wrap items-start gap-x-4 gap-y-3 p-4 sm:p-5">
         <AgentAvatar name={agent.name} color={agent.color} working={state.label === "Working"} />
         <div className="min-w-0 flex-1 basis-60">
-          <h2 className="flex flex-wrap items-center gap-2 text-[17px] font-semibold break-words">{agent.name} <Pill tone={state.tone}>{thinking ? "Thinking" : state.label}</Pill></h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-[17px] font-semibold break-words">
+            {agent.name} <Pill tone={state.tone}>{thinking ? "Thinking" : state.label}</Pill>
+            <AgentAccessPills agent={agent} />
+          </h2>
           <p className="text-[13px] break-words text-muted">
-            {data.task ? <>On <Link to="/tasks" search={{ task: data.task.id }} className="text-accent hover:underline">{data.task.title}</Link>{data.task.tokens ? ` · ${data.task.calls} model calls, ${tokensShort(data.task.tokens)} tokens so far` : ""}</> : "No task right now."}
+            {data.task ? <>On {agent.view_only ? <span className="text-fg">{data.task.title}</span> : <Link to="/tasks" search={{ task: data.task.id }} className="text-accent hover:underline">{data.task.title}</Link>}{data.task.tokens ? ` · ${data.task.calls} model calls, ${tokensShort(data.task.tokens)} tokens so far` : ""}</> : "No task right now."}
           </p>
           {data.helpers?.length ? (
             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted">
@@ -82,7 +86,7 @@ function Watch({ agent }: { agent: Agent }) {
             <IconTile icon={ListChecksIcon} size="sm" className="size-7" /> Step by step
             <Pill tone="accent" live className="ml-auto">Live</Pill>
           </h3>
-          <StepList lines={lines} empty={`Nothing yet. Give ${agent.name} a task and watch it work here.`} className="flex-1" />
+          <StepList lines={lines} empty={agent.view_only ? `Nothing yet. When ${agent.name} works, each step shows here.` : `Nothing yet. Give ${agent.name} a task and watch it work here.`} className="flex-1" />
         </section>
       </div>
     </div>
@@ -189,7 +193,11 @@ export function MonitorPage() {
                   className={cn("flex max-w-60 shrink-0 items-center gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 text-left transition-colors lg:w-full lg:max-w-none", a.id === selected?.id ? "border-accent bg-accent-soft/60" : "border-border bg-surface hover:bg-surface-2")}>
                   <AgentAvatar name={a.name} color={a.color} size="sm" working={st.label === "Working"} />
                   <span className={cn("min-w-0 flex-1", a.clone_of && "pl-1")}>
-                    <span className="block truncate text-[13.5px] font-medium">{a.clone_of ? "↳ " : ""}{a.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-[13.5px] font-medium">
+                      <span className="truncate">{a.clone_of ? "↳ " : ""}{a.name}</span>
+                      {a.view_only ? <EyeIcon size={13} className="shrink-0 text-muted" aria-label="View only" /> : null}
+                      {a.private ? <LockSimpleIcon size={13} className="shrink-0 text-muted" aria-label="Private" /> : null}
+                    </span>
                     <span className="block truncate text-[12px] text-muted">{st.label}{a.current_task ? ` · ${a.current_task.title}` : ""}</span>
                   </span>
                 </button>

@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     local_llm_url: str = ""
     local_llm_model: str = "qwen3:0.6b"
 
+    # Where people open the app (P16): Google sign-in returns here, links in messages point here.
+    public_url: str = "http://localhost:8500"
+    # Google OAuth app for Gmail (P16). Can also be set in the dashboard (Channels > Google).
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # WhatsApp through WAHA (P16): the self-hosted gateway, and how it reaches our webhook.
+    waha_url: str = "http://waha:3000"
+    waha_api_key: str = ""
+    internal_api_url: str = "http://api:8501"
+
     # The code sandbox (P13): a sealed container with no internet and no secrets.
     sandbox_url: str = ""  # empty = the run_python tool is off
     sandbox_token: str = "dev-sandbox-token"  # noqa: S105 - dev default, required outside dev
