@@ -253,7 +253,7 @@ function BranchTable({ o }: { o: Overview }) {
             <tr>
               {COLS.map((c) => (
                 <th key={c.key} scope="col" className={cn("px-3 py-2 font-medium first:pl-4 sm:first:pl-5", c.num && "text-right")} aria-sort={sort.key === c.key ? (sort.desc ? "descending" : "ascending") : "none"}>
-                  <button className="inline-flex items-center gap-1 whitespace-nowrap hover:text-fg" onClick={() => setSort((s) => ({ key: c.key, desc: s.key === c.key ? !s.desc : c.key !== "name" }))}>
+                  <button className="inline-flex items-center gap-1 whitespace-nowrap hover:text-fg pointer-coarse:min-h-10" onClick={() => setSort((s) => ({ key: c.key, desc: s.key === c.key ? !s.desc : c.key !== "name" }))}>
                     {c.label}
                     {sort.key === c.key ? (sort.desc ? <ArrowDownIcon size={11} /> : <ArrowUpIcon size={11} />) : null}
                   </button>

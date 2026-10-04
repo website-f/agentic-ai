@@ -203,3 +203,59 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- native feel on phones
+   Unlayered on purpose: it must beat the utility classes (text-[13px] on a field). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+@media (pointer: coarse) {
+  /* iOS Safari zooms the whole page into any field under 16px when it gets focus. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px;
+  }
+  /* No grey flash on tap, no double-tap wait, no text selection or callout on controls. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  a,
+  button,
+  label,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"] {
+    touch-action: manipulation;
+  }
+  button,
+  [role="button"],
+  [role="tab"],
+  nav a {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+@media (pointer: coarse) and (max-width: 767px) {
+  /* Like a native app: the tab bar steps aside while the keyboard is up. */
+  body:has(:is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select, [contenteditable="true"]):focus)
+    nav[aria-label="Main"].fixed {
+    display: none;
+  }
+}
+@media (pointer: coarse) {
+  /* Small controls get a finger-sized hit area without changing how they look. */
+  [role="switch"] {
+    position: relative;
+  }
+  [role="switch"]::after {
+    content: "";
+    position: absolute;
+    inset: -10px -6px;
+  }
+}

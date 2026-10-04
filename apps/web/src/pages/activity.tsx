@@ -165,7 +165,7 @@ export function ActivityPage() {
       ) : all.length === 0 && kind === "all" ? (
         <EmptyState icon={ClockCounterClockwiseIcon} title="Nothing recorded yet" body="Changes to members, branches and departments will show up here." />
       ) : (
-        <div className="grid gap-6">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
           <Segmented label="Filter activity" value={kind} onChange={setKind} options={options} className="w-fit" />
           {groups.length === 0 ? (
             <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">

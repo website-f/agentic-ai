@@ -256,7 +256,7 @@ function Header() {
       className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/85 px-3 backdrop-blur-md sm:px-4"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <Link to="/" className="md:hidden" aria-label="Home">
+      <Link to="/" className="-m-1.5 p-1.5 md:hidden" aria-label="Home">
         <LogoMark className="size-7" />
       </Link>
       <div className="min-w-0 flex-1">
@@ -341,12 +341,19 @@ function MobileTabBar() {
       <Drawer.Root open={more} onOpenChange={setMore}>
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-40 bg-black/40" />
+          {/* The sheet itself only drags; the list scrolls inside it (vaul treats a drag on the
+              sheet as "move the sheet", so a scrolling sheet could never scroll on a phone). */}
           <Drawer.Content
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-[var(--radius-lg)] border-t border-border bg-surface px-4 pb-6 outline-none"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
+            aria-describedby={undefined}
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-[var(--radius-lg)] border-t border-border bg-surface outline-none"
           >
-            <div aria-hidden className="mx-auto mt-2.5 mb-3 h-1.5 w-10 rounded-full bg-border" />
+            <div aria-hidden className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-border" />
             <Drawer.Title className="sr-only">All pages</Drawer.Title>
+            <div
+              data-vaul-no-drag
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 [-webkit-overflow-scrolling:touch]"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
+            >
             {moreSections.map((s) => (
               <div key={s.title} className="mb-3">
                 <p className="mb-1.5 px-1 text-[12px] font-medium text-muted">{s.title}</p>
@@ -372,6 +379,7 @@ function MobileTabBar() {
                 </div>
               </div>
             ))}
+            </div>
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
