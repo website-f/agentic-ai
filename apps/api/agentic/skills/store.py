@@ -105,17 +105,275 @@ You are given a transcript, chat log or rough notes from a meeting.
 - Do not invent owners or dates.
 """,
     ),
+    # P19 finance and management starters. They lean on finance_calc and forecast, which do
+    # the maths deterministically, so the model only chooses inputs and explains.
+    (
+        "cash-flow-forecast",
+        "Forecast the next months of cash in, cash out and closing balance from past monthly "
+        "figures, with a range and the months where cash runs short.",
+        """## When to use
+Someone asks how cash will look in the coming months, whether there is enough to pay a
+commitment, or wants a 3, 6 or 12 month cash-flow projection.
+
+## Steps
+1. Collect at least 6 months (ideally 24) of monthly cash in and cash out, oldest first, and the
+   opening bank balance. Use read_file for statements or ask_human for what is missing.
+2. Run forecast separately for cash in and for cash out (season_length 12 when you have two
+   years or more; last_period as YYYY-MM so months are labelled).
+3. Add known one-off items people told you about (a loan drawdown, a big payment, bonus month)
+   on top of the forecast, and list them.
+4. Closing balance each month = opening + cash in - cash out. Use calc for the running total.
+5. Flag every month where the closing balance falls below the minimum buffer (ask for it;
+   default one month of cash out) and say how big the gap is.
+
+## Output format
+- One line: the lowest month, its closing balance, and whether action is needed.
+- Table: month, cash in, cash out, net, closing balance, low and high (80% range).
+- Assumptions and one-off items as a short list, then the forecast method from the tool.
+
+## Pitfalls
+- Never invent history. With fewer than 6 months say the projection is rough.
+- Forecasts are ranges, not promises: give the 80% range, not only the point.
+- Receivables are not cash until collected; use actual receipts, not invoices raised.
+""",
+    ),
+    (
+        "budget-variance",
+        "Compare budget against actual by line, compute variances and percentages, and explain "
+        "the few lines that matter.",
+        """## When to use
+Someone gives a budget and actual figures (monthly or year to date) and asks how the company
+is doing against plan, or for a variance report.
+
+## Steps
+1. Line up budget and actual for each line; keep income and expense lines apart.
+2. For each line use calc: variance = actual - budget, and variance % = variance / budget.
+3. Mark each variance favourable or unfavourable: more income or less cost is favourable.
+4. Pick the lines with the largest absolute variance (top 3 to 5) and those over 10%; for
+   each, give the likely cause in one sentence and a question to confirm it (ask_human if a
+   person must answer).
+5. Total income, total expenses and net profit against budget at the bottom.
+
+## Output format
+- One line: net profit against budget, in RM and %.
+- Table: line, budget, actual, variance, variance %, F/U.
+- "What explains it" for the top lines, then "Actions".
+
+## Pitfalls
+- A favourable cost variance can mean work not done yet (timing), not savings. Say so.
+- Do not compute percentages on a zero budget; write "n/a".
+""",
+    ),
+    (
+        "debtor-ageing",
+        "Age outstanding customer invoices into 0-30, 31-60, 61-90 and over 90 days and draft "
+        "a collection plan by customer.",
+        """## When to use
+Someone shares an invoice list or debtor report and asks who owes what, how old it is, or how
+to collect it faster.
+
+## Steps
+1. For each unpaid invoice note customer, invoice number, date, due date and amount
+   outstanding. Use time_now for today's date.
+2. Days overdue = today - due date (use invoice date + credit term when there is no due date).
+3. Put each into a bucket: current (not due), 1-30, 31-60, 61-90, over 90 days overdue.
+   Use calc for every bucket and customer total.
+4. Collection plan per customer, oldest and largest first: 1-30 a friendly reminder, 31-60 a
+   call plus statement, 61-90 a firm letter and hold new credit, over 90 escalate to
+   management (a person decides on legal action).
+5. Draft reminder text if asked, but never send it: a person sends it.
+
+## Output format
+- One line: total outstanding and how much is over 90 days.
+- Ageing table: customer, current, 1-30, 31-60, 61-90, over 90, total.
+- Collection plan: customer, amount, action, owner, by when.
+
+## Pitfalls
+- Credit notes and part payments reduce the balance; apply them first.
+- Do not threaten legal action in drafts; that is a decision for a person.
+""",
+    ),
+    (
+        "monthly-management-report",
+        "Write a one-page monthly management report: revenue, profit, cash, debtors, key "
+        "numbers against last month and budget, risks and decisions needed.",
+        """## When to use
+The owner or management asks for the month-end report, a business update or a board pack
+summary.
+
+## Steps
+1. Gather this month's figures, last month's and the budget: revenue, gross profit, expenses,
+   net profit, cash balance, debtors, creditors, and any operating numbers they track
+   (orders, projects, tickets). Ask for what is missing rather than guessing.
+2. Use finance_calc (calculation margin) for gross and net margins and calc for every change
+   (amount and %) against last month and budget.
+3. If there are 6 or more months of history, run forecast on revenue for the next 3 months.
+4. Pick the 3 things management must know and the decisions you need from them.
+5. Publish the report with publish_report (tables for the figures).
+
+## Output format
+- Headline (2-3 sentences).
+- Key figures table: measure, this month, last month, change, budget, variance.
+- Highlights, Risks, Decisions needed (bullets, each one line).
+
+## Pitfalls
+- Report numbers, not adjectives. Say "revenue fell 12%", not "a challenging month".
+- Mark figures that are estimates or not yet reconciled.
+""",
+    ),
+    (
+        "pricing-margin-check",
+        "Check a price or quotation against cost: margin, markup, break-even volume and the "
+        "price needed for a target margin, before it goes to the customer.",
+        """## When to use
+Before a quotation, tender price or price change is sent, or when someone asks whether a price
+is profitable or what to charge.
+
+## Steps
+1. Get the full unit cost: materials, labour, subcontract, delivery, and a share of overheads
+   if the company uses one. List what was included.
+2. Run finance_calc with calculation margin (cost and price) for margin and markup.
+3. If there is a target margin, run finance_calc margin with margin_pct for the price needed.
+4. If fixed costs for the job or product are known, run finance_calc break_even for the
+   volume needed.
+5. Check SST: is the price before or after tax? Use finance_calc sst when needed.
+6. Recommend: keep, raise or lower, with the margin each option gives.
+
+## Output format
+- One line: the margin at the proposed price and whether it meets the target.
+- Table: cost, price, margin, markup; then the price for the target margin.
+- Assumptions (what cost includes), then the recommendation.
+
+## Pitfalls
+- Margin and markup are different: 30% markup is a 23.08% margin.
+- Quote prices with or without SST explicitly.
+""",
+    ),
+    (
+        "financing-comparison",
+        "Compare loan, hire-purchase or financing offers on instalment, total cost and true "
+        "effective rate, flat against reducing balance.",
+        """## When to use
+Someone has two or more financing offers (bank loan, hire purchase, Islamic financing, lease)
+for a vehicle, machine, property or working capital and asks which is cheaper.
+
+## Steps
+1. For each offer note amount financed, rate, whether the rate is flat or reducing balance
+   (ask if unclear: hire purchase is usually flat), tenure, fees, and deposit.
+2. Run finance_calc calculation loan for each offer with its method, schedule yearly.
+3. Compare on the effective (reducing-balance) rate and the total paid including fees, not on
+   the headline rate: a 3% flat rate costs about 5.6% a year over 5 years.
+4. Note terms that change the real cost: early settlement (Rule of 78 rebate for flat-rate
+   hire purchase), lock-in periods, insurance, balloon payments.
+5. Recommend one, and say what would change the answer.
+
+## Output format
+- One line: the cheapest offer and by how much in total.
+- Table: offer, amount, rate quoted, effective rate, instalment, total interest, total paid.
+- Terms to watch, then the recommendation.
+
+## Pitfalls
+- Never compare a flat rate with a reducing-balance rate directly.
+- Islamic financing quotes a profit rate; treat it the same way for the comparison.
+""",
+    ),
 ]
+
+# Tests for the built-in skills: run from the Skills page like any skill's eval cases.
+BUILTIN_CASES: dict[str, list[dict[str, Any]]] = {
+    "cash-flow-forecast": [
+        {
+            "title": "Six-month projection with a shortfall",
+            "input": "Opening balance RM 40,000. Cash in Apr-Sep: 52000, 48000, 55000, 50000, "
+            "53000, 51000. Cash out Apr-Sep: 50000, 51000, 54000, 56000, 55000, 57000. "
+            "Project the next 3 months.",
+            "must_call": ["forecast"],
+            "must_contain": ["closing"],
+            "rubric": "Gives a month-by-month table with closing balances, states a range or "
+            "uncertainty, and points out whether cash runs short.",
+        },
+    ],
+    "budget-variance": [
+        {
+            "title": "Revenue below budget, costs above",
+            "input": "Budget: revenue 200000, salaries 80000, rent 12000. Actual: revenue "
+            "180000, salaries 85000, rent 12000. Variance report please.",
+            "must_contain": ["unfavourable", "20,000"],
+            "rubric": "Shows variance and variance % per line, marks revenue and salaries "
+            "unfavourable, and states net profit against budget (RM 25,000 worse).",
+        },
+    ],
+    "debtor-ageing": [
+        {
+            "title": "Buckets and a plan",
+            "input": "Today is 2026-10-01. Unpaid: Alpha Sdn Bhd INV-101 due 2026-09-20 RM "
+            "5,000; Beta Trading INV-088 due 2026-06-15 RM 12,000; Alpha Sdn Bhd INV-110 due "
+            "2026-10-15 RM 3,000.",
+            "must_contain": ["90"],
+            "rubric": "Beta Trading's RM 12,000 is over 90 days overdue and escalated to "
+            "management; Alpha's INV-101 is 1-30 days; INV-110 is current; totals are right.",
+        },
+    ],
+    "monthly-management-report": [
+        {
+            "title": "Month-end summary",
+            "input": "September: revenue 310000 (Aug 290000, budget 300000), gross profit "
+            "93000, net profit 21000, cash 145000, debtors 220000. Write the management report.",
+            "must_contain": ["revenue"],
+            "rubric": "Has a headline, a key figures table with change against last month and "
+            "budget, and lists risks (e.g. high debtors) and decisions needed.",
+        },
+    ],
+    "pricing-margin-check": [
+        {
+            "title": "Markup is not margin",
+            "input": "Our cost is RM 1,000 and sales wants to quote RM 1,300. We target a 30% "
+            "margin. Is the price OK?",
+            "must_call": ["finance_calc"],
+            "rubric": "Says RM 1,300 is a 23.08% margin (30% markup), below the 30% target, "
+            "and that about RM 1,428.57 is needed for a 30% margin.",
+        },
+    ],
+    "financing-comparison": [
+        {
+            "title": "Flat against reducing",
+            "input": "Offer A: hire purchase RM 50,000 at 3% flat for 5 years. Offer B: bank "
+            "loan RM 50,000 at 5% reducing balance for 5 years. Which is cheaper?",
+            "must_call": ["finance_calc"],
+            "must_contain": ["effective"],
+            "rubric": "Converts the flat rate to an effective rate (about 5.6%) and compares "
+            "total interest: A about RM 7,500, B about RM 6,614; recommends B.",
+        },
+    ],
+}
+
+# The starters every workspace had before P19, so older workspaces gain only the new ones.
+_FIRST_BUILTIN = ("compare-quotes", "meeting-notes")
 
 
 async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
-    have = await db.scalar(
-        select(func.count()).select_from(Skill).where(Skill.workspace_id == ws.id)
-    )
-    if have:
+    """Add the built-in starters a workspace has not had yet. Each is seeded once (recorded
+    in workspace settings), so a starter someone deleted does not come back."""
+    seeded_key = "builtin_skills"
+    all_names = {b[0] for b in BUILTIN}
+    settings = dict(ws.settings or {})
+    seeded = settings.get(seeded_key)
+    if isinstance(seeded, list) and all_names <= set(seeded):
+        return  # the usual case: one dict lookup, no query
+    if not isinstance(seeded, list):
+        have = await db.scalar(
+            select(func.count()).select_from(Skill).where(Skill.workspace_id == ws.id)
+        )
+        seeded = list(_FIRST_BUILTIN) if have else []
+    existing = set((await db.scalars(select(Skill.name).where(Skill.workspace_id == ws.id))).all())
+    todo = [b for b in BUILTIN if b[0] not in seeded and b[0] not in existing]
+    settings[seeded_key] = sorted({*seeded, *all_names})
+    ws.settings = settings
+    if not todo:
+        await db.commit()
         return
-    vectors = await embed.embed([f"{n}: {d}" for n, d, _ in BUILTIN]) or [None] * len(BUILTIN)
-    for (name, description, body), vec in zip(BUILTIN, vectors, strict=True):
+    vectors = await embed.embed([f"{n}: {d}" for n, d, _ in todo]) or [None] * len(todo)
+    for (name, description, body), vec in zip(todo, vectors, strict=True):
         s = Skill(
             workspace_id=ws.id,
             name=name,
@@ -141,6 +399,18 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
                 created_at=_now(),
             )
         )
+        for c in BUILTIN_CASES.get(name, []):
+            db.add(
+                SkillEvalCase(
+                    workspace_id=ws.id,
+                    skill_id=s.id,
+                    title=c["title"],
+                    input=c["input"],
+                    checks={k: v for k, v in c.items() if k not in ("title", "input")},
+                    created_by="system",
+                    created_at=_now(),
+                )
+            )
         await _mirror(db, ws, s, brain_store.SYSTEM, f"skills: add built-in {name}")
     await db.commit()
 

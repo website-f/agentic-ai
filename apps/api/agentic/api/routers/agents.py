@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import dispatch, runtime, twin
+from ...agents import dispatch, runtime, twin, work_hours
 from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import TOOLS
@@ -114,7 +114,22 @@ async def agent_out(
         view_only=principal is not None and not principal.scope.sees_agent(a),
         private=bool(a.private),
         is_twin=bool(a.is_twin),
+        work_hours=a.work_hours,
+        hours_label=work_hours.describe(a.work_hours) if a.work_hours else None,
+        duty=work_hours.duty(datetime.now(UTC), a.work_hours) if a.work_hours else None,
     )
+
+
+async def clean_hours(db: AsyncSession, ws_id: str, raw: dict | None) -> dict | None:
+    """Validate working hours from a person (422 with the reason); tz defaults to the
+    workspace's."""
+    from ...models import Workspace
+
+    ws = await db.get(Workspace, ws_id)
+    try:
+        return work_hours.clean(raw, ws.timezone if ws else "UTC")
+    except work_hours.HoursError as e:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_hours", str(e)) from e
 
 
 def can_manage(principal: Principal, a: Agent) -> bool:
@@ -337,6 +352,7 @@ async def create_agent(
     ):
         slug, n = f"{base}-{n}", n + 1
     fields = body.model_dump(exclude={"personal"})
+    fields["work_hours"] = await clean_hours(db, principal.workspace_id, body.work_hours)
     if personal:
         fields["owner_user_id"] = principal.user.id
         if "agents.manage" not in perms:
@@ -447,6 +463,8 @@ async def update_agent(
         await _guard_twin(db, principal, a, changes)
     if "tools" in changes:
         _check_tools(changes["tools"] or {})
+    if "work_hours" in changes:  # the person (a twin's owner) and its managers set hours
+        changes["work_hours"] = await clean_hours(db, principal.workspace_id, changes["work_hours"])
     branch_id = changes.get("branch_id", a.branch_id)
     if branch_id != a.branch_id and "department_id" not in changes:
         changes["department_id"] = None  # the old department belongs to the old branch
@@ -499,6 +517,10 @@ async def update_agent(
     )
     await db.commit()
     await db.refresh(a)
+    if "work_hours" in changes and before.get("work_hours") != a.work_hours:
+        from ...agents import launch
+
+        await launch.recheck_waiting(db, a, principal.actor)
     await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
     return await agent_out(db, a, None, principal)
 

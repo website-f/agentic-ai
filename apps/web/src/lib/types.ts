@@ -61,6 +61,8 @@ export interface Branch {
   slug: string;
   color: string;
   isolated: boolean;
+  /** What the company does (P19): picks its ready-made AI team. */
+  industry?: string;
   created_at: string;
   departments: Department[];
 }

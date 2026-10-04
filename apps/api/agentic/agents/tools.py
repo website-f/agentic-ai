@@ -1064,3 +1064,14 @@ TOOLS.update({t.name: t for t in SCHEDULE_TOOLS})
 from ..assistants.calendar_tools import CALENDAR_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in CALENDAR_TOOLS})
+
+# A visible plan for multi-step work (P19): the checklist people watch on the task.
+from .plan_tools import PLAN_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in PLAN_TOOLS})
+
+# Finance and forecasting (P19): deterministic loan, NPV/IRR, margin, depreciation, SST
+# maths and exponential-smoothing forecasts, each with the formula it used.
+from .finance_tools import FINANCE_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in FINANCE_TOOLS})

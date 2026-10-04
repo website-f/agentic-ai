@@ -85,6 +85,7 @@ Rules:
 
 
 FEEDBACK = "Feedback on your last answer:"  # how a sent-back task's correction is recorded
+SELF_CHECK = "Self-check before handing in:"  # agents/verify.py PREFIX (P19)
 CADENCE = 8  # every this many finished tasks with real tool work, reflect anyway (Hermes)
 
 
@@ -112,6 +113,8 @@ def _trigger(task: Task, msgs: list[AgentMessage], tasks_since: int = 0) -> str 
         return f"the work was sent back {task.run_count - 1} times"
     if any(m.role == "user" and (m.content or "").startswith(FEEDBACK) for m in msgs):
         return "a person corrected the work"
+    if any(m.role == "user" and (m.content or "").startswith(SELF_CHECK) for m in msgs):
+        return "the self-check caught a mistake before hand-in"
     asked = [task.brief] + [m.content or "" for m in msgs if m.role == "user"]
     if any(REMEMBER.search(a) for a in asked):
         return "someone asked to remember how to do this"

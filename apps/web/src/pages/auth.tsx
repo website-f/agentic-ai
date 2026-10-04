@@ -1,5 +1,5 @@
-import { HardDrivesIcon, LockSimpleIcon, ShieldCheckIcon, SignInIcon, UsersThreeIcon, type Icon } from "@phosphor-icons/react";
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { BuildingsIcon, HardDrivesIcon, LockSimpleIcon, ShieldCheckIcon, SignInIcon, UserFocusIcon, UsersThreeIcon, type Icon } from "@phosphor-icons/react";
+import { useQueryClient, useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -10,8 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { api, ApiError } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
+import { lastLoginPath, rememberLoginPath, staffQuery, type LoginPath } from "@/lib/staff";
+import { staffOnly } from "@/lib/twin";
 import type { Me } from "@/lib/types";
 import { useSignOut } from "@/lib/use-sign-out";
+import { cn } from "@/lib/utils";
 
 const POINTS: { icon: Icon; title: string; body: string }[] = [
   { icon: ShieldCheckIcon, title: "Tamper-evident", body: "Every change is recorded in a hash-chained log." },
@@ -73,7 +76,7 @@ function AuthLayout({ title, subtitle, children }: { title: string; subtitle: Re
   );
 }
 
-function useAuthSubmit<T>(path: string, onDone: (me: Me) => void) {
+function useAuthSubmit<T>(path: string, onDone: (me: Me) => void | Promise<void>) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +90,7 @@ function useAuthSubmit<T>(path: string, onDone: (me: Me) => void) {
       const me = await api<Me>(path, "POST", body);
       qc.setQueryData(keys.me, me);
       qc.setQueryData(keys.setup, { needs_setup: false });
-      onDone(me);
+      await onDone(me);
     } catch (e) {
       if (e instanceof ApiError) {
         setFields(e.fields);
@@ -129,21 +132,74 @@ export function SetupPage() {
   );
 }
 
+/** Where a person goes after signing in (P19): staff who chose "I'm staff" go to their AI
+ * worker (hiring it first, if they have not yet); everyone else to where they were going. */
+async function landing(qc: QueryClient, me: Me, path: LoginPath, next?: string): Promise<string> {
+  const wanted = next && next.startsWith("/") ? next : undefined;
+  if (path === "staff" && staffOnly(me.permissions)) {
+    try {
+      const s = await qc.fetchQuery(staffQuery);
+      return s.onboarding.done ? (wanted ?? "/my-worker") : "/welcome";
+    } catch {
+      return wanted ?? "/my-worker";
+    }
+  }
+  return wanted ?? "/";
+}
+
+const PATHS: { value: LoginPath; icon: Icon; title: string; hint: string }[] = [
+  { value: "staff", icon: UserFocusIcon, title: "I'm staff", hint: "My AI worker" },
+  { value: "manager", icon: BuildingsIcon, title: "Owner / manager", hint: "Run the office" },
+];
+
 export function LoginPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const search = useSearch({ strict: false }) as { next?: string };
-  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", (me) => {
+  const [path, setPath] = useState<LoginPath>(lastLoginPath);
+  const staff = path === "staff";
+  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", async (me) => {
+    rememberLoginPath(path);
     if (me.user.must_change_password) navigate({ to: "/change-password" });
-    else navigate({ to: search.next && search.next.startsWith("/") ? search.next : "/" });
+    else navigate({ to: await landing(qc, me, path, search.next) });
   });
   return (
-    <AuthLayout title="Sign in" subtitle="Use the email and password your workspace owner gave you.">
-      <form className="grid gap-4" onSubmit={(e) => submit(formValues(e))} noValidate>
-        <Field label="Email" name="email" type="email" required autoComplete="username" error={fields.email} />
+    <AuthLayout
+      title={staff ? "Sign in to your AI worker" : "Sign in"}
+      subtitle={staff ? "Staff sign in here. Your AI worker is waiting for you." : "Run the office: agents, work, approvals and settings."}
+    >
+      <div role="radiogroup" aria-label="I am signing in as" className="mb-5 grid grid-cols-2 gap-2">
+        {PATHS.map((p) => {
+          const on = path === p.value;
+          return (
+            <button
+              key={p.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setPath(p.value)}
+              className={cn(
+                "grid min-h-[4.5rem] min-w-0 content-center justify-items-start gap-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow]",
+                on ? "border-accent/60 bg-accent-soft/60 shadow-[var(--shadow-soft)]" : "border-border bg-surface hover:border-accent/30",
+              )}
+            >
+              <p.icon size={20} weight={on ? "fill" : "duotone"} className={on ? "text-accent" : "text-muted"} />
+              <span className="w-full truncate text-[13.5px] font-semibold">{p.title}</span>
+              <span className="w-full truncate text-[12px] text-muted">{p.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+      <form
+        className={cn("grid gap-4", staff && "[&_input]:h-12 [&_input]:text-[16px]")}
+        onSubmit={(e) => submit(formValues(e))}
+        noValidate
+      >
+        <Field label="Email" name="email" type="email" required autoComplete="username" inputMode="email" error={fields.email} />
         <Field label="Password" name="password" type="password" required autoComplete="current-password" error={fields.password} />
         <FormError message={error} />
-        <Button type="submit" size="lg" loading={busy} className="mt-1">
-          {!busy ? <SignInIcon size={17} weight="bold" /> : null} Sign in
+        <Button type="submit" size="lg" loading={busy} className={cn("mt-1", staff && "h-12 text-[16px]")}>
+          {!busy ? <SignInIcon size={17} weight="bold" /> : null} {staff ? "Sign in" : "Sign in to the office"}
         </Button>
         <p className="text-center text-[12.5px] text-muted">Forgot your password? Ask an admin or your manager to reset it.</p>
       </form>
@@ -157,9 +213,11 @@ export function ChangePasswordPage() {
   const navigate = useNavigate();
   const signOut = useSignOut();
   const [mismatch, setMismatch] = useState<string | undefined>();
-  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/change-password", () => {
+  const qc = useQueryClient();
+  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/change-password", async (fresh) => {
     toast.success("Password updated. Other devices were signed out.");
-    navigate({ to: "/" });
+    // A first sign-in (temporary password) continues where the login choice pointed.
+    navigate({ to: forced ? await landing(qc, fresh, lastLoginPath()) : "/" });
   });
   return (
     <AuthLayout

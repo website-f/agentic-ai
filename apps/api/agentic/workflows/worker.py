@@ -44,6 +44,8 @@ from .channel_workflows import DeliverWorkflow
 from .document_activities import file_extract, workflow_run_tick
 from .document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from .engine_activities import check_all_providers
+from .hours_activities import deferred_start
+from .hours_workflows import DeferredStartWorkflow
 from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
@@ -81,6 +83,7 @@ WORKFLOWS = [
     FileExtractWorkflow,
     WorkflowRunWorkflow,
     KnowledgeIndexWorkflow,
+    DeferredStartWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -112,6 +115,7 @@ ACTIVITIES = [
     file_extract,
     workflow_run_tick,
     knowledge_index,
+    deferred_start,
 ]
 
 

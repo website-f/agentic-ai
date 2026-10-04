@@ -1,6 +1,8 @@
 import {
   BrainIcon,
+  BriefcaseIcon,
   BooksIcon,
+  BookOpenTextIcon,
   BlueprintIcon,
   FlowArrowIcon,
   FileTextIcon,
@@ -18,6 +20,7 @@ import {
   EyeIcon,
   CpuIcon,
   ChartBarIcon,
+  ChartLineUpIcon,
   ClipboardTextIcon,
   LockKeyIcon,
   GaugeIcon,
@@ -39,7 +42,9 @@ export type AppPath =
   | "/"
   | "/assistants"
   | "/twin"
+  | "/my-worker"
   | "/overview"
+  | "/impact"
   | "/reports"
   | "/company-kit"
   | "/files"
@@ -69,7 +74,8 @@ export type AppPath =
   | "/organization"
   | "/activity"
   | "/settings"
-  | "/settings/members";
+  | "/settings/members"
+  | "/tutorial";
 
 export interface NavItem {
   to: AppPath;
@@ -95,9 +101,11 @@ export const NAV: NavSection[] = [
     title: "Home",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
+      { to: "/my-worker", label: "My AI worker", icon: BriefcaseIcon, perm: "agents.own", blurb: "The AI worker you hired: what it is doing now, what waits for you, its duties and the hours it works and rests." },
       { to: "/twin", label: "My twin", icon: UserFocusIcon, perm: "agents.own", blurb: "Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important." },
       { to: "/assistants", label: "My assistants", icon: SparkleIcon, perm: "work.write", blurb: "Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp." },
       { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing." },
+      { to: "/impact", label: "Impact", icon: ChartLineUpIcon, perm: ["org.manage", "team.manage"], blurb: "What the AI team measurably did per company and department, the time it freed against what it cost, and what it can do next." },
     ],
   },
   {
@@ -164,6 +172,12 @@ export const NAV: NavSection[] = [
       { to: "/organization", label: "Organization", icon: TreeStructureIcon, blurb: "Branches (one per company) and the departments inside them." },
       { to: "/activity", label: "Activity", icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: "Every change made by people and agents, in a tamper-evident log." },
       { to: "/settings", label: "Settings", icon: GearSixIcon, blurb: "Members and roles, appearance and your account." },
+    ],
+  },
+  {
+    title: "Help",
+    items: [
+      { to: "/tutorial", label: "Tutorial", icon: BookOpenTextIcon, blurb: "Learn the whole system for your role, step by step: from your first agent to giving tasks and seeing results." },
     ],
   },
 ];

@@ -260,6 +260,26 @@ class ApplyIn(BaseModel):
 
 
 async def _apply(db: AsyncSession, principal: Principal, bp: Blueprint, agent: Agent) -> None:
+    if agent.is_twin:  # P19: a twin keeps its persona; the blueprint becomes its playbook
+        from ...agents import hire
+        from ...brain.store import Author
+        from ...models import Workspace
+
+        ws = await db.get(Workspace, principal.workspace_id)
+        assert ws is not None
+        await hire.apply_blueprint_to_twin(
+            db, ws, agent, bp, Author(principal.actor, principal.user.name)
+        )
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "blueprint.applied",
+            target=agent.id,
+            after={"blueprint": bp.name},
+            note="AI twin: persona kept, blueprint added as its playbook",
+        )
+        return
     agent.role = bp.role or agent.role
     agent.soul = bp.soul
     agent.model_group = bp.model_group

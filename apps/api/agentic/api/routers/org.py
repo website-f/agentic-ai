@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...models import Branch, Department
-from ...services import audit
+from ...org import starter
+from ...services import audit, events
 from ...services.text import slugify
 from ..deps import Principal, api_error, require
 from ..schemas import (
@@ -17,6 +18,7 @@ from ..schemas import (
     DepartmentCreateIn,
     DepartmentOut,
     DepartmentUpdateIn,
+    StarterTeamIn,
 )
 
 router = APIRouter(prefix="/api", tags=["organization"])
@@ -39,7 +41,24 @@ def _branch_out(b: Branch) -> BranchOut:
         isolated=b.isolated,
         created_at=b.created_at,
         departments=[_dept_out(d) for d in b.departments],
+        industry=b.industry or "",
     )
+
+
+def _industry(raw: str | None) -> str:
+    key = (raw or "general").strip().lower()
+    if key not in starter.INDUSTRIES:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "bad_industry",
+            f"Pick an industry: {', '.join(starter.INDUSTRIES)}.",
+        )
+    return key
+
+
+async def _publish_team(workspace_id: str, res: starter.StarterResult) -> None:
+    for p in res.created:
+        await events.publish(workspace_id, "agent.upsert", {"agent_id": p.agent_id, "name": p.name})
 
 
 async def _branch(db: AsyncSession, workspace_id: str, branch_id: str) -> Branch:
@@ -94,12 +113,37 @@ async def list_branches(
     return [_branch_out(b) for b in rows]
 
 
+@router.get("/branches/starter-teams")
+async def starter_teams(_: Principal = Depends(require("read"))) -> list[dict]:
+    """Industries and the ready-made AI team each brings, for the "Add company" preview."""
+    return starter.catalog()
+
+
+@router.post("/branches/{branch_id}/starter-team")
+async def add_starter_team(
+    branch_id: str,
+    body: StarterTeamIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Add (or top up) a company's starter team. Idempotent: roles it has are skipped."""
+    b = await _branch(db, principal.workspace_id, branch_id)
+    industry = _industry(body.industry)
+    if not b.industry:
+        b.industry = industry
+    res = await starter.add_starter_team(db, b, industry, principal.actor)
+    await db.commit()
+    await _publish_team(principal.workspace_id, res)
+    return {**res.public(), "branch": _branch_out(await _reload(db, b.id)).model_dump()}
+
+
 @router.post("/branches", status_code=status.HTTP_201_CREATED)
 async def create_branch(
     body: BranchCreateIn,
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> BranchOut:
+    industry = _industry(body.industry) if body.industry or body.starter_team else ""
     name = body.name.strip()
     slug = await _unique_slug(
         db, Branch, Branch.workspace_id, principal.workspace_id, name, "branch"
@@ -110,6 +154,7 @@ async def create_branch(
         slug=slug,
         color=body.color,
         isolated=body.isolated,
+        industry=industry,
     )
     db.add(b)
     await db.flush()
@@ -126,10 +171,18 @@ async def create_branch(
         principal.actor,
         "branch.created",
         target=b.id,
-        after={"name": name, "departments": len(seeded)},
+        after={"name": name, "departments": len(seeded), "industry": industry or None},
     )
     await db.commit()
-    return _branch_out(await _reload(db, b.id))
+    if not body.starter_team:
+        return _branch_out(await _reload(db, b.id))
+    # The team goes in after the branch is saved, so the departments it reuses exist.
+    res = await starter.add_starter_team(db, await _reload(db, b.id), industry, principal.actor)
+    await db.commit()
+    await _publish_team(principal.workspace_id, res)
+    out = _branch_out(await _reload(db, b.id))
+    out.starter = res.public()
+    return out
 
 
 @router.patch("/branches/{branch_id}")

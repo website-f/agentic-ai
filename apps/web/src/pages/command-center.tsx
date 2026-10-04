@@ -29,6 +29,7 @@ import { BudgetsCard, PingsCard } from "./command-center-teams";
 import { staffOnly } from "@/lib/twin";
 
 import { MeetTwinCard } from "./twin/meet-card";
+import { TutorialBanner } from "./tutorial/banner";
 
 function SystemPanel() {
   const { data, isLoading, error, dataUpdatedAt } = useQuery(systemStatusQuery);
@@ -199,6 +200,8 @@ export function CommandCenterPage() {
         description={`${me.workspace.name}. Here is how the office is doing.`}
         actions={<div className="flex items-center">{statusPill}</div>}
       />
+
+      <TutorialBanner />
 
       {me.permissions.includes("agents.own") ? <MeetTwinCard /> : null}
 

@@ -1,5 +1,6 @@
 """Heartbeats: once an hour, during work hours in the workspace's time zone, every agent with
-heartbeat on either picks up its oldest queued task or (once a day) asks for work."""
+heartbeat on either picks up its oldest queued task or (once a day) asks for work. An agent
+with its own working hours (P19, agents/work_hours.py) wakes only in those, breaks excluded."""
 
 import logging
 from datetime import UTC, datetime
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
+from ..agents import work_hours as wh
 from ..core.db import SessionLocal
 from ..models import Agent, JobRun, Task, Workspace
 from . import budget
@@ -39,17 +41,21 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
     totals = {"workspaces": 0, "started": 0, "pinged": 0}
     async with SessionLocal() as db:
         for ws in (await db.scalars(select(Workspace))).all():
-            if not in_work_hours(ws, now):
-                continue
-            agents = (
-                await db.scalars(
-                    select(Agent).where(
-                        Agent.workspace_id == ws.id,
-                        Agent.status == "active",
-                        Agent.heartbeat.is_(True),
+            office_open = in_work_hours(ws, now)
+            # P19: an agent with its own hours wakes in those; the others in the office's.
+            agents = [
+                a
+                for a in (
+                    await db.scalars(
+                        select(Agent).where(
+                            Agent.workspace_id == ws.id,
+                            Agent.status == "active",
+                            Agent.heartbeat.is_(True),
+                        )
                     )
-                )
-            ).all()
+                ).all()
+                if (wh.is_working(now, a.work_hours) if a.work_hours else office_open)
+            ]
             if not agents:
                 continue
             totals["workspaces"] += 1
@@ -78,7 +84,7 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
                 ]
                 if queued:
                     try:
-                        await launch.launch(db, queued[0], f"agent:{a.id}")
+                        await launch.launch(db, queued[0], f"agent:{a.id}", now)
                         started += 1
                     except launch.LaunchError as e:
                         errors.append(f"{a.name}: {e.message}")

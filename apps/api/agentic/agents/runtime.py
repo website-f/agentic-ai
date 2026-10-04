@@ -38,7 +38,7 @@ from ..models import (
 from ..services import events
 from ..skills import store as skills_store
 from ..teams import budget, colleague, delegation, meetings
-from . import context, goals, policy
+from . import context, goals, policy, verify
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
@@ -1000,8 +1000,31 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
 
     await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
     async with SessionLocal() as db:
-        task, agent, _ = await _load(db, task_id)
+        task, agent, ws = await _load(db, task_id)
         unchecked = False
+        # P19: a reviewer reads real work once before it is handed in; one chance to fix.
+        if state == "done" and verify.enabled(ws) and await verify.due(db, task):
+            rv = await verify.review(db, task, agent, message)
+            note = (
+                "self-check could not run"
+                if not rv.checked
+                else "self-check passed"
+                if rv.ok
+                else f"self-check found {len(rv.issues)} problem(s); fixing before handing in"
+            )
+            await task_event(
+                db,
+                task,
+                "selfcheck",
+                "system",
+                note,
+                {"ok": rv.ok, "checked": rv.checked, "issues": rv.issues},
+            )
+            if not rv.ok:
+                _add(db, agent, "user", task_id=task.id, content=verify.nudge(rv.issues))
+                await db.commit()
+                await launch.launch(db, task, "self-check")
+                return
         if state == "done" and task.goal and task.goal_tries < goals.MAX_GOAL_TRIES:
             verdict = await goals.judge(db, task, agent, message)
             if not verdict.met:

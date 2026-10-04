@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
+import { TaskPlan } from "@/components/task-plan";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
@@ -308,6 +309,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               <p className="text-[13px] break-words text-muted">{t.goal}</p>
             </section>
           ) : null}
+          <TaskPlan events={data.events} />
           <SheetSection icon={ClockCounterClockwiseIcon} title="Timeline" note={`${data.events.length} events`}>
             <Timeline events={data.events} />
           </SheetSection>

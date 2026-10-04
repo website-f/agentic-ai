@@ -6,6 +6,7 @@ import {
   PlusIcon,
   TrashIcon,
   TreeStructureIcon,
+  UsersThreeIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -29,6 +30,19 @@ import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import type { Branch, Department } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { workKeys } from "@/lib/work";
+import { StarterTeamDialog, StarterTeamFields, teamToast, type StarterResult } from "@/pages/org-starter";
+
+const INDUSTRY_LABELS: Record<string, string> = {
+  general: "General business",
+  network: "Network, IT & telecom",
+  engineering: "Engineering & construction",
+  trading: "Trading & retail",
+  professional: "Professional services",
+};
+const industryLabel = (k: string) => INDUSTRY_LABELS[k] ?? k;
+/** The company's industry (P19); older API builds do not send it. */
+const industryOf = (b: Branch) => b.industry ?? "";
 
 const SWATCHES = ["#13895f", "#2f6db5", "#b7791f", "#c2412d", "#7a5af5", "#0f8ba0", "#5b6b2f", "#b04a87"];
 
@@ -51,14 +65,37 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
   const [color, setColor] = useState(branch?.color ?? SWATCHES[0]!);
   const [seed, setSeed] = useState(true);
   const [isolated, setIsolated] = useState(branch?.isolated ?? false);
+  // P19: what the company does, and a ready-made AI team for it (on by default).
+  const [industry, setIndustry] = useState("general");
+  const [team, setTeam] = useState(true);
+  const qc = useQueryClient();
 
   const save = useOrgMutation(
     () =>
       editing
         ? api(`/api/branches/${branch.id}`, "PATCH", { name, color, isolated })
-        : api("/api/branches", "POST", { name, color, isolated, seed_departments: seed }),
-    editing ? "Branch updated." : "Branch created.",
+        : api<Branch & { starter?: StarterResult | null }>("/api/branches", "POST", {
+            name,
+            color,
+            isolated,
+            seed_departments: seed,
+            industry,
+            starter_team: team,
+          }),
+    editing ? "Branch updated." : undefined,
   );
+  const create = () =>
+    save.mutate(undefined, {
+      onSuccess: (r) => {
+        onOpenChange(false);
+        if (editing) return;
+        const made = r as Branch & { starter?: StarterResult | null };
+        if (made.starter) {
+          qc.invalidateQueries({ queryKey: workKeys.agents });
+          toast.success(`${made.name} created. ${teamToast(made.starter, made.name)}`);
+        } else toast.success("Branch created.");
+      },
+    });
   const fieldError = save.error instanceof ApiError ? save.error.fields.name : undefined;
 
   return (
@@ -75,7 +112,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
           <Button
             loading={save.isPending}
             disabled={!name.trim()}
-            onClick={() => save.mutate(undefined, { onSuccess: () => onOpenChange(false) })}
+            onClick={create}
           >
             {editing ? "Save" : "Create branch"}
           </Button>
@@ -103,6 +140,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
         {!editing ? (
           <SwitchField checked={seed} onCheckedChange={setSeed} label="Add standard departments" hint="Management, Finance, Research, Operations, Data and Writing. You can rename or remove them later." />
         ) : null}
+        {!editing ? <StarterTeamFields industry={industry} onIndustry={setIndustry} enabled={team} onEnabled={setTeam} /> : null}
         <SwitchField checked={isolated} onCheckedChange={setIsolated} label="Keep this company's knowledge private" hint="Agents in other branches will not see this branch's SOPs, facts or notes." />
         <FormError message={save.error && !fieldError ? errorMessage(save.error) : null} />
       </div>
@@ -204,6 +242,8 @@ function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean 
   const [edit, setEdit] = useState(false);
   const [editKey, setEditKey] = useState(0);
   const [confirm, setConfirm] = useState(false);
+  const [team, setTeam] = useState(false);
+  const [teamKey, setTeamKey] = useState(0);
   const qc = useQueryClient();
   return (
     <Card className="overflow-hidden">
@@ -219,6 +259,7 @@ function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean 
           <h2 className="text-[15px] font-semibold break-words">{branch.name}</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
             <span>{branch.departments.length} {branch.departments.length === 1 ? "department" : "departments"}</span>
+            {industryOf(branch) ? <Pill tone="accent">{industryLabel(industryOf(branch))}</Pill> : null}
             {branch.isolated ? (
               <Pill tone="info">
                 <LockSimpleIcon size={12} weight="bold" /> Private knowledge
@@ -237,6 +278,7 @@ function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean 
             </MenuTrigger>
             <MenuContent>
               <MenuItem icon={<PencilSimpleIcon />} onSelect={() => { setEditKey((k) => k + 1); setEdit(true); }}>Edit branch</MenuItem>
+              <MenuItem icon={<UsersThreeIcon />} onSelect={() => { setTeamKey((k) => k + 1); setTeam(true); }}>Add ready-made AI team</MenuItem>
               <MenuSeparator />
               <MenuItem icon={<TrashIcon />} danger onSelect={() => setConfirm(true)}>Delete branch</MenuItem>
             </MenuContent>
@@ -257,6 +299,14 @@ function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean 
         </p>
       ) : null}
       <BranchDialog key={editKey} open={edit} onOpenChange={setEdit} branch={branch} />
+      <StarterTeamDialog
+        key={`team-${teamKey}`}
+        open={team}
+        onOpenChange={setTeam}
+        branchId={branch.id}
+        branchName={branch.name}
+        initialIndustry={industryOf(branch)}
+      />
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}

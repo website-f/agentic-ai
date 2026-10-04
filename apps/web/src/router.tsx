@@ -62,6 +62,10 @@ const page = {
   documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
   packs: lazyRouteComponent(() => import("@/pages/documents/packs"), "PacksPage"),
   twin: lazyRouteComponent(() => import("@/pages/twin"), "TwinPage"),
+  welcome: lazyRouteComponent(() => import("@/pages/welcome"), "WelcomePage"),
+  myWorker: lazyRouteComponent(() => import("@/pages/my-worker"), "MyWorkerPage"),
+  tutorial: lazyRouteComponent(() => import("@/pages/tutorial"), "TutorialPage"),
+  impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -412,6 +416,39 @@ const twinRoute = createRoute({
   component: page.twin,
 });
 
+// P19: staff hire their AI worker full screen (no app shell), then land on My AI worker.
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/welcome",
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (!staffOnly(me.permissions)) throw redirect({ to: "/" });
+  },
+  component: page.welcome,
+});
+const myWorkerRoute = createRoute({ getParentRoute: () => appRoute, path: "/my-worker", component: page.myWorker });
+
+const TUTORIAL_TRACKS = ["owner", "management", "staff", "approver"] as const;
+const tutorialRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/tutorial",
+  validateSearch: (s: Record<string, unknown>): { track?: (typeof TUTORIAL_TRACKS)[number] } => ({
+    track: TUTORIAL_TRACKS.find((t) => t === s.track),
+  }),
+  component: page.tutorial,
+});
+
+// P19: owners, admins and managers see what the AI team measurably did.
+const impactRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/impact",
+  beforeLoad: ({ context }) => {
+    if (!["org.manage", "team.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/" });
+  },
+  component: page.impact,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -426,6 +463,7 @@ const routeTree = rootRoute.addChildren([
   setupRoute,
   loginRoute,
   changePasswordRoute,
+  welcomeRoute,
   appRoute.addChildren([
     homeRoute,
     assistantsRoute,
@@ -464,6 +502,9 @@ const routeTree = rootRoute.addChildren([
     documentsRoute,
     packsRoute,
     twinRoute,
+    myWorkerRoute,
+    tutorialRoute,
+    impactRoute,
   ]),
 ]);
 

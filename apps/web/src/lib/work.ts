@@ -63,6 +63,10 @@ export interface Agent {
   private: boolean;
   /** A staff member's AI twin (P18); owner_name is the person it is the twin of. */
   is_twin?: boolean;
+  /** P19: when it works (null = any time), a one-line summary, and whether it is on duty now. */
+  work_hours?: import("./staff").WorkHours | null;
+  hours_label?: string | null;
+  duty?: import("./staff").Duty | null;
 }
 
 export interface SOP {

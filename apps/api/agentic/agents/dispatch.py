@@ -33,6 +33,27 @@ async def start_task(task_id: str, run: int) -> str:
     return workflow_id
 
 
+async def start_deferred(task_id: str, run: int, at: datetime) -> str:
+    """P19: start a task at its agent's next shift (a durable timer). Idempotent: the same
+    task, run and time is the same workflow."""
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from ..workflows.hours_workflows import DeferredStartWorkflow
+
+    client = await temporal_client()
+    workflow_id = f"defer-{task_id}-{run}-{int(at.timestamp())}"
+    try:
+        await client.start_workflow(
+            DeferredStartWorkflow.run,
+            args=[task_id, run, at.astimezone(UTC).isoformat()],
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
+        )
+    except WorkflowAlreadyStartedError:
+        pass
+    return workflow_id
+
+
 async def signal_decision(workflow_id: str, approval_id: str) -> None:
     client = await temporal_client()
     await client.get_workflow_handle(workflow_id).signal(

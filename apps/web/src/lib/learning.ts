@@ -28,6 +28,8 @@ export interface LearningDecision {
 export interface LearningOverview {
   days: number;
   mode: LearningMode;
+  /** P19: a reviewer reads real work before it is handed in. */
+  self_check: boolean;
   modes: { key: LearningMode; label: string }[];
   can_configure: boolean;
   proposals: {
@@ -75,6 +77,7 @@ export const learningOverviewQuery = (days: LearningRange) =>
   queryOptions({ queryKey: learningKeys.overview(days), queryFn: () => api<LearningOverview>(`/api/learning/overview?days=${days}`) });
 
 export const setLearningMode = (mode: LearningMode) => api<{ mode: LearningMode }>("/api/learning/settings", "PUT", { mode });
+export const setSelfCheck = (self_check: boolean) => api<{ self_check: boolean }>("/api/learning/settings", "PUT", { self_check });
 export const learnFromSource = (body: LearnSourceIn) => api<LearnSourceOut>("/api/learning/learn-source", "POST", body);
 export const revertSkill = (id: string, version: number) =>
   api<{ id: string; name: string; version: number }>(`/api/skills/${id}/revert`, "POST", { version });

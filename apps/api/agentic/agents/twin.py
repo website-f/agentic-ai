@@ -469,11 +469,16 @@ def rules(p: dict[str, Any], person: str) -> str:
 
 
 def soul(p: dict[str, Any], person: str, where: str, polished_intro: str | None = None) -> str:
-    return (
+    out = (
         (polished_intro or intro(p, person, where)).strip()
         + "\n\nHow you work:\n"
         + rules(p, person)
     )
+    # P19: a blueprint applied to the twin adds its role playbook; the persona stays.
+    bp = p.get("_blueprint")
+    if isinstance(bp, dict) and str(bp.get("soul") or "").strip():
+        out += f"\n\nYour role playbook ({bp.get('name') or 'blueprint'}):\n{bp['soul'].strip()}"
+    return out
 
 
 async def polish(db: AsyncSession, workspace_id: str, text: str) -> str | None:

@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..agents import work_hours
 from ..core.db import SessionLocal
 from ..models import Agent, Incident, JobRun, Schedule, Task
 from ..services import events
@@ -159,11 +160,19 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
             or 0
         )
         local = now.astimezone(ZoneInfo(s.timezone))
+        # P19: an off-duty agent starts the run at its next shift (the workflow sleeps until
+        # then). A schedule marked urgent runs now when the agent's hours allow urgent work.
+        urgent = work_hours.schedule_is_urgent(s.name, s.title)
+        later = work_hours.deferred_until(now, agent.work_hours, urgent)
         t = Task(
             workspace_id=s.workspace_id,
             branch_id=agent.branch_id,
             title=f"{s.title} ({local:%d %b})"[:200],
             brief=s.brief,
+            priority="urgent" if urgent else "normal",
+            blocked_reason=work_hours.waiting_note(agent.name, later, now, agent.work_hours or {})
+            if later
+            else None,
             status="ready",
             assignee_agent_id=agent.id,
             created_by=f"schedule:{s.id}",
@@ -175,6 +184,8 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
         db.add(t)
         await db.flush()
         run.task_id = t.id
+        if later:
+            run.detail = {**(run.detail or {}), "waits_until": later.isoformat()}
         once = origin(s.created_by).once and not manual
         if once:  # a one-off ("remind me Friday 4pm") switches itself off after firing
             s.enabled = False
@@ -186,7 +197,10 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
             s.workspace_id, "task.created", {"task_id": t.id, "agent_id": t.assignee_agent_id}
         )
         await _publish(run)
-        return {"run_id": str(run.id), "task_id": t.id}
+        out = {"run_id": str(run.id), "task_id": t.id}
+        if later:
+            out["wait_until"] = later.isoformat()
+        return out
 
 
 async def attempt(run_id: str, n: int) -> str:

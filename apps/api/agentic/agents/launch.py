@@ -1,11 +1,26 @@
-"""Starting a task run, shared by the API, heartbeats and schedules."""
+"""Starting a task run, shared by the API, heartbeats and schedules.
 
+P19 working hours: an agent with `work_hours` only starts work in its hours. A task started
+outside them (and not urgent, or urgent while the agent's hours do not allow urgent work any
+time) is not started: it stays queued ("ready") with a note ("Starts when Aisyah's twin is
+back at 09:00") and a durable Temporal timer (DeferredStartWorkflow) starts it at the agent's
+next shift. That timer is idempotent: it only starts the task if nobody started, moved or
+finished it in the meantime, and a second deferral of the same run at the same time is the
+same workflow.
+"""
+
+from datetime import UTC, datetime
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Agent, Task
-from . import dispatch, runtime
+from . import dispatch, runtime, work_hours
 
 RUNNING = ("running", "blocked")
+# A goal-loop nudge continues work already started in hours: it is not new work.
+CONTINUES = ("goal-loop",)
+WAKE_ACTOR = "system:work-hours"
 
 
 class LaunchError(Exception):
@@ -14,8 +29,11 @@ class LaunchError(Exception):
         self.status, self.code, self.message = status, code, message
 
 
-async def launch(db: AsyncSession, t: Task, actor: str) -> None:
-    """Begin a fresh run: a new workflow, the same conversation."""
+async def launch(
+    db: AsyncSession, t: Task, actor: str, now: datetime | None = None
+) -> datetime | None:
+    """Begin a fresh run: a new workflow, the same conversation. Returns None when it
+    started, or the time it will start when the agent is off duty now."""
     if not t.assignee_agent_id:
         raise LaunchError(400, "no_assignee", "Assign an agent before starting.")
     agent = await db.get(Agent, t.assignee_agent_id)
@@ -23,6 +41,14 @@ async def launch(db: AsyncSession, t: Task, actor: str) -> None:
         raise LaunchError(409, "agent_inactive", "The assigned agent is not active.")
     if t.status in RUNNING:
         raise LaunchError(409, "already_running", "This task is already running.")
+    now = now or datetime.now(UTC)
+    if actor not in CONTINUES:
+        later = work_hours.deferred_until(
+            now, agent.work_hours, work_hours.task_is_urgent(t.priority, t.labels)
+        )
+        if later is not None:
+            await _defer(db, t, agent, later, now, actor)
+            return later
     t.run_count += 1
     t.status = "ready"
     t.result = t.error = t.blocked_reason = None
@@ -41,3 +67,60 @@ async def launch(db: AsyncSession, t: Task, actor: str) -> None:
         raise LaunchError(503, "temporal_unavailable", msg) from e
     await db.commit()
     await runtime.task_event(db, t, "run", actor, f"started run {t.run_count}")
+    return None
+
+
+async def _defer(
+    db: AsyncSession, t: Task, agent: Agent, at: datetime, now: datetime, actor: str
+) -> None:
+    """Queue the task until the agent's next shift (see the module docstring)."""
+    wh = agent.work_hours or {}
+    note = work_hours.waiting_note(agent.name, at, now, wh)
+    t.status = "ready"
+    t.blocked_reason = note
+    await db.commit()
+    try:
+        await dispatch.start_deferred(t.id, t.run_count, at)
+    except Exception as e:
+        msg = "Could not schedule the start: the worker service is not reachable."
+        raise LaunchError(503, "temporal_unavailable", msg) from e
+    await runtime.task_event(
+        db, t, "deferred", actor, note, {"start_at": at.isoformat(), "run": t.run_count}
+    )
+
+
+async def recheck_waiting(db: AsyncSession, agent: Agent, actor: str) -> int:
+    """The agent's hours changed: tasks waiting for its shift start now, or wait for the new
+    one. Scheduled runs are left to their own workflow. Returns how many started now."""
+    rows = (
+        await db.scalars(
+            select(Task).where(
+                Task.assignee_agent_id == agent.id,
+                Task.status == "ready",
+                Task.source != "schedule",
+                Task.blocked_reason.like("Starts when %"),
+            )
+        )
+    ).all()
+    started = 0
+    for t in rows:
+        try:
+            started += 0 if await launch(db, t, actor) else 1
+        except LaunchError:
+            continue
+    return started
+
+
+async def start_deferred(db: AsyncSession, task_id: str, run_count: int) -> str:
+    """The DeferredStartWorkflow's wake-up: start the task if it is still waiting for this
+    shift. started | deferred (hours changed: waits again) | skipped (someone else moved it)."""
+    t = await db.get(Task, task_id)
+    if t is None or t.run_count != run_count or t.status not in ("ready", "triage"):
+        return "skipped"
+    try:
+        later = await launch(db, t, WAKE_ACTOR)
+    except LaunchError as e:
+        t.blocked_reason = f"Did not start: {e.message}"[:300]
+        await db.commit()
+        return "skipped"
+    return "deferred" if later else "started"

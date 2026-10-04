@@ -36,6 +36,8 @@ class AgentIn(BaseModel):
     heartbeat: bool = False
     # P9: the signed-in person's own agent (always, for staff).
     personal: bool = False
+    # P19: when it works (agents/work_hours.py); None = any time.
+    work_hours: dict[str, Any] | None = None
 
 
 class AgentUpdateIn(BaseModel):
@@ -57,6 +59,8 @@ class AgentUpdateIn(BaseModel):
     budget_daily_tokens: int | None = Field(default=None, ge=1000, le=100_000_000)
     budget_monthly_usd: float | None = Field(default=None, ge=0.01, le=1_000_000)
     heartbeat: bool | None = None
+    # P19: when it works; null = any time (validated by agents/work_hours.clean).
+    work_hours: dict[str, Any] | None = None
 
 
 class TaskBrief(BaseModel):
@@ -101,6 +105,11 @@ class AgentOut(BaseModel):
     private: bool = False
     # P18: a staff member's AI twin (owner_name is the person it is the twin of).
     is_twin: bool = False
+    # P19: its working hours (None = any time), a one-line summary, and whether it is on
+    # duty now: {"state": working|break|off|always, "on", "until", "label"}.
+    work_hours: dict[str, Any] | None = None
+    hours_label: str | None = None
+    duty: dict[str, Any] | None = None
 
 
 class PromptPreviewOut(BaseModel):

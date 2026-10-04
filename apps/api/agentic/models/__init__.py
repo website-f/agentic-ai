@@ -51,6 +51,8 @@ class User(Timestamps, Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P19: small per-person settings (tutorial progress, onboarding done, dismissed tips).
+    prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
 
 class Membership(Timestamps, Base):
@@ -100,6 +102,8 @@ class Branch(Timestamps, Base):
     slug: Mapped[str] = mapped_column(String(80))
     color: Mapped[str] = mapped_column(String(16), default="#13895f")
     isolated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # P19: what the company does (e.g. "network", "engineering"): picks its starter team.
+    industry: Mapped[str] = mapped_column(String(60), default="", server_default="")
 
     departments: Mapped[list["Department"]] = relationship(
         back_populates="branch",
@@ -333,6 +337,10 @@ class Agent(Timestamps, Base):
     private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # P18: a staff member's AI twin, their one virtual self at work (owner_user_id = them).
     is_twin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P19: when the agent works, like a person's contract. None = any time.
+    # {"tz": "Asia/Kuala_Lumpur", "days": [1..5 (Mon=1)], "start": "09:00", "end": "18:00",
+    #  "breaks": [{"start": "13:00", "end": "14:00"}], "urgent_anytime": true}
+    work_hours: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class ChatSession(Timestamps, Base):

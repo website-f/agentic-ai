@@ -37,6 +37,7 @@ import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { SwitchField } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/api";
 import {
   LEARNING_RANGES,
@@ -44,6 +45,7 @@ import {
   learningOverviewQuery,
   MODE_HELP,
   setLearningMode,
+  setSelfCheck,
   trajectoriesUrl,
   type LearningDecision,
   type LearningMode,
@@ -159,6 +161,14 @@ function Autopilot({ o }: { o: LearningOverview }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const value = save.isPending && save.variables ? save.variables : o.mode;
+  const check = useMutation({
+    mutationFn: setSelfCheck,
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: learningKeys.all });
+      toast.success(r.self_check ? "Self-check is on: work is reviewed before hand-in." : "Self-check is off.");
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   return (
     <Card aria-label="Autopilot" className="flex flex-col">
       <CardHeader icon={<IconTile icon={RobotIcon} tone="violet" size="sm" />} title="Autopilot"
@@ -189,6 +199,15 @@ function Autopilot({ o }: { o: LearningOverview }) {
         <p className="text-[12px] text-muted">
           {o.can_configure ? "Every automatic change is versioned and can be put back from the skill's version list." : "Only an owner or admin can change this."}
         </p>
+        <div className="border-t border-border pt-3">
+          <SwitchField
+            checked={check.isPending && check.variables !== undefined ? check.variables : o.self_check}
+            onCheckedChange={(v) => check.mutate(v)}
+            disabled={!o.can_configure || check.isPending}
+            label="Self-check before hand-in"
+            hint="A second model reads finished work against the request and the procedure. If something is missing or a number has no support, the agent fixes it once before you see it, and the lesson goes into its skills."
+          />
+        </div>
       </CardBody>
     </Card>
   );

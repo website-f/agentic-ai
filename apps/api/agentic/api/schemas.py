@@ -136,6 +136,9 @@ class BranchOut(BaseModel):
     isolated: bool
     created_at: datetime
     departments: list[DepartmentOut]
+    industry: str = ""
+    # Set on create with starter_team: the agents added (org/starter.py StarterResult).
+    starter: dict | None = None
 
 
 class BranchCreateIn(BaseModel):
@@ -143,6 +146,13 @@ class BranchCreateIn(BaseModel):
     color: str = Field(default="#13895f", pattern=HEX_COLOR)
     isolated: bool = False
     seed_departments: bool = True
+    # P19: what the company does (picks its starter team), and whether to add that team now.
+    industry: str | None = Field(default=None, max_length=60)
+    starter_team: bool = False
+
+
+class StarterTeamIn(BaseModel):
+    industry: str = Field(default="general", min_length=1, max_length=60)
 
 
 class BranchUpdateIn(BaseModel):

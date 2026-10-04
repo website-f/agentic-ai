@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import dispatch
+from ...agents import dispatch, verify
 from ...brain.store import Author
 from ...core.db import get_db
 from ...core.redact import redact
@@ -276,6 +276,7 @@ async def overview(
     return {
         "days": days,
         "mode": autopilot.mode(ws),
+        "self_check": verify.enabled(ws),
         "modes": [{"key": k, "label": v} for k, v in MODE_LABELS.items()],
         "can_configure": principal.role in ("owner", "admin"),
         "proposals": {
@@ -334,7 +335,8 @@ async def overview(
 
 
 class LearningSettingsIn(BaseModel):
-    mode: Literal["review", "auto_safe", "auto"]
+    mode: Literal["review", "auto_safe", "auto"] | None = None
+    self_check: bool | None = None  # P19: a reviewer reads real work before hand-in
 
 
 @router.put("/learning/settings")
@@ -342,24 +344,22 @@ async def update_settings(
     body: LearningSettingsIn,
     principal: Principal = Depends(require("brain.manage")),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     ws = await db.get(Workspace, principal.workspace_id)
     assert ws is not None
-    before = autopilot.mode(ws)
+    before = {"mode": autopilot.mode(ws), "self_check": verify.enabled(ws)}
     current = dict(ws.settings or {})
-    current["skill_learning"] = {**(current.get("skill_learning") or {}), "mode": body.mode}
+    if body.mode is not None:
+        current["skill_learning"] = {**(current.get("skill_learning") or {}), "mode": body.mode}
+    if body.self_check is not None:
+        current["quality"] = {**(current.get("quality") or {}), "self_check": body.self_check}
     ws.settings = current  # a new dict, so the JSONB change is saved
+    after = {"mode": autopilot.mode(ws), "self_check": verify.enabled(ws)}
     await audit.record(
-        db,
-        ws.id,
-        principal.actor,
-        "learning.mode",
-        target=ws.id,
-        before={"mode": before},
-        after={"mode": body.mode},
+        db, ws.id, principal.actor, "learning.mode", target=ws.id, before=before, after=after
     )
     await db.commit()
-    return {"mode": body.mode}
+    return after
 
 
 class LearnSourceIn(BaseModel):

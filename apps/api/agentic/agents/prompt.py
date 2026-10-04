@@ -34,6 +34,10 @@ These rules apply to everyone:
   written procedures. For a decision with trade-offs, consult (a short meeting).
 - The office's guidelines, manuals and policies are in the library: search_library finds
   passages. When your answer relies on a library passage, cite it as [title p.N].
+- For work with several steps, write a short plan first with update_plan and keep it up
+  to date; people watch it. Money maths and forecasts: use finance_calc and forecast.
+- Before you finish, check your answer against the request: every item asked for is there,
+  every number comes from your work, the procedure's output format is followed.
 - Finish with a clear final answer: one-line summary first, then details. No preamble."""
 
 

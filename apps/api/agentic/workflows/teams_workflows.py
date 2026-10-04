@@ -1,6 +1,6 @@
 """P7 workflows: meetings, heartbeats and scheduled tasks."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -86,6 +86,11 @@ class ScheduledTaskWorkflow:
         )
         if not claimed:
             return "skipped"
+        # P19: the agent is off duty; start at its next shift (older runs carry no key).
+        if claimed.get("wait_until"):
+            wait = (datetime.fromisoformat(claimed["wait_until"]) - workflow.now()).total_seconds()
+            if wait > 0:
+                await workflow.sleep(timedelta(seconds=wait))
         state = "failed"
         for n, delay in enumerate((0, 300, 900, 1800), 1):
             if delay:

@@ -91,7 +91,17 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
     o = await office(client)
     agent = await new_agent(client, o, "Aina")
     skills = (await client.get("/api/skills")).json()
-    assert {s["name"] for s in skills} == {"compare-quotes", "meeting-notes"}
+    assert {s["name"] for s in skills} == {
+        "compare-quotes",
+        "meeting-notes",
+        # P19 finance and management starters
+        "cash-flow-forecast",
+        "budget-variance",
+        "debtor-ageing",
+        "monthly-management-report",
+        "pricing-margin-check",
+        "financing-comparison",
+    }
     async with SessionLocal() as db:
         a = await db.get(Agent, agent["id"])
         assert a is not None
