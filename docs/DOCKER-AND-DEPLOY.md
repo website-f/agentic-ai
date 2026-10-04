@@ -206,9 +206,39 @@ the worker's database pool ran dry with 20+ concurrent task steps (now 16 steps,
 subscription, so about 20 open tabs stalled the app (now no connection, and one shared
 subscription per process); the task and agent lists ran two queries per row (now batched).
 
+### Live install: agent.oriondesk.space (2026-10-04)
+
+**Where it runs**
+- Server: 84.46.249.133 (Ubuntu 24.04, 8 cores, 23 GB). SSH with the `vps_rizqmall` key.
+- Code: `/opt/agentic-ai`, a clone of github.com/website-f/agentic-ai.
+- Secrets: `.env`, mode 600. They were generated on the server; keep a copy in a password manager.
+
+**Ports and proxy**
+- Ports: web on `127.0.0.1:8700`, Temporal UI on `127.0.0.1:8702`. Ports 8500-8512 belong to rizqmall on this server.
+- TLS and routing: **Orxies** (`/opt/proxy-go`), not Caddy. The site is `/opt/proxy-go/sites/agent.oriondesk.space.yml`, with upstream `127.0.0.1:8700`.
+- Orxies hot-reloads site files and gets the Let's Encrypt certificate by itself.
+- Its admin UI: `ssh -L 8090:127.0.0.1:8090 root@84.46.249.133`, then open http://localhost:8090.
+
+**Updating it:** `cd /opt/agentic-ai && ./deploy/scripts/deploy-vps.sh`. This pulls, builds and restarts; migrations run when the api starts.
+
+**Server settings in `.env`**
+- `COMPOSE_PROFILES=demo`: includes the practice portal.
+- `OLLAMA_KEEP_ALIVE=30m`: frees about 0.8 GB when the backup model is idle.
+- `WAHA_IMAGE` is pinned to the digest the WhatsApp session was created with.
+
+**How the dev PC's data was moved**
+1. Stopped the writers, then `pg_dump -Fc` of `agentic`, `temporal` and `temporal_visibility`. Tarred the `vault` and `wahadata` volumes.
+2. On the server: started `postgres` alone so its first boot creates the roles. Ran `pg_restore --no-owner --role=<owner>`, then untarred the volumes.
+3. Ran `python -m agentic.admin rotate-master-key --from-dev`. It re-wraps every stored secret from the dev-derived key to the server's `AGENTIC_MASTER_KEY`.
+4. Pointed the WhatsApp channel at the server's WAHA key.
+5. Gave the test accounts one-time passwords with `reset-password`, because the dev password is published in this README.
+6. Stopped WAHA on the dev PC. **One WhatsApp session must never run in two places at once.**
+
+Memory measured after start: the stack uses about 3.3 GB. That includes the api (about 0.8 GB, mostly the embedding model), the worker (about 0.73 GB), Ollama (about 0.86 GB until it unloads), WAHA (0.33 GB) and Postgres (0.2 GB).
+
 ### VPS deploy behind the shared reverse proxy
 
-Not deployed yet: this is the recipe for when it is wanted.
+The general recipe, for a server with the shared Caddy (`/opt/reverse-proxy`).
 
 1. On the VPS: `git clone` into `/opt/agentic-ai`, `cp .env.vps.example .env`, fill it
    (`python3 deploy/scripts/gen-secrets.py`), set `AGENTIC_DOMAIN`.
