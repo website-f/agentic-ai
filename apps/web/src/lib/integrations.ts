@@ -72,6 +72,8 @@ export interface GoogleAccount {
   last_error: string | null;
   connected_at: string;
   can_send: boolean;
+  /** Granted calendar access (connections made before it was asked for were not). */
+  calendar?: boolean;
 }
 
 export interface GoogleStatus {

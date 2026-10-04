@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
@@ -16,9 +17,10 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { api, errorMessage } from "@/lib/api";
+import { usePagedList } from "@/lib/paged";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
-import { agentsQuery, broadcastQuery, broadcastsQuery, workKeys, type Audience, type Broadcast } from "@/lib/work";
+import { agentsQuery, broadcastQuery, workKeys, type Audience, type Broadcast } from "@/lib/work";
 
 const EMPTY: Audience = { all: false, branch_ids: [], department_ids: [], agent_ids: [] };
 
@@ -195,7 +197,10 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
 export function BroadcastsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
-  const { data: history, isLoading } = useQuery(broadcastsQuery);
+  // Sent broadcasts only grow: 50 at a time as you scroll.
+  const list = usePagedList<Broadcast>(workKeys.broadcasts, "/api/broadcasts");
+  const { items: history, isLoading } = list;
+  const sent = list.total ?? history.length;
   const search = useSearch({ strict: false }) as { b?: string };
   const navigate = useNavigate();
   return (
@@ -205,10 +210,10 @@ export function BroadcastsPage() {
         {canWrite ? <Composer /> : (
           <EmptyState icon={LockSimpleIcon} title="Read only" body="Your role can read broadcasts but not send them." />
         )}
-        <Section title="Sent" description={history?.length ? `${history.length} ${history.length === 1 ? "broadcast" : "broadcasts"}, newest first` : undefined}>
+        <Section title="Sent" description={sent ? `${sent} ${sent === 1 ? "broadcast" : "broadcasts"}, newest first` : undefined}>
           {isLoading ? (
             <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-[var(--radius-md)]" />)}</div>
-          ) : !history?.length ? (
+          ) : !history.length ? (
             <EmptyState icon={MegaphoneIcon} title="Nothing sent yet" body="Announcements sit in each agent's context for 30 days. Tasks land in Triage." />
           ) : (
             <ListCard>
@@ -228,6 +233,7 @@ export function BroadcastsPage() {
               ))}
             </ListCard>
           )}
+          {history.length ? <LoadMore noun="broadcasts" shown={history.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
         </Section>
       </div>
       {search.b ? <Detail id={search.b} onClose={() => navigate({ to: "/broadcasts", search: {} })} /> : null}

@@ -1,16 +1,20 @@
 """SOPs: the written procedures agents follow. Versioned on every edit."""
 
+import logging
+
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
+from ...knowledge import indexer
 from ...models import SOP, Agent, Branch, Department
 from ...services import audit
 from ..agent_schemas import SOPIn, SOPOut, SOPUpdateIn
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api/sops", tags=["sops"])
+log = logging.getLogger("agentic.api.sops")
 
 
 async def _label(db: AsyncSession, s: SOP) -> str:
@@ -40,6 +44,15 @@ async def _out(db: AsyncSession, s: SOP) -> SOPOut:
         updated_by=s.updated_by,
         updated_at=s.updated_at,
     )
+
+
+async def _index(db: AsyncSession, sop_id: str) -> None:
+    """Rebuild the SOP's library passages (P18). SOPs are short, so this runs right here."""
+    try:
+        await indexer.index_sop(db, sop_id)
+    except Exception:  # noqa: BLE001 - the SOP is saved; POST /api/library/reindex redoes it
+        await db.rollback()
+        log.warning("could not index SOP %s", sop_id, exc_info=True)
 
 
 async def _get(db: AsyncSession, ws: str, sop_id: str) -> SOP:
@@ -97,6 +110,7 @@ async def create_sop(
         after={"title": s.title, "scope": s.scope},
     )
     await db.commit()
+    await _index(db, s.id)
     await db.refresh(s)
     return await _out(db, s)
 
@@ -126,6 +140,7 @@ async def update_sop(
         after={"title": s.title, "version": s.version},
     )
     await db.commit()
+    await _index(db, s.id)
     await db.refresh(s)
     return await _out(db, s)
 
@@ -151,5 +166,6 @@ async def delete_sop(
         target=sop_id,
         before={"title": s.title},
     )
+    await indexer.remove(db, "sop", sop_id)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

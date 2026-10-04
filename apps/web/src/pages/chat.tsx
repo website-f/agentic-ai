@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { meQuery } from "@/lib/queries";
+import { staffOnly } from "@/lib/twin";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
@@ -44,7 +45,7 @@ export function ChatPage() {
       <Page>
         <PageHeader title="Chat" />
         <EmptyState icon={ChatsCircleIcon} title="No agents to talk to yet" body="Create an agent, then chat with it here or from its profile."
-          action={<Button asChild><Link to="/agents/new">New agent</Link></Button>} />
+          action={<Button asChild>{staffOnly(me.permissions) ? <Link to="/twin">Meet your AI twin</Link> : <Link to="/agents/new">New agent</Link>}</Button>} />
       </Page>
     );
   }

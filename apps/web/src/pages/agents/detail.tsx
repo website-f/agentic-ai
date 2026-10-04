@@ -36,7 +36,7 @@ import { useLive } from "@/lib/live";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentQuery, sopsQuery, STATUS_INFO, tasksQuery, workKeys, type Agent, type ToolMode } from "@/lib/work";
-import { groupsQuery } from "@/pages/ai-engine/data";
+import { chatGroupsQuery } from "@/pages/ai-engine/data";
 
 import { ChatPanel } from "./chat-panel";
 import { MemoryTab } from "./memory-tab";
@@ -135,7 +135,7 @@ function Overview({ agent }: { agent: Agent }) {
 function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
   const save = useSaveAgent(agent);
   const { data: branches = [] } = useQuery(branchesQuery);
-  const { data: groups = [] } = useQuery(groupsQuery);
+  const { data: groups = [] } = useQuery(chatGroupsQuery);
   const [d, setD] = useState({
     name: agent.name,
     role: agent.role,

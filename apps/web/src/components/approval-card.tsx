@@ -24,7 +24,7 @@ function FormPreview({ fields, page }: { fields: { label: string; value: string 
         {fields.map((f, i) => (
           <div key={i} className="contents">
             <dt className="truncate text-muted" title={f.label}>{f.label}</dt>
-            <dd className={f.value ? "break-words" : "text-muted italic"}>{f.value || "empty"}</dd>
+            <dd className={f.value ? "min-w-0 [overflow-wrap:anywhere]" : "text-muted italic"}>{f.value || "empty"}</dd>
           </div>
         ))}
       </dl>
@@ -46,7 +46,7 @@ function ArgsPreview({ a }: { a: Approval }) {
   const entries = Object.entries(a.args).filter(([k]) => k !== "why" && k !== "reason");
   if (!entries.length) return null;
   return (
-    <pre className="max-h-32 overflow-auto rounded-sm bg-surface-2 px-2.5 py-1.5 font-mono text-[12px] whitespace-pre-wrap">
+    <pre className="max-h-32 overflow-x-hidden overflow-y-auto rounded-sm bg-surface-2 px-2.5 py-1.5 font-mono text-[12px] whitespace-pre-wrap [overflow-wrap:anywhere]">
       {entries.map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n")}
     </pre>
   );

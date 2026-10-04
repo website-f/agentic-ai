@@ -59,6 +59,9 @@ export interface Schedule {
   last_status: RunStatus | null;
   next_runs: string[];
   created_at: string;
+  /** Who set it up: a person on the Schedules page, or the agent itself when a person asked
+   * it in chat or a task ("set up by Aina from chat"). One-offs switch off after firing. */
+  origin?: { via: "page" | "chat" | "task" | "other"; person_name: string | null; by_agent: boolean; once: boolean };
 }
 
 export type RunStatus = "claimed" | "running" | "completed" | "failed";

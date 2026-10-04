@@ -3,6 +3,8 @@
 Each person connects their own mailbox with Google sign-in (OAuth 2.0 with PKCE). Scopes:
 gmail.readonly (read and search) and gmail.compose (create drafts, and send a draft). Nothing
 is ever sent without the person pressing Send in the dashboard: assistants only make drafts.
+The same sign-in also asks for calendar.events (see calendar.py): connections made before
+that have no calendar until the person reconnects.
 
 An API key cannot read a mailbox; Google requires the mailbox owner's consent through an
 OAuth client (Client ID + secret) created in the same Google Cloud project, with the Gmail
@@ -34,9 +36,12 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 - a URL
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
+    # The person's calendar (read events, and add or change them once they confirm).
+    CALENDAR_SCOPE,
 ]
 STATE_TTL = 600
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake Google

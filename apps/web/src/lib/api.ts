@@ -51,6 +51,24 @@ export async function api<T>(path: string, method: Method = "GET", body?: unknow
   return data as T;
 }
 
+/** GET that also hands back the response headers (list pages carry X-Next-Cursor and
+ * X-Total-Count there, so the JSON body stays the plain list older callers expect). */
+export async function apiWithHeaders<T>(path: string): Promise<{ data: T; headers: Headers }> {
+  let res: Response;
+  try {
+    res = await fetch(path, { credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+  }
+  const data = (await res.json().catch(() => null)) as
+    | (T & { code?: string; message?: string; fields?: Record<string, string> })
+    | null;
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? `Request failed (${res.status}).`, data?.fields ?? {});
+  }
+  return { data: data as T, headers: res.headers };
+}
+
 /** Headers every state-changing request needs (JSON + CSRF echo). */
 export function writeHeaders(): Record<string, string> {
   return { "content-type": "application/json", "x-csrf-token": readCookie("agentic_csrf") };

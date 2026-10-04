@@ -29,7 +29,9 @@ from .routers import (
     events_stream,
     files,
     learning,
+    library,
     mcp_servers,
+    media,
     members,
     monitor,
     office,
@@ -43,6 +45,7 @@ from .routers import (
     system,
     tasks,
     teams,
+    twins,
     vault,
     web_tasks,
     whatsapp,
@@ -57,7 +60,7 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
 # File uploads send raw bytes. A cross-site form cannot send octet-stream either, so the
 # JSON-only guarantee holds; the CSRF token is still checked.
-RAW_UPLOAD_PATHS = {"/api/files"}
+RAW_UPLOAD_PATHS = {"/api/files", "/api/transcribe"}
 WEBHOOK_PREFIX = "/api/whatsapp/hook/"
 
 
@@ -182,5 +185,8 @@ for r in (
     assistants.router,
     learning.router,
     events_stream.router,
+    media.router,
+    twins.router,
+    library.router,
 ):
     app.include_router(r)

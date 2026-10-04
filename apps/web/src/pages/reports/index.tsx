@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LoadMore } from "@/components/load-more";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,8 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
-import { officeKeys, reportQuery, reportsQuery, type Report, type ReportTable } from "@/lib/office-data";
+import { officeKeys, reportQuery, type Report, type ReportTable } from "@/lib/office-data";
+import { useDebounced, usePagedList } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
 function DataTable({ reportId, table, n }: { reportId: string; table: ReportTable; n: number }) {
@@ -150,14 +152,16 @@ function Row({ r, active, onOpen }: { r: Report; active: boolean; onOpen: () => 
 
 export function ReportsPage() {
   const qc = useQueryClient();
-  const { data: reports = [], isLoading, error } = useQuery(reportsQuery);
   const search = useSearch({ strict: false }) as { r?: string };
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  // Search runs on the server (title, summary, agent, label) and the list loads 50 at a time.
+  const needle = useDebounced(q.trim());
+  const list = usePagedList<Report>(officeKeys.reports, "/api/reports", { q: needle });
+  const { items: shown, isLoading, error } = list;
   useEffect(() => onLiveEvent((ev) => {
     if (ev.type === "report.created") qc.invalidateQueries({ queryKey: officeKeys.reports });
   }), [qc]);
-  const shown = reports.filter((r) => !q.trim() || `${r.title} ${r.summary} ${r.agent_name} ${r.branch_name} ${r.labels.join(" ")}`.toLowerCase().includes(q.trim().toLowerCase()));
   const open = (id?: string) => navigate({ to: "/reports", search: id ? { r: id } : {}, replace: true });
   const current = search.r ?? (typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches ? shown[0]?.id : undefined);
 
@@ -171,7 +175,7 @@ export function ReportsPage() {
         </div>
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !reports.length ? (
+      ) : !shown.length && !needle && !list.hasMore ? (
         <EmptyState icon={ClipboardTextIcon} title="No reports yet" body="Ask an agent for a report (for example, a summary of an inbox) and it publishes one here." />
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
@@ -179,11 +183,12 @@ export function ReportsPage() {
             <SearchInput value={q} onChange={setQ} placeholder="Search reports" className="flex-none basis-auto" />
             <div className="min-h-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
               <p className="border-b border-border px-4 py-2 text-[12px] text-muted tabular">
-                {shown.length === reports.length ? `${reports.length} ${reports.length === 1 ? "report" : "reports"}` : `${shown.length} of ${reports.length} reports`}
+                {needle ? `${list.total ?? shown.length} matching` : `${list.total ?? shown.length} ${(list.total ?? shown.length) === 1 ? "report" : "reports"}`}
               </p>
               <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:overscroll-contain">
                 {shown.map((r) => <Row key={r.id} r={r} active={r.id === current} onOpen={() => open(r.id)} />)}
                 {!shown.length ? <li className="px-4 py-8 text-center text-[13px] text-muted">No report matches.</li> : null}
+                {list.hasMore || shown.length > 50 ? <li className="p-3"><LoadMore compact noun="reports" shown={shown.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /></li> : null}
               </ul>
             </div>
           </div>

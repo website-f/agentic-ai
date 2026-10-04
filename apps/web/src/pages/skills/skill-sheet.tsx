@@ -1,6 +1,6 @@
 import {
   ArrowCounterClockwiseIcon, ArchiveIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, CoinsIcon, FlaskIcon,
-  GitCommitIcon, ListChecksIcon, PencilSimpleIcon, PlusIcon, TrashIcon, TrendDownIcon, UsersThreeIcon,
+  GitCommitIcon, ListChecksIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, TrendDownIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -137,6 +137,11 @@ function Cases({ s, canWrite }: { s: SkillDetail; canWrite: boolean }) {
     onSuccess: () => toast("Running the tests. Results appear here in a minute."),
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const improve = useMutation({
+    mutationFn: () => api(`/api/skills/${s.id}/optimize`, "POST"),
+    onSuccess: () => toast("Improving this skill: rewriting it from its tests and testing each try. If a better version passes more tests, it shows up under Proposals (or goes live, per your autopilot setting)."),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const remove = async (id: string) => {
     try {
       await api(`/api/skills/${s.id}/cases/${id}`, "DELETE");
@@ -151,6 +156,7 @@ function Cases({ s, canWrite }: { s: SkillDetail; canWrite: boolean }) {
       <>
         {s.last_eval ? <SuiteBadge suite={s.last_eval} label={fresh ? "Last run" : `Version ${s.last_eval.version}`} /> : null}
         {canWrite && s.eval_cases.length ? <Button size="sm" variant="outline" loading={run.isPending} onClick={() => run.mutate()}>Run tests</Button> : null}
+        {canWrite && s.status === "active" ? <Button size="sm" variant="outline" loading={improve.isPending} onClick={() => improve.mutate()} title="Rewrite from failing tests, test each version, keep the best"><SparkleIcon size={14} /> Improve with AI</Button> : null}
         {canWrite ? <Button size="sm" variant="ghost" onClick={() => setAdding(!adding)}><PlusIcon size={14} /> Add</Button> : null}
       </>
     )}>
@@ -253,7 +259,7 @@ export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; c
           </StatGrid>
 
           <Block icon={ListChecksIcon} tone="accent" title="Instructions">
-            <div className="min-w-0 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{s.body}</Markdown></div>
+            <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{s.body}</Markdown></div>
           </Block>
 
           <Block icon={UsersThreeIcon} tone="violet" title="Who can use it">
@@ -286,7 +292,7 @@ export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; c
                         </Button>
                       ) : null}
                     </div>
-                    {open && prev ? <div className="min-w-0 overflow-x-auto border-t border-border p-3"><DiffView before={prev.body} after={v.body} labels={[`v${prev.version}`, `v${v.version}`]} /></div> : null}
+                    {open && prev ? <div className="min-w-0 border-t border-border p-3"><DiffView before={prev.body} after={v.body} labels={[`v${prev.version}`, `v${v.version}`]} /></div> : null}
                   </li>
                 );
               })}

@@ -86,3 +86,25 @@ async def get_updates(token: str, offset: int, timeout: int = 20) -> list[dict[s
 
 async def delete_webhook(token: str) -> None:
     await call(token, "deleteWebhook", {"drop_pending_updates": False}, timeout=10)
+
+
+async def download_file(token: str, file_id: str, max_bytes: int) -> bytes:
+    """A file someone sent the bot (voice notes, P18): getFile, then the file URL. Bots may
+    download up to 20 MB."""
+    info = await call(token, "getFile", {"file_id": file_id}, timeout=10) or {}
+    path = str(info.get("file_path") or "")
+    if not path:
+        raise TelegramError("Telegram did not give the file.")
+    if int(info.get("file_size") or 0) > max_bytes:
+        raise TelegramError("The file is too large.", 413)
+    url = f"{settings.telegram_api_base.rstrip('/')}/file/bot{token}/{path}"
+    async with http._client(timeout=60) as c:  # noqa: SLF001 - shared transport hook
+        async with c.stream("GET", url) as r:
+            if r.status_code >= 400:
+                raise TelegramError(f"Telegram answered {r.status_code}.", r.status_code)
+            data = bytearray()
+            async for chunk in r.aiter_bytes():
+                data.extend(chunk)
+                if len(data) > max_bytes:
+                    raise TelegramError("The file is too large.", 413)
+    return bytes(data)

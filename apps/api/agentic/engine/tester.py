@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AIProvider, ModelGroup, ProviderCheck
-from . import client, store
+from . import client, media, store
 from .presets import BY_ID
 
 TOOL_PROBE = [
@@ -81,7 +81,10 @@ async def group_model(db: AsyncSession | None, p: AIProvider | None) -> str | No
     groups = (
         await db.scalars(
             select(ModelGroup)
-            .where(ModelGroup.workspace_id == p.workspace_id, ModelGroup.name != "embed")
+            .where(
+                ModelGroup.workspace_id == p.workspace_id,
+                ModelGroup.name.notin_(media.NOT_CHAT),
+            )
             .order_by(ModelGroup.position)
         )
     ).all()

@@ -13,7 +13,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
@@ -31,6 +31,7 @@ from ...models import (
     DocumentVersion,
 )
 from ...services import audit, events
+from .. import paging
 from ..deps import Principal, api_error, require
 from .files import check_branch, check_task, get_file
 
@@ -503,15 +504,17 @@ async def doc_detail(db: AsyncSession, d: Document) -> DocDetailOut:
     )
 
 
-@router.get("/documents")
-async def list_documents(
-    status_: str | None = Query(default=None, alias="status", pattern="^(draft|review|approved)$"),
-    branch_id: str | None = None,
-    task_id: str | None = None,
-    q: str = Query(default="", max_length=120),
-    principal: Principal = Depends(require("read")),
-    db: AsyncSession = Depends(get_db),
-) -> list[DocOut]:
+DOC_ORDER: paging.Order = ((Document.updated_at, True), (Document.id, True))
+FIX_SCAN = 300  # documents checked per call when looking for the ones that fail a check
+
+
+def _doc_query(
+    principal: Principal,
+    status_: str | None,
+    branch_id: str | None,
+    task_id: str | None,
+    q: str,
+) -> Any:
     query = select(Document).where(Document.workspace_id == principal.workspace_id)
     if status_:
         query = query.where(Document.status == status_)
@@ -522,18 +525,93 @@ async def list_documents(
     if q.strip():
         like = f"%{q.strip()}%"
         query = query.where(or_(Document.title.ilike(like), Document.number.ilike(like)))
-    rows = (
-        await db.scalars(
-            service.scoped(query, Document, principal)
-            .order_by(Document.updated_at.desc())
-            .limit(300)
-        )
-    ).all()
+    return service.scoped(query, Document, principal)
+
+
+async def _failing(
+    db: AsyncSession, query: Any, cursor: str | None, want: int
+) -> tuple[list[DocOut], str | None]:
+    """Documents that fail a check, in list order, from after `cursor`. Checks are computed,
+    not stored, so this walks the list rendering each one: at most FIX_SCAN per call. Returns
+    the matches and where to resume (None once the list is exhausted)."""
+    out: list[DocOut] = []
+    scanned = 0
+    while len(out) < want and scanned < FIX_SCAN:
+        batch_q = query
+        if cursor:
+            batch_q = batch_q.where(paging.after(DOC_ORDER, paging.decode(cursor, 2)))
+        batch = list((await db.scalars(batch_q.order_by(*paging.sort(DOC_ORDER)).limit(50))).all())
+        if not batch:
+            return out, None
+        for d in batch:
+            scanned += 1
+            cursor = paging.cursor_for(d, DOC_ORDER)
+            r = await service.render(db, d)
+            base = await _base(db, d, r.checks)
+            if base["errors"]:
+                out.append(DocOut(**base))
+            if len(out) >= want or scanned >= FIX_SCAN:
+                return out, cursor
+        if len(batch) < 50:
+            return out, None
+    return out, cursor
+
+
+@router.get("/documents")
+async def list_documents(
+    response: Response,
+    status_: str | None = Query(default=None, alias="status", pattern="^(draft|review|approved)$"),
+    branch_id: str | None = None,
+    task_id: str | None = None,
+    q: str = Query(default="", max_length=120),
+    fix: bool = False,
+    limit: int = Query(default=300, ge=1, le=300),
+    cursor: str | None = Query(default=None, max_length=400),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[DocOut]:
+    """Most recently changed first. Pages with `limit` + `cursor` (X-Next-Cursor,
+    X-Total-Count); filters and search apply to every page. `fix` keeps only documents that
+    fail a check (pages can be short; follow X-Next-Cursor until it stops)."""
+    query = _doc_query(principal, status_, branch_id, task_id, q)
+    if fix:
+        found, nxt = await _failing(db, query, cursor, limit)
+        if nxt:
+            response.headers[paging.NEXT] = nxt
+        return found
+    rows = await paging.paginate(
+        db, query, DOC_ORDER, limit=limit, cursor=cursor, response=response
+    )
     out = []
     for d in rows:
         r = await service.render(db, d)
         out.append(DocOut(**await _base(db, d, r.checks)))
     return out
+
+
+@router.get("/documents/stats")
+async def document_stats(
+    branch_id: str | None = None,
+    q: str = Query(default="", max_length=120),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Counts behind the Documents tiles and tabs for the same company and search as the
+    list. `fix` counts failing documents among the latest FIX_SCAN (`fix_complete` says
+    whether that covered them all)."""
+    query = _doc_query(principal, None, branch_id, None, q)
+    grouped = query.with_only_columns(Document.status, func.count()).group_by(Document.status)
+    rows: list[Any] = list((await db.execute(grouped)).all())
+    by_status: dict[str, int] = {r[0]: int(r[1]) for r in rows}
+    found, more = await _failing(db, query, None, FIX_SCAN)
+    return {
+        "total": sum(by_status.values()),
+        "draft": by_status.get("draft", 0),
+        "review": by_status.get("review", 0),
+        "approved": by_status.get("approved", 0),
+        "fix": len(found),
+        "fix_complete": more is None,
+    }
 
 
 class DocIn(BaseModel):

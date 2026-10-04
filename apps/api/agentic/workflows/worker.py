@@ -44,6 +44,8 @@ from .channel_workflows import DeliverWorkflow
 from .document_activities import file_extract, workflow_run_tick
 from .document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from .engine_activities import check_all_providers
+from .knowledge_activities import knowledge_index
+from .knowledge_workflows import KnowledgeIndexWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
 from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
@@ -78,6 +80,7 @@ WORKFLOWS = [
     ScheduledTaskWorkflow,
     FileExtractWorkflow,
     WorkflowRunWorkflow,
+    KnowledgeIndexWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -108,6 +111,7 @@ ACTIVITIES = [
     schedule_finish,
     file_extract,
     workflow_run_tick,
+    knowledge_index,
 ]
 
 

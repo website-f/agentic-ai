@@ -23,7 +23,7 @@ import { meQuery } from "@/lib/queries";
 import { skillsQuery } from "@/lib/skills";
 import { cn } from "@/lib/utils";
 import { agentsQuery, sopsQuery, toolsQuery, workKeys, type ToolMode } from "@/lib/work";
-import { groupsQuery } from "@/pages/ai-engine/data";
+import { chatGroupsQuery } from "@/pages/ai-engine/data";
 
 const MODES: { value: ToolMode; label: string }[] = [
   { value: "allow", label: "Allow" },
@@ -101,7 +101,7 @@ function ScopeEditor({ tools, onChange }: { tools: Record<string, ToolMode>; onC
 
 function BlueprintDialog({ editing, open, onOpenChange }: { editing?: Blueprint; open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
-  const { data: groups = [] } = useQuery(groupsQuery);
+  const { data: groups = [] } = useQuery(chatGroupsQuery);
   const { data: sops = [] } = useQuery(sopsQuery);
   const { data: skills = [] } = useQuery(skillsQuery());
   const [d, setD] = useState<BlueprintInput>(() => editing ? {

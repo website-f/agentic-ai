@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import dispatch, runtime
+from ...agents import dispatch, runtime, twin
 from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import TOOLS
@@ -18,6 +19,7 @@ from ...engine import gateway
 from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task, User
 from ...services import audit, events
 from ...services.text import slugify
+from .. import paging
 from ..agent_schemas import (
     AgentIn,
     AgentOut,
@@ -111,6 +113,7 @@ async def agent_out(
         can_manage=principal is not None and can_manage(principal, a),
         view_only=principal is not None and not principal.scope.sees_agent(a),
         private=bool(a.private),
+        is_twin=bool(a.is_twin),
     )
 
 
@@ -156,6 +159,28 @@ def manage_perm():
         return principal
 
     return checker
+
+
+async def refuse_second_agent(db: AsyncSession, principal: Principal) -> None:
+    """P18: someone without agents.manage has one agent, their AI twin. 409 when they already
+    have it, or own an agent from before twins (they adopt that one instead)."""
+    mine = await twin.twin_of(db, principal.workspace_id, principal.user.id)
+    if mine is not None:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "twin_exists",
+            f"You already have your AI twin, {mine.name}. You can change it any time.",
+        )
+    old = await twin.adoptable(db, principal.workspace_id, principal.user.id)
+    if old:
+        which = old[0].name if len(old) == 1 else f"{len(old)} agents"
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "adopt_instead",
+            f"You already have {which}. Make "
+            + ("it" if len(old) == 1 else "one of them")
+            + " your AI twin instead of adding another agent.",
+        )
 
 
 async def _check_placement(
@@ -274,6 +299,21 @@ async def create_agent(
 ) -> AgentOut:
     perms = PERMISSIONS.get(principal.role, frozenset())
     personal = body.personal or "agents.manage" not in perms
+    # P18: without agents.manage, a person's one agent is their AI twin, sitting with them.
+    as_twin = "agents.manage" not in perms
+    if as_twin:
+        await refuse_second_agent(db, principal)
+        home = await twin.home_of(db, principal.workspace_id, principal.user)
+        if home.branch is None:
+            raise api_error(
+                status.HTTP_409_CONFLICT, "no_branch", "Ask an admin to create a company first."
+            )
+        body = body.model_copy(
+            update={
+                "branch_id": home.branch.id,
+                "department_id": home.department.id if home.department else None,
+            }
+        )
     if not personal and not principal.scope.placement_ok(body.branch_id, body.department_id):
         raise api_error(
             status.HTTP_403_FORBIDDEN,
@@ -308,9 +348,20 @@ async def create_agent(
             fields["role_kind"] = tpl.role_kind  # e.g. office manager: orchestrator
         if "tools" not in body.model_fields_set:
             fields["tools"] = dict(tpl.tools)  # e.g. the web operator's browser tools
+    if as_twin:
+        fields.update(is_twin=True, role_kind="leaf", autonomy="ask")
+        await twin.free_retired_place(db, principal.workspace_id, principal.user.id)
     a = Agent(workspace_id=principal.workspace_id, slug=slug, **fields)
     db.add(a)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as e:  # two creates at once: the unique index keeps one twin
+        await db.rollback()
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "twin_exists",
+            "You already have your AI twin. You can change it any time.",
+        ) from e
     await audit.record(
         db,
         principal.workspace_id,
@@ -327,6 +378,8 @@ async def create_agent(
     )
     await db.commit()
     await db.refresh(a)
+    if as_twin:
+        await twin.seed_basic(db, a, principal.user)
     out = await agent_out(db, a, None, principal)
     await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": a.id, "name": a.name})
     return out
@@ -348,6 +401,36 @@ async def read_agent(
     return await agent_out(db, a, None, principal)
 
 
+TWIN_PERSONA = ("name", "role", "soul", "color")
+
+
+async def _guard_twin(db: AsyncSession, principal: Principal, a: Agent, changes: dict) -> None:
+    """A twin sits with its person and speaks for them: nobody moves it, and only its person
+    changes who it is (managers still govern it: status, budgets, tools, SOPs, model)."""
+    person = await db.get(User, a.owner_user_id) if a.owner_user_id else None
+    who = person.name if person else "its person"
+    if (
+        changes.get("branch_id", a.branch_id) != a.branch_id
+        or changes.get("department_id", a.department_id) != a.department_id
+    ):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "twin_placement",
+            f"{a.name} sits with {who}. Change {who}'s branch or department in Members; "
+            "the twin follows when it is saved again.",
+        )
+    changes.pop("branch_id", None)
+    changes.pop("department_id", None)
+    touched = [k for k in TWIN_PERSONA if k in changes and changes[k] != getattr(a, k)]
+    if touched and a.owner_user_id != principal.user.id:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "twin_persona",
+            f"{a.name} is {who}'s AI twin: only {who} can change its name, role, persona or "
+            "colour. You can still pause it or adjust its tools, SOPs and budget.",
+        )
+
+
 @router.patch("/agents/{agent_id}")
 async def update_agent(
     agent_id: str,
@@ -360,6 +443,8 @@ async def update_agent(
     if "agents.manage" not in PERMISSIONS.get(principal.role, frozenset()):
         for k in ("role_kind", "heartbeat", "reports_to"):
             changes.pop(k, None)
+    if a.is_twin:
+        await _guard_twin(db, principal, a, changes)
     if "tools" in changes:
         _check_tools(changes["tools"] or {})
     branch_id = changes.get("branch_id", a.branch_id)
@@ -424,18 +509,29 @@ async def update_agent(
 @router.get("/agents/{agent_id}/sessions")
 async def list_sessions(
     agent_id: str,
+    response: Response,
+    q: str = Query(default="", max_length=120),
+    limit: int = Query(default=30, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    """The person's conversations with this agent, most recent first. Pages with `limit` +
+    `cursor` (X-Next-Cursor, X-Total-Count); `q` filters on the title."""
     await get_agent(db, principal, agent_id)
-    rows = (
-        await db.scalars(
-            select(ChatSession)
-            .where(ChatSession.agent_id == agent_id, ChatSession.user_id == principal.user.id)
-            .order_by(ChatSession.updated_at.desc())
-            .limit(30)
-        )
-    ).all()
+    query = select(ChatSession).where(
+        ChatSession.agent_id == agent_id, ChatSession.user_id == principal.user.id
+    )
+    if q.strip():
+        query = query.where(ChatSession.title.ilike(f"%{q.strip()}%"))
+    rows = await paging.paginate(
+        db,
+        query,
+        ((ChatSession.updated_at, True), (ChatSession.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in rows]
 
 

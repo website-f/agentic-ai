@@ -8,11 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...models import Agent, Branch, Report, Task
+from .. import paging
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -89,14 +90,18 @@ async def _get(db: AsyncSession, principal: Principal, report_id: str) -> Report
 
 @router.get("")
 async def list_reports(
+    response: Response,
     branch_id: str | None = None,
     agent_id: str | None = None,
     task_id: str | None = None,
     label: str | None = None,
+    q_: str = Query(default="", alias="q", max_length=120),
     limit: int = Query(default=100, ge=1, le=300),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ReportOut]:
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
     q = _scoped(select(Report).where(Report.workspace_id == principal.workspace_id), principal)
     if branch_id:
         q = q.where(Report.branch_id == branch_id)
@@ -106,7 +111,27 @@ async def list_reports(
         q = q.where(Report.task_id == task_id)
     if label:
         q = q.where(Report.labels.contains([label.lower()]))
-    rows = (await db.scalars(q.order_by(Report.created_at.desc()).limit(limit))).all()
+    if q_.strip():
+        like = f"%{q_.strip()}%"
+        named = select(Agent.id).where(
+            Agent.workspace_id == principal.workspace_id, Agent.name.ilike(like)
+        )
+        q = q.where(
+            or_(
+                Report.title.ilike(like),
+                Report.summary.ilike(like),
+                cast(Report.labels, String).ilike(like),
+                Report.agent_id.in_(named),
+            )
+        )
+    rows = await paging.paginate(
+        db,
+        q,
+        ((Report.created_at, True), (Report.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     return [await _out(db, r, False) for r in rows]
 
 

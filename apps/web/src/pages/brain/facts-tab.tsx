@@ -1,9 +1,10 @@
 import { ArrowCounterClockwiseIcon, LightbulbIcon, PencilSimpleIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useDeferredValue, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, Meta, Toolbar } from "@/components/ui/card";
@@ -14,7 +15,8 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
-import { brainKeys, END_REASON, factScope, factsQuery, type Fact } from "@/lib/brain";
+import { brainKeys, END_REASON, factScope, type Fact } from "@/lib/brain";
+import { useDebounced, usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -118,11 +120,13 @@ export function FactsTab({ canWrite }: { canWrite: boolean }) {
   const [state, setState] = useState<State>("active");
   const [branch, setBranch] = useState("all");
   const [q, setQ] = useState("");
-  const query = useDeferredValue(q);
-  const params: Record<string, string> = { state, limit: "200" };
-  if (branch !== "all") params.branch_id = branch;
-  if (query.trim()) params.q = query.trim();
-  const { data, isLoading, error } = useQuery(factsQuery(params));
+  const query = useDebounced(q.trim());
+  // Filters and search run on the server; facts load 50 at a time as you scroll.
+  const list = usePagedList<Fact>(["brain", "facts"], "/api/brain/facts",
+    { state, branch_id: branch !== "all" ? branch : undefined, q: query || undefined },
+    { pick: (b) => (b as { items: Fact[] }).items });
+  const { isLoading, error } = list;
+  const data = list.query.data ? { total: list.total ?? list.items.length, items: list.items } : undefined;
 
   return (
     <div className="grid gap-4">
@@ -146,10 +150,11 @@ export function FactsTab({ canWrite }: { canWrite: boolean }) {
             : "Agents pick up facts as they finish tasks and chats: names, terms, prices, preferences. You can add them yourself too."} />
       ) : (
         <>
-          <p className="-mb-1 text-[12.5px] text-muted tabular">{data.total} {data.total === 1 ? "fact" : "facts"}{data.total > data.items.length ? `, showing the first ${data.items.length}` : ""}</p>
+          <p className="-mb-1 text-[12.5px] text-muted tabular">{data.total} {data.total === 1 ? "fact" : "facts"}</p>
           <ListCard>
             {data.items.map((f) => <FactRow key={f.id} f={f} canWrite={canWrite} />)}
           </ListCard>
+          <LoadMore noun="facts" shown={data.items.length} total={data.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} />
         </>
       )}
     </div>

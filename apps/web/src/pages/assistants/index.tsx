@@ -2,7 +2,8 @@
  * company, let them read Gmail and draft replies (sent only when approved here), and have them
  * chase people and other agents on WhatsApp. Built phone-first. */
 import {
-  ArrowRightIcon, ChartLineUpIcon, CheckCircleIcon, ChatCircleDotsIcon, EnvelopeSimpleIcon, GearSixIcon, LightningIcon,
+  ArrowRightIcon, CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon,
+  ChatCircleDotsIcon, ClockCountdownIcon, EnvelopeSimpleIcon, GearSixIcon, LightningIcon, VideoCameraIcon,
   LockSimpleIcon, MagnifyingGlassIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon, TrendDownIcon, UsersThreeIcon,
   WarningCircleIcon, WhatsappLogoIcon, type Icon,
 } from "@phosphor-icons/react";
@@ -25,15 +26,18 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
+import { VoiceInput } from "@/components/voice-input";
 import { api, errorMessage } from "@/lib/api";
-import { assistantKeys, assistantsQuery, draftsQuery, QUICK_PROMPTS, type AssistantsHome, type EmailDraft, type Preset } from "@/lib/assistants";
+import {
+  assistantKeys, assistantsQuery, calendarDraftsQuery, draftsQuery, QUICK_PROMPTS, type AssistantsHome, type CalendarDraft, type EmailDraft, type Preset,
+} from "@/lib/assistants";
 import { cn, timeAgo } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
 
 type Tab = "chat" | "drafts" | "settings";
 
 const PRESET_LOOK: Record<Preset["key"], { icon: Icon; tone: Tone; can: string[] }> = {
-  chief_of_staff: { icon: SparkleIcon, tone: "accent", can: ["Daily company pulse", "Who's slipping", "Chase people & agents", "Your inbox"] },
+  chief_of_staff: { icon: SparkleIcon, tone: "accent", can: ["Daily company pulse", "Who's slipping", "Chase people & agents", "Your inbox & calendar"] },
   inbox: { icon: EnvelopeSimpleIcon, tone: "info", can: ["Reads Gmail", "What needs you today", "Drafts replies to approve"] },
   analyst: { icon: ChartLineUpIcon, tone: "violet", can: ["Team performance", "Trends & tables", "Three actions"] },
   custom: { icon: GearSixIcon, tone: "orange", can: ["Your own instructions"] },
@@ -50,11 +54,24 @@ const TOOL_LOOK: Record<string, { label: string; icon: Icon }> = {
   email_read: { label: "Read an email", icon: EnvelopeSimpleIcon },
   email_draft_reply: { label: "Drafted a reply", icon: PaperPlaneRightIcon },
   email_draft: { label: "Drafted an email", icon: PaperPlaneRightIcon },
+  calendar_agenda: { label: "Read your calendar", icon: CalendarBlankIcon },
+  calendar_free_slots: { label: "Found free time", icon: CalendarCheckIcon },
+  calendar_create_event: { label: "Proposed an event", icon: CalendarPlusIcon },
+  calendar_update_event: { label: "Proposed a change", icon: CalendarBlankIcon },
+  calendar_cancel_event: { label: "Proposed a cancellation", icon: CalendarXIcon },
+  schedule_task: { label: "Set up a schedule", icon: ClockCountdownIcon },
+  list_my_schedules: { label: "Checked schedules", icon: ClockCountdownIcon },
+  cancel_schedule: { label: "Cancelled a schedule", icon: ClockCountdownIcon },
 };
+
+/** Tools whose result waits on the Drafts tab. */
+const PROPOSES = ["email_draft", "email_draft_reply", "calendar_create_event", "calendar_update_event", "calendar_cancel_event"];
 
 /** While the assistant works: what it is probably doing, from what was asked. */
 function thinkingLine(q: string): string {
   const s = q.toLowerCase();
+  if (/\bevery\b|remind me|\bdaily\b|\bweekly\b|\bmonthly\b/.test(s)) return "Setting up the schedule…";
+  if (/calendar|meeting|free time|free slot|\bbook\b|agenda/.test(s)) return "Checking your calendar…";
   if (/inbox|email|mail|reply|draft/.test(s)) return "Going through your email…";
   if (/slack|stuck|late|behind|slip/.test(s)) return "Looking for what's stuck…";
   if (/who|staff|team|perform|doing well/.test(s)) return "Checking how everyone is doing…";
@@ -186,8 +203,9 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       setPicked(true);
       await qc.invalidateQueries({ queryKey: workKeys.messages(r.session_id) });
       qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
-      if (r.tools_used.some((t) => t.startsWith("email_draft"))) {
+      if (r.tools_used.some((t) => PROPOSES.includes(t))) {
         qc.invalidateQueries({ queryKey: assistantKeys.allDrafts });
+        qc.invalidateQueries({ queryKey: assistantKeys.allCalendar });
         qc.invalidateQueries({ queryKey: assistantKeys.home });
       }
       setLocal([]);
@@ -207,7 +225,9 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
     send.mutate(t);
   };
   const gmail = !!home.google.account;
-  const prompts = QUICK_PROMPTS.filter((p) => !p.needs || gmail);
+  const cal = !!home.google.account?.calendar;
+  const prompts = QUICK_PROMPTS.filter((p) => !p.needs || (p.needs === "gmail" ? gmail : cal));
+  const waiting = home.drafts_pending + (home.calendar_pending ?? 0);
 
   return (
     // Exactly the screen that is left: app header, page title (desktop), tabs, tab bar (phones).
@@ -218,8 +238,8 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
           <p className="truncate text-[14px] font-semibold">{agent.name}</p>
           <p className="truncate text-[11.5px] text-muted">{send.isPending ? thinkingLine(asked) : agent.role}</p>
         </div>
-        {home.drafts_pending ? (
-          <Button size="sm" variant="outline" onClick={onDrafts}><EnvelopeSimpleIcon size={14} /> {home.drafts_pending} to approve</Button>
+        {waiting ? (
+          <Button size="sm" variant="outline" onClick={onDrafts}><CheckCircleIcon size={14} /> {waiting} to approve</Button>
         ) : null}
         {current ? (
           <Button size="sm" variant="ghost" onClick={() => { setLocal([]); setSessionId(null); setPicked(true); }} aria-label="New conversation"><PlusIcon size={15} /><span className="max-sm:hidden">New</span></Button>
@@ -243,7 +263,8 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
                 </button>
               ))}
             </div>
-            {!gmail ? <p className="text-[12px] text-muted">Connect Gmail in Settings and I can read your inbox too.</p> : null}
+            {!gmail ? <p className="text-[12px] text-muted">Connect Google in Settings and I can read your inbox and calendar too.</p>
+              : !cal ? <p className="text-[12px] text-muted">Reconnect Google in Settings to add your calendar.</p> : null}
           </div>
         ) : null}
         <ol className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-5">
@@ -307,6 +328,8 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
           disabled={agent.status !== "active"}
           placeholder={agent.status !== "active" ? `${agent.name} is ${agent.status}` : `Ask ${agent.name} anything…`}
           className="max-h-40 min-h-11 flex-1 resize-none rounded-[var(--radius-md)] border border-border bg-bg px-3.5 py-2.5 text-[14px] [field-sizing:content] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none disabled:opacity-60" />
+        <VoiceInput round disabled={agent.status !== "active"}
+          onText={(t) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${t}` : t)); box.current?.focus(); }} />
         <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || send.isPending} aria-label="Send">
           <PaperPlaneRightIcon size={18} weight="fill" />
         </Button>
@@ -370,26 +393,86 @@ function DraftCard({ d }: { d: EmailDraft }) {
   );
 }
 
+const CAL_LOOK: Record<CalendarDraft["action"], { icon: Icon; tone: Tone; verb: string; confirm: string; done: string }> = {
+  create: { icon: CalendarPlusIcon, tone: "accent", verb: "New event", confirm: "Add to calendar", done: "Added to your calendar." },
+  update: { icon: CalendarBlankIcon, tone: "info", verb: "Change", confirm: "Save the change", done: "Calendar updated." },
+  cancel: { icon: CalendarXIcon, tone: "danger", verb: "Cancel", confirm: "Cancel the event", done: "Event cancelled." },
+};
+
+/** An event an assistant proposed. Nothing reaches Google (or the guests) until Confirm. */
+function CalendarDraftCard({ d }: { d: CalendarDraft }) {
+  const qc = useQueryClient();
+  const look = CAL_LOOK[d.action];
+  const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allCalendar }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
+  const confirm = useMutation({
+    mutationFn: () => api<CalendarDraft>(`/api/calendar-drafts/${d.id}/confirm`, "POST"),
+    onSuccess: () => { refresh(); toast.success(look.done + (d.notify ? " Guests were told." : "")); },
+    onError: (e) => { refresh(); toast.error(errorMessage(e)); },
+  });
+  const discard = useMutation({
+    mutationFn: () => api(`/api/calendar-drafts/${d.id}/discard`, "POST"),
+    onSuccess: () => { refresh(); toast.success("Discarded. Nothing changed in your calendar."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <Card>
+      <CardHeader icon={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
+        title={<span className="break-words">{look.verb}: {d.title}</span>}
+        description={[d.agent_name ? `Proposed by ${d.agent_name}` : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+        actions={<Pill tone="warn">Waiting for you</Pill>} />
+      <CardBody className="grid gap-3">
+        <p className="text-[13.5px] break-words">{d.summary}</p>
+        {d.attendees.length || d.meet ? (
+          <div className="flex flex-wrap gap-1.5">
+            {d.attendees.map((a) => <span key={a} className="max-w-full truncate rounded-full border border-border px-2 py-0.5 text-[11.5px] text-muted">{a}</span>)}
+            {d.meet ? <Pill tone="info"><VideoCameraIcon size={12} /> Google Meet</Pill> : null}
+          </div>
+        ) : null}
+        {d.notify ? <p className="text-[12px] text-muted">Guests get {d.action === "create" ? "an invitation" : "an update"} only when you confirm.</p> : null}
+        <div className="flex flex-wrap items-center gap-2 max-sm:[&>button]:flex-1">
+          <Button variant={d.action === "cancel" ? "danger" : "primary"} loading={confirm.isPending} onClick={() => confirm.mutate()}>
+            <CalendarCheckIcon size={15} /> {look.confirm}
+          </Button>
+          <Button variant="ghost" loading={discard.isPending} onClick={() => discard.mutate()}><TrashIcon size={14} /> Discard</Button>
+        </div>
+        {d.error ? <p className="text-[12.5px] text-danger">{d.error}</p> : null}
+      </CardBody>
+    </Card>
+  );
+}
+
 function Drafts({ home }: { home: AssistantsHome }) {
   const { data: pending = [], isLoading } = useQuery(draftsQuery("pending"));
+  const { data: events = [], isLoading: loadingEvents } = useQuery(calendarDraftsQuery("pending"));
   const [history, setHistory] = useState(false);
   const { data: all = [] } = useQuery({ ...draftsQuery("all"), enabled: history });
-  if (!home.google.account) {
-    return <EmptyState icon={EnvelopeSimpleIcon} title="Gmail isn't connected" body="Connect it in Settings and your assistants can read your inbox and draft replies. Nothing is ever sent until you press Send here." />;
+  const { data: allEvents = [] } = useQuery({ ...calendarDraftsQuery("all"), enabled: history });
+  if (!home.google.account && !events.length) {
+    return <EmptyState icon={EnvelopeSimpleIcon} title="Google isn't connected" body="Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here." />;
   }
+  const done = [
+    ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: `${d.subject} → ${d.to}`, at: d.decided_at ?? d.created_at })),
+    ...allEvents.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: CAL_LOOK[d.action].icon, status: d.status, ok: d.status === "done", text: `${CAL_LOOK[d.action].verb}: ${d.title}`, at: d.decided_at ?? d.created_at })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
   return (
     <div className="grid gap-3">
-      {isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
-        : !pending.length ? <EmptyState icon={CheckCircleIcon} title="Nothing waiting" body="When an assistant drafts an email for you, it appears here and on your phone. You review it, change anything, then send." />
-        : pending.map((d) => <DraftCard key={d.id} d={d} />)}
-      <button type="button" onClick={() => setHistory((h) => !h)} className="w-fit text-[12.5px] text-muted hover:text-fg">{history ? "Hide" : "Show"} sent and discarded</button>
+      {isLoading || loadingEvents ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
+        : !pending.length && !events.length ? <EmptyState icon={CheckCircleIcon} title="Nothing waiting" body="When an assistant drafts an email or proposes a calendar event, it appears here and on your phone. You review it, then send or confirm." />
+        : (
+          <>
+            {events.map((d) => <CalendarDraftCard key={d.id} d={d} />)}
+            {pending.map((d) => <DraftCard key={d.id} d={d} />)}
+          </>
+        )}
+      <button type="button" onClick={() => setHistory((h) => !h)} className="w-fit text-[12.5px] text-muted hover:text-fg">{history ? "Hide" : "Show"} handled</button>
       {history ? (
         <ul className="grid gap-1.5">
-          {all.filter((d) => d.status !== "pending").map((d) => (
+          {done.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-2 rounded-sm border border-border px-3 py-2 text-[12.5px]">
-              <Pill tone={d.status === "sent" ? "ok" : d.status === "failed" ? "danger" : "neutral"}>{d.status}</Pill>
-              <span className="min-w-0 flex-1 truncate">{d.subject} → {d.to}</span>
-              <span className="text-muted">{timeAgo(d.decided_at ?? d.created_at)}</span>
+              <d.icon size={14} className="shrink-0 text-muted" />
+              <Pill tone={d.ok ? "ok" : d.status === "failed" ? "danger" : "neutral"}>{d.status}</Pill>
+              <span className="min-w-0 flex-1 truncate">{d.text}</span>
+              <span className="text-muted">{timeAgo(d.at)}</span>
             </li>
           ))}
         </ul>
@@ -448,7 +531,7 @@ function Connections({ home }: { home: AssistantsHome }) {
   });
   const disconnect = useMutation({
     mutationFn: () => api("/api/integrations/google/account", "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success("Gmail disconnected."); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success("Google disconnected."); },
   });
   const row = (icon: Icon, tone: Tone, title: string, status: React.ReactNode, action: React.ReactNode) => (
     // The card is narrow at every size: the action sits under the text, never squeezing it.
@@ -470,8 +553,15 @@ function Connections({ home }: { home: AssistantsHome }) {
               {g.account.status === "error" ? <Button size="sm" onClick={() => connect.mutate()} loading={connect.isPending}>Reconnect</Button> : <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Connected</Pill>}
               <Button size="sm" variant="ghost" onClick={() => setUnlinking(true)}>Disconnect</Button>
             </>
-          ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>Connect Gmail</Button>
+          ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>Connect Google</Button>
             : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">Set up</Link></Button> : null)}
+        {row(CalendarBlankIcon, "accent", "Calendar",
+          g.account?.calendar ? <>Your Google Calendar. Assistants read it and find free time; events they propose wait for you.</>
+            : g.account ? "Connected before calendar access was added. Reconnect Google and tick the calendar box."
+            : "Connect Google above to add your calendar.",
+          g.account?.calendar ? <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Connected</Pill>
+            : g.account ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><CalendarPlusIcon size={14} /> Reconnect Google to add Calendar</Button>
+            : null)}
         {row(WhatsappLogoIcon, "ok", "WhatsApp",
           !home.whatsapp.channel_id ? "Not set up for the office yet."
             : home.whatsapp.status !== "WORKING" ? `The office number is not connected (${(home.whatsapp.status ?? "unknown").toLowerCase().replace(/_/g, " ")}). An admin reconnects it on Channels.`
@@ -482,16 +572,19 @@ function Connections({ home }: { home: AssistantsHome }) {
           home.reach.length ? home.reach.map((r) => (r === "app" ? "this app" : r === "whatsapp" ? "WhatsApp" : "Telegram")).join(", ") : "Nowhere yet: turn on phone notifications or link WhatsApp.",
           null)}
       </ul>
-      <ConfirmDialog open={unlinking} onOpenChange={setUnlinking} title="Disconnect Gmail?" confirmLabel="Disconnect"
-        body="Your assistants stop reading your email. Drafts already in Gmail stay there." onConfirm={async () => { await disconnect.mutateAsync(); }} />
+      <ConfirmDialog open={unlinking} onOpenChange={setUnlinking} title="Disconnect Google?" confirmLabel="Disconnect"
+        body="Your assistants stop reading your email and calendar. Drafts already in Gmail stay there." onConfirm={async () => { await disconnect.mutateAsync(); }} />
     </Card>
   );
 }
 
-const TOOL_GROUPS: { label: string; hint: string; tools: string[] }[] = [
+const TOOL_GROUPS: { label: string; hint: string; tools: string[]; on?: Record<string, string> }[] = [
   { label: "Company reports", hint: "Pulse, team performance, where things slip", tools: ["company_pulse", "team_performance", "slacking_report"] },
   { label: "Email", hint: "Read your Gmail and draft replies (you send)", tools: ["email_search", "email_read", "email_draft_reply", "email_draft"] },
+  { label: "Calendar", hint: "Read your calendar, find free time, propose events (you confirm)", tools: ["calendar_agenda", "calendar_free_slots", "calendar_create_event", "calendar_update_event", "calendar_cancel_event"] },
   { label: "Reach people and agents", hint: "WhatsApp/app messages, jobs for other agents", tools: ["notify_person", "message_agent"] },
+  // Asking in chat is the OK; from anywhere else a schedule waits for your approval ("ask").
+  { label: "Schedules", hint: "Set up recurring or one-off jobs when you ask", tools: ["schedule_task", "list_my_schedules", "cancel_schedule"], on: { schedule_task: "ask" } },
 ];
 
 function Settings({ agent, home }: { agent: Agent; home: AssistantsHome }) {
@@ -526,7 +619,7 @@ function Settings({ agent, home }: { agent: Agent; home: AssistantsHome }) {
           <div className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
             {TOOL_GROUPS.map((g) => (
               <SwitchField key={g.label} checked={on(g.tools)} label={g.label} hint={g.hint}
-                onCheckedChange={(v) => setTools((t) => ({ ...t, ...Object.fromEntries(g.tools.map((x) => [x, v ? "allow" : "deny"])) }))} />
+                onCheckedChange={(v) => setTools((t) => ({ ...t, ...Object.fromEntries(g.tools.map((x) => [x, v ? g.on?.[x] ?? "allow" : "deny"])) }))} />
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -553,12 +646,13 @@ export function AssistantsPage() {
   const tab: Tab = search.tab ?? "chat";
   const list = useMemo(() => home?.assistants ?? [], [home]);
   const agent = useMemo(() => list.find((a) => a.id === search.a) ?? list[0], [list, search.a]);
+  const waiting = (home?.drafts_pending ?? 0) + (home?.calendar_pending ?? 0);
   const go = (p: { a?: string; tab?: Tab }) => navigate({ search: (s) => ({ ...s, ...p, google: undefined, msg: undefined }), replace: true });
 
   // Back from Google sign-in.
   useEffect(() => {
     if (!search.google) return;
-    if (search.google === "connected") toast.success(`Gmail connected${search.msg ? `: ${search.msg}` : ""}.`);
+    if (search.google === "connected") toast.success(`Google connected${search.msg ? `: ${search.msg}` : ""}.`);
     else toast.error(search.msg || "Google sign-in failed.");
     qc.invalidateQueries({ queryKey: assistantKeys.home });
     navigate({ search: (s) => ({ ...s, google: undefined, msg: undefined, tab: "settings" }), replace: true });
@@ -602,7 +696,11 @@ export function AssistantsPage() {
               </div>
               <div className="mt-4 hidden gap-2 lg:grid">
                 <p className="text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">Connected</p>
-                <span className="flex items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={home.google.account ? "text-ok" : "text-muted"} /> {home.google.account ? home.google.account.email : "Gmail not connected"}</span>
+                <span className="flex min-w-0 items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={cn("shrink-0", home.google.account ? "text-ok" : "text-muted")} /> <span className="truncate">{home.google.account ? home.google.account.email : "Gmail not connected"}</span></span>
+                {home.google.account ? (
+                  home.google.account.calendar ? <span className="flex items-center gap-2 text-[12.5px]"><CalendarBlankIcon size={15} className="text-ok" /> Calendar connected</span>
+                    : <button type="button" onClick={() => go({ tab: "settings" })} className="flex items-center gap-2 text-left text-[12.5px] text-warn hover:underline"><CalendarBlankIcon size={15} /> Add your calendar →</button>
+                ) : null}
                 <span className="flex items-center gap-2 text-[12.5px]">
                   <WhatsappLogoIcon size={15} className={home.whatsapp.status === "WORKING" ? "text-ok" : "text-muted"} />
                   {!home.whatsapp.channel_id ? "WhatsApp not set up" : home.whatsapp.status === "WORKING" ? `Office ${pretty(home.whatsapp.number)}` : "Office WhatsApp offline"}
@@ -612,7 +710,7 @@ export function AssistantsPage() {
                     {home.whatsapp.linked ? "Your phone is linked" : "Link your phone →"}
                   </button>
                 ) : null}
-                {home.drafts_pending ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {home.drafts_pending} draft{home.drafts_pending > 1 ? "s" : ""} to approve</button> : null}
+                {waiting ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {waiting} waiting for you</button> : null}
               </div>
             </aside>
 
@@ -620,7 +718,7 @@ export function AssistantsPage() {
               <Segmented<Tab> label="View" value={tab} onChange={(t) => go({ tab: t })} className="w-full sm:w-fit [&>button]:flex-1 [&>button]:justify-center"
                 options={[
                   { value: "chat", label: "Chat" },
-                  { value: "drafts", label: "Drafts", ...(home.drafts_pending ? { count: home.drafts_pending } : {}) },
+                  { value: "drafts", label: "Drafts", ...(waiting ? { count: waiting } : {}) },
                   { value: "settings", label: "Settings" },
                 ]} />
               {tab === "chat" ? <Chat key={agent.id} agent={agent} home={home} onDrafts={() => go({ tab: "drafts" })} />

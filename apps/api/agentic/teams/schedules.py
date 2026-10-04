@@ -7,7 +7,9 @@ incidents by signature, so 50 identical failures raise one alert.
 """
 
 import hashlib
+import logging
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,6 +22,8 @@ from ..core.db import SessionLocal
 from ..models import Agent, Incident, JobRun, Schedule, Task
 from ..services import events
 
+log = logging.getLogger("agentic.teams.schedules")
+
 RETRY_DELAYS = (0, 300, 900, 1800)  # first try, then +5, +15, +30 minutes
 SYSTEM_JOBS = {
     "provider-health": "Checks every AI provider (every 30 minutes)",
@@ -30,6 +34,38 @@ SYSTEM_JOBS = {
 
 class ScheduleError(ValueError):
     pass
+
+
+# ---------------------------------------------------------------- who set a schedule up
+# Schedule.created_by is "user:<id>" for one made on the Schedules page. One an agent made
+# when a person asked (agents/schedule_tools.py) reads "agent:<id>|for:<person>|chat[|once]":
+# the agent that runs it, the person who gets each result, where they asked (chat | task),
+# and whether it runs only once (then it switches itself off after firing).
+
+
+@dataclass(frozen=True)
+class Origin:
+    agent_id: str | None = None  # the agent that set it up (always the one that runs it)
+    person: str | None = None  # the person it reports to (asked for it, or made it)
+    via: str = "page"  # page | chat | task
+    once: bool = False
+
+
+def by_agent(agent_id: str, person: str | None, via: str, once: bool) -> str:
+    parts = [f"agent:{agent_id}", *([f"for:{person}"] if person else []), via]
+    return "|".join([*parts, "once"] if once else parts)
+
+
+def origin(created_by: str | None) -> Origin:
+    raw = created_by or ""
+    if raw.startswith("user:"):
+        return Origin(person=raw.removeprefix("user:"))
+    if not raw.startswith("agent:"):
+        return Origin(via="other")
+    parts = raw.split("|")
+    person = next((p.removeprefix("for:") for p in parts if p.startswith("for:")), None)
+    via = next((p for p in parts[1:] if p in ("chat", "task")), "task")
+    return Origin(parts[0].removeprefix("agent:"), person, via, "once" in parts[1:])
 
 
 def next_runs(cron: str, tz: str, n: int = 3, after: datetime | None = None) -> list[datetime]:
@@ -139,7 +175,12 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
         db.add(t)
         await db.flush()
         run.task_id = t.id
+        once = origin(s.created_by).once and not manual
+        if once:  # a one-off ("remind me Friday 4pm") switches itself off after firing
+            s.enabled = False
         await db.commit()
+        if once:
+            await _pause(s)
         await runtime.task_event(db, t, "created", "system", f"created by the schedule {s.name}")
         await events.publish(
             s.workspace_id, "task.created", {"task_id": t.id, "agent_id": t.assignee_agent_id}
@@ -187,6 +228,51 @@ async def finish(run_id: str, state: str) -> None:
         await _publish(run)
         if run.status == "failed":
             await _incident(db, run, s.name if s else "A scheduled job")
+        if s is not None and t is not None and state != "cancelled":
+            await _report_to_person(db, s, t, run)
+
+
+async def _pause(s: Schedule) -> None:
+    """Pause a fired one-off in Temporal too (best effort: the row is already off, so a
+    stray firing is skipped by claim anyway)."""
+    from ..agents import dispatch  # late: dispatch imports the workflows
+
+    try:
+        await dispatch.upsert_schedule(s.id, s.cron, s.timezone, False, s.name)
+    except Exception:  # noqa: BLE001
+        log.warning("could not pause the one-off schedule %s", s.id, exc_info=True)
+
+
+async def _report_to_person(db: AsyncSession, s: Schedule, t: Task, run: JobRun) -> None:
+    """A schedule an agent set up for a person sends them each result (or the failure)."""
+    from ..channels import deliver
+
+    o = origin(s.created_by)
+    if o.agent_id is None or not o.person:
+        return
+    agent = await db.get(Agent, s.agent_id)
+    who = agent.name if agent else "Your agent"
+    if run.status == "completed":
+        title = f"{who}: {s.title}"[:120]
+        body = (t.result or "Done.").strip()
+    else:
+        title = f"{who} could not finish: {s.title}"[:120]
+        body = (run.error or "It failed.").strip()
+    body = body[:1500] + ("…" if len(body) > 1500 else "")
+    try:
+        await deliver.start(
+            await deliver.notify_user(
+                db,
+                s.workspace_id,
+                o.person,
+                title,
+                body,
+                f"/tasks?task={t.id}",
+                dedupe=f"schedule-result:{run.id}",
+            )
+        )
+    except Exception:  # noqa: BLE001 - a notice must never fail the run's bookkeeping
+        log.warning("could not send the result of schedule %s", s.id, exc_info=True)
 
 
 async def _incident(db: AsyncSession, run: JobRun, name: str) -> None:

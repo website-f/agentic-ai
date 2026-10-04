@@ -31,6 +31,7 @@ from ...models import (
     Workspace,
 )
 from ...skills import store as skills_store
+from .. import paging
 from ..deps import Principal, api_error, require
 from .agents import get_agent
 
@@ -316,17 +317,28 @@ async def overview(
 
 @router.get("/brain/pages")
 async def list_pages(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+    response: Response,
+    q: str = Query(default="", max_length=120),
+    limit: int | None = Query(default=None, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[PageSummary]:
+    """Every page in path order (the vault tree needs the whole set). `limit` + `cursor` page
+    through it instead (X-Next-Cursor, X-Total-Count); `q` filters on path and title."""
     ws = await _ws(db, principal)
     await store.ensure_vault(db, ws)
-    rows = list(
-        (
-            await db.scalars(
-                select(BrainPage).where(BrainPage.workspace_id == ws.id).order_by(BrainPage.path)
-            )
-        ).all()
-    )
+    query = select(BrainPage).where(BrainPage.workspace_id == ws.id)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(or_(BrainPage.path.ilike(like), BrainPage.title.ilike(like)))
+    order: paging.Order = ((BrainPage.path, False), (BrainPage.id, False))
+    if limit is None and not cursor:
+        rows = list((await db.scalars(query.order_by(*paging.sort(order)))).all())
+    else:
+        rows = await paging.paginate(
+            db, query, order, limit=limit or 100, cursor=cursor, response=response
+        )
     names = await _names(db, {p.updated_by for p in rows})
     return [PageSummary(**_summary(p, names)) for p in rows]
 
@@ -525,15 +537,19 @@ async def search(
 
 @router.get("/brain/facts")
 async def list_facts(
+    response: Response,
     state: Literal["active", "ended", "all"] = "active",
     agent_id: str | None = None,
     branch_id: str | None = None,
     q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    """Newest first. `{total, items, next_cursor}`: pass `next_cursor` (also sent as
+    X-Next-Cursor) back as `cursor` for the next page; `offset` still works for old callers."""
     conds = [BrainFact.workspace_id == principal.workspace_id]
     if state == "active":
         conds.append(BrainFact.valid_to.is_(None))
@@ -551,18 +567,21 @@ async def list_facts(
             )
         )
     total = await db.scalar(select(func.count()).select_from(BrainFact).where(*conds))
-    rows = list(
-        (
-            await db.scalars(
-                select(BrainFact)
-                .where(*conds)
-                .order_by(BrainFact.valid_from.desc())
-                .offset(offset)
-                .limit(limit)
-            )
-        ).all()
+    rows = await paging.paginate(
+        db,
+        select(BrainFact).where(*conds).offset(offset if not cursor else 0),
+        ((BrainFact.valid_from, True), (BrainFact.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+        total=False,
     )
-    return {"total": total, "items": [f.model_dump() for f in await _facts_out(db, rows)]}
+    response.headers[paging.TOTAL] = str(total)
+    return {
+        "total": total,
+        "items": [f.model_dump() for f in await _facts_out(db, rows)],
+        "next_cursor": response.headers.get(paging.NEXT),
+    }
 
 
 @router.post("/brain/facts", status_code=status.HTTP_201_CREATED)

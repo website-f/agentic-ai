@@ -99,6 +99,8 @@ class AgentOut(BaseModel):
     # Watched, not acted on (staff seeing a colleague's agent work): no chat, no tasks.
     view_only: bool = False
     private: bool = False
+    # P18: a staff member's AI twin (owner_name is the person it is the twin of).
+    is_twin: bool = False
 
 
 class PromptPreviewOut(BaseModel):

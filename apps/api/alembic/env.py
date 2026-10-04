@@ -22,6 +22,15 @@ MANUAL_INDEXES = {
     "ix_brain_facts_tsv",
     "ix_brain_facts_embedding",
     "ix_agent_messages_fts",
+    "ix_knowledge_chunks_tsv",
+    "ix_knowledge_chunks_embedding",
+    "ux_agents_one_twin",
+    "ix_approvals_page",
+    "ix_tasks_page",
+    "ix_meetings_page",
+    "ix_broadcasts_page",
+    "ix_chat_sessions_page",
+    "ix_skill_proposals_page",
 }
 
 

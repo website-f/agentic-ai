@@ -208,3 +208,16 @@ async def start_run(run_id: str) -> str:
 async def poke_run(run_id: str) -> None:
     client = await temporal_client()
     await client.get_workflow_handle(f"wfrun-{run_id}").signal(WorkflowRunWorkflow.poke)
+
+
+async def start_library_index(kind: str, target_id: str) -> None:
+    """Build library passages on the worker (P18). kind = file | sop | workspace."""
+    from ..workflows.knowledge_workflows import KnowledgeIndexWorkflow
+
+    client = await temporal_client()
+    await client.start_workflow(
+        KnowledgeIndexWorkflow.run,
+        args=[kind, target_id],
+        id=f"library-{kind}-{target_id}-{datetime.now(UTC):%Y%m%d%H%M%S%f}",
+        task_queue=settings.temporal_task_queue,
+    )

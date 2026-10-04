@@ -331,6 +331,8 @@ class Agent(Timestamps, Base):
     clone_of: Mapped[str | None] = mapped_column(String(40), index=True)
     # A personal assistant (P16): only its owner sees it, works with it and reads its work.
     private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P18: a staff member's AI twin, their one virtual self at work (owner_user_id = them).
+    is_twin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class ChatSession(Timestamps, Base):
@@ -573,6 +575,32 @@ class BrainChunk(Base):
         TSVECTOR, Computed("to_tsvector('simple', heading || ' ' || text)", persisted=True)
     )
     embedding: Mapped[Any] = mapped_column(Vector(EMBED_DIMS), nullable=True)
+
+
+class KnowledgeChunk(Base):
+    """P18 knowledge library: one passage of a library file or an SOP, searchable by keyword
+    and by meaning. Rebuilt whenever its source changes."""
+
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (Index("ix_knowledge_chunks_source", "source_kind", "source_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(String(40), index=True)
+    source_kind: Mapped[str] = mapped_column(String(16))  # file | sop
+    source_id: Mapped[str] = mapped_column(String(40))
+    # Who may read it: None = the whole workspace. SOP scopes map onto these too.
+    branch_id: Mapped[str | None] = mapped_column(String(40))
+    department_id: Mapped[str | None] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    idx: Mapped[int] = mapped_column(Integer)
+    heading: Mapped[str] = mapped_column(String(300), default="")
+    page: Mapped[int | None] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    tsv: Mapped[Any] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('simple', heading || ' ' || text)", persisted=True)
+    )
+    embedding: Mapped[Any] = mapped_column(Vector(EMBED_DIMS), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class BrainLink(Base):
@@ -1168,6 +1196,13 @@ class DocFile(Timestamps, Base):
     error: Mapped[str | None] = mapped_column(String(300))
     source: Mapped[str] = mapped_column(String(16), default="upload")  # upload | generated
     created_by: Mapped[str] = mapped_column(String(80))
+    # P18 knowledge library: guidelines, manuals and policies agents search and cite.
+    # Scope: branch_id (None = whole workspace) and optionally one department.
+    library: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CompanyKit(Timestamps, Base):
@@ -1379,6 +1414,23 @@ class GoogleAccount(Timestamps, Base):
     @property
     def aad(self) -> str:
         return f"google_account:{self.id}"
+
+
+class CalendarProposal(Base):
+    """P18: a calendar change an assistant prepared (create | update | cancel). Nothing is
+    written to Google until its owner confirms. `data` holds the full proposal."""
+
+    __tablename__ = "calendar_proposals"
+    __table_args__ = (
+        Index("ix_calendar_proposals_owner", "workspace_id", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class EmailDraft(Timestamps, Base):

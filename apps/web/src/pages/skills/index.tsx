@@ -14,13 +14,15 @@ import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
+import { LoadMore } from "@/components/load-more";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { isAutoApproved } from "@/lib/learning";
 import { keys, meQuery } from "@/lib/queries";
-import { compact, KIND_LABEL, pct, proposalsQuery, skillKeys, skillsQuery, TRUST_LABEL, type Proposal, type ProposalKind, type Skill } from "@/lib/skills";
+import { compact, KIND_LABEL, pct, skillKeys, skillsQuery, TRUST_LABEL, type Proposal, type ProposalKind, type Skill } from "@/lib/skills";
+import { usePagedList } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
 import { LearnSourceDialog } from "@/pages/learning/learn-source-dialog";
@@ -184,8 +186,12 @@ export function SkillsPage() {
   const [creating, setCreating] = useState(0);
   const [teaching, setTeaching] = useState(0);
   const { data: skills, isLoading, error } = useQuery(skillsQuery(state));
-  const { data: pending = [] } = useQuery(proposalsQuery("pending"));
-  const { data: decided = [] } = useQuery({ ...proposalsQuery("decided"), enabled: tab === "history" });
+  // Proposals only grow (the review queue and every past decision): both load 50 at a time.
+  const pendingList = usePagedList<Proposal>(skillKeys.proposals("pending"), "/api/skill-proposals", { state: "pending" });
+  const decidedList = usePagedList<Proposal>(skillKeys.proposals("decided"), "/api/skill-proposals", { state: "decided" }, { enabled: tab === "history" });
+  const pending = pendingList.items;
+  const decided = decidedList.items;
+  const pendingCount = pendingList.total ?? pending.length;
   const go = (next: SkillsSearch) => navigate({ to: "/skills", search: { tab, ...next }, replace: true });
   const [q, setQ] = useState("");
   const shown = useMemo(() => {
@@ -214,15 +220,15 @@ export function SkillsPage() {
       {skills && state === "active" ? (
         <StatGrid>
           <Stat label="Active skills" value={skills.length} icon={LightningIcon} tone="accent" hint="Agents load these when a task matches" onClick={() => go({ tab: "library" })} active={tab === "library"} />
-          <Stat label="To review" value={pending.length} icon={SealQuestionIcon} tone={pending.length ? "warn" : "neutral"}
-            hint={pending.length ? "Waiting for a person" : "All caught up"} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
+          <Stat label="To review" value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
+            hint={pendingCount ? "Waiting for a person" : "All caught up"} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
           <Stat label="Uses" value={totals.uses} icon={ChartLineUpIcon} tone="info" hint="Across all active skills" />
           <Stat label="Accepted" value={pct(totals.rate)} icon={CheckCircleIcon} tone="ok" hint={totals.judged ? `${totals.judged} results judged` : "Nothing judged yet"} />
         </StatGrid>
       ) : null}
 
       <Segmented<SkillTab> label="Skills sections" value={tab} onChange={(v) => navigate({ to: "/skills", search: { tab: v }, replace: true })} className="w-fit"
-        options={SKILL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: t === "proposals" ? pending.length : t === "library" ? skills?.length : undefined }))} />
+        options={SKILL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: t === "proposals" ? pendingCount : t === "library" ? skills?.length : undefined }))} />
 
       <div role="tabpanel" aria-label={TAB_LABEL[tab]} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
         {tab === "library" ? (
@@ -247,17 +253,23 @@ export function SkillsPage() {
           </>
         ) : tab === "proposals" ? (
           pending.length ? (
-            <ListCard>
-              {pending.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
-            </ListCard>
+            <>
+              <ListCard>
+                {pending.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
+              </ListCard>
+              <LoadMore noun="proposals" shown={pending.length} total={pendingList.total} hasMore={pendingList.hasMore} loading={pendingList.isFetchingMore} onLoad={pendingList.loadMore} />
+            </>
           ) : (
             <EmptyState icon={SealQuestionIcon} title="Nothing to review"
               body="Agents propose a skill after work that took many steps or several rounds of corrections, and the nightly curator proposes merges and retirements. They wait here for you." />
           )
         ) : decided.length ? (
-          <ListCard>
-            {decided.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
-          </ListCard>
+          <>
+            <ListCard>
+              {decided.map((p) => <ProposalRow key={p.id} p={p} onOpen={() => go({ proposal: p.id })} />)}
+            </ListCard>
+            <LoadMore noun="decisions" shown={decided.length} total={decidedList.total} hasMore={decidedList.hasMore} loading={decidedList.isFetchingMore} onLoad={decidedList.loadMore} />
+          </>
         ) : (
           <EmptyState icon={ClockCounterClockwiseIcon} title="No decisions yet" body="Decisions on proposals appear here." />
         )}

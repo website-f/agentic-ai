@@ -175,6 +175,9 @@ class AuditOut(BaseModel):
 class AuditPage(BaseModel):
     items: list[AuditOut]
     next_before_id: int | None
+    # First page only: entries per kind (signin, people, org, work, agents, other) and in all.
+    kinds: dict[str, int] | None = None
+    total: int | None = None
 
 
 class ComponentStatus(BaseModel):

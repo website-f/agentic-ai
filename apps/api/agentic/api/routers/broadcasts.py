@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,7 @@ from ...agents import dispatch, runtime
 from ...core.db import get_db
 from ...models import Agent, Branch, Broadcast, BroadcastReceipt, Department, Task, User
 from ...services import audit, events
+from .. import paging
 from ..agent_schemas import BroadcastIn, BroadcastOut, ReceiptOut
 from ..deps import Principal, api_error, require
 
@@ -241,28 +242,32 @@ async def send(
 
 @router.get("")
 async def history(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+    response: Response,
+    limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[BroadcastOut]:
-    rows = (
-        await db.scalars(
-            select(Broadcast)
-            .where(Broadcast.workspace_id == principal.workspace_id)
-            .order_by(Broadcast.created_at.desc())
-            .limit(100)
-        )
-    ).all()
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count). A scoped
+    person sees what they sent and what reached an agent they can see."""
+    q = select(Broadcast).where(Broadcast.workspace_id == principal.workspace_id)
     cond = principal.scope.agent_where()
     if cond is not None:
-        reached = set(
-            (
-                await db.scalars(
-                    select(BroadcastReceipt.broadcast_id)
-                    .join(Agent, Agent.id == BroadcastReceipt.agent_id)
-                    .where(BroadcastReceipt.broadcast_id.in_([b.id for b in rows]), cond)
-                )
-            ).all()
+        reached = (
+            select(BroadcastReceipt.broadcast_id)
+            .join(Agent, Agent.id == BroadcastReceipt.agent_id)
+            .where(BroadcastReceipt.broadcast_id == Broadcast.id, cond)
+            .exists()
         )
-        rows = [b for b in rows if b.sender == principal.actor or b.id in reached]
+        q = q.where(or_(Broadcast.sender == principal.actor, reached))
+    rows = await paging.paginate(
+        db,
+        q,
+        ((Broadcast.created_at, True), (Broadcast.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     return [await _out(db, b) for b in rows]
 
 

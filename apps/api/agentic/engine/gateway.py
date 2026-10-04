@@ -7,7 +7,7 @@ no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, store
+from . import client, media, store
 from .client import Usage
+from .errors import Failure
 
 MAX_WAIT = 60.0  # seconds a call may wait for rate limits to reset
 
@@ -81,6 +82,10 @@ async def chat(
     )
     if g is None:
         raise GatewayUnavailable(f"There is no model group called '{group}'.", [])
+    if g.name in media.NAMES:
+        raise GatewayUnavailable(
+            f"The {g.label} group does not chat. Pick a chat group such as Smart or Fast.", []
+        )
     if not g.members:
         raise GatewayUnavailable(
             f"The {g.label} group has no models yet. Add some in AI Engine > Model groups.", []
@@ -310,3 +315,281 @@ async def chat_first(
         except GatewayUnavailable as e:
             last = e
     raise last or GatewayUnavailable("No group could answer.", [])
+
+
+# ---------------------------------------------------------------- voice and pictures (P18)
+
+
+class NotConfigured(GatewayUnavailable):
+    """The group has no models yet: a person has to add one in AI Engine."""
+
+
+class MediaRejected(ValueError):
+    """The audio or prompt itself cannot be used (empty, too big, too long)."""
+
+
+NO_TRANSCRIBE = (
+    "Voice notes need a speech-to-text model. Add one in AI Engine > Model groups > Speech "
+    "to text (Groq whisper-large-v3-turbo is free; OpenAI gpt-4o-mini-transcribe works too)."
+)
+NO_IMAGE = (
+    "No picture model is set up. Add one in AI Engine > Model groups > Image generation "
+    "(OpenAI gpt-image-1 or dall-e-3)."
+)
+
+
+@dataclass
+class _Try:
+    call: client.CallResult
+    usage: Usage
+    cost: Any  # Decimal | None
+    value: Any = None
+
+
+@dataclass
+class Transcript:
+    text: str
+    provider_name: str
+    model: str
+    seconds: float | None
+    language: str | None
+    latency_ms: int
+    cost_usd: float | None
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class Picture:
+    data: bytes
+    mime: str
+    ext: str
+    size: str
+    provider_name: str
+    model: str
+    revised_prompt: str
+    latency_ms: int
+    cost_usd: float | None
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+
+
+async def _walk(
+    db: AsyncSession,
+    workspace_id: str,
+    group: str,
+    *,
+    task: str,
+    unconfigured: str,
+    attempt: Callable[[AIProvider, str, str], Awaitable[_Try]],
+    agent_id: str | None,
+    task_id: str | None,
+) -> tuple[_Try, AIProvider, str, list[dict[str, Any]]]:
+    """The routing of chat(), for one-shot media calls: members in order, skipping providers
+    that are off, keyless or cooling; a failure cools the provider and the next one is asked.
+    No waiting for rate limits: a person is usually waiting on the answer."""
+    await store.ensure_default_groups(db, workspace_id)
+    g = await db.scalar(
+        select(ModelGroup).where(ModelGroup.workspace_id == workspace_id, ModelGroup.name == group)
+    )
+    if g is None or not g.members:
+        raise NotConfigured(unconfigured, [])
+    providers = {
+        p.id: p
+        for p in (
+            await db.scalars(
+                select(AIProvider).where(
+                    AIProvider.id.in_({m["provider_id"] for m in g.members}),
+                    AIProvider.workspace_id == workspace_id,
+                )
+            )
+        ).all()
+    }
+    attempts: list[dict[str, Any]] = []
+    last = ""
+    for member in g.members:
+        p = providers.get(member["provider_id"])
+        model_id = member["model_id"]
+        label = f"{p.name if p else 'removed provider'} / {model_id}"
+        if p is None:
+            attempts.append({"member": label, "skipped": "provider was removed"})
+            continue
+        if not p.enabled:
+            attempts.append({"member": label, "skipped": "provider is turned off"})
+            continue
+        key = store.provider_key(p)
+        if not key:
+            attempts.append({"member": label, "skipped": "no key saved"})
+            continue
+        if wait := await store.cooling_for(p.id):
+            attempts.append({"member": label, "skipped": f"cooling down for {wait} s"})
+            continue
+        row = await store.model_row(db, p.id, model_id)
+        if row is not None and row.stale:
+            attempts.append({"member": label, "skipped": "model no longer offered"})
+            continue
+        t = await attempt(p, key, model_id)
+        f = t.call.failure
+        await store.record_call(
+            workspace_id=workspace_id,
+            task=task,
+            group=group,
+            provider_id=p.id,
+            provider_name=p.name,
+            model=model_id,
+            usage=t.usage,
+            latency_ms=t.call.latency_ms,
+            ok=t.call.ok,
+            error_class=f.error_class if f else None,
+            error_detail=None if t.call.ok else client.error_detail(t.call),
+            cost=t.cost if t.call.ok else None,
+            agent_id=agent_id,
+            task_id=task_id,
+        )
+        if t.call.ok:
+            attempts.append({"member": label, "ok": True, "latency_ms": t.call.latency_ms})
+            return t, p, model_id, attempts
+        if f is not None:
+            if f.error_class == "model_not_found":
+                await _mark_stale(db, p, model_id)
+            await store.cool(p.id, f.cool_seconds)
+            last = f.message
+        attempts.append(
+            {
+                "member": label,
+                "failed": f.message if f else "no usable answer",
+                "error_class": f.error_class if f else "unusable_reply",
+            }
+        )
+    if not last:
+        raise GatewayUnavailable(
+            f"No model in the {g.label} group is usable right now (off, keyless or resting).",
+            attempts,
+        )
+    raise GatewayUnavailable(f"No model in the {g.label} group could do it. {last}", attempts)
+
+
+async def transcribe(
+    db: AsyncSession,
+    workspace_id: str,
+    audio: bytes,
+    *,
+    mime: str,
+    language: str | None = None,
+    seconds: float | None = None,
+    task: str = "audio.transcribe",
+    agent_id: str | None = None,
+    task_id: str | None = None,
+) -> Transcript:
+    """Speech to text through the "transcribe" group. `seconds` is the length when the
+    caller knows it (refused over 10 minutes; also priced by it when the provider is quiet).
+    Raises MediaRejected, NotConfigured or GatewayUnavailable."""
+    if not audio:
+        raise MediaRejected("The recording is empty.")
+    if len(audio) > client.MAX_AUDIO_BYTES:
+        raise MediaRejected(f"Voice recordings can be up to {media.MAX_AUDIO_MB} MB.")
+    if seconds is not None and seconds > media.MAX_AUDIO_SECONDS:
+        raise MediaRejected(
+            f"Voice recordings can be up to {media.MAX_AUDIO_SECONDS // 60} minutes long."
+        )
+    filename = media.audio_filename(mime)
+
+    async def attempt(p: AIProvider, key: str, model_id: str) -> _Try:
+        r = await client.transcribe(
+            p.base_url, key, model_id, audio, filename, media.bare_mime(mime), language
+        )
+        secs = r.seconds if r.seconds is not None else seconds
+        return _Try(r.call, r.usage, media.transcribe_cost(model_id, secs, p.tier), r)
+
+    t, p, model_id, attempts = await _walk(
+        db,
+        workspace_id,
+        media.TRANSCRIBE,
+        task=task,
+        unconfigured=NO_TRANSCRIBE,
+        attempt=attempt,
+        agent_id=agent_id,
+        task_id=task_id,
+    )
+    r: client.TranscribeResult = t.value
+    return Transcript(
+        text=r.text,
+        provider_name=p.name,
+        model=model_id,
+        seconds=r.seconds if r.seconds is not None else seconds,
+        language=r.language,
+        latency_ms=r.call.latency_ms,
+        cost_usd=float(t.cost) if t.cost is not None else None,
+        attempts=attempts,
+    )
+
+
+def picture_type(data: bytes) -> tuple[str, str]:
+    """(mime, extension) from the bytes themselves; empty when it is not a picture."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png", "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg", "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    return "", ""
+
+
+async def generate_image(
+    db: AsyncSession,
+    workspace_id: str,
+    prompt: str,
+    *,
+    shape: str = "square",
+    style: str | None = None,
+    task: str = "image.generate",
+    agent_id: str | None = None,
+    task_id: str | None = None,
+) -> Picture:
+    """One picture through the "image" group. Raises MediaRejected, NotConfigured or
+    GatewayUnavailable."""
+    prompt = prompt.strip()
+    if not prompt:
+        raise MediaRejected("Describe the picture to make.")
+    style = (style or "").strip()[:200] or None
+    full = prompt if not style or style in ("vivid", "natural") else f"{prompt}\n\nStyle: {style}"
+    full = full[:4000]
+
+    async def attempt(p: AIProvider, key: str, model_id: str) -> _Try:
+        size = media.image_size(model_id, shape)
+        r = await client.generate_image(
+            p.base_url,
+            key,
+            model_id,
+            full,
+            size=size,
+            quality=media.image_quality(model_id),
+            style=style,
+        )
+        if r.call.ok and not picture_type(r.image)[0]:
+            r.call.ok = False
+            r.call.failure = Failure("bad_response", "The picture came back unreadable.")
+        return _Try(r.call, r.usage, media.image_cost(model_id, size, p.tier), (r, size))
+
+    t, p, model_id, attempts = await _walk(
+        db,
+        workspace_id,
+        media.IMAGE,
+        task=task,
+        unconfigured=NO_IMAGE,
+        attempt=attempt,
+        agent_id=agent_id,
+        task_id=task_id,
+    )
+    r, size = t.value
+    mime, ext = picture_type(r.image)
+    return Picture(
+        data=r.image,
+        mime=mime,
+        ext=ext,
+        size=size,
+        provider_name=p.name,
+        model=model_id,
+        revised_prompt=r.revised_prompt,
+        latency_ms=r.call.latency_ms,
+        cost_usd=float(t.cost) if t.cost is not None else None,
+        attempts=attempts,
+    )

@@ -324,7 +324,17 @@ async def _set_group(c: httpx.AsyncClient, name: str, members: list[tuple[str, s
 async def test_groups_seeded(client: httpx.AsyncClient):
     await setup_owner(client)
     names = [g["name"] for g in (await client.get("/api/ai/groups")).json()]
-    assert names == ["smart", "fast", "bulk", "reasoning", "vision", "embed", "local"]
+    assert names == [
+        "smart",
+        "fast",
+        "bulk",
+        "reasoning",
+        "vision",
+        "embed",
+        "local",
+        "transcribe",  # P18: speech to text
+        "image",  # P18: pictures
+    ]
 
 
 async def test_fallback_cools_failing_provider(client: httpx.AsyncClient):

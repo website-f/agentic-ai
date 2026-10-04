@@ -3,17 +3,28 @@ import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { ApprovalCard } from "@/components/approval-card";
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
+import { usePagedList } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
-import { approvalsQuery } from "@/lib/work";
+import { approvalsQuery, workKeys, type Approval } from "@/lib/work";
 
 type Tab = "pending" | "history";
 
+/** Decided approvals only grow, so history loads 50 at a time as you scroll. */
+const useHistory = (enabled = true) =>
+  usePagedList<Approval>(workKeys.approvals("history"), "/api/approvals", { state: "history" }, { enabled });
+
+/** Waiting approvals are a short inbox: one full list. History pages. */
 function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
-  const { data, isLoading, error } = useQuery(approvalsQuery(state));
+  const waiting = useQuery({ ...approvalsQuery("pending"), enabled: state === "pending" });
+  const history = useHistory(state === "history");
+  const data = state === "pending" ? waiting.data : history.items;
+  const isLoading = state === "pending" ? waiting.isLoading : history.isLoading;
+  const error = state === "pending" ? waiting.error : history.error;
   if (isLoading) {
     return (
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
@@ -38,6 +49,9 @@ function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
       {data.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={canDecide} />)}
+      {state === "history" ? (
+        <LoadMore className="lg:col-span-2" noun="decisions" shown={history.items.length} total={history.total} hasMore={history.hasMore} loading={history.isFetchingMore} onLoad={history.loadMore} />
+      ) : null}
     </div>
   );
 }
@@ -49,7 +63,7 @@ export function ApprovalsPage() {
   const navigate = useNavigate();
   const tab: Tab = search.tab === "history" ? "history" : "pending";
   const { data: pending } = useQuery(approvalsQuery("pending"));
-  const { data: history } = useQuery({ ...approvalsQuery("history"), enabled: tab === "history" });
+  const history = useHistory(tab === "history");
   return (
     <Page>
       <PageHeader
@@ -63,7 +77,7 @@ export function ApprovalsPage() {
         onChange={(v) => navigate({ to: "/approvals", search: { tab: v }, replace: true })}
         options={[
           { value: "pending", label: "Waiting", count: pending?.length },
-          { value: "history", label: "History", count: history?.length },
+          { value: "history", label: "History", count: tab === "history" ? (history.total ?? history.items.length) : undefined },
         ]}
       />
       {tab === "pending" ? <List state="pending" canDecide={canDecide} /> : <List state="history" canDecide={false} />}

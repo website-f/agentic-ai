@@ -436,6 +436,14 @@ async def process_file(db: AsyncSession, file_id: str) -> str:
         f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
     f.status = "ready"
     await db.commit()
+    if f.library:  # P18: a library file becomes searchable passages once it is read
+        from ..knowledge import indexer
+
+        try:
+            await indexer.index_file(db, f.id)
+        except Exception:  # noqa: BLE001 - the file is read; indexing can be redone
+            await db.rollback()
+            log.warning("could not index library file %s", f.id, exc_info=True)
     return f.status
 
 

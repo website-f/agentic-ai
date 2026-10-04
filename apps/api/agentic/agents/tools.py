@@ -39,6 +39,7 @@ class ToolContext:
     agent: Agent
     workspace: Workspace
     task: Task | None  # None in chat
+    person: str | None = None  # in chat: the user id of the person talking to the agent
 
 
 Handler = Callable[[ToolContext, dict[str, Any]], Awaitable[str]]
@@ -412,8 +413,7 @@ async def _propose_skill(ctx: ToolContext, args: dict[str, Any]) -> str:
         return f"Error: {e}"
     what = "an update to" if p.kind == "patch" else "a new skill,"
     return (
-        f"Proposed {what} {p.name}. It goes live when it passes its tests or a person "
-        "approves it."
+        f"Proposed {what} {p.name}. It goes live when it passes its tests or a person approves it."
     )
 
 
@@ -1043,3 +1043,24 @@ async def check_url_arg(value: Any) -> str | None:
     except BlockedURL as e:
         return str(e)
     return None
+
+
+# Knowledge library (P18): search guidelines, manuals, policies and SOPs, with citations.
+from .library_tools import LIBRARY_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in LIBRARY_TOOLS})
+
+# Voice and pictures (P18): generate_image saves a picture as an office file.
+from .media_tools import MEDIA_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in MEDIA_TOOLS})
+
+# Schedules from chat: an agent sets up recurring or one-off work for itself when asked.
+from .schedule_tools import SCHEDULE_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in SCHEDULE_TOOLS})
+
+# Google Calendar for personal assistants: read, find free time, propose events to confirm.
+from ..assistants.calendar_tools import CALENDAR_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in CALENDAR_TOOLS})

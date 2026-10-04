@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, writeHeaders } from "@/lib/api";
 
-import { groupsQuery, usd, type Attempt, type PlaygroundReply } from "./data";
+import { chatGroupsQuery, usd, type Attempt, type PlaygroundReply } from "./data";
 
 class PlaygroundError extends ApiError {
   readonly attempts: Attempt[];
@@ -54,7 +54,7 @@ function Route({ attempts }: { attempts: Attempt[] }) {
 
 export function PlaygroundTab({ canRun }: { canRun: boolean }) {
   const qc = useQueryClient();
-  const { data: groups = [] } = useQuery(groupsQuery);
+  const { data: groups = [] } = useQuery(chatGroupsQuery);
   const [group, setGroup] = useState("smart");
   const [system, setSystem] = useState("");
   const [prompt, setPrompt] = useState("In one sentence, what is a good first job for an AI research assistant?");

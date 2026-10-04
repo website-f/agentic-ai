@@ -64,6 +64,8 @@ export interface Group {
   label: string;
   description: string;
   members: GroupMember[];
+  /** chat groups can run an agent; embed / transcribe / image are for one job each. */
+  kind?: "chat" | "embed" | "transcribe" | "image";
 }
 
 export interface StepEvent {
@@ -168,6 +170,12 @@ export const modelsQuery = (providerId?: string) =>
 export const groupsQuery = queryOptions({
   queryKey: aiKeys.groups,
   queryFn: () => api<Group[]>("/api/ai/groups"),
+});
+
+/** Groups an agent can think with: not embeddings, speech to text or image generation. */
+export const chatGroupsQuery = queryOptions({
+  ...groupsQuery,
+  select: (groups: Group[]) => groups.filter((g) => (g.kind ?? "chat") === "chat"),
 });
 
 export const usageQuery = (days: number) =>

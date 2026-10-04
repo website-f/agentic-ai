@@ -15,6 +15,7 @@ import {
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
@@ -94,32 +95,33 @@ function dayLabel(iso: string): string {
 }
 
 export function ActivityPage() {
-  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(auditQuery);
   const verify = useMutation({ mutationFn: () => api<{ ok: boolean; checked: number; broken_at: number | null }>("/api/audit/verify") });
   const [kind, setKind] = useState<Kind | "all">("all");
+  // The kind filter runs on the server: every page is that kind, and the counts are true counts.
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(auditQuery(kind === "all" ? undefined : kind));
 
-  const all = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
-  const counts = useMemo(() => {
-    const out = new Map<Kind, number>();
-    for (const item of all) out.set(kindOf(item.action), (out.get(kindOf(item.action)) ?? 0) + 1);
-    return out;
-  }, [all]);
+  const all = useMemo(() => {
+    const seen = new Set<number>();
+    return (data?.pages.flatMap((p) => p.items) ?? []).filter((i) => !seen.has(i.id) && seen.add(i.id));
+  }, [data]);
+  const first = data?.pages[0];
+  const counts = first?.kinds ?? {};
+  const everything = Object.values(counts).reduce((a, b) => a + b, 0);
 
   const groups = useMemo(() => {
     const out: { day: string; items: AuditItem[] }[] = [];
     for (const item of all) {
-      if (kind !== "all" && kindOf(item.action) !== kind) continue;
       const day = dayLabel(item.ts);
       const last = out[out.length - 1];
       if (last && last.day === day) last.items.push(item);
       else out.push({ day, items: [item] });
     }
     return out;
-  }, [all, kind]);
+  }, [all]);
 
   const options = [
-    { value: "all" as const, label: "All", count: all.length },
-    ...(Object.keys(KINDS) as Kind[]).filter((k) => counts.get(k)).map((k) => ({ value: k, label: KINDS[k].label, count: counts.get(k) })),
+    { value: "all" as const, label: "All", count: everything || undefined },
+    ...(Object.keys(KINDS) as Kind[]).filter((k) => counts[k] || k === kind).map((k) => ({ value: k, label: KINDS[k].label, count: counts[k] ?? 0 })),
   ];
 
   return (
@@ -160,14 +162,14 @@ export function ActivityPage() {
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
           Could not load activity. {errorMessage(error)}
         </div>
-      ) : all.length === 0 ? (
+      ) : all.length === 0 && kind === "all" ? (
         <EmptyState icon={ClockCounterClockwiseIcon} title="Nothing recorded yet" body="Changes to members, branches and departments will show up here." />
       ) : (
         <div className="grid gap-6">
           <Segmented label="Filter activity" value={kind} onChange={setKind} options={options} className="w-fit" />
           {groups.length === 0 ? (
             <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">
-              No {kind !== "all" ? KINDS[kind].label.toLowerCase() : "entries"} in the loaded activity. Load older activity to look further back.
+              No {kind !== "all" ? KINDS[kind].label.toLowerCase() : "entries"} recorded yet.
             </p>
           ) : null}
           {groups.map((g) => (
@@ -198,11 +200,8 @@ export function ActivityPage() {
               </ol>
             </section>
           ))}
-          {hasNextPage ? (
-            <Button variant="outline" className="justify-self-center max-sm:w-full" loading={isFetchingNextPage} onClick={() => fetchNextPage()}>
-              Load older activity
-            </Button>
-          ) : null}
+          <LoadMore noun="entries" shown={all.length} total={first?.total} hasMore={!!hasNextPage} loading={isFetchingNextPage}
+            onLoad={() => { if (hasNextPage && !isFetchingNextPage) void fetchNextPage(); }} />
         </div>
       )}
     </Page>

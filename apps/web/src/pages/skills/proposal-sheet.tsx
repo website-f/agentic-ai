@@ -175,10 +175,10 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
                 <p className="text-[12.5px] text-muted line-through">{p.current.description}</p>
               ) : null}
               {p.current ? (
-                <div className="min-w-0 overflow-x-auto"><DiffView before={p.kind === "merge" && p.other ? `${p.current.body}\n${p.other.body}` : p.current.body} after={p.body}
+                <div className="min-w-0"><DiffView before={p.kind === "merge" && p.other ? `${p.current.body}\n${p.other.body}` : p.current.body} after={p.body}
                   labels={[p.kind === "merge" && p.other ? `${p.name} + ${p.other.name}` : `Version ${p.current.version}`, "Proposed"]} /></div>
               ) : (
-                <div className="min-w-0 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{p.body}</Markdown></div>
+                <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{p.body}</Markdown></div>
               )}
             </section>
           )}

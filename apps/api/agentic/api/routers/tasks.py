@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import decisions, dispatch, launch, runtime
@@ -22,6 +22,7 @@ from ...models import (
 )
 from ...services import audit, events
 from ...skills import store as skills_store
+from .. import paging
 from ..agent_schemas import (
     ApprovalOut,
     DecisionIn,
@@ -47,6 +48,8 @@ MANUAL_MOVES = {
     "cancelled": {"triage"},
 }
 FINISHED = ("done", "failed", "cancelled")
+# Board order (position, then newest), id as the tie-break: what list pages walk.
+TASK_ORDER: paging.Order = ((Task.position, False), (Task.created_at, True), (Task.id, False))
 LIST_TEXT = 400  # brief / result characters a list row carries
 RETRY_CAP = 50  # failed tasks relaunched per bulk-retry call
 
@@ -243,14 +246,16 @@ async def list_tasks(
     branch_id: str | None = None,
     limit: int = Query(default=200, ge=1, le=500),
     before: str | None = Query(default=None, max_length=40),
+    cursor: str | None = Query(default=None, max_length=400),
+    q_: str = Query(default="", alias="q", max_length=120),
     full: bool = False,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskOut]:
     """The board, in board order (position, then newest). Rows carry brief and result cut to
     LIST_TEXT characters (`truncated` says so) unless `full`; GET /tasks/{id} has the full
-    text. More rows than `limit`: the `X-Next-Before` header holds the cursor for the next
-    page (pass it as `before`)."""
+    text. More rows than `limit`: `X-Next-Cursor` holds the token for the next page (pass it
+    as `cursor`); `X-Next-Before` keeps the older id form (pass it as `before`)."""
     q = select(Task).where(Task.workspace_id == principal.workspace_id)
     cond = principal.scope.task_where()
     if cond is not None:
@@ -261,33 +266,28 @@ async def list_tasks(
         q = q.where(Task.assignee_agent_id == agent_id)
     if branch_id:
         q = q.where(Task.branch_id == branch_id)
-    if before:
+    if q_.strip():
+        like = f"%{q_.strip()}%"
+        named = select(Agent.id).where(
+            Agent.workspace_id == principal.workspace_id, Agent.name.ilike(like)
+        )
+        q = q.where(
+            or_(
+                Task.title.ilike(like),
+                Task.brief.ilike(like),
+                cast(Task.labels, String).ilike(like),
+                Task.assignee_agent_id.in_(named),
+            )
+        )
+    if before and not cursor:
         cur = await db.get(Task, before)
         if cur is None or cur.workspace_id != principal.workspace_id:
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_cursor", "That page cursor is not valid."
             )
-        # Rows after the cursor in the same order: position asc, created_at desc, id asc.
-        q = q.where(
-            or_(
-                Task.position > cur.position,
-                and_(Task.position == cur.position, Task.created_at < cur.created_at),
-                and_(
-                    Task.position == cur.position,
-                    Task.created_at == cur.created_at,
-                    Task.id > cur.id,
-                ),
-            )
-        )
-    rows = list(
-        (
-            await db.scalars(
-                q.order_by(Task.position, Task.created_at.desc(), Task.id).limit(limit + 1)
-            )
-        ).all()
-    )
-    if len(rows) > limit:
-        rows = rows[:limit]
+        cursor = paging.cursor_for(cur, TASK_ORDER)
+    rows = await paging.paginate(db, q, TASK_ORDER, limit=limit, cursor=cursor, response=response)
+    if paging.NEXT in response.headers:
         response.headers["X-Next-Before"] = rows[-1].id
     return await tasks_out(db, rows, trim=not full)
 
@@ -742,10 +742,16 @@ async def revise_task(
 
 @router.get("/approvals")
 async def list_approvals(
+    response: Response,
     state: str = Query(default="pending", pattern="^(pending|history)$"),
+    status_: str | None = Query(default=None, alias="status", max_length=80),
+    limit: int = Query(default=200, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ApprovalOut]:
+    """Newest first. History pages with `limit` + `cursor` (X-Next-Cursor); `status` narrows
+    history to some outcomes (comma list, e.g. approved,denied)."""
     q = select(Approval).where(Approval.workspace_id == principal.workspace_id)
     cond = principal.scope.approval_where()
     if cond is not None:
@@ -755,7 +761,16 @@ async def list_approvals(
         if state == "pending"
         else q.where(Approval.status != "pending")
     )
-    rows = (await db.scalars(q.order_by(Approval.created_at.desc()).limit(200))).all()
+    if status_ and state == "history":
+        q = q.where(Approval.status.in_(status_.split(",")))
+    rows = await paging.paginate(
+        db,
+        q,
+        ((Approval.created_at, True), (Approval.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     names = await _names(db, {a.decided_by for a in rows if a.decided_by})
     return [await approval_out(db, a, names) for a in rows]
 

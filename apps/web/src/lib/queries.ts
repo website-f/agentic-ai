@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { api } from "./api";
 import type { AuditPage, Branch, Me, Member, SystemStatus } from "./types";
@@ -42,10 +42,14 @@ export const membersQuery = queryOptions({
   queryFn: () => api<Member[]>("/api/members"),
 });
 
-export const auditQuery = infiniteQueryOptions({
-  queryKey: keys.audit,
-  queryFn: ({ pageParam }) =>
-    api<AuditPage>(`/api/audit?limit=40${pageParam ? `&before_id=${pageParam}` : ""}`),
-  initialPageParam: 0,
-  getNextPageParam: (last) => last.next_before_id ?? undefined,
-});
+/** The activity log, newest first, 50 entries a page. `kind` filters on the server, so every
+ * page holds only that kind; the first page also counts entries per kind. */
+export const auditQuery = (kind?: string) =>
+  infiniteQueryOptions({
+    queryKey: [...keys.audit, kind ?? "all"],
+    queryFn: ({ pageParam }) =>
+      api<AuditPage>(`/api/audit?limit=50${kind ? `&kind=${kind}` : ""}${pageParam ? `&before_id=${pageParam}` : ""}`),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.next_before_id ?? undefined,
+    placeholderData: keepPreviousData,
+  });

@@ -26,6 +26,9 @@ import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { cn, greeting } from "@/lib/utils";
 
 import { BudgetsCard, PingsCard } from "./command-center-teams";
+import { staffOnly } from "@/lib/twin";
+
+import { MeetTwinCard } from "./twin/meet-card";
 
 function SystemPanel() {
   const { data, isLoading, error, dataUpdatedAt } = useQuery(systemStatusQuery);
@@ -197,6 +200,8 @@ export function CommandCenterPage() {
         actions={<div className="flex items-center">{statusPill}</div>}
       />
 
+      {me.permissions.includes("agents.own") ? <MeetTwinCard /> : null}
+
       <StatGrid>
         <Stat
           label="Agents"
@@ -238,7 +243,7 @@ export function CommandCenterPage() {
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <GettingStarted counts={counts} />
+        {staffOnly(me.permissions) ? null : <GettingStarted counts={counts} />}
         <SystemPanel />
       </div>
 

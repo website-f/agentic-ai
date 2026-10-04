@@ -9,7 +9,8 @@ from ..agents import runtime
 from ..core.db import SessionLocal
 from ..models import Skill, SkillEvalCase, SkillProposal, Task, Workspace
 from ..services import events
-from ..skills import autopilot, evals, reflect
+from ..skills import autopilot, evals, optimize, reflect
+from ..skills.store import SkillError
 
 log = logging.getLogger("agentic.worker.skills")
 
@@ -48,8 +49,32 @@ async def skill_reflect_chat(message_id: int) -> str | None:
 
 @activity.defn
 async def skill_eval(kind: str, target_id: str) -> dict:
-    """kind = skill (run its test cases) | proposal (old vs new)."""
+    """kind = skill (run its test cases) | proposal (old vs new) | optimize (P18)."""
     async with SessionLocal() as db:
+        if kind == "optimize":
+            sk = await db.get(Skill, target_id)
+            ws = await db.get(Workspace, sk.workspace_id) if sk else None
+            if sk is None or ws is None:
+                return {}
+            try:
+                out = await optimize.optimize(db, ws, sk)
+            except SkillError as e:
+                await events.publish(
+                    sk.workspace_id, "skill.updated", {"skill_id": sk.id, "optimize": str(e)}
+                )
+                return {"error": str(e)}
+            await events.publish(
+                sk.workspace_id,
+                "skill.proposal",
+                {"proposal_id": out.proposal_id, "skill_id": sk.id, "optimize": out.note},
+            )
+            return {
+                "baseline": out.baseline,
+                "best": out.best,
+                "proposal_id": out.proposal_id,
+                "status": out.status,
+                "note": out.note,
+            }
         if kind == "proposal":
             p = await db.get(SkillProposal, target_id)
             if p is None:

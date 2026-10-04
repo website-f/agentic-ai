@@ -8,7 +8,7 @@ Everyone else with work.write proposes, and the proposal waits for review.
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from ...core.security import can
 from ...models import Skill, SkillEvalCase, SkillProposal, SkillUse, SkillVersion, Task, Workspace
 from ...skills import format as fmt
 from ...skills import store
+from .. import paging
 from ..deps import Principal, api_error, require
 from .brain import _names
 
@@ -697,16 +698,27 @@ async def _proposals_list(db: AsyncSession, rows: list[SkillProposal]) -> list[P
 
 @router.get("/skill-proposals")
 async def list_proposals(
+    response: Response,
     state: Literal["pending", "decided", "all"] = "pending",
+    limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProposalListOut]:
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
     q = select(SkillProposal).where(SkillProposal.workspace_id == principal.workspace_id)
     if state == "pending":
         q = q.where(SkillProposal.status == "pending")
     elif state == "decided":
         q = q.where(SkillProposal.status != "pending")
-    rows = list((await db.scalars(q.order_by(SkillProposal.created_at.desc()).limit(100))).all())
+    rows = await paging.paginate(
+        db,
+        q,
+        ((SkillProposal.created_at, True), (SkillProposal.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     return await _proposals_list(db, rows)
 
 

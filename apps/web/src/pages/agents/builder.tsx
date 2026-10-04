@@ -15,7 +15,7 @@ import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { useBranch } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { sopsQuery, templatesQuery, workKeys, type Agent, type Template, type ToolMode } from "@/lib/work";
-import { groupsQuery } from "@/pages/ai-engine/data";
+import { chatGroupsQuery } from "@/pages/ai-engine/data";
 
 import { ToolMatrix } from "./tool-matrix";
 
@@ -68,7 +68,7 @@ export function AgentBuilderPage() {
   const { data: branches = [] } = useQuery(branchesQuery);
   const { data: templates = [] } = useQuery(templatesQuery);
   const { data: sops = [] } = useQuery(sopsQuery);
-  const { data: groups = [] } = useQuery(groupsQuery);
+  const { data: groups = [] } = useQuery(chatGroupsQuery);
   const { data: me } = useSuspenseQuery(meQuery);
   // Staff (agents.own) make personal agents; managers may make one for themselves too.
   const ownOnly = !me.permissions.includes("agents.manage");

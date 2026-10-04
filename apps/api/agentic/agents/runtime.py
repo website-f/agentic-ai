@@ -1293,8 +1293,11 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     block, _, _ = await recall_block(db, agent, text, ws.timezone, exclude_session_id=session.id)
-    ctx = ToolContext(db=db, agent=agent, workspace=ws, task=None)
+    ctx = ToolContext(db=db, agent=agent, workspace=ws, task=None, person=session.user_id)
+    # A person who could approve this agent's requests asking it directly (policy.py).
+    approver = await policy.chat_approver(db, agent, session.user_id)
     used: list[str] = []
+    outside_read = False  # outside text was read this turn (policy.OUTSIDE_CONTENT)
     for _ in range(4):
         history = await _history(db, session_id=session.id)
         prompt = await system_prompt(db, agent, "chat", session.memory_snapshot)
@@ -1366,10 +1369,17 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
             elif name == "ask_human":
                 result = "You are already talking to a person. Ask your question in your reply."
             else:
-                d = await policy.evaluate(agent, name, args)
-                if d.effect == "allow":
+                d = await policy.evaluate(agent, name, args, asked_by=approver)
+                if d.rule == "chat.person_asked" and outside_read:
+                    result = (
+                        "Not done yet: you read outside content (an email, a page or a file) "
+                        "in this turn, so this needs the person's own confirmation. Tell them "
+                        "exactly what you would set up and when, and ask them to reply yes."
+                    )
+                elif d.effect == "allow":
                     result = await run_tool(ctx, name, args)
                     used.append(name)
+                    outside_read = outside_read or name in policy.OUTSIDE_CONTENT
                 elif d.effect == "ask":
                     result = (
                         "This needs approval, which only works inside a task. Tell the "

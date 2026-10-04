@@ -61,6 +61,8 @@ export interface Agent {
   view_only: boolean;
   /** A personal assistant: only ever returned to its owner. */
   private: boolean;
+  /** A staff member's AI twin (P18); owner_name is the person it is the twin of. */
+  is_twin?: boolean;
 }
 
 export interface SOP {

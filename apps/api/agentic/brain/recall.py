@@ -60,8 +60,11 @@ async def gather(
     history: int = 0,
     exclude_task_id: str | None = None,
     exclude_session_id: str | None = None,
+    qvec: list[float] | None = None,
+    embedded: bool = False,
 ) -> tuple[list[Hit], list[Hit], list[Hit]]:
-    qvec = await embed.embed_one(query)
+    if not embedded:
+        qvec = await embed.embed_one(query)
     fact_rows = await search_facts(db, v, query, qvec, limit=facts) if facts else []
     page_hits = await search_pages(db, v, query, qvec, limit=pages) if pages else []
     hist = (
@@ -85,18 +88,33 @@ async def gather(
 async def recall_block(
     db: AsyncSession, agent: Agent, query: str, tz: str, *, exclude_session_id: str | None = None
 ) -> tuple[str, int, int]:
-    """(prompt block, facts used, pages used). Empty block when nothing relevant is known."""
+    """(prompt block, facts used, pages used). Empty block when nothing relevant is known.
+
+    The block also carries a short "From the library" part (P18) when a passage of the
+    office's guidelines clearly matches; it is fenced, since uploaded files are untrusted."""
+    from ..knowledge.search import auto_section  # late: knowledge imports brain
+
     v = await for_agent(db, agent)
+    qvec = await embed.embed_one(query)
     fact_hits, page_hits, _ = await gather(
-        db, v, query, facts=AUTO_FACTS, pages=AUTO_PAGES, exclude_session_id=exclude_session_id
+        db,
+        v,
+        query,
+        facts=AUTO_FACTS,
+        pages=AUTO_PAGES,
+        exclude_session_id=exclude_session_id,
+        qvec=qvec,
+        embedded=True,
     )
-    if not fact_hits and not page_hits:
+    library, _ = await auto_section(db, agent, query, qvec)
+    if not fact_hits and not page_hits and not library:
         return "", 0, 0
     lines = [OPEN]
     if fact_hits:
         lines += ["Facts:"] + [_fact_line(h, tz) for h in fact_hits]
     if page_hits:
         lines += ["Wiki pages (read_page for the full text):"] + [_page_line(h) for h in page_hits]
+    lines += library
     lines.append("</memory>")
     return "\n".join(lines), len(fact_hits), len(page_hits)
 

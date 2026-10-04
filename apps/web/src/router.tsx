@@ -15,6 +15,7 @@ import { AppShell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { ApiError, errorMessage } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
+import { staffOnly } from "@/lib/twin";
 import { ALL_NAV, type AppPath } from "@/nav";
 import type { Me } from "@/lib/types";
 import { NotFoundPage, PlaceholderPage } from "@/pages/placeholder";
@@ -39,6 +40,7 @@ const page = {
   broadcasts: lazyRouteComponent(() => import("@/pages/broadcasts"), "BroadcastsPage"),
   chat: lazyRouteComponent(() => import("@/pages/chat"), "ChatPage"),
   sops: lazyRouteComponent(() => import("@/pages/sops"), "SopsPage"),
+  library: lazyRouteComponent(() => import("@/pages/library"), "LibraryPage"),
   brain: lazyRouteComponent(() => import("@/pages/brain"), "BrainPage"),
   skills: lazyRouteComponent(() => import("@/pages/skills"), "SkillsPage"),
   learning: lazyRouteComponent(() => import("@/pages/learning"), "LearningPage"),
@@ -59,6 +61,7 @@ const page = {
   templates: lazyRouteComponent(() => import("@/pages/documents/templates"), "TemplatesPage"),
   documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
   packs: lazyRouteComponent(() => import("@/pages/documents/packs"), "PacksPage"),
+  twin: lazyRouteComponent(() => import("@/pages/twin"), "TwinPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -218,6 +221,8 @@ const agentNewRoute = createRoute({
   path: "/agents/new",
   beforeLoad: ({ context }) => {
     if (!["agents.manage", "agents.own"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/agents" });
+    // Staff have one AI twin, made with its own wizard (P18).
+    if (staffOnly(context.me.permissions)) throw redirect({ to: "/twin" });
   },
   component: page.agentNew,
 });
@@ -259,6 +264,7 @@ const sopsRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { sop?: string } => ({ sop: str(s.sop) }),
   component: page.sops,
 });
+const libraryRoute = createRoute({ getParentRoute: () => appRoute, path: "/library", component: page.library });
 
 const BRAIN_TABS = ["pages", "facts", "search", "graph", "dreams"] as const;
 const brainRoute = createRoute({
@@ -395,6 +401,17 @@ const blueprintsRoute = createRoute({
   component: page.blueprints,
 });
 
+const TWIN_TABS = ["chat", "tasks", "memory", "teach"] as const;
+const twinRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/twin",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof TWIN_TABS)[number]; edit?: number } => ({
+    tab: TWIN_TABS.find((t) => t === s.tab),
+    edit: num(s.edit),
+  }),
+  component: page.twin,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -425,6 +442,7 @@ const routeTree = rootRoute.addChildren([
     broadcastsRoute,
     chatRoute,
     sopsRoute,
+    libraryRoute,
     brainRoute,
     skillsRoute,
     learningRoute,
@@ -445,6 +463,7 @@ const routeTree = rootRoute.addChildren([
     templatesRoute,
     documentsRoute,
     packsRoute,
+    twinRoute,
   ]),
 ]);
 

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
@@ -13,7 +14,8 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { errorMessage } from "@/lib/api";
-import { documentsQuery, STATUS_LABEL, type DocStatus, type DocSummary } from "@/lib/documents";
+import { docKeys, docStatsQuery, STATUS_LABEL, type DocStatus, type DocSummary } from "@/lib/documents";
+import { useDebounced, usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { DocumentEditor } from "./editor";
@@ -31,19 +33,26 @@ export function DocumentsPage() {
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(!!search.new);
   const { data: branches = [] } = useQuery(branchesQuery);
-  // One list per company/search; status is filtered here so every tab shows its count.
+  // Company, search and status all filter on the server, so each lazily loaded page is already
+  // the right documents; the tiles and tab counts come from one stats call.
+  const needle = useDebounced(q.trim());
   const params: Record<string, string> = {};
   if (branch !== ALL) params.branch_id = branch;
-  if (q.trim()) params.q = q.trim();
-  const { data: all = [], isLoading, error } = useQuery({ ...documentsQuery(params), enabled: !search.d });
+  if (needle) params.q = needle;
+  const { data: stats } = useQuery({ ...docStatsQuery(params), enabled: !search.d });
+  const list = usePagedList<DocSummary>(docKeys.documents, "/api/documents", {
+    ...params,
+    status: status !== ALL && status !== "fix" ? status : undefined,
+    fix: status === "fix" ? true : undefined,
+  }, { enabled: !search.d });
+  const { items: docs, isLoading, error } = list;
 
   if (search.d) {
     return <Page><DocumentEditor key={search.d} id={search.d} /></Page>;
   }
 
-  const count = (s: DocStatus) => all.filter((d) => d.status === s).length;
-  const fixing = all.filter((d) => d.errors > 0).length;
-  const docs = all.filter((d) => (status === ALL ? true : status === "fix" ? d.errors > 0 : d.status === status));
+  const count = (s: DocStatus) => stats?.[s] ?? 0;
+  const fixing = stats?.fix ?? 0;
 
   return (
     <Page>
@@ -58,13 +67,13 @@ export function DocumentsPage() {
           onClick={() => setStatus(status === "draft" ? ALL : "draft")} active={status === "draft"} />
         <Stat label="Approved" value={count("approved")} icon={SealCheckIcon} tone="ok" hint="Ready to send"
           onClick={() => setStatus(status === "approved" ? ALL : "approved")} active={status === "approved"} />
-        <Stat label="Needs fixing" value={fixing} icon={WarningCircleIcon} tone={fixing ? "danger" : "neutral"} hint="Failed a check"
+        <Stat label="Needs fixing" value={fixing} icon={WarningCircleIcon} tone={fixing ? "danger" : "neutral"} hint={stats && !stats.fix_complete ? "In the latest 300" : "Failed a check"}
           onClick={() => setStatus(status === "fix" ? ALL : "fix")} active={status === "fix"} />
       </StatGrid>
       <Toolbar>
         <Segmented<Filter> label="Status" value={status} onChange={setStatus}
           options={[
-            { value: ALL, label: "All", count: all.length },
+            { value: ALL, label: "All", count: stats?.total },
             { value: "review", label: "In review", count: count("review") },
             { value: "draft", label: "Drafts", count: count("draft") },
             { value: "approved", label: "Approved", count: count("approved") },
@@ -84,6 +93,7 @@ export function DocumentsPage() {
             {docs.map((d) => <DocRow key={d.id} d={d} onOpen={() => navigate({ search: { d: d.id } })} />)}
           </ListCard>
         )}
+      {docs.length || list.hasMore ? <LoadMore noun="documents" shown={docs.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
       {creating ? <NewDocumentDialog branchId={branch === ALL ? null : branch} onClose={() => setCreating(false)}
         onCreated={(id) => navigate({ search: { d: id } })} /> : null}
     </Page>

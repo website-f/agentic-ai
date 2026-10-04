@@ -142,6 +142,8 @@ class GroupOut(BaseModel):
     label: str
     description: str
     members: list[GroupMember]
+    # chat | embed | transcribe | image: pickers for an agent's model offer chat groups only.
+    kind: str = "chat"
 
 
 class GroupUpdateIn(BaseModel):

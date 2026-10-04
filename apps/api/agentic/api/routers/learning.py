@@ -430,6 +430,29 @@ async def revert_skill(
     return {"id": skill.id, "name": skill.name, "version": skill.version}
 
 
+@router.post("/skills/{skill_id}/optimize", status_code=status.HTTP_202_ACCEPTED)
+async def optimize_skill(
+    skill_id: str,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """P18: rewrite the skill from its failing tests, test the variants, propose the best."""
+    skill = await db.get(Skill, skill_id)
+    if skill is None or skill.workspace_id != principal.workspace_id:
+        raise api_error(status.HTTP_404_NOT_FOUND, "skill_not_found", "That skill is not here.")
+    if skill.status != "active":
+        raise api_error(status.HTTP_409_CONFLICT, "not_active", "Only active skills are optimized.")
+    try:
+        wid = await dispatch.start_skill_eval("optimize", skill.id)
+    except Exception as e:  # noqa: BLE001
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "worker_unavailable",
+            "The background worker is not reachable, so the optimizer cannot run.",
+        ) from e
+    return {"workflow_id": wid}
+
+
 ROLE_MAP = {"system": "system", "user": "human", "assistant": "gpt", "tool": "tool"}
 EXPORT_LIMIT = 2000
 

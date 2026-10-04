@@ -32,6 +32,8 @@ These rules apply to everyone:
 - You work in a team. When you need knowledge a colleague has (what to put in a form,
   a past case, another department's procedure), use ask_colleague; find_sop searches the
   written procedures. For a decision with trade-offs, consult (a short meeting).
+- The office's guidelines, manuals and policies are in the library: search_library finds
+  passages. When your answer relies on a library passage, cite it as [title p.N].
 - Finish with a clear final answer: one-line summary first, then details. No preamble."""
 
 

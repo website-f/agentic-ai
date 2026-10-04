@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from ...models import Agent, Branch, DocFile, Task, Workflow, WorkflowRun
 from ...services import audit
 from ...workflows import runs
 from ...workflows.procedure import clean_graph, wait_text
+from .. import paging
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["workflow-runs"])
@@ -298,20 +299,29 @@ async def start_run(
 
 @router.get("/workflow-runs")
 async def list_runs(
+    response: Response,
     workflow_id: str | None = None,
     status_: str | None = Query(default=None, alias="status"),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[RunSummary]:
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count); `status`
+    takes one status or a comma list."""
     q = select(WorkflowRun).where(WorkflowRun.workspace_id == principal.workspace_id)
     if workflow_id:
         q = q.where(WorkflowRun.workflow_id == workflow_id)
     if status_:
-        q = q.where(WorkflowRun.status == status_)
-    rows = (
-        await db.scalars(_scoped(q, principal).order_by(WorkflowRun.created_at.desc()).limit(limit))
-    ).all()
+        q = q.where(WorkflowRun.status.in_(status_.split(",")))
+    rows = await paging.paginate(
+        db,
+        _scoped(q, principal),
+        ((WorkflowRun.created_at, True), (WorkflowRun.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     return [RunSummary(**await _summary(db, r)) for r in rows]
 
 

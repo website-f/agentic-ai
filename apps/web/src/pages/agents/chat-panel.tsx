@@ -10,9 +10,13 @@ import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Select } from "@/components/ui/select";
+import { VoiceInput } from "@/components/voice-input";
 import { api, errorMessage } from "@/lib/api";
+import { usePagedList } from "@/lib/paged";
 import { cn } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
+
+const OLDER = "__older";
 
 interface Msg {
   id: number | string;
@@ -31,10 +35,9 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
   const [deleting, setDeleting] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
-  const sessions = useQuery({
-    queryKey: workKeys.sessions(agent.id),
-    queryFn: () => api<{ id: string; title: string; updated_at: string }[]>(`/api/agents/${agent.id}/sessions`),
-  });
+  // Most recent 30 conversations; older ones load on demand from the picker's last option.
+  const sessions = usePagedList<{ id: string; title: string; updated_at: string }>(
+    workKeys.sessions(agent.id), `/api/agents/${agent.id}/sessions`, {}, { pageSize: 30 });
   const history = useQuery({
     queryKey: workKeys.messages(sessionId ?? "none"),
     queryFn: () => api<Msg[]>(`/api/chat/sessions/${sessionId}/messages`),
@@ -95,10 +98,18 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
         <Select
           size="sm"
           value={sessionId ?? "new"}
-          onValueChange={(v) => { setLocal([]); setSessionId(v === "new" ? null : v); }}
+          onValueChange={(v) => {
+            if (v === OLDER) return sessions.loadMore();
+            setLocal([]);
+            setSessionId(v === "new" ? null : v);
+          }}
           label="Conversation"
           className="min-w-0 flex-1 sm:max-w-sm"
-          options={[{ value: "new", label: "New conversation" }, ...(sessions.data ?? []).map((s) => ({ value: s.id, label: s.title }))]}
+          options={[
+            { value: "new", label: "New conversation" },
+            ...sessions.items.map((s) => ({ value: s.id, label: s.title })),
+            ...(sessions.hasMore ? [{ value: OLDER, label: sessions.isFetchingMore ? "Loading older conversations…" : "Load older conversations…" }] : []),
+          ]}
         />
         {sessionId ? (
           <>
@@ -170,6 +181,8 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
           placeholder={agent.status !== "active" ? `${agent.name} is ${agent.status}` : canWrite ? `Message ${agent.name}` : "Your role can read but not chat"}
           className="max-h-40 min-h-10 flex-1 resize-none rounded-sm border border-border bg-bg px-3 py-2 text-[14px] focus-visible:border-accent focus-visible:outline-none disabled:opacity-60"
         />
+        <VoiceInput disabled={!canWrite || agent.status !== "active"}
+          onText={(t) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${t}` : t)); document.getElementById(`chat-${agent.id}`)?.focus(); }} />
         <Button type="submit" size="icon" disabled={!draft.trim() || send.isPending || !canWrite} aria-label="Send">
           <PaperPlaneRightIcon size={18} weight="fill" />
         </Button>

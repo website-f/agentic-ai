@@ -54,6 +54,16 @@ export const filesQuery = (params: Record<string, string> = {}) =>
     refetchInterval: (q) => (q.state.data?.some((f) => f.status === "reading") ? 2500 : false),
   });
 
+export interface FileStats { total: number; upload: number; generated: number; expiring: number; reading: number }
+
+/** Counts behind the Files tiles and tabs, for the same company and search as the list. */
+export const fileStatsQuery = (params: Record<string, string> = {}) =>
+  queryOptions({
+    queryKey: [...docKeys.files, "stats", params],
+    queryFn: () => api<FileStats>(`/api/files/stats?${new URLSearchParams(params)}`),
+    refetchInterval: (q) => (q.state.data?.reading ? 2500 : false),
+  });
+
 export const fileQuery = (id: string) =>
   queryOptions({
     queryKey: docKeys.file(id),
@@ -247,6 +257,14 @@ export const documentsQuery = (params: Record<string, string> = {}) =>
   queryOptions({
     queryKey: [...docKeys.documents, params],
     queryFn: () => api<DocSummary[]>(`/api/documents?${new URLSearchParams(params)}`),
+  });
+export interface DocStats { total: number; draft: number; review: number; approved: number; fix: number; fix_complete: boolean }
+
+/** Counts behind the Documents tiles and tabs, for the same company and search as the list. */
+export const docStatsQuery = (params: Record<string, string> = {}) =>
+  queryOptions({
+    queryKey: [...docKeys.documents, "stats", params],
+    queryFn: () => api<DocStats>(`/api/documents/stats?${new URLSearchParams(params)}`),
   });
 export const documentQuery = (id: string) =>
   queryOptions({ queryKey: docKeys.document(id), queryFn: () => api<DocDetail>(`/api/documents/${id}`) });

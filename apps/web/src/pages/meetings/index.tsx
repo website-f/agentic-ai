@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta } from "@/components/ui/card";
@@ -17,8 +18,9 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
+import { usePagedList } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
-import { meetingQuery, meetingsQuery, teamKeys, tokensShort, type Meeting, type MeetingOutcome, type MeetingTurn } from "@/lib/teams";
+import { meetingQuery, teamKeys, tokensShort, type Meeting, type MeetingOutcome, type MeetingTurn } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, taskQuery } from "@/lib/work";
 
@@ -239,10 +241,17 @@ export function MeetingsPage() {
   const canWrite = me.permissions.includes("work.write");
   const search = useSearch({ strict: false }) as MeetingsSearch;
   const navigate = useNavigate();
-  const { data: meetings, isLoading, error } = useQuery(meetingsQuery);
+  // Live meetings are few and stay complete; past ones pile up and load 50 at a time.
+  const live = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "running" }, { pageSize: 200 });
+  const pastList = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "done,failed,cancelled" });
+  const doneCount = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "done" }, { pageSize: 1 });
+  const isLoading = live.isLoading || pastList.isLoading;
+  const error = live.error ?? pastList.error;
   const go = (next: MeetingsSearch) => navigate({ to: "/meetings", search: next, replace: true });
-  const running = meetings?.filter((m) => m.status === "running") ?? [];
-  const past = meetings?.filter((m) => m.status !== "running") ?? [];
+  const running = live.items;
+  const past = pastList.items;
+  const pastTotal = pastList.total ?? past.length;
+  const meetings = isLoading || error ? undefined : { length: (live.total ?? running.length) + pastTotal };
 
   const row = (m: Meeting) => {
     const caller = m.initiator_agent_id ? `Called by ${m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? "an agent"}` : "Called by a person";
@@ -259,7 +268,7 @@ export function MeetingsPage() {
       </ListRow>
     );
   };
-  const decided = past.filter((m) => m.status === "done").length;
+  const decided = doneCount.total ?? past.filter((m) => m.status === "done").length;
 
   return (
     <Page>
@@ -274,7 +283,7 @@ export function MeetingsPage() {
         <>
           <StatGrid className="lg:grid-cols-3">
             <Stat label="In progress" value={running.length} icon={ChatsTeardropIcon} tone="accent" hint={running.length ? "Agents are talking now" : "Nothing live"} />
-            <Stat label="Decided" value={decided} icon={GavelIcon} tone="ok" hint={`of ${past.length} finished`} />
+            <Stat label="Decided" value={decided} icon={GavelIcon} tone="ok" hint={`of ${pastTotal} finished`} />
             <Stat label="Total meetings" value={meetings.length} icon={UsersThreeIcon} tone="neutral" className="max-lg:col-span-2" />
           </StatGrid>
           {running.length ? (
@@ -284,7 +293,10 @@ export function MeetingsPage() {
           ) : null}
           {past.length ? (
             <Section title="Past meetings">
-              <ListCard>{past.map(row)}</ListCard>
+              <div className="grid gap-3">
+                <ListCard>{past.map(row)}</ListCard>
+                <LoadMore noun="meetings" shown={past.length} total={pastList.total} hasMore={pastList.hasMore} loading={pastList.isFetchingMore} onLoad={pastList.loadMore} />
+              </div>
             </Section>
           ) : null}
         </>

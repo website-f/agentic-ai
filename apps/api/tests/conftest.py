@@ -61,6 +61,8 @@ async def database():
 
 
 TABLES = (
+    "knowledge_chunks",
+    "calendar_proposals",
     "mcp_servers",
     "workflow_runs",
     "packs",

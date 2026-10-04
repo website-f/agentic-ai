@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import decisions, runtime
 from ..core.security import can
 from ..core.valkey import valkey
-from ..engine import gateway
+from ..engine import gateway, media
 from ..models import (
     Agent,
     Approval,
@@ -29,7 +29,7 @@ from ..models import (
     Membership,
     User,
 )
-from . import deliver, telegram
+from . import deliver, telegram, voice
 
 log = logging.getLogger("agentic.channels.bot")
 
@@ -122,7 +122,10 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
     text = (msg.get("text") or "").strip()
     chat = msg.get("chat") or {}
     sender = msg.get("from") or {}
-    if not text or not chat:
+    sound = msg.get("voice") or msg.get("audio")  # a voice note or audio file (P18)
+    if not isinstance(sound, dict) or not sound.get("file_id"):
+        sound = None
+    if not chat or (not text and sound is None):
         return
     chat_id, from_id = str(chat.get("id")), str(sender.get("id"))
 
@@ -149,6 +152,15 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
     if role is None:
         await _reply(db, ch, chat_id, "Your account is no longer in this workspace.", uid)
         return
+
+    # A voice note becomes text first, then goes everywhere typed text would.
+    heard = ""
+    if not text and sound is not None:
+        heard, problem = await _hear(db, ch, sound)
+        if problem:
+            await _reply(db, ch, chat_id, problem, uid)
+            return
+        text = heard
 
     # Replying to a question notification answers it.
     if (to := msg.get("reply_to_message")) and to.get("message_id"):
@@ -192,9 +204,30 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
         answer = reply.content or "(no answer)"
     except gateway.GatewayUnavailable as e:
         reply, answer = None, f"{agent.name} could not answer: {e}"
-    await _reply(db, ch, chat_id, f"{agent.name}: {answer}", uid)
+    said = f'"{voice.quote(heard)}"\n\n' if heard else ""  # what was heard, to spot mistakes
+    await _reply(db, ch, chat_id, f"{said}{agent.name}: {answer}", uid)
     if reply is not None and reply.message_id is not None:
         await deliver.learn_from_chat(reply.message_id)
+
+
+async def _hear(db: AsyncSession, ch: Channel, sound: dict[str, Any]) -> tuple[str, str | None]:
+    """Download a voice note from Telegram and turn it into text: (transcript, problem)."""
+    seconds = float(sound.get("duration") or 0) or None
+    if seconds and seconds > media.MAX_AUDIO_SECONDS:
+        return "", voice.TOO_LONG
+    try:
+        data = await telegram.download_file(
+            deliver.channel_token(ch), str(sound["file_id"]), voice.MAX_BYTES
+        )
+    except telegram.TelegramError as e:
+        if e.status == 413:
+            return "", f"That voice note is too large (over {media.MAX_AUDIO_MB} MB)."
+        return "", voice.NO_DOWNLOAD
+    except Exception:  # noqa: BLE001 - Telegram unreachable
+        log.info("telegram voice download failed on %s", ch.id, exc_info=True)
+        return "", voice.NO_DOWNLOAD
+    mime = str(sound.get("mime_type") or "audio/ogg")
+    return await voice.hear(db, ch.workspace_id, data, mime, seconds=seconds)
 
 
 async def _link(

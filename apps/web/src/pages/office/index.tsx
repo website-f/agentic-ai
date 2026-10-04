@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
 import { branchesQuery, meQuery } from "@/lib/queries";
+import { staffOnly } from "@/lib/twin";
 import { useBranch } from "@/lib/stores";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, tasksQuery, workKeys, type Task } from "@/lib/work";
@@ -278,7 +279,7 @@ export function OfficePage() {
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
           {snap.agents.length ? <ListView snap={snap} watchOnly={watchOnly} onOpen={(id) => openAgent(id)} /> : (
             <EmptyState icon={BuildingsIcon} title={`No agents in ${snap.branch.name} yet`} body="Add agents to its departments and they take a desk here."
-              action={canWrite ? <Button size="sm" asChild><Link to="/agents/new">Add an agent</Link></Button> : undefined} />
+              action={canWrite ? <Button size="sm" asChild>{staffOnly(me.permissions) ? <Link to="/twin">Meet your AI twin</Link> : <Link to="/agents/new">Add an agent</Link>}</Button> : undefined} />
           )}
           <TaskTray snap={snap} canWrite={canWrite} watchOnly={watchOnly} onAssign={(taskId, agentId) => assign.mutate({ taskId, agentId })} />
         </div>
@@ -302,7 +303,7 @@ export function OfficePage() {
               <div className="absolute inset-x-4 bottom-20 mx-auto max-w-sm rounded-[var(--radius-md)] border border-border bg-surface/95 p-4 text-center shadow-[var(--shadow-soft)]">
                 <p className="text-[13.5px] font-medium">The office is empty</p>
                 <p className="mt-1 text-[12.5px] text-muted">Add agents to {snap.branch.name}'s departments and they take a desk here.</p>
-                {canWrite ? <Button size="sm" className="mt-3" asChild><Link to="/agents/new">Add an agent</Link></Button> : null}
+                {canWrite ? <Button size="sm" className="mt-3" asChild>{staffOnly(me.permissions) ? <Link to="/twin">Meet your AI twin</Link> : <Link to="/agents/new">Add an agent</Link>}</Button> : null}
               </div>
             ) : null}
             {/* Roster: tap to fly the camera there. */}

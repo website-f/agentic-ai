@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { ApprovalCard } from "@/components/approval-card";
 import { FilePicker } from "@/components/file-drop";
+import { LoadMore } from "@/components/load-more";
 import { Markdown } from "@/components/markdown";
 import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,13 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
+import { usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, approvalsQuery, workKeys } from "@/lib/work";
 import { meQuery } from "@/lib/queries";
 import {
-  RUN_STATUS, runKeys, runQuery, runsQuery, STEP_LABEL,
+  RUN_STATUS, runKeys, runQuery, STEP_LABEL,
   type Run, type RunStep, type RunSummary, type StepStatus, type Workflow,
 } from "@/lib/workflows";
 
@@ -236,7 +238,7 @@ function Review({ run, s }: { run: Run; s: RunStep }) {
   });
   return (
     <div className="grid gap-2">
-      {s.output ? <div className="max-h-56 min-w-0 overflow-auto rounded-sm border border-border bg-surface p-3"><Markdown className="text-[13px]">{linkDocs(s.output)}</Markdown></div> : null}
+      {s.output ? <div className="max-h-56 min-w-0 overflow-x-hidden overflow-y-auto rounded-sm border border-border bg-surface p-3"><Markdown className="text-[13px] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">{linkDocs(s.output)}</Markdown></div> : null}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" className="max-sm:h-9" loading={accept.isPending} onClick={() => accept.mutate()}><SealCheckIcon size={14} /> Accept</Button>
         <Input value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Or say what to change…" className="h-9 min-w-0 flex-1 basis-40" aria-label="Feedback" />
@@ -372,7 +374,7 @@ export function RunView({ id }: { id: string }) {
                     <summary className="cursor-pointer text-muted">
                       <span className="inline-block max-w-[calc(100%-1.25rem)] truncate align-bottom">{s.output.split("\n")[0]!.slice(0, 140)}</span>
                     </summary>
-                    <div className="mt-1.5 max-h-72 overflow-y-auto"><Markdown className="text-[13px]">{linkDocs(s.output)}</Markdown></div>
+                    <div className="mt-1.5 max-h-72 overflow-x-hidden overflow-y-auto"><Markdown className="text-[13px] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">{linkDocs(s.output)}</Markdown></div>
                   </details>
                 ) : null}
                 {s.error ? <p className="text-[12.5px] text-danger">{s.error}</p> : null}
@@ -427,16 +429,18 @@ export function RunList({ runs, onOpen }: { runs: RunSummary[]; onOpen: (id: str
   );
 }
 
+/** Every run, newest first, 20 at a time as you scroll (runs pile up; the list never caps). */
 export function RecentRuns({ workflowId, onOpen }: { workflowId?: string; onOpen: (id: string) => void }) {
-  const { data: runs = [] } = useQuery(runsQuery(workflowId));
+  const list = usePagedList<RunSummary>([...runKeys.all, "list"], "/api/workflow-runs", { workflow_id: workflowId }, { pageSize: 20 });
+  const runs = list.items;
   if (!runs.length) return null;
   return (
     <section className="grid min-w-0 gap-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <h2 className="text-[15px] font-semibold">Runs <span className="font-normal text-muted tabular">{runs.length}</span></h2>
-        {runs.length > 20 ? <p className="text-[12.5px] text-muted">Showing the latest 20</p> : null}
+        <h2 className="text-[15px] font-semibold">Runs <span className="font-normal text-muted tabular">{list.total ?? runs.length}</span></h2>
       </div>
-      <RunList runs={runs.slice(0, 20)} onOpen={onOpen} />
+      <RunList runs={runs} onOpen={onOpen} />
+      <LoadMore noun="runs" shown={runs.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} />
     </section>
   );
 }

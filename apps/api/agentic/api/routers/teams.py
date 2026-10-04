@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import String, func, or_, select
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch
@@ -20,10 +21,12 @@ from ...models import (
     MeetingTurn,
     Schedule,
     Task,
+    User,
     Workspace,
 )
 from ...services import audit, events
 from ...teams import budget, meetings, schedules
+from .. import paging
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["teams"])
@@ -138,19 +141,32 @@ async def _seen_agent(db: AsyncSession, principal: Principal, agent_id: str | No
 
 @router.get("/meetings")
 async def list_meetings(
+    response: Response,
+    status_: str | None = Query(default=None, alias="status", max_length=80),
+    limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
+    cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    rows = (
-        await db.scalars(
-            select(Meeting)
-            .where(Meeting.workspace_id == principal.workspace_id)
-            .order_by(Meeting.created_at.desc())
-            .limit(100)
-        )
-    ).all()
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count); `status`
+    takes one status or a comma list. Visibility matches _meeting_ok, in SQL."""
+    q = select(Meeting).where(Meeting.workspace_id == principal.workspace_id)
+    if status_:
+        q = q.where(Meeting.status.in_(status_.split(",")))
     visible = await _visible(db, principal)
-    rows = [m for m in rows if _meeting_ok(m, principal, visible)]
+    if visible is not None:
+        seen = [Meeting.started_by == principal.actor]
+        if visible:
+            seen.append(Meeting.participant_ids.has_any(array(sorted(visible), type_=String)))
+        q = q.where(or_(*seen))
+    rows = await paging.paginate(
+        db,
+        q,
+        ((Meeting.created_at, True), (Meeting.id, True)),
+        limit=limit,
+        cursor=cursor,
+        response=response,
+    )
     ids = {i for m in rows for i in m.participant_ids}
     names = {a.id: a for a in (await db.scalars(select(Agent).where(Agent.id.in_(ids))))}
     return [await _meeting_out(db, m, names=names) for m in rows]
@@ -285,9 +301,19 @@ async def _schedule_out(db: AsyncSession, s: Schedule) -> dict[str, Any]:
         nxt = [t.isoformat() for t in schedules.next_runs(s.cron, s.timezone)] if s.enabled else []
     except schedules.ScheduleError:
         nxt = []
+    o = schedules.origin(s.created_by)
+    person = await db.get(User, o.person) if o.person else None
     return {
         "id": s.id,
         "name": s.name,
+        # Who set it up: a person on this page, or the agent itself when a person asked it
+        # in chat or a task ("set up by Aina from chat"); one-offs switch off after firing.
+        "origin": {
+            "via": o.via,
+            "person_name": person.name if person else None,
+            "by_agent": o.agent_id is not None,
+            "once": o.once,
+        },
         "agent_id": s.agent_id,
         "agent_name": agent.name if agent else "Removed agent",
         "agent_color": agent.color if agent else "#888888",

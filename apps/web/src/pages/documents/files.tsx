@@ -5,6 +5,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FileDrop, FileStatus } from "@/components/file-drop";
+import { LibraryToggle } from "@/components/library-toggle";
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -17,17 +19,15 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
-import { docKeys, fileQuery, fileSize, filesQuery, fileUrl, type DocFile } from "@/lib/documents";
+import { docKeys, fileQuery, fileSize, fileStatsQuery, fileUrl, type DocFile } from "@/lib/documents";
+import type { LibraryFile } from "@/lib/library";
+import { useDebounced, usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { DocSteps, FileTile } from "./visuals";
 
 const ALL = "__all";
 type Show = "all" | "upload" | "generated" | "expiring";
-
-function daysUntil(iso: string): number {
-  return (new Date(iso).getTime() - Date.now()) / 86_400_000;
-}
 
 function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const qc = useQueryClient();
@@ -94,9 +94,10 @@ function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
             <Select value={f.branch_id ?? ALL} onValueChange={(v) => move.mutate(v === ALL ? null : v)} label="Company"
               options={[{ value: ALL, label: "All companies (shared)" }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
           </div>
+          {f.source === "upload" ? <LibraryToggle file={f} /> : null}
           <section className="grid gap-1.5">
             <h3 className="text-[13px] font-semibold">Text agents read {f.text_length ? <span className="font-normal text-muted">({f.text_length.toLocaleString()} characters)</span> : null}</h3>
-            <pre className="max-h-[50dvh] overflow-auto rounded-[var(--radius-md)] border border-border bg-surface-2/50 p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap">
+            <pre className="max-h-[50dvh] overflow-x-hidden overflow-y-auto rounded-[var(--radius-md)] border border-border bg-surface-2/50 p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
               {f.text?.trim() || (f.status === "reading" ? "…" : "No text could be read.")}
             </pre>
           </section>
@@ -115,22 +116,21 @@ export function FilesPage() {
   const [q, setQ] = useState("");
   const [show, setShow] = useState<Show>("all");
   const { data: branches = [] } = useQuery(branchesQuery);
+  // Company, search and the Show tab all filter on the server, so each lazily loaded page
+  // is already the right files and the counts are true totals (not just the loaded rows).
+  const needle = useDebounced(q.trim());
   const params: Record<string, string> = {};
   if (branch !== ALL) params.branch_id = branch;
-  if (q.trim()) params.q = q.trim();
-  const { data: all = [], isLoading, error } = useQuery(filesQuery(params));
+  if (needle) params.q = needle;
+  const { data: stats } = useQuery(fileStatsQuery(params));
+  const list = usePagedList<DocFile>(docKeys.files, "/api/files", {
+    ...params,
+    source: show === "upload" || show === "generated" ? show : undefined,
+    expiring: show === "expiring" ? true : undefined,
+  }, { poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
+  const { items: files, isLoading, error } = list;
   const open = (id?: string) => navigate({ search: { f: id } });
-
-  const soon = (f: DocFile) => f.expired || (!!f.expires_on && daysUntil(f.expires_on) < 60);
-  const counts = {
-    upload: all.filter((f) => f.source === "upload").length,
-    generated: all.filter((f) => f.source === "generated").length,
-    expiring: all.filter(soon).length,
-    reading: all.filter((f) => f.status === "reading").length,
-  };
-  const files = all.filter((f) =>
-    show === "all" ? true : show === "expiring" ? soon(f) : f.source === show,
-  );
+  const counts = stats ?? { total: 0, upload: 0, generated: 0, expiring: 0, reading: 0 };
 
   return (
     <Page>
@@ -152,7 +152,7 @@ export function FilesPage() {
       <Toolbar>
         <Segmented<Show> label="Show" value={show} onChange={setShow}
           options={[
-            { value: "all", label: "All", count: all.length },
+            { value: "all", label: "All", count: counts.total },
             { value: "upload", label: "Uploaded", count: counts.upload },
             { value: "generated", label: "Generated", count: counts.generated },
             { value: "expiring", label: "Expiring", count: counts.expiring },
@@ -176,12 +176,14 @@ export function FilesPage() {
                 trailing={<>
                   <FileStatus f={f} />
                   {f.source === "generated" ? <Pill tone="accent">Generated</Pill> : null}
+                  {(f as LibraryFile).library ? <Pill tone="accent">Guideline</Pill> : null}
                 </>}>
                 {f.summary ? <span className="line-clamp-2 text-[12.5px] text-muted/90">{f.summary}</span> : null}
               </ListRow>
             ))}
           </ListCard>
         )}
+      {files.length ? <LoadMore noun="files" shown={files.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
       {search.f ? <FileSheet id={search.f} onClose={() => open(undefined)} /> : null}
     </Page>
   );

@@ -10,13 +10,14 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowClockwiseIcon, CaretRightIcon, KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/ui/card";
@@ -26,9 +27,10 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
+import { editPaged, useDebounced, usePagedList, type PagedList } from "@/lib/paged";
 import { keys, meQuery } from "@/lib/queries";
 import { cn, shortAge, timeAgo } from "@/lib/utils";
-import { PRIORITY_INFO, STATUS_INFO, tasksQuery, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
+import { PRIORITY_INFO, STATUS_INFO, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { NewTaskDialog } from "./new-task";
 import { TaskSheet } from "./task-sheet";
@@ -106,8 +108,17 @@ function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void;
   );
 }
 
-function Column({ status, hint, empty, tasks, onOpen, canWrite, dragFrom }: { status: TaskStatus; hint: string; empty: string; tasks: Task[]; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null }) {
+/** Each column pages on its own (status filter + search on the server), so a long Done column
+ * loads 50 cards at a time as you scroll it while the short working columns stay complete. */
+const BOARD_KEY: QueryKey = [...workKeys.tasks, "board"];
+type BoardStatus = "triage" | "ready" | "running" | "blocked" | "review" | "done";
+const useColumn = (status: string, q: string, enabled = true) =>
+  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q }, { enabled });
+
+function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom }: { status: TaskStatus; hint: string; empty: string; list: PagedList<Task>; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const scroller = useRef<HTMLDivElement>(null);
+  const tasks = list.items;
   const allowed = dragFrom ? (MOVES[dragFrom] ?? []).includes(status) : false;
   const info = STATUS_INFO[status];
   return (
@@ -132,9 +143,9 @@ function Column({ status, hint, empty, tasks, onOpen, canWrite, dragFrom }: { st
           </h2>
           <p className="mt-0.5 truncate pl-4 text-[11.5px] text-muted">{hint}</p>
         </div>
-        <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-muted tabular ring-1 ring-border/70">{tasks.length}</span>
+        <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-muted tabular ring-1 ring-border/70">{list.total ?? tasks.length}</span>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain p-2">
+      <div ref={scroller} className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain p-2">
         {tasks.map((t) => (
           <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} />
         ))}
@@ -143,6 +154,7 @@ function Column({ status, hint, empty, tasks, onOpen, canWrite, dragFrom }: { st
             {dragFrom && allowed ? "Drop here" : empty}
           </p>
         ) : null}
+        <LoadMore compact root={scroller} margin={240} noun="tasks" shown={tasks.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} />
       </div>
     </section>
   );
@@ -168,7 +180,6 @@ export function TasksPage() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string };
-  const { data: tasks, isLoading, error } = useQuery(tasksQuery);
   const [creating, setCreating] = useState(0);
   const [dragFrom, setDragFrom] = useState<TaskStatus | null>(null);
   const [q, setQ] = useState("");
@@ -183,17 +194,27 @@ export function TasksPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
   );
 
-  const byStatus = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const m = new Map<TaskStatus, Task[]>();
-    for (const t of tasks ?? []) {
-      if (needle && !`${t.title} ${t.assignee_name ?? ""} ${(t.labels ?? []).join(" ")}`.toLowerCase().includes(needle)) continue;
-      m.set(t.status, [...(m.get(t.status) ?? []), t]);
-    }
-    return m;
-  }, [tasks, q]);
-  const failed = byStatus.get("failed") ?? [];
-  const closed = [...failed, ...(byStatus.get("cancelled") ?? [])];
+  // Search runs on the server (title, brief, agent, label), so every page of every column is
+  // filtered and the counts are the true counts.
+  const needle = useDebounced(q.trim());
+  const triage = useColumn("triage", needle);
+  const ready = useColumn("ready", needle);
+  const running = useColumn("running", needle);
+  const blocked = useColumn("blocked", needle);
+  const review = useColumn("review", needle);
+  const done = useColumn("done", needle);
+  const cols: Record<BoardStatus, PagedList<Task>> = { triage, ready, running, blocked, review, done };
+  const closedList = useColumn("failed,cancelled", needle);
+  const failedList = useColumn("failed", needle, canWrite);
+  const counts = new Map<TaskStatus, number>(Object.entries(cols).map(([s, l]) => [s as TaskStatus, l.total ?? l.items.length]));
+  const lists = [...Object.values(cols), closedList];
+  const isLoading = lists.some((l) => l.isLoading);
+  const error = lists.find((l) => l.error)?.error ?? null;
+  const anyTasks = lists.some((l) => (l.total ?? l.items.length) > 0);
+  const failed = failedList.items;
+  const failedTotal = failedList.total ?? failed.length;
+  const closed = closedList.items;
+  const closedTotal = closedList.total ?? closed.length;
 
   /** Relaunch every failed task shown (the API takes up to 50 per call and says what it skipped). */
   const retryFailed = async () => {
@@ -210,7 +231,7 @@ export function TasksPage() {
     }
   };
   // On phones the board opens on the first column that has work in it, not an empty Triage.
-  const firstBusy = COLUMNS.find((c) => byStatus.get(c.status)?.length)?.status ?? "triage";
+  const firstBusy = COLUMNS.find((c) => (counts.get(c.status) ?? 0) > 0)?.status ?? "triage";
   const col = picked ?? firstBusy;
 
   /** Scroll the swipeable board so `status` sits at its left edge. */
@@ -252,24 +273,31 @@ export function TasksPage() {
     }
   };
   // First load on a narrow screen: start on the first busy column (DOM scroll only, no state).
+  const settled = !isLoading && anyTasks;
   useEffect(() => {
-    if (didInit.current || !tasks?.length) return;
+    if (didInit.current || !settled) return;
     didInit.current = true;
     scrollTo(firstBusy, false);
     revealTab(firstBusy);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once, when the tasks first arrive
-  }, [tasks]);
+  }, [settled]);
 
   const move = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => api<Task>(`/api/tasks/${id}`, "PATCH", { status }),
     onMutate: async ({ id, status }) => {
-      await qc.cancelQueries({ queryKey: workKeys.tasks });
-      const prev = qc.getQueryData<Task[]>(workKeys.tasks);
-      qc.setQueryData<Task[]>(workKeys.tasks, (old) => old?.map((t) => (t.id === id ? { ...t, status } : t)));
+      await qc.cancelQueries({ queryKey: BOARD_KEY });
+      const prev = qc.getQueriesData({ queryKey: BOARD_KEY });
+      const moved = lists.flatMap((l) => l.items).find((t) => t.id === id);
+      // Out of every column it was in, onto the top of the column it moved to.
+      editPaged<Task>(qc, BOARD_KEY, (items, page, params) => {
+        const rest = items.filter((t) => t.id !== id);
+        const into = String(params.status ?? "").split(",").includes(status);
+        return moved && into && page === 0 ? [{ ...moved, status }, ...rest] : rest;
+      });
       return { prev };
     },
     onError: (e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(workKeys.tasks, ctx.prev);
+      for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
       toast.error(errorMessage(e));
     },
     onSettled: () => {
@@ -308,7 +336,7 @@ export function TasksPage() {
         <BoardSkeleton />
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !tasks?.length ? (
+      ) : !anyTasks && !needle ? (
         <EmptyState icon={KanbanIcon} title="No tasks yet" body="Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review."
           action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Create first task</Button> : undefined} />
       ) : (
@@ -318,7 +346,7 @@ export function TasksPage() {
             {/* Column switcher for the swipeable board; wide screens see all six columns at once. */}
             <div ref={tabs} className="min-w-0 xl:hidden">
               <Segmented size="sm" label="Board columns" value={col} onChange={jump}
-                options={COLUMNS.map((c) => ({ value: c.status, label: STATUS_INFO[c.status].label, count: byStatus.get(c.status)?.length ?? 0 }))} />
+                options={COLUMNS.map((c) => ({ value: c.status, label: STATUS_INFO[c.status].label, count: counts.get(c.status) ?? 0 }))} />
             </div>
           </Toolbar>
           <div
@@ -327,19 +355,19 @@ export function TasksPage() {
             className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:thin] sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-8 lg:scroll-px-8 lg:px-8 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0"
           >
             {COLUMNS.map((c) => (
-              <Column key={c.status} status={c.status} hint={c.hint} empty={q.trim() ? "No match in this column." : c.empty} tasks={byStatus.get(c.status) ?? []} onOpen={openTask} canWrite={canWrite} dragFrom={dragFrom} />
+              <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? "No match in this column." : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask} canWrite={canWrite} dragFrom={dragFrom} />
             ))}
           </div>
-          {closed.length ? (
+          {closedTotal ? (
             <details className="group min-w-0 rounded-[var(--radius-md)] border border-border bg-surface">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
                 <CaretRightIcon size={13} weight="bold" className="shrink-0 text-muted transition-transform group-open:rotate-90" />
                 <WarningIcon size={15} weight="duotone" className="shrink-0 text-muted" /> Failed and cancelled
-                <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-muted tabular">{closed.length}</span>
+                <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-muted tabular">{closedTotal}</span>
               </summary>
               {canWrite && failed.length ? (
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
-                  <p className="min-w-0 text-[12.5px] text-muted">{failed.length} failed {failed.length === 1 ? "task was" : "tasks were"} never retried.</p>
+                  <p className="min-w-0 text-[12.5px] text-muted">{failedTotal} failed {failedTotal === 1 ? "task was" : "tasks were"} never retried.</p>
                   <Button size="sm" variant="outline" className="min-h-9" onClick={() => setRetrying(true)}>
                     <ArrowClockwiseIcon size={14} weight="bold" /> Retry all failed
                   </Button>
@@ -347,11 +375,12 @@ export function TasksPage() {
               ) : null}
               <div className="grid max-h-[28rem] grid-cols-[minmax(0,1fr)] gap-2 overflow-y-auto border-t border-border p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {closed.map((t) => <TaskCard key={t.id} task={t} onOpen={() => openTask(t.id)} draggable={false} />)}
+                <LoadMore className="col-span-full" noun="tasks" shown={closed.length} total={closedList.total} hasMore={closedList.hasMore} loading={closedList.isFetchingMore} onLoad={closedList.loadMore} />
               </div>
             </details>
           ) : null}
-          <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={`Retry ${failed.length} failed task${failed.length === 1 ? "" : "s"}?`} confirmLabel="Retry all"
-            body={<>Each one starts a fresh run with its agent, continuing the same conversation.{failed.length > 50 ? " Up to 50 start now; retry again for the rest." : ""}{q.trim() ? " Only the tasks matching your filter are retried." : ""}</>}
+          <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={`Retry ${failedTotal} failed task${failedTotal === 1 ? "" : "s"}?`} confirmLabel="Retry all"
+            body={<>Each one starts a fresh run with its agent, continuing the same conversation.{failedTotal > 50 ? " Up to 50 start now; retry again for the rest." : ""}{needle ? " Only the tasks matching your filter are retried." : ""}</>}
             onConfirm={retryFailed} />
         </DndContext>
       )}

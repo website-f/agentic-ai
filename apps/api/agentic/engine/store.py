@@ -12,6 +12,7 @@ from ..core import crypto
 from ..core.db import SessionLocal
 from ..core.valkey import valkey
 from ..models import AIModel, AIProvider, LLMCall, ModelGroup
+from . import media
 from .client import Usage
 
 log = logging.getLogger("agentic.engine")
@@ -33,6 +34,7 @@ DEFAULT_GROUPS: tuple[tuple[str, str, str], ...] = (
         "A small model on this server: free and private. Does simple side jobs first, and is "
         "the backup brain when cloud models are down.",
     ),
+    *media.GROUPS,  # speech to text and pictures (P18)
 )
 
 
@@ -64,6 +66,7 @@ async def ensure_default_groups(db: AsyncSession, workspace_id: str) -> list[Mod
     )
     have = {g.name for g in rows}
     added = False
+    new_rows: list[ModelGroup] = []
     for i, (name, label, desc) in enumerate(DEFAULT_GROUPS):
         if name not in have:
             g = ModelGroup(
@@ -76,10 +79,13 @@ async def ensure_default_groups(db: AsyncSession, workspace_id: str) -> list[Mod
             )
             db.add(g)
             rows.append(g)
+            new_rows.append(g)
             added = True
     if added:
         await db.commit()
         rows.sort(key=lambda g: g.position)
+        # A new voice/picture group starts with the speech/image models of Groq and OpenAI.
+        await media.fill_groups(db, workspace_id, new_rows)
     await _fill_local(db, workspace_id, rows)
     return rows
 

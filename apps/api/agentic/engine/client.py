@@ -1,6 +1,7 @@
 """OpenAI-compatible HTTP calls. Every function guards the URL first (core/ssrf.py) and
 never logs the key. Tests swap the transport with `use_transport`."""
 
+import base64
 import re
 import time
 from dataclasses import dataclass, field
@@ -125,15 +126,29 @@ class CallResult:
 
 
 async def _request(
-    method: str, url: str, key: str, json: dict | None = None, timeout: float = 30
+    method: str,
+    url: str,
+    key: str,
+    json: dict | None = None,
+    timeout: float = 30,
+    *,
+    files: dict[str, Any] | None = None,
+    form: dict[str, str] | None = None,
 ) -> CallResult:
+    """`files` + `form` send multipart/form-data (audio uploads) instead of JSON."""
     t0 = time.perf_counter()
     host = host_of(url)
     try:
         target, pin, ext = await pinned(url)
         async with _client(timeout) as http:
             r = await http.request(
-                method, target, headers={**_headers(key), **pin}, json=json, extensions=ext
+                method,
+                target,
+                headers={**_headers(key), **pin},
+                json=json,
+                files=files,
+                data=form,
+                extensions=ext,
             )
     except Exception as e:  # noqa: BLE001 - every failure becomes a classified result
         return CallResult(ok=False, latency_ms=_ms(t0), failure=classify_exception(e, host))
@@ -346,3 +361,156 @@ async def embed(base_url: str, key: str, model: str, texts: list[str]) -> CallRe
     return await _request(
         "POST", _url(base_url, "/embeddings"), key, {"model": model, "input": texts}, timeout=60
     )
+
+
+# ---------------------------------------------------------------- audio and pictures (P18)
+
+MAX_AUDIO_BYTES = 25 * 1024 * 1024  # OpenAI and Groq both refuse larger uploads
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+
+def _dict(v: Any) -> dict[str, Any]:
+    return v if isinstance(v, dict) else {}
+
+
+@dataclass
+class TranscribeResult:
+    call: CallResult
+    text: str = ""
+    seconds: float | None = None  # audio length, when the provider says
+    language: str | None = None
+    usage: Usage = field(default_factory=Usage)
+
+
+async def transcribe(
+    base_url: str,
+    key: str,
+    model: str,
+    audio: bytes,
+    filename: str,
+    mime: str,
+    language: str | None = None,
+    *,
+    timeout: float = 120,
+) -> TranscribeResult:
+    """OpenAI-compatible POST /audio/transcriptions (multipart). Whisper models are asked for
+    verbose_json, which carries the audio length (for cost); the gpt-4o transcribe models
+    only speak json and report usage instead."""
+    url = _url(base_url, "/audio/transcriptions")
+
+    async def send(fmt: str) -> CallResult:
+        form = {"model": model, "response_format": fmt}
+        if language:
+            form["language"] = language
+        return await _request(
+            "POST",
+            url,
+            key,
+            timeout=timeout,
+            files={"file": (filename, audio, mime or "application/octet-stream")},
+            form=form,
+        )
+
+    fmt = "verbose_json" if "whisper" in _bare(model) else "json"
+    call = await send(fmt)
+    err = str(call.data.get("error_text", "")).lower()
+    if call.status == 400 and fmt != "json" and "response_format" in err:
+        call = await send("json")
+    if not call.ok:
+        return TranscribeResult(call=call)
+    d = call.data if isinstance(call.data, dict) else {}
+    u = _dict(d.get("usage"))
+    seconds = d.get("duration")
+    if seconds is None and u.get("type") == "duration":
+        seconds = u.get("seconds")
+    try:
+        secs = float(seconds) if seconds is not None else None
+    except (TypeError, ValueError):
+        secs = None
+    return TranscribeResult(
+        call=call,
+        text=str(d.get("text") or "").strip(),
+        seconds=secs,
+        language=str(d["language"]) if d.get("language") else None,
+        usage=Usage(
+            prompt=int(u.get("input_tokens") or 0), completion=int(u.get("output_tokens") or 0)
+        ),
+    )
+
+
+@dataclass
+class ImageResult:
+    call: CallResult
+    image: bytes = b""
+    revised_prompt: str = ""
+    usage: Usage = field(default_factory=Usage)
+
+
+async def generate_image(
+    base_url: str,
+    key: str,
+    model: str,
+    prompt: str,
+    *,
+    size: str,
+    quality: str | None = None,
+    style: str | None = None,
+    timeout: float = 180,
+) -> ImageResult:
+    """OpenAI-compatible POST /images/generations, one picture. gpt-image models always
+    answer base64; dall-e is asked for it; a provider that answers with a URL is fetched
+    (public addresses only, and never with the key)."""
+    body: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1, "size": size}
+    bare = _bare(model)
+    if bare.startswith("dall-e"):
+        body["response_format"] = "b64_json"
+        if bare == "dall-e-3" and style in ("vivid", "natural"):
+            body["style"] = style
+    if quality:
+        body["quality"] = quality
+    call = await _request("POST", _url(base_url, "/images/generations"), key, body, timeout)
+    if not call.ok:
+        return ImageResult(call=call)
+    items = call.data.get("data") if isinstance(call.data, dict) else None
+    first = items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else {}
+    blob = b""
+    if first.get("b64_json"):
+        try:
+            blob = base64.b64decode(first["b64_json"])
+        except ValueError:
+            blob = b""
+    elif first.get("url"):
+        blob = await download(str(first["url"]), MAX_IMAGE_BYTES)
+    if not blob:
+        call.ok = False
+        call.failure = Failure("bad_response", f"{host_of(base_url)} sent back no picture.")
+        return ImageResult(call=call)
+    u = _dict(call.data.get("usage"))
+    return ImageResult(
+        call=call,
+        image=blob,
+        revised_prompt=str(first.get("revised_prompt") or ""),
+        usage=Usage(
+            prompt=int(u.get("input_tokens") or 0), completion=int(u.get("output_tokens") or 0)
+        ),
+    )
+
+
+async def download(url: str, max_bytes: int, timeout: float = 60) -> bytes:
+    """GET a public URL (SSRF-guarded, no credentials). Empty on any failure or overflow."""
+    try:
+        target, pin, ext = await pinned(url)
+        async with _client(timeout) as http:
+            async with http.stream(
+                "GET", target, headers={"User-Agent": "agentic-ai/0.1", **pin}, extensions=ext
+            ) as r:
+                if r.status_code >= 400:
+                    return b""
+                data = bytearray()
+                async for chunk in r.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > max_bytes:
+                        return b""
+                return bytes(data)
+    except Exception:  # noqa: BLE001 - a missing picture is reported by the caller
+        return b""

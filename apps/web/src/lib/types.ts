@@ -80,6 +80,10 @@ export interface AuditItem {
 export interface AuditPage {
   items: AuditItem[];
   next_before_id: number | null;
+  /** First page only: entries per kind (signin, people, org, work, agents, other). */
+  kinds?: Record<string, number> | null;
+  /** First page only: entries matching the kind filter. */
+  total?: number | null;
 }
 
 export interface ComponentStatus {

@@ -11,5 +11,10 @@ ASSISTANT_ONLY = frozenset(
         "email_read",
         "email_draft_reply",
         "email_draft",
+        "calendar_agenda",
+        "calendar_free_slots",
+        "calendar_create_event",
+        "calendar_update_event",
+        "calendar_cancel_event",
     }
 )

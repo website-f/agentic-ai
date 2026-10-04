@@ -124,7 +124,7 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={18} aria-label="Procedure (Markdown)"
               className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
           ) : (
-            <div className="min-w-0 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3"><Markdown>{body || "_Empty_"}</Markdown></div>
+            <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3"><Markdown>{body || "_Empty_"}</Markdown></div>
           )}
           <p className="text-[12px] text-muted">Markdown: ## headings, - lists, 1. steps, **bold**, tables.</p>
         </div>

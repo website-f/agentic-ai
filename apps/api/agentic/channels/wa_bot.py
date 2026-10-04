@@ -18,9 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import runtime
 from ..core.security import can
 from ..core.valkey import valkey
-from ..engine import gateway
+from ..engine import gateway, media
 from ..models import Agent, Binding, Channel, ChannelLink, ChatSession, Membership, User
-from . import deliver
+from . import deliver, voice, whatsapp
 from .whatsapp import Inbound
 
 log = logging.getLogger("agentic.channels.whatsapp")
@@ -102,6 +102,34 @@ async def _agent_for(db: AsyncSession, ch: Channel, sender: str, user_id: str) -
     )
 
 
+async def _hear(
+    db: AsyncSession, ch: Channel, msg: Inbound, agent: Agent
+) -> tuple[str, str | None]:
+    """Download the voice note and turn it into text: (transcript, problem)."""
+    assert msg.audio is not None
+    if msg.audio.seconds and msg.audio.seconds > media.MAX_AUDIO_SECONDS:
+        return "", voice.TOO_LONG
+    cfg = whatsapp.Config.load(deliver.channel_token(ch))
+    try:
+        data = await whatsapp.download_audio(cfg, msg.audio, voice.MAX_BYTES)
+    except whatsapp.WhatsAppError as e:
+        if e.status == 413:
+            return "", f"That voice note is too large (over {media.MAX_AUDIO_MB} MB)."
+        log.info("voice note download failed on %s: %s", ch.id, e)
+        return "", voice.NO_DOWNLOAD
+    except Exception:  # noqa: BLE001 - WAHA or Meta unreachable
+        log.info("voice note download failed on %s", ch.id, exc_info=True)
+        return "", voice.NO_DOWNLOAD
+    return await voice.hear(
+        db,
+        ch.workspace_id,
+        data,
+        msg.audio.mime,
+        seconds=msg.audio.seconds,
+        agent_id=agent.id,
+    )
+
+
 async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
     # WhatsApp gateways retry webhooks: answer each message once.
     if msg.message_id and not await valkey().set(
@@ -144,6 +172,13 @@ async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
             key,
         )
         return
+    text, heard = msg.text, ""
+    if msg.audio is not None and not text:
+        heard, problem = await _hear(db, ch, msg, agent)
+        if problem:
+            await _reply(db, ch, msg.sender, problem, key)
+            return
+        text = heard
     title = f"WhatsApp chat {msg.sender}"
     session = await db.scalar(
         select(ChatSession).where(
@@ -159,10 +194,12 @@ async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
         db.add(session)
         await db.commit()
     try:
-        reply = await runtime.chat_turn(db, agent, session, msg.text)
+        reply = await runtime.chat_turn(db, agent, session, text)
         answer = reply.content or "(no answer)"
     except gateway.GatewayUnavailable as e:
         reply, answer = None, f"{agent.name} could not answer right now: {e}"
-    await _reply(db, ch, msg.sender, f"*{agent.name}*: {answer}", key)
+    # A voice note's answer quotes what was heard (WhatsApp shows "> " as a quote).
+    said = f"> {voice.quote(heard)}\n\n" if heard else ""
+    await _reply(db, ch, msg.sender, f"{said}*{agent.name}*: {answer}", key)
     if reply is not None and reply.message_id is not None:
         await deliver.learn_from_chat(reply.message_id)

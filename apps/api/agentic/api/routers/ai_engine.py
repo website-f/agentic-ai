@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import SessionLocal, get_db
 from ...core.ssrf import BlockedURL, guard_url
 from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
-from ...engine import client, gateway, store, tester
+from ...engine import client, gateway, media, store, tester
 from ...engine.presets import BY_ID, PRESETS, PRIMARY
 from ...models import AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck, Workspace
 from ...services import audit
@@ -229,6 +229,8 @@ async def create_provider(
             f"A provider called {body.name} already exists.",
         ) from e
     await db.refresh(p)
+    # Groq / OpenAI bring speech and picture models: fill those groups while still empty.
+    await media.fill_after_new_provider(db, p)
     return await _provider_out(db, p)
 
 
@@ -493,6 +495,10 @@ async def update_model(
 # ------------------------------------------------------------------ groups
 
 
+def _group_kind(name: str) -> str:
+    return name if name in media.NOT_CHAT else "chat"
+
+
 @router.get("/groups")
 async def list_groups(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
@@ -504,6 +510,7 @@ async def list_groups(
             label=g.label,
             description=g.description,
             members=[GroupMember(**m) for m in g.members],
+            kind=_group_kind(g.name),
         )
         for g in rows
     ]  # type: ignore[arg-type]
@@ -560,6 +567,7 @@ async def update_group(
         label=g.label,
         description=g.description,
         members=[GroupMember(**m) for m in g.members],
+        kind=_group_kind(g.name),
     )
 
 

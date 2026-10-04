@@ -51,6 +51,16 @@ function RowsSkeleton({ rows = 3, h = "h-16" }: { rows?: number; h?: string }) {
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
+/** "Set up by Aina from chat": a person here, or the agent itself when someone asked it. */
+function setUpBy(s: Schedule): string | null {
+  const o = s.origin;
+  if (!o) return null;
+  const who = o.person_name ?? "a person";
+  if (o.via === "chat") return `Set up by ${who} from chat`;
+  if (o.via === "task") return `Set up by ${who} through a task`;
+  return o.person_name ? `Set up by ${o.person_name}` : null;
+}
+
 function ScheduleDialog({ s, onClose }: { s?: Schedule; onClose: () => void }) {
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
@@ -143,14 +153,15 @@ function SchedulesTab({ canWrite }: { canWrite: boolean }) {
                 <span className="grid min-w-0 gap-0.5">
                   <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="min-w-0 text-[14px] font-medium break-words">{s.name}</span>
-                    {!s.enabled ? <Pill>Paused</Pill> : null}
+                    {s.origin?.once ? <Pill tone="info">Once</Pill> : null}
+                    {!s.enabled ? (s.origin?.once && s.last_run_at ? <Pill tone="ok">Done</Pill> : <Pill>Paused</Pill>) : null}
                     {s.last_status ? <Pill tone={RUN_TONE[s.last_status]}>Last run {s.last_status}</Pill> : null}
                   </span>
                   <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted">
                     <Meta items={[s.agent_name, `${describeCron(s.cron)} (${s.timezone})`]} />
                   </span>
                   <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
-                    <Meta items={[s.enabled && s.next_runs[0] ? `Next ${when(s.next_runs[0])}` : "Not running", s.last_run_at ? `last ${timeAgo(s.last_run_at).toLowerCase()}` : null]} />
+                    <Meta items={[s.enabled && s.next_runs[0] ? `Next ${when(s.next_runs[0])}` : "Not running", s.last_run_at ? `last ${timeAgo(s.last_run_at).toLowerCase()}` : null, setUpBy(s)]} />
                   </span>
                 </span>
               </button>

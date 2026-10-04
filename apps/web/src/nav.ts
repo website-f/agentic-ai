@@ -1,5 +1,6 @@
 import {
   BrainIcon,
+  BooksIcon,
   BlueprintIcon,
   FlowArrowIcon,
   FileTextIcon,
@@ -30,12 +31,14 @@ import {
   SparkleIcon,
   UsersIcon,
   UsersThreeIcon,
+  UserFocusIcon,
   type Icon,
 } from "@phosphor-icons/react";
 
 export type AppPath =
   | "/"
   | "/assistants"
+  | "/twin"
   | "/overview"
   | "/reports"
   | "/company-kit"
@@ -54,6 +57,7 @@ export type AppPath =
   | "/broadcasts"
   | "/brain"
   | "/sops"
+  | "/library"
   | "/skills"
   | "/learning"
   | "/blueprints"
@@ -91,6 +95,7 @@ export const NAV: NavSection[] = [
     title: "Home",
     items: [
       { to: "/", label: "Command center", icon: GaugeIcon, blurb: "Today at a glance: system health, organization and what to do next." },
+      { to: "/twin", label: "My twin", icon: UserFocusIcon, perm: "agents.own", blurb: "Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important." },
       { to: "/assistants", label: "My assistants", icon: SparkleIcon, perm: "work.write", blurb: "Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp." },
       { to: "/overview", label: "Company overview", icon: ChartBarIcon, blurb: "Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing." },
     ],
@@ -135,6 +140,7 @@ export const NAV: NavSection[] = [
     title: "Knowledge",
     items: [
       { to: "/sops", label: "SOPs", icon: FileTextIcon, blurb: "Written procedures agents follow: for every company, one company, one department, or attached to specific agents." },
+      { to: "/library", label: "Library", icon: BooksIcon, blurb: "Guidelines, manuals and policies people upload. Agents search them when the work needs it and cite the page." },
       { to: "/brain", label: "Brain", icon: BrainIcon, blurb: "What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian." },
       { to: "/skills", label: "Skills", icon: LightningIcon, blurb: "Procedures agents have learned. Review what they propose before it becomes part of how they work." },
       { to: "/learning", label: "Learning", icon: GraduationCapIcon, blurb: "What your agents learned, how each change was tested, what went live by itself, and what learning cost." },

@@ -2,6 +2,7 @@ import {
   ArrowClockwiseIcon,
   ArrowSquareOutIcon,
   BellRingingIcon,
+  CalendarPlusIcon,
   CaretDownIcon,
   ChatsCircleIcon,
   CheckCircleIcon,
@@ -928,8 +929,8 @@ function GoogleSetup({ g, onDone }: { g: GoogleStatus; onDone?: () => void }) {
         </p>
         <Disclosure open={guide} onOpenChange={setGuide} title="Step by step: create the OAuth client in Google Cloud">
           <Steps items={[
-            <>In <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noreferrer" className="text-accent hover:underline">Google Cloud Console</a>, go to <Kbd>APIs &amp; Services</Kbd> &gt; <Kbd>Library</Kbd> and enable the <Kbd>Gmail API</Kbd>. The project that holds your existing API key is fine.</>,
-            <>Open <Kbd>OAuth consent screen</Kbd>: choose <Kbd>External</Kbd> (or <Kbd>Internal</Kbd> on Google Workspace), add your email as a <Kbd>Test user</Kbd>, and add the scopes <Code>gmail.readonly</Code> and <Code>gmail.compose</Code>.</>,
+            <>In <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noreferrer" className="text-accent hover:underline">Google Cloud Console</a>, go to <Kbd>APIs &amp; Services</Kbd> &gt; <Kbd>Library</Kbd> and enable the <Kbd>Gmail API</Kbd> and the <Kbd>Google Calendar API</Kbd>. The project that holds your existing API key is fine.</>,
+            <>Open <Kbd>OAuth consent screen</Kbd>: choose <Kbd>External</Kbd> (or <Kbd>Internal</Kbd> on Google Workspace), add your email as a <Kbd>Test user</Kbd>, and add the scopes <Code>gmail.readonly</Code>, <Code>gmail.compose</Code> and <Code>calendar.events</Code>.</>,
             <>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="text-accent hover:underline">Credentials</a> &gt; <Kbd>Create credentials</Kbd> &gt; <Kbd>OAuth client ID</Kbd> &gt; <Kbd>Web application</Kbd>. Under <Kbd>Authorised redirect URIs</Kbd>, add the redirect URI shown here.</>,
             <>Copy the <Kbd>Client ID</Kbd> and <Kbd>Client secret</Kbd> into this form and save.</>,
           ]} />
@@ -972,7 +973,7 @@ function Gmail() {
       <CardHeader
         icon={<IconTile icon={GoogleLogoIcon} tone="info" size="sm" />}
         title="Gmail"
-        description="Your assistants read your Gmail and draft replies for you."
+        description="Your assistants read your Gmail and calendar, draft replies and propose events for you."
         actions={pill}
       />
       <CardBody className="grid grid-cols-[minmax(0,1fr)] gap-5">
@@ -1016,18 +1017,22 @@ function Gmail() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-medium break-all">{acct.email}</p>
                     <p className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-1.5 text-[12.5px] text-muted">
-                      <Meta items={[`Connected ${timeAgo(acct.connected_at).toLowerCase()}`, acct.can_send ? "Can draft replies" : "Read only"]} />
+                      <Meta items={[`Connected ${timeAgo(acct.connected_at).toLowerCase()}`, acct.can_send ? "Can draft replies" : "Read only", acct.calendar ? "Calendar" : "No calendar"]} />
                     </p>
                     {acct.status === "error" ? (
                       <p className="mt-1.5 text-[12.5px] break-words text-danger">{acct.last_error || "Google stopped accepting this connection."} Reconnect to fix it.</p>
                     ) : !acct.can_send ? (
                       <p className="mt-1.5 text-[12.5px] text-muted">Drafting was not allowed at sign-in. Reconnect and tick the Gmail compose permission.</p>
+                    ) : !acct.calendar ? (
+                      <p className="mt-1.5 text-[12.5px] text-muted">Connected before calendar access was added. Reconnect Google and tick the calendar box so your assistants can read your calendar and propose events.</p>
                     ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 max-sm:w-full max-sm:pl-11">
                   {acct.status === "error" || !acct.can_send ? (
                     <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><ArrowClockwiseIcon size={14} /> Reconnect</Button>
+                  ) : !acct.calendar ? (
+                    <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><CalendarPlusIcon size={14} /> Reconnect Google to add Calendar</Button>
                   ) : null}
                   <Button size="sm" variant="ghost" onClick={() => setConfirmOff(true)}><LinkBreakIcon size={15} /> Disconnect</Button>
                 </div>

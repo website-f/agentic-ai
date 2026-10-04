@@ -1,4 +1,4 @@
-import { HandIcon, LightningIcon, PauseCircleIcon, PlusIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { HandIcon, LightningIcon, PauseCircleIcon, PlusIcon, UserFocusIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -15,6 +15,7 @@ import { errorMessage } from "@/lib/api";
 import { useLive } from "@/lib/live";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { useBranch } from "@/lib/stores";
+import { staffOnly } from "@/lib/twin";
 import { agentsQuery, type Agent } from "@/lib/work";
 
 import { OrgChart } from "./org-chart";
@@ -52,7 +53,7 @@ function AgentCard({ agent }: { agent: Agent }) {
         <Pill className="font-mono">{agent.model_group}</Pill>
         <AgentAccessPills agent={agent} />
         {agent.clone_of ? <Pill tone="info">Helper</Pill> : null}
-        {agent.owner_name ? <Pill tone="info">{agent.owner_name}&apos;s agent</Pill> : null}
+        {agent.owner_name && !agent.is_twin ? <Pill tone="info">{agent.owner_name}&apos;s agent</Pill> : null}
         {agent.autonomy === "auto" ? <Pill tone="accent">Auto</Pill> : null}
         {agent.role_kind === "orchestrator" ? <Pill tone="accent">Leads</Pill> : null}
         {agent.budget_daily_tokens || agent.budget_monthly_usd ? <Pill>Budget</Pill> : null}
@@ -65,6 +66,9 @@ function AgentCard({ agent }: { agent: Agent }) {
 export function AgentsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("agents.manage") || me.permissions.includes("agents.own");
+  // P18: staff have one agent, their AI twin; only managers add more.
+  const staff = staffOnly(me.permissions);
+  const twinHint = "Staff have one AI twin. Ask your manager for more agents.";
   const { data: agents, isLoading, error } = useQuery(agentsQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
   const branchId = useBranch((s) => s.branchId);
@@ -105,8 +109,14 @@ export function AgentsPage() {
     <Page>
       <PageHeader
         title="Agents"
-        description={branch ? `The staff of ${branch.name}, by department. Switch company with the branch picker above.` : "Create a branch first, then add agents to its departments."}
-        actions={canManage && branch ? (
+        description={branch ? `The staff of ${branch.name}, by department. Switch company with the branch picker above.${staff ? ` ${twinHint}` : ""}` : "Create a branch first, then add agents to its departments."}
+        actions={staff ? (
+          <Button asChild variant="outline" title={twinHint}>
+            <Link to="/twin">
+              <UserFocusIcon size={16} weight="bold" /> My twin
+            </Link>
+          </Button>
+        ) : canManage && branch ? (
           <Button asChild>
             <Link to="/agents/new">
               <PlusIcon size={16} weight="bold" /> New agent
@@ -125,7 +135,7 @@ export function AgentsPage() {
           icon={UsersThreeIcon}
           title={`No agents at ${branch.name} yet`}
           body="Start from a template like Accountant or Researcher, place it in a department, and give it your SOPs."
-          action={canManage ? <Button asChild><Link to="/agents/new"><PlusIcon size={16} weight="bold" /> Create first agent</Link></Button> : undefined}
+          action={staff ? <Button asChild><Link to="/twin"><UserFocusIcon size={16} weight="bold" /> Meet your AI twin</Link></Button> : canManage ? <Button asChild><Link to="/agents/new"><PlusIcon size={16} weight="bold" /> Create first agent</Link></Button> : undefined}
         />
       ) : (
         <>

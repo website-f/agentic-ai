@@ -188,6 +188,19 @@ async def run(db: AsyncSession, ws: Workspace) -> list[dict[str, Any]]:
             repaired += 1
             changes.append({"kind": "skill", "action": "repair", "name": s.name, "uses": n})
 
+    # P18: one skill a night gets the optimizer (reflective rewrite, tested old vs new).
+    try:
+        from . import optimize  # late: optimize imports the store and autopilot
+
+        pick = await optimize.nightly_pick(db, ws)
+        if pick is not None:
+            out = await optimize.optimize(db, ws, pick)
+            changes.append(
+                {"kind": "skill", "action": "optimize", "name": pick.name, "note": out.note}
+            )
+    except Exception:  # noqa: BLE001 - optimizing is a bonus; never stop the dream
+        log.warning("optimizer failed for %s", ws.id, exc_info=True)
+
     try:
         tidied = await autopilot.tidy(db, ws)
         if any(tidied.values()):
