@@ -730,3 +730,23 @@ def test_waha_self_chat_counts_but_never_our_own_replies():
         )
         == []
     )
+
+
+async def test_a_lost_status_webhook_does_not_leave_whatsapp_offline(client, llm, temporal, waha):
+    """WAHA can report WORKING while the api is still starting; the page asks again."""
+    await office(client)
+    ch = (
+        await client.post("/api/channels/whatsapp", json={"provider": "waha"}, headers=csrf(client))
+    ).json()
+    waha.status, waha.me = "WORKING", {"id": "60123456789@c.us", "pushName": "Office"}
+    async with SessionLocal() as db:
+        row = await db.get(Channel, ch["id"])
+        assert row is not None
+        row.state = {"status": "STARTING", "provider": "waha"}  # the lost "WORKING" event
+        await db.commit()
+    home = (await client.get("/api/assistants")).json()
+    assert home["whatsapp"]["status"] == "WORKING"
+    assert home["whatsapp"]["number"] == "60123456789"
+    async with SessionLocal() as db:
+        row = await db.get(Channel, ch["id"])
+        assert row is not None and row.state["checked_at"]

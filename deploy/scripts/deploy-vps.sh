@@ -17,4 +17,4 @@ git pull --ff-only
 "${DC[@]}" ps --format "table {{.Service}}\t{{.Status}}"
 echo
 echo "Published ports (must all be 127.0.0.1):"
-"${DC[@]}" ps --format "{{.Publishers}}" | tr ',' '\n' | grep -o '[0-9.]*:[0-9]*->' | sort -u || true
+"${DC[@]}" ps --format "{{.Service}}  {{.Ports}}" | grep -- "->" || echo "(none)"

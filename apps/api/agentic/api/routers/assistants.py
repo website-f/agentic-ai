@@ -2,6 +2,7 @@
 drafts their assistants prepared, waiting to be approved and sent."""
 
 import json
+import logging
 import urllib.parse
 from datetime import UTC, datetime
 from typing import Any
@@ -34,6 +35,7 @@ from ..deps import Principal, api_error, require
 from .agents import agent_out
 
 router = APIRouter(prefix="/api", tags=["assistants"])
+log = logging.getLogger("agentic.api.assistants")
 
 BASE = (
     "You work for one person only: {owner}. You are their private assistant: nobody else sees "
@@ -162,6 +164,13 @@ async def assistants_home(
             Channel.workspace_id == principal.workspace_id, Channel.kind == "whatsapp"
         )
     )
+    if wa is not None:
+        from .whatsapp import refresh_state  # late: the whatsapp router imports this one
+
+        try:
+            await refresh_state(db, wa)
+        except Exception:  # noqa: BLE001 - show what is stored; the page still works
+            log.warning("could not refresh the WhatsApp state", exc_info=True)
     linked = (
         await db.scalar(
             select(ChannelLink.id).where(

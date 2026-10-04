@@ -4,6 +4,7 @@ status and login QR, send a test, and receive messages through signed webhooks."
 import json
 import logging
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
@@ -61,6 +62,44 @@ async def _wa_channel(db: AsyncSession, principal: Principal, channel_id: str) -
     if ch is None or ch.workspace_id != principal.workspace_id or ch.kind != "whatsapp":
         raise api_error(status.HTTP_404_NOT_FOUND, "channel_not_found", "That channel is not here.")
     return ch
+
+
+STATE_FRESH = timedelta(minutes=5)  # a stored WORKING older than this is checked again
+
+
+async def refresh_state(db: AsyncSession, ch: Channel, *, force: bool = False) -> dict[str, Any]:
+    """The stored channel state, re-checked with the gateway when it may be wrong.
+
+    Status webhooks can be lost (WAHA reports WORKING while the api is still starting), so
+    a stored state that is not WORKING, or is older than STATE_FRESH, is asked for again.
+    """
+    state = dict(ch.state or {})
+    checked = state.get("checked_at")
+    fresh = (
+        state.get("status") == "WORKING"
+        and checked
+        and datetime.now(UTC) - datetime.fromisoformat(checked) < STATE_FRESH
+    )
+    if fresh and not force:
+        return state
+    cfg = _cfg(ch)
+    st = await _status(ch, cfg, with_qr=False)
+    if st["status"] == "UNREACHABLE" and state.get("status"):
+        return state  # the gateway is restarting: keep what we knew
+    state.update(
+        status=st["status"],
+        provider=cfg.provider,
+        checked_at=datetime.now(UTC).isoformat(),
+        **({"number": st["number"]} if st.get("number") else {}),
+    )
+    ch.state = state
+    await db.commit()
+    if cfg.provider == "waha" and st["status"] == "WORKING":
+        try:  # a lost webhook may also mean an old webhook config
+            await whatsapp.waha_ensure_webhook(cfg, waha_hook(ch.id))
+        except Exception:  # noqa: BLE001 - next check tries again
+            log.info("could not update the WAHA webhook for %s", ch.id)
+    return state
 
 
 async def _status(ch: Channel, cfg: whatsapp.Config, with_qr: bool = True) -> dict[str, Any]:
@@ -176,8 +215,14 @@ async def whatsapp_status(
             await whatsapp.waha_ensure_webhook(cfg, waha_hook(ch.id))
         except Exception:  # noqa: BLE001 - next status check tries again
             log.info("could not update the WAHA webhook for %s", ch.id)
-    if st.get("number") and st["number"] != (ch.state or {}).get("number"):
-        ch.state = {**(ch.state or {}), "number": st["number"]}
+    if st["status"] != "UNREACHABLE":  # keep the stored state in step with what we saw
+        ch.state = {
+            **(ch.state or {}),
+            "status": st["status"],
+            "provider": cfg.provider,
+            "checked_at": datetime.now(UTC).isoformat(),
+            **({"number": st["number"]} if st.get("number") else {}),
+        }
         await db.commit()
     out = {**st, "id": ch.id, "name": ch.name, "enabled": ch.enabled}
     if manage:
@@ -284,7 +329,11 @@ async def waha_webhook(
         payload = json.loads(body or b"{}")
         if payload.get("event") == "session.status":
             new = ((payload.get("payload") or {}).get("status")) or "UNKNOWN"
-            ch.state = {**(ch.state or {}), "status": new}
+            ch.state = {
+                **(ch.state or {}),
+                "status": new,
+                "checked_at": datetime.now(UTC).isoformat(),
+            }
             await db.commit()
     items = whatsapp.parse_waha(payload)
     if items:
