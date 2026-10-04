@@ -238,7 +238,7 @@ function AddDepartment({ branchId }: { branchId: string }) {
   );
 }
 
-function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean }) {
+function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: boolean; guide?: string }) {
   const [edit, setEdit] = useState(false);
   const [editKey, setEditKey] = useState(0);
   const [confirm, setConfirm] = useState(false);
@@ -246,7 +246,7 @@ function BranchCard({ branch, canManage }: { branch: Branch; canManage: boolean 
   const [teamKey, setTeamKey] = useState(0);
   const qc = useQueryClient();
   return (
-    <Card className="overflow-hidden">
+    <Card data-guide={guide} className="overflow-hidden">
       <header className="flex items-start gap-3 border-b border-border px-4 py-3.5 sm:px-5">
         <span
           aria-hidden
@@ -352,7 +352,7 @@ export function OrganizationPage() {
         title="Organization"
         description="Each company you run is a branch. Departments inside a branch hold its agents and SOPs."
         actions={canManage ? (
-          <Button onClick={openCreate}>
+          <Button data-guide="organization.add" onClick={openCreate}>
             <PlusIcon size={16} weight="bold" /> New branch
           </Button>
         ) : null}
@@ -382,7 +382,7 @@ export function OrganizationPage() {
             />
           </StatGrid>
           <AnimatePresence initial={false}>
-            {branches.map((b) => (
+            {branches.map((b, i) => (
               <motion.div
                 key={b.id}
                 layout={!reduce}
@@ -391,7 +391,7 @@ export function OrganizationPage() {
                 exit={reduce ? undefined : { opacity: 0, scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
               >
-                <BranchCard branch={b} canManage={canManage} />
+                <BranchCard branch={b} canManage={canManage} guide={i === 0 ? "organization.company" : undefined} />
               </motion.div>
             ))}
           </AnimatePresence>

@@ -51,7 +51,7 @@ export function ChatPage() {
   }
 
   const list = (
-    <aside aria-label="Agents" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+    <aside data-guide="chat.agents" aria-label="Agents" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
       <div className="grid gap-2 border-b border-border p-2.5">
         <label className="relative block">
           <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />

@@ -96,6 +96,7 @@ export function BrainPage() {
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
         <Segmented<BrainTab>
+          guide="brain.tabs"
           label="Brain sections"
           value={tab}
           onChange={(v) => go({ tab: v })}

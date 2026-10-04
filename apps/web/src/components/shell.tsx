@@ -21,7 +21,7 @@ import { branchesQuery, meQuery, systemStatusQuery } from "@/lib/queries";
 import { useBranch, usePalette, useTheme, type ThemePref } from "@/lib/stores";
 import { useSignOut } from "@/lib/use-sign-out";
 import { cn, initials } from "@/lib/utils";
-import { ALL_NAV, NAV, TAB_BAR, type NavItem } from "@/nav";
+import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
 import { LogoMark, Wordmark } from "./logo";
@@ -51,6 +51,9 @@ function useVisibleNav() {
   );
 }
 
+/** Tutorial, Guide and Present: never permission-gated, always reachable. */
+const HELP_ITEMS: NavItem[] = NAV.find((s) => s.title === HELP_SECTION)?.items ?? [];
+
 function isActive(pathname: string, to: string) {
   return to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
 }
@@ -63,8 +66,41 @@ function PhaseTag({ phase }: { phase: string }) {
   );
 }
 
+/** Pinned under the scrolling nav so help is never below the fold. */
+function HelpFooter({ pathname }: { pathname: string }) {
+  return (
+    <nav aria-label="Help" className="shrink-0 border-t border-border px-3 py-2.5">
+      <p className="hidden px-2.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
+        {HELP_SECTION}
+      </p>
+      <ul className="grid gap-0.5 xl:grid-cols-3 xl:gap-1">
+        {HELP_ITEMS.map((item) => {
+          const active = isActive(pathname, item.to);
+          const IconCmp = item.icon;
+          return (
+            <li key={item.to} className="min-w-0">
+              <Link
+                to={item.to}
+                title={item.blurb}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex h-9 items-center justify-center rounded-sm transition-colors xl:h-auto xl:flex-col xl:gap-0.5 xl:py-1.5",
+                  active ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-fg",
+                )}
+              >
+                <IconCmp size={19} weight={active ? "fill" : "regular"} />
+                <span className="sr-only text-[11.5px] leading-tight font-medium xl:not-sr-only">{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
 function Sidebar() {
-  const sections = useVisibleNav();
+  const sections = useVisibleNav().filter((s) => s.title !== HELP_SECTION);
   const waiting = useWaiting();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
@@ -119,6 +155,7 @@ function Sidebar() {
           </div>
         ))}
       </nav>
+      <HelpFooter pathname={pathname} />
     </aside>
   );
 }
@@ -133,7 +170,7 @@ function BranchSwitcher() {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button className="flex h-9 min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-surface-2">
+        <button className="flex h-9 max-w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-surface-2">
           <span
             aria-hidden
             className="size-2.5 shrink-0 rounded-full"
@@ -314,6 +351,7 @@ function MobileTabBar() {
   const tabs = TAB_BAR.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
   const moreActive = !tabs.some((t) => isActive(pathname, t.to));
   const moreSections = sections
+    .filter((s) => s.title !== HELP_SECTION)
     .map((s) => ({ ...s, items: s.items.filter((i) => !TAB_BAR.includes(i.to)) }))
     .filter((s) => s.items.length);
 
@@ -354,6 +392,27 @@ function MobileTabBar() {
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 [-webkit-overflow-scrolling:touch]"
               style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
             >
+            <div className="mb-4 grid grid-cols-3 gap-2" role="list" aria-label="Help">
+              {HELP_ITEMS.map((item) => {
+                const IconCmp = item.icon;
+                const active = isActive(pathname, item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    role="listitem"
+                    to={item.to}
+                    onClick={() => setMore(false)}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 rounded-full border px-2 py-2 text-[12.5px] font-medium",
+                      active ? "border-accent/40 bg-accent-soft text-accent" : "border-border bg-surface-2/60 text-fg",
+                    )}
+                  >
+                    <IconCmp size={17} weight={active ? "fill" : "regular"} className={active ? undefined : "text-accent"} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
             {moreSections.map((s) => (
               <div key={s.title} className="mb-3">
                 <p className="mb-1.5 px-1 text-[12px] font-medium text-muted">{s.title}</p>

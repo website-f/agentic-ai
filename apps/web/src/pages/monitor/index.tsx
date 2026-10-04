@@ -79,7 +79,7 @@ function Watch({ agent }: { agent: Agent }) {
           </Link>
         </div>
       </Card>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div data-guide="monitor.screen" className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         {browser ? <Screen session={browser} events={feed} live={!!data.task} /> : <Desk agent={agent} line={last} thinking={thinking} />}
         <section aria-label="What it is doing" className="flex max-h-[34rem] min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
           <h3 className="flex items-center gap-2.5 border-b border-border px-4 py-2.5 text-[13.5px] font-semibold">
@@ -156,7 +156,7 @@ function Wall({ onOpen }: { onOpen: (id: string) => void }) {
     return <EmptyState icon={SquaresFourIcon} title="Nobody is working right now" body="When agents start tasks, each one shows here with its live screen. Pick an agent to see its history and last steps." />;
   }
   return (
-    <section aria-label="Agents at work" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+    <section data-guide="monitor.screen" aria-label="Agents at work" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 2xl:grid-cols-3">
       {data.map((item) => <WallTile key={item.agent.id} item={item} onOpen={() => onOpen(item.agent.id)} />)}
     </section>
   );
@@ -177,7 +177,7 @@ export function MonitorPage() {
         <EmptyState icon={EyeIcon} title="No agents to watch" body="Create an agent first." />
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
-          <nav aria-label="Agents" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:flex-col lg:overflow-y-auto lg:pb-0 [&::-webkit-scrollbar]:hidden">
+          <nav data-guide="monitor.agents" aria-label="Agents" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-7rem)] lg:flex-col lg:overflow-y-auto lg:pb-0 [&::-webkit-scrollbar]:hidden">
             <button onClick={() => navigate({ to: "/monitor", search: {}, replace: true })} aria-current={!selected}
               className={cn("flex max-w-60 shrink-0 items-center gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 text-left transition-colors lg:w-full lg:max-w-none", !selected ? "border-accent bg-accent-soft/60" : "border-border bg-surface hover:bg-surface-2")}>
               <IconTile icon={SquaresFourIcon} size="sm" className="rounded-full" />

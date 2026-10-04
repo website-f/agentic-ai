@@ -166,7 +166,7 @@ export function LoginsPage() {
       <PageHeader
         title="Logins"
         description="Website logins your agents may use. They are encrypted, never shown again, never sent to an AI model, and typed in only on the sites listed. Every use is in the activity log."
-        actions={<Button onClick={() => setAdding((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Save a login</Button>}
+        actions={<Button data-guide="logins.new" onClick={() => setAdding((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Save a login</Button>}
       />
       {isLoading ? (
         <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[4.5rem] rounded-[var(--radius-md)]" />)}</div>
@@ -177,7 +177,7 @@ export function LoginsPage() {
           action={<Button onClick={() => setAdding((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Save a login</Button>} />
       ) : (
         <Section title="Saved logins" description={`${logins.length} ${logins.length === 1 ? "login" : "logins"} agents may use.`}>
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+          <ul data-guide="logins.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
             {logins.map((l) => <LoginRow key={l.id} l={l} agentNames={names} />)}
           </ul>
         </Section>

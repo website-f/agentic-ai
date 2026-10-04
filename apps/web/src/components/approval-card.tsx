@@ -76,7 +76,20 @@ const DECIDED_TONE: Partial<Record<Approval["status"], "ok" | "danger" | "info" 
   cancelled: "neutral",
 };
 
-export function ApprovalCard({ approval: a, canDecide, showTask = true }: { approval: Approval; canDecide: boolean; showTask?: boolean }) {
+export function ApprovalCard({
+  approval: a,
+  canDecide,
+  showTask = true,
+  guide,
+  guideActions,
+}: {
+  approval: Approval;
+  canDecide: boolean;
+  showTask?: boolean;
+  /** data-guide ids for the Guide's screenshots: the card, and its decision buttons. */
+  guide?: string;
+  guideActions?: string;
+}) {
   const qc = useQueryClient();
   const [answer, setAnswer] = useState("");
   const [denying, setDenying] = useState(false);
@@ -100,7 +113,7 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
   const expiresIn = timeAgo(a.expires_at);
 
   return (
-    <article className={cn("flex h-full min-w-0 flex-col gap-3 rounded-[var(--radius-md)] border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]", pending && a.risk === "high" && !question && !budget ? "border-danger/35" : pending ? "border-warn/35" : "border-border")}>
+    <article data-guide={guide} className={cn("flex h-full min-w-0 flex-col gap-3 rounded-[var(--radius-md)] border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]", pending && a.risk === "high" && !question && !budget ? "border-danger/35" : pending ? "border-warn/35" : "border-border")}>
       <header className="flex items-start gap-3">
         <AgentAvatar name={a.agent_name} color={a.agent_color} size="sm" />
         <div className="min-w-0 flex-1">
@@ -137,7 +150,7 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
 
       {pending && canDecide ? (
         question ? (
-          <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (answer.trim()) decide.mutate({ decision: "answer", answer }); }}>
+          <form data-guide={guideActions} className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (answer.trim()) decide.mutate({ decision: "answer", answer }); }}>
             {options.length ? (
               <div className="flex flex-wrap gap-2" role="group" aria-label="Quick answers">
                 {options.map((o) => (
@@ -165,12 +178,12 @@ export function ApprovalCard({ approval: a, canDecide, showTask = true }: { appr
             </div>
           </form>
         ) : budget ? (
-          <div className="flex flex-wrap gap-2">
+          <div data-guide={guideActions} className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> Allow more</Button>
             <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => setDenying(true)}>Stop the task</Button>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div data-guide={guideActions} className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> Approve once</Button>
             {/* High-risk tools ask every time: "always" is only offered for the rest. */}
             {a.risk !== "high" ? <Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "always" })}>Always allow for {a.agent_name}</Button> : null}

@@ -3,6 +3,8 @@ import {
   BriefcaseIcon,
   BooksIcon,
   BookOpenTextIcon,
+  BookBookmarkIcon,
+  PresentationIcon,
   BlueprintIcon,
   FlowArrowIcon,
   FileTextIcon,
@@ -75,7 +77,9 @@ export type AppPath =
   | "/activity"
   | "/settings"
   | "/settings/members"
-  | "/tutorial";
+  | "/tutorial"
+  | "/guide"
+  | "/present";
 
 export interface NavItem {
   to: AppPath;
@@ -119,10 +123,10 @@ export const NAV: NavSection[] = [
   {
     title: "Work",
     items: [
-      { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card onto an agent to assign it." },
+      { to: "/tasks", label: "Tasks", icon: KanbanIcon, blurb: "A board of everything your agents are working on, from triage to done. Drag a card between columns to move it along." },
       { to: "/approvals", label: "Approvals", icon: SealCheckIcon, blurb: "Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification." },
       { to: "/reports", label: "Reports", icon: ClipboardTextIcon, blurb: "What agents wrote up for you: summaries and tables you can sort and download." },
-      { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, switch its model for a session, and turn a conversation into a task." },
+      { to: "/chat", label: "Chat", icon: ChatsCircleIcon, blurb: "Talk to any agent directly, by typing or with your voice, and pick up past conversations." },
     ],
   },
   {
@@ -178,6 +182,8 @@ export const NAV: NavSection[] = [
     title: "Help",
     items: [
       { to: "/tutorial", label: "Tutorial", icon: BookOpenTextIcon, blurb: "Learn the whole system for your role, step by step: from your first agent to giving tasks and seeing results." },
+      { to: "/guide", label: "Guide", icon: BookBookmarkIcon, blurb: "The user guide: every page explained with annotated screenshots, how-to steps and short videos." },
+      { to: "/present", label: "Present", icon: PresentationIcon, blurb: "A ready-made presentation of Agentic Office for clients and colleagues, full screen, built from real screenshots." },
     ],
   },
 ];
@@ -185,4 +191,7 @@ export const NAV: NavSection[] = [
 export const ALL_NAV: NavItem[] = NAV.flatMap((s) => s.items);
 
 /** Phone bottom bar: the four things you reach for one-handed, plus More. */
+/** The Help group: pinned at the foot of the sidebar and at the top of the phone More sheet. */
+export const HELP_SECTION = "Help";
+
 export const TAB_BAR: AppPath[] = ["/office", "/tasks", "/approvals", "/chat"];

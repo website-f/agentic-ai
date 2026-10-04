@@ -6,8 +6,11 @@ export function cn(...inputs: ClassValue[]): string {
 }
 
 export function initials(name: string): string {
-  // "Rafi #2" (a helper) reads R2, not R#.
-  const parts = name.trim().replace(/#/g, "").split(/\s+/).filter(Boolean);
+  // "Aisyah (Finance)" reads AF: the name, then the role in brackets (starter teams, P19).
+  const role = name.match(/^([^(]*\p{L}[^(]*)\(\s*([\p{L}\p{N}])/u);
+  if (role) return (((role[1] ?? "").trim()[0] ?? "") + (role[2] ?? "")).toUpperCase();
+  // "Rafi #2" (a helper) reads R2, not R#; other punctuation never becomes an initial.
+  const parts = name.trim().replace(/[^\p{L}\p{N}\s]/gu, "").split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return (first + last).toUpperCase() || "?";

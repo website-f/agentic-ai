@@ -8,6 +8,10 @@ describe("utils", () => {
     expect(initials("Siti Nur Aisyah")).toBe("SA");
     expect(initials("ahmad")).toBe("A");
     expect(initials("   ")).toBe("?");
+    expect(initials("Aisyah (Finance)")).toBe("AF");
+    expect(initials("Joanne (Customer Service)")).toBe("JC");
+    expect(initials("Rafi #2")).toBe("R2");
+    expect(initials("Dr. Lim")).toBe("DL");
   });
 
   it("timeAgo handles never, just now and past times", () => {

@@ -94,7 +94,7 @@ export function LibraryToggle({ file, disabled }: { file: LibraryFile; disabled?
   };
 
   return (
-    <section className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
+    <section data-guide="files.library" className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
       <div className="flex items-start gap-3">
         <BooksIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">

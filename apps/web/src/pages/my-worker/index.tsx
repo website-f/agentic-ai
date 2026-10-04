@@ -152,6 +152,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
                 {twin.role} · {twin.department_name ? `${twin.department_name}, ` : ""}{twin.branch_name}
               </p>
               <motion.div
+                data-guide="my-worker.status"
                 key={st.label}
                 initial={reduce ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -175,7 +176,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:w-80">
+          <div data-guide="my-worker.actions" className="grid grid-cols-2 gap-2 lg:w-80">
             <QuickAction icon={KanbanIcon} label="Give a task" onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })} />
             <QuickAction icon={ChatCircleDotsIcon} label="Chat" onClick={() => navigate({ to: "/twin", search: { tab: "chat" } })} />
             <QuickAction icon={ClockIcon} label="Change hours" onClick={() => setDialog("hours")} />
@@ -227,7 +228,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
           <Today data={data} twin={twin} />
         </div>
         <div className="grid min-w-0 content-start gap-5">
-          <Card>
+          <Card data-guide="my-worker.week">
             <CardHeader
               title="Its week"
               description={twin.work_hours ? data.hours_label : "No hours set: it works any time."}

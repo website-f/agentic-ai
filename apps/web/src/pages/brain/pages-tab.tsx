@@ -58,7 +58,7 @@ function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: s
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
-      <SearchInput value={filter} onChange={setFilter} placeholder="Filter pages" className="basis-auto" />
+      <SearchInput guide="brain.search" value={filter} onChange={setFilter} placeholder="Filter pages" className="basis-auto" />
       <nav aria-label="Vault pages" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1.5">
         {groups.map(([folder, items]) => (
           <details key={folder || "(top)"} open className="group min-w-0">

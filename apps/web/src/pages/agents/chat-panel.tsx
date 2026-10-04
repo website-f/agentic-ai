@@ -169,7 +169,7 @@ export function ChatPanel({ agent, canWrite, className }: { agent: Agent; canWri
         </ol>
       </div>
 
-      <form className="flex items-end gap-2 border-t border-border p-2.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <form data-guide="chat.composer" className="flex items-end gap-2 border-t border-border p-2.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <label htmlFor={`chat-${agent.id}`} className="sr-only">Message {agent.name}</label>
         <textarea
           id={`chat-${agent.id}`}

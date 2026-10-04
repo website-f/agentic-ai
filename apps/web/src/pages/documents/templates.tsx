@@ -255,7 +255,7 @@ export function TemplatesPage() {
         description="The documents you write again and again. Start from a starter, write your own with {{placeholders}}, or upload your own Word file and keep its layout."
         actions={<>
           <Button variant="outline" onClick={() => setWord(true)}><UploadSimpleIcon size={16} /> Word template</Button>
-          <Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New template</Button>
+          <Button data-guide="templates.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New template</Button>
         </>} />
       <DocSteps current="/templates" />
       <Toolbar>
@@ -270,7 +270,7 @@ export function TemplatesPage() {
       {isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-60" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !shown.length ? <EmptyState icon={StackIcon} title={templates.length ? "Nothing matches" : "No templates"} body="Create one, or upload a Word file with {{placeholders}}." />
-        : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{shown.map((t) => <TemplateCard key={t.id} t={t} onUse={() => setUsing(t)} />)}</div>}
+        : <div data-guide="templates.list" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{shown.map((t) => <TemplateCard key={t.id} t={t} onUse={() => setUsing(t)} />)}</div>}
       {creating ? <TemplateDialog onClose={() => setCreating(false)} /> : null}
       {word ? <WordDialog onClose={() => setWord(false)} /> : null}
       {using ? <NewDocumentDialog template={using} onClose={() => setUsing(null)}

@@ -326,6 +326,7 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
 
       {canManage && available.length ? (
         <Section
+          guide="ai-engine.add"
           title="Connect a provider"
           description="Addresses are filled in. You only need the key."
           actions={

@@ -180,8 +180,8 @@ export function ReportsPage() {
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
           <div className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]", current && "hidden lg:grid")}>
-            <SearchInput value={q} onChange={setQ} placeholder="Search reports" className="flex-none basis-auto" />
-            <div className="min-h-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+            <SearchInput guide="reports.search" value={q} onChange={setQ} placeholder="Search reports" className="flex-none basis-auto" />
+            <div data-guide="reports.list" className="min-h-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
               <p className="border-b border-border px-4 py-2 text-[12px] text-muted tabular">
                 {needle ? `${list.total ?? shown.length} matching` : `${list.total ?? shown.length} ${(list.total ?? shown.length) === 1 ? "report" : "reports"}`}
               </p>

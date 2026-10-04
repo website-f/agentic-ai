@@ -274,7 +274,7 @@ export function MeetingsPage() {
     <Page>
       <PageHeader title="Meetings"
         description="Agents talk a decision through for a few rounds and come back with one summary: the decision, why, what else they weighed and who disagreed. Meetings recommend; they never approve anything."
-        actions={canWrite ? <Button onClick={() => go({ new: 1 })}><PlusIcon size={16} weight="bold" /> New meeting</Button> : null} />
+        actions={canWrite ? <Button data-guide="meetings.new" onClick={() => go({ new: 1 })}><PlusIcon size={16} weight="bold" /> New meeting</Button> : null} />
       {isLoading ? <Skeleton className="h-48 rounded-[var(--radius-md)]" /> : error || !meetings ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : !meetings.length ? (
         <EmptyState icon={UsersThreeIcon} title="No meetings yet"
           body="Agents call one with the consult tool when a task needs several views. You can also start one yourself, on its own or for a task."
@@ -288,13 +288,13 @@ export function MeetingsPage() {
           </StatGrid>
           {running.length ? (
             <Section title="Happening now" description="Open one to follow along or add a point.">
-              <ListCard className="border-accent/40">{running.map(row)}</ListCard>
+              <ListCard data-guide="meetings.list" className="border-accent/40">{running.map(row)}</ListCard>
             </Section>
           ) : null}
           {past.length ? (
             <Section title="Past meetings">
               <div className="grid gap-3">
-                <ListCard>{past.map(row)}</ListCard>
+                <ListCard data-guide={running.length ? undefined : "meetings.list"}>{past.map(row)}</ListCard>
                 <LoadMore noun="meetings" shown={past.length} total={pastList.total} hasMore={pastList.hasMore} loading={pastList.isFetchingMore} onLoad={pastList.loadMore} />
               </div>
             </Section>

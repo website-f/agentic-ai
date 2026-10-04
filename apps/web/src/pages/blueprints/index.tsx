@@ -201,7 +201,7 @@ function ApplyDialog({ bp, open, onOpenChange }: { bp: Blueprint; open: boolean;
   );
 }
 
-function BlueprintCard({ bp, canManage, toolCount }: { bp: Blueprint; canManage: boolean; toolCount: number | null }) {
+function BlueprintCard({ bp, canManage, toolCount, guideApply }: { bp: Blueprint; canManage: boolean; toolCount: number | null; guideApply?: string }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -246,7 +246,7 @@ function BlueprintCard({ bp, canManage, toolCount }: { bp: Blueprint; canManage:
       </div>
       {canManage ? (
         <div className="border-t border-border px-4 py-3">
-          <Button size="sm" variant="outline" className="w-full max-sm:h-9" onClick={() => setApplying(true)}><UserPlusIcon size={14} /> Apply to an agent</Button>
+          <Button data-guide={guideApply} size="sm" variant="outline" className="w-full max-sm:h-9" onClick={() => setApplying(true)}><UserPlusIcon size={14} /> Apply to an agent</Button>
         </div>
       ) : null}
       {editing ? <BlueprintDialog editing={bp} open onOpenChange={setEditing} /> : null}
@@ -275,7 +275,7 @@ export function BlueprintsPage() {
     <Page>
       <PageHeader title="Blueprints"
         description="Reusable role packages — instructions, model, tool scope, SOPs and skills. Define a role once, then stamp it onto any agent so it starts as a trained specialist."
-        actions={canManage ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New blueprint</Button> : null} />
+        actions={canManage ? <Button data-guide="blueprints.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New blueprint</Button> : null} />
       {isLoading ? <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 rounded-[var(--radius-md)]" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !blueprints.length ? (
@@ -293,7 +293,7 @@ export function BlueprintsPage() {
             {blueprints.length > 6 ? <SearchInput value={q} onChange={setQ} placeholder="Search blueprints" className="sm:max-w-80" /> : null}
             {shown.length ? (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {shown.map((bp) => <BlueprintCard key={bp.id} bp={bp} canManage={canManage} toolCount={toolsFor(bp)} />)}
+                {shown.map((bp, i) => <BlueprintCard key={bp.id} bp={bp} canManage={canManage} toolCount={toolsFor(bp)} guideApply={i === 0 ? "blueprints.apply" : undefined} />)}
               </div>
             ) : <EmptyState icon={BlueprintIcon} title="No blueprint matches" body="Try another word." />}
           </>

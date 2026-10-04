@@ -44,6 +44,7 @@ export function AIEnginePage() {
         description="Connect the AI providers your agents use, decide which models answer first, and see what every call costs."
       />
       <Segmented
+        guide="ai-engine.tabs"
         label="AI Engine sections"
         value={tab}
         onChange={(v) => navigate({ to: "/ai-engine", search: { tab: v }, replace: true })}

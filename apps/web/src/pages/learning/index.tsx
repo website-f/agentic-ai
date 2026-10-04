@@ -133,7 +133,7 @@ function Trend({ now, prev }: { now: number | null; prev: number | null }) {
 function Kpis({ o, onWaiting }: { o: LearningOverview; onWaiting: () => void }) {
   const learned = o.proposals.approved_auto + o.proposals.approved_human;
   return (
-    <StatGrid className={KPI_GRID}>
+    <StatGrid guide="learning.kpis" className={KPI_GRID}>
       <Stat label="Skills learned" value={learned} icon={GraduationCapIcon} tone="accent"
         hint={learned ? `${o.proposals.approved_auto} by autopilot` : `${o.skills.active} active in all`} />
       <Stat label="Waiting for review" value={o.proposals.waiting} icon={SealQuestionIcon} tone={o.proposals.waiting ? "warn" : "neutral"}
@@ -170,7 +170,7 @@ function Autopilot({ o }: { o: LearningOverview }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
-    <Card aria-label="Autopilot" className="flex flex-col">
+    <Card data-guide="learning.autopilot" aria-label="Autopilot" className="flex flex-col">
       <CardHeader icon={<IconTile icon={RobotIcon} tone="violet" size="sm" />} title="Autopilot"
         description="Which learned skill changes go live without a person." />
       <CardBody className="grid gap-3">
@@ -314,7 +314,7 @@ function Recent({ o, onOpen, brief }: { o: LearningOverview; onOpen: (id: string
   const [all, setAll] = useState(false);
   const shown = all ? o.recent : o.recent.slice(0, RECENT_FIRST);
   return (
-    <Card aria-label="Recent decisions" className="overflow-hidden">
+    <Card data-guide="learning.recent" aria-label="Recent decisions" className="overflow-hidden">
       <CardHeader icon={<IconTile icon={SealQuestionIcon} tone="accent" size="sm" />} title="Recent decisions"
         description="Skill changes agents proposed, how they tested, and who switched them on." />
       {o.recent.length ? (

@@ -404,7 +404,7 @@ export function PacksPage() {
     <Page>
       <PageHeader title="Packs"
         description="Everything a submission needs, in one PDF. List the items, let the office match the company's files and documents (or ask an agent to prepare the rest), then compile it with a cover and contents for you to check and submit."
-        actions={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New pack</Button>} />
+        actions={<Button data-guide="packs.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New pack</Button>} />
       <DocSteps current="/packs" />
       {packs.length ? (
         <StatGrid className="lg:grid-cols-3">
@@ -421,7 +421,7 @@ export function PacksPage() {
             body="A pack is a checklist (registration certificate, bank statements, profile, quotation, cover letter) matched to real files and compiled into one PDF."
             action={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New pack</Button>} />
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div data-guide="packs.list" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {packs.map((p) => (
               <Card key={p.id} interactive className="p-0">
                 <button type="button" onClick={() => navigate({ search: { p: p.id } })} className="grid h-full w-full content-start gap-4 p-4 text-left">

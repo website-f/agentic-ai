@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- A fictional supplier portal, shown as an agent's live browser screen in the demo. -->
+<html><head><meta charset="utf-8"><style>
+body{margin:0;font:14px/1.45 "Segoe UI",Arial,sans-serif;background:#f3f5f8;color:#1d2733}
+.top{background:#0f4c81;color:#fff;padding:14px 28px;display:flex;align-items:center;gap:14px}
+.logo{width:30px;height:30px;border-radius:6px;background:#f2a900;display:grid;place-items:center;font-weight:700;color:#0f4c81}
+.top b{font-size:17px}.top span{margin-left:auto;opacity:.85}
+.nav{background:#fff;border-bottom:1px solid #dde3ea;padding:0 28px;display:flex;gap:24px}
+.nav a{padding:12px 0;color:#4a5866;text-decoration:none}.nav a.on{color:#0f4c81;border-bottom:3px solid #0f4c81;font-weight:600}
+main{max-width:980px;margin:26px auto;background:#fff;border:1px solid #dde3ea;border-radius:8px;padding:26px 30px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:#6a7785;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 24px}
+label{display:block;font-size:12px;color:#6a7785;margin-bottom:4px}
+.in{border:1px solid #c9d2dc;border-radius:5px;padding:8px 10px;background:#fbfcfd}
+table{width:100%;border-collapse:collapse;margin-top:20px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #e6eaef}
+th{background:#f6f8fa;font-size:12px;color:#5a6876}td.r,th.r{text-align:right}
+.tot{display:flex;justify-content:flex-end;gap:40px;margin-top:12px;font-size:15px}.tot b{font-size:17px}
+.act{display:flex;justify-content:flex-end;gap:12px;margin-top:22px}
+.btn{padding:10px 20px;border-radius:5px;border:1px solid #c9d2dc;background:#fff}
+.btn.p{background:#f2a900;border-color:#f2a900;font-weight:600;outline:3px solid rgba(242,169,0,.35)}
+</style></head><body>
+<div class="top"><div class="logo">S</div><b>Sinar Pack Supplies</b> Customer Portal<span>Nusantara Logistics Sdn Bhd</span></div>
+<div class="nav"><a>Dashboard</a><a class="on">Purchase orders</a><a>Deliveries</a><a>Invoices</a><a>Price list</a></div>
+<main>
+<h1>New purchase order</h1><div class="sub">Review the order and press Submit to send it to Sinar Pack.</div>
+<div class="grid">
+<div><label>PO number</label><div class="in">PO-NL-1043</div></div>
+<div><label>Order date</label><div class="in">5 Oct 2026</div></div>
+<div><label>Deliver to</label><div class="in">Shah Alam hub, Lot 7, Jalan Utas 15/7</div></div>
+<div><label>Requested delivery</label><div class="in">9 Oct 2026, 8:00 to 12:00</div></div>
+</div>
+<table><tr><th>Item</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price (RM)</th><th class="r">Amount (RM)</th></tr>
+<tr><td>SF-500</td><td>Stretch film 500mm x 23 micron</td><td class="r">120 rolls</td><td class="r">18.40</td><td class="r">2,208.00</td></tr></table>
+<div class="tot"><span>Subtotal RM 2,208.00</span><span>SST included</span><b>Total RM 2,208.00</b></div>
+<div class="act"><span class="btn">Save draft</span><span class="btn p">Submit order</span></div>
+</main></body></html>

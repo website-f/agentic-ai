@@ -9,15 +9,18 @@ export function SearchInput({
   placeholder = "Search",
   label,
   className,
+  guide,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   label?: string;
   className?: string;
+  /** data-guide id for the Guide's screenshots. */
+  guide?: string;
 }) {
   return (
-    <label className={cn("relative block min-w-0 flex-1 basis-56", className)}>
+    <label data-guide={guide} className={cn("relative block min-w-0 flex-1 basis-56", className)}>
       <span className="sr-only">{label ?? placeholder}</span>
       <MagnifyingGlassIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
       <input

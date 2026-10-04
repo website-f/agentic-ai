@@ -14,6 +14,7 @@ export function Stat({
   onClick,
   active,
   className,
+  guide,
 }: {
   label: string;
   value: ReactNode;
@@ -23,6 +24,8 @@ export function Stat({
   onClick?: () => void;
   active?: boolean;
   className?: string;
+  /** data-guide id for the Guide's screenshots. */
+  guide?: string;
 }) {
   const body = (
     <>
@@ -41,14 +44,14 @@ export function Stat({
     className,
   );
   return onClick ? (
-    <button type="button" onClick={onClick} aria-pressed={active} className={cls}>
+    <button type="button" data-guide={guide} onClick={onClick} aria-pressed={active} className={cls}>
       {body}
     </button>
   ) : (
-    <div className={cls}>{body}</div>
+    <div data-guide={guide} className={cls}>{body}</div>
   );
 }
 
-export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>{children}</div>;
+export function StatGrid({ children, className, guide }: { children: ReactNode; className?: string; /** data-guide id for the Guide's screenshots. */ guide?: string }) {
+  return <div data-guide={guide} className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>{children}</div>;
 }

@@ -17,6 +17,7 @@ export function Segmented<T extends string>({
   label,
   className,
   size = "md",
+  guide,
 }: {
   value: T;
   onChange: (v: T) => void;
@@ -24,6 +25,8 @@ export function Segmented<T extends string>({
   label: string;
   className?: string;
   size?: "sm" | "md";
+  /** data-guide id for the Guide's screenshots. */
+  guide?: string;
 }) {
   const id = useId();
   const list = useRef<HTMLDivElement>(null);
@@ -39,6 +42,7 @@ export function Segmented<T extends string>({
       ref={list}
       role="tablist"
       aria-label={label}
+      data-guide={guide}
       className={cn(
         "flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,

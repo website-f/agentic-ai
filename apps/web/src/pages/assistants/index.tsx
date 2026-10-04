@@ -231,7 +231,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
 
   return (
     // Exactly the screen that is left: app header, page title (desktop), tabs, tab bar (phones).
-    <div className="flex h-[calc(100dvh-18.5rem-env(safe-area-inset-bottom))] min-h-[24rem] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface md:h-[calc(100dvh-18rem)] lg:h-[calc(100dvh-17.5rem)]">
+    <div data-guide="assistants.chat" className="flex h-[calc(100dvh-18.5rem-env(safe-area-inset-bottom))] min-h-[24rem] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface md:h-[calc(100dvh-18rem)] lg:h-[calc(100dvh-17.5rem)]">
       <div className="flex items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
         <AgentAvatar name={agent.name} color={agent.color} size="sm" working={send.isPending} />
         <div className="min-w-0 flex-1">
@@ -254,7 +254,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
               <p className="text-[17px] font-semibold">Hi, I'm {agent.name}.</p>
               <p className="mt-1 text-[13px] text-muted">Ask me about the company, your team or your inbox. Try one of these:</p>
             </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+            <div data-guide="assistants.quick" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
               {prompts.slice(0, 6).map((p) => (
                 <button key={p.label} type="button" onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
                   className="group flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border px-3.5 py-3 text-left text-[13px] transition-colors hover:border-accent/50 hover:bg-accent-soft/40">
@@ -310,7 +310,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       </div>
 
       {messages.length ? (
-        <div className="flex gap-1.5 overflow-x-auto border-t border-border px-3 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div data-guide="assistants.quick" className="flex gap-1.5 overflow-x-auto border-t border-border px-3 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {prompts.map((p) => (
             <button key={p.label} type="button" disabled={send.isPending}
               onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
@@ -542,7 +542,7 @@ function Connections({ home }: { home: AssistantsHome }) {
     </li>
   );
   return (
-    <Card>
+    <Card data-guide="assistants.connections">
       <CardHeader title="Connections" description="What your assistants can reach on your behalf." />
       <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
         {row(EnvelopeSimpleIcon, "info", "Gmail",
@@ -694,7 +694,7 @@ export function AssistantsPage() {
                   <PlusIcon size={15} /> Add
                 </button>
               </div>
-              <div className="mt-4 hidden gap-2 lg:grid">
+              <div data-guide="assistants.connections" className="mt-4 hidden gap-2 lg:grid">
                 <p className="text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">Connected</p>
                 <span className="flex min-w-0 items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={cn("shrink-0", home.google.account ? "text-ok" : "text-muted")} /> <span className="truncate">{home.google.account ? home.google.account.email : "Gmail not connected"}</span></span>
                 {home.google.account ? (

@@ -64,12 +64,13 @@ const MOVES: Partial<Record<TaskStatus, TaskStatus[]>> = {
   cancelled: ["triage"],
 };
 
-function TaskCard({ task, onOpen, draggable }: { task: Task; onOpen: () => void; draggable: boolean }) {
+function TaskCard({ task, onOpen, draggable, guide }: { task: Task; onOpen: () => void; draggable: boolean; guide?: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, disabled: !draggable, data: { status: task.status } });
   const urgent = task.priority === "high" || task.priority === "urgent";
   return (
     <button
       ref={setNodeRef}
+      data-guide={guide}
       style={{ transform: CSS.Translate.toString(transform) }}
       // Drag attributes only when draggable: otherwise dnd-kit adds aria-disabled, which tells
       // screen readers the card itself is disabled although it still opens the task.
@@ -115,7 +116,7 @@ type BoardStatus = "triage" | "ready" | "running" | "blocked" | "review" | "done
 const useColumn = (status: string, q: string, enabled = true) =>
   usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q }, { enabled });
 
-function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom }: { status: TaskStatus; hint: string; empty: string; list: PagedList<Task>; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null }) {
+function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, guideFirst }: { status: TaskStatus; hint: string; empty: string; list: PagedList<Task>; onOpen: (id: string) => void; canWrite: boolean; dragFrom: TaskStatus | null; guideFirst?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const scroller = useRef<HTMLDivElement>(null);
   const tasks = list.items;
@@ -146,8 +147,8 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom }: { sta
         <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-muted tabular ring-1 ring-border/70">{list.total ?? tasks.length}</span>
       </header>
       <div ref={scroller} className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain p-2">
-        {tasks.map((t) => (
-          <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} />
+        {tasks.map((t, i) => (
+          <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} guide={guideFirst && i === 0 ? "tasks.card" : undefined} />
         ))}
         {!tasks.length ? (
           <p className={cn("grid min-h-24 place-items-center rounded-[var(--radius-sm)] border border-dashed border-border px-3 py-6 text-center text-[12px] text-muted", dragFrom && allowed && "border-accent/60 text-accent")}>
@@ -330,7 +331,7 @@ export function TasksPage() {
       <PageHeader
         title="Tasks"
         description="Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves."
-        actions={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New task</Button> : null}
+        actions={canWrite ? <Button data-guide="tasks.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New task</Button> : null}
       />
       {isLoading ? (
         <BoardSkeleton />
@@ -342,7 +343,7 @@ export function TasksPage() {
       ) : (
         <DndContext sensors={sensors} onDragStart={(e) => setDragFrom((e.active.data.current?.status as TaskStatus) ?? null)} onDragCancel={() => setDragFrom(null)} onDragEnd={onDragEnd}>
           <Toolbar className="xl:max-w-md">
-            <SearchInput value={q} onChange={setQ} placeholder="Filter by title, agent or label" />
+            <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder="Filter by title, agent or label" />
             {/* Column switcher for the swipeable board; wide screens see all six columns at once. */}
             <div ref={tabs} className="min-w-0 xl:hidden">
               <Segmented size="sm" label="Board columns" value={col} onChange={jump}
@@ -351,11 +352,12 @@ export function TasksPage() {
           </Toolbar>
           <div
             ref={board}
+            data-guide="tasks.columns"
             onScroll={onBoardScroll}
             className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:thin] sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-8 lg:scroll-px-8 lg:px-8 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0"
           >
             {COLUMNS.map((c) => (
-              <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? "No match in this column." : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask} canWrite={canWrite} dragFrom={dragFrom} />
+              <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? "No match in this column." : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask} canWrite={canWrite} dragFrom={dragFrom} guideFirst={c.status === firstBusy} />
             ))}
           </div>
           {closedTotal ? (

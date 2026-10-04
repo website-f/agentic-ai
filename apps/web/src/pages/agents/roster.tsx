@@ -29,11 +29,12 @@ export function agentState(a: Agent, live?: { status: string } | undefined): { l
   return { label: "Available", tone: "info" };
 }
 
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({ agent, guide }: { agent: Agent; guide?: string }) {
   const live = useLive((s) => s.agentStatus[agent.id]);
   const state = agentState(agent, live);
   return (
     <Link
+      data-guide={guide}
       to="/agents/$agentId"
       params={{ agentId: agent.id }}
       className="group flex min-w-0 flex-col gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-accent/40 hover:shadow-[var(--shadow-soft)]"
@@ -93,6 +94,7 @@ export function AgentsPage() {
     return out;
   }, [inBranch, branch, scope]);
   const total = sections.reduce((n, s) => n + s.agents.length, 0);
+  const firstAgentId = sections.find((s) => s.agents.length)?.agents[0]?.id;
   const statuses = useLive((s) => s.agentStatus);
   const counts = useMemo(() => {
     const here = sections.flatMap((s) => s.agents);
@@ -117,7 +119,7 @@ export function AgentsPage() {
             </Link>
           </Button>
         ) : canManage && branch ? (
-          <Button asChild>
+          <Button asChild data-guide="agents.new">
             <Link to="/agents/new">
               <PlusIcon size={16} weight="bold" /> New agent
             </Link>
@@ -147,6 +149,7 @@ export function AgentsPage() {
           </StatGrid>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Segmented
+              guide="agents.org"
               label="Show agents by"
               value={view === "org" ? "org" : "departments"}
               onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
@@ -179,7 +182,7 @@ export function AgentsPage() {
                     <span aria-hidden className="h-px flex-1 bg-border" />
                   </h2>
                   <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {s.agents.map((a) => <AgentCard key={a.id} agent={a} />)}
+                    {s.agents.map((a) => <AgentCard key={a.id} agent={a} guide={a.id === firstAgentId ? "agents.card" : undefined} />)}
                   </div>
                 </section>
               ))}

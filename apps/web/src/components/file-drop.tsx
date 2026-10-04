@@ -35,12 +35,14 @@ export function FileStatus({ f }: { f: Pick<DocFile, "status" | "expired" | "exp
   return null;
 }
 
-export function FileDrop({ branchId, taskId, onUploaded, compact, className }: {
+export function FileDrop({ branchId, taskId, onUploaded, compact, className, guide }: {
   branchId?: string | null;
   taskId?: string | null;
   onUploaded?: (files: DocFile[]) => void;
   compact?: boolean;
   className?: string;
+  /** data-guide id for the Guide's screenshots. */
+  guide?: string;
 }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
@@ -75,6 +77,7 @@ export function FileDrop({ branchId, taskId, onUploaded, compact, className }: {
 
   return (
     <div
+      data-guide={guide}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}

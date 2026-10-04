@@ -66,6 +66,8 @@ const page = {
   myWorker: lazyRouteComponent(() => import("@/pages/my-worker"), "MyWorkerPage"),
   tutorial: lazyRouteComponent(() => import("@/pages/tutorial"), "TutorialPage"),
   impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
+  guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
+  present: lazyRouteComponent(() => import("@/pages/present"), "PresentPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -449,6 +451,38 @@ const impactRoute = createRoute({
   component: page.impact,
 });
 
+// The user guide: an index of every page, and one page's annotated doc at /guide/<page id>.
+const guideRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/guide",
+  validateSearch: (s: Record<string, unknown>): { q?: string } => ({ q: str(s.q) }),
+  component: page.guide,
+});
+const guidePageRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/guide/$page",
+  validateSearch: (s: Record<string, unknown>): { state?: string; device?: "desktop" | "mobile" } => ({
+    state: str(s.state),
+    device: s.device === "mobile" || s.device === "desktop" ? s.device : undefined,
+  }),
+  component: page.guide,
+});
+
+// The client presentation runs full screen without the app shell (like /welcome), signed in.
+const presentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/present",
+  validateSearch: (s: Record<string, unknown>): { s?: number } => {
+    const n = Number(s.s);
+    return { s: Number.isInteger(n) && n > 0 ? n : undefined };
+  },
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+  },
+  component: page.present,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -464,6 +498,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   changePasswordRoute,
   welcomeRoute,
+  presentRoute,
   appRoute.addChildren([
     homeRoute,
     assistantsRoute,
@@ -505,6 +540,8 @@ const routeTree = rootRoute.addChildren([
     myWorkerRoute,
     tutorialRoute,
     impactRoute,
+    guideRoute,
+    guidePageRoute,
   ]),
 ]);
 

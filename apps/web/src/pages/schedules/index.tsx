@@ -138,14 +138,14 @@ function SchedulesTab({ canWrite }: { canWrite: boolean }) {
       {data.length ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-muted">{data.length} {data.length === 1 ? "schedule" : "schedules"}, {data.filter((x) => x.enabled).length} running</p>
-          {canWrite ? <Button className="max-sm:w-full" onClick={() => setEditing("new")}><PlusIcon size={16} weight="bold" /> New schedule</Button> : null}
+          {canWrite ? <Button data-guide="schedules.new" className="max-sm:w-full" onClick={() => setEditing("new")}><PlusIcon size={16} weight="bold" /> New schedule</Button> : null}
         </div>
       ) : null}
       {!data.length ? (
         <EmptyState icon={CalendarCheckIcon} title="Nothing scheduled" body="Give an agent recurring work: a morning cash position, a weekly supplier check, a month-end summary."
-          action={canWrite ? <Button onClick={() => setEditing("new")}><PlusIcon size={16} weight="bold" /> New schedule</Button> : undefined} />
+          action={canWrite ? <Button data-guide="schedules.new" onClick={() => setEditing("new")}><PlusIcon size={16} weight="bold" /> New schedule</Button> : undefined} />
       ) : (
-        <ListCard>
+        <ListCard data-guide="schedules.list">
           {data.map((s) => (
             <li key={s.id} className="grid min-w-0 gap-3 px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
               <button type="button" className="flex min-w-0 items-start gap-3 rounded-sm text-left disabled:cursor-default" onClick={() => canWrite && setEditing(s)} disabled={!canWrite}>
@@ -202,7 +202,7 @@ function RunsTab() {
       ) : (
         <>
           {/* Phones: one card per run. */}
-          <ListCard className="md:hidden">
+          <ListCard data-guide="schedules.list" className="md:hidden">
             {data.map((r) => {
               const d = r.detail as { started?: number; pinged?: number } | null;
               return (
@@ -222,7 +222,7 @@ function RunsTab() {
             })}
           </ListCard>
           {/* Larger screens: the ledger as a table. */}
-          <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface max-md:hidden">
+          <div data-guide="schedules.list" className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface max-md:hidden">
             <table className="w-full min-w-[640px] text-left text-[13px]">
               <thead className="border-b border-border bg-surface-2/50 text-[12px] text-muted">
                 <tr><th className="px-4 py-2.5 font-medium">Job</th><th className="px-4 py-2.5 font-medium">Status</th><th className="px-4 py-2.5 font-medium">Started</th><th className="px-4 py-2.5 font-medium">Took</th><th className="px-4 py-2.5 font-medium">Result</th></tr>

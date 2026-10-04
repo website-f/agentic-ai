@@ -1,0 +1,2131 @@
+{
+ "generated_at": "2026-10-04T17:20:17.195Z",
+ "source": "Sample companies (demo data)",
+ "shots": {
+  "home": {
+   "desktop": {
+    "src": "/guide-media/shots/home-desktop.webp",
+    "w": 1440,
+    "h": 1139,
+    "boxes": [
+     {
+      "id": "home.health",
+      "x": 0.6175,
+      "y": 0.5571,
+      "w": 0.345,
+      "h": 0.333
+     },
+     {
+      "id": "home.getting-started",
+      "x": 0.2069,
+      "y": 0.5571,
+      "w": 0.3967,
+      "h": 0.333
+     },
+     {
+      "id": "home.shortcuts",
+      "x": 0.2069,
+      "y": 0.9076,
+      "w": 0.7556,
+      "h": 0.0571
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/home-mobile.webp",
+    "w": 786,
+    "h": 4146,
+    "boxes": [
+     {
+      "id": "home.health",
+      "x": 0.0407,
+      "y": 0.6458,
+      "w": 0.9186,
+      "h": 0.1744
+     },
+     {
+      "id": "home.getting-started",
+      "x": 0.0407,
+      "y": 0.3997,
+      "w": 0.9186,
+      "h": 0.2365
+     },
+     {
+      "id": "home.shortcuts",
+      "x": 0.0407,
+      "y": 0.8298,
+      "w": 0.9186,
+      "h": 0.1056
+     }
+    ]
+   }
+  },
+  "my-worker": {
+   "desktop": {
+    "src": "/guide-media/shots/my-worker-desktop.webp",
+    "w": 1440,
+    "h": 999,
+    "boxes": [
+     {
+      "id": "my-worker.status",
+      "x": 0.2743,
+      "y": 0.2715,
+      "w": 0.2587,
+      "h": 0.0638
+     },
+     {
+      "id": "my-worker.actions",
+      "x": 0.7229,
+      "y": 0.2336,
+      "w": 0.2222,
+      "h": 0.1041
+     },
+     {
+      "id": "my-worker.week",
+      "x": 0.6469,
+      "y": 0.5513,
+      "w": 0.3156,
+      "h": 0.4079
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/my-worker-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "my-worker.status",
+      "x": 0.2672,
+      "y": 0.1411,
+      "w": 0.6489,
+      "h": 0.0299
+     },
+     {
+      "id": "my-worker.actions",
+      "x": 0.084,
+      "y": 0.2008,
+      "w": 0.8321,
+      "h": 0.0488
+     },
+     {
+      "id": "my-worker.week",
+      "x": 0.0407,
+      "y": 0.671,
+      "w": 0.9186,
+      "h": 0.2082
+     }
+    ]
+   }
+  },
+  "my-worker:welcome": {
+   "desktop": {
+    "src": "/guide-media/shots/my-worker-welcome-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/my-worker-welcome-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "assistants": {
+   "desktop": {
+    "src": "/guide-media/shots/assistants-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "assistants.chat",
+      "x": 0.3806,
+      "y": 0.2847,
+      "w": 0.5972,
+      "h": 0.6889
+     },
+     {
+      "id": "assistants.quick",
+      "x": 0.3813,
+      "y": 0.8514,
+      "w": 0.5958,
+      "h": 0.0456
+     },
+     {
+      "id": "assistants.connections",
+      "x": 0.1917,
+      "y": 0.3636,
+      "w": 0.1778,
+      "h": 0.0769
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/assistants-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "assistants.chat",
+      "x": 0.0407,
+      "y": 0.2441,
+      "w": 0.9186,
+      "h": 0.6526
+     },
+     {
+      "id": "assistants.quick",
+      "x": 0.0433,
+      "y": 0.7418,
+      "w": 0.9135,
+      "h": 0.0481
+     }
+    ]
+   }
+  },
+  "overview": {
+   "desktop": {
+    "src": "/guide-media/shots/overview-desktop.webp",
+    "w": 1440,
+    "h": 1150,
+    "boxes": [
+     {
+      "id": "overview.range",
+      "x": 0.7836,
+      "y": 0.1254,
+      "w": 0.1942,
+      "h": 0.033
+     },
+     {
+      "id": "overview.branches",
+      "x": 0.1917,
+      "y": 0.7945,
+      "w": 0.7861,
+      "h": 0.17
+     },
+     {
+      "id": "overview.briefing",
+      "x": 0.656,
+      "y": 0.4159,
+      "w": 0.3218,
+      "h": 0.3613
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/overview-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "overview.range",
+      "x": 0.0407,
+      "y": 0.0919,
+      "w": 0.9186,
+      "h": 0.0216
+     },
+     {
+      "id": "overview.branches",
+      "x": 0.0407,
+      "y": 0.8828,
+      "w": 0.9186,
+      "h": 0.1172
+     },
+     {
+      "id": "overview.briefing",
+      "x": 0.0407,
+      "y": 0.6401,
+      "w": 0.9186,
+      "h": 0.2333
+     }
+    ]
+   }
+  },
+  "impact": {
+   "desktop": {
+    "src": "/guide-media/shots/impact-desktop.webp",
+    "w": 1440,
+    "h": 1800,
+    "boxes": [
+     {
+      "id": "impact.totals",
+      "x": 0.2069,
+      "y": 0.1146,
+      "w": 0.7556,
+      "h": 0.0731
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/impact-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "impact.totals",
+      "x": 0.0407,
+      "y": 0.1343,
+      "w": 0.9186,
+      "h": 0.1759
+     }
+    ]
+   }
+  },
+  "impact:roi": {
+   "desktop": {
+    "src": "/guide-media/shots/impact-roi-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "impact.roi",
+      "x": 0.2069,
+      "y": 0.0797,
+      "w": 0.7556,
+      "h": 0.4531
+     },
+     {
+      "id": "impact.try",
+      "x": 0.2188,
+      "y": 0.8842,
+      "w": 0.0529,
+      "h": 0.0356
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/impact-roi-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "impact.roi",
+      "x": 0.0407,
+      "y": 0.0848,
+      "w": 0.9186,
+      "h": 0.8589
+     }
+    ]
+   }
+  },
+  "office": {
+   "desktop": {
+    "src": "/guide-media/shots/office-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "office.floor",
+      "x": 0.1694,
+      "y": 0.1233,
+      "w": 0.6306,
+      "h": 0.8767
+     },
+     {
+      "id": "office.branch",
+      "x": 0.2315,
+      "y": 0.0744,
+      "w": 0.2956,
+      "h": 0.0356
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/office-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "office.floor",
+      "x": 0,
+      "y": 0.135,
+      "w": 1,
+      "h": 0.7805
+     },
+     {
+      "id": "office.branch",
+      "x": 0.0305,
+      "y": 0.081,
+      "w": 0.4197,
+      "h": 0.0376
+     }
+    ]
+   }
+  },
+  "office:agent": {
+   "desktop": {
+    "src": "/guide-media/shots/office-agent-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/office-agent-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "monitor": {
+   "desktop": {
+    "src": "/guide-media/shots/monitor-desktop.webp",
+    "w": 1440,
+    "h": 1786,
+    "boxes": [
+     {
+      "id": "monitor.agents",
+      "x": 0.1917,
+      "y": 0.1155,
+      "w": 0.1778,
+      "h": 0.5711
+     },
+     {
+      "id": "monitor.screen",
+      "x": 0.3833,
+      "y": 0.1155,
+      "w": 0.5944,
+      "h": 0.8665
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/monitor-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "monitor.agents",
+      "x": 0,
+      "y": 0.1052,
+      "w": 1,
+      "h": 0.0283
+     },
+     {
+      "id": "monitor.screen",
+      "x": 0.0407,
+      "y": 0.1428,
+      "w": 0.9186,
+      "h": 0.8572
+     }
+    ]
+   }
+  },
+  "agents": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "agents.new",
+      "x": 0.8746,
+      "y": 0.1581,
+      "w": 0.0879,
+      "h": 0.0444
+     },
+     {
+      "id": "agents.card",
+      "x": 0.2069,
+      "y": 0.4942,
+      "w": 0.2463,
+      "h": 0.2031
+     },
+     {
+      "id": "agents.org",
+      "x": 0.2069,
+      "y": 0.3914,
+      "w": 0.1586,
+      "h": 0.0422
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "agents.new",
+      "x": 0.0407,
+      "y": 0.0919,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "agents.card",
+      "x": 0.0407,
+      "y": 0.2905,
+      "w": 0.9186,
+      "h": 0.0717
+     },
+     {
+      "id": "agents.org",
+      "x": 0.0407,
+      "y": 0.2433,
+      "w": 0.5813,
+      "h": 0.0216
+     }
+    ]
+   }
+  },
+  "agents:new": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-new-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-new-mobile.webp",
+    "w": 786,
+    "h": 3172,
+    "boxes": []
+   }
+  },
+  "agents:detail": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-detail-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-detail-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": []
+   }
+  },
+  "tasks": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "tasks.new",
+      "x": 0.8956,
+      "y": 0.1581,
+      "w": 0.0822,
+      "h": 0.0444
+     },
+     {
+      "id": "tasks.columns",
+      "x": 0.1917,
+      "y": 0.2958,
+      "w": 0.7861,
+      "h": 0.6711
+     },
+     {
+      "id": "tasks.card",
+      "x": 0.3303,
+      "y": 0.3744,
+      "w": 0.1116,
+      "h": 0.1719
+     },
+     {
+      "id": "tasks.search",
+      "x": 0.1917,
+      "y": 0.2292,
+      "w": 0.3111,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tasks-mobile.webp",
+    "w": 786,
+    "h": 1812,
+    "boxes": [
+     {
+      "id": "tasks.new",
+      "x": 0.0407,
+      "y": 0.2384,
+      "w": 0.9186,
+      "h": 0.0442
+     },
+     {
+      "id": "tasks.columns",
+      "x": 0,
+      "y": 0.4305,
+      "w": 1,
+      "h": 0.5232
+     },
+     {
+      "id": "tasks.card",
+      "x": 0.0636,
+      "y": 0.5086,
+      "w": 0.7684,
+      "h": 0.1502
+     },
+     {
+      "id": "tasks.search",
+      "x": 0.0407,
+      "y": 0.3091,
+      "w": 0.9186,
+      "h": 0.0442
+     }
+    ]
+   }
+  },
+  "tasks:new": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-new-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tasks-new-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "tasks:sheet": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-sheet-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tasks-sheet-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "approvals": {
+   "desktop": {
+    "src": "/guide-media/shots/approvals-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "approvals.card",
+      "x": 0.2069,
+      "y": 0.2711,
+      "w": 0.3736,
+      "h": 0.3642
+     },
+     {
+      "id": "approvals.actions",
+      "x": 0.2188,
+      "y": 0.4867,
+      "w": 0.35,
+      "h": 0.0356
+     },
+     {
+      "id": "approvals.history",
+      "x": 0.2069,
+      "y": 0.2067,
+      "w": 0.1182,
+      "h": 0.0422
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/approvals-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "approvals.card",
+      "x": 0.0407,
+      "y": 0.1266,
+      "w": 0.9186,
+      "h": 0.1734
+     },
+     {
+      "id": "approvals.actions",
+      "x": 0.084,
+      "y": 0.2268,
+      "w": 0.8321,
+      "h": 0.0338
+     },
+     {
+      "id": "approvals.history",
+      "x": 0.0407,
+      "y": 0.0957,
+      "w": 0.4332,
+      "h": 0.0216
+     }
+    ]
+   }
+  },
+  "reports": {
+   "desktop": {
+    "src": "/guide-media/shots/reports-desktop.webp",
+    "w": 1440,
+    "h": 1034,
+    "boxes": [
+     {
+      "id": "reports.list",
+      "x": 0.1917,
+      "y": 0.2498,
+      "w": 0.2333,
+      "h": 0.7502
+     },
+     {
+      "id": "reports.search",
+      "x": 0.1917,
+      "y": 0.1995,
+      "w": 0.2333,
+      "h": 0.0387
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/reports-mobile.webp",
+    "w": 786,
+    "h": 2988,
+    "boxes": [
+     {
+      "id": "reports.list",
+      "x": 0.0407,
+      "y": 0.1712,
+      "w": 0.9186,
+      "h": 0.7646
+     },
+     {
+      "id": "reports.search",
+      "x": 0.0407,
+      "y": 0.1364,
+      "w": 0.9186,
+      "h": 0.0268
+     }
+    ]
+   }
+  },
+  "chat": {
+   "desktop": {
+    "src": "/guide-media/shots/chat-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "chat.agents",
+      "x": 0.1917,
+      "y": 0.2067,
+      "w": 0.2,
+      "h": 0.7511
+     },
+     {
+      "id": "chat.composer",
+      "x": 0.4035,
+      "y": 0.8889,
+      "w": 0.5736,
+      "h": 0.0678
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/chat-mobile.webp",
+    "w": 786,
+    "h": 2236,
+    "boxes": [
+     {
+      "id": "chat.agents",
+      "x": 0.0407,
+      "y": 0.1822,
+      "w": 0.9186,
+      "h": 0.8175
+     }
+    ]
+   }
+  },
+  "chat:conversation": {
+   "desktop": {
+    "src": "/guide-media/shots/chat-conversation-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "chat.agents",
+      "x": 0.1917,
+      "y": 0.2067,
+      "w": 0.2,
+      "h": 0.7511
+     },
+     {
+      "id": "chat.composer",
+      "x": 0.4035,
+      "y": 0.8889,
+      "w": 0.5736,
+      "h": 0.0678
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/chat-conversation-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "chat.composer",
+      "x": 0.0433,
+      "y": 0.8357,
+      "w": 0.9135,
+      "h": 0.0739
+     }
+    ]
+   }
+  },
+  "company-kit": {
+   "desktop": {
+    "src": "/guide-media/shots/company-kit-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "company-kit.fields",
+      "x": 0.2069,
+      "y": 0.3664,
+      "w": 0.4972,
+      "h": 0.3689
+     },
+     {
+      "id": "company-kit.save",
+      "x": 0.7299,
+      "y": 0.7919,
+      "w": 0.2208,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/company-kit-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "company-kit.fields",
+      "x": 0.0407,
+      "y": 0.3566,
+      "w": 0.9186,
+      "h": 0.2249
+     },
+     {
+      "id": "company-kit.save",
+      "x": 0.0407,
+      "y": 0.9437,
+      "w": 0.9186,
+      "h": 0.0188
+     }
+    ]
+   }
+  },
+  "files": {
+   "desktop": {
+    "src": "/guide-media/shots/files-desktop.webp",
+    "w": 1440,
+    "h": 1262,
+    "boxes": [
+     {
+      "id": "files.upload",
+      "x": 0.2069,
+      "y": 0.2157,
+      "w": 0.2491,
+      "h": 0.2092
+     },
+     {
+      "id": "files.list",
+      "x": 0.2069,
+      "y": 0.4883,
+      "w": 0.7556,
+      "h": 0.4861
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/files-mobile.webp",
+    "w": 786,
+    "h": 4254,
+    "boxes": [
+     {
+      "id": "files.upload",
+      "x": 0.0407,
+      "y": 0.1459,
+      "w": 0.9186,
+      "h": 0.1172
+     },
+     {
+      "id": "files.list",
+      "x": 0.0407,
+      "y": 0.4664,
+      "w": 0.9186,
+      "h": 0.4885
+     }
+    ]
+   }
+  },
+  "files:sheet": {
+   "desktop": {
+    "src": "/guide-media/shots/files-sheet-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "files.library",
+      "x": 0.4396,
+      "y": 0.569,
+      "w": 0.5438,
+      "h": 0.0744
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/files-sheet-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "files.library",
+      "x": 0.0509,
+      "y": 0.8072,
+      "w": 0.8982,
+      "h": 0.1006
+     }
+    ]
+   }
+  },
+  "templates": {
+   "desktop": {
+    "src": "/guide-media/shots/templates-desktop.webp",
+    "w": 1440,
+    "h": 1142,
+    "boxes": [
+     {
+      "id": "templates.new",
+      "x": 0.8599,
+      "y": 0.1246,
+      "w": 0.1026,
+      "h": 0.035
+     },
+     {
+      "id": "templates.list",
+      "x": 0.2069,
+      "y": 0.2909,
+      "w": 0.7556,
+      "h": 0.6808
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/templates-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "templates.new",
+      "x": 0.5127,
+      "y": 0.1014,
+      "w": 0.4466,
+      "h": 0.0188
+     },
+     {
+      "id": "templates.list",
+      "x": 0.0407,
+      "y": 0.216,
+      "w": 0.9186,
+      "h": 0.784
+     }
+    ]
+   }
+  },
+  "documents": {
+   "desktop": {
+    "src": "/guide-media/shots/documents-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "documents.new",
+      "x": 0.8548,
+      "y": 0.1581,
+      "w": 0.1077,
+      "h": 0.0444
+     },
+     {
+      "id": "documents.list",
+      "x": 0.2069,
+      "y": 0.5314,
+      "w": 0.7556,
+      "h": 0.3719
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/documents-mobile.webp",
+    "w": 786,
+    "h": 3174,
+    "boxes": [
+     {
+      "id": "documents.new",
+      "x": 0.0407,
+      "y": 0.1361,
+      "w": 0.9186,
+      "h": 0.0252
+     },
+     {
+      "id": "documents.list",
+      "x": 0.0407,
+      "y": 0.483,
+      "w": 0.9186,
+      "h": 0.4562
+     }
+    ]
+   }
+  },
+  "documents:editor": {
+   "desktop": {
+    "src": "/guide-media/shots/documents-editor-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/documents-editor-mobile.webp",
+    "w": 786,
+    "h": 3022,
+    "boxes": []
+   }
+  },
+  "packs": {
+   "desktop": {
+    "src": "/guide-media/shots/packs-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "packs.new",
+      "x": 0.878,
+      "y": 0.1806,
+      "w": 0.0845,
+      "h": 0.0444
+     },
+     {
+      "id": "packs.list",
+      "x": 0.2069,
+      "y": 0.4872,
+      "w": 0.7556,
+      "h": 0.1728
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/packs-mobile.webp",
+    "w": 786,
+    "h": 2096,
+    "boxes": [
+     {
+      "id": "packs.new",
+      "x": 0.0407,
+      "y": 0.2254,
+      "w": 0.9186,
+      "h": 0.0382
+     },
+     {
+      "id": "packs.list",
+      "x": 0.0407,
+      "y": 0.5961,
+      "w": 0.9186,
+      "h": 0.312
+     }
+    ]
+   }
+  },
+  "meetings": {
+   "desktop": {
+    "src": "/guide-media/shots/meetings-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "meetings.list",
+      "x": 0.2069,
+      "y": 0.4522,
+      "w": 0.7556,
+      "h": 0.2278
+     },
+     {
+      "id": "meetings.new",
+      "x": 0.8635,
+      "y": 0.1806,
+      "w": 0.099,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/meetings-mobile.webp",
+    "w": 786,
+    "h": 2022,
+    "boxes": [
+     {
+      "id": "meetings.list",
+      "x": 0.0407,
+      "y": 0.5618,
+      "w": 0.9186,
+      "h": 0.3427
+     },
+     {
+      "id": "meetings.new",
+      "x": 0.0407,
+      "y": 0.2337,
+      "w": 0.9186,
+      "h": 0.0396
+     }
+    ]
+   }
+  },
+  "broadcasts": {
+   "desktop": {
+    "src": "/guide-media/shots/broadcasts-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "broadcasts.compose",
+      "x": 0.1917,
+      "y": 0.2292,
+      "w": 0.3847,
+      "h": 0.7225
+     },
+     {
+      "id": "broadcasts.list",
+      "x": 0.5931,
+      "y": 0.2892,
+      "w": 0.3847,
+      "h": 0.1961
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/broadcasts-mobile.webp",
+    "w": 786,
+    "h": 2694,
+    "boxes": [
+     {
+      "id": "broadcasts.compose",
+      "x": 0.0407,
+      "y": 0.1513,
+      "w": 0.9186,
+      "h": 0.5408
+     },
+     {
+      "id": "broadcasts.list",
+      "x": 0.0407,
+      "y": 0.75,
+      "w": 0.9186,
+      "h": 0.1785
+     }
+    ]
+   }
+  },
+  "sops": {
+   "desktop": {
+    "src": "/guide-media/shots/sops-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "sops.new",
+      "x": 0.8805,
+      "y": 0.1581,
+      "w": 0.082,
+      "h": 0.0444
+     },
+     {
+      "id": "sops.list",
+      "x": 0.2069,
+      "y": 0.2958,
+      "w": 0.7556,
+      "h": 0.5997
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/sops-mobile.webp",
+    "w": 786,
+    "h": 2184,
+    "boxes": [
+     {
+      "id": "sops.new",
+      "x": 0.0407,
+      "y": 0.1978,
+      "w": 0.9186,
+      "h": 0.0366
+     },
+     {
+      "id": "sops.list",
+      "x": 0.0407,
+      "y": 0.3608,
+      "w": 0.9186,
+      "h": 0.5513
+     }
+    ]
+   }
+  },
+  "library": {
+   "desktop": {
+    "src": "/guide-media/shots/library-desktop.webp",
+    "w": 1440,
+    "h": 1337,
+    "boxes": [
+     {
+      "id": "library.upload",
+      "x": 0.2069,
+      "y": 0.1543,
+      "w": 0.3736,
+      "h": 0.2352
+     },
+     {
+      "id": "library.sources",
+      "x": 0.2069,
+      "y": 0.5761,
+      "w": 0.7556,
+      "h": 0.4001
+     },
+     {
+      "id": "library.search",
+      "x": 0.2069,
+      "y": 0.4045,
+      "w": 0.7556,
+      "h": 0.1133
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/library-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "library.upload",
+      "x": 0.0407,
+      "y": 0.1315,
+      "w": 0.9186,
+      "h": 0.1527
+     },
+     {
+      "id": "library.sources",
+      "x": 0.0407,
+      "y": 0.5502,
+      "w": 0.9186,
+      "h": 0.4498
+     },
+     {
+      "id": "library.search",
+      "x": 0.0407,
+      "y": 0.4112,
+      "w": 0.9186,
+      "h": 0.0987
+     }
+    ]
+   }
+  },
+  "brain": {
+   "desktop": {
+    "src": "/guide-media/shots/brain-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "brain.tabs",
+      "x": 0.1917,
+      "y": 0.3933,
+      "w": 0.2742,
+      "h": 0.0422
+     },
+     {
+      "id": "brain.search",
+      "x": 0.1917,
+      "y": 0.5111,
+      "w": 0.2,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/brain-mobile.webp",
+    "w": 786,
+    "h": 4238,
+    "boxes": [
+     {
+      "id": "brain.tabs",
+      "x": 0.0407,
+      "y": 0.2535,
+      "w": 0.9186,
+      "h": 0.0217
+     },
+     {
+      "id": "brain.search",
+      "x": 0.0407,
+      "y": 0.3073,
+      "w": 0.9186,
+      "h": 0.0189
+     }
+    ]
+   }
+  },
+  "skills": {
+   "desktop": {
+    "src": "/guide-media/shots/skills-desktop.webp",
+    "w": 1440,
+    "h": 1515,
+    "boxes": [
+     {
+      "id": "skills.list",
+      "x": 0.2069,
+      "y": 0.3078,
+      "w": 0.7556,
+      "h": 0.671
+     },
+     {
+      "id": "skills.proposals",
+      "x": 0.3979,
+      "y": 0.1361,
+      "w": 0.1826,
+      "h": 0.0832
+     },
+     {
+      "id": "skills.teach",
+      "x": 0.7448,
+      "y": 0.0939,
+      "w": 0.132,
+      "h": 0.0264
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/skills-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "skills.list",
+      "x": 0.0407,
+      "y": 0.3431,
+      "w": 0.9186,
+      "h": 0.6569
+     },
+     {
+      "id": "skills.proposals",
+      "x": 0.5153,
+      "y": 0.141,
+      "w": 0.444,
+      "h": 0.0532
+     },
+     {
+      "id": "skills.teach",
+      "x": 0.0407,
+      "y": 0.1109,
+      "w": 0.4837,
+      "h": 0.0188
+     }
+    ]
+   }
+  },
+  "skills:sheet": {
+   "desktop": {
+    "src": "/guide-media/shots/skills-sheet-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/skills-sheet-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "learning": {
+   "desktop": {
+    "src": "/guide-media/shots/learning-desktop.webp",
+    "w": 1440,
+    "h": 1800,
+    "boxes": [
+     {
+      "id": "learning.kpis",
+      "x": 0.1917,
+      "y": 0.1356,
+      "w": 0.7861,
+      "h": 0.1467
+     },
+     {
+      "id": "learning.autopilot",
+      "x": 0.656,
+      "y": 0.2933,
+      "w": 0.3218,
+      "h": 0.3131
+     },
+     {
+      "id": "learning.recent",
+      "x": 0.1917,
+      "y": 0.6175,
+      "w": 0.4505,
+      "h": 0.3825
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/learning-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "learning.kpis",
+      "x": 0.0407,
+      "y": 0.1717,
+      "w": 0.9186,
+      "h": 0.1708
+     },
+     {
+      "id": "learning.autopilot",
+      "x": 0.0407,
+      "y": 0.563,
+      "w": 0.9186,
+      "h": 0.3048
+     }
+    ]
+   }
+  },
+  "blueprints": {
+   "desktop": {
+    "src": "/guide-media/shots/blueprints-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "blueprints.new",
+      "x": 0.8598,
+      "y": 0.1581,
+      "w": 0.1027,
+      "h": 0.0444
+     },
+     {
+      "id": "blueprints.apply",
+      "x": 0.2188,
+      "y": 0.5836,
+      "w": 0.2227,
+      "h": 0.0356
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/blueprints-mobile.webp",
+    "w": 786,
+    "h": 2660,
+    "boxes": [
+     {
+      "id": "blueprints.new",
+      "x": 0.0407,
+      "y": 0.1624,
+      "w": 0.9186,
+      "h": 0.0301
+     },
+     {
+      "id": "blueprints.apply",
+      "x": 0.084,
+      "y": 0.5391,
+      "w": 0.8321,
+      "h": 0.0271
+     }
+    ]
+   }
+  },
+  "workflows": {
+   "desktop": {
+    "src": "/guide-media/shots/workflows-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "workflows.new",
+      "x": 0.8583,
+      "y": 0.1806,
+      "w": 0.1042,
+      "h": 0.0444
+     },
+     {
+      "id": "workflows.list",
+      "x": 0.2069,
+      "y": 0.4806,
+      "w": 0.7556,
+      "h": 0.2241
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workflows-mobile.webp",
+    "w": 786,
+    "h": 2756,
+    "boxes": [
+     {
+      "id": "workflows.new",
+      "x": 0.0407,
+      "y": 0.1714,
+      "w": 0.9186,
+      "h": 0.029
+     },
+     {
+      "id": "workflows.list",
+      "x": 0.0407,
+      "y": 0.4882,
+      "w": 0.9186,
+      "h": 0.3014
+     }
+    ]
+   }
+  },
+  "workflows:editor": {
+   "desktop": {
+    "src": "/guide-media/shots/workflows-editor-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "workflows.run",
+      "x": 0.9153,
+      "y": 0.014,
+      "w": 0.0486,
+      "h": 0.0356
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workflows-editor-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "workflows.run",
+      "x": 0.397,
+      "y": 0.0672,
+      "w": 0.0967,
+      "h": 0.0376
+     }
+    ]
+   }
+  },
+  "schedules": {
+   "desktop": {
+    "src": "/guide-media/shots/schedules-desktop.webp",
+    "w": 1440,
+    "h": 968,
+    "boxes": [
+     {
+      "id": "schedules.new",
+      "x": 0.8594,
+      "y": 0.4238,
+      "w": 0.1031,
+      "h": 0.0413
+     },
+     {
+      "id": "schedules.list",
+      "x": 0.2069,
+      "y": 0.4817,
+      "w": 0.7556,
+      "h": 0.4853
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/schedules-mobile.webp",
+    "w": 786,
+    "h": 3288,
+    "boxes": [
+     {
+      "id": "schedules.new",
+      "x": 0.0407,
+      "y": 0.3528,
+      "w": 0.9186,
+      "h": 0.0243
+     },
+     {
+      "id": "schedules.list",
+      "x": 0.0407,
+      "y": 0.3869,
+      "w": 0.9186,
+      "h": 0.5549
+     }
+    ]
+   }
+  },
+  "logins": {
+   "desktop": {
+    "src": "/guide-media/shots/logins-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "logins.new",
+      "x": 0.8686,
+      "y": 0.1581,
+      "w": 0.0939,
+      "h": 0.0444
+     },
+     {
+      "id": "logins.list",
+      "x": 0.2069,
+      "y": 0.2892,
+      "w": 0.7556,
+      "h": 0.4294
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/logins-mobile.webp",
+    "w": 786,
+    "h": 2032,
+    "boxes": [
+     {
+      "id": "logins.new",
+      "x": 0.0407,
+      "y": 0.2126,
+      "w": 0.9186,
+      "h": 0.0394
+     },
+     {
+      "id": "logins.list",
+      "x": 0.0407,
+      "y": 0.3287,
+      "w": 0.9186,
+      "h": 0.4577
+     }
+    ]
+   }
+  },
+  "ai-engine": {
+   "desktop": {
+    "src": "/guide-media/shots/ai-engine-desktop.webp",
+    "w": 1440,
+    "h": 1232,
+    "boxes": [
+     {
+      "id": "ai-engine.tabs",
+      "x": 0.1917,
+      "y": 0.1674,
+      "w": 0.3351,
+      "h": 0.0308
+     },
+     {
+      "id": "ai-engine.add",
+      "x": 0.1917,
+      "y": 0.775,
+      "w": 0.7861,
+      "h": 0.1993
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/ai-engine-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "ai-engine.tabs",
+      "x": 0.0407,
+      "y": 0.0957,
+      "w": 0.9186,
+      "h": 0.0216
+     },
+     {
+      "id": "ai-engine.add",
+      "x": 0.0407,
+      "y": 0.7518,
+      "w": 0.9186,
+      "h": 0.2482
+     }
+    ]
+   }
+  },
+  "mcp-servers": {
+   "desktop": {
+    "src": "/guide-media/shots/mcp-servers-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "mcp-servers.add",
+      "x": 0.8542,
+      "y": 0.1806,
+      "w": 0.1083,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/mcp-servers-mobile.webp",
+    "w": 786,
+    "h": 1896,
+    "boxes": [
+     {
+      "id": "mcp-servers.add",
+      "x": 0.0407,
+      "y": 0.2706,
+      "w": 0.9186,
+      "h": 0.0422
+     }
+    ]
+   }
+  },
+  "channels": {
+   "desktop": {
+    "src": "/guide-media/shots/channels-desktop.webp",
+    "w": 1440,
+    "h": 1051,
+    "boxes": [
+     {
+      "id": "channels.whatsapp",
+      "x": 0.2069,
+      "y": 0.5735,
+      "w": 0.7556,
+      "h": 0.3877
+     },
+     {
+      "id": "channels.telegram",
+      "x": 0.5917,
+      "y": 0.1962,
+      "w": 0.3708,
+      "h": 0.3582
+     },
+     {
+      "id": "channels.push",
+      "x": 0.2069,
+      "y": 0.1962,
+      "w": 0.3708,
+      "h": 0.196
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/channels-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "channels.whatsapp",
+      "x": 0.0407,
+      "y": 0.4332,
+      "w": 0.9186,
+      "h": 0.2628
+     },
+     {
+      "id": "channels.telegram",
+      "x": 0.0407,
+      "y": 0.2332,
+      "w": 0.9186,
+      "h": 0.1906
+     },
+     {
+      "id": "channels.push",
+      "x": 0.0407,
+      "y": 0.0957,
+      "w": 0.9186,
+      "h": 0.1282
+     }
+    ]
+   }
+  },
+  "organization": {
+   "desktop": {
+    "src": "/guide-media/shots/organization-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "organization.add",
+      "x": 0.8692,
+      "y": 0.1356,
+      "w": 0.0933,
+      "h": 0.0444
+     },
+     {
+      "id": "organization.company",
+      "x": 0.2069,
+      "y": 0.3644,
+      "w": 0.7556,
+      "h": 0.2028
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/organization-mobile.webp",
+    "w": 786,
+    "h": 3060,
+    "boxes": [
+     {
+      "id": "organization.add",
+      "x": 0.0407,
+      "y": 0.1279,
+      "w": 0.9186,
+      "h": 0.0261
+     },
+     {
+      "id": "organization.company",
+      "x": 0.0407,
+      "y": 0.3361,
+      "w": 0.9186,
+      "h": 0.2879
+     }
+    ]
+   }
+  },
+  "organization:new": {
+   "desktop": {
+    "src": "/guide-media/shots/organization-new-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/organization-new-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "activity": {
+   "desktop": {
+    "src": "/guide-media/shots/activity-desktop.webp",
+    "w": 1440,
+    "h": 1504,
+    "boxes": [
+     {
+      "id": "activity.filter",
+      "x": 0.2069,
+      "y": 0.1371,
+      "w": 0.4831,
+      "h": 0.0253
+     },
+     {
+      "id": "activity.list",
+      "x": 0.2069,
+      "y": 0.1784,
+      "w": 0.7556,
+      "h": 0.7949
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/activity-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "activity.filter",
+      "x": 0.0407,
+      "y": 0.1219,
+      "w": 0.9186,
+      "h": 0.0216
+     },
+     {
+      "id": "activity.list",
+      "x": 0.0407,
+      "y": 0.1548,
+      "w": 0.9186,
+      "h": 0.6478
+     }
+    ]
+   }
+  },
+  "settings": {
+   "desktop": {
+    "src": "/guide-media/shots/settings-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "settings.add",
+      "x": 0.8653,
+      "y": 0.1356,
+      "w": 0.0972,
+      "h": 0.0444
+     },
+     {
+      "id": "settings.list",
+      "x": 0.2069,
+      "y": 0.3689,
+      "w": 0.7556,
+      "h": 0.5519
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/settings-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "settings.add",
+      "x": 0.0407,
+      "y": 0.0919,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "settings.list",
+      "x": 0.0407,
+      "y": 0.2485,
+      "w": 0.9186,
+      "h": 0.3656
+     }
+    ]
+   }
+  },
+  "tutorial": {
+   "desktop": {
+    "src": "/guide-media/shots/tutorial-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "tutorial.tracks",
+      "x": 0.2069,
+      "y": 0.2303,
+      "w": 0.2908,
+      "h": 0.0422
+     },
+     {
+      "id": "tutorial.next",
+      "x": 0.2069,
+      "y": 0.2958,
+      "w": 0.7556,
+      "h": 0.1543
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tutorial-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "tutorial.tracks",
+      "x": 0.0407,
+      "y": 0.1052,
+      "w": 0.9186,
+      "h": 0.0216
+     },
+     {
+      "id": "tutorial.next",
+      "x": 0.0407,
+      "y": 0.1606,
+      "w": 0.9186,
+      "h": 0.1058
+     }
+    ]
+   }
+  }
+ },
+ "videos": {
+  "create-agent": {
+   "src": "/guide-media/videos/create-agent.mp4",
+   "poster": "/guide-media/videos/create-agent-poster.webp",
+   "w": 1280,
+   "h": 800,
+   "duration": 26.8,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "Agents: your AI team, by department"
+    },
+    {
+     "t": 3.9,
+     "label": "Pick a starting point"
+    },
+    {
+     "t": 7.3,
+     "label": "Choose its company and department"
+    },
+    {
+     "t": 9.7,
+     "label": "Give it a name and a job title"
+    },
+    {
+     "t": 15.6,
+     "label": "SOPs it follows"
+    },
+    {
+     "t": 17.8,
+     "label": "What it may do, and what it must ask first"
+    },
+    {
+     "t": 20.3,
+     "label": "Review and create"
+    },
+    {
+     "t": 23.3,
+     "label": "The new agent joins the team"
+    }
+   ],
+   "device": "desktop"
+  },
+  "give-task": {
+   "src": "/guide-media/videos/give-task.mp4",
+   "poster": "/guide-media/videos/give-task-poster.webp",
+   "w": 1280,
+   "h": 800,
+   "duration": 49.9,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "The task board"
+    },
+    {
+     "t": 2.8,
+     "label": "Say what you need"
+    },
+    {
+     "t": 12.8,
+     "label": "Pick the agent"
+    },
+    {
+     "t": 15.7,
+     "label": "Create and start"
+    },
+    {
+     "t": 17.7,
+     "label": "Follow the plan, live"
+    },
+    {
+     "t": 42.7,
+     "label": "The result waits for your review"
+    },
+    {
+     "t": 47,
+     "label": "Accept it"
+    }
+   ],
+   "device": "desktop"
+  },
+  "approve": {
+   "src": "/guide-media/videos/approve.mp4",
+   "poster": "/guide-media/videos/approve-poster.webp",
+   "w": 1280,
+   "h": 800,
+   "duration": 23.2,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "Decisions waiting for you"
+    },
+    {
+     "t": 2.4,
+     "label": "Read what the agent wants to do, and why"
+    },
+    {
+     "t": 4.6,
+     "label": "Approve once"
+    },
+    {
+     "t": 7.7,
+     "label": "History keeps every decision"
+    },
+    {
+     "t": 12.2,
+     "label": "The agent carries on and hands in the result"
+    }
+   ],
+   "device": "desktop"
+  },
+  "add-company": {
+   "src": "/guide-media/videos/add-company.mp4",
+   "poster": "/guide-media/videos/add-company-poster.webp",
+   "w": 1280,
+   "h": 800,
+   "duration": 23.7,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "Your companies"
+    },
+    {
+     "t": 2.8,
+     "label": "Name the company"
+    },
+    {
+     "t": 6.2,
+     "label": "Pick its industry: the AI team to match"
+    },
+    {
+     "t": 12.1,
+     "label": "Create it"
+    },
+    {
+     "t": 15.4,
+     "label": "Its AI team is ready, desk by desk"
+    }
+   ],
+   "device": "desktop"
+  },
+  "hire-worker": {
+   "src": "/guide-media/videos/hire-worker.mp4",
+   "poster": "/guide-media/videos/hire-worker-poster.webp",
+   "w": 786,
+   "h": 1704,
+   "duration": 35.4,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "Where you work (set by your manager)"
+    },
+    {
+     "t": 3.7,
+     "label": "Meet your AI worker"
+    },
+    {
+     "t": 11,
+     "label": "Give it a job"
+    },
+    {
+     "t": 17.7,
+     "label": "When it works and rests"
+    },
+    {
+     "t": 22,
+     "label": "The offer: check and hire"
+    },
+    {
+     "t": 29.2,
+     "label": "Its first day: working on your task"
+    }
+   ],
+   "device": "mobile"
+  },
+  "phone-tour": {
+   "src": "/guide-media/videos/phone-tour.mp4",
+   "poster": "/guide-media/videos/phone-tour-poster.webp",
+   "w": 786,
+   "h": 1704,
+   "duration": 27.6,
+   "chapters": [
+    {
+     "t": 0.2,
+     "label": "Command center: how the office is doing"
+    },
+    {
+     "t": 3.1,
+     "label": "Approvals: decide from your phone"
+    },
+    {
+     "t": 7.3,
+     "label": "Tasks: the board, one column at a time"
+    },
+    {
+     "t": 17.8,
+     "label": "Office floor: who is working"
+    },
+    {
+     "t": 22.2,
+     "label": "Everything else is under More"
+    }
+   ],
+   "device": "mobile"
+  }
+ }
+}

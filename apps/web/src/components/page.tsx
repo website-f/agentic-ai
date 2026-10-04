@@ -1,7 +1,8 @@
-import type { Icon } from "@phosphor-icons/react";
-import { useRouterState } from "@tanstack/react-router";
+import { QuestionIcon, type Icon } from "@phosphor-icons/react";
+import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { guidePageFor } from "@/guide/lookup";
 import { cn } from "@/lib/utils";
 import { NAV } from "@/nav";
 
@@ -16,6 +17,12 @@ function useNavEntry() {
     }
   }
   return best;
+}
+
+/** The user-guide page for the current screen, if one is written. */
+function useGuideEntry() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return guidePageFor(pathname);
 }
 
 /** A tinted square holding an icon: page headers, list rows, cards and stats share it. */
@@ -72,6 +79,7 @@ export function PageHeader({
   eyebrow?: ReactNode;
 }) {
   const entry = useNavEntry();
+  const guide = useGuideEntry();
   const IconCmp = icon === undefined ? entry?.icon : icon;
   const kicker = eyebrow ?? entry?.section;
   return (
@@ -82,9 +90,22 @@ export function PageHeader({
           {kicker ? (
             <p className="text-[11.5px] font-medium tracking-[0.06em] text-accent uppercase">{kicker}</p>
           ) : null}
-          <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-balance break-words sm:text-[26px]">
-            {title}
-          </h1>
+          <div className="flex min-w-0 items-start gap-2">
+            <h1 className="min-w-0 text-[22px] leading-tight font-semibold tracking-tight text-balance break-words sm:text-[26px]">
+              {title}
+            </h1>
+            {guide ? (
+              <Link
+                to="/guide/$page"
+                params={{ page: guide.id }}
+                title={`Guide: how to use ${guide.title}`}
+                aria-label={`Help: how to use ${guide.title}`}
+                className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted transition-colors hover:border-accent/40 hover:bg-accent-soft hover:text-accent pointer-coarse:size-9 sm:mt-1"
+              >
+                <QuestionIcon size={15} weight="bold" />
+              </Link>
+            ) : null}
+          </div>
           {description ? <p className="mt-1 max-w-[68ch] text-[13.5px] text-muted">{description}</p> : null}
         </div>
       </div>
@@ -148,15 +169,18 @@ export function Section({
   actions,
   children,
   className,
+  guide,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** data-guide id for the Guide's screenshots. */
+  guide?: string;
 }) {
   return (
-    <section className={cn("grid min-w-0 gap-3", className)}>
+    <section data-guide={guide} className={cn("grid min-w-0 gap-3", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold">{title}</h2>

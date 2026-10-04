@@ -91,7 +91,7 @@ function TrySearch() {
     setQ(draft.trim());
   };
   return (
-    <Card>
+    <Card data-guide="library.search">
       <CardHeader icon={<IconTile icon={MagnifyingGlassIcon} size="sm" />} title="Try a search"
         description="Ask the way an agent would. You see the passages it would find, with their page." />
       <CardBody className="grid gap-3">
@@ -140,7 +140,7 @@ function AddGuidelines() {
   };
 
   return (
-    <Card>
+    <Card data-guide="library.upload">
       <CardHeader icon={<IconTile icon={BooksIcon} size="sm" />} title="Add guidelines"
         description="SOPs, policies, manuals, price rules. Pick who they are for, then drop the files." />
       <CardBody className="grid gap-3">
@@ -223,7 +223,7 @@ export function LibraryPage() {
           <EmptyState icon={BooksIcon} title={sources.length ? "Nothing here" : "The library is empty"}
             body="Upload SOPs, policies and manuals. Agents search them and cite the page." />
         ) : (
-          <ListCard>
+          <ListCard data-guide="library.sources">
             {shown.map((s) => (
               <ListRow key={`${s.kind}-${s.id}`}
                 leading={s.kind === "file" ? <FileTile mime={s.mime} name={s.name} /> : <IconTile icon={FileTextIcon} tone="violet" />}

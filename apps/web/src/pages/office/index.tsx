@@ -254,7 +254,7 @@ export function OfficePage() {
     <div className="flex h-[calc(100dvh-3.5rem-4.5rem-env(safe-area-inset-bottom))] min-h-80 flex-col md:h-[calc(100dvh-3.5rem)]">
       <div className="flex items-center gap-2 border-b border-border bg-surface/60 px-3 py-2 sm:px-6 sm:py-2.5">
         <h1 className="mr-2 text-[17px] font-semibold max-sm:sr-only">Office</h1>
-        <nav aria-label="Companies" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav data-guide="office.branch" aria-label="Companies" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {branches.map((b) => (
             <button key={b.id} onClick={() => setBranchId(b.id)} aria-current={b.id === branch.id ? "page" : undefined}
               className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-[13px] transition-colors", b.id === branch.id ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
@@ -285,7 +285,7 @@ export function OfficePage() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <div className="relative min-h-0 min-w-0 flex-1">
+          <div data-guide="office.floor" className="relative min-h-0 min-w-0 flex-1">
             <canvas ref={canvas} className="absolute inset-0 size-full touch-none select-none" aria-label={`Pixel office of ${snap.branch.name}. ${snap.agents.length} agents. The list view shows the same information as a table.`} role="img" />
             {banner ? (
               <div role="status" key={banner.id} className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">

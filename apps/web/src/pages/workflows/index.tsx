@@ -191,7 +191,7 @@ export function WorkflowsPage() {
     <Page>
       <PageHeader title="Workflows"
         description="Hand whole jobs to your agents. Map how a job is done (steps, decisions, approvals, waits), draw it yourself or let AI draft it, then run it, give it with a task, or make it an agent's standard way of working."
-        actions={canManage ? <Button onClick={() => setChoosing(true)}><PlusIcon size={16} weight="bold" /> New workflow</Button> : null} />
+        actions={canManage ? <Button data-guide="workflows.new" onClick={() => setChoosing(true)}><PlusIcon size={16} weight="bold" /> New workflow</Button> : null} />
       {workflows.length ? (
         <StatGrid>
           <Stat label="Workflows" value={workflows.length} icon={FlowArrowIcon} tone="accent" hint={`${TEMPLATES.length} templates to start from`} />
@@ -219,7 +219,7 @@ export function WorkflowsPage() {
         ) : !shown.length ? (
           <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">Nothing matches.</p>
         ) : (
-          <div className={cn("grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3")}>
+          <div data-guide="workflows.list" className={cn("grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3")}>
             {shown.map((wf) => <WorkflowCard key={wf.id} wf={wf} onOpen={() => open(wf.id)} />)}
           </div>
         )}

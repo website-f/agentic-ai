@@ -212,7 +212,7 @@ export function SkillsPage() {
         description="Procedures your agents load when a task matches, so the second time is faster and cheaper. Agents propose new ones from their work; nothing is used until a person approves it."
         actions={canWrite ? (
           <>
-            <Button variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> Teach from a source</Button>
+            <Button data-guide="skills.teach" variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> Teach from a source</Button>
             <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New skill</Button>
           </>
         ) : null}
@@ -220,7 +220,7 @@ export function SkillsPage() {
       {skills && state === "active" ? (
         <StatGrid>
           <Stat label="Active skills" value={skills.length} icon={LightningIcon} tone="accent" hint="Agents load these when a task matches" onClick={() => go({ tab: "library" })} active={tab === "library"} />
-          <Stat label="To review" value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
+          <Stat guide="skills.proposals" label="To review" value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
             hint={pendingCount ? "Waiting for a person" : "All caught up"} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
           <Stat label="Uses" value={totals.uses} icon={ChartLineUpIcon} tone="info" hint="Across all active skills" />
           <Stat label="Accepted" value={pct(totals.rate)} icon={CheckCircleIcon} tone="ok" hint={totals.judged ? `${totals.judged} results judged` : "Nothing judged yet"} />
@@ -246,7 +246,7 @@ export function SkillsPage() {
             ) : !shown.length ? (
               <EmptyState icon={LightningIcon} title="No skill matches" body="Try another word." />
             ) : (
-              <ListCard>
+              <ListCard data-guide="skills.list">
                 {shown.map((s) => <SkillRow key={s.id} s={s} onOpen={() => go({ skill: s.id })} />)}
               </ListCard>
             )}

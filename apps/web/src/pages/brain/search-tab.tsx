@@ -47,7 +47,7 @@ export function SearchTab({ onOpenPage, initial }: { onOpenPage: (path: string) 
 
   return (
     <div className="grid min-w-0 gap-5">
-      <div className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] sm:p-4">
+      <div data-guide="brain.search" className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 shadow-[0_1px_2px_hsl(var(--shadow)/0.04)] sm:p-4">
         <label className="relative block">
           <span className="sr-only">Search the brain</span>
           <MagnifyingGlassIcon size={18} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted" />

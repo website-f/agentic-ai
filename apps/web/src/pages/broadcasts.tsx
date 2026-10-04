@@ -75,7 +75,7 @@ function Composer() {
     setAud((a) => ({ ...a, [key]: a[key].includes(id) ? a[key].filter((x) => x !== id) : [...a[key], id] }));
 
   return (
-    <Card className="self-start">
+    <Card data-guide="broadcasts.compose" className="self-start">
       <CardHeader title="New broadcast" description="Pick who hears it, then write once." icon={<IconTile icon={PaperPlaneTiltIcon} size="sm" />} />
       <section className="grid grid-cols-[minmax(0,1fr)] content-start gap-5 p-4 sm:p-5" aria-label="New broadcast">
       <div className="grid min-w-0 gap-2">
@@ -216,7 +216,7 @@ export function BroadcastsPage() {
           ) : !history.length ? (
             <EmptyState icon={MegaphoneIcon} title="Nothing sent yet" body="Announcements sit in each agent's context for 30 days. Tasks land in Triage." />
           ) : (
-            <ListCard>
+            <ListCard data-guide="broadcasts.list">
               {history.map((b) => (
                 <ListRow
                   key={b.id}

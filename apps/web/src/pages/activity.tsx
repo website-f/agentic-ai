@@ -166,14 +166,14 @@ export function ActivityPage() {
         <EmptyState icon={ClockCounterClockwiseIcon} title="Nothing recorded yet" body="Changes to members, branches and departments will show up here." />
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-          <Segmented label="Filter activity" value={kind} onChange={setKind} options={options} className="w-fit" />
+          <Segmented guide="activity.filter" label="Filter activity" value={kind} onChange={setKind} options={options} className="w-fit" />
           {groups.length === 0 ? (
             <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">
               No {kind !== "all" ? KINDS[kind].label.toLowerCase() : "entries"} recorded yet.
             </p>
           ) : null}
-          {groups.map((g) => (
-            <section key={g.day} className="grid gap-2">
+          {groups.map((g, gi) => (
+            <section key={g.day} data-guide={gi === 0 ? "activity.list" : undefined} className="grid gap-2">
               <h2 className="flex items-center gap-2 text-[12.5px] font-medium text-muted">
                 {g.day}
                 <span className="rounded-full bg-surface-2 px-1.5 text-[11px] tabular">{g.items.length}</span>

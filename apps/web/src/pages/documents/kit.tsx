@@ -90,8 +90,8 @@ function KitForm({ kit }: { kit: CompanyKit }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <form className="grid min-w-0 gap-5" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
-        {groups.map((g) => (
-          <Card key={g}>
+        {groups.map((g, gi) => (
+          <Card key={g} data-guide={gi === 0 ? "company-kit.fields" : undefined}>
             <CardHeader title={g} description={GROUP[g]?.hint}
               icon={<IconTile icon={GROUP[g]?.icon ?? IdentificationCardIcon} tone={GROUP[g]?.tone ?? "neutral"} size="sm" />} />
             <CardBody>
@@ -144,7 +144,7 @@ function KitForm({ kit }: { kit: CompanyKit }) {
         {!ro ? (
           <ActionBar className="lg:hidden">
             <span className="text-[12.5px] text-muted max-md:hidden">{kit.filled} of {kit.total} filled</span>
-            <Button type="submit" loading={save.isPending} disabled={!dirty}>{dirty ? "Save kit" : "Saved"}</Button>
+            <Button data-guide="company-kit.save" type="submit" loading={save.isPending} disabled={!dirty}>{dirty ? "Save kit" : "Saved"}</Button>
           </ActionBar>
         ) : null}
       </form>
@@ -171,7 +171,7 @@ function KitForm({ kit }: { kit: CompanyKit }) {
             <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${Math.round((kit.filled / Math.max(1, kit.total)) * 100)}%` }} />
           </div>
           {ro ? <p className="text-[12.5px] text-muted">Only admins and this company's manager can change it.</p>
-            : <Button className="max-lg:hidden" loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>{dirty ? "Save kit" : "Saved"}</Button>}
+            : <Button data-guide="company-kit.save" className="max-lg:hidden" loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>{dirty ? "Save kit" : "Saved"}</Button>}
         </div>
       </aside>
     </div>

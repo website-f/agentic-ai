@@ -175,7 +175,7 @@ function NextUp({
   const info = TRACK_BY_ID[track];
   const done = info.lessons.filter((l) => lessonState(l, progress?.signals, progress?.done)).length;
   return (
-    <Card className="relative overflow-hidden">
+    <Card data-guide="tutorial.next" className="relative overflow-hidden">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top_left,var(--accent-soft),transparent_70%)]" />
       <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 p-4 sm:p-5 md:grid-cols-[auto_minmax(0,1fr)_auto]">
         {progress ? <ProgressRing done={done} total={info.lessons.length} /> : <Skeleton className="size-[76px] rounded-full" />}
@@ -305,7 +305,7 @@ export function TutorialPage() {
       />
 
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Segmented<Track> label="Role track" value={track} onChange={setTrack}
+        <Segmented<Track> guide="tutorial.tracks" label="Role track" value={track} onChange={setTrack}
           options={TRACKS.map((t) => ({
             value: t.id,
             label: progress ? `${t.label} ${t.lessons.filter((l) => state(l)).length}/${t.lessons.length}` : t.label,

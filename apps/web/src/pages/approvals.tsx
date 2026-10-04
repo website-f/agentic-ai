@@ -48,7 +48,11 @@ function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
   }
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
-      {data.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={canDecide} />)}
+      {data.map((a, i) => (
+        <ApprovalCard key={a.id} approval={a} canDecide={canDecide}
+          guide={state === "pending" && i === 0 ? "approvals.card" : undefined}
+          guideActions={state === "pending" && i === 0 ? "approvals.actions" : undefined} />
+      ))}
       {state === "history" ? (
         <LoadMore className="lg:col-span-2" noun="decisions" shown={history.items.length} total={history.total} hasMore={history.hasMore} loading={history.isFetchingMore} onLoad={history.loadMore} />
       ) : null}
@@ -71,6 +75,7 @@ export function ApprovalsPage() {
         description={canDecide ? "Agents stop and wait here before risky actions, and when they need an answer from you." : "Your role can see decisions but not make them. Ask an approver or admin."}
       />
       <Segmented<Tab>
+        guide="approvals.history"
         label="Approvals"
         className="w-fit"
         value={tab}

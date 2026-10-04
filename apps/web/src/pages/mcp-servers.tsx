@@ -172,7 +172,7 @@ export function McpServersPage() {
     <Page>
       <PageHeader title="MCP tools"
         description="Connect external MCP servers — a project tracker, a CRM, or a company's own server — and their tools become available to agents. Agents find them with a search bridge and every call is approved first, so their schemas never clog the prompt."
-        actions={<Button onClick={() => setAdding(true)}><PlusIcon size={16} weight="bold" /> Connect server</Button>} />
+        actions={<Button data-guide="mcp-servers.add" onClick={() => setAdding(true)}><PlusIcon size={16} weight="bold" /> Connect server</Button>} />
       {isLoading ? (
         <div className="grid gap-5">
           <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>

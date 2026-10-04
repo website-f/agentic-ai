@@ -418,7 +418,7 @@ function ImpactBody({
 
   return (
     <>
-      <StatGrid className="sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
+      <StatGrid guide="impact.totals" className="sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
         <Stat
           label="Tasks completed"
           value={t.tasks_done.toLocaleString()}
@@ -736,7 +736,7 @@ function RoiCalculator({
   const net = value - spend;
   const per = spend > 0 ? value / spend : null;
   return (
-    <Card>
+    <Card data-guide="impact.roi">
       <CardHeader
         icon={<IconTile icon={CalculatorIcon} tone="info" size="sm" />}
         title="Return on the AI spend"
@@ -834,7 +834,7 @@ function Capabilities({ branches, canManage }: { branches: BranchImpact[]; canMa
       }
     >
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map((c) => {
+        {shown.map((c, i) => {
           const agent = agentFor(c, usable, company === "any" ? branchId : company);
           return (
             <Card key={c.key} className="flex flex-col">
@@ -855,6 +855,7 @@ function Capabilities({ branches, canManage }: { branches: BranchImpact[]; canMa
               </ul>
               <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
                 <Button
+                  data-guide={i === 0 ? "impact.try" : undefined}
                   size="sm"
                   variant={agent ? "primary" : "outline"}
                   onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: agent?.id, brief: c.example } })}

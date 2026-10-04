@@ -138,7 +138,7 @@ export function FilesPage() {
         description="Everything your companies hand the office: certificates, statements, letters, forms and photos. Each file is read once (scans too) and summarised, so agents work from it without re-reading." />
       <DocSteps current="/files" />
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <FileDrop branchId={branch === ALL ? null : branch} onUploaded={(fs) => fs.length === 1 && open(fs[0]!.id)} />
+        <FileDrop guide="files.upload" branchId={branch === ALL ? null : branch} onUploaded={(fs) => fs.length === 1 && open(fs[0]!.id)} />
         <StatGrid className="grid-cols-2 lg:grid-cols-2">
           <Stat label="Uploaded" value={counts.upload} icon={FolderOpenIcon} hint={counts.reading ? `${counts.reading} being read now` : "Read and summarised"}
             onClick={() => setShow(show === "upload" ? "all" : "upload")} active={show === "upload"} />
@@ -167,7 +167,7 @@ export function FilesPage() {
           <EmptyState icon={FolderOpenIcon} title={q || show !== "all" ? "No files match" : "No files yet"}
             body="Drop the documents a company keeps on hand: registration certificate, bank statements, licences, company profile. Agents use them to prepare documents and packs." />
         ) : (
-          <ListCard>
+          <ListCard data-guide="files.list">
             {files.map((f) => (
               <ListRow key={f.id} onClick={() => open(f.id)} active={search.f === f.id}
                 leading={<FileTile mime={f.mime} name={f.name} />}

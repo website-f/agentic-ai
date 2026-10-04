@@ -176,7 +176,7 @@ export function SopsPage() {
       <PageHeader
         title="SOPs"
         description="Written procedures your agents follow. Company and department SOPs apply automatically; library SOPs are attached to specific agents."
-        actions={canManage ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New SOP</Button> : null}
+        actions={canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New SOP</Button> : null}
       />
       {isLoading ? (
         <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
@@ -197,7 +197,7 @@ export function SopsPage() {
           {!groups.length ? (
             <EmptyState icon={FileTextIcon} title="No SOP matches" body="Try another word, or show every scope." />
           ) : (
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+            <div data-guide="sops.list" className="grid grid-cols-[minmax(0,1fr)] gap-6">
               {groups.map((g) => {
                 const look = SCOPE_LOOK[g.scope];
                 return (

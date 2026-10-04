@@ -318,7 +318,7 @@ export function MembersPage() {
         title="Members"
         description={scoped ? `People in ${me.scope?.label}, and what their role lets them do.` : "People who can sign in to this workspace, where they sit, and what their role lets them do."}
         actions={canAdd ? (
-          <Button onClick={openAdd}>
+          <Button data-guide="settings.add" onClick={openAdd}>
             <UserPlusIcon size={16} weight="bold" /> Add member
           </Button>
         ) : null}
@@ -340,7 +340,7 @@ export function MembersPage() {
             <Stat label="Temporary password" value={list.filter((m) => m.must_change_password).length} icon={KeyIcon} tone={list.some((m) => m.must_change_password) ? "warn" : "neutral"} hint="Yet to pick their own" />
             <Stat label="Personal agents" value={list.reduce((n, m) => n + (m.agents ?? 0), 0)} icon={RobotIcon} tone="info" hint="Owned by members" />
           </StatGrid>
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+          <ul data-guide="settings.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
             {list.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
           </ul>
         </>

@@ -108,7 +108,7 @@ function Briefing({ days }: { days: number }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
-    <Card aria-label="AI briefing" className="flex flex-col">
+    <Card data-guide="overview.briefing" aria-label="AI briefing" className="flex flex-col">
       <CardHeader
         icon={<IconTile icon={SparkleIcon} size="sm" />}
         title="Briefing"
@@ -241,7 +241,7 @@ function BranchTable({ o }: { o: Overview }) {
     return sort.desc ? -c : c;
   });
   return (
-    <Card aria-label="Branches compared" className="overflow-hidden">
+    <Card data-guide="overview.branches" aria-label="Branches compared" className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={TableIcon} tone="violet" size="sm" />}
         title="Branches compared"
@@ -375,6 +375,7 @@ export function OverviewPage() {
         description={o && o.scope.kind !== "all" ? `Every branch in ${o.scope.label}, side by side.` : "Every branch side by side: what they are working on, what is failing or waiting on people, and what it costs."}
         actions={
           <Segmented
+            guide="overview.range"
             label="Period"
             value={String(days)}
             onChange={(v) => navigate({ to: "/overview", search: { days: Number(v) }, replace: true })}

@@ -58,7 +58,7 @@ export function DocumentsPage() {
     <Page>
       <PageHeader title="Documents"
         description="Quotations, invoices, letters and proposals, written by you or by agents. Each is checked automatically, approved by a person, then exported to PDF, Word or Excel."
-        actions={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New document</Button>} />
+        actions={<Button data-guide="documents.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New document</Button>} />
       <DocSteps current="/documents" />
       <StatGrid>
         <Stat label="In review" value={count("review")} icon={EyeIcon} tone="info" hint="Waiting for a person"
@@ -89,7 +89,7 @@ export function DocumentsPage() {
             body="Start from a template (quotation, invoice, letter, proposal…), let AI write a draft from a description, or ask an agent to prepare one."
             action={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> New document</Button>} />
         ) : (
-          <ListCard>
+          <ListCard data-guide="documents.list">
             {docs.map((d) => <DocRow key={d.id} d={d} onOpen={() => navigate({ search: { d: d.id } })} />)}
           </ListCard>
         )}

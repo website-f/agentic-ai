@@ -116,7 +116,7 @@ function ThisDevice() {
   };
 
   return (
-    <Card>
+    <Card data-guide="channels.push">
       <CardHeader
         icon={<IconTile icon={BellRingingIcon} size="sm" />}
         title="This device"
@@ -304,9 +304,9 @@ function Telegram({ canManage }: { canManage: boolean }) {
     onSuccess: () => { setToken(""); qc.invalidateQueries({ queryKey: ["channels"] }); toast.success("Bot connected."); },
   });
   if (isLoading) return <Skeleton className="h-40 rounded-[var(--radius-md)]" />;
-  if (channels?.length) return <div className="grid gap-4">{channels.map((ch) => <TelegramCard key={ch.id} ch={ch} canManage={canManage} />)}</div>;
+  if (channels?.length) return <div data-guide="channels.telegram" className="grid gap-4">{channels.map((ch) => <TelegramCard key={ch.id} ch={ch} canManage={canManage} />)}</div>;
   return (
-    <Card>
+    <Card data-guide="channels.telegram">
       <CardHeader
         icon={<IconTile icon={TelegramLogoIcon} tone="info" size="sm" />}
         title="Telegram"
@@ -439,7 +439,7 @@ function WhatsAppSetup({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <Card>
+    <Card data-guide="channels.whatsapp">
       <CardHeader
         icon={<IconTile icon={WhatsappLogoIcon} tone="ok" size="sm" />}
         title="WhatsApp"
@@ -796,7 +796,7 @@ function WhatsAppCard({ ch, canManage }: { ch: ChannelOut; canManage: boolean })
   };
 
   return (
-    <Card>
+    <Card data-guide="channels.whatsapp">
       <CardHeader
         icon={<IconTile icon={WhatsappLogoIcon} tone="ok" size="sm" />}
         title={

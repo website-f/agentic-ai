@@ -647,7 +647,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
           <Button variant="outline" size="sm" onClick={() => setAi(true)} className="max-sm:px-2.5"><SparkleIcon size={15} /> <span className="hidden sm:inline">{graph.nodes.length ? "Improve with AI" : "Draft with AI"}</span></Button>
           <Button size="sm" variant={existing ? "outline" : "primary"} loading={save.isPending} disabled={!dirty && !!existing} onClick={trySave}>Save</Button>
           {existing ? (
-            <Button size="sm" disabled={dirty || !graph.nodes.length} title={dirty ? "Save your changes first" : undefined} onClick={() => setRunning(true)}>
+            <Button data-guide="workflows.run" size="sm" disabled={dirty || !graph.nodes.length} title={dirty ? "Save your changes first" : undefined} onClick={() => setRunning(true)}>
               <PlayIcon size={14} weight="fill" /> <span className="hidden sm:inline">Run</span>
             </Button>
           ) : null}

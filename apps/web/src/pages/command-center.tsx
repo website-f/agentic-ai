@@ -38,7 +38,7 @@ function SystemPanel() {
   if (data) status = data.ok ? <Pill tone="ok" live>Healthy</Pill> : <Pill tone="danger" live>Needs attention</Pill>;
 
   return (
-    <Card className="flex flex-col overflow-hidden">
+    <Card data-guide="home.health" className="flex flex-col overflow-hidden">
       <CardHeader
         icon={<IconTile icon={HeartbeatIcon} tone="ok" size="sm" />}
         title="System"
@@ -151,7 +151,7 @@ function GettingStarted({ counts }: { counts: Record<string, number> | undefined
   const finished = steps.filter((s) => s.done).length;
   const pct = Math.round((finished / steps.length) * 100);
   return (
-    <Card className="overflow-hidden">
+    <Card data-guide="home.getting-started" className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={RocketLaunchIcon} size="sm" />}
         title="Getting started"
@@ -250,7 +250,7 @@ export function CommandCenterPage() {
         <SystemPanel />
       </div>
 
-      <nav aria-label="Shortcuts" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
+      <nav data-guide="home.shortcuts" aria-label="Shortcuts" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
         {[
           { to: "/organization", icon: TreeStructureIcon, label: "Organization", body: "Branches and departments", tone: "info" as const },
           { to: "/settings/members", icon: UserPlusIcon, label: "Members", body: "People and their roles", tone: "violet" as const },
