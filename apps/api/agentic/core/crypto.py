@@ -65,6 +65,27 @@ def decrypt(token: str, aad: str) -> str:
         raise DecryptError("secret could not be decrypted (wrong master key or moved row)") from e
 
 
+def dev_master_key(secret_key: str) -> bytes:
+    """The key a dev install derives from its secret key (see _master_key)."""
+    return hashlib.sha256(f"agentic-dev-master:{secret_key}".encode()).digest()
+
+
+def rewrap(token: str, aad: str, old_key: bytes, new_key: bytes) -> str:
+    """Move one secret to a new master key. Only the data key is re-wrapped; the secret
+    itself is never decrypted. Raises DecryptError if `old_key` is not the right one."""
+    try:
+        version, wrapped_b64, sealed_b64 = token.split(".")
+        if version != VERSION:
+            raise DecryptError(f"unknown secret format {version}")
+        w = _b64d(wrapped_b64)
+        dek = AESGCM(old_key).decrypt(w[:12], w[12:], b"dek:" + aad.encode())
+    except (ValueError, InvalidTag) as e:
+        raise DecryptError("secret could not be unwrapped with the old master key") from e
+    n1 = os.urandom(12)
+    wrapped = AESGCM(new_key).encrypt(n1, dek, b"dek:" + aad.encode())
+    return f"{VERSION}.{_b64e(n1 + wrapped)}.{sealed_b64}"
+
+
 def hint(plaintext: str) -> str:
     """What the UI may show: the last four characters only."""
     return f"…{plaintext[-4:]}" if len(plaintext) > 8 else "…"

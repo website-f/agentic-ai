@@ -1,4 +1,4 @@
-# VPS overrides, behind the shared /opt/reverse-proxy Caddy (which terminates TLS).
+# VPS overrides, behind the server's reverse proxy (Caddy or Orxies terminates TLS).
 #
 #   cp .env.vps.example .env && nano .env
 #   install -d -o 10001 -g 10001 data/backups data/restore
@@ -18,6 +18,9 @@ x-prod-env: &prod-env
   AGENTIC_DEV_SEED: "false"
   AGENTIC_DATABASE_URL: postgresql+asyncpg://agentic:${AGENTIC_DB_PASSWORD:?set AGENTIC_DB_PASSWORD in .env}@postgres:5432/agentic
   AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
+  AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:?set AGENTIC_SANDBOX_TOKEN in .env}
+  AGENTIC_WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:?set AGENTIC_WAHA_API_KEY in .env}
+  AGENTIC_PUBLIC_URL: ${AGENTIC_PUBLIC_URL:?set AGENTIC_PUBLIC_URL in .env (https://your.domain)}
 
 services:
   postgres:
@@ -51,6 +54,13 @@ services:
   browser:
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
+
+  waha:
+    environment:
+      WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:?set AGENTIC_WAHA_API_KEY in .env}
+
+  practice-portal:  # profile demo: only the browser reaches it
+    ports: !override []
 
   sandbox:
     environment:
