@@ -62,5 +62,23 @@ createRoot(document.getElementById("root")!).render(
 );
 
 if (import.meta.env.PROD) {
-  import("virtual:pwa-register").then(({ registerSW }) => registerSW({ immediate: true }));
+  import("virtual:pwa-register").then(({ registerSW }) =>
+    registerSW({
+      immediate: true,
+      // A tab left open never navigates, so it would keep the old app forever. Look for a
+      // new version every 15 minutes and whenever the tab comes back; autoUpdate reloads
+      // the page once the new version has taken over.
+      onRegisteredSW(_url, reg) {
+        if (!reg) return;
+        const check = () => {
+          if (navigator.onLine) reg.update().catch(() => {});
+        };
+        setInterval(check, 15 * 60 * 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") check();
+        });
+        window.addEventListener("focus", check);
+      },
+    }),
+  );
 }
