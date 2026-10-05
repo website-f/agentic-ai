@@ -304,7 +304,27 @@ def _filtered(
         query = query.where(
             or_(DocFile.name.ilike(like), DocFile.title.ilike(like), DocFile.kind.ilike(like))
         )
-    return service.scoped(query, DocFile, principal)
+    return visible_files(query, principal)
+
+
+def visible_files(query: Any, principal: Principal) -> Any:
+    """Files a person sees: their own and their agents' (service.scoped), plus the guidelines
+    shared with them (library files of their company and department, not held back), which
+    they open and download like get_file(library_ok=True) but do not change."""
+    if principal.scope.everything:
+        return query
+    from ...knowledge import search as library
+    from ...search.viewer import library_scope
+
+    mine = service.scoped(
+        select(DocFile.id).where(DocFile.workspace_id == principal.workspace_id), DocFile, principal
+    )
+    shared = and_(
+        DocFile.library.is_(True),
+        DocFile.quarantined.is_(False),
+        library_scope(library.for_person(principal)),
+    )
+    return query.where(or_(DocFile.id.in_(mine), shared))
 
 
 @router.get("/stats")

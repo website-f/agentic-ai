@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from ...core.db import SessionLocal, get_db
-from ...documents import render_pdf, service
+from ...documents import render_pdf
 from ...documents.extract import sniff
 from ...intake import scan, sort
 from ...knowledge import indexer
@@ -39,6 +39,7 @@ from .files import (
     file_out,
     get_file,
     may_manage,
+    visible_files,
 )
 
 router = APIRouter(prefix="/api/files", tags=["company files"])
@@ -57,7 +58,7 @@ def _visible(principal: Principal, branch_id: str | None) -> Any:
     q = select(DocFile).where(DocFile.workspace_id == principal.workspace_id)
     if branch_id:
         q = q.where(DocFile.branch_id == branch_id)
-    return service.scoped(q, DocFile, principal)
+    return visible_files(q, principal)
 
 
 def _under(folder: str) -> Any:

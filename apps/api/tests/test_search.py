@@ -693,3 +693,20 @@ async def test_made_by_filter_follows_provenance(client):
     assert ids(await find(client, "sebut harga", source="upload")) == []
     assert o["handbook"] in ids(await find(client, "kelayakan advance", source="upload"))
     assert ids(await find(client, "kelayakan advance", source="agent")) == []
+
+
+async def test_staff_browse_the_guidelines_they_can_search(client):
+    """What search finds for staff, Company files lists too: their company's library files
+    (not held back, not another company's, not files only managers see)."""
+    o = await office_docs(client)
+    staff = await as_role(client, "staff3@example.com", "staff", branch_id=o["a"])
+    listed = [f["id"] for f in (await staff.get("/api/files", params={"branch_id": o["a"]})).json()]
+    assert o["guide_a"] in listed
+    assert not {o["held"], o["handbook"], o["form"], o["guide_b"]} & set(listed)
+    found = {h["id"] for h in (await find(staff, "topi keledar"))["hits"]}
+    assert o["guide_a"] in found
+    stats = (await staff.get("/api/files/stats", params={"branch_id": o["a"]})).json()
+    assert stats["total"] == len(listed)
+    tree = (await staff.get("/api/files/tree", params={"branch_id": o["a"]})).json()
+    assert tree["total_files"] == len(listed)
+    await staff.aclose()

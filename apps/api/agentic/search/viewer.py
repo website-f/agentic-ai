@@ -50,7 +50,7 @@ class Viewer:
         open_ = and_(ws, DocFile.quarantined.is_(False), DocFile.status == "ready")
         if self.everything:
             return open_
-        shared = and_(DocFile.library.is_(True), _library_scope(self.reader))
+        shared = and_(DocFile.library.is_(True), library_scope(self.reader))
         if self.agent is not None:
             r = self.reader
             branch = (
@@ -128,7 +128,7 @@ class Viewer:
 WIKI_KINDS = ("wiki", "decision")
 
 
-def _library_scope(r: library.Reader) -> ColumnElement[bool]:
+def library_scope(r: library.Reader) -> ColumnElement[bool]:
     """knowledge.search.scope_where, on files."""
     if r.everything:
         return true()
