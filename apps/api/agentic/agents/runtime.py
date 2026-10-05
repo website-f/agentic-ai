@@ -1321,7 +1321,10 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     approver = await policy.chat_approver(db, agent, session.user_id)
     used: list[str] = []
     outside_read = False  # outside text was read this turn (policy.OUTSIDE_CONTENT)
-    for _ in range(4):
+    for round_no in range(CHAT_ROUNDS):
+        # The last round offers no tools: the agent answers from what it has found so far,
+        # instead of the person getting "could not finish" after real work was done.
+        last = round_no == CHAT_ROUNDS - 1
         history = await _history(db, session_id=session.id)
         prompt = await system_prompt(db, agent, "chat", session.memory_snapshot)
         messages = [{"role": "system", "content": prompt}]
@@ -1344,6 +1347,8 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
             pinned_first=False,
             extra={asked.id: block} if block else None,
         )
+        if last:
+            messages.append({"role": "user", "content": FINAL_ROUND})
         await agent_thinking(agent, True)
         try:
             reply = await gateway.chat(
@@ -1352,8 +1357,8 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 agent.model_group,
                 messages,
                 task="agent.chat",
-                tools=offered_tools(agent, mcp=await _has_mcp(db, ws.id)),
-                max_tokens=1200,
+                tools=None if last else offered_tools(agent, mcp=await _has_mcp(db, ws.id)),
+                max_tokens=1600 if last else 1200,
                 agent_id=agent.id,
             )
         except gateway.GatewayUnavailable:
@@ -1363,7 +1368,7 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
             reply = backup
         finally:
             await agent_thinking(agent, False)
-        if not reply.tool_calls:
+        if not reply.tool_calls and (reply.content or "").strip():
             answer = _add(
                 db,
                 agent,
@@ -1424,6 +1429,15 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     _add(db, agent, "assistant", session_id=session.id, content=final)
     await db.commit()
     return ChatReply(final, "", "", used)
+
+
+# A chat answer may take several tool rounds (search the inbox, open three emails, answer).
+CHAT_ROUNDS = 8
+FINAL_ROUND = (
+    "(System note, not from the person: you have used your tools for this message. Answer "
+    "now from what you have found so far. If something could not be checked, say so in one "
+    "line and offer to continue.)"
+)
 
 
 @dataclass
