@@ -204,3 +204,8 @@ from .routers import minutes as minutes_router  # noqa: E402
 
 RAW_UPLOAD_PATHS.add(minutes_router.UPLOAD_PATH)
 app.include_router(minutes_router.router)
+
+# P21: company objectives (why work matters, progress and cost per objective).
+from .routers import objectives as objectives_router  # noqa: E402
+
+app.include_router(objectives_router.router)

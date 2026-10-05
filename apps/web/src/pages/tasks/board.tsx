@@ -32,6 +32,7 @@ import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { LoadMore } from "@/components/load-more";
+import { ObjectiveChip } from "@/components/objective-bits";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/ui/card";
@@ -39,6 +40,7 @@ import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { editPaged, useDebounced, usePagedList, type PagedList } from "@/lib/paged";
@@ -49,16 +51,17 @@ import { useIsPhone } from "@/lib/use-media";
 import { cn, shortAge, timeAgo } from "@/lib/utils";
 import { PRIORITY_INFO, STATUS_INFO, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
+import { ReviewRoundPill, waitingPath, WaitingChip, type TaskX } from "./accountable";
 import { NewTaskDialog } from "./new-task";
 import { TaskSheet } from "./task-sheet";
 
 const COLUMNS: { status: TaskStatus; hint: string; empty: string }[] = [
-  { status: "triage", hint: "Not started", empty: "New tasks without an agent land here." },
-  { status: "ready", hint: "Queued to run", empty: "Nothing queued." },
-  { status: "running", hint: "Agents working", empty: "No agent is working right now." },
-  { status: "blocked", hint: "Needs a decision", empty: "Nothing is waiting on you." },
-  { status: "review", hint: "Check and accept", empty: "Nothing to review." },
-  { status: "done", hint: "Accepted", empty: "Accepted work shows here." },
+  { status: "triage", hint: msg("Not started"), empty: msg("New tasks without an agent land here.") },
+  { status: "ready", hint: msg("Queued to run"), empty: msg("Nothing queued.") },
+  { status: "running", hint: msg("Agents working"), empty: msg("No agent is working right now.") },
+  { status: "blocked", hint: msg("A decision or a task"), empty: msg("Nothing is waiting on you.") },
+  { status: "review", hint: msg("Check and accept"), empty: msg("Nothing to review.") },
+  { status: "done", hint: msg("Accepted"), empty: msg("Accepted work shows here.") },
 ];
 
 /** The status colour as a small dot beside the column name (the label carries the meaning). */
@@ -151,20 +154,23 @@ function CompanyTag({ company }: { company: Branch }) {
 
 /** What a card shows: title, why it is stuck, chips, who has it and how long ago. */
 function CardContent({ task, company }: { task: Task; company?: Branch }) {
+  const t = useT();
   const urgent = task.priority === "high" || task.priority === "urgent";
   return (
     <>
       <p className="line-clamp-3 text-[13.5px] leading-snug font-medium break-words">{task.title}</p>
-      {task.status === "blocked" && task.blocked_reason ? (
-        <p className="line-clamp-2 rounded-[6px] bg-warn/10 px-2 py-1 text-[12px] break-words text-warn">{task.blocked_reason}</p>
+      {waitingPath(task) ? (
+        <WaitingChip task={task} />
       ) : task.status === "failed" && task.error ? (
         <p className="line-clamp-2 rounded-[6px] bg-danger/8 px-2 py-1 text-[12px] break-words text-danger">{task.error}</p>
       ) : null}
-      {task.labels?.length || urgent || task.pending_approvals || company ? (
+      {task.labels?.length || urgent || task.pending_approvals || company || (task as TaskX).review_round || task.objective_title ? (
         <span className="flex min-w-0 flex-wrap gap-1">
           {company ? <CompanyTag company={company} /> : null}
+          {task.objective_title ? <ObjectiveChip title={task.objective_title} /> : null}
+          <ReviewRoundPill task={task} />
           {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
-          {urgent ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{PRIORITY_INFO[task.priority].label}</Pill> : null}
+          {urgent ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{t(PRIORITY_INFO[task.priority].label)}</Pill> : null}
           {task.labels?.slice(0, 3).map((l) => <Pill key={l} className="max-w-full truncate">{l}</Pill>)}
         </span>
       ) : null}
@@ -174,8 +180,8 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
             <AgentAvatar name={task.assignee_name} color={task.assignee_color ?? "#888"} size="xs" working={task.status === "running"} />
             <span className="truncate">{task.assignee_name}</span>
           </span>
-        ) : <span className="truncate text-[12px] text-muted italic">Unassigned</span>}
-        <time dateTime={task.updated_at} title={`Updated ${timeAgo(task.updated_at).toLowerCase()}`} className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-muted tabular">{shortAge(task.updated_at)}</time>
+        ) : <span className="truncate text-[12px] text-muted italic">{t("Unassigned")}</span>}
+        <time dateTime={task.updated_at} title={t("Updated {ago}", { ago: timeAgo(task.updated_at).toLowerCase() })} className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-muted tabular">{shortAge(task.updated_at)}</time>
       </div>
     </>
   );
@@ -199,6 +205,7 @@ function TaskCard({ task, onOpen, draggable, guide, company, line }: {
   company?: Branch;
   line?: "before" | "after";
 }) {
+  const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: !draggable,
@@ -212,7 +219,7 @@ function TaskCard({ task, onOpen, draggable, guide, company, line }: {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       // Drag attributes only when draggable: otherwise dnd-kit adds aria-disabled, which tells
       // screen readers the card itself is disabled although it still opens the task.
-      {...(draggable ? { ...listeners, ...attributes, "aria-roledescription": "draggable task" } : {})}
+      {...(draggable ? { ...listeners, ...attributes, "aria-roledescription": t("draggable task") } : {})}
       onClick={onOpen}
       className={cn(
         CARD,
@@ -267,6 +274,7 @@ interface ColumnProps {
 }
 
 function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered, drop, sortable, companyOf, guideFirst }: ColumnProps) {
+  const t = useT();
   const { setNodeRef } = useDroppable({ id: colId(status), data: { type: "col", status } satisfies DragData });
   const scroller = useRef<HTMLDivElement>(null);
   const tasks = list.items;
@@ -279,7 +287,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
     <section
       ref={setNodeRef}
       data-col={status}
-      aria-label={info.label}
+      aria-label={t(info.label)}
       className={cn(
         // Fills the screen below the toolbar; the cards scroll inside the column, header stays.
         "flex h-[var(--fill-h,24rem)] w-[84vw] max-w-[20rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-border/60 bg-surface-2/50 transition-[border-color,background-color,opacity,box-shadow] duration-150",
@@ -294,9 +302,9 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold">
             <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[info.tone])} />
-            <span className="truncate">{info.label}</span>
+            <span className="truncate">{t(info.label)}</span>
           </h2>
-          <p className="mt-0.5 truncate pl-4 text-[11.5px] text-muted">{dragFrom && !allowed && !home ? "Can't move here" : hint}</p>
+          <p className="mt-0.5 truncate pl-4 text-[11.5px] text-muted">{dragFrom && !allowed && !home ? t("Can't move here") : t(hint)}</p>
         </div>
         <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-muted tabular ring-1 ring-border/70">{list.total ?? tasks.length}</span>
       </header>
@@ -310,10 +318,10 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
         {!tasks.length ? (
           <p className={cn("grid min-h-24 place-items-center rounded-[var(--radius-sm)] border border-dashed border-border px-3 py-6 text-center text-[12px] text-muted transition-colors",
             dragFrom && allowed && "border-accent/60 text-accent", hovered && allowed && "border-solid bg-surface/70 font-medium")}>
-            {dragFrom && allowed ? "Drop here" : empty}
+            {dragFrom && allowed ? t("Drop here") : t(empty)}
           </p>
         ) : null}
-        <LoadMore compact root={scroller} margin={240} noun="tasks" shown={tasks.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} />
+        <LoadMore compact root={scroller} margin={240} noun={t("tasks")} shown={tasks.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} />
       </div>
     </section>
   );
@@ -322,6 +330,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
 /** One tab of the phone column switcher. While a card is held it is also a drop target: drop
  * on it to move the card to the top of that column; hover a moment and the board slides there. */
 function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: TaskStatus; count: number; on: boolean; onPick: () => void; dragFrom: TaskStatus | null; hovered: boolean }) {
+  const t = useT();
   const { setNodeRef } = useDroppable({ id: tabId(status), data: { type: "tab", status } satisfies DragData, disabled: !dragFrom });
   const allowed = canMove(dragFrom, status);
   return (
@@ -343,7 +352,7 @@ function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: T
         <motion.span layoutId="board-tab" transition={{ type: "spring", stiffness: 500, damping: 38 }}
           className="absolute inset-0 rounded-[calc(var(--radius-sm)-2px)] bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] ring-1 ring-border" />
       ) : null}
-      <span className="relative">{STATUS_INFO[status].label}</span>
+      <span className="relative">{t(STATUS_INFO[status].label)}</span>
       <span className={cn("relative rounded-full px-1.5 text-[11px] tabular", hovered && allowed ? "bg-accent-fg/20 text-accent-fg" : on ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted")}>{count}</span>
     </button>
   );
@@ -385,13 +394,14 @@ interface Move {
 }
 
 export function TasksPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const reduce = !!useReducedMotion();
   const phone = useIsPhone();
-  const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string };
+  const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string; objective?: string };
   const [creating, setCreating] = useState(0);
   const [active, setActive] = useState<Task | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
@@ -457,10 +467,12 @@ export function TasksPage() {
   /** Relaunch every failed task shown (the API takes up to 50 per call and says what it skipped). */
   const retryFailed = async () => {
     try {
-      const r = await api<RetryFailedResult>("/api/tasks/retry-failed", "POST", { task_ids: failed.map((t) => t.id) });
+      const r = await api<RetryFailedResult>("/api/tasks/retry-failed", "POST", { task_ids: failed.map((x) => x.id) });
       const why = r.skipped[0]?.reason;
-      if (r.retried) toast.success(`Retrying ${r.retried} task${r.retried === 1 ? "" : "s"}.`, why ? { description: `${r.skipped.length} not retried: ${why}` } : undefined);
-      else toast.error(why ? `None retried: ${why}` : "Nothing to retry.");
+      if (r.retried) {
+        toast.success(r.retried === 1 ? t("Retrying 1 task.") : t("Retrying {n} tasks.", { n: r.retried }),
+          why ? { description: t("{n} not retried: {why}", { n: r.skipped.length, why }) } : undefined);
+      } else toast.error(why ? t("None retried: {why}", { why }) : t("Nothing to retry."));
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -636,7 +648,7 @@ export function TasksPage() {
       return;
     }
     if (!canMove(from.status, to)) {
-      toast(`A ${STATUS_INFO[from.status].label.toLowerCase()} task cannot go to ${STATUS_INFO[to].label.toLowerCase()}.`);
+      toast(t("A {from} task cannot go to {to}.", { from: t(STATUS_INFO[from.status].label).toLowerCase(), to: t(STATUS_INFO[to].label).toLowerCase() }));
       return;
     }
     const list = cols[to as BoardStatus]?.items ?? [];
@@ -651,21 +663,21 @@ export function TasksPage() {
     place(m);
     buzz(8);
     move.mutate(m);
-    if (d.type === "tab") toast.success(`Moved to ${STATUS_INFO[to].label}.`, { duration: 1800 });
+    if (d.type === "tab") toast.success(t("Moved to {column}.", { column: t(STATUS_INFO[to].label) }), { duration: 1800 });
   };
 
   const labelOf = (id: string | number | undefined) => {
     const s = id === undefined ? "" : String(id);
     const status = s.startsWith("col:") || s.startsWith("tab:") ? (s.slice(4) as TaskStatus) : null;
-    if (status) return `the ${STATUS_INFO[status].label} column`;
-    const t = lists.flatMap((l) => l.items).find((x) => x.id === s);
-    return t ? `"${t.title}"` : "the board";
+    if (status) return t("the {column} column", { column: t(STATUS_INFO[status].label) });
+    const hit = lists.flatMap((l) => l.items).find((x) => x.id === s);
+    return hit ? `"${hit.title}"` : t("the board");
   };
   const announcements: Announcements = {
-    onDragStart: ({ active: a }) => `Picked up ${labelOf(a.id)}. Use the arrow keys to move it, Space to drop, Escape to cancel.`,
-    onDragOver: ({ over }) => (over ? `Over ${labelOf(over.id)}.` : "Not over a column."),
-    onDragEnd: ({ over }) => (over ? `Dropped on ${labelOf(over.id)}.` : "Dropped outside the board. Nothing moved."),
-    onDragCancel: () => "Move cancelled. Nothing changed.",
+    onDragStart: ({ active: a }) => t("Picked up {item}. Use the arrow keys to move it, Space to drop, Escape to cancel.", { item: labelOf(a.id) }),
+    onDragOver: ({ over }) => (over ? t("Over {item}.", { item: labelOf(over.id) }) : t("Not over a column.")),
+    onDragEnd: ({ over }) => (over ? t("Dropped on {item}.", { item: labelOf(over.id) }) : t("Dropped outside the board. Nothing moved.")),
+    onDragCancel: () => t("Move cancelled. Nothing changed."),
   };
 
   const newOpen = creating > 0 || (!!search.new && canWrite);
@@ -686,18 +698,18 @@ export function TasksPage() {
   return (
     <Page wide>
       <PageHeader
-        title="Tasks"
-        description={phone ? undefined : "Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves."}
+        title={t("Tasks")}
+        description={phone ? undefined : t("Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves.")}
         // Phones: a round "+" beside the search instead of a full-width button, so the board gets the screen.
-        actions={canWrite && !(phone && showBoard) ? <Button data-guide="tasks.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New task</Button> : null}
+        actions={canWrite && !(phone && showBoard) ? <Button data-guide="tasks.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
       />
       {isLoading ? (
         <BoardSkeleton />
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : !anyTasks && !needle ? (
-        <EmptyState icon={KanbanIcon} title={branchFilter && selected ? `No tasks at ${selected.name} yet` : "No tasks yet"} body="Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review."
-          action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> Create first task</Button> : undefined} />
+        <EmptyState icon={KanbanIcon} title={branchFilter && selected ? t("No tasks at {name} yet", { name: selected.name }) : t("No tasks yet")} body={t("Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review.")}
+          action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
       ) : (
         <DndContext
           sensors={sensors}
@@ -705,7 +717,7 @@ export function TasksPage() {
           measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           // Scroll the column under the card and the sideways board near their edges; never the page.
           autoScroll={{ threshold: { x: 0.14, y: 0.16 }, acceleration: 14, canScroll: (el) => el !== document.scrollingElement && el !== document.body }}
-          accessibility={{ announcements, screenReaderInstructions: { draggable: "To move a task, press Space. Use the arrow keys to choose a column or a place in it, then press Space again to drop it, or Escape to cancel." } }}
+          accessibility={{ announcements, screenReaderInstructions: { draggable: t("To move a task, press Space. Use the arrow keys to choose a column or a place in it, then press Space again to drop it, or Escape to cancel.") } }}
           onDragStart={onDragStart}
           onDragMove={track}
           onDragOver={track}
@@ -714,24 +726,24 @@ export function TasksPage() {
         >
           <Toolbar className="xl:max-w-2xl">
             <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
-              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder="Filter by title, agent or label" />
+              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Filter by title, agent or label")} />
               {canWrite && phone ? (
-                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label="New task" onClick={() => setCreating((n) => n + 1)}>
+                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={() => setCreating((n) => n + 1)}>
                   <PlusIcon size={18} weight="bold" />
                 </Button>
               ) : null}
             </div>
             {branchFilter && selected ? (
-              <button type="button" onClick={() => select(ALL_COMPANIES)} title="Show every company's tasks"
+              <button type="button" onClick={() => select(ALL_COMPANIES)} title={t("Show every company's tasks")}
                 className="inline-flex h-10 max-w-full min-w-0 shrink-0 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-[12.5px] text-muted hover:border-accent/40 hover:text-fg pointer-coarse:h-11">
                 <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: selected.color }} />
-                <span className="truncate">Only {selected.name}</span>
+                <span className="truncate">{t("Only {name}", { name: selected.name })}</span>
                 <XIcon size={13} className="shrink-0" />
               </button>
             ) : null}
             {/* Column switcher for the swipeable board (and a drop target while dragging); wide screens see all six columns. */}
             <div ref={tabs} className="min-w-0 xl:hidden">
-              <div role="tablist" aria-label="Board columns"
+              <div role="tablist" aria-label={t("Board columns")}
                 className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {COLUMNS.map((c) => (
                   <ColumnTab key={c.status} status={c.status} count={counts.get(c.status) ?? 0} on={c.status === col} onPick={() => jump(c.status)}
@@ -753,7 +765,7 @@ export function TasksPage() {
             {COLUMNS.map((c) => {
               const drop = target && target.status === c.status && target.status !== dragFrom && canMove(dragFrom, c.status) && target.index >= 0 ? target.index : null;
               return (
-                <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? "No match in this column." : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
+                <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? msg("No match in this column.") : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
                   canWrite={canWrite} dragFrom={dragFrom} hovered={overStatus === c.status} drop={drop} sortable={sortable} companyOf={companyOf} guideFirst={c.status === firstBusy} />
               );
             })}
@@ -767,14 +779,14 @@ export function TasksPage() {
             <details className="group min-w-0 rounded-[var(--radius-md)] border border-border bg-surface">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[13px] font-medium [&::-webkit-details-marker]:hidden">
                 <CaretRightIcon size={13} weight="bold" className="shrink-0 text-muted transition-transform group-open:rotate-90" />
-                <WarningIcon size={15} weight="duotone" className="shrink-0 text-muted" /> Failed and cancelled
+                <WarningIcon size={15} weight="duotone" className="shrink-0 text-muted" /> {t("Failed and cancelled")}
                 <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] font-medium text-muted tabular">{closedTotal}</span>
               </summary>
               {canWrite && failed.length ? (
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
-                  <p className="min-w-0 text-[12.5px] text-muted">{failedTotal} failed {failedTotal === 1 ? "task was" : "tasks were"} never retried.</p>
+                  <p className="min-w-0 text-[12.5px] text-muted">{failedTotal === 1 ? t("1 failed task was never retried.") : t("{n} failed tasks were never retried.", { n: failedTotal })}</p>
                   <Button size="sm" variant="outline" className="min-h-9" onClick={() => setRetrying(true)}>
-                    <ArrowClockwiseIcon size={14} weight="bold" /> Retry all failed
+                    <ArrowClockwiseIcon size={14} weight="bold" /> {t("Retry all failed")}
                   </Button>
                 </div>
               ) : null}
@@ -785,18 +797,18 @@ export function TasksPage() {
                     <CardContent task={t} company={companyOf(t)} />
                   </button>
                 ))}
-                <LoadMore className="col-span-full" noun="tasks" shown={closed.length} total={closedList.total} hasMore={closedList.hasMore} loading={closedList.isFetchingMore} onLoad={closedList.loadMore} />
+                <LoadMore className="col-span-full" noun={t("tasks")} shown={closed.length} total={closedList.total} hasMore={closedList.hasMore} loading={closedList.isFetchingMore} onLoad={closedList.loadMore} />
               </div>
             </details>
           ) : null}
-          <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={`Retry ${failedTotal} failed task${failedTotal === 1 ? "" : "s"}?`} confirmLabel="Retry all"
-            body={<>Each one starts a fresh run with its agent, continuing the same conversation.{failedTotal > 50 ? " Up to 50 start now; retry again for the rest." : ""}{needle ? " Only the tasks matching your filter are retried." : ""}</>}
+          <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={failedTotal === 1 ? t("Retry 1 failed task?") : t("Retry {n} failed tasks?", { n: failedTotal })} confirmLabel={t("Retry all")}
+            body={<>{t("Each one starts a fresh run with its agent, continuing the same conversation.")}{failedTotal > 50 ? ` ${t("Up to 50 start now; retry again for the rest.")}` : ""}{needle ? ` ${t("Only the tasks matching your filter are retried.")}` : ""}</>}
             onConfirm={retryFailed} />
         </DndContext>
       )}
       {search.task ? <TaskSheet taskId={search.task} onClose={() => navigate({ to: "/tasks", search: {} })} /> : null}
       {newOpen ? (
-        <NewTaskDialog key={`${creating}-${search.agent ?? ""}`} open onOpenChange={(o) => !o && closeNew()} initialAgent={search.agent} initialBrief={search.brief}
+        <NewTaskDialog key={`${creating}-${search.agent ?? ""}`} open onOpenChange={(o) => !o && closeNew()} initialAgent={search.agent} initialBrief={search.brief} initialObjective={search.objective}
           onCreated={(t) => { setCreating(0); navigate({ to: "/tasks", search: { task: t.id } }); }} />
       ) : null}
     </Page>

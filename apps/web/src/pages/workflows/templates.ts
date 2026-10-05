@@ -1,4 +1,5 @@
 /** Ready-made office workflows to start from. Each is a plain graph; people change anything. */
+import { msg } from "@/i18n";
 import type { Graph, WNode } from "@/lib/workflows";
 
 import { tidy } from "./layout";
@@ -25,8 +26,8 @@ function build(steps: S[], edges: E[]): Graph {
 
 export const TEMPLATES: WorkflowTemplate[] = [
   {
-    id: "enquiry", name: "Client enquiry to quotation", area: "Sales",
-    description: "Qualify a new enquiry, research the client, quote, approve and reply.",
+    id: "enquiry", name: msg("Client enquiry to quotation"), area: "Sales",
+    description: msg("Qualify a new enquiry, research the client, quote, approve and reply."),
     graph: build(
       [["s", "start", "Enquiry comes in", "Email, WhatsApp or web form from a prospect."],
         ["r", "read", "Pull out the request", "What they need, where, when, budget and contact."],
@@ -42,8 +43,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "invoice", name: "Supplier invoice processing", area: "Finance",
-    description: "Read the invoice, match it to the PO, get approval, record it and tell the supplier.",
+    id: "invoice", name: msg("Supplier invoice processing"), area: "Finance",
+    description: msg("Read the invoice, match it to the PO, get approval, record it and tell the supplier."),
     graph: build(
       [["s", "start", "Invoice received"],
         ["r", "read", "Read the invoice", "Supplier, invoice no., date, items, total, due date."],
@@ -59,8 +60,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "leave", name: "Leave request", area: "HR",
-    description: "Check the balance, get the manager's approval, tell the team.",
+    id: "leave", name: msg("Leave request"), area: "HR",
+    description: msg("Check the balance, get the manager's approval, tell the team."),
     graph: build(
       [["s", "start", "Leave request"],
         ["c", "calculate", "Check leave balance", "Days asked vs days left this year."],
@@ -73,8 +74,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "purchase", name: "Purchase request", area: "Operations",
-    description: "Get three quotes, compare, recommend, approve, issue the PO.",
+    id: "purchase", name: msg("Purchase request"), area: "Operations",
+    description: msg("Get three quotes, compare, recommend, approve, issue the PO."),
     graph: build(
       [["s", "start", "Someone needs to buy something"],
         ["q", "research", "Find three suppliers", "Prices, delivery time, warranty."],
@@ -89,8 +90,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "weekly", name: "Weekly management report", area: "Admin",
-    description: "Gather the week's numbers, summarise, check and publish.",
+    id: "weekly", name: msg("Weekly management report"), area: "Admin",
+    description: msg("Gather the week's numbers, summarise, check and publish."),
     graph: build(
       [["s", "start", "Every Friday"],
         ["r", "read", "Gather this week's files", "Sales, spend, tickets, attendance."],
@@ -104,8 +105,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "recruit", name: "Recruitment screening", area: "HR",
-    description: "Read CVs, shortlist, schedule interviews and email candidates.",
+    id: "recruit", name: msg("Recruitment screening"), area: "HR",
+    description: msg("Read CVs, shortlist, schedule interviews and email candidates."),
     graph: build(
       [["s", "start", "CVs received"],
         ["r", "read", "Read every CV", "Experience, skills, salary, notice period."],
@@ -119,8 +120,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "complaint", name: "Customer complaint", area: "Support",
-    description: "Understand it, route it, reply, then follow up.",
+    id: "complaint", name: msg("Customer complaint"), area: "Support",
+    description: msg("Understand it, route it, reply, then follow up."),
     graph: build(
       [["s", "start", "Complaint received"],
         ["u", "summarise", "What happened", "The issue, the customer, what they want."],
@@ -135,8 +136,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "social", name: "Social media post", area: "Marketing",
-    description: "Research, write in two languages, approve and schedule.",
+    id: "social", name: msg("Social media post"), area: "Marketing",
+    description: msg("Research, write in two languages, approve and schedule."),
     graph: build(
       [["s", "start", "Post idea"],
         ["q", "research", "Research the topic", "Facts, trends and what competitors posted."],
@@ -150,8 +151,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "tender", name: "Submission pack", area: "Sales",
-    description: "Read the requirements, gather the documents, check and approve.",
+    id: "tender", name: msg("Submission pack"), area: "Sales",
+    description: msg("Read the requirements, gather the documents, check and approve."),
     graph: build(
       [["s", "start", "Tender or proposal to submit"],
         ["r", "read", "Read the requirements", "Every document and form they ask for, and the deadline."],
@@ -166,8 +167,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "monthend", name: "Month-end close", area: "Finance",
-    description: "Reconcile, explain variances, approve and report.",
+    id: "monthend", name: msg("Month-end close"), area: "Finance",
+    description: msg("Reconcile, explain variances, approve and report."),
     graph: build(
       [["s", "start", "Last working day"],
         ["x", "spreadsheet", "Reconcile bank and ledger"],
@@ -182,8 +183,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "meeting", name: "Meeting follow-up", area: "Admin",
-    description: "Minutes, action items, emails and a check-in a few days later.",
+    id: "meeting", name: msg("Meeting follow-up"), area: "Admin",
+    description: msg("Minutes, action items, emails and a check-in a few days later."),
     graph: build(
       [["s", "start", "Meeting finished"],
         ["u", "summarise", "Write the minutes", "Decisions and who does what by when."],
@@ -196,8 +197,8 @@ export const TEMPLATES: WorkflowTemplate[] = [
     ),
   },
   {
-    id: "onboard", name: "New staff onboarding", area: "HR",
-    description: "Welcome, first-week plan, accounts and team intro.",
+    id: "onboard", name: msg("New staff onboarding"), area: "HR",
+    description: msg("Welcome, first-week plan, accounts and team intro."),
     graph: build(
       [["s", "start", "Offer accepted"],
         ["i", "input", "Start date and role", "HR confirms the details."],

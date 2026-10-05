@@ -24,8 +24,10 @@ import { flushSync } from "react-dom";
 
 import { LogoMark } from "@/components/logo";
 import { useManifest } from "@/guide/data";
+import { useSlides } from "@/guide/lang";
 import type { GuideManifest } from "@/guide/manifest";
 import { SLIDES } from "@/guide/slides";
+import { useT } from "@/i18n";
 import { meQuery } from "@/lib/queries";
 import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ import { SlideView, type Presenter } from "./slide";
 
 const W = 1600;
 const H = 900;
+// Every language has the same slides (content-parity.test.ts), so the count is fixed.
 const TOTAL = SLIDES.length;
 
 const PRINT_CSS = `
@@ -93,9 +96,10 @@ function usePrintDeck() {
 }
 
 function PrintDeck({ manifest, presenter }: { manifest: GuideManifest | null; presenter: Presenter }) {
+  const slides = useSlides();
   return (
     <div className="present-print hidden" aria-hidden>
-      {SLIDES.map((s, i) => (
+      {slides.map((s, i) => (
         <section key={s.id}>
           <SlideView slide={s} index={i} total={TOTAL} manifest={manifest} presenter={presenter} eager />
         </section>
@@ -125,6 +129,8 @@ function IconButton({ label, onClick, active, children, className }: { label: st
 
 /** Every slide as a small picture; click one to jump there. */
 function Overview({ index, manifest, presenter, onPick, onClose }: { index: number; manifest: GuideManifest | null; presenter: Presenter; onPick: (i: number) => void; onClose: () => void }) {
+  const t = useT();
+  const slides = useSlides();
   const [ref, size] = useBoxSize();
   const cols = size.w >= 1200 ? 4 : size.w >= 820 ? 3 : 2;
   const gap = 16;
@@ -136,17 +142,17 @@ function Overview({ index, manifest, presenter, onPick, onClose }: { index: numb
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur-md"
       role="dialog"
-      aria-label="All slides"
+      aria-label={t("All slides")}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-3">
-        <p className="text-[14px] font-semibold">All slides</p>
-        <IconButton label="Close overview (Esc)" onClick={onClose}>
+        <p className="text-[14px] font-semibold">{t("All slides")}</p>
+        <IconButton label={t("Close overview (Esc)")} onClick={onClose}>
           <XIcon size={18} />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8">
         <div ref={ref} className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap }}>
-          {SLIDES.map((s, i) => (
+          {slides.map((s, i) => (
             <button
               key={s.id}
               type="button"
@@ -176,6 +182,8 @@ function Overview({ index, manifest, presenter, onPick, onClose }: { index: numb
 // ---------------------------------------------------------------- stage (landscape)
 
 function StageDeck({ index, go, manifest, presenter }: { index: number; go: (i: number) => void; manifest: GuideManifest | null; presenter: Presenter }) {
+  const t = useT();
+  const slides = useSlides();
   const [ref, box] = useBoxSize();
   const [notes, setNotes] = useState(false);
   const [overview, setOverview] = useState(false);
@@ -184,7 +192,7 @@ function StageDeck({ index, go, manifest, presenter }: { index: number; go: (i: 
   const fs = useFullscreen();
   const reduce = useReducedMotion();
   const scale = Math.min(box.w / W, box.h / H);
-  const slide = SLIDES[index]!;
+  const slide = slides[index]!;
 
   const move = useCallback(
     (to: number) => {
@@ -276,44 +284,44 @@ function StageDeck({ index, go, manifest, presenter }: { index: number; go: (i: 
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="shrink-0 overflow-hidden border-t border-border bg-surface"
-            aria-label="Presenter notes"
+            aria-label={t("Presenter notes")}
           >
             <div className="mx-auto grid max-h-[26dvh] max-w-5xl gap-1.5 overflow-y-auto px-6 py-4">
-              <p className="text-[11.5px] font-semibold tracking-[0.08em] text-accent uppercase">Notes · slide {index + 1}</p>
+              <p className="text-[11.5px] font-semibold tracking-[0.08em] text-accent uppercase">{t("Notes · slide {n}", { n: index + 1 })}</p>
               <p className="text-[16px] leading-relaxed">{slide.notes}</p>
-              {SLIDES[index + 1] ? <p className="text-[13px] text-muted">Next: {SLIDES[index + 1]!.title}</p> : null}
+              {slides[index + 1] ? <p className="text-[13px] text-muted">{t("Next: {title}", { title: slides[index + 1]!.title })}</p> : null}
             </div>
           </motion.aside>
         ) : null}
       </AnimatePresence>
 
       <div className="flex h-14 shrink-0 items-center gap-1 border-t border-border bg-surface px-2 sm:px-4">
-        <Link to="/" className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-muted hover:bg-surface-2 hover:text-fg" title="Back to the office">
+        <Link to="/" className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-muted hover:bg-surface-2 hover:text-fg" title={t("Back to the office")}>
           <ArrowLeftIcon size={16} />
-          <span className="hidden sm:inline">Exit</span>
+          <span className="hidden sm:inline">{t("Exit")}</span>
         </Link>
         <div className="flex flex-1 items-center justify-center gap-1">
-          <IconButton label="Previous slide" onClick={() => move(index - 1)}>
+          <IconButton label={t("Previous slide")} onClick={() => move(index - 1)}>
             <CaretLeftIcon size={18} weight="bold" />
           </IconButton>
           <span className="min-w-16 text-center text-[13px] font-medium tabular">
             {index + 1} / {TOTAL}
           </span>
-          <IconButton label="Next slide" onClick={() => move(index + 1)}>
+          <IconButton label={t("Next slide")} onClick={() => move(index + 1)}>
             <CaretRightIcon size={18} weight="bold" />
           </IconButton>
         </div>
-        <IconButton label="Presenter notes (N)" onClick={() => setNotes((v) => !v)} active={notes}>
+        <IconButton label={t("Presenter notes (N)")} onClick={() => setNotes((v) => !v)} active={notes}>
           <NotepadIcon size={18} />
         </IconButton>
-        <IconButton label="All slides (O)" onClick={() => setOverview(true)} active={overview}>
+        <IconButton label={t("All slides (O)")} onClick={() => setOverview(true)} active={overview}>
           <SquaresFourIcon size={18} />
         </IconButton>
-        <IconButton label="Print or save as PDF" onClick={() => window.print()} className="max-sm:hidden">
+        <IconButton label={t("Print or save as PDF")} onClick={() => window.print()} className="max-sm:hidden">
           <PrinterIcon size={18} />
         </IconButton>
         {fs.supported ? (
-          <IconButton label={fs.on ? "Leave full screen (F)" : "Full screen (F)"} onClick={fs.toggle} active={fs.on}>
+          <IconButton label={fs.on ? t("Leave full screen (F)") : t("Full screen (F)")} onClick={fs.toggle} active={fs.on}>
             {fs.on ? <CornersInIcon size={18} /> : <CornersOutIcon size={18} />}
           </IconButton>
         ) : null}
@@ -340,6 +348,8 @@ function StageDeck({ index, go, manifest, presenter }: { index: number; go: (i: 
 // ---------------------------------------------------------------- read (portrait phones)
 
 function ReadDeck({ index, manifest, presenter }: { index: number; manifest: GuideManifest | null; presenter: Presenter }) {
+  const t = useT();
+  const slides = useSlides();
   const [current, setCurrent] = useState(index);
   const [notes, setNotes] = useState(false);
   const [overview, setOverview] = useState(false);
@@ -380,20 +390,20 @@ function ReadDeck({ index, manifest, presenter }: { index: number; manifest: Gui
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="flex h-14 items-center gap-2 px-3">
-          <Link to="/" aria-label="Back to the office" className="grid size-10 place-items-center rounded-full text-muted hover:bg-surface-2">
+          <Link to="/" aria-label={t("Back to the office")} className="grid size-10 place-items-center rounded-full text-muted hover:bg-surface-2">
             <ArrowLeftIcon size={18} />
           </Link>
           <LogoMark className="size-7" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[14px] font-semibold">Agentic Office</p>
             <p className="text-[12px] text-muted tabular">
-              Slide {current + 1} of {TOTAL}
+              {t("Slide {n} of {total}", { n: current + 1, total: TOTAL })}
             </p>
           </div>
-          <IconButton label="Presenter notes" onClick={() => setNotes((v) => !v)} active={notes}>
+          <IconButton label={t("Presenter notes")} onClick={() => setNotes((v) => !v)} active={notes}>
             <NotepadIcon size={18} />
           </IconButton>
-          <IconButton label="All slides" onClick={() => setOverview(true)}>
+          <IconButton label={t("All slides")} onClick={() => setOverview(true)}>
             <SquaresFourIcon size={18} />
           </IconButton>
         </div>
@@ -402,7 +412,7 @@ function ReadDeck({ index, manifest, presenter }: { index: number; manifest: Gui
         </div>
       </header>
       <div ref={list} className="mx-auto grid max-w-2xl gap-4 px-4 py-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}>
-        {SLIDES.map((s, i) => (
+        {slides.map((s, i) => (
           <section key={s.id} data-slide={i} className="grid scroll-mt-20 gap-2">
             <p className="px-1 text-[11.5px] font-medium text-muted tabular">
               {i + 1} / {TOTAL}
@@ -410,7 +420,7 @@ function ReadDeck({ index, manifest, presenter }: { index: number; manifest: Gui
             <SlideView slide={s} index={i} total={TOTAL} manifest={manifest} presenter={presenter} read />
             {notes ? (
               <p className="rounded-[var(--radius-md)] border border-dashed border-border bg-surface px-3.5 py-3 text-[13.5px] leading-relaxed text-muted">
-                <span className="font-semibold text-accent">Notes: </span>
+                <span className="font-semibold text-accent">{t("Notes:")} </span>
                 {s.notes}
               </p>
             ) : null}
@@ -424,18 +434,18 @@ function ReadDeck({ index, manifest, presenter }: { index: number; manifest: Gui
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             role="dialog"
-            aria-label="All slides"
+            aria-label={t("All slides")}
             className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur-md"
             style={{ paddingTop: "env(safe-area-inset-top)" }}
           >
             <div className="flex shrink-0 items-center justify-between px-4 py-3">
-              <p className="text-[14px] font-semibold">All slides</p>
-              <IconButton label="Close" onClick={() => setOverview(false)}>
+              <p className="text-[14px] font-semibold">{t("All slides")}</p>
+              <IconButton label={t("Close")} onClick={() => setOverview(false)}>
                 <XIcon size={18} />
               </IconButton>
             </div>
             <ol className="min-h-0 flex-1 overflow-y-auto px-3 pb-8">
-              {SLIDES.map((s, i) => (
+              {slides.map((s, i) => (
                 <li key={s.id}>
                   <button
                     type="button"
@@ -464,6 +474,8 @@ function ReadDeck({ index, manifest, presenter }: { index: number; manifest: Gui
 // ---------------------------------------------------------------- route component
 
 export function PresentPage() {
+  const t = useT();
+  const slides = useSlides();
   const { s } = useSearch({ from: "/present" });
   const navigate = useNavigate();
   const { data: me } = useSuspenseQuery(meQuery);
@@ -477,11 +489,11 @@ export function PresentPage() {
 
   useEffect(() => {
     const prev = document.title;
-    document.title = `${SLIDES[index]?.title ?? "Presentation"} · Agentic Office`;
+    document.title = `${slides[index]?.title ?? t("Presentation")} · Agentic Office`;
     return () => {
       document.title = prev;
     };
-  }, [index]);
+  }, [index, slides, t]);
 
   return (
     <>

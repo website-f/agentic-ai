@@ -125,6 +125,9 @@ class Department(Timestamps, Base):
     name: Mapped[str] = mapped_column(String(120))
     slug: Mapped[str] = mapped_column(String(80))
     position: Mapped[int] = mapped_column(Integer, default=0)
+    # P21 review stages: {"stages": [{"type": "agent", "agent_id": ...} | {"type": "human"}],
+    # "max_rounds": 3}. None = the task's own requires_review decides, as before.
+    review_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     branch: Mapped[Branch] = relationship(back_populates="departments")
 
@@ -247,6 +250,8 @@ class LLMCall(Base):
     error_class: Mapped[str | None] = mapped_column(String(40))
     # The provider's own words (keys redacted), so a 400 can be diagnosed after the fact.
     error_detail: Mapped[str | None] = mapped_column(String(500))
+    # P21: sha256 of the system message + tool schemas; a changing prefix breaks prompt caching.
+    prefix_hash: Mapped[str | None] = mapped_column(String(16))
 
 
 class ProviderCheck(Base):
@@ -407,6 +412,14 @@ class Task(Timestamps, Base):
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     # P11: the workflow run this task is one step of.
     workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    # P21 accountable work: who moves a blocked task next and what they must do; the company
+    # objective it serves; the first task of its delegation tree (for cost roll-up); review.
+    blocked_owner: Mapped[str | None] = mapped_column(String(80))  # user:<id> | agent:<id>
+    blocked_action: Mapped[str | None] = mapped_column(String(300))
+    objective_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    root_task_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    review_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    review_round: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # P12 context window (agents/context.py): the checkpoint of compacted work, the last
     # message it covers, and the last message whose old tool results are shown as stubs.
     ctx_summary: Mapped[str | None] = mapped_column(Text)
@@ -1138,6 +1151,7 @@ class Blueprint(Timestamps, Base):
     sop_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
     skill_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
     color: Mapped[str] = mapped_column(String(16), default="#13895f")
+    review_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # P21
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | analyst
     created_by: Mapped[str] = mapped_column(String(80))
 
@@ -1531,3 +1545,55 @@ class MeetingRecording(Timestamps, Base):
     workflow_id: Mapped[str | None] = mapped_column(String(120))
     runs: Mapped[int] = mapped_column(Integer, default=0)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TaskBlocker(Base):
+    """P21: a task that waits for another (start B when A is done). A cancelled blocker does
+    not count as done: the waiting task needs a person's decision."""
+
+    __tablename__ = "task_blockers"
+    __table_args__ = (UniqueConstraint("task_id", "blocker_task_id", name="uq_task_blockers"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    blocker_task_id: Mapped[str] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Objective(Timestamps, Base):
+    """P21: a company objective work serves ("Win 5 government tenders this quarter"). Tasks
+    carry objective_id; children inherit it; cost and output roll up to it."""
+
+    __tablename__ = "objectives"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ob"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    parent_id: Mapped[str | None] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(200))
+    target: Mapped[str] = mapped_column(String(300), default="")
+    due_on: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active|done|dropped
+    budget_usd: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CredentialState(Base):
+    """P21: a saved login's browser session (cookies + local storage), encrypted, so agents
+    stay signed in to a portal between tasks like a person does. Never shown to models."""
+
+    __tablename__ = "credential_states"
+
+    credential_id: Mapped[str] = mapped_column(
+        ForeignKey("credentials.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(String(40))
+    state_enc: Mapped[str] = mapped_column(Text)
+    check_url: Mapped[str | None] = mapped_column(String(500))
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

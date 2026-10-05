@@ -1,6 +1,8 @@
 /** Types and queries for the Brain (P3): pages, facts, search, graph, dreams, core memory. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg, t } from "@/i18n";
+
 import { api } from "./api";
 
 export type PageKind = "wiki" | "decision" | "raw" | "log" | "agent" | "dream" | "root" | "skill" | "index";
@@ -181,26 +183,26 @@ export const agentFactsQuery = (agentId: string) =>
 
 /** Folder labels and colours. Colours follow the categorical series in fixed order. */
 export const KIND_INFO: Record<PageKind, { label: string; color: string }> = {
-  wiki: { label: "Knowledge", color: "var(--series-1)" },
-  decision: { label: "Decision", color: "var(--series-2)" },
-  raw: { label: "Source", color: "var(--series-3)" },
-  agent: { label: "Agent memory", color: "var(--series-4)" },
-  skill: { label: "Skill", color: "var(--series-7)" },
-  root: { label: "Vault file", color: "var(--series-other)" },
-  log: { label: "Log", color: "var(--series-other)" },
-  dream: { label: "Dream diary", color: "var(--series-other)" },
-  index: { label: "Vault file", color: "var(--series-other)" },
+  wiki: { label: msg("Knowledge"), color: "var(--series-1)" },
+  decision: { label: msg("Decision"), color: "var(--series-2)" },
+  raw: { label: msg("Source"), color: "var(--series-3)" },
+  agent: { label: msg("Agent memory"), color: "var(--series-4)" },
+  skill: { label: msg("Skill"), color: "var(--series-7)" },
+  root: { label: msg("Vault file"), color: "var(--series-other)" },
+  log: { label: msg("Log"), color: "var(--series-other)" },
+  dream: { label: msg("Dream diary"), color: "var(--series-other)" },
+  index: { label: msg("Vault file"), color: "var(--series-other)" },
 };
 
 export const END_REASON: Record<NonNullable<Fact["end_reason"]>, string> = {
-  replaced: "Replaced",
-  merged: "Merged as duplicate",
-  contradicted: "Contradicted",
-  forgotten: "Forgotten",
+  replaced: msg("Replaced"),
+  merged: msg("Merged as duplicate"),
+  contradicted: msg("Contradicted"),
+  forgotten: msg("Forgotten"),
 };
 
 export function factScope(f: Fact): string {
-  if (f.agent_name) return `Private to ${f.agent_name}`;
+  if (f.agent_name) return t("Private to {name}", { name: f.agent_name });
   if (f.branch_name) return f.branch_name;
-  return "Every company";
+  return t("Every company");
 }

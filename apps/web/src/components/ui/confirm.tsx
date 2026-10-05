@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 
+import { useT } from "@/i18n";
+
 import { Button } from "./button";
 import { ResponsiveDialog } from "./dialog";
 
@@ -23,6 +25,7 @@ export function ConfirmDialog({
   danger,
   onConfirm,
 }: ConfirmProps) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
@@ -41,7 +44,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button variant={danger ? "danger" : "primary"} onClick={run} loading={busy}>
             {confirmLabel}

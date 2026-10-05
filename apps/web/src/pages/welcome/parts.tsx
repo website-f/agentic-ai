@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Field, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { SwitchField } from "@/components/ui/switch";
+import { msg, useT } from "@/i18n";
 import { DAY_SHORT, describeHours, hoursProblem, mins, readWhen, type DutyIn, type WorkHours } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,7 @@ export function ChoiceCard({
 
 /* ------------------------------------------------------------ the week */
 
-const NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const NAMES = [msg("Monday"), msg("Tuesday"), msg("Wednesday"), msg("Thursday"), msg("Friday"), msg("Saturday"), msg("Sunday")];
 
 /** ISO weekday (Mon=1) and minutes since midnight, now, in a time zone. */
 function nowIn(tz: string): { day: number; m: number } {
@@ -89,6 +90,7 @@ function nowIn(tz: string): { day: number; m: number } {
 
 /** A week at a glance: working stretches, breaks and rest days, with "now" on today's row. */
 export function WeekTimeline({ hours, className }: { hours: WorkHours; className?: string }) {
+  const t = useT();
   const problem = hoursProblem(hours);
   const lo = Math.max(0, Math.floor(mins(hours.start) / 60) - 1) * 60;
   const hi = Math.min(24, Math.ceil(mins(hours.end) / 60) + 1) * 60;
@@ -96,17 +98,17 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
   const pct = (m: number) => `${((Math.min(Math.max(m, lo), hi) - lo) / span) * 100}%`;
   const ticks: number[] = [];
   const step = span > 12 * 60 ? 240 : span > 8 * 60 ? 180 : 120;
-  for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+  for (let k = Math.ceil(lo / step) * step; k <= hi; k += step) ticks.push(k);
   const [now] = useState(() => nowIn(hours.tz));
   const breaks = [...hours.breaks].sort((a, b) => mins(a.start) - mins(b.start));
   return (
-    <div className={cn("grid min-w-0 gap-2", className)} role="img" aria-label={problem ? "Working hours are not complete" : `Works ${describeHours(hours)}`}>
+    <div className={cn("grid min-w-0 gap-2", className)} role="img" aria-label={problem ? t("Working hours are not complete") : t("Works {hours}", { hours: describeHours(hours) })}>
       <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-end gap-2">
         <span />
         <div className="relative h-4 text-[10.5px] text-muted tabular">
-          {ticks.map((t) => (
-            <span key={t} className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full" style={{ left: pct(t) }}>
-              {String(t / 60).padStart(2, "0")}:00
+          {ticks.map((k) => (
+            <span key={k} className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full" style={{ left: pct(k) }}>
+              {String(k / 60).padStart(2, "0")}:00
             </span>
           ))}
         </div>
@@ -117,8 +119,8 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
         const today = day === now.day;
         return (
           <div key={name} className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2">
-            <span className={cn("text-[12px] tabular", today ? "font-semibold text-fg" : "text-muted")} title={name}>
-              {DAY_SHORT[i]}
+            <span className={cn("text-[12px] tabular", today ? "font-semibold text-fg" : "text-muted")} title={t(name)}>
+              {t(DAY_SHORT[i]!)}
             </span>
             <div className={cn("relative h-6 overflow-hidden rounded-[6px] bg-surface-2", today && "ring-1 ring-accent/40")}>
               {works ? (
@@ -127,7 +129,7 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
                   {breaks.map((b) => (
                     <span
                       key={b.start}
-                      title={`Break ${b.start}–${b.end}`}
+                      title={t("Break {start}–{end}", { start: b.start, end: b.end })}
                       className="absolute inset-y-0 grid place-items-center bg-[repeating-linear-gradient(135deg,var(--surface-2)_0_4px,var(--surface)_4px_8px)] text-muted"
                       style={{ left: pct(mins(b.start)), width: `calc(${pct(mins(b.end))} - ${pct(mins(b.start))})` }}
                     >
@@ -136,7 +138,7 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
                   ))}
                 </>
               ) : (
-                <span className="absolute inset-0 grid place-items-center text-[11px] text-muted">Rest day</span>
+                <span className="absolute inset-0 grid place-items-center text-[11px] text-muted">{t("Rest day")}</span>
               )}
               {today && now.m >= lo && now.m <= hi ? (
                 <span aria-hidden className="absolute inset-y-0 w-0.5 bg-fg/70" style={{ left: pct(now.m) }} />
@@ -146,9 +148,9 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
         );
       })}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pl-[3rem] text-[11.5px] text-muted">
-        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-accent/85" /> Working</span>
-        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-[repeating-linear-gradient(135deg,var(--surface-2)_0_2px,var(--border)_2px_4px)]" /> Break</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-fg/70" /> Now</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-accent/85" /> {t("Working")}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-[repeating-linear-gradient(135deg,var(--surface-2)_0_2px,var(--border)_2px_4px)]" /> {t("Break")}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-fg/70" /> {t("Now")}</span>
       </div>
     </div>
   );
@@ -157,10 +159,10 @@ export function WeekTimeline({ hours, className }: { hours: WorkHours; className
 /* ------------------------------------------------------------ the hours editor */
 
 const PRESETS: { label: string; days: number[]; start: string; end: string; breaks: { start: string; end: string }[] }[] = [
-  { label: "Office week", days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00", breaks: [{ start: "13:00", end: "14:00" }] },
-  { label: "Early shift", days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00", breaks: [{ start: "12:00", end: "13:00" }] },
-  { label: "Six days", days: [1, 2, 3, 4, 5, 6], start: "09:00", end: "18:00", breaks: [{ start: "13:00", end: "14:00" }] },
-  { label: "Every day", days: [1, 2, 3, 4, 5, 6, 7], start: "09:00", end: "21:00", breaks: [{ start: "13:00", end: "14:00" }] },
+  { label: msg("Office week"), days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00", breaks: [{ start: "13:00", end: "14:00" }] },
+  { label: msg("Early shift"), days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00", breaks: [{ start: "12:00", end: "13:00" }] },
+  { label: msg("Six days"), days: [1, 2, 3, 4, 5, 6], start: "09:00", end: "18:00", breaks: [{ start: "13:00", end: "14:00" }] },
+  { label: msg("Every day"), days: [1, 2, 3, 4, 5, 6, 7], start: "09:00", end: "21:00", breaks: [{ start: "13:00", end: "14:00" }] },
 ];
 
 const ZONES = [
@@ -192,6 +194,7 @@ function zones(current: string): string[] {
 }
 
 export function HoursEditor({ value, onChange, name }: { value: WorkHours; onChange: (v: WorkHours) => void; name: string }) {
+  const t = useT();
   const set = (patch: Partial<WorkHours>) => onChange({ ...value, ...patch });
   const toggleDay = (d: number) => set({ days: value.days.includes(d) ? value.days.filter((x) => x !== d) : [...value.days, d].sort((a, b) => a - b) });
   const problem = hoursProblem(value);
@@ -206,7 +209,7 @@ export function HoursEditor({ value, onChange, name }: { value: WorkHours; onCha
   return (
     <div className="grid min-w-0 gap-5">
       <div className="grid gap-2">
-        <span className="text-[13px] font-medium">Quick start</span>
+        <span className="text-[13px] font-medium">{t("Quick start")}</span>
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
             <button
@@ -220,13 +223,13 @@ export function HoursEditor({ value, onChange, name }: { value: WorkHours; onCha
               )}
             >
               {active === p ? <CheckIcon size={13} weight="bold" /> : null}
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
       </div>
       <fieldset className="grid gap-2">
-        <legend className="mb-2 text-[13px] font-medium">Working days</legend>
+        <legend className="mb-2 text-[13px] font-medium">{t("Working days")}</legend>
         <div className="grid grid-cols-7 gap-1.5">
           {DAY_SHORT.map((d, i) => {
             const on = value.days.includes(i + 1);
@@ -235,29 +238,29 @@ export function HoursEditor({ value, onChange, name }: { value: WorkHours; onCha
                 key={d}
                 type="button"
                 aria-pressed={on}
-                aria-label={NAMES[i]}
+                aria-label={t(NAMES[i]!)}
                 onClick={() => toggleDay(i + 1)}
                 className={cn(
                   "grid h-11 min-w-0 place-items-center rounded-sm border text-[13px] font-medium transition-colors",
                   on ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface text-muted hover:border-accent/40",
                 )}
               >
-                {d}
+                {t(d)}
               </button>
             );
           })}
         </div>
       </fieldset>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Starts at" type="time" step={300} value={value.start} onChange={(e) => set({ start: e.target.value || value.start })} />
-        <Field label="Finishes at" type="time" step={300} value={value.end} onChange={(e) => set({ end: e.target.value || value.end })} />
+        <Field label={t("Starts at")} type="time" step={300} value={value.start} onChange={(e) => set({ start: e.target.value || value.start })} />
+        <Field label={t("Finishes at")} type="time" step={300} value={value.end} onChange={(e) => set({ end: e.target.value || value.end })} />
       </div>
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[13px] font-medium">Lunch and breaks</span>
+          <span className="text-[13px] font-medium">{t("Lunch and breaks")}</span>
           {value.breaks.length < 4 ? (
             <Button type="button" variant="outline" size="sm" onClick={addBreak}>
-              <PlusIcon size={14} weight="bold" /> Add a break
+              <PlusIcon size={14} weight="bold" /> {t("Add a break")}
             </Button>
           ) : null}
         </div>
@@ -265,28 +268,28 @@ export function HoursEditor({ value, onChange, name }: { value: WorkHours; onCha
           <ul className="grid gap-2">
             {value.breaks.map((b, i) => (
               <li key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
-                <Field label={i === 0 ? "From" : "From"} type="time" step={300} value={b.start} onChange={(e) => setBreak(i, "start", e.target.value || b.start)} />
-                <Field label="Until" type="time" step={300} value={b.end} onChange={(e) => setBreak(i, "end", e.target.value || b.end)} />
-                <Button type="button" variant="ghost" size="icon" aria-label="Remove this break" onClick={() => set({ breaks: value.breaks.filter((_, j) => j !== i) })}>
+                <Field label={t("From")} type="time" step={300} value={b.start} onChange={(e) => setBreak(i, "start", e.target.value || b.start)} />
+                <Field label={t("Until")} type="time" step={300} value={b.end} onChange={(e) => setBreak(i, "end", e.target.value || b.end)} />
+                <Button type="button" variant="ghost" size="icon" aria-label={t("Remove this break")} onClick={() => set({ breaks: value.breaks.filter((_, j) => j !== i) })}>
                   <TrashIcon size={16} />
                 </Button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-[12.5px] text-muted">No breaks: it works straight through.</p>
+          <p className="text-[12.5px] text-muted">{t("No breaks: it works straight through.")}</p>
         )}
       </div>
       <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">Time zone</span>
-        <Select label="Time zone" className="w-full" value={value.tz} onValueChange={(tz) => set({ tz })} options={zones(value.tz).map((z) => ({ value: z, label: z.replace(/_/g, " ") }))} />
+        <span className="text-[13px] font-medium">{t("Time zone")}</span>
+        <Select label={t("Time zone")} className="w-full" value={value.tz} onValueChange={(tz) => set({ tz })} options={zones(value.tz).map((z) => ({ value: z, label: z.replace(/_/g, " ") }))} />
       </div>
       <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 p-3.5">
         <SwitchField
           checked={value.urgent_anytime}
           onCheckedChange={(v) => set({ urgent_anytime: v })}
-          label="May work outside hours for urgent tasks"
-          hint={`Anything marked urgent starts right away, even at night. Everything else waits until ${name} is back.`}
+          label={t("May work outside hours for urgent tasks")}
+          hint={t("Anything marked urgent starts right away, even at night. Everything else waits until {name} is back.", { name })}
         />
       </div>
       {problem ? (
@@ -314,6 +317,7 @@ export const EMPTY_DUTY: DutyIn = { title: "", brief: "", when: "", urgent: fals
 
 /** One recurring duty: what, when (plain words, read back as you type), urgent. */
 export function DutyForm({ value, onChange, urgentAllowed }: { value: DutyIn; onChange: (d: DutyIn) => void; urgentAllowed: boolean }) {
+  const t = useT();
   const text = useDebounced(value.when.trim());
   const read = useQuery({
     queryKey: ["me", "worker", "when", text],
@@ -325,26 +329,26 @@ export function DutyForm({ value, onChange, urgentAllowed }: { value: DutyIn; on
   const r = text.length >= 3 ? read.data : undefined;
   return (
     <div className="grid min-w-0 gap-3">
-      <Field label="Duty" value={value.title} maxLength={160} placeholder="e.g. Weekly aging report" onChange={(e) => onChange({ ...value, title: e.target.value })} />
+      <Field label={t("Duty")} value={value.title} maxLength={160} placeholder={t("e.g. Weekly aging report")} onChange={(e) => onChange({ ...value, title: e.target.value })} />
       <div className="grid gap-1.5">
         <Field
-          label="When"
+          label={t("When")}
           value={value.when}
           maxLength={200}
-          placeholder="e.g. every Monday at 9am"
+          placeholder={t("e.g. every Monday at 9am")}
           onChange={(e) => onChange({ ...value, when: e.target.value })}
           aria-describedby="duty-when-read"
         />
         <p id="duty-when-read" aria-live="polite" className={cn("min-h-[1.25rem] text-[12.5px]", r && !r.ok ? "text-warn" : "text-muted")}>
-          {r ? (r.ok ? <span className="inline-flex items-center gap-1 text-ok"><CheckIcon size={13} weight="bold" /> Runs {r.summary}</span> : r.question) : "Say it in plain words: every weekday at 8am, every 1st of the month at 9am."}
+          {r ? (r.ok ? <span className="inline-flex items-center gap-1 text-ok"><CheckIcon size={13} weight="bold" /> {t("Runs {when}", { when: r.summary })}</span> : r.question) : t("Say it in plain words: every weekday at 8am, every 1st of the month at 9am.")}
         </p>
       </div>
-      <TextareaField label="What to do (optional)" rows={2} maxLength={4000} value={value.brief} onChange={(e) => onChange({ ...value, brief: e.target.value })} placeholder="The steps or the result you expect." />
+      <TextareaField label={t("What to do (optional)")} rows={2} maxLength={4000} value={value.brief} onChange={(e) => onChange({ ...value, brief: e.target.value })} placeholder={t("The steps or the result you expect.")} />
       <SwitchField
         checked={value.urgent}
         onCheckedChange={(v) => onChange({ ...value, urgent: v })}
-        label="Urgent"
-        hint={urgentAllowed ? "Runs on time even outside working hours." : "Marked urgent. It still waits for working hours unless you allow urgent work any time."}
+        label={t("Urgent")}
+        hint={urgentAllowed ? t("Runs on time even outside working hours.") : t("Marked urgent. It still waits for working hours unless you allow urgent work any time.")}
       />
     </div>
   );
@@ -363,9 +367,10 @@ export function useDutyReady(d: DutyIn): boolean {
 }
 
 export function UrgentPill() {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-danger/12 px-2 py-0.5 text-[11.5px] font-medium text-danger">
-      <LightningIcon size={11} weight="fill" /> Urgent
+      <LightningIcon size={11} weight="fill" /> {t("Urgent")}
     </span>
   );
 }

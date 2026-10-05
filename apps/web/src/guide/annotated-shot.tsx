@@ -12,6 +12,7 @@ import {
 import { Dialog } from "radix-ui";
 import { useState, type CSSProperties } from "react";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import type { Device } from "./data";
@@ -36,6 +37,7 @@ function Hotspots({ shot, numbers, active, onActive, interactive = true }: Hotsp
 }
 
 function Hotspot({ box, n, active, onActive, interactive }: { box: GuideBox; n: number; active: string | null; onActive: (id: string | null) => void; interactive: boolean }) {
+  const t = useT();
   const on = active === box.id;
   const dim = active !== null && !on;
   // Badges sit just outside the box's top-left corner, or inside it when the box touches the edge.
@@ -50,7 +52,7 @@ function Hotspot({ box, n, active, onActive, interactive }: { box: GuideBox; n: 
     <button
       type="button"
       tabIndex={interactive ? 0 : -1}
-      aria-label={`Marker ${n}`}
+      aria-label={t("Marker {n}", { n })}
       onMouseEnter={interactive ? () => onActive(box.id) : undefined}
       onMouseLeave={interactive ? () => onActive(null) : undefined}
       onFocus={interactive ? () => onActive(box.id) : undefined}
@@ -94,6 +96,7 @@ export function ShotPlaceholder({
   onActive,
   className,
 }: HotspotProps & { device: Device; title: string; targets: GuideTarget[]; className?: string }) {
+  const tr = useT();
   const shown = targets.filter((t) => numbers.has(t.id));
   return (
     <div
@@ -112,7 +115,7 @@ export function ShotPlaceholder({
           {device === "mobile" ? <DeviceMobileIcon size={22} weight="duotone" /> : <DesktopIcon size={22} weight="duotone" />}
         </span>
         <p className="text-[13.5px] font-medium">{title}</p>
-        <p className="max-w-xs text-[12.5px] text-muted">The screenshot for this view has not been captured yet. The numbered controls are listed below.</p>
+        <p className="max-w-xs text-[12.5px] text-muted">{tr("The screenshot for this view has not been captured yet. The numbered controls are listed below.")}</p>
         {shown.length ? (
           <ul className="mt-1 flex flex-wrap justify-center gap-1.5">
             {shown.map((t) => (
@@ -149,6 +152,7 @@ function Lightbox({
   onOpenChange,
   ...hot
 }: HotspotProps & { shot: GuideShot; alt: string; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const t = useT();
   const [zoom, setZoom] = useState<number>(1);
   const idx = ZOOMS.indexOf(zoom as (typeof ZOOMS)[number]);
   const fitW = shot.w >= shot.h; // landscape shots fill the width; tall ones fill the height
@@ -165,7 +169,7 @@ function Lightbox({
             <Dialog.Title className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{alt}</Dialog.Title>
             <button
               type="button"
-              aria-label="Zoom out"
+              aria-label={t("Zoom out")}
               disabled={idx <= 0}
               onClick={() => setZoom(ZOOMS[Math.max(0, idx - 1)]!)}
               className="grid size-10 place-items-center rounded-full bg-white/10 disabled:opacity-40"
@@ -175,14 +179,14 @@ function Lightbox({
             <span className="w-10 text-center text-[12.5px] tabular">{Math.round(zoom * 100)}%</span>
             <button
               type="button"
-              aria-label="Zoom in"
+              aria-label={t("Zoom in")}
               disabled={idx >= ZOOMS.length - 1}
               onClick={() => setZoom(ZOOMS[Math.min(ZOOMS.length - 1, idx + 1)]!)}
               className="grid size-10 place-items-center rounded-full bg-white/10 disabled:opacity-40"
             >
               <MagnifyingGlassPlusIcon size={18} />
             </button>
-            <Dialog.Close className="grid size-10 place-items-center rounded-full bg-white/10" aria-label="Close">
+            <Dialog.Close className="grid size-10 place-items-center rounded-full bg-white/10" aria-label={t("Close")}>
               <XIcon size={18} />
             </Dialog.Close>
           </div>
@@ -214,6 +218,7 @@ export function AnnotatedShot({
   className,
   ...hot
 }: HotspotProps & { shot: GuideShot; alt: string; device: Device; maxHeight?: string; className?: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ratio = shot.w / shot.h;
   // Tall (phone) shots are capped by height so the whole screen fits beside the text.
@@ -245,7 +250,7 @@ export function AnnotatedShot({
           onClick={() => setOpen(true)}
           className="absolute right-2 bottom-2 z-20 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface/90 px-3 text-[12.5px] font-medium text-fg shadow-[var(--shadow-soft)] backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         >
-          <MagnifyingGlassPlusIcon size={15} /> Enlarge
+          <MagnifyingGlassPlusIcon size={15} /> {t("Enlarge")}
         </button>
       </div>
       <Lightbox shot={shot} alt={alt} open={open} onOpenChange={setOpen} {...hot} />

@@ -4,6 +4,7 @@ import { Command } from "cmdk";
 import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
 
+import { useT } from "@/i18n";
 import { usePalette, useTheme } from "@/lib/stores";
 import { NAV } from "@/nav";
 
@@ -34,6 +35,7 @@ function Key({ children }: { children: ReactNode }) {
 }
 
 export function CommandPalette() {
+  const t = useT();
   const { open, setOpen } = usePalette();
   const navigate = useNavigate();
   const setTheme = useTheme((s) => s.setPref);
@@ -49,51 +51,51 @@ export function CommandPalette() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
         <Dialog.Content className="fixed top-[10dvh] left-1/2 z-50 w-[min(calc(100vw-1.5rem),38rem)] -translate-x-1/2 overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[dialog-in_160ms_cubic-bezier(0.16,1,0.3,1)]">
-          <Dialog.Title className="sr-only">Command palette</Dialog.Title>
-          <Dialog.Description className="sr-only">Jump to a page or run an action.</Dialog.Description>
-          <Command label="Command palette" loop>
+          <Dialog.Title className="sr-only">{t("Command palette")}</Dialog.Title>
+          <Dialog.Description className="sr-only">{t("Jump to a page or run an action.")}</Dialog.Description>
+          <Command label={t("Command palette")} loop>
             <div className="flex items-center gap-2.5 border-b border-border px-4">
               <MagnifyingGlassIcon size={18} className="shrink-0 text-muted" aria-hidden />
               <Command.Input
                 autoFocus
-                placeholder="Jump to a page or run an action…"
+                placeholder={t("Jump to a page or run an action…")}
                 className="h-13 w-full min-w-0 bg-transparent text-[14.5px] outline-none placeholder:text-muted"
               />
               <span className="max-sm:hidden"><Key>Esc</Key></span>
             </div>
             <Command.List className="max-h-[min(60dvh,28rem)] overflow-y-auto overscroll-contain p-2">
               <Command.Empty className="px-3 py-8 text-center text-[13px] text-muted">
-                Nothing matches that.
+                {t("Nothing matches that.")}
               </Command.Empty>
               {NAV.map((section) => (
-                <Command.Group key={section.title} heading={section.title} className={GROUP}>
+                <Command.Group key={section.title} heading={t(section.title)} className={GROUP}>
                   {section.items.map((n) => {
                     const IconCmp = n.icon;
                     return (
-                      <Item key={n.to} value={`${section.title} ${n.label} ${n.to}`} icon={<IconCmp weight="duotone" />} hint={n.phase} onSelect={() => run(() => navigate({ to: n.to }))}>
-                        {n.label}
+                      <Item key={n.to} value={`${t(section.title)} ${t(n.label)} ${section.title} ${n.label} ${n.to}`} icon={<IconCmp weight="duotone" />} hint={n.phase} onSelect={() => run(() => navigate({ to: n.to }))}>
+                        {t(n.label)}
                       </Item>
                     );
                   })}
                 </Command.Group>
               ))}
-              <Command.Group heading="Actions" className={GROUP}>
+              <Command.Group heading={t("Actions")} className={GROUP}>
                 <Item icon={<PlusIcon />} onSelect={() => run(() => navigate({ to: "/organization", search: { new: 1 } }))}>
-                  New branch
+                  {t("New branch")}
                 </Item>
                 <Item icon={<UserPlusIcon />} onSelect={() => run(() => navigate({ to: "/settings/members", search: { add: 1 } }))}>
-                  Add member
+                  {t("Add member")}
                 </Item>
-                <Item icon={<SunIcon />} onSelect={() => run(() => setTheme("light"))}>Light theme</Item>
-                <Item icon={<MoonIcon />} onSelect={() => run(() => setTheme("dark"))}>Dark theme</Item>
-                <Item icon={<MonitorIcon />} onSelect={() => run(() => setTheme("system"))}>Match system theme</Item>
-                <Item icon={<SignOutIcon />} onSelect={() => run(signOut)}>Sign out</Item>
+                <Item icon={<SunIcon />} onSelect={() => run(() => setTheme("light"))}>{t("Light theme")}</Item>
+                <Item icon={<MoonIcon />} onSelect={() => run(() => setTheme("dark"))}>{t("Dark theme")}</Item>
+                <Item icon={<MonitorIcon />} onSelect={() => run(() => setTheme("system"))}>{t("Match system theme")}</Item>
+                <Item icon={<SignOutIcon />} onSelect={() => run(signOut)}>{t("Sign out")}</Item>
               </Command.Group>
             </Command.List>
             <div className="flex items-center gap-4 border-t border-border bg-surface-2/40 px-4 py-2 text-[11.5px] text-muted max-sm:hidden">
-              <span className="flex items-center gap-1.5"><Key><ArrowsDownUpIcon size={11} /></Key> Move</span>
-              <span className="flex items-center gap-1.5"><Key><ArrowElbowDownLeftIcon size={11} /></Key> Open</span>
-              <span className="ml-auto flex items-center gap-1.5"><Key>Ctrl</Key><Key>K</Key> Toggle</span>
+              <span className="flex items-center gap-1.5"><Key><ArrowsDownUpIcon size={11} /></Key> {t("Move")}</span>
+              <span className="flex items-center gap-1.5"><Key><ArrowElbowDownLeftIcon size={11} /></Key> {t("Open|verb")}</span>
+              <span className="ml-auto flex items-center gap-1.5"><Key>Ctrl</Key><Key>K</Key> {t("Toggle")}</span>
             </div>
           </Command>
         </Dialog.Content>

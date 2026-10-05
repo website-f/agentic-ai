@@ -3,18 +3,20 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
+import { LanguageSwitch } from "@/components/language-switch";
 import { IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { msg, useT } from "@/i18n";
 import { meQuery } from "@/lib/queries";
 import { ROLE_INFO } from "@/lib/types";
 import { useTheme, type ThemePref } from "@/lib/stores";
 import { cn, initials } from "@/lib/utils";
 
 const THEMES: { value: ThemePref; label: string; hint: string; icon: typeof SunIcon }[] = [
-  { value: "light", label: "Light", hint: "Bright surfaces", icon: SunIcon },
-  { value: "dark", label: "Dark", hint: "Easy at night", icon: MoonIcon },
-  { value: "system", label: "Match system", hint: "Follows this device", icon: MonitorIcon },
+  { value: "light", label: msg("Light"), hint: msg("Bright surfaces"), icon: SunIcon },
+  { value: "dark", label: msg("Dark"), hint: msg("Easy at night"), icon: MoonIcon },
+  { value: "system", label: msg("Match system"), hint: msg("Follows this device"), icon: MonitorIcon },
 ];
 
 function LinkRow({ to, icon, tone, title, body }: { to: string; icon: typeof SunIcon; tone: Tone; title: string; body: string }) {
@@ -31,12 +33,13 @@ function LinkRow({ to, icon, tone, title, body }: { to: string; icon: typeof Sun
 }
 
 export function SettingsPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const { pref, setPref } = useTheme();
   const role = ROLE_INFO[me.role];
   return (
     <Page className="max-w-3xl">
-      <PageHeader title="Settings" description="Your account, this workspace, and how the app looks on this device." />
+      <PageHeader title={t("Settings")} description={t("Your account, this workspace, and how the app looks on this device.")} />
 
       <Card>
         <div className="flex flex-wrap items-center gap-4 p-4 sm:p-5">
@@ -48,40 +51,44 @@ export function SettingsPage() {
             <p className="text-[13px] break-all text-muted">{me.user.email}</p>
           </div>
           <div className="grid justify-items-start gap-1 sm:justify-items-end">
-            <Pill tone="accent">{role?.label ?? me.role}</Pill>
+            <Pill tone="accent">{role ? t(role.label) : me.role}</Pill>
             {me.scope && me.scope.kind !== "all" && me.scope.label ? <span className="text-[12px] text-muted">{me.scope.label}</span> : null}
           </div>
         </div>
-        {role ? <p className="border-t border-border bg-surface-2/30 px-4 py-2.5 text-[12.5px] text-muted sm:px-5">{role.blurb}</p> : null}
+        {role ? <p className="border-t border-border bg-surface-2/30 px-4 py-2.5 text-[12.5px] text-muted sm:px-5">{t(role.blurb)}</p> : null}
       </Card>
 
       <Card>
-        <CardHeader title="Workspace" icon={<IconTile icon={BuildingOfficeIcon} size="sm" />} />
+        <CardHeader title={t("Workspace")} icon={<IconTile icon={BuildingOfficeIcon} size="sm" />} />
         <dl className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 px-4 py-4 sm:grid-cols-3 sm:px-5">
           <div className="min-w-0">
-            <dt className="text-[12.5px] text-muted">Name</dt>
+            <dt className="text-[12.5px] text-muted">{t("Name")}</dt>
             <dd className="text-[13.5px] font-medium break-words">{me.workspace.name}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-[12.5px] text-muted">Time zone</dt>
+            <dt className="text-[12.5px] text-muted">{t("Time zone")}</dt>
             <dd className="text-[13.5px] font-medium break-words">{me.workspace.timezone.replace(/_/g, " ")}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-[12.5px] text-muted">Handle</dt>
+            <dt className="text-[12.5px] text-muted">{t("Handle")}</dt>
             <dd className="font-mono text-[13px] break-all">{me.workspace.slug}</dd>
           </div>
         </dl>
       </Card>
 
-      <Section title="People and account">
+      <Section title={t("People and account")}>
         <div className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-          <LinkRow to="/settings/members" icon={UsersIcon} tone="info" title="Members and roles" body="Add teammates and decide what each one can do." />
-          <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title="Change password" body="Signs out your other devices." />
+          <LinkRow to="/settings/members" icon={UsersIcon} tone="info" title={t("Members and roles")} body={t("Add teammates and decide what each one can do.")} />
+          <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Signs out your other devices.")} />
         </div>
       </Section>
 
-      <Section title="Appearance" description="Saved on this device.">
-        <RadioGroup.Root value={pref} onValueChange={(v) => setPref(v as ThemePref)} className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Theme">
+      <Section title={t("Language")} description={t("English or Bahasa Melayu. Saved to your profile, so it follows you to other devices.")}>
+        <LanguageSwitch size="md" />
+      </Section>
+
+      <Section title={t("Appearance")} description={t("Saved on this device.")}>
+        <RadioGroup.Root value={pref} onValueChange={(v) => setPref(v as ThemePref)} className="grid grid-cols-3 gap-2 sm:gap-3" aria-label={t("Theme")}>
           {THEMES.map(({ value, label, hint, icon: IconCmp }) => {
             const on = pref === value;
             return (
@@ -95,8 +102,8 @@ export function SettingsPage() {
               >
                 {on ? <CheckCircleIcon size={16} weight="fill" className="absolute top-2 right-2" aria-hidden /> : null}
                 <IconCmp size={22} weight={on ? "fill" : "regular"} />
-                <span className="font-medium">{label}</span>
-                <span className={cn("text-[11.5px] max-sm:hidden", on ? "text-accent/80" : "text-muted")}>{hint}</span>
+                <span className="font-medium">{t(label)}</span>
+                <span className={cn("text-[11.5px] max-sm:hidden", on ? "text-accent/80" : "text-muted")}>{t(hint)}</span>
               </RadioGroup.Item>
             );
           })}

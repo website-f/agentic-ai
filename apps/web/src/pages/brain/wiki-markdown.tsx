@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 const FRONT = /^---\n[\s\S]*?\n---\n?/;
@@ -31,6 +32,7 @@ export function WikiMarkdown({
   title?: string;
   className?: string;
 }) {
+  const t = useT();
   let text = stripFrontmatter(body);
   const first = /^\s*#\s+(.+)\n?/.exec(text);
   if (title && first?.[1]?.trim() === title.trim()) text = text.slice(first[0].length);
@@ -53,7 +55,7 @@ export function WikiMarkdown({
                 <button
                   type="button"
                   onClick={() => onOpen(path, name)}
-                  title={path ?? `No page called “${name}” yet`}
+                  title={path ?? t("No page called “{name}” yet", { name })}
                   className={cn(
                     "underline underline-offset-2",
                     path ? "text-accent" : "text-muted decoration-dashed",

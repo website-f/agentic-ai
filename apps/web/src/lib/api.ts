@@ -1,4 +1,5 @@
 /** Thin fetch wrapper: same-origin cookies, JSON in and out, CSRF echo, typed errors. */
+import { t } from "@/i18n";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -33,7 +34,7 @@ export async function api<T>(path: string, method: Method = "GET", body?: unknow
   try {
     res = await fetch(path, init);
   } catch {
-    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
   }
 
   if (res.status === 204) return undefined as T;
@@ -44,7 +45,7 @@ export async function api<T>(path: string, method: Method = "GET", body?: unknow
     throw new ApiError(
       res.status,
       data?.code ?? "http_error",
-      data?.message ?? `Request failed (${res.status}).`,
+      data?.message ?? t("Request failed ({status}).", { status: res.status }),
       data?.fields ?? {},
     );
   }
@@ -58,13 +59,13 @@ export async function apiWithHeaders<T>(path: string): Promise<{ data: T; header
   try {
     res = await fetch(path, { credentials: "same-origin" });
   } catch {
-    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
   }
   const data = (await res.json().catch(() => null)) as
     | (T & { code?: string; message?: string; fields?: Record<string, string> })
     | null;
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? `Request failed (${res.status}).`, data?.fields ?? {});
+    throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? t("Request failed ({status}).", { status: res.status }), data?.fields ?? {});
   }
   return { data: data as T, headers: res.headers };
 }
@@ -80,11 +81,11 @@ export async function streamNdjson<E>(path: string, body: unknown, onEvent: (e: 
   try {
     res = await fetch(path, { method: "POST", credentials: "same-origin", headers: writeHeaders(), body: JSON.stringify(body) });
   } catch {
-    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
   }
   if (!res.ok || !res.body) {
     const data = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
-    throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? `Request failed (${res.status}).`);
+    throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? t("Request failed ({status}).", { status: res.status }));
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -106,5 +107,5 @@ export async function streamNdjson<E>(path: string, body: unknown, onEvent: (e: 
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  return t("Something went wrong.");
 }

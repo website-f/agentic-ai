@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { t } from "@/i18n";
 import { api } from "@/lib/api";
 
 export type Tier = "free" | "paid" | "local";
@@ -114,6 +115,32 @@ export interface Usage {
   daily: { day: string; provider: string; tokens: number; cost: number; calls: number }[];
 }
 
+/** Prompt-cache drift per agent and kind of work (GET /api/ai/cache-health). */
+export interface CacheHealthGroup {
+  agent_id: string | null;
+  agent_name: string;
+  task: string;
+  calls: number;
+  prefixes: number;
+  changes: number;
+  change_share: number;
+  prompt_tokens: number;
+  cached_tokens: number;
+  cached_share: number | null;
+  cached_share_before: number | null;
+  cached_share_recent: number | null;
+  flags: ("prefix_churn" | "cache_drop")[];
+  note: string;
+}
+
+export interface CacheHealth {
+  days: number;
+  calls: number;
+  cached_share: number | null;
+  flagged: number;
+  groups: CacheHealthGroup[];
+}
+
 export interface PlaygroundReply {
   content: string;
   provider_name: string;
@@ -142,6 +169,7 @@ export const aiKeys = {
   models: (providerId?: string) => ["ai", "models", providerId ?? "all"] as const,
   groups: ["ai", "groups"] as const,
   usage: (days: number) => ["ai", "usage", days] as const,
+  cacheHealth: (days: number) => ["ai", "cache-health", days] as const,
 };
 
 export const aiSettingsQuery = queryOptions({
@@ -185,6 +213,13 @@ export const usageQuery = (days: number) =>
     refetchInterval: 60_000,
   });
 
+export const cacheHealthQuery = (days: number) =>
+  queryOptions({
+    queryKey: aiKeys.cacheHealth(days),
+    queryFn: () => api<CacheHealth>(`/api/ai/cache-health?days=${days}`),
+    refetchInterval: 60_000,
+  });
+
 /** Color follows the provider, never its rank: slot by creation order (ids are ULIDs). */
 export function providerColors(providers: Pick<Provider, "id" | "name">[]): Map<string, string> {
   const ordered = [...providers].sort((a, b) => a.id.localeCompare(b.id));
@@ -204,7 +239,7 @@ export function compact(n: number): string {
 }
 
 export function usd(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "Unpriced";
+  if (n === null || n === undefined) return t("Unpriced");
   if (n === 0) return "$0";
   if (n < 0.01) return `$${n.toFixed(4)}`;
   return `$${n.toFixed(2)}`;

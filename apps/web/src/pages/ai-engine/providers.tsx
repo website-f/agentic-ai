@@ -26,6 +26,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/compo
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { locale, msg, useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
@@ -36,11 +37,13 @@ import { ProviderDialog } from "./provider-dialog";
 import { TestControls, TestSteps, useConnectionTest } from "./test-runner";
 
 const HEALTH = {
-  ok: { label: "Working", cls: "text-ok", icon: CheckCircleIcon },
-  degraded: { label: "Key works, chat failing", cls: "text-warn", icon: WarningCircleIcon },
-  down: { label: "Not working", cls: "text-danger", icon: XCircleIcon },
-  unknown: { label: "Not tested yet", cls: "text-muted", icon: QuestionIcon },
+  ok: { label: msg("Working"), cls: "text-ok", icon: CheckCircleIcon },
+  degraded: { label: msg("Key works, chat failing"), cls: "text-warn", icon: WarningCircleIcon },
+  down: { label: msg("Not working"), cls: "text-danger", icon: XCircleIcon },
+  unknown: { label: msg("Not tested yet"), cls: "text-muted", icon: QuestionIcon },
 } as const;
+
+export const TIER_LABEL: Record<Provider["tier"], string> = { free: msg("Free"), paid: msg("Paid"), local: msg("Local") };
 
 export function Monogram({ name, color, className }: { name: string; color: string; className?: string }) {
   return (
@@ -56,6 +59,7 @@ export function Monogram({ name, color, className }: { name: string; color: stri
 
 /** Last 24 health checks, oldest first. Status color always comes with the text label beside it. */
 function HealthSpark({ checks }: { checks: Provider["recent_checks"] }) {
+  const t = useT();
   const slots = 24;
   const pad = Array.from({ length: Math.max(0, slots - checks.length) }, () => null);
   const cells = [...pad, ...checks];
@@ -67,7 +71,7 @@ function HealthSpark({ checks }: { checks: Provider["recent_checks"] }) {
         preserveAspectRatio="none"
         className="h-3.5 w-full max-w-[120px] min-w-0 flex-1"
         role="img"
-        aria-label={checks.length ? `${okCount} of ${checks.length} recent checks passed` : "No checks yet"}
+        aria-label={checks.length ? t("{ok} of {n} recent checks passed", { ok: okCount, n: checks.length }) : t("No checks yet")}
       >
         {cells.map((c, i) => (
           <rect
@@ -79,16 +83,25 @@ function HealthSpark({ checks }: { checks: Provider["recent_checks"] }) {
             rx={1.5}
             fill={c === null ? "var(--border)" : c.ok ? "var(--ok)" : "var(--danger)"}
           >
-            {c ? <title>{`${new Date(c.ts).toLocaleString()}: ${c.ok ? "passed" : "failed"}${c.latency_ms ? `, ${c.latency_ms} ms` : ""}`}</title> : null}
+            {c ? (
+              <title>
+                {(() => {
+                  const v = { when: new Date(c.ts).toLocaleString(locale()), ms: c.latency_ms ?? 0 };
+                  if (c.latency_ms) return c.ok ? t("{when}: passed, {ms} ms", v) : t("{when}: failed, {ms} ms", v);
+                  return c.ok ? t("{when}: passed", v) : t("{when}: failed", v);
+                })()}
+              </title>
+            ) : null}
           </rect>
         ))}
       </svg>
-      <span className="shrink-0 text-[12px] text-muted tabular">{checks.length ? `${okCount}/${checks.length}` : "No checks"}</span>
+      <span className="shrink-0 text-[12px] text-muted tabular">{checks.length ? `${okCount}/${checks.length}` : t("No checks")}</span>
     </div>
   );
 }
 
 function TestDialog({ provider, open, onOpenChange }: { provider: Provider; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: models } = useQuery({ ...modelsQuery(provider.id), enabled: open });
   const [model, setModel] = useState(provider.last_test_result?.model ?? "");
@@ -100,7 +113,7 @@ function TestDialog({ provider, open, onOpenChange }: { provider: Provider; open
     qc.invalidateQueries({ queryKey: ["ai", "models"] });
   };
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={`Test ${provider.name}`} description="Uses the saved key and address." className="w-[min(94vw,34rem)]">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Test {name}", { name: provider.name })} description={t("Uses the saved key and address.")} className="w-[min(94vw,34rem)]">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <TestControls
           models={(models ?? []).filter((m) => !m.stale).map((m) => m.model_id)}
@@ -118,15 +131,20 @@ function TestDialog({ provider, open, onOpenChange }: { provider: Provider; open
 }
 
 function ProviderCard({ provider, color, canManage }: { provider: Provider; color: string; canManage: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const [dialog, setDialog] = useState<null | "test" | "models" | "edit" | "remove">(null);
   const [editKey, setEditKey] = useState(0);
   const h = HEALTH[provider.health];
+  // "Working" is also an agent state (Sedang bekerja); a provider that works needs its own Malay word.
+  const lang = useLang((s) => s.lang);
   const toggle = useMutation({
     mutationFn: () => api(`/api/ai/providers/${provider.id}`, "PATCH", { enabled: !provider.enabled }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: aiKeys.providers });
-      toast.success(provider.enabled ? `${provider.name} turned off. Groups will skip it.` : `${provider.name} turned on.`);
+      toast.success(
+        provider.enabled ? t("{name} turned off. Groups will skip it.", { name: provider.name }) : t("{name} turned on.", { name: provider.name }),
+      );
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -143,23 +161,23 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="min-w-0 text-[15px] font-semibold break-words">{provider.name}</h3>
-            <Pill tone={provider.tier === "paid" ? "info" : "accent"} className="capitalize">{provider.tier}</Pill>
-            {!provider.enabled ? <Pill>Off</Pill> : null}
+            <Pill tone={provider.tier === "paid" ? "info" : "accent"} >{t(TIER_LABEL[provider.tier])}</Pill>
+            {!provider.enabled ? <Pill>{t("Off")}</Pill> : null}
           </div>
           <p className="mt-0.5 truncate font-mono text-[12px] text-muted" title={provider.base_url}>{provider.base_url}</p>
         </div>
         {canManage ? (
           <Menu>
             <MenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`Options for ${provider.name}`}>
+              <Button variant="ghost" size="icon-sm" aria-label={t("Options for {name}", { name: provider.name })}>
                 <DotsThreeIcon size={20} weight="bold" />
               </Button>
             </MenuTrigger>
             <MenuContent>
-              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => { setEditKey((k) => k + 1); setDialog("edit"); }}>Edit or replace key</MenuItem>
-              <MenuItem icon={<PowerIcon />} onSelect={() => toggle.mutate()}>{provider.enabled ? "Turn off" : "Turn on"}</MenuItem>
+              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => { setEditKey((k) => k + 1); setDialog("edit"); }}>{t("Edit or replace key")}</MenuItem>
+              <MenuItem icon={<PowerIcon />} onSelect={() => toggle.mutate()}>{provider.enabled ? t("Turn off") : t("Turn on")}</MenuItem>
               <MenuSeparator />
-              <MenuItem icon={<TrashIcon />} danger onSelect={() => setDialog("remove")}>Remove provider</MenuItem>
+              <MenuItem icon={<TrashIcon />} danger onSelect={() => setDialog("remove")}>{t("Remove provider")}</MenuItem>
             </MenuContent>
           </Menu>
         ) : null}
@@ -167,28 +185,29 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
 
       <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-3 border-t border-border bg-surface-2/30 px-4 py-3 text-[12.5px]">
         <div className="min-w-0">
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted">{t("Status")}</dt>
           <dd className={cn("mt-0.5 flex items-start gap-1.5 font-medium", h.cls)}>
-            <h.icon size={15} weight="fill" className="mt-px shrink-0" /> <span className="min-w-0">{h.label}</span>
+            <h.icon size={15} weight="fill" className="mt-px shrink-0" /> <span className="min-w-0">{provider.health === "ok" && lang === "ms" ? t("Working (provider health)") : t(h.label)}</span>
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-muted">Key</dt>
-          <dd className="mt-0.5 truncate font-mono">{provider.key_hint || "None"}</dd>
+          <dt className="text-muted">{t("Key")}</dt>
+          <dd className="mt-0.5 truncate font-mono">{provider.key_hint || t("None")}</dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-muted">Recent checks</dt>
+          <dt className="text-muted">{t("Recent checks")}</dt>
           <dd className="mt-1"><HealthSpark checks={provider.recent_checks} /></dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-muted">Models</dt>
-          <dd className="mt-0.5 tabular">{provider.model_count || "Not listed yet"}</dd>
+          <dt className="text-muted">{t("Models")}</dt>
+          <dd className="mt-0.5 tabular">{provider.model_count || t("Not listed yet")}</dd>
         </div>
       </dl>
 
       {provider.cooling_seconds > 0 ? (
         <p className="mx-4 mb-3 flex items-start gap-1.5 rounded-sm bg-info/10 px-2.5 py-1.5 text-[12.5px] text-info">
-          <SnowflakeIcon size={14} className="mt-0.5 shrink-0" /> Resting for {provider.cooling_seconds} s after an error. Groups use the next model meanwhile.
+          <SnowflakeIcon size={14} className="mt-0.5 shrink-0" />{" "}
+          {t("Resting for {s} s after an error. Groups use the next model meanwhile.", { s: provider.cooling_seconds })}
         </p>
       ) : null}
       {provider.last_test_result && !provider.last_test_result.ok ? (
@@ -200,14 +219,14 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
 
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border px-4 py-2.5">
         <span className="min-w-0 flex-1 text-[12px] text-muted">
-          {provider.last_test_at ? `Tested ${timeAgo(provider.last_test_at).toLowerCase()}` : "Never tested"}
+          {provider.last_test_at ? t("Tested {when}", { when: timeAgo(provider.last_test_at).toLowerCase() }) : t("Never tested")}
         </span>
         <Button size="sm" variant="ghost" onClick={() => setDialog("models")}>
-          <ListBulletsIcon size={15} /> Models
+          <ListBulletsIcon size={15} /> {t("Models")}
         </Button>
         {canManage ? (
           <Button size="sm" variant="outline" onClick={() => setDialog("test")}>
-            <PlayIcon size={14} weight="fill" /> Test
+            <PlayIcon size={14} weight="fill" /> {t("Test")}
           </Button>
         ) : null}
       </div>
@@ -218,16 +237,16 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
       <ConfirmDialog
         open={dialog === "remove"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={`Remove ${provider.name}?`}
-        body="Its key is deleted and it is taken out of every model group. Usage history is kept."
-        confirmLabel="Remove provider"
+        title={t("Remove {name}?", { name: provider.name })}
+        body={t("Its key is deleted and it is taken out of every model group. Usage history is kept.")}
+        confirmLabel={t("Remove provider")}
         danger
         onConfirm={async () => {
           try {
             await api(`/api/ai/providers/${provider.id}`, "DELETE");
             qc.invalidateQueries({ queryKey: ["ai"] });
             qc.invalidateQueries({ queryKey: keys.status });
-            toast.success(`${provider.name} removed.`);
+            toast.success(t("{name} removed.", { name: provider.name }));
           } catch (e) {
             toast.error(errorMessage(e));
           }
@@ -238,6 +257,7 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
 }
 
 function PresetTile({ preset, onConnect }: { preset: Preset; onConnect: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -251,7 +271,7 @@ function PresetTile({ preset, onConnect }: { preset: Preset; onConnect: () => vo
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px] font-medium">
           {preset.name}
           <Pill tone={preset.tier === "paid" ? "info" : "accent"} className="px-2 py-0 text-[11px]">
-            {preset.tier === "free" ? "Free tier" : preset.tier === "paid" ? "Paid" : "Local"}
+            {preset.tier === "free" ? t("Free tier") : t(TIER_LABEL[preset.tier])}
           </Pill>
         </span>
         <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-muted">{preset.notes}</span>
@@ -262,6 +282,8 @@ function PresetTile({ preset, onConnect }: { preset: Preset; onConnect: () => vo
 }
 
 export function ProvidersTab({ canManage }: { canManage: boolean }) {
+  const t = useT();
+  const lang = useLang((s) => s.lang);
   const { data: providers, isLoading, error } = useQuery(providersQuery);
   const { data: presets = [] } = useQuery(presetsQuery);
   const [connect, setConnect] = useState<{ preset: Preset | null; key: number } | null>(null);
@@ -287,7 +309,7 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
     );
   }
   if (error) {
-    return <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">Could not load providers. {errorMessage(error)}</div>;
+    return <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">{t("Could not load providers.")} {errorMessage(error)}</div>;
   }
 
   const list = providers ?? [];
@@ -302,13 +324,13 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
       {list.length ? (
         <div className="grid gap-5">
           <StatGrid>
-            <Stat label="Connected" value={list.length} icon={PlugsConnectedIcon} tone="accent"
-              hint={list.length - on.length ? `${list.length - on.length} turned off` : "All turned on"} />
-            <Stat label="Working" value={working} icon={CheckCircleIcon} tone="ok"
-              hint={untested ? `${untested} not tested yet` : `of ${on.length} turned on`} />
-            <Stat label="Need attention" value={attention} icon={WarningCircleIcon} tone={attention ? "danger" : "neutral"}
-              hint={attention ? "Failing their last checks" : "Nothing failing"} />
-            <Stat label="Models listed" value={models.toLocaleString()} icon={CpuIcon} tone="info" hint="Across all providers" />
+            <Stat label={t("Connected")} value={list.length} icon={PlugsConnectedIcon} tone="accent"
+              hint={list.length - on.length ? t("{n} turned off", { n: list.length - on.length }) : t("All turned on")} />
+            <Stat label={lang === "ms" ? t("Working (provider health)") : t("Working")} value={working} icon={CheckCircleIcon} tone="ok"
+              hint={untested ? t("{n} not tested yet", { n: untested }) : t("of {n} turned on", { n: on.length })} />
+            <Stat label={t("Need attention")} value={attention} icon={WarningCircleIcon} tone={attention ? "danger" : "neutral"}
+              hint={attention ? t("Failing their last checks") : t("Nothing failing")} />
+            <Stat label={t("Models listed")} value={models.toLocaleString(locale())} icon={CpuIcon} tone="info" hint={t("Across all providers")} />
           </StatGrid>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
             {list.map((p) => (
@@ -319,19 +341,19 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
       ) : (
         <EmptyState
           icon={CpuIcon}
-          title="No AI providers connected"
-          body="Agents need at least one. Paste a key below, test it, and save. Free tiers from Groq, OpenRouter, Mistral and HuggingFace are enough to start."
+          title={t("No AI providers connected")}
+          body={t("Agents need at least one. Paste a key below, test it, and save. Free tiers from Groq, OpenRouter, Mistral and HuggingFace are enough to start.")}
         />
       )}
 
       {canManage && available.length ? (
         <Section
           guide="ai-engine.add"
-          title="Connect a provider"
-          description="Addresses are filled in. You only need the key."
+          title={t("Connect a provider")}
+          description={t("Addresses are filled in. You only need the key.")}
           actions={
             <Button variant="outline" size="sm" onClick={() => open(null)}>
-              <PlusIcon size={15} /> Other OpenAI-compatible
+              <PlusIcon size={15} /> {t("Other OpenAI-compatible")}
             </Button>
           }
         >

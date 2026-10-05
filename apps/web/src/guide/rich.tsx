@@ -1,5 +1,6 @@
 import { BookBookmarkIcon, type Icon } from "@phosphor-icons/react";
 
+import { msg } from "@/i18n";
 import { ALL_NAV } from "@/nav";
 
 import { GUIDE_PAGES, type GuidePage } from "./targets";
@@ -33,15 +34,17 @@ function navIcon(page: GuidePage): Icon {
 /** Each guide page's sidebar icon, by page id (a static map, so render code only looks it up). */
 export const PAGE_ICONS: Record<string, Icon> = Object.fromEntries(GUIDE_PAGES.map((p) => [p.id, navIcon(p)]));
 
-/** Friendly names for captured states. */
+/** Friendly names for captured states (English keys; show them with t()). */
 const STATE_LABELS: Record<string, string> = {
-  new: "Creating one",
-  detail: "Detail page",
-  sheet: "Opened item",
-  editor: "Editor",
-  agent: "Agent panel",
-  welcome: "Hiring steps",
-  conversation: "Conversation",
+  new: msg("Creating one"),
+  detail: msg("Detail page"),
+  sheet: msg("Opened item"),
+  editor: msg("Editor"),
+  agent: msg("Agent panel"),
+  welcome: msg("Hiring steps"),
+  conversation: msg("Conversation"),
+  roi: msg("ROI calculator"),
 };
 
+/** The English name of a captured state: pass it through t() where it shows. */
 export const stateLabel = (key: string) => STATE_LABELS[key] ?? key.charAt(0).toUpperCase() + key.slice(1).replace(/[-_]/g, " ");

@@ -25,23 +25,26 @@ import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 import { tutorialProgressQuery, useSavePrefs, type Track, type TutorialProgress } from "@/lib/tutorial";
 import { cn } from "@/lib/utils";
 
 import { LessonArt } from "./art";
-import { FAQ, GLOSSARY, TRACK_BY_ID, TRACKS, lessonState, lessonText, parseStep, trackOfRole, type Lesson } from "./content";
+import { lessonState, lessonText, parseStep, trackOfRole, type Lesson } from "./content";
+import { useTutorialText } from "./lang";
 
 /** A progress ring: how much of a track is done. */
 export function ProgressRing({ done, total, size = 76 }: { done: number; total: number; size?: number }) {
+  const t = useT();
   const stroke = size > 60 ? 7 : 5;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const ratio = total ? done / total : 0;
   return (
     <span className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }}
-      role="img" aria-label={`${done} of ${total} lessons done`}>
+      role="img" aria-label={t("{done} of {total} lessons done", { done, total })}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--accent)" strokeWidth={stroke} strokeLinecap="round"
@@ -49,7 +52,7 @@ export function ProgressRing({ done, total, size = 76 }: { done: number; total: 
       </svg>
       <span className="absolute text-center leading-none">
         <span className="block text-[17px] font-semibold tabular">{done}</span>
-        <span className="block text-[10.5px] text-muted">of {total}</span>
+        <span className="block text-[10.5px] text-muted">{t("of {total}", { total })}</span>
       </span>
     </span>
   );
@@ -73,10 +76,11 @@ function StepText({ text }: { text: string }) {
 }
 
 function ShowMe({ lesson, size = "sm", variant = "primary" }: { lesson: Lesson; size?: "sm" | "md"; variant?: "primary" | "outline" }) {
+  const t = useT();
   return (
     <Button asChild size={size} variant={variant}>
       <Link to={lesson.show.to as "/"} search={(lesson.show.search ?? {}) as never}>
-        {lesson.show.label ?? "Show me"} <ArrowRightIcon size={14} />
+        {lesson.show.label ?? t("Show me")} <ArrowRightIcon size={14} />
       </Link>
     </Button>
   );
@@ -101,6 +105,7 @@ function LessonCard({
   onMark: () => void;
   saving: boolean;
 }) {
+  const t = useT();
   const panel = `lesson-${lesson.id}`;
   return (
     <li id={`l-${lesson.id}`} className="scroll-mt-20">
@@ -114,8 +119,8 @@ function LessonCard({
           <span className="grid min-w-0 gap-0.5">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-[14.5px] font-semibold break-words">{lesson.title}</span>
-              {state === "auto" ? <Pill tone="ok" title="Spotted in your real data">Done</Pill>
-                : state === "manual" ? <Pill tone="ok">Marked done</Pill> : null}
+              {state === "auto" ? <Pill tone="ok" title={t("Spotted in your real data")}>{t("Done")}</Pill>
+                : state === "manual" ? <Pill tone="ok">{t("Marked done")}</Pill> : null}
             </span>
             <span className="text-[13px] text-muted">{lesson.why}</span>
           </span>
@@ -137,16 +142,16 @@ function LessonCard({
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3.5 md:col-span-2 max-sm:[&>*]:flex-1">
               {canOpen ? <ShowMe lesson={lesson} /> : (
                 <span className="inline-flex items-center gap-1.5 text-[12.5px] text-muted">
-                  <LockSimpleIcon size={14} /> Your role cannot open this page. Ask an owner or your manager.
+                  <LockSimpleIcon size={14} /> {t("Your role cannot open this page. Ask an owner or your manager.")}
                 </span>
               )}
               {state === "auto" ? (
                 <span className="inline-flex items-center justify-center gap-1.5 text-[12.5px] text-ok">
-                  <CheckCircleIcon size={15} weight="fill" /> Done: we spotted it in your work
+                  <CheckCircleIcon size={15} weight="fill" /> {t("Done: we spotted it in your work")}
                 </span>
               ) : (
                 <Button size="sm" variant={state ? "ghost" : "outline"} onClick={onMark} disabled={saving}>
-                  {state ? <><ArrowUUpLeftIcon size={14} /> Not done yet</> : <><CheckIcon size={14} weight="bold" /> Mark as done</>}
+                  {state ? <><ArrowUUpLeftIcon size={14} /> {t("Not done yet")}</> : <><CheckIcon size={14} weight="bold" /> {t("Mark as done")}</>}
                 </Button>
               )}
             </div>
@@ -172,7 +177,8 @@ function NextUp({
   canOpen: boolean;
   onOpenLesson: (l: Lesson) => void;
 }) {
-  const info = TRACK_BY_ID[track];
+  const t = useT();
+  const info = useTutorialText().trackById[track];
   const done = info.lessons.filter((l) => lessonState(l, progress?.signals, progress?.done)).length;
   return (
     <Card data-guide="tutorial.next" className="relative overflow-hidden">
@@ -182,13 +188,13 @@ function NextUp({
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-[11.5px] font-medium tracking-[0.06em] text-accent uppercase">
             {info.title}
-            {track === roleTrack ? <Pill tone="accent" className="tracking-normal normal-case">Your track</Pill> : null}
+            {track === roleTrack ? <Pill tone="accent" className="tracking-normal normal-case">{t("Your track")}</Pill> : null}
           </p>
           <h2 className="mt-1 text-[17px] leading-snug font-semibold break-words">
-            {next ? <>Next up: {next.title}</> : "You finished this track"}
+            {next ? t("Next up: {lesson}", { lesson: next.title }) : t("You finished this track")}
           </h2>
           <p className="mt-0.5 text-[13px] text-muted">
-            {next ? next.why : "Every lesson here is done. Peek at another track, or keep the glossary below handy."}
+            {next ? next.why : t("Every lesson here is done. Peek at another track, or keep the glossary below handy.")}
           </p>
           <p className="mt-1.5 text-[12px] text-muted max-sm:hidden">{info.who}: {info.blurb}</p>
         </div>
@@ -196,10 +202,10 @@ function NextUp({
           {next ? (
             <>
               {canOpen ? <ShowMe lesson={next} size="md" /> : null}
-              <Button variant="outline" onClick={() => onOpenLesson(next)}>Read the steps</Button>
+              <Button variant="outline" onClick={() => onOpenLesson(next)}>{t("Read the steps")}</Button>
             </>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok"><TrophyIcon size={18} weight="duotone" /> All done</span>
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok"><TrophyIcon size={18} weight="duotone" /> {t("All done")}</span>
           )}
         </div>
       </div>
@@ -208,10 +214,11 @@ function NextUp({
 }
 
 function Glossary({ q }: { q: string }) {
-  const terms = GLOSSARY.filter((t) => !q || `${t.term} ${t.meaning}`.toLowerCase().includes(q));
+  const tr = useT();
+  const terms = useTutorialText().glossary.filter((t) => !q || `${t.term} ${t.meaning}`.toLowerCase().includes(q));
   return (
     <Card id="glossary" className="scroll-mt-20">
-      <CardHeader icon={<IconTile icon={BookOpenTextIcon} size="sm" />} title="Glossary" description="The words you will see around the app, in plain language." />
+      <CardHeader icon={<IconTile icon={BookOpenTextIcon} size="sm" />} title={tr("Glossary")} description={tr("The words you will see around the app, in plain language.")} />
       <CardBody>
         {terms.length ? (
           <dl className="grid grid-cols-[minmax(0,1fr)] gap-x-5 gap-y-4 sm:grid-cols-2">
@@ -225,18 +232,19 @@ function Glossary({ q }: { q: string }) {
               </div>
             ))}
           </dl>
-        ) : <p className="text-[13px] text-muted">No word matches your search.</p>}
+        ) : <p className="text-[13px] text-muted">{tr("No word matches your search.")}</p>}
       </CardBody>
     </Card>
   );
 }
 
 function Faqs({ q }: { q: string }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
-  const items = FAQ.filter((f) => !q || `${f.q} ${f.a}`.toLowerCase().includes(q));
+  const items = useTutorialText().faq.filter((f) => !q || `${f.q} ${f.a}`.toLowerCase().includes(q));
   return (
     <Card id="faq" className="scroll-mt-20">
-      <CardHeader icon={<IconTile icon={QuestionIcon} tone="info" size="sm" />} title="Questions people ask" description="Costs, safety, mistakes and privacy." />
+      <CardHeader icon={<IconTile icon={QuestionIcon} tone="info" size="sm" />} title={t("Questions people ask")} description={t("Costs, safety, mistakes and privacy.")} />
       {items.length ? (
         <ul className="divide-y divide-border">
           {items.map((f) => {
@@ -253,12 +261,14 @@ function Faqs({ q }: { q: string }) {
             );
           })}
         </ul>
-      ) : <CardBody><p className="text-[13px] text-muted">No question matches your search.</p></CardBody>}
+      ) : <CardBody><p className="text-[13px] text-muted">{t("No question matches your search.")}</p></CardBody>}
     </Card>
   );
 }
 
 export function TutorialPage() {
+  const tr = useT();
+  const { tracks, trackById } = useTutorialText();
   const { data: me } = useSuspenseQuery(meQuery);
   const search = useSearch({ strict: false }) as { track?: Track };
   const navigate = useNavigate();
@@ -269,7 +279,7 @@ export function TutorialPage() {
 
   const roleTrack = progress?.track ?? trackOfRole(me.role);
   const track = search.track ?? roleTrack;
-  const info = TRACK_BY_ID[track];
+  const info = trackById[track];
   const q = query.trim().toLowerCase();
   const state = (l: Lesson) => lessonState(l, progress?.signals, progress?.done);
   const canOpen = (l: Lesson) => !l.perm || l.perm.some((p) => me.permissions.includes(p));
@@ -277,7 +287,7 @@ export function TutorialPage() {
 
   const lessons = info.lessons.filter((l) => !q || lessonText(l).includes(q));
   const elsewhere = q
-    ? TRACKS.filter((t) => t.id !== track)
+    ? tracks.filter((t) => t.id !== track)
         .map((t) => ({ t, n: t.lessons.filter((l) => lessonText(l).includes(q)).length }))
         .filter((x) => x.n)
     : [];
@@ -300,30 +310,30 @@ export function TutorialPage() {
   return (
     <Page>
       <PageHeader
-        title="Tutorial"
-        description="Learn the whole system step by step, from your first agent to seeing finished work. Pick your role; lessons tick themselves as you use the app."
+        title={tr("Tutorial")}
+        description={tr("Learn the whole system step by step, from your first agent to seeing finished work. Pick your role; lessons tick themselves as you use the app.")}
       />
 
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Segmented<Track> guide="tutorial.tracks" label="Role track" value={track} onChange={setTrack}
-          options={TRACKS.map((t) => ({
+        <Segmented<Track> guide="tutorial.tracks" label={tr("Role track")} value={track} onChange={setTrack}
+          options={tracks.map((t) => ({
             value: t.id,
             label: progress ? `${t.label} ${t.lessons.filter((l) => state(l)).length}/${t.lessons.length}` : t.label,
           }))} />
-        <SearchInput value={query} onChange={setQuery} placeholder="Search lessons, words and questions" className="max-md:flex-none md:max-w-sm" />
+        <SearchInput value={query} onChange={setQuery} placeholder={tr("Search lessons, words and questions")} className="max-md:flex-none md:max-w-sm" />
       </div>
 
       {!q ? <NextUp track={track} progress={progress} roleTrack={roleTrack} next={next} canOpen={!!next && canOpen(next)} onOpenLesson={openLesson} /> : null}
 
-      <section aria-label={`${info.title} lessons`} className="grid min-w-0 gap-3">
+      <section aria-label={tr("{track} lessons", { track: info.title })} className="grid min-w-0 gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold">{q ? `Lessons matching "${query.trim()}"` : `${info.label} lessons`}</h2>
-            <p className="text-[13px] text-muted">{q ? `${lessons.length} in the ${info.title.toLowerCase()}` : `${info.lessons.length} short lessons, in order. Open one to see the steps.`}</p>
+            <h2 className="text-[15px] font-semibold">{q ? tr('Lessons matching "{q}"', { q: query.trim() }) : tr("{track} lessons", { track: info.label })}</h2>
+            <p className="text-[13px] text-muted">{q ? tr("{n} in the {track}", { n: lessons.length, track: info.title.toLowerCase() }) : tr("{n} short lessons, in order. Open one to see the steps.", { n: info.lessons.length })}</p>
           </div>
           {elsewhere.length ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[12.5px] text-muted">Also in</span>
+              <span className="text-[12.5px] text-muted">{tr("Also in")}</span>
               {elsewhere.map(({ t, n }) => (
                 <Button key={t.id} size="sm" variant="outline" onClick={() => setTrack(t.id)}>{t.label} ({n})</Button>
               ))}
@@ -339,8 +349,8 @@ export function TutorialPage() {
             ))}
           </ol>
         ) : (
-          <EmptyState icon={MagnifyingGlassIcon} title="No lesson matches"
-            body={elsewhere.length ? "Try one of the other tracks above, or a different word." : "Try a different word, like task, approval or schedule."} />
+          <EmptyState icon={MagnifyingGlassIcon} title={tr("No lesson matches")}
+            body={elsewhere.length ? tr("Try one of the other tracks above, or a different word.") : tr("Try a different word, like task, approval or schedule.")} />
         )}
       </section>
 

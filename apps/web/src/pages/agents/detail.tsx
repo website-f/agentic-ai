@@ -31,6 +31,7 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WebTaskDialog } from "@/components/web-task-dialog";
+import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { useLive } from "@/lib/live";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
@@ -47,13 +48,13 @@ import { ToolMatrix } from "./tool-matrix";
 const TABS = ["overview", "chat", "memory", "profile", "team", "permissions", "sops"] as const;
 type Tab = (typeof TABS)[number];
 const LABELS: Record<Tab, string> = {
-  overview: "Overview",
-  chat: "Chat",
-  memory: "Memory",
-  profile: "Profile",
-  team: "Team & budget",
-  permissions: "Permissions",
-  sops: "SOPs",
+  overview: msg("Overview"),
+  chat: msg("Chat"),
+  memory: msg("Memory"),
+  profile: msg("Profile"),
+  team: msg("Team & budget"),
+  permissions: msg("Permissions"),
+  sops: msg("SOPs"),
 };
 
 function useSaveAgent(agent: Agent) {
@@ -63,68 +64,69 @@ function useSaveAgent(agent: Agent) {
     onSuccess: (a) => {
       qc.setQueryData(workKeys.agent(a.id), a);
       qc.invalidateQueries({ queryKey: workKeys.agents });
-      toast.success("Saved.");
+      toast.success(tr("Saved."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
 }
 
 function Overview({ agent }: { agent: Agent }) {
+  const t = useT();
   // A watched colleague's agent: its tasks and results are not the viewer's, so only the live view shows.
   const viewOnly = agent.view_only;
   const { data: tasks = [] } = useQuery({ ...tasksQuery, enabled: !viewOnly });
-  const mine = tasks.filter((t) => t.assignee_agent_id === agent.id).slice(0, 12);
+  const mine = tasks.filter((x) => x.assignee_agent_id === agent.id).slice(0, 12);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-5">
-        <Section title="Right now" description="Its screen and every step, live." className="grid-cols-[minmax(0,1fr)] content-start">
+        <Section title={t("Right now")} description={t("Its screen and every step, live.")} className="grid-cols-[minmax(0,1fr)] content-start">
           <AgentLive agentId={agent.id} name={agent.name} viewOnly={viewOnly} />
         </Section>
         {viewOnly ? null : <Card className="overflow-hidden">
           <CardHeader
             icon={<IconTile icon={KanbanIcon} tone="info" size="sm" />}
-            title="Tasks"
-            description={mine.length ? `The latest ${mine.length} given to ${agent.name}.` : undefined}
+            title={t("Tasks")}
+            description={mine.length ? t("The latest {n} given to {name}.", { n: mine.length, name: agent.name }) : undefined}
             actions={
               <Button asChild size="sm" variant="outline">
                 <Link to="/tasks" search={{ new: 1, agent: agent.id }}>
-                  <PlusIcon size={14} /> Give a task
+                  <PlusIcon size={14} /> {t("Give a task")}
                 </Link>
               </Button>
             }
           />
           {mine.length ? (
             <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
-              {mine.map((t) => (
-                <li key={t.id}>
-                  <Link to="/tasks" search={{ task: t.id }} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/60 sm:px-5">
+              {mine.map((task) => (
+                <li key={task.id}>
+                  <Link to="/tasks" search={{ task: task.id }} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/60 sm:px-5">
                     <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-[13.5px] break-words">{t.title}</span>
-                      <span className="block text-[12px] text-muted sm:hidden">{timeAgo(t.updated_at)}</span>
+                      <span className="line-clamp-2 text-[13.5px] break-words">{task.title}</span>
+                      <span className="block text-[12px] text-muted sm:hidden">{timeAgo(task.updated_at)}</span>
                     </span>
-                    <Pill tone={STATUS_INFO[t.status].tone} className="shrink-0">
-                      {STATUS_INFO[t.status].label}
+                    <Pill tone={STATUS_INFO[task.status].tone} className="shrink-0">
+                      {t(STATUS_INFO[task.status].label)}
                     </Pill>
-                    <span className="hidden w-20 shrink-0 text-right text-[12px] text-muted sm:block">{timeAgo(t.updated_at)}</span>
+                    <span className="hidden w-20 shrink-0 text-right text-[12px] text-muted sm:block">{timeAgo(task.updated_at)}</span>
                   </Link>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-8 text-center text-[13px] text-muted">No tasks yet. Give {agent.name} something to do.</p>
+            <p className="px-4 py-8 text-center text-[13px] text-muted">{t("No tasks yet. Give {name} something to do.", { name: agent.name })}</p>
           )}
         </Card>}
       </div>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-5">
         {viewOnly ? null : (
-          <Section title="What came out of it" description="Its latest finished work and reports." className="grid-cols-[minmax(0,1fr)] content-start">
+          <Section title={t("What came out of it")} description={t("Its latest finished work and reports.")} className="grid-cols-[minmax(0,1fr)] content-start">
             <AgentOutcome agentId={agent.id} name={agent.name} />
           </Section>
         )}
         <Card className="overflow-hidden">
-          <CardHeader icon={<IconTile icon={SmileyIcon} tone="violet" size="sm" />} title="Personality" description="How it thinks, writes and reports." />
+          <CardHeader icon={<IconTile icon={SmileyIcon} tone="violet" size="sm" />} title={t("Personality")} description={t("How it thinks, writes and reports.")} />
           <CardBody>
-            <p className="text-[13.5px] break-words whitespace-pre-wrap text-muted">{agent.soul || "No personality written yet."}</p>
+            <p className="text-[13.5px] break-words whitespace-pre-wrap text-muted">{agent.soul || t("No personality written yet.")}</p>
           </CardBody>
         </Card>
       </div>
@@ -133,6 +135,7 @@ function Overview({ agent }: { agent: Agent }) {
 }
 
 function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+  const t = useT();
   const save = useSaveAgent(agent);
   const { data: branches = [] } = useQuery(branchesQuery);
   const { data: groups = [] } = useQuery(chatGroupsQuery);
@@ -158,29 +161,29 @@ function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
   return (
     <div className="grid max-w-2xl grid-cols-[minmax(0,1fr)] gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
-        <Field label="Name" value={d.name} disabled={!canManage} onChange={(e) => setD({ ...d, name: e.target.value })} />
-        <Field label="Job title" value={d.role} disabled={!canManage} onChange={(e) => setD({ ...d, role: e.target.value })} />
+        <Field label={t("Name")} value={d.name} disabled={!canManage} onChange={(e) => setD({ ...d, name: e.target.value })} />
+        <Field label={t("Job title")} value={d.role} disabled={!canManage} onChange={(e) => setD({ ...d, role: e.target.value })} />
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3">
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Branch</span>
+          <span className="text-[13px] font-medium">{t("Branch")}</span>
           <Select
             value={d.branch_id}
             disabled={!canManage}
             onValueChange={(v) => setD({ ...d, branch_id: v, department_id: null })}
-            label="Branch"
+            label={t("Branch")}
             options={branches.map((b) => ({ value: b.id, label: b.name }))}
           />
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Department</span>
+          <span className="text-[13px] font-medium">{t("Department")}</span>
           <Select
             value={d.department_id ?? "none"}
             disabled={!canManage}
             onValueChange={(v) => setD({ ...d, department_id: v === "none" ? null : v })}
-            label="Department"
+            label={t("Department")}
             options={[
-              { value: "none", label: "No department" },
+              { value: "none", label: t("No department") },
               ...(branch?.departments ?? []).map((x) => ({
                 value: x.id,
                 label: x.name,
@@ -189,18 +192,18 @@ function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
           />
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Model group</span>
+          <span className="text-[13px] font-medium">{t("Model group")}</span>
           <Select
             value={d.model_group}
             disabled={!canManage}
             onValueChange={(v) => setD({ ...d, model_group: v })}
-            label="Model group"
+            label={t("Model group")}
             options={groups.map((g) => ({ value: g.name, label: g.label }))}
           />
         </div>
       </div>
       <TextareaField
-        label="Personality and way of working"
+        label={t("Personality and way of working")}
         value={d.soul}
         disabled={!canManage}
         rows={9}
@@ -209,7 +212,7 @@ function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
       {canManage ? (
         <ActionBar className="justify-start">
           <Button disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(d)}>
-            <CheckIcon size={15} weight="bold" /> Save profile
+            <CheckIcon size={15} weight="bold" /> {t("Save profile")}
           </Button>
         </ActionBar>
       ) : null}
@@ -218,6 +221,7 @@ function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
 }
 
 function Permissions({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+  const t = useT();
   const save = useSaveAgent(agent);
   const [tools, setTools] = useState<Record<string, ToolMode>>(agent.tools);
   const [autonomy, setAutonomy] = useState(agent.autonomy);
@@ -228,7 +232,7 @@ function Permissions({ agent, canManage }: { agent: Agent; canManage: boolean })
       {canManage ? (
         <ActionBar className="justify-start">
           <Button disabled={!dirty} loading={save.isPending} onClick={() => save.mutate({ tools, autonomy })}>
-            <CheckIcon size={15} weight="bold" /> Save permissions
+            <CheckIcon size={15} weight="bold" /> {t("Save permissions")}
           </Button>
         </ActionBar>
       ) : null}
@@ -237,6 +241,7 @@ function Permissions({ agent, canManage }: { agent: Agent; canManage: boolean })
 }
 
 function SOPs({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+  const t = useT();
   const save = useSaveAgent(agent);
   const { data: sops = [] } = useQuery(sopsQuery);
   const auto = sops.filter(
@@ -252,8 +257,8 @@ function SOPs({ agent, canManage }: { agent: Agent; canManage: boolean }) {
     <div className="grid max-w-2xl grid-cols-[minmax(0,1fr)] gap-6">
       <section className="grid min-w-0 gap-2">
         <div>
-          <h2 className="text-[14px] font-semibold">Applied automatically</h2>
-          <p className="text-[12.5px] text-muted">From the workspace, {agent.branch_name} and its department.</p>
+          <h2 className="text-[14px] font-semibold">{t("Applied automatically")}</h2>
+          <p className="text-[12.5px] text-muted">{t("From the workspace, {branch} and its department.", { branch: agent.branch_name })}</p>
         </div>
         {auto.length ? (
           <ListCard>
@@ -270,13 +275,13 @@ function SOPs({ agent, canManage }: { agent: Agent; canManage: boolean }) {
             ))}
           </ListCard>
         ) : (
-          <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-4 text-[13px] text-muted">None yet.</p>
+          <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-4 text-[13px] text-muted">{t("None yet.")}</p>
         )}
       </section>
       <section className="grid min-w-0 gap-2">
         <div>
-          <h2 className="text-[14px] font-semibold">Attached from the library</h2>
-          <p className="text-[12.5px] text-muted">Tick the extra SOPs {agent.name} should follow.</p>
+          <h2 className="text-[14px] font-semibold">{t("Attached from the library")}</h2>
+          <p className="text-[12.5px] text-muted">{t("Tick the extra SOPs {name} should follow.", { name: agent.name })}</p>
         </div>
         {library.length ? (
           <ListCard>
@@ -297,11 +302,10 @@ function SOPs({ agent, canManage }: { agent: Agent; canManage: boolean }) {
           </ListCard>
         ) : (
           <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-4 text-[13px] text-muted">
-            No library SOPs yet.{" "}
+            {t("No library SOPs yet.")}{" "}
             <Link to="/sops" className="text-accent hover:underline">
-              Write one
+              {t("Write one")}
             </Link>
-            .
           </p>
         )}
       </section>
@@ -310,6 +314,7 @@ function SOPs({ agent, canManage }: { agent: Agent; canManage: boolean }) {
 }
 
 export function AgentDetailPage() {
+  const t = useT();
   const { agentId } = useParams({ strict: false }) as { agentId: string };
   const search = useSearch({ strict: false }) as { tab?: Tab };
   const navigate = useNavigate();
@@ -325,7 +330,7 @@ export function AgentDetailPage() {
   const [retiring, setRetiring] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   // Watching only: chat and memory are the owner's; the rest stays readable.
-  const tabs: readonly Tab[] = viewOnly ? TABS.filter((t) => t !== "chat" && t !== "memory") : TABS;
+  const tabs: readonly Tab[] = viewOnly ? TABS.filter((x) => x !== "chat" && x !== "memory") : TABS;
   const tab: Tab = search.tab && tabs.includes(search.tab) ? search.tab : "overview";
 
   const setStatus = useMutation({
@@ -334,7 +339,7 @@ export function AgentDetailPage() {
       qc.setQueryData(workKeys.agent(a.id), a);
       qc.invalidateQueries({ queryKey: workKeys.agents });
       qc.invalidateQueries({ queryKey: keys.status });
-      toast.success(a.status === "active" ? `${a.name} is back at work.` : a.status === "paused" ? `${a.name} is paused.` : `${a.name} was retired.`);
+      toast.success(a.status === "active" ? tr("{name} is back at work.", { name: a.name }) : a.status === "paused" ? tr("{name} is paused.", { name: a.name }) : tr("{name} was retired.", { name: a.name }));
       if (a.status === "retired") navigate({ to: "/agents" });
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -362,7 +367,7 @@ export function AgentDetailPage() {
   return (
     <Page>
       <Link to="/agents" className="-my-1 inline-flex h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg">
-        <ArrowLeftIcon size={14} /> Agents
+        <ArrowLeftIcon size={14} /> {t("Agents")}
       </Link>
       <Card className="p-4 sm:p-5">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start">
@@ -370,53 +375,53 @@ export function AgentDetailPage() {
             <AgentAvatar name={agent.name} color={agent.color} size="lg" working={state.label === "Working"} />
             <div className="grid min-w-0 flex-1 gap-1">
               <h1 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[20px] leading-tight font-semibold tracking-tight break-words sm:text-[22px]">
-                {agent.name} <Pill tone={state.tone}>{state.label}</Pill>
+                {agent.name} <Pill tone={state.tone}>{t(state.label)}</Pill>
                 <AgentAccessPills agent={agent} />
               </h1>
               <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted">
                 <Meta
                   items={[
                     agent.role,
-                    `${agent.department_name ?? "No department"}, ${agent.branch_name}`,
-                    agent.owner_name ? `${agent.owner_name}'s personal agent` : null,
-                    agent.clone_of ? "A helper, here while a big job runs" : null,
+                    `${agent.department_name ?? t("No department")}, ${agent.branch_name}`,
+                    agent.owner_name ? t("{name}'s personal agent", { name: agent.owner_name }) : null,
+                    agent.clone_of ? t("A helper, here while a big job runs") : null,
                   ]}
                 />
               </p>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 <Pill className="font-mono">{agent.model_group}</Pill>
-                {agent.role_kind === "orchestrator" ? <Pill tone="accent">Leads</Pill> : null}
-                {agent.autonomy === "auto" ? <Pill tone="accent">Auto</Pill> : <Pill>Asks first</Pill>}
-                {agent.heartbeat ? <Pill tone="ok">Heartbeat</Pill> : null}
-                {agent.sop_ids.length ? <Pill>{agent.sop_ids.length} SOPs</Pill> : null}
-                {agent.budget_daily_tokens || agent.budget_monthly_usd ? <Pill>Budget set</Pill> : null}
+                {agent.role_kind === "orchestrator" ? <Pill tone="accent">{t("Leads")}</Pill> : null}
+                {agent.autonomy === "auto" ? <Pill tone="accent">{t("Auto")}</Pill> : <Pill>{t("Asks first")}</Pill>}
+                {agent.heartbeat ? <Pill tone="ok">{t("Heartbeat")}</Pill> : null}
+                {agent.sop_ids.length ? <Pill>{t("{n} SOPs", { n: agent.sop_ids.length })}</Pill> : null}
+                {agent.budget_daily_tokens || agent.budget_monthly_usd ? <Pill>{t("Budget set")}</Pill> : null}
               </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2">
             {canWrite && agent.status === "active" ? (
               <Button variant="outline" onClick={() => setBrowsing(true)}>
-                <BrowserIcon size={15} /> Browse for me
+                <BrowserIcon size={15} /> {t("Browse for me")}
               </Button>
             ) : null}
             <Button variant="outline" asChild>
               <Link to="/monitor" search={{ agent: agent.id }}>
-                <EyeIcon size={15} /> Watch live
+                <EyeIcon size={15} /> {t("Watch live")}
               </Link>
             </Button>
             {canManage ? (
               <>
                 {agent.status === "active" ? (
                   <Button variant="outline" onClick={() => setStatus.mutate("paused")}>
-                    <PauseIcon size={15} /> Pause
+                    <PauseIcon size={15} /> {t("Pause")}
                   </Button>
                 ) : (
                   <Button variant="outline" onClick={() => setStatus.mutate("active")}>
-                    <PlayIcon size={15} /> Resume
+                    <PlayIcon size={15} /> {t("Resume")}
                   </Button>
                 )}
                 <Button variant="ghost" className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setRetiring(true)}>
-                  Retire
+                  {t("Retire")}
                 </Button>
               </>
             ) : null}
@@ -436,7 +441,7 @@ export function AgentDetailPage() {
               <LightningIcon size={16} weight="duotone" className="shrink-0 text-accent" />
             )}
             <span className="min-w-0 flex-1">
-              <span className="text-muted">{agent.current_task.status === "blocked" ? "Waiting on approval: " : "Working on: "}</span>
+              <span className="text-muted">{agent.current_task.status === "blocked" ? t("Waiting on approval:") : t("Working on:")}</span>{" "}
               <span className="font-medium break-words">{agent.current_task.title}</span>
             </span>
           </p>
@@ -455,7 +460,7 @@ export function AgentDetailPage() {
               <LightningIcon size={16} weight="duotone" className="shrink-0 text-accent" />
             )}
             <span className="min-w-0 flex-1">
-              <span className="text-muted">{agent.current_task.status === "blocked" ? "Waiting on you: " : "Working on: "}</span>
+              <span className="text-muted">{agent.current_task.status === "blocked" ? t("Waiting on you:") : t("Working on:")}</span>{" "}
               <span className="font-medium break-words">{agent.current_task.title}</span>
             </span>
             <ArrowRightIcon size={14} className="shrink-0 text-muted" />
@@ -465,7 +470,7 @@ export function AgentDetailPage() {
           <p role="note" className="mt-4 flex items-start gap-2.5 rounded-sm border border-border bg-surface-2/60 px-3 py-2.5 text-[13px] text-muted">
             <EyeIcon size={16} weight="duotone" className="mt-0.5 shrink-0" />
             <span className="min-w-0 flex-1 break-words">
-              You&apos;re watching <span className="font-medium text-fg">{agent.name}</span>. Only {agent.owner_name ?? "its manager"} can instruct or change it.
+              {agent.owner_name ? t("You're watching {name}. Only {owner} can instruct or change it.", { name: agent.name, owner: agent.owner_name }) : t("You're watching {name}. Only its manager can instruct or change it.", { name: agent.name })}
             </span>
           </p>
         ) : null}
@@ -483,16 +488,16 @@ export function AgentDetailPage() {
         }
       >
         <Tabs.List
-          aria-label={`${agent.name} sections`}
+          aria-label={t("{name} sections", { name: agent.name })}
           className="mb-5 flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {tabs.map((t) => (
+          {tabs.map((k) => (
             <Tabs.Trigger
-              key={t}
-              value={t}
+              key={k}
+              value={k}
               className="-mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-[13.5px] whitespace-nowrap text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg"
             >
-              {LABELS[t]}
+              {t(LABELS[k])}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
@@ -541,9 +546,9 @@ export function AgentDetailPage() {
       <ConfirmDialog
         open={retiring}
         onOpenChange={setRetiring}
-        title={`Retire ${agent.name}?`}
-        body="Retired agents stop working and leave the roster. Their past tasks and history stay."
-        confirmLabel="Retire agent"
+        title={t("Retire {name}?", { name: agent.name })}
+        body={t("Retired agents stop working and leave the roster. Their past tasks and history stay.")}
+        confirmLabel={t("Retire agent")}
         danger
         onConfirm={async () => {
           await setStatus.mutateAsync("retired");

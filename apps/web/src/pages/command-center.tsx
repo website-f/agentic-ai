@@ -21,6 +21,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { cn, greeting } from "@/lib/utils";
@@ -32,17 +33,18 @@ import { MeetTwinCard } from "./twin/meet-card";
 import { TutorialBanner } from "./tutorial/banner";
 
 function SystemPanel() {
+  const t = useT();
   const { data, isLoading, error, dataUpdatedAt } = useQuery(systemStatusQuery);
 
   let status: ReactNode = null;
-  if (data) status = data.ok ? <Pill tone="ok" live>Healthy</Pill> : <Pill tone="danger" live>Needs attention</Pill>;
+  if (data) status = data.ok ? <Pill tone="ok" live>{t("Healthy")}</Pill> : <Pill tone="danger" live>{t("Needs attention")}</Pill>;
 
   return (
     <Card data-guide="home.health" className="flex flex-col overflow-hidden">
       <CardHeader
         icon={<IconTile icon={HeartbeatIcon} tone="ok" size="sm" />}
-        title="System"
-        description="Refreshes every 15 seconds."
+        title={t("System")}
+        description={t("Refreshes every 15 seconds.")}
         actions={status}
       />
       {isLoading ? (
@@ -53,7 +55,7 @@ function SystemPanel() {
         </div>
       ) : error || !data ? (
         <p role="alert" className="m-4 rounded-sm border border-danger/30 bg-danger/8 p-3 text-[13.5px] text-danger">
-          Could not load system status. {errorMessage(error)}
+          {t("Could not load system status. {error}", { error: errorMessage(error) })}
         </p>
       ) : (
         <>
@@ -61,9 +63,9 @@ function SystemPanel() {
             {data.components.map((c) => (
               <li key={c.name} className="flex items-center gap-3 px-4 py-3 sm:px-5">
                 {c.ok ? (
-                  <CheckCircleIcon size={20} weight="fill" className="shrink-0 text-ok" aria-label="Running" />
+                  <CheckCircleIcon size={20} weight="fill" className="shrink-0 text-ok" aria-label={t("Running")} />
                 ) : (
-                  <WarningCircleIcon size={20} weight="fill" className="shrink-0 text-danger" aria-label="Down" />
+                  <WarningCircleIcon size={20} weight="fill" className="shrink-0 text-danger" aria-label={t("Down")} />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-[13.5px] font-medium">{c.name}</p>
@@ -78,8 +80,8 @@ function SystemPanel() {
             ))}
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border bg-surface-2/50 px-4 py-2 text-[12px] text-muted sm:px-5">
-            <span>Version {data.version}</span>
-            <span>Checked {new Date(dataUpdatedAt).toLocaleTimeString()}</span>
+            <span>{t("Version {version}", { version: data.version })}</span>
+            <span>{t("Checked {time}", { time: new Date(dataUpdatedAt).toLocaleTimeString(locale()) })}</span>
           </div>
         </>
       )}
@@ -88,11 +90,12 @@ function SystemPanel() {
 }
 
 function Step({ n, done, title, body, to, cta, soon }: { n: number; done: boolean; title: string; body: string; to: string; cta: string; soon?: string }) {
+  const t = useT();
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5">
       {done ? (
         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ok/12 text-ok">
-          <CheckCircleIcon size={18} weight="fill" aria-label="Done" />
+          <CheckCircleIcon size={18} weight="fill" aria-label={t("Done")} />
         </span>
       ) : (
         <span className="grid size-7 shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-[12.5px] font-semibold text-muted tabular">
@@ -118,34 +121,35 @@ function Step({ n, done, title, body, to, cta, soon }: { n: number; done: boolea
 }
 
 function GettingStarted({ counts }: { counts: Record<string, number> | undefined }) {
+  const t = useT();
   const steps = [
     {
       done: (counts?.branches ?? 0) > 0,
-      title: "Create a branch for each company",
-      body: "Departments (Finance, Research, Operations and more) are added for you.",
+      title: t("Create a branch for each company"),
+      body: t("Departments (Finance, Research, Operations and more) are added for you."),
       to: "/organization",
-      cta: "Add branch",
+      cta: t("Add branch"),
     },
     {
       done: (counts?.members ?? 0) > 1,
-      title: "Invite your team",
-      body: "Give each person a role: operators run work, approvers decide on it.",
+      title: t("Invite your team"),
+      body: t("Give each person a role: operators run work, approvers decide on it."),
       to: "/settings/members",
-      cta: "Add member",
+      cta: t("Add member"),
     },
     {
       done: (counts?.providers ?? 0) > 0,
-      title: "Connect AI providers",
-      body: "Paste your Groq, OpenRouter, Mistral, HuggingFace, DeepSeek or OpenAI keys and test them.",
+      title: t("Connect AI providers"),
+      body: t("Paste your Groq, OpenRouter, Mistral, HuggingFace, DeepSeek or OpenAI keys and test them."),
       to: "/ai-engine",
-      cta: "Connect",
+      cta: t("Connect"),
     },
     {
       done: (counts?.agents ?? 0) > 0,
-      title: "Create your first agent",
-      body: "Place it in a department, give it SOPs and permissions, then give it a task.",
+      title: t("Create your first agent"),
+      body: t("Place it in a department, give it SOPs and permissions, then give it a task."),
       to: "/agents/new",
-      cta: "New agent",
+      cta: t("New agent"),
     },
   ];
   const finished = steps.filter((s) => s.done).length;
@@ -154,9 +158,9 @@ function GettingStarted({ counts }: { counts: Record<string, number> | undefined
     <Card data-guide="home.getting-started" className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={RocketLaunchIcon} size="sm" />}
-        title="Getting started"
-        description="The order that gets your first agent working."
-        actions={counts ? <Pill tone={finished === steps.length ? "ok" : "accent"}>{finished} of {steps.length} done</Pill> : null}
+        title={t("Getting started")}
+        description={t("The order that gets your first agent working.")}
+        actions={counts ? <Pill tone={finished === steps.length ? "ok" : "accent"}>{t("{done} of {total} done", { done: finished, total: steps.length })}</Pill> : null}
       />
       <div className="px-4 pt-3 sm:px-5" aria-hidden>
         <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
@@ -173,6 +177,7 @@ function GettingStarted({ counts }: { counts: Record<string, number> | undefined
 }
 
 export function CommandCenterPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const { data } = useQuery(systemStatusQuery);
   const navigate = useNavigate();
@@ -182,12 +187,12 @@ export function CommandCenterPage() {
   const review = counts?.tasks_review ?? 0;
   const running = counts?.tasks_running ?? 0;
 
-  let statusPill: ReactNode = <Pill>Checking</Pill>;
+  let statusPill: ReactNode = <Pill>{t("Checking")}</Pill>;
   if (data) {
     statusPill = data.ok ? (
-      <Pill tone="ok" live>All systems running</Pill>
+      <Pill tone="ok" live>{t("All systems running")}</Pill>
     ) : (
-      <Pill tone="danger" live>Needs attention</Pill>
+      <Pill tone="danger" live>{t("Needs attention")}</Pill>
     );
   }
 
@@ -196,8 +201,8 @@ export function CommandCenterPage() {
   return (
     <Page>
       <PageHeader
-        title={`${greeting()}, ${firstName}`}
-        description={`${me.workspace.name}. Here is how the office is doing.`}
+        title={t("{greeting}, {name}", { greeting: greeting(), name: firstName ?? "" })}
+        description={t("{workspace}. Here is how the office is doing.", { workspace: me.workspace.name })}
         actions={<div className="flex items-center">{statusPill}</div>}
       />
 
@@ -207,33 +212,33 @@ export function CommandCenterPage() {
 
       <StatGrid>
         <Stat
-          label="Agents"
+          label={t("Agents")}
           value={value(counts?.agents)}
-          hint="On staff"
+          hint={t("On staff")}
           icon={UsersThreeIcon}
           tone="accent"
           onClick={() => navigate({ to: "/agents" })}
         />
         <Stat
-          label="Working now"
+          label={t("Working now")}
           value={value(counts?.tasks_running)}
-          hint={running ? "Tasks in progress" : "Nobody busy right now"}
+          hint={running ? t("Tasks in progress") : t("Nobody busy right now")}
           icon={LightningIcon}
           tone="info"
           onClick={() => navigate({ to: "/tasks" })}
         />
         <Stat
-          label="Waiting on you"
+          label={t("Waiting on you")}
           value={value(counts?.approvals_pending)}
-          hint={waiting ? "Decisions to make" : "Nothing to decide"}
+          hint={waiting ? t("Decisions to make") : t("Nothing to decide")}
           icon={HandIcon}
           tone={waiting ? "warn" : "neutral"}
           onClick={() => navigate({ to: "/approvals" })}
         />
         <Stat
-          label="To review"
+          label={t("To review")}
           value={value(counts?.tasks_review)}
-          hint={review ? "Finished work to check" : "All checked"}
+          hint={review ? t("Finished work to check") : t("All checked")}
           icon={ClipboardTextIcon}
           tone="violet"
           onClick={() => navigate({ to: "/tasks" })}
@@ -250,11 +255,11 @@ export function CommandCenterPage() {
         <SystemPanel />
       </div>
 
-      <nav data-guide="home.shortcuts" aria-label="Shortcuts" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
+      <nav data-guide="home.shortcuts" aria-label={t("Shortcuts")} className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
         {[
-          { to: "/organization", icon: TreeStructureIcon, label: "Organization", body: "Branches and departments", tone: "info" as const },
-          { to: "/settings/members", icon: UserPlusIcon, label: "Members", body: "People and their roles", tone: "violet" as const },
-          { to: "/agents", icon: UsersThreeIcon, label: "Agents", body: `${counts?.agents ?? 0} on staff`, tone: "accent" as const },
+          { to: "/organization", icon: TreeStructureIcon, label: t("Organization"), body: t("Branches and departments"), tone: "info" as const },
+          { to: "/settings/members", icon: UserPlusIcon, label: t("Members"), body: t("People and their roles"), tone: "violet" as const },
+          { to: "/agents", icon: UsersThreeIcon, label: t("Agents"), body: t("{n} on staff", { n: counts?.agents ?? 0 }), tone: "accent" as const },
         ].map(({ to, icon, label, body, tone }) => (
           <Link
             key={to}
@@ -271,7 +276,7 @@ export function CommandCenterPage() {
         ))}
       </nav>
       <p className="flex items-center gap-1.5 text-[12px] text-muted">
-        <CpuIcon size={14} className="shrink-0" /> Temporal UI for workflow debugging runs at localhost:8502.
+        <CpuIcon size={14} className="shrink-0" /> {t("Temporal UI for workflow debugging runs at localhost:8502.")}
       </p>
     </Page>
   );

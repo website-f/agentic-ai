@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.scope import Scope
 from ..core.security import can
 from ..models import Agent, Membership
-from .tools import GLOBAL_DENY, TOOLS, check_url_arg
+from .tools import GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
 # Outward actions a person signs off every time, whatever an agent's settings say.
@@ -36,6 +36,7 @@ OUTSIDE_CONTENT = frozenset(
         "email_search",
         "web_fetch",
         "web_search",
+        "research_gather",
         "read_file",
         "view_image",
         "tool_call",
@@ -44,6 +45,9 @@ OUTSIDE_CONTENT = frozenset(
         "browser_open",
         "browser_read",
         "browser_check",
+        "browser_snapshot",
+        "browser_find",
+        "browser_wait",
     }
 )
 
@@ -95,7 +99,7 @@ async def evaluate(
         return Decision(
             "ask", f"hardline.{tool_name}", f"{tool.label} always waits for a person.", True
         )
-    mode = (agent.tools or {}).get(tool_name, tool.default_mode)
+    mode = mode_of(agent.tools, tool_name)
     if mode == "deny":
         return Decision(
             "deny", f"agent.{tool_name}=deny", f"{agent.name} is not allowed to use {tool.label}."

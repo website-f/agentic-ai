@@ -5,6 +5,7 @@ import { lazy, Suspense } from "react";
 import { Page, PageHeader } from "@/components/page";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { msg, useT } from "@/i18n";
 import { meQuery } from "@/lib/queries";
 
 import { groupsQuery, providersQuery } from "./data";
@@ -20,14 +21,15 @@ export const AI_TABS = ["providers", "groups", "usage", "playground", "settings"
 export type AITab = (typeof AI_TABS)[number];
 
 const LABELS: Record<AITab, string> = {
-  providers: "Providers",
-  groups: "Model groups",
-  usage: "Usage",
-  playground: "Playground",
-  settings: "Settings",
+  providers: msg("Providers"),
+  groups: msg("Model groups"),
+  usage: msg("Usage"),
+  playground: msg("Playground"),
+  settings: msg("Settings"),
 };
 
 export function AIEnginePage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("engine.manage");
   const search = useSearch({ strict: false }) as { tab?: AITab };
@@ -40,18 +42,18 @@ export function AIEnginePage() {
   return (
     <Page className="max-w-7xl">
       <PageHeader
-        title="AI Engine"
-        description="Connect the AI providers your agents use, decide which models answer first, and see what every call costs."
+        title={t("AI Engine")}
+        description={t("Connect the AI providers your agents use, decide which models answer first, and see what every call costs.")}
       />
       <Segmented
         guide="ai-engine.tabs"
-        label="AI Engine sections"
+        label={t("AI Engine sections")}
         value={tab}
         onChange={(v) => navigate({ to: "/ai-engine", search: { tab: v }, replace: true })}
-        options={AI_TABS.map((t) => ({ value: t, label: LABELS[t], count: counts[t] }))}
+        options={AI_TABS.map((k) => ({ value: k, label: t(LABELS[k]), count: counts[k] }))}
         className="w-fit"
       />
-      <div role="tabpanel" aria-label={LABELS[tab]} className="min-w-0 outline-none">
+      <div role="tabpanel" aria-label={t(LABELS[tab])} className="min-w-0 outline-none">
         {tab === "providers" ? <ProvidersTab canManage={canManage} /> : null}
         {tab === "groups" ? <GroupsTab canManage={canManage} /> : null}
         {tab === "usage" ? (

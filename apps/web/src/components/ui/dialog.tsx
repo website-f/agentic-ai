@@ -3,6 +3,7 @@ import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
 import { Drawer } from "vaul";
 
+import { useT } from "@/i18n";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ export function ResponsiveDialog({
   footer,
   className,
 }: ResponsiveDialogProps) {
+  const t = useT();
   const phone = useIsPhone();
 
   if (phone) {
@@ -86,7 +88,7 @@ export function ResponsiveDialog({
             </div>
             <Dialog.Close
               className="shrink-0 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg"
-              aria-label="Close"
+              aria-label={t("Close")}
             >
               <XIcon size={18} />
             </Dialog.Close>

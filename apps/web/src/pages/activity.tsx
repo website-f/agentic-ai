@@ -20,37 +20,55 @@ import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { locale, msg, t as tr, translate, useLang, useT, type Lang } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { auditQuery } from "@/lib/queries";
-import type { AuditItem } from "@/lib/types";
+import { ROLE_INFO, type AuditItem, type Role } from "@/lib/types";
 
 /** Plain-language sentence for each audit action. */
 function describe(item: AuditItem): string {
   const a = item.after ?? {};
   const b = item.before ?? {};
   const s = (v: unknown) => (v === undefined || v === null ? "" : String(v));
+  const role = (v: unknown) => (ROLE_INFO[v as Role] ? tr(ROLE_INFO[v as Role].label) : s(v));
   switch (item.action) {
-    case "workspace.created": return `created the workspace ${s(a.name)}`;
-    case "auth.login": return "signed in";
-    case "auth.password_changed": return "changed their password";
-    case "member.added": return `added ${s(a.email)} as ${s(a.role)}`;
-    case "member.role_changed": return `changed a role from ${s(b.role)} to ${s(a.role)}`;
-    case "member.removed": return `removed ${s(b.email)}`;
-    case "member.password_reset": return "reset a member's password";
-    case "branch.created": return `created the branch ${s(a.name)}`;
-    case "branch.updated": return `updated the branch ${s(a.name)}`;
-    case "branch.deleted": return `deleted the branch ${s(b.name)}`;
-    case "department.created": return `added the ${s(a.name)} department to ${s(a.branch)}`;
-    case "department.updated": return b.name !== a.name ? `renamed ${s(b.name)} to ${s(a.name)}` : `updated ${s(a.name)}`;
-    case "department.deleted": return `removed the ${s(b.name)} department`;
+    case "workspace.created": return tr("created the workspace {name}", { name: s(a.name) });
+    case "auth.login": return tr("signed in");
+    case "auth.password_changed": return tr("changed their password");
+    case "member.added": return tr("added {email} as {role}", { email: s(a.email), role: role(a.role) });
+    case "member.role_changed": return tr("changed a role from {from} to {to}", { from: role(b.role), to: role(a.role) });
+    case "member.removed": return tr("removed {email}", { email: s(b.email) });
+    case "member.password_reset": return tr("reset a member's password");
+    case "branch.created": return tr("created the branch {name}", { name: s(a.name) });
+    case "branch.updated": return tr("updated the branch {name}", { name: s(a.name) });
+    case "branch.deleted": return tr("deleted the branch {name}", { name: s(b.name) });
+    case "department.created": return tr("added the {name} department to {branch}", { name: s(a.name), branch: s(a.branch) });
+    case "department.updated": return b.name !== a.name ? tr("renamed {from} to {to}", { from: s(b.name), to: s(a.name) }) : tr("updated {name}", { name: s(a.name) });
+    case "department.deleted": return tr("removed the {name} department", { name: s(b.name) });
     default: return fallback(item.action);
   }
 }
+
+/** Malay for the generated sentences below ("mencipta tugasan"); unknown pairs stay English.
+ * The keys are only looked up in Malay, so they carry an "activity:" prefix to stay apart. */
+const VERB_MS: Record<string, string> = {
+  created: msg("activity: created"), updated: msg("activity: updated"), deleted: msg("activity: deleted"), uploaded: msg("activity: uploaded"),
+  added: msg("activity: added"), removed: msg("activity: removed"), approved: msg("activity: approved"), rejected: msg("activity: rejected"),
+  reverted: msg("activity: reverted"), applied: msg("activity: applied"), compiled: msg("activity: compiled"), delegated: msg("activity: delegated"),
+  published: msg("activity: published"), started: msg("activity: started"), accepted: msg("activity: accepted"),
+};
+const NOUN_MS: Record<string, string> = {
+  task: msg("activity: task"), file: msg("activity: file"), document: msg("activity: document"), pack: msg("activity: pack"), workflow: msg("activity: workflow"),
+  template: msg("activity: template"), meeting: msg("activity: meeting"), broadcast: msg("activity: broadcast"), report: msg("activity: report"),
+  schedule: msg("activity: schedule"), agent: msg("activity: agent"), skill: msg("activity: skill"), sop: msg("activity: SOP"), blueprint: msg("activity: blueprint"),
+  objective: msg("activity: objective"), minutes: msg("activity: meeting minutes"), mcp: msg("activity: MCP server"),
+};
 
 /** "task.created" -> "created a task", "workflow.run_started" -> "workflow run started". */
 function fallback(action: string): string {
   const [entity = "", verb = ""] = action.split(".");
   const noun = entity.replace(/_/g, " ");
+  if (useLang.getState().lang === "ms" && VERB_MS[verb] && NOUN_MS[entity]) return `${tr(VERB_MS[verb])} ${tr(NOUN_MS[entity])}`;
   if (/^[a-z]+ed$/.test(verb)) return `${verb} ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}`;
   return `${noun} ${verb.replace(/_/g, " ")}`.trim() || action;
 }
@@ -58,12 +76,12 @@ function fallback(action: string): string {
 type Kind = "signin" | "people" | "org" | "work" | "agents" | "other";
 
 const KINDS: Record<Kind, { label: string; icon: Icon; tone: Tone }> = {
-  signin: { label: "Sign-ins", icon: SignInIcon, tone: "neutral" },
-  people: { label: "People", icon: UsersIcon, tone: "info" },
-  org: { label: "Organization", icon: BuildingsIcon, tone: "violet" },
-  work: { label: "Work", icon: KanbanIcon, tone: "accent" },
-  agents: { label: "Agents", icon: RobotIcon, tone: "orange" },
-  other: { label: "Other", icon: SparkleIcon, tone: "neutral" },
+  signin: { label: msg("Sign-ins"), icon: SignInIcon, tone: "neutral" },
+  people: { label: msg("People"), icon: UsersIcon, tone: "info" },
+  org: { label: msg("Organization"), icon: BuildingsIcon, tone: "violet" },
+  work: { label: msg("Work"), icon: KanbanIcon, tone: "accent" },
+  agents: { label: msg("Agents"), icon: RobotIcon, tone: "orange" },
+  other: { label: msg("Other"), icon: SparkleIcon, tone: "neutral" },
 };
 
 function kindOf(action: string): Kind {
@@ -85,16 +103,18 @@ function iconFor(action: string): { icon: Icon; tone: Tone } {
 }
 
 
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, lang: Lang): string {
   const d = new Date(iso);
   const today = new Date();
   const yesterday = new Date(Date.now() - 86_400_000);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  if (d.toDateString() === today.toDateString()) return translate(lang, "Today");
+  if (d.toDateString() === yesterday.toDateString()) return translate(lang, "Yesterday");
+  return d.toLocaleDateString(locale(lang), { weekday: "long", day: "numeric", month: "long" });
 }
 
 export function ActivityPage() {
+  const t = useT();
+  const lang = useLang((s) => s.lang);
   const verify = useMutation({ mutationFn: () => api<{ ok: boolean; checked: number; broken_at: number | null }>("/api/audit/verify") });
   const [kind, setKind] = useState<Kind | "all">("all");
   // The kind filter runs on the server: every page is that kind, and the counts are true counts.
@@ -111,27 +131,27 @@ export function ActivityPage() {
   const groups = useMemo(() => {
     const out: { day: string; items: AuditItem[] }[] = [];
     for (const item of all) {
-      const day = dayLabel(item.ts);
+      const day = dayLabel(item.ts, lang);
       const last = out[out.length - 1];
       if (last && last.day === day) last.items.push(item);
       else out.push({ day, items: [item] });
     }
     return out;
-  }, [all]);
+  }, [all, lang]);
 
   const options = [
-    { value: "all" as const, label: "All", count: everything || undefined },
-    ...(Object.keys(KINDS) as Kind[]).filter((k) => counts[k] || k === kind).map((k) => ({ value: k, label: KINDS[k].label, count: counts[k] ?? 0 })),
+    { value: "all" as const, label: t("All"), count: everything || undefined },
+    ...(Object.keys(KINDS) as Kind[]).filter((k) => counts[k] || k === kind).map((k) => ({ value: k, label: t(KINDS[k].label), count: counts[k] ?? 0 })),
   ];
 
   return (
     <Page>
       <PageHeader
-        title="Activity"
-        description="Every change in this workspace. Entries are chained by hash, so editing or deleting one is detectable."
+        title={t("Activity")}
+        description={t("Every change in this workspace. Entries are chained by hash, so editing or deleting one is detectable.")}
         actions={
           <Button variant="outline" loading={verify.isPending} onClick={() => verify.mutate()}>
-            {!verify.isPending ? <SealCheckIcon size={16} /> : null} Verify log
+            {!verify.isPending ? <SealCheckIcon size={16} /> : null} {t("Verify log")}
           </Button>
         }
       />
@@ -140,16 +160,16 @@ export function ActivityPage() {
           <div role="status" className="flex items-start gap-3 rounded-[var(--radius-md)] border border-ok/25 bg-ok/8 px-4 py-3">
             <IconTile icon={SealCheckIcon} tone="ok" size="sm" />
             <p className="min-w-0 text-[13px]">
-              <span className="font-medium text-ok">Log intact.</span>{" "}
-              <span className="text-muted">All {verify.data.checked} entries match their hash chain.</span>
+              <span className="font-medium text-ok">{t("Log intact.")}</span>{" "}
+              <span className="text-muted">{t("All {n} entries match their hash chain.", { n: verify.data.checked })}</span>
             </p>
           </div>
         ) : (
           <div role="alert" className="flex items-start gap-3 rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 px-4 py-3">
             <IconTile icon={WarningOctagonIcon} tone="danger" size="sm" />
             <p className="min-w-0 text-[13px]">
-              <span className="font-medium text-danger">Chain broken at entry {verify.data.broken_at}.</span>{" "}
-              <span className="text-muted">An entry from that point on was changed or removed.</span>
+              <span className="font-medium text-danger">{t("Chain broken at entry {n}.", { n: verify.data.broken_at ?? "" })}</span>{" "}
+              <span className="text-muted">{t("An entry from that point on was changed or removed.")}</span>
             </p>
           </div>
         )
@@ -160,16 +180,16 @@ export function ActivityPage() {
         <div className="grid gap-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14 rounded-[var(--radius-md)]" />)}</div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
-          Could not load activity. {errorMessage(error)}
+          {t("Could not load activity. {error}", { error: errorMessage(error) })}
         </div>
       ) : all.length === 0 && kind === "all" ? (
-        <EmptyState icon={ClockCounterClockwiseIcon} title="Nothing recorded yet" body="Changes to members, branches and departments will show up here." />
+        <EmptyState icon={ClockCounterClockwiseIcon} title={t("Nothing recorded yet")} body={t("Changes to members, branches and departments will show up here.")} />
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-          <Segmented guide="activity.filter" label="Filter activity" value={kind} onChange={setKind} options={options} className="w-fit" />
+          <Segmented guide="activity.filter" label={t("Filter activity")} value={kind} onChange={setKind} options={options} className="w-fit" />
           {groups.length === 0 ? (
             <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">
-              No {kind !== "all" ? KINDS[kind].label.toLowerCase() : "entries"} recorded yet.
+              {kind !== "all" ? t("No {kind} recorded yet.", { kind: t(KINDS[kind].label).toLowerCase() }) : t("No entries recorded yet.")}
             </p>
           ) : null}
           {groups.map((g, gi) => (
@@ -191,8 +211,8 @@ export function ActivityPage() {
                         </p>
                         {item.note ? <p className="text-[12px] break-words text-muted">{item.note}</p> : null}
                       </div>
-                      <time className="mt-0.5 shrink-0 font-mono text-[12px] whitespace-nowrap text-muted tabular" dateTime={item.ts} title={new Date(item.ts).toLocaleString()}>
-                        {new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      <time className="mt-0.5 shrink-0 font-mono text-[12px] whitespace-nowrap text-muted tabular" dateTime={item.ts} title={new Date(item.ts).toLocaleString(locale())}>
+                        {new Date(item.ts).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}
                       </time>
                     </li>
                   );

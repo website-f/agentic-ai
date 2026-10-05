@@ -10,6 +10,7 @@ import { Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
+import { locale, msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { ALL_COMPANIES, useBranch } from "@/lib/stores";
@@ -19,7 +20,7 @@ import { chatGroupsQuery } from "@/pages/ai-engine/data";
 
 import { ToolMatrix } from "./tool-matrix";
 
-const STEPS = ["Template", "Placement", "Identity", "SOPs", "Permissions", "Review"] as const;
+const STEPS = [msg("Template"), msg("Placement"), msg("Identity"), msg("SOPs"), msg("Permissions"), msg("Review")];
 const COLORS = ["#2f6db5", "#b7791f", "#7a5af5", "#0f8ba0", "#5b6b2f", "#c2412d", "#b04a87", "#13895f"];
 
 interface Draft {
@@ -37,7 +38,8 @@ interface Draft {
   personal?: boolean;
 }
 
-function TemplateCard({ t, selected, onPick }: { t: Template | null; selected: boolean; onPick: () => void }) {
+function TemplateCard({ t: tpl, selected, onPick }: { t: Template | null; selected: boolean; onPick: () => void }) {
+  const t = useT();
   return (
     <button
       onClick={onPick}
@@ -47,10 +49,10 @@ function TemplateCard({ t, selected, onPick }: { t: Template | null; selected: b
         selected ? "border-accent bg-accent-soft/50 ring-2 ring-accent/15" : "border-border bg-surface hover:border-accent/40 hover:shadow-[var(--shadow-soft)]",
       )}
     >
-      {t ? <AgentAvatar name={t.role} color={t.color} size="sm" /> : <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-muted"><SparkleIcon size={16} /></span>}
+      {tpl ? <AgentAvatar name={tpl.role} color={tpl.color} size="sm" /> : <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-muted"><SparkleIcon size={16} /></span>}
       <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-medium">{t ? t.role : "Blank agent"}</span>
-        <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-muted">{t ? t.soul.split(". ")[0] + "." : "Start from nothing and write the personality yourself."}</span>
+        <span className="block text-[13.5px] font-medium">{tpl ? tpl.role : t("Blank agent")}</span>
+        <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-muted">{tpl ? tpl.soul.split(". ")[0] + "." : t("Start from nothing and write the personality yourself.")}</span>
       </span>
       {selected ? (
         <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
@@ -62,6 +64,7 @@ function TemplateCard({ t, selected, onPick }: { t: Template | null; selected: b
 }
 
 export function AgentBuilderPage() {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
@@ -87,12 +90,12 @@ export function AgentBuilderPage() {
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }));
   const branch = branches.find((b) => b.id === (d.branch_id || startBranch?.id)) ?? startBranch;
 
-  const pickTemplate = (t: Template | null) => {
-    setPicked(t?.id ?? null);
-    const dept = t && branch ? branch.departments.find((x) => x.name.toLowerCase() === t.department.toLowerCase()) : undefined;
+  const pickTemplate = (tpl: Template | null) => {
+    setPicked(tpl?.id ?? null);
+    const dept = tpl && branch ? branch.departments.find((x) => x.name.toLowerCase() === tpl.department.toLowerCase()) : undefined;
     set({
-      template: t?.id ?? null, role: t?.role ?? "", soul: t?.soul ?? "", color: t?.color ?? COLORS[0]!,
-      model_group: t?.model_group ?? "smart", tools: t?.tools ?? {}, branch_id: branch?.id ?? "",
+      template: tpl?.id ?? null, role: tpl?.role ?? "", soul: tpl?.soul ?? "", color: tpl?.color ?? COLORS[0]!,
+      model_group: tpl?.model_group ?? "smart", tools: tpl?.tools ?? {}, branch_id: branch?.id ?? "",
       department_id: dept?.id ?? d.department_id,
     });
   };
@@ -115,7 +118,7 @@ export function AgentBuilderPage() {
     onSuccess: (a) => {
       qc.invalidateQueries({ queryKey: workKeys.agents });
       qc.invalidateQueries({ queryKey: keys.status });
-      toast.success(`${a.name} joined ${a.department_name ?? a.branch_name}.`);
+      toast.success(t("{name} joined {place}.", { name: a.name, place: a.department_name ?? a.branch_name }));
       navigate({ to: "/agents/$agentId", params: { agentId: a.id } });
     },
   });
@@ -133,11 +136,11 @@ export function AgentBuilderPage() {
   return (
     <Page className="max-w-3xl">
       <Link to="/agents" className="-my-1 inline-flex h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg">
-        <ArrowLeftIcon size={14} /> Agents
+        <ArrowLeftIcon size={14} /> {t("Agents")}
       </Link>
-      <PageHeader title="New agent" description="Six short steps: a starting point, where it sits, who it is, its SOPs and what it may do." />
+      <PageHeader title={t("New agent")} description={t("Six short steps: a starting point, where it sits, who it is, its SOPs and what it may do.")} />
 
-      <nav aria-label="Steps" className="rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4">
+      <nav aria-label={t("Steps")} className="rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4">
         <ol className="flex gap-1.5">
           {STEPS.map((s, i) => (
             <li key={s} className="min-w-0 flex-1">
@@ -146,28 +149,28 @@ export function AgentBuilderPage() {
                 disabled={i > step}
                 className={cn("grid w-full gap-1.5 text-left", i < step && "cursor-pointer")}
                 aria-current={i === step ? "step" : undefined}
-                aria-label={`Step ${i + 1}: ${s}${i < step ? " (done)" : ""}`}
+                aria-label={i < step ? t("Step {n}: {name} (done)", { n: i + 1, name: t(s) }) : t("Step {n}: {name}", { n: i + 1, name: t(s) })}
               >
                 <span className={cn("block h-1 rounded-full transition-colors", i <= step ? "bg-accent" : "bg-border")} />
                 <span className={cn("hidden items-center gap-1 truncate text-[12px] sm:flex", i === step ? "font-medium text-fg" : i < step ? "text-accent" : "text-muted")}>
                   {i < step ? <CheckIcon size={12} weight="bold" className="shrink-0" /> : <span className="tabular">{i + 1}.</span>}
-                  <span className="truncate">{s}</span>
+                  <span className="truncate">{t(s)}</span>
                 </span>
               </button>
             </li>
           ))}
         </ol>
         <p className="mt-2 text-[12.5px] text-muted sm:hidden">
-          Step {step + 1} of {STEPS.length}: <span className="font-medium text-fg">{STEPS[step]}</span>
+          {t("Step {n} of {total}:", { n: step + 1, total: STEPS.length })} <span className="font-medium text-fg">{t(STEPS[step] ?? "")}</span>
         </p>
       </nav>
 
       <motion.div key={step} initial={reduce ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
         {step === 0 ? (
           <section className="grid gap-3">
-            <p className="text-[13.5px] text-muted">Pick a starting point. You can change everything afterwards.</p>
+            <p className="text-[13.5px] text-muted">{t("Pick a starting point. You can change everything afterwards.")}</p>
             <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
-              {templates.map((t) => <TemplateCard key={t.id} t={t} selected={picked === t.id} onPick={() => pickTemplate(t)} />)}
+              {templates.map((tpl) => <TemplateCard key={tpl.id} t={tpl} selected={picked === tpl.id} onPick={() => pickTemplate(tpl)} />)}
               <TemplateCard t={null} selected={picked === null} onPick={() => pickTemplate(null)} />
             </div>
           </section>
@@ -176,11 +179,11 @@ export function AgentBuilderPage() {
         {step === 1 ? (
           <section className="grid gap-5">
             <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">Company (branch)</span>
-              <Select value={d.branch_id} onValueChange={(v) => set({ branch_id: v, department_id: null })} label="Branch" options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <span className="text-[13px] font-medium">{t("Company (branch)")}</span>
+              <Select value={d.branch_id} onValueChange={(v) => set({ branch_id: v, department_id: null })} label={t("Branch")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
             </div>
             <fieldset className="grid gap-2">
-              <legend className="mb-2 text-[13px] font-medium">Department</legend>
+              <legend className="mb-2 text-[13px] font-medium">{t("Department")}</legend>
               <div className="flex flex-wrap gap-2">
                 {branch?.departments.map((dep) => (
                   <button key={dep.id} onClick={() => set({ department_id: dep.id })} aria-pressed={d.department_id === dep.id}
@@ -190,17 +193,17 @@ export function AgentBuilderPage() {
                 ))}
                 <button onClick={() => set({ department_id: null })} aria-pressed={d.department_id === null}
                   className={cn("min-h-9 rounded-full border px-3.5 py-1.5 text-[13px]", d.department_id === null ? "border-accent bg-accent-soft font-medium text-accent" : "border-dashed border-border text-muted")}>
-                  No department
+                  {t("No department")}
                 </button>
               </div>
-              <p className="text-[12.5px] text-muted">The department decides which SOPs apply automatically and where the agent sits in the office.</p>
+              <p className="text-[12.5px] text-muted">{t("The department decides which SOPs apply automatically and where the agent sits in the office.")}</p>
             </fieldset>
             {ownOnly ? (
-              <p className="rounded-sm bg-accent-soft px-3 py-2 text-[13px] text-accent">This will be your personal agent: you give it work and answer its questions, and your managers can see it.</p>
+              <p className="rounded-sm bg-accent-soft px-3 py-2 text-[13px] text-accent">{t("This will be your personal agent: you give it work and answer its questions, and your managers can see it.")}</p>
             ) : (
               <label className="flex items-start gap-2.5 text-[13.5px]">
                 <input type="checkbox" className="mt-1 accent-[var(--color-accent)]" checked={!!d.personal} onChange={(e) => set({ personal: e.target.checked })} />
-                <span>My personal agent<span className="block text-[12.5px] text-muted">It works for you: only you and your managers manage it.</span></span>
+                <span>{t("My personal agent")}<span className="block text-[12.5px] text-muted">{t("It works for you: only you and your managers manage it.")}</span></span>
               </label>
             )}
           </section>
@@ -209,28 +212,28 @@ export function AgentBuilderPage() {
         {step === 2 ? (
           <section className="grid gap-4">
             <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
-              <Field label="Name" value={d.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Aina" autoFocus error={fieldErrors.name} />
-              <Field label="Job title" value={d.role} onChange={(e) => set({ role: e.target.value })} placeholder="e.g. Senior Accountant" error={fieldErrors.role} />
+              <Field label={t("Name")} value={d.name} onChange={(e) => set({ name: e.target.value })} placeholder={t("e.g. Aina")} autoFocus error={fieldErrors.name} />
+              <Field label={t("Job title")} value={d.role} onChange={(e) => set({ role: e.target.value })} placeholder={t("e.g. Senior Accountant")} error={fieldErrors.role} />
             </div>
             <fieldset>
-              <legend className="mb-2 text-[13px] font-medium">Color</legend>
+              <legend className="mb-2 text-[13px] font-medium">{t("Color")}</legend>
               <div className="flex flex-wrap items-center gap-2">
                 {COLORS.map((c) => (
-                  <button key={c} aria-label={`Color ${c}`} aria-pressed={d.color === c} onClick={() => set({ color: c })}
+                  <button key={c} aria-label={t("Color {c}", { c })} aria-pressed={d.color === c} onClick={() => set({ color: c })}
                     className={cn("size-8 rounded-full ring-offset-2 ring-offset-bg", d.color === c ? "ring-2 ring-fg" : "hover:ring-2 hover:ring-border")} style={{ background: c }} />
                 ))}
-                {d.name ? <span className="ml-2 flex items-center gap-2 text-[13px] text-muted"><AgentAvatar name={d.name} color={d.color} size="sm" /> Preview</span> : null}
+                {d.name ? <span className="ml-2 flex items-center gap-2 text-[13px] text-muted"><AgentAvatar name={d.name} color={d.color} size="sm" /> {t("Preview")}</span> : null}
               </div>
             </fieldset>
-            <TextareaField label="Personality and way of working" value={d.soul} onChange={(e) => set({ soul: e.target.value })} rows={7}
-              hint={`How this agent thinks, writes and reports. ${d.soul.length} characters.`} placeholder="You are a careful accountant who shows workings for every total..." />
+            <TextareaField label={t("Personality and way of working")} value={d.soul} onChange={(e) => set({ soul: e.target.value })} rows={7}
+              hint={t("How this agent thinks, writes and reports. {n} characters.", { n: d.soul.length })} placeholder={t("You are a careful accountant who shows workings for every total...")} />
           </section>
         ) : null}
 
         {step === 3 ? (
           <section className="grid gap-5">
             <div className="grid gap-2">
-              <h2 className="text-[14px] font-semibold">Applied automatically</h2>
+              <h2 className="text-[14px] font-semibold">{t("Applied automatically")}</h2>
               {autoSops.length ? (
                 <ul className="grid gap-1.5">
                   {autoSops.map((s) => (
@@ -241,10 +244,10 @@ export function AgentBuilderPage() {
                     </li>
                   ))}
                 </ul>
-              ) : <p className="text-[13px] text-muted">No company or department SOPs yet.</p>}
+              ) : <p className="text-[13px] text-muted">{t("No company or department SOPs yet.")}</p>}
             </div>
             <div className="grid gap-2">
-              <h2 className="text-[14px] font-semibold">From the library</h2>
+              <h2 className="text-[14px] font-semibold">{t("From the library")}</h2>
               {library.length ? (
                 <ul className="grid gap-1.5">
                   {library.map((s) => {
@@ -260,8 +263,8 @@ export function AgentBuilderPage() {
                     );
                   })}
                 </ul>
-              ) : <p className="text-[13px] text-muted">No library SOPs yet.</p>}
-              <Link to="/sops" className="w-fit text-[13px] font-medium text-accent hover:underline">Write or edit SOPs</Link>
+              ) : <p className="text-[13px] text-muted">{t("No library SOPs yet.")}</p>}
+              <Link to="/sops" className="w-fit text-[13px] font-medium text-accent hover:underline">{t("Write or edit SOPs")}</Link>
             </div>
           </section>
         ) : null}
@@ -269,9 +272,9 @@ export function AgentBuilderPage() {
         {step === 4 ? (
           <section className="grid gap-5">
             <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">Model group</span>
-              <Select value={d.model_group} onValueChange={(v) => set({ model_group: v })} label="Model group"
-                options={groups.map((g) => ({ value: g.name, label: g.label, hint: g.members.length ? `${g.members.length} models` : "No models yet, add some in AI Engine" }))} />
+              <span className="text-[13px] font-medium">{t("Model group")}</span>
+              <Select value={d.model_group} onValueChange={(v) => set({ model_group: v })} label={t("Model group")}
+                options={groups.map((g) => ({ value: g.name, label: g.label, hint: g.members.length ? t("{n} models", { n: g.members.length }) : t("No models yet, add some in AI Engine") }))} />
             </div>
             <ToolMatrix tools={d.tools} onChange={(tools) => set({ tools })} autonomy={d.autonomy} onAutonomy={(autonomy) => set({ autonomy })} />
           </section>
@@ -283,16 +286,16 @@ export function AgentBuilderPage() {
               <AgentAvatar name={d.name || "?"} color={d.color} size="lg" />
               <div className="min-w-0">
                 <p className="text-[16px] font-semibold break-words">{d.name}</p>
-                <p className="text-[13px] text-muted">{d.role} · {branch?.departments.find((x) => x.id === d.department_id)?.name ?? "No department"}, {branch?.name}</p>
-                <p className="mt-1 text-[12.5px] text-muted">Model group <span className="font-mono">{d.model_group}</span> · {autoSops.length + d.sop_ids.length} SOPs · {d.autonomy === "auto" ? "works on auto" : "asks before risky tools"}</p>
+                <p className="text-[13px] text-muted">{d.role} · {branch?.departments.find((x) => x.id === d.department_id)?.name ?? t("No department")}, {branch?.name}</p>
+                <p className="mt-1 text-[12.5px] text-muted">{t("Model group")} <span className="font-mono">{d.model_group}</span> · {t("{n} SOPs", { n: autoSops.length + d.sop_ids.length })} · {d.autonomy === "auto" ? t("works on auto") : t("asks before risky tools")}</p>
               </div>
             </div>
             <details className="group rounded-[var(--radius-md)] border border-border bg-surface" open>
               <summary className="cursor-pointer px-4 py-3 text-[13.5px] font-medium">
-                What the agent will be told {preview.data ? <span className="font-normal text-muted">· about {preview.data.tokens_estimate.toLocaleString()} tokens</span> : null}
+                {t("What the agent will be told")} {preview.data ? <span className="font-normal text-muted">· {t("about {n} tokens", { n: preview.data.tokens_estimate.toLocaleString(locale()) })}</span> : null}
               </summary>
               <pre className="max-h-80 overflow-auto border-t border-border px-4 py-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-muted">
-                {preview.isLoading ? "Building preview..." : preview.data?.prompt ?? (preview.error ? errorMessage(preview.error) : "")}
+                {preview.isLoading ? t("Building preview...") : preview.data?.prompt ?? (preview.error ? errorMessage(preview.error) : "")}
               </pre>
             </details>
             <FormError message={create.error && !Object.keys(fieldErrors).length ? errorMessage(create.error) : null} />
@@ -302,15 +305,15 @@ export function AgentBuilderPage() {
 
       <div className="sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 -mx-4 flex justify-between gap-3 border-t border-border bg-bg/90 px-4 py-3 backdrop-blur-md sm:mx-0 sm:px-0 md:bottom-0">
         <Button variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
-          <ArrowLeftIcon size={15} /> Back
+          <ArrowLeftIcon size={15} /> {t("Back")}
         </Button>
         {step < STEPS.length - 1 ? (
           <Button onClick={() => setStep((s) => s + 1)} disabled={!canNext}>
-            Next <ArrowRightIcon size={15} />
+            {t("Next")} <ArrowRightIcon size={15} />
           </Button>
         ) : (
           <Button onClick={() => create.mutate()} loading={create.isPending}>
-            <CheckIcon size={15} weight="bold" /> Create agent
+            <CheckIcon size={15} weight="bold" /> {t("Create agent")}
           </Button>
         )}
       </div>

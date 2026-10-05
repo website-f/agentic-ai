@@ -163,6 +163,7 @@ async def record_call(
     cost: Decimal | None = None,
     agent_id: str | None = None,
     task_id: str | None = None,
+    prefix_hash: str | None = None,
 ) -> None:
     """Own session, so a failed call is still logged even if the caller rolls back."""
     try:
@@ -187,6 +188,7 @@ async def record_call(
                     status="ok" if ok else "error",
                     error_class=error_class,
                     error_detail=(error_detail or "")[:500] or None,
+                    prefix_hash=prefix_hash,
                 )
             )
             await db.commit()

@@ -29,23 +29,27 @@ import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { AnnotatedShot, ShotPlaceholder, ShotThumb } from "@/guide/annotated-shot";
-import { PAGE_DOCS, plain, type PageDoc, type Recipe } from "@/guide/content";
-import { flowsOf, groupedPages, searchGuide, shotKeys, shotOf, useManifest, videoOf, type Device } from "@/guide/data";
+import { plain, type PageDoc, type Recipe } from "@/guide/content";
+import { groupedPages, searchGuide, shotKeys, shotOf, useManifest, videoOf, type Device } from "@/guide/data";
 import { FlowVideo } from "@/guide/flow-video";
+import { useGuideText } from "@/guide/lang";
 import type { GuideManifest } from "@/guide/manifest";
 import { PAGE_ICONS, Rich, stateLabel } from "@/guide/rich";
-import { GUIDE_FLOWS, GUIDE_PAGES, pageById, type GuidePage as GuidePageInfo } from "@/guide/targets";
+import type { GuidePage as GuidePageInfo } from "@/guide/targets";
+import { locale, useT } from "@/i18n";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------- index (sidebar / sheet)
 
 function PageIndex({ current, query, onPick }: { current?: string; query: string; onPick?: () => void }) {
+  const t = useT();
+  const gt = useGuideText();
   const q = query.trim().toLowerCase();
-  const pages = q ? GUIDE_PAGES.filter((p) => p.title.toLowerCase().includes(q) || p.group.toLowerCase().includes(q)) : GUIDE_PAGES;
+  const pages = q ? gt.pages.filter((p) => p.title.toLowerCase().includes(q) || gt.groupLabel(p.group).toLowerCase().includes(q)) : gt.pages;
   const groups = groupedPages(pages);
   return (
-    <nav aria-label="Guide pages" className="grid gap-4">
+    <nav aria-label={t("Guide pages")} className="grid gap-4">
       <Link
         to="/guide"
         onClick={onPick}
@@ -54,11 +58,11 @@ function PageIndex({ current, query, onPick }: { current?: string; query: string
           !current ? "bg-accent-soft text-accent" : "text-fg hover:bg-surface-2",
         )}
       >
-        <BookOpenTextIcon size={17} weight={!current ? "fill" : "regular"} /> Guide home
+        <BookOpenTextIcon size={17} weight={!current ? "fill" : "regular"} /> {t("Guide home")}
       </Link>
       {groups.map((g) => (
         <div key={g.group}>
-          <p className="px-2.5 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">{g.group}</p>
+          <p className="px-2.5 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">{gt.groupLabel(g.group)}</p>
           <ul className="grid gap-0.5">
             {g.pages.map((p) => {
               const IconCmp = (PAGE_ICONS[p.id] ?? BookBookmarkIcon);
@@ -84,13 +88,14 @@ function PageIndex({ current, query, onPick }: { current?: string; query: string
           </ul>
         </div>
       ))}
-      {!groups.length ? <p className="px-2.5 text-[13px] text-muted">No page is called that. Search below looks inside the text too.</p> : null}
+      {!groups.length ? <p className="px-2.5 text-[13px] text-muted">{t("No page is called that. Search below looks inside the text too.")}</p> : null}
     </nav>
   );
 }
 
 /** Phones and tablets: the index lives in a bottom sheet behind one button. */
 function IndexSheet({ current, query, onQuery }: { current?: GuidePageInfo; query: string; onQuery: (q: string) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const IconCmp = current ? (PAGE_ICONS[current.id] ?? BookBookmarkIcon) : BookOpenTextIcon;
   return (
@@ -101,9 +106,9 @@ function IndexSheet({ current, query, onQuery }: { current?: GuidePageInfo; quer
           className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-left shadow-[var(--shadow-soft)] lg:hidden"
         >
           <IconCmp size={18} className="shrink-0 text-accent" />
-          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{current ? current.title : "Guide home"}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{current ? current.title : t("Guide home")}</span>
           <span className="inline-flex shrink-0 items-center gap-1 text-[12.5px] text-muted">
-            <ListBulletsIcon size={16} /> All pages
+            <ListBulletsIcon size={16} /> {t("All pages")}
           </span>
         </button>
       </Drawer.Trigger>
@@ -114,9 +119,9 @@ function IndexSheet({ current, query, onQuery }: { current?: GuidePageInfo; quer
           className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-[var(--radius-lg)] border-t border-border bg-surface outline-none"
         >
           <div aria-hidden className="mx-auto mt-2.5 mb-2 h-1.5 w-10 shrink-0 rounded-full bg-border" />
-          <Drawer.Title className="px-4 pb-2 text-[15px] font-semibold">User guide</Drawer.Title>
+          <Drawer.Title className="px-4 pb-2 text-[15px] font-semibold">{t("User guide")}</Drawer.Title>
           <div className="px-4 pb-3">
-            <SearchInput value={query} onChange={onQuery} placeholder="Search the guide" />
+            <SearchInput value={query} onChange={onQuery} placeholder={t("Search the guide")} />
           </div>
           <div
             data-vaul-no-drag
@@ -138,16 +143,26 @@ function IndexSheet({ current, query, onQuery }: { current?: GuidePageInfo; quer
 // ---------------------------------------------------------------- search
 
 function SearchResults({ query, onPick, compact }: { query: string; onPick?: () => void; compact?: boolean }) {
-  const hits = useMemo(() => searchGuide(query), [query]);
+  const t = useT();
+  const gt = useGuideText();
+  const hits = useMemo(
+    () =>
+      searchGuide(query, 30, {
+        pages: gt.pages,
+        docs: gt.docs,
+        labels: { page: t("Page"), about: t("About"), can: t("What you can do"), tip: t("Tip"), onScreen: t("On screen") },
+      }),
+    [query, gt, t],
+  );
   if (!hits.length) {
     return (
       <p className={cn("text-[13.5px] text-muted", compact ? "px-2.5 py-2" : "py-6 text-center")}>
-        Nothing in the guide matches "{query.trim()}". Try one word, such as "approve" or "budget".
+        {t('Nothing in the guide matches "{q}". Try one word, such as "approve" or "budget".', { q: query.trim() })}
       </p>
     );
   }
   return (
-    <ul className={cn("grid", compact ? "gap-0.5" : "gap-2")} aria-label="Search results">
+    <ul className={cn("grid", compact ? "gap-0.5" : "gap-2")} aria-label={t("Search results")}>
       {hits.map((h) => {
         const IconCmp = (PAGE_ICONS[h.page.id] ?? BookBookmarkIcon);
         return (
@@ -165,7 +180,7 @@ function SearchResults({ query, onPick, compact }: { query: string; onPick?: () 
               <span className="grid min-w-0 gap-0.5">
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                   <span className="text-[14px] font-medium">{h.page.title}</span>
-                  <span className="text-[12px] text-muted">{h.page.group} · {h.where}</span>
+                  <span className="text-[12px] text-muted">{gt.groupLabel(h.page.group)} · {h.where}</span>
                 </span>
                 <span className="line-clamp-2 text-[13px] text-muted">{h.snippet}</span>
               </span>
@@ -180,29 +195,31 @@ function SearchResults({ query, onPick, compact }: { query: string; onPick?: () 
 // ---------------------------------------------------------------- guide home
 
 function GuideHome({ manifest, query, onQuery }: { manifest: GuideManifest | null; query: string; onQuery: (q: string) => void }) {
+  const t = useT();
+  const gt = useGuideText();
   const searching = query.trim().length > 1;
   return (
     <div className="grid min-w-0 gap-8">
       <PageHeader
-        title="User guide"
-        description="Every page of the office explained: what it is for, what you can do there and how, step by step, on real screenshots."
+        title={t("User guide")}
+        description={t("Every page of the office explained: what it is for, what you can do there and how, step by step, on real screenshots.")}
         actions={
           <>
             <Button variant="outline" asChild>
               <Link to="/tutorial">
-                <BookOpenTextIcon size={16} /> Tutorial
+                <BookOpenTextIcon size={16} /> {t("Tutorial")}
               </Link>
             </Button>
             <Button variant="outline" asChild>
               <Link to="/present">
-                <PresentationIcon size={16} /> Present
+                <PresentationIcon size={16} /> {t("Present")}
               </Link>
             </Button>
           </>
         }
       />
       <div className="grid gap-3">
-        <SearchInput value={query} onChange={onQuery} placeholder="Search the guide, e.g. approve or budget" className="basis-auto" />
+        <SearchInput value={query} onChange={onQuery} placeholder={t("Search the guide, e.g. approve or budget")} className="basis-auto" />
         {searching ? <SearchResults query={query} /> : null}
       </div>
 
@@ -211,14 +228,14 @@ function GuideHome({ manifest, query, onQuery }: { manifest: GuideManifest | nul
           <section className="grid gap-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
-                <h2 className="text-[15px] font-semibold">Watch how it's done</h2>
-                <p className="text-[13px] text-muted">Short recordings of the things people do most.</p>
+                <h2 className="text-[15px] font-semibold">{t("Watch how it's done")}</h2>
+                <p className="text-[13px] text-muted">{t("Short recordings of the things people do most.")}</p>
               </div>
             </div>
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {GUIDE_FLOWS.map((f) => {
+              {gt.flows.map((f) => {
                 const v = videoOf(manifest, f.id);
-                const page = pageById(f.page);
+                const page = gt.pageById(f.page);
                 return (
                   <li key={f.id} className="min-w-0">
                     <Link
@@ -239,7 +256,7 @@ function GuideHome({ manifest, query, onQuery }: { manifest: GuideManifest | nul
                         <IconTile icon={FilmStripIcon} size="sm" />
                         <span className="grid min-w-0 gap-0.5">
                           <span className="text-[14px] font-medium break-words">{f.title}</span>
-                          <span className="text-[12.5px] text-muted">{v ? page?.title : `${page?.title} · steps until the video is ready`}</span>
+                          <span className="text-[12.5px] text-muted">{v ? page?.title : t("{page} · steps until the video is ready", { page: page?.title ?? "" })}</span>
                         </span>
                       </div>
                     </Link>
@@ -249,12 +266,12 @@ function GuideHome({ manifest, query, onQuery }: { manifest: GuideManifest | nul
             </ul>
           </section>
 
-          {groupedPages().map((g) => (
+          {groupedPages(gt.pages).map((g) => (
             <section key={g.group} className="grid gap-3">
-              <h2 className="text-[15px] font-semibold">{g.group}</h2>
+              <h2 className="text-[15px] font-semibold">{gt.groupLabel(g.group)}</h2>
               <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {g.pages.map((p) => {
-                  const doc = PAGE_DOCS[p.id];
+                  const doc = gt.docs[p.id];
                   const IconCmp = (PAGE_ICONS[p.id] ?? BookBookmarkIcon);
                   return (
                     <li key={p.id} className="min-w-0">
@@ -291,11 +308,15 @@ function GuideHome({ manifest, query, onQuery }: { manifest: GuideManifest | nul
 }
 
 function SourceNote({ manifest }: { manifest: GuideManifest | null }) {
+  const t = useT();
   return (
     <p className="text-[12.5px] text-muted">
       {manifest
-        ? `Screenshots: ${manifest.source}, captured ${new Date(manifest.generated_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}. Your own screens show your own data.`
-        : "Screenshots are being captured. Placeholders show until they are ready; the steps already match the real screens."}
+        ? t("Screenshots: {source}, captured {date}. Your own screens show your own data.", {
+            source: t(manifest.source),
+            date: new Date(manifest.generated_at).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" }),
+          })
+        : t("Screenshots are being captured. Placeholders show until they are ready; the steps already match the real screens.")}
     </p>
   );
 }
@@ -356,6 +377,7 @@ function RecipeCard({
   onShowState: (state: string) => void;
   stateKey: string;
 }) {
+  const t = useT();
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -372,7 +394,7 @@ function RecipeCard({
               stateKey === recipe.state ? "border-accent/40 bg-accent-soft text-accent" : "border-border text-muted hover:text-fg",
             )}
           >
-            Show: {stateLabel(recipe.state)}
+            {t("Show: {view}", { view: t(stateLabel(recipe.state)) })}
           </button>
         ) : null}
       </div>
@@ -421,7 +443,9 @@ function RecipeCard({
 }
 
 function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideManifest | null }) {
-  const doc = PAGE_DOCS[page.id];
+  const t = useT();
+  const gt = useGuideText();
+  const doc = gt.docs[page.id];
   const search = useSearch({ strict: false }) as { state?: string; device?: Device };
   const navigate = useNavigate();
   const phone = useIsPhone();
@@ -460,15 +484,17 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
     }
   };
 
-  const idx = GUIDE_PAGES.findIndex((p) => p.id === page.id);
-  const prev = GUIDE_PAGES[idx - 1];
-  const next = GUIDE_PAGES[idx + 1];
+  const idx = gt.pages.findIndex((p) => p.id === page.id);
+  const prev = gt.pages[idx - 1];
+  const next = gt.pages[idx + 1];
   const IconCmp = (PAGE_ICONS[page.id] ?? BookBookmarkIcon);
-  const flows = flowsOf(page.id);
+  const flows = gt.flows.filter((f) => f.page === page.id);
   const stateInfo = page.states.find((s) => s.key === stateKey);
+  const viewName = stateInfo ? t(stateLabel(stateInfo.key)) : "";
+  const deviceName = device === "mobile" ? t("phone") : t("desktop");
 
   if (!doc) {
-    return <EmptyState icon={IconCmp} title={page.title} body="This page is not written up yet." />;
+    return <EmptyState icon={IconCmp} title={page.title} body={t("This page is not written up yet.")} />;
   }
 
   const devices = (["desktop", "mobile"] as Device[]).filter((d) => has(key, d));
@@ -476,13 +502,13 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
     <article className="grid min-w-0 gap-6">
       <PageHeader
         icon={IconCmp}
-        eyebrow={`Guide · ${page.group}`}
+        eyebrow={t("Guide · {group}", { group: gt.groupLabel(page.group) })}
         title={page.title}
         description={<Rich text={doc.purpose} />}
         actions={
           <Button asChild>
             <Link to={page.route}>
-              Open this page <ArrowSquareOutIcon size={16} />
+              {t("Open this page")} <ArrowSquareOutIcon size={16} />
             </Link>
           </Button>
         }
@@ -494,32 +520,36 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             {page.states.length ? (
               <Segmented
-                label="Which view"
+                label={t("Which view")}
                 size="sm"
                 value={stateKey || "_"}
                 onChange={(v) => setView({ state: v === "_" ? "" : v })}
-                options={[{ value: "_", label: "As it opens" }, ...page.states.map((s) => ({ value: s.key, label: stateLabel(s.key) }))]}
+                options={[{ value: "_", label: t("As it opens") }, ...page.states.map((s) => ({ value: s.key, label: t(stateLabel(s.key)) }))]}
                 className="min-w-0"
               />
             ) : (
-              <span className="text-[12.5px] font-medium text-muted">As it opens</span>
+              <span className="text-[12.5px] font-medium text-muted">{t("As it opens")}</span>
             )}
             <Segmented
-              label="Screen size"
+              label={t("Screen size")}
               size="sm"
               value={device}
               onChange={(d) => setView({ device: d })}
               options={[
-                { value: "desktop", label: devices.length && !devices.includes("desktop") ? "Desktop (none)" : "Desktop" },
-                { value: "mobile", label: devices.length && !devices.includes("mobile") ? "Phone (none)" : "Phone" },
+                { value: "desktop", label: devices.length && !devices.includes("desktop") ? t("Desktop (none)") : t("Desktop") },
+                { value: "mobile", label: devices.length && !devices.includes("mobile") ? t("Phone (none)") : t("Phone") },
               ]}
             />
           </div>
-          {stateInfo ? <p className="text-[12.5px] text-muted">How to get here: {stateInfo.how.replace(/\s*\(\/[^)]*\)/, "")}.</p> : null}
+          {stateInfo ? <p className="text-[12.5px] text-muted">{t("How to get here: {how}.", { how: stateInfo.how.replace(/\s*\(\/[^)]*\)/, "") })}</p> : null}
           {shot ? (
             <AnnotatedShot
               shot={shot}
-              alt={`${page.title}${stateInfo ? `, ${stateLabel(stateInfo.key).toLowerCase()}` : ""} (${device === "mobile" ? "phone" : "desktop"})`}
+              alt={
+                stateInfo
+                  ? t("{page}, {view} ({device})", { page: page.title, view: viewName.toLowerCase(), device: deviceName })
+                  : t("{page} ({device})", { page: page.title, device: deviceName })
+              }
               device={device}
               maxHeight={device === "mobile" ? "calc(100dvh - 11rem)" : undefined}
               numbers={numbers}
@@ -529,7 +559,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           ) : (
             <ShotPlaceholder
               device={device}
-              title={`${page.title}${stateInfo ? ` · ${stateLabel(stateInfo.key)}` : ""}`}
+              title={stateInfo ? `${page.title} · ${viewName}` : page.title}
               targets={page.targets}
               numbers={numbers}
               active={active}
@@ -538,13 +568,13 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           )}
           <div className="hidden items-center gap-1.5 text-[12px] text-muted md:flex">
             {device === "mobile" ? <DeviceMobileIcon size={14} /> : <DesktopIcon size={14} />}
-            Point at a numbered step to see where it is on the screen.
+            {t("Point at a numbered step to see where it is on the screen.")}
           </div>
         </div>
 
         <div className="grid min-w-0 gap-7">
           {numbers.size ? (
-            <DocSection title="On this screen">
+            <DocSection title={t("On this screen")}>
               <ul className="grid gap-1">
                 {page.targets
                   .filter((t) => numbers.has(t.id))
@@ -579,7 +609,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
             </DocSection>
           ) : null}
 
-          <DocSection title="What you can do here" icon={<CheckCircleIcon size={18} weight="duotone" className="text-accent" />}>
+          <DocSection title={t("What you can do here")} icon={<CheckCircleIcon size={18} weight="duotone" className="text-accent" />}>
             <ul className="grid gap-2">
               {doc.can.map((c, i) => (
                 <li key={i} className="flex min-w-0 gap-2.5 text-[13.5px] leading-relaxed">
@@ -592,7 +622,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
             </ul>
           </DocSection>
 
-          <DocSection title="How to">
+          <DocSection title={t("How to")}>
             <div className="grid gap-3">
               {doc.howto.map((r, i) => (
                 <RecipeCard
@@ -611,7 +641,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           </DocSection>
 
           {flows.length ? (
-            <DocSection title={flows.length > 1 ? "Videos" : "Video"}>
+            <DocSection title={flows.length > 1 ? t("Videos") : t("Video")}>
               <div className="grid gap-3">
                 {flows.map((f) => (
                   <FlowVideo key={f.id} id={f.id} title={f.title} video={videoOf(manifest, f.id)} />
@@ -621,7 +651,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           ) : null}
 
           {doc.tips.length ? (
-            <DocSection title="Tips" icon={<LightbulbIcon size={18} weight="duotone" className="text-warn" />}>
+            <DocSection title={t("Tips")} icon={<LightbulbIcon size={18} weight="duotone" className="text-warn" />}>
               <ul className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface-2/40 p-3.5">
                 {doc.tips.map((t, i) => (
                   <li key={i} className="flex min-w-0 gap-2.5 text-[13.5px] leading-relaxed">
@@ -635,15 +665,15 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
             </DocSection>
           ) : null}
 
-          <DocSection title="Who can use it" icon={<UsersIcon size={18} weight="duotone" className="text-info" />}>
+          <DocSection title={t("Who can use it")} icon={<UsersIcon size={18} weight="duotone" className="text-info" />}>
             <p className="text-[13.5px] leading-relaxed">{doc.who}</p>
           </DocSection>
 
           {doc.related.length ? (
-            <DocSection title="Related pages">
+            <DocSection title={t("Related pages")}>
               <ul className="flex flex-wrap gap-2">
                 {doc.related.map((id) => {
-                  const p = pageById(id);
+                  const p = gt.pageById(id);
                   if (!p) return null;
                   const RIcon = (PAGE_ICONS[p.id] ?? BookBookmarkIcon);
                   return (
@@ -664,7 +694,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
         </div>
       </div>
 
-      <nav aria-label="Previous and next page" className="grid grid-cols-2 gap-3 border-t border-border pt-5">
+      <nav aria-label={t("Previous and next page")} className="grid grid-cols-2 gap-3 border-t border-border pt-5">
         {prev ? (
           <Link
             to="/guide/$page"
@@ -672,7 +702,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
             className="grid min-w-0 gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface p-3 transition-colors hover:border-accent/40"
           >
             <span className="inline-flex items-center gap-1 text-[12px] text-muted">
-              <ArrowLeftIcon size={13} /> Previous
+              <ArrowLeftIcon size={13} /> {t("Previous")}
             </span>
             <span className="truncate text-[14px] font-medium">{prev.title}</span>
           </Link>
@@ -686,7 +716,7 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
             className="grid min-w-0 justify-items-end gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface p-3 text-right transition-colors hover:border-accent/40"
           >
             <span className="inline-flex items-center gap-1 text-[12px] text-muted">
-              Next <ArrowRightIcon size={13} />
+              {t("Next")} <ArrowRightIcon size={13} />
             </span>
             <span className="max-w-full truncate text-[14px] font-medium">{next.title}</span>
           </Link>
@@ -701,11 +731,13 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
 // ---------------------------------------------------------------- route component
 
 export function GuidePage() {
+  const t = useT();
+  const gt = useGuideText();
   const params = useParams({ strict: false }) as { page?: string };
   const search = useSearch({ strict: false }) as { q?: string };
   const manifest = useManifest();
   const [query, setQuery] = useState(search.q ?? "");
-  const page = params.page ? pageById(params.page) : undefined;
+  const page = params.page ? gt.pageById(params.page) : undefined;
   const searching = query.trim().length > 1;
 
   return (
@@ -713,7 +745,7 @@ export function GuidePage() {
       <div className="grid min-w-0 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
         <aside className="hidden lg:block">
           <div className="sticky top-[4.75rem] grid max-h-[calc(100dvh-6rem)] grid-rows-[auto_minmax(0,1fr)] gap-3">
-            <SearchInput value={query} onChange={setQuery} placeholder="Search the guide" className="basis-auto" />
+            <SearchInput value={query} onChange={setQuery} placeholder={t("Search the guide")} className="basis-auto" />
             <div className="-mx-1 overflow-y-auto px-1 pb-4">
               <PageIndex current={page?.id} query={searching ? "" : query} />
             </div>
@@ -724,19 +756,19 @@ export function GuidePage() {
           {params.page && !page ? (
             <EmptyState
               icon={BookOpenTextIcon}
-              title="No guide page by that name"
-              body="It may have been renamed. Pick a page from the list."
+              title={t("No guide page by that name")}
+              body={t("It may have been renamed. Pick a page from the list.")}
               action={
                 <Button asChild variant="outline">
                   <Link to="/guide">
-                    Guide home <CaretRightIcon size={14} />
+                    {t("Guide home")} <CaretRightIcon size={14} />
                   </Link>
                 </Button>
               }
             />
           ) : page && searching ? (
             <div className="hidden gap-3 lg:grid">
-              <h2 className="text-[15px] font-semibold">Results for "{query.trim()}"</h2>
+              <h2 className="text-[15px] font-semibold">{t('Results for "{q}"', { q: query.trim() })}</h2>
               <SearchResults query={query} onPick={() => setQuery("")} />
             </div>
           ) : null}

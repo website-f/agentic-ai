@@ -37,8 +37,8 @@ from ..models import (
 )
 from ..services import events
 from ..skills import store as skills_store
-from ..teams import budget, colleague, delegation, meetings
-from . import context, goals, policy, verify
+from ..teams import budget, colleague, delegation, meetings, objectives
+from . import compress, context, goals, policy, verify
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
@@ -132,6 +132,44 @@ def _add(
     return m
 
 
+def task_query(task: Task) -> str:
+    """The words a compressor ranks rows by: what the job is about."""
+    return f"{task.title}\n{task.brief or ''}"
+
+
+async def _add_tool_result(
+    db: AsyncSession,
+    agent: Agent,
+    *,
+    call_id: str,
+    name: str,
+    content: str,
+    query: str,
+    args: dict[str, Any] | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+) -> AgentMessage:
+    """Store a tool result: the original in `content` (transcripts, the UI, expand_result) and,
+    for a big one, the shortened text the model is sent in meta["compressed"] (compress.py)."""
+    m = _add(
+        db,
+        agent,
+        "tool",
+        task_id=task_id,
+        session_id=session_id,
+        content=content,
+        tool_call_id=call_id,
+        name=name,
+    )
+    if len(content or "") >= compress.MIN_CHARS:
+        await db.flush()  # the id goes into the marker that points at expand_result
+        words = " ".join(str(v) for v in (args or {}).values() if isinstance(v, str))
+        meta = compress.prepare(content, tool=name, query=query, extra=words, message_id=m.id)
+        if meta:
+            m.meta = meta
+    return m
+
+
 async def task_event(
     db: AsyncSession,
     task: Task,
@@ -167,6 +205,10 @@ async def set_task_status(
 ) -> None:
     before = task.status
     task.status = status
+    # P21: who moves it next is part of the state it is in; a move that does not name one
+    # clears the previous owner and action (blocked/review set them explicitly).
+    fields.setdefault("blocked_owner", None)
+    fields.setdefault("blocked_action", None)
     for k, v in fields.items():
         setattr(task, k, v)
     await db.commit()
@@ -407,7 +449,15 @@ async def add_tool_result(
     )
     if done is not None:
         return False
-    _add(db, agent, "tool", task_id=task_id, content=content, tool_call_id=call_id, name=name)
+    await _add_tool_result(
+        db,
+        agent,
+        task_id=task_id,
+        call_id=call_id,
+        name=name,
+        content=content,
+        query=task_query(task),
+    )
     await db.commit()
     return True
 
@@ -521,7 +571,16 @@ async def _resolve_calls(
         result = await run_tool(ctx, name, args)
         if _stuck(name, result) and await _help_hint_once(db, task, agent):
             result += HELP_HINT
-        _add(db, agent, "tool", task_id=task.id, content=result, tool_call_id=call_id, name=name)
+        await _add_tool_result(
+            db,
+            agent,
+            task_id=task.id,
+            call_id=call_id,
+            name=name,
+            content=result,
+            query=task_query(task),
+            args=args,
+        )
         await db.commit()
         await activity(agent, task, "tool_result", tool=name, preview=_brief(result, 400))
         if name.startswith("browser_") and _browser_tool_error(result):
@@ -658,7 +717,7 @@ async def _budget_gate(
     st = await budget.state(db, agent, ws.timezone)
     if not st.over:
         await budget.alert_if_near(db, agent, ws, st)
-        return None
+        return await objectives.gate(db, task, agent, ws)  # P21: the objective's budget
     daily = bool(st.token_limit and st.token_ratio >= 1)
     key = st.periods.day if daily else st.periods.month
     # The limit is part of the id: after a grant a new ask is a new approval.
@@ -719,13 +778,28 @@ async def _create_approval(
     await db.flush()
     if kind == "question":
         what, note = f"Question: {reason}", f"asked: {reason}"
+        action = "Answer the question"
     elif kind == "budget":
         what, note = "Over budget: approve more to continue", "hit its budget and asked for more"
+        action = "Approve more budget or stop it"
     else:
         what = f"Wants to use {TOOLS[tool].label}"
         note = f"wants to use {TOOLS[tool].label}"
+        action = f"Approve or deny: {TOOLS[tool].label}"
+    # P21: a named owner for the decision: the person who gave the task, else the agent's
+    # owner; None = whoever may decide approvals for this agent.
+    owner = task.created_by if (task.created_by or "").startswith("user:") else None
+    if owner is None and agent.owner_user_id:
+        owner = f"user:{agent.owner_user_id}"
     await set_task_status(
-        db, task, "blocked", actor=f"agent:{agent.id}", note=note, blocked_reason=what[:300]
+        db,
+        task,
+        "blocked",
+        actor=f"agent:{agent.id}",
+        note=note,
+        blocked_reason=what[:300],
+        blocked_owner=owner,
+        blocked_action=action[:300],
     )
     await events.publish(
         task.workspace_id,
@@ -793,6 +867,7 @@ async def run_task_step(task_id: str) -> StepResult:
         history = await _history(db, task_id=task.id)
         if not history:
             content = f"Task: {task.title}\n\n{task.brief}".strip()
+            content += await objectives.why_line(db, task)  # P21: why this work matters
             content += await _attached_files_note(db, task, ws.timezone)
             if task.output_schema:
                 content += "\n\n" + delegation.schema_note(task.output_schema)
@@ -996,14 +1071,16 @@ async def start_run(task_id: str) -> None:
 
 
 async def finish(task_id: str, state: str, message: str | None) -> None:
+    from ..teams import blockers, review  # late: they import this module
     from . import browser_tools, launch  # late: both import this module
 
     await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
     async with SessionLocal() as db:
         task, agent, ws = await _load(db, task_id)
         unchecked = False
+        reviewing = task.source == "review"  # P21: a reviewer agent's verdict on others' work
         # P19: a reviewer reads real work once before it is handed in; one chance to fix.
-        if state == "done" and verify.enabled(ws) and await verify.due(db, task):
+        if state == "done" and not reviewing and verify.enabled(ws) and await verify.due(db, task):
             rv = await verify.review(db, task, agent, message)
             note = (
                 "self-check could not run"
@@ -1048,8 +1125,18 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 await task_event(
                     db, task, "goal", "system", "no model could check the goal; sent for review"
                 )
+        if state == "done" and not reviewing and not unchecked:
+            # P21 review stages: a reviewer agent checks it before a person or done.
+            try:
+                taken = await review.start(db, task, agent, message)
+            except Exception:  # noqa: BLE001 - review trouble must not lose the work
+                log.warning("review stages failed for %s", task.id, exc_info=True)
+                taken = False
+            if taken:
+                await agent_status(agent, "idle", task)
+                return
         if state == "done":
-            status = "review" if task.requires_review or unchecked else "done"
+            status = "review" if (task.requires_review and not reviewing) or unchecked else "done"
             if status == "done":
                 await skills_store.settle(db, task.id, "accepted")
             await set_task_status(
@@ -1098,6 +1185,13 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 blocked_reason=None,
             )
         await agent_status(agent, "error" if state not in ("done", "cancelled") else "idle", task)
+        # P21: act on a reviewer's verdict, and move on the work that waits for this task.
+        try:
+            if reviewing:
+                await review.finished(db, task, state, message)
+            await blockers.on_finished(db, task)
+        except Exception:  # noqa: BLE001 - the task itself is finished either way
+            log.warning("follow-ups after %s failed", task.id, exc_info=True)
 
 
 async def apply_approval(approval_id: str) -> None:
@@ -1176,14 +1270,15 @@ async def apply_approval(approval_id: str) -> None:
                 "No one answered within 24 hours. Continue without it, or finish and "
                 "explain what is missing."
             )
-        _add(
+        await _add_tool_result(
             db,
             agent,
-            "tool",
             task_id=task.id,
-            content=result,
-            tool_call_id=a.tool_call_id,
+            call_id=a.tool_call_id or "",
             name=a.tool_name,
+            content=result,
+            query=task_query(task),
+            args=a.args,
         )
         await set_task_status(
             db,
@@ -1316,7 +1411,9 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     block, _, _ = await recall_block(db, agent, text, ws.timezone, exclude_session_id=session.id)
-    ctx = ToolContext(db=db, agent=agent, workspace=ws, task=None, person=session.user_id)
+    ctx = ToolContext(
+        db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id
+    )
     # A person who could approve this agent's requests asking it directly (policy.py).
     approver = await policy.chat_approver(db, agent, session.user_id)
     used: list[str] = []
@@ -1415,14 +1512,15 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                     )
                 else:
                     result = f"Blocked by policy ({d.rule}): {d.reason}"
-            _add(
+            await _add_tool_result(
                 db,
                 agent,
-                "tool",
                 session_id=session.id,
-                content=result,
-                tool_call_id=str(call.get("id")),
+                call_id=str(call.get("id")),
                 name=name,
+                content=result,
+                query=text,
+                args=args,
             )
         await db.commit()
     final = "I could not finish that in one go. Try asking in smaller steps, or make it a task."

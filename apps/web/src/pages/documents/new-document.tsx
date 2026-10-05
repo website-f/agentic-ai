@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
+import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
 import { docKeys, templatesQuery, type DocDetail, type DocTemplate, type FieldValue } from "@/lib/documents";
@@ -24,6 +25,7 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const { data: templates = [] } = useQuery(templatesQuery);
@@ -36,7 +38,7 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
   // A document belongs to one company: the header's (or the last one picked), unless changed here.
   const { one } = useCompanies();
   const company = branch || one?.id || branches[0]?.id || "";
-  const tpl = start.kind === "template" ? templates.find((t) => t.id === start.id) : undefined;
+  const tpl = start.kind === "template" ? templates.find((x) => x.id === start.id) : undefined;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -57,7 +59,7 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
     },
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: docKeys.documents });
-      toast.success(start.kind === "ai" ? "Drafted. Check every fact before you send it." : `${d.title} created.`);
+      toast.success(start.kind === "ai" ? tr("Drafted. Check every fact before you send it.") : tr("{name} created.", { name: d.title }));
       onCreated(d.id);
       onClose();
     },
@@ -72,52 +74,52 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
 
   return (
     <>
-      <ResponsiveDialog open={!picking} onOpenChange={(o) => !o && onClose()} title="New document" className="w-[min(96vw,44rem)]"
-        description="Pick the company and how to start. Company details fill in from its kit."
-        footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>
+      <ResponsiveDialog open={!picking} onOpenChange={(o) => !o && onClose()} title={t("New document")} className="w-[min(96vw,44rem)]"
+        description={t("Pick the company and how to start. Company details fill in from its kit.")}
+        footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
           <Button disabled={!ready} loading={create.isPending} onClick={() => create.mutate()}>
-            {start.kind === "ai" ? <><MagicWandIcon size={15} /> Draft it</> : request.trim() ? <><MagicWandIcon size={15} /> Create and fill</> : "Create"}
+            {start.kind === "ai" ? <><MagicWandIcon size={15} /> {t("Draft it")}</> : request.trim() ? <><MagicWandIcon size={15} /> {t("Create and fill")}</> : t("Create")}
           </Button></>}>
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">Company</span>
-              <Select value={company} onValueChange={setBranch} label="Company" options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <span className="text-[13px] font-medium">{t("Company")}</span>
+              <Select value={company} onValueChange={setBranch} label={t("Company")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
             </div>
-            <Field label="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? `${tpl.name} for …` : "e.g. Proposal for Bina"} />
+            <Field label={t("Title (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? t("{name} for …", { name: tpl.name }) : t("e.g. Proposal for Bina")} />
           </div>
 
           {!template ? (
             <fieldset className="grid gap-2">
-              <legend className="mb-1 text-[13px] font-medium">Start from</legend>
+              <legend className="mb-1 text-[13px] font-medium">{t("Start from")}</legend>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button type="button" className={option(start.kind === "ai")} onClick={() => setStart({ kind: "ai" })}>
                   <IconTile icon={MagicWandIcon} tone="violet" size="sm" />
                   <span className="grid min-w-0 gap-0.5 pr-5">
-                    <span className="text-[13.5px] font-medium">Write it with AI</span>
-                    <span className="text-[12px] text-muted">Describe the document; an agent writes the whole draft.</span>
+                    <span className="text-[13.5px] font-medium">{t("Write it with AI")}</span>
+                    <span className="text-[12px] text-muted">{t("Describe the document; an agent writes the whole draft.")}</span>
                   </span>
                   {tick(start.kind === "ai")}
                 </button>
                 <button type="button" className={option(start.kind === "blank")} onClick={() => setStart({ kind: "blank" })}>
                   <IconTile icon={FileIcon} tone="neutral" size="sm" />
                   <span className="grid min-w-0 gap-0.5 pr-5">
-                    <span className="text-[13.5px] font-medium">Blank page</span>
-                    <span className="text-[12px] text-muted">Write it yourself on the letterhead.</span>
+                    <span className="text-[13.5px] font-medium">{t("Blank page")}</span>
+                    <span className="text-[12px] text-muted">{t("Write it yourself on the letterhead.")}</span>
                   </span>
                   {tick(start.kind === "blank")}
                 </button>
               </div>
-              <p className="mt-1 text-[12px] font-medium text-muted">Or a template</p>
+              <p className="mt-1 text-[12px] font-medium text-muted">{t("Or a template")}</p>
               <div className="grid grid-cols-1 gap-2 p-0.5 sm:max-h-72 sm:grid-cols-2 sm:overflow-y-auto">
-                {templates.map((t) => {
-                  const on = start.kind === "template" && start.id === t.id;
+                {templates.map((x) => {
+                  const on = start.kind === "template" && start.id === x.id;
                   return (
-                    <button key={t.id} type="button" className={option(on)} onClick={() => setStart({ kind: "template", id: t.id })}>
-                      <KindTile kind={t.kind} size="sm" />
+                    <button key={x.id} type="button" className={option(on)} onClick={() => setStart({ kind: "template", id: x.id })}>
+                      <KindTile kind={x.kind} size="sm" />
                       <span className="grid min-w-0 gap-0.5 pr-5">
-                        <span className="truncate text-[13.5px] font-medium">{t.name}</span>
-                        <span className="line-clamp-2 text-[12px] text-muted">{t.description}</span>
+                        <span className="truncate text-[13.5px] font-medium">{x.name}</span>
+                        <span className="line-clamp-2 text-[12px] text-muted">{x.description}</span>
                       </span>
                       {tick(on)}
                     </button>
@@ -127,12 +129,12 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
             </fieldset>
           ) : null}
 
-          <TextareaField label={start.kind === "ai" ? "What should it say?" : "Describe it and let AI fill the fields (optional)"} rows={4}
+          <TextareaField label={start.kind === "ai" ? t("What should it say?") : t("Describe it and let AI fill the fields (optional)")} rows={4}
             value={request} onChange={(e) => setRequest(e.target.value)}
             placeholder={start.kind === "ai"
-              ? "e.g. A one-page proposal to Syarikat Bina for monthly office cleaning, 3 visits a week, RM1,850 a month, starting January."
-              : "e.g. Quote Syarikat Bina, Lot 5 Shah Alam, attn Encik Rahim: 12 months office cleaning at RM1,850 a month, valid 30 days."}
-            hint={start.kind === "blank" ? undefined : "It uses only what you write and the files you attach — anything missing is left for you to fill, never invented."} />
+              ? t("e.g. A one-page proposal to Syarikat Bina for monthly office cleaning, 3 visits a week, RM1,850 a month, starting January.")
+              : t("e.g. Quote Syarikat Bina, Lot 5 Shah Alam, attn Encik Rahim: 12 months office cleaning at RM1,850 a month, valid 30 days.")}
+            hint={start.kind === "blank" ? undefined : t("It uses only what you write and the files you attach — anything missing is left for you to fill, never invented.")} />
 
           {start.kind !== "blank" ? (
             <div className="grid gap-1.5">
@@ -140,11 +142,11 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
                 {files.map((f) => (
                   <span key={f.id} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[12.5px]">
                     {f.name}
-                    <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
+                    <button type="button" aria-label={t("Remove {name}", { name: f.name })} onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
                   </span>
                 ))}
                 <Button size="sm" variant="ghost" onClick={() => setPicking(true)} disabled={files.length >= 5}>
-                  <PaperclipIcon size={14} /> Attach a file to work from
+                  <PaperclipIcon size={14} /> {t("Attach a file to work from")}
                 </Button>
               </div>
             </div>
@@ -152,7 +154,7 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
           <FormError message={create.error ? errorMessage(create.error) : null} />
         </div>
       </ResponsiveDialog>
-      <FilePicker open={picking} onOpenChange={setPicking} branchId={company || null} title="Attach a file to work from"
+      <FilePicker open={picking} onOpenChange={setPicking} branchId={company || null} title={t("Attach a file to work from")}
         onPick={(f) => setFiles((fs) => (fs.some((x) => x.id === f.id) ? fs : [...fs, { id: f.id, name: f.name }]))} />
     </>
   );

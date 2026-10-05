@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { docKeys, fileSize, filesQuery, MAX_UPLOAD_MB, uploadFile, type DocFile } from "@/lib/documents";
 import { cn, timeAgo } from "@/lib/utils";
@@ -25,12 +26,13 @@ function daysUntil(iso: string, now: number = Date.now()): number {
 }
 
 export function FileStatus({ f }: { f: Pick<DocFile, "status" | "expired" | "expires_on" | "error"> }) {
-  if (f.status === "reading") return <Pill tone="info" live>Reading…</Pill>;
-  if (f.status === "failed") return <Pill tone="danger" title={f.error ?? undefined}>Could not read</Pill>;
-  if (f.expired) return <Pill tone="danger">Expired</Pill>;
+  const t = useT();
+  if (f.status === "reading") return <Pill tone="info" live>{t("Reading…")}</Pill>;
+  if (f.status === "failed") return <Pill tone="danger" title={f.error ?? undefined}>{t("Could not read")}</Pill>;
+  if (f.expired) return <Pill tone="danger">{t("Expired")}</Pill>;
   if (f.expires_on) {
     const days = daysUntil(f.expires_on);
-    if (days < 60) return <Pill tone="warn">Expires in {Math.max(0, Math.round(days))}d</Pill>;
+    if (days < 60) return <Pill tone="warn">{t("Expires in {n}d", { n: Math.max(0, Math.round(days)) })}</Pill>;
   }
   return null;
 }
@@ -44,6 +46,7 @@ export function FileDrop({ branchId, taskId, onUploaded, compact, className, gui
   /** data-guide id for the Guide's screenshots. */
   guide?: string;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -64,7 +67,7 @@ export function FileDrop({ branchId, taskId, onUploaded, compact, className, gui
     }
     qc.invalidateQueries({ queryKey: docKeys.files });
     if (done.length) {
-      toast.success(done.length === 1 ? `${done[0]!.name} uploaded — reading it now.` : `${done.length} files uploaded — reading them now.`);
+      toast.success(done.length === 1 ? t("{name} uploaded. Reading it now.", { name: done[0]!.name }) : t("{n} files uploaded. Reading them now.", { n: done.length }));
       onUploaded?.(done);
     }
   };
@@ -91,20 +94,20 @@ export function FileDrop({ branchId, taskId, onUploaded, compact, className, gui
       <input ref={input} type="file" multiple hidden onChange={(e) => { if (e.target.files) void send(e.target.files); e.target.value = ""; }} />
       <div className="grid justify-items-center gap-2">
         <CloudArrowUpIcon size={compact ? 22 : 30} weight="duotone" className="text-accent" />
-        <p className="text-[13.5px] font-medium">{busy ? `Uploading ${busy} file${busy > 1 ? "s" : ""}…` : "Drop files here"}</p>
+        <p className="text-[13.5px] font-medium">{busy ? (busy > 1 ? t("Uploading {n} files…", { n: busy }) : t("Uploading 1 file…")) : t("Drop files here")}</p>
         {!compact ? (
           <p className="max-w-md text-[12.5px] text-muted">
-            PDFs, Word, Excel, CSV, or photos of documents (up to {MAX_UPLOAD_MB} MB). Each one is read once — scans included — and summarised, so agents can use it without re-reading.
+            {t("PDFs, Word, Excel, CSV, or photos of documents (up to {mb} MB). Each one is read once (scans included) and summarised, so agents can use it without re-reading.", { mb: MAX_UPLOAD_MB })}
           </p>
         ) : null}
-        <Button size="sm" variant="outline" loading={busy > 0} onClick={() => input.current?.click()}>Choose files</Button>
+        <Button size="sm" variant="outline" loading={busy > 0} onClick={() => input.current?.click()}>{t("Choose files")}</Button>
       </div>
     </div>
   );
 }
 
 /** Pick one of the company's files, or upload a new one right here. */
-export function FilePicker({ open, onOpenChange, branchId, onPick, title = "Choose a file", filter }: {
+export function FilePicker({ open, onOpenChange, branchId, onPick, title, filter }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   branchId?: string | null;
@@ -112,6 +115,7 @@ export function FilePicker({ open, onOpenChange, branchId, onPick, title = "Choo
   title?: string;
   filter?: (f: DocFile) => boolean;
 }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const params: Record<string, string> = { source: "upload" };
   if (branchId) params.branch_id = branchId;
@@ -119,17 +123,17 @@ export function FilePicker({ open, onOpenChange, branchId, onPick, title = "Choo
   const { data: files = [], isLoading } = useQuery(filesQuery(params));
   const shown = filter ? files.filter(filter) : files;
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={title} className="w-[min(96vw,40rem)]"
-      description="Your company's files. Upload a new one if it is not here yet.">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={title ?? t("Choose a file")} className="w-[min(96vw,40rem)]"
+      description={t("Your company's files. Upload a new one if it is not here yet.")}>
       <div className="grid gap-3">
         <FileDrop compact branchId={branchId} onUploaded={(fs) => { onPick(fs[0]!); onOpenChange(false); }} />
         <label className="relative">
           <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files" className="pl-9" aria-label="Search files" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search files")} className="pl-9" aria-label={t("Search files")} />
         </label>
         <ul className="grid max-h-[46dvh] gap-1 overflow-y-auto">
-          {isLoading ? <li className="px-2 py-3 text-[13px] text-muted">Loading…</li>
-            : !shown.length ? <li className="px-2 py-3 text-[13px] text-muted">No files{q ? " match" : " yet"}.</li>
+          {isLoading ? <li className="px-2 py-3 text-[13px] text-muted">{t("Loading…")}</li>
+            : !shown.length ? <li className="px-2 py-3 text-[13px] text-muted">{q ? t("No files match.") : t("No files yet.")}</li>
             : shown.map((f) => (
               <li key={f.id}>
                 <button type="button" onClick={() => { onPick(f); onOpenChange(false); }}

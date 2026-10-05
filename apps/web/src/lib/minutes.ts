@@ -1,6 +1,8 @@
 /** Meeting minutes from a recording (Meetings > People meetings): types, queries, upload. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { t } from "@/i18n";
+
 import { api, ApiError, readCookie } from "./api";
 
 export type RecordingStatus = "uploading" | "queued" | "extracting" | "transcribing" | "writing" | "ready" | "failed";
@@ -166,11 +168,11 @@ export function uploadRecording(
         data = null;
       }
       if (xhr.status >= 200 && xhr.status < 300 && data) resolve(data);
-      else if (xhr.status === 413 && !data?.message) reject(new ApiError(413, "file_too_large", "That recording is larger than the server accepts."));
-      else reject(new ApiError(xhr.status, data?.code ?? "http_error", data?.message ?? `Upload failed (${xhr.status}).`));
+      else if (xhr.status === 413 && !data?.message) reject(new ApiError(413, "file_too_large", t("That recording is larger than the server accepts.")));
+      else reject(new ApiError(xhr.status, data?.code ?? "http_error", data?.message ?? t("Upload failed ({status}).", { status: xhr.status })));
     };
-    xhr.onerror = () => reject(new ApiError(0, "network", "The upload was cut off. Check the connection and try again."));
-    xhr.onabort = () => reject(new ApiError(0, "aborted", "Upload cancelled."));
+    xhr.onerror = () => reject(new ApiError(0, "network", t("The upload was cut off. Check the connection and try again.")));
+    xhr.onabort = () => reject(new ApiError(0, "aborted", t("Upload cancelled.")));
     signal?.addEventListener("abort", () => xhr.abort());
     xhr.send(file);
   });

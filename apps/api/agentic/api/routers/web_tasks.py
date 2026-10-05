@@ -34,6 +34,9 @@ READ = (
     "browser_scroll",
     "browser_back",
     "browser_read",
+    "browser_snapshot",
+    "browser_find",
+    "browser_wait",
     "browser_close",
 )
 INTERACT = READ + (

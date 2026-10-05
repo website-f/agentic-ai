@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # The browser service (Camoufox), reached by the worker only. Empty = no browser tools.
     browser_url: str = "http://browser:8600"
     browser_token: str = "dev-browser-token"  # noqa: S105 - dev default, required outside dev
+    # A saved login's browser session (cookies + local storage) is kept this many days, so
+    # agents stay signed in between tasks; older ones are dropped and the agent signs in again.
+    browser_session_days: int = Field(default=14, ge=1, le=90)
 
     # The local backup brain (P14): a small model served by Ollama on this server, e.g.
     # http://ollama:11434/v1. Empty = none. Registered in every workspace as "Local backup".

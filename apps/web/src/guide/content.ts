@@ -403,7 +403,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     purpose: "A board of everything your agents are working on, from new to done.",
     can: [
       "Create a task with **New task**: what you need, who does it, priority, files and whether you review the result.",
-      "Follow every task through the columns: **Triage**, **Ready**, **Running**, **Waiting on you**, **In review** and **Done**.",
+      "Follow every task through the columns: **Triage**, **Ready**, **Running**, **Waiting**, **In review** and **Done**.",
       "Drag a card between columns, for example from **In review** to **Done**.",
       "Open a card to see its plan, result, sub-tasks, timeline and the self-check.",
       "**Accept**, **Send back**, **Start**, **Retry**, **Cancel** or **Delete** a task, and call a **Meeting** about it.",
@@ -446,7 +446,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       },
     ],
     tips: [
-      "**Running** and **Waiting on you** are moved by agents; you move the other columns.",
+      "**Running** and **Waiting** are moved by agents; you move the other columns.",
       "The plan shows if the self-check passed, or what it caught and fixed before hand-in.",
       "On a phone, press and hold a card to drag it, or use the column switcher.",
       "Deleting a task keeps the reports and files it produced.",

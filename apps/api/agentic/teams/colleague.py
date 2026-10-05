@@ -24,6 +24,7 @@ from ..brain.scope import for_agent
 from ..core.fence import fence
 from ..engine import gateway
 from ..models import SOP, Agent, BrainPage, Branch, Task, Workspace
+from . import objectives
 
 MAX_DEPTH = 3
 MAX_QUESTIONS_PER_TASK = 6
@@ -231,6 +232,7 @@ async def plan(
             parent_task_id=task.id,
             depth=task.depth + 1,
             position=0,
+            **objectives.lineage(task),  # P21: same objective, same request
         )
         db.add(child)
         await db.flush()

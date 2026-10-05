@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/page";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { graphQuery, KIND_INFO, type GraphData, type PageKind } from "@/lib/brain";
 
@@ -30,6 +31,7 @@ function cssColor(el: Element, value: string): string {
 }
 
 export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void }) {
+  const t = useT();
   const { data, isLoading, error } = useQuery(graphQuery);
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -71,9 +73,9 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
       ctx.beginPath();
       for (const e of edges) {
         const s = e.source as Node;
-        const t = e.target as Node;
+        const d = e.target as Node;
         ctx.moveTo(s.x ?? 0, s.y ?? 0);
-        ctx.lineTo(t.x ?? 0, t.y ?? 0);
+        ctx.lineTo(d.x ?? 0, d.y ?? 0);
       }
       ctx.stroke();
       for (const n of nodes) {
@@ -160,21 +162,21 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
   if (isLoading) return <Skeleton className="h-[min(64dvh,40rem)] min-h-80 rounded-[var(--radius-md)]" />;
   if (error || !data) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   if (!data.edges.length) {
-    return <EmptyState icon={GraphIcon} title="No links yet" body="The graph shows how pages link to each other with [[page-name]]. It fills in as agents and people write linked pages." />;
+    return <EmptyState icon={GraphIcon} title={t("No links yet")} body={t("The graph shows how pages link to each other with [[page-name]]. It fills in as agents and people write linked pages.")} />;
   }
 
   return (
     <div className="grid min-w-0 gap-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <ul aria-label="Legend" className="flex flex-wrap gap-1.5">
+        <ul aria-label={t("Legend")} className="flex flex-wrap gap-1.5">
           {legend.map(([kind, n]) => (
             <li key={kind} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-0.5 text-[12px] text-muted">
               <span aria-hidden className="size-2.5 rounded-full" style={{ background: KIND_INFO[kind].color }} />
-              {KIND_INFO[kind].label} <span className="font-medium text-fg tabular">{n}</span>
+              {t(KIND_INFO[kind].label)} <span className="font-medium text-fg tabular">{n}</span>
             </li>
           ))}
         </ul>
-        <p className="text-[12.5px] text-muted tabular">{data.nodes.length} pages · {data.edges.length} links · pick a dot to open it</p>
+        <p className="text-[12.5px] text-muted tabular">{t("{pages} pages · {links} links · pick a dot to open it", { pages: data.nodes.length, links: data.edges.length })}</p>
       </div>
       <div ref={wrap} className="relative h-[min(64dvh,40rem)] min-h-80 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]"
         style={{ backgroundImage: "radial-gradient(var(--color-border) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
@@ -183,7 +185,7 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
           style={{ width: size.w, height: size.h }}
           className="block cursor-pointer touch-manipulation"
           role="img"
-          aria-label={`Graph of ${data.nodes.length} pages and ${data.edges.length} links. The Pages tab lists the same pages.`}
+          aria-label={t("Graph of {pages} pages and {links} links. The Pages tab lists the same pages.", { pages: data.nodes.length, links: data.edges.length })}
           onPointerMove={(e) => setHover(hitTest(e.clientX, e.clientY))}
           onPointerLeave={() => setHover(null)}
           onClick={(e) => {
@@ -196,13 +198,13 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
             style={{ left: Math.max(4, Math.min(hover.x + 12, size.w - 200)), top: Math.max(hover.y - 44, 4) }}>
             <p className="font-medium break-words">{hover.node.title}</p>
             <p className="truncate font-mono text-[11px] text-muted">{hover.node.path}</p>
-            <p className="text-muted">{hover.node.degree} {hover.node.degree === 1 ? "link" : "links"} · click to open</p>
+            <p className="text-muted">{hover.node.degree === 1 ? t("1 link · click to open") : t("{n} links · click to open", { n: hover.node.degree })}</p>
           </div>
         ) : null}
       </div>
       {data.unresolved.length ? (
         <p className="rounded-[var(--radius-md)] border border-dashed border-border px-3.5 py-2.5 text-[12.5px] break-words text-muted">
-          <span className="font-medium text-fg">Linked but not written yet:</span> {data.unresolved.slice(0, 12).join(", ")}{data.unresolved.length > 12 ? ` and ${data.unresolved.length - 12} more` : ""}.
+          <span className="font-medium text-fg">{t("Linked but not written yet:")}</span> {data.unresolved.length > 12 ? t("{list} and {n} more.", { list: data.unresolved.slice(0, 12).join(", "), n: data.unresolved.length - 12 }) : `${data.unresolved.join(", ")}.`}
         </p>
       ) : null}
     </div>

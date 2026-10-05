@@ -17,7 +17,7 @@ RUN apt-get update \
 USER app
 # The browser binary lives in the app user's cache, baked in so it never downloads at run.
 RUN python -m camoufox fetch
-COPY --chown=app:app apps/browser/service.py /app/service.py
+COPY --chown=app:app apps/browser/service.py apps/browser/snapshot.py /app/
 WORKDIR /app
 EXPOSE 8600
 ENTRYPOINT ["/usr/bin/tini", "--"]

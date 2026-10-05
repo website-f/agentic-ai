@@ -1,6 +1,8 @@
 /** Personal assistants (P16): the page's data, email drafts awaiting approval. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg } from "@/i18n";
+
 import { api } from "./api";
 import type { Agent } from "./work";
 
@@ -93,15 +95,16 @@ export const calendarDraftsQuery = (status: "pending" | "all") =>
     refetchInterval: 20_000,
   });
 
-/** One-tap questions for the chat, by what the assistant is for. */
+/** One-tap questions for the chat, by what the assistant is for. The label is an English key
+ * (render with t()); the prompt goes to the assistant as written. */
 export const QUICK_PROMPTS: { label: string; prompt: string; needs?: "gmail" | "calendar" }[] = [
-  { label: "What's happening today?", prompt: "Give me today's company pulse: what got done, what's open, what needs me." },
-  { label: "Where are we slacking?", prompt: "Where are we slacking? List what's stuck or waiting too long, and who should move it." },
-  { label: "Who's not doing well?", prompt: "Which staff or agents aren't doing their work well this fortnight, and why? Be specific." },
-  { label: "Check my inbox", prompt: "Check my inbox: what came in since yesterday that needs me? Group by priority.", needs: "gmail" },
-  { label: "Draft my replies", prompt: "Draft replies to the urgent unread emails for me to approve.", needs: "gmail" },
-  { label: "What's on my calendar today?", prompt: "What's on my calendar today? Flag clashes and anything I should prepare for.", needs: "calendar" },
-  { label: "Find time to meet", prompt: "Find a free hour this week for <meeting> with <name>, and propose the event for me to confirm.", needs: "calendar" },
-  { label: "Weekly report", prompt: "Every Monday at 9am, send me where we're slacking." },
-  { label: "Chase a report", prompt: "Tell <name>'s agent to finish <report> by <time>, and make sure <name> knows." },
+  { label: msg("What's happening today?"), prompt: "Give me today's company pulse: what got done, what's open, what needs me." },
+  { label: msg("Where are we slacking?"), prompt: "Where are we slacking? List what's stuck or waiting too long, and who should move it." },
+  { label: msg("Who's not doing well?"), prompt: "Which staff or agents aren't doing their work well this fortnight, and why? Be specific." },
+  { label: msg("Check my inbox"), prompt: "Check my inbox: what came in since yesterday that needs me? Group by priority.", needs: "gmail" },
+  { label: msg("Draft my replies"), prompt: "Draft replies to the urgent unread emails for me to approve.", needs: "gmail" },
+  { label: msg("What's on my calendar today?"), prompt: "What's on my calendar today? Flag clashes and anything I should prepare for.", needs: "calendar" },
+  { label: msg("Find time to meet"), prompt: "Find a free hour this week for <meeting> with <name>, and propose the event for me to confirm.", needs: "calendar" },
+  { label: msg("Weekly report"), prompt: "Every Monday at 9am, send me where we're slacking." },
+  { label: msg("Chase a report"), prompt: "Tell <name>'s agent to finish <report> by <time>, and make sure <name> knows." },
 ];

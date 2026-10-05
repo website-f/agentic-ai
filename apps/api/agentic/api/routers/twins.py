@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import twin
-from ...agents.tools import TOOLS
+from ...agents.tools import mode_of
 from ...brain import core as core_memory
 from ...brain.facts import _SECRET
 from ...brain.store import Author
@@ -361,7 +361,7 @@ async def adopt_twin(
     tools = dict(a.tools or {})
     for key in twin.LOCKED_ASKS:  # sending forms, code and outside tools always ask
         for name in twin.ASK_BY_KEY[key].tools:
-            if tools.get(name, TOOLS[name].default_mode) == "allow":
+            if mode_of(tools, name) == "allow":
                 tools[name] = "ask"
     a.is_twin, a.tools, a.autonomy = True, tools, "ask"
     a.role_kind, a.reports_to = "leaf", None

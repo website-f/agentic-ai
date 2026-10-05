@@ -106,6 +106,9 @@ export interface SavedLogin {
   created_at: string;
   last_used_at: string | null;
   can_manage: boolean;
+  /** When agents last kept this login's signed-in browser session (they stay signed in). */
+  session_saved_at?: string | null;
+  session_expires_at?: string | null;
 }
 
 export const officeKeys = {

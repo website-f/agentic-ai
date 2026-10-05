@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { SwitchField } from "@/components/ui/switch";
+import { t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { docKeys } from "@/lib/documents";
 import { libraryKeys, libraryQuery, setLibrary, type LibraryFile, type LibraryScopeIn, type LibraryStatus } from "@/lib/library";
@@ -20,7 +21,7 @@ export function scopeOptions(me: Me | undefined, branches: Branch[]): { value: s
   const dept = (b: Branch) => b.departments.map((d) => ({ value: `d:${d.id}`, label: `${d.name} · ${b.name}` }));
   if (!sc || sc.kind === "all") {
     return [
-      { value: WHOLE, label: "Whole company (every agent)" },
+      { value: WHOLE, label: tr("Whole company (every agent)") },
       ...branches.map((b) => ({ value: `b:${b.id}`, label: b.name })),
       ...branches.flatMap(dept),
     ];
@@ -29,7 +30,7 @@ export function scopeOptions(me: Me | undefined, branches: Branch[]): { value: s
   if (sc.kind === "branch") return mine ? [{ value: `b:${mine.id}`, label: mine.name }, ...dept(mine)] : [];
   if (sc.department_id) {
     const d = mine?.departments.find((x) => x.id === sc.department_id);
-    return [{ value: `d:${sc.department_id}`, label: d && mine ? `${d.name} · ${mine.name}` : sc.department_name ?? "My department" }];
+    return [{ value: `d:${sc.department_id}`, label: d && mine ? `${d.name} · ${mine.name}` : sc.department_name ?? tr("My department") }];
   }
   return mine ? [{ value: `b:${mine.id}`, label: mine.name }] : [];
 }
@@ -50,23 +51,26 @@ export function parseScope(value: string, branches: Branch[]): LibraryScopeIn {
 }
 
 export function ScopeSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const t = useT();
   const { data: me } = useQuery(meQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
   const options = scopeOptions(me, branches);
   const current = options.some((o) => o.value === value) ? value : (options[0]?.value ?? WHOLE);
-  return <Select value={current} onValueChange={onChange} options={options} label="Who it is for" className={className} />;
+  return <Select value={current} onValueChange={onChange} options={options} label={t("Who it is for")} className={className} />;
 }
 
 export function LibraryStatusPill({ status, passages }: { status: LibraryStatus; passages: number }) {
-  if (status === "reading") return <Pill tone="info" live>Reading…</Pill>;
-  if (status === "failed") return <Pill tone="danger">Could not read</Pill>;
-  if (status === "indexed") return <Pill tone="ok">Indexed · {passages} passage{passages === 1 ? "" : "s"}</Pill>;
-  if (status === "empty") return <Pill tone="warn">No text found</Pill>;
-  return <Pill tone="neutral">Not indexed yet</Pill>;
+  const t = useT();
+  if (status === "reading") return <Pill tone="info" live>{t("Reading…")}</Pill>;
+  if (status === "failed") return <Pill tone="danger">{t("Could not read")}</Pill>;
+  if (status === "indexed") return <Pill tone="ok">{passages === 1 ? t("Indexed · 1 passage") : t("Indexed · {n} passages", { n: passages })}</Pill>;
+  if (status === "empty") return <Pill tone="warn">{t("No text found")}</Pill>;
+  return <Pill tone="neutral">{t("Not indexed yet")}</Pill>;
 }
 
 /** "Use as a guideline (library)" on a file: agents search it and cite its pages. */
 export function LibraryToggle({ file, disabled }: { file: LibraryFile; disabled?: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: me } = useQuery(meQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
@@ -82,7 +86,7 @@ export function LibraryToggle({ file, disabled }: { file: LibraryFile; disabled?
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: docKeys.files });
       qc.invalidateQueries({ queryKey: libraryKeys.all });
-      toast.success(v.library ? "Agents can now search this file and cite it." : "Taken out of the library.");
+      toast.success(v.library ? t("Agents can now search this file and cite it.") : t("Taken out of the library."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -99,8 +103,8 @@ export function LibraryToggle({ file, disabled }: { file: LibraryFile; disabled?
         <BooksIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-accent" />
         <div className="min-w-0 flex-1">
           <SwitchField
-            label="Use as a guideline (library)"
-            hint="Agents search it when the work needs it and cite the page they used."
+            label={t("Use as a guideline (library)")}
+            hint={t("Agents search it when the work needs it and cite the page they used.")}
             checked={on}
             disabled={disabled || save.isPending || !options.length}
             onCheckedChange={(v) => (v ? turnOn() : save.mutate({ library: false }))}

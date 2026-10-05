@@ -3,6 +3,7 @@ import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
 import { Drawer } from "vaul";
 
+import { useT } from "@/i18n";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ interface Props {
 
 /** Detail panel: docked right on tablet/desktop, a tall bottom sheet on phones. */
 export function SideSheet({ open, onOpenChange, title, description, actions, children, size, wide }: Props) {
+  const t = useT();
   const phone = useIsPhone();
   if (phone) {
     return (
@@ -76,7 +78,7 @@ export function SideSheet({ open, onOpenChange, title, description, actions, chi
                 <Dialog.Title className="text-[17px] font-semibold">{title}</Dialog.Title>
                 {description ? <Dialog.Description asChild><div className="mt-1 text-[13px] text-muted">{description}</div></Dialog.Description> : null}
               </div>
-              <Dialog.Close className="shrink-0 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg" aria-label="Close">
+              <Dialog.Close className="shrink-0 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg" aria-label={t("Close")}>
                 <XIcon size={18} />
               </Dialog.Close>
             </div>

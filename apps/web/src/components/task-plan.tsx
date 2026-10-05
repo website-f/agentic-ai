@@ -2,6 +2,7 @@
 import { CheckCircleIcon, CircleDashedIcon, CircleIcon, ListChecksIcon, MinusCircleIcon, SealCheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 
 import { Pill } from "@/components/ui/pill";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { TaskEvent } from "@/lib/work";
 
@@ -15,6 +16,7 @@ const ICON = {
 };
 
 export function TaskPlan({ events }: { events: TaskEvent[] }) {
+  const t = useT();
   const plan = [...events].reverse().find((e) => e.kind === "plan");
   const checks = events.filter((e) => e.kind === "selfcheck");
   const steps = ((plan?.data?.steps as Step[] | undefined) ?? []).filter((s) => s && s.text);
@@ -25,8 +27,8 @@ export function TaskPlan({ events }: { events: TaskEvent[] }) {
       {steps.length ? (
         <>
           <h3 className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
-            <ListChecksIcon size={15} weight="duotone" className="text-muted" /> Plan
-            <Pill tone={done === steps.length ? "ok" : "accent"}>{done} of {steps.length} done</Pill>
+            <ListChecksIcon size={15} weight="duotone" className="text-muted" /> {t("Plan")}
+            <Pill tone={done === steps.length ? "ok" : "accent"}>{t("{done} of {total} done", { done, total: steps.length })}</Pill>
           </h3>
           <div className="h-1 overflow-hidden rounded-full bg-surface-2" aria-hidden>
             <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${Math.round((done / steps.length) * 100)}%` }} />
@@ -48,7 +50,7 @@ export function TaskPlan({ events }: { events: TaskEvent[] }) {
           <div key={c.id} className={cn("grid min-w-0 gap-1 text-[12.5px]", steps.length && "border-t border-border pt-2.5")}>
             <p className={cn("flex items-center gap-1.5 font-medium", ok ? "text-ok" : "text-warn")}>
               {ok ? <SealCheckIcon size={15} weight="fill" /> : <WarningCircleIcon size={15} weight="fill" />}
-              {ok ? (c.data?.checked === false ? "Self-check skipped (no reviewer model answered)" : "Self-check passed before hand-in") : "Self-check caught problems, fixed before hand-in"}
+              {ok ? (c.data?.checked === false ? t("Self-check skipped (no reviewer model answered)") : t("Self-check passed before hand-in")) : t("Self-check caught problems, fixed before hand-in")}
             </p>
             {issues.length ? (
               <ul className="grid gap-0.5 pl-5 text-muted">

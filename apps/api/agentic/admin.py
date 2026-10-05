@@ -31,6 +31,7 @@ from .models import (
     AuthSession,
     Channel,
     Credential,
+    CredentialState,
     GoogleAccount,
     InstanceSecret,
     Integration,
@@ -117,6 +118,7 @@ SECRETS = [
     (McpServer, "auth_header_enc", lambda r: r.aad),
     (Credential, "username_enc", lambda r: r.aad + ":u"),
     (Credential, "password_enc", lambda r: r.aad),
+    (CredentialState, "state_enc", lambda r: f"credential_state:{r.credential_id}"),
     (InstanceSecret, "value_enc", lambda r: f"instance_secret:{r.name}"),
 ]
 

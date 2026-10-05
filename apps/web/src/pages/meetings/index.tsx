@@ -18,6 +18,7 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { usePagedList } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
@@ -36,15 +37,15 @@ interface MeetingsSearch {
 }
 
 const TABS = [
-  { value: "agents" as const, label: "Agent meetings" },
-  { value: "minutes" as const, label: "People meetings" },
+  { value: "agents" as const, label: msg("Agent meetings") },
+  { value: "minutes" as const, label: msg("People meetings") },
 ];
 
 const STATUS: Record<Meeting["status"], { label: string; tone: "accent" | "ok" | "danger" | "neutral" }> = {
-  running: { label: "In progress", tone: "accent" },
-  done: { label: "Decided", tone: "ok" },
-  failed: { label: "No outcome", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  running: { label: msg("In progress"), tone: "accent" },
+  done: { label: msg("Decided"), tone: "ok" },
+  failed: { label: msg("No outcome"), tone: "danger" },
+  cancelled: { label: msg("Cancelled"), tone: "neutral" },
 };
 
 const STATUS_ICON: Record<Meeting["status"], Icon> = {
@@ -63,26 +64,29 @@ function Faces({ m, size = "xs" }: { m: Meeting; size?: "xs" | "sm" }) {
 }
 
 export function Outcome({ o, path }: { o: MeetingOutcome; path: string | null }) {
+  const t = useT();
+  // The file name is a link, so the sentence is split around it (the word order stays Malay).
+  const [savedBefore = "", savedAfter = ""] = t("Saved to the brain as {file}.").split("{file}");
   return (
-    <section aria-label="Outcome" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-ok/30 bg-ok/6 p-4">
-      <p className="flex items-center gap-2 text-[12px] font-semibold tracking-wide text-ok uppercase"><GavelIcon size={14} weight="bold" /> Decision</p>
+    <section aria-label={t("Outcome")} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-ok/30 bg-ok/6 p-4">
+      <p className="flex items-center gap-2 text-[12px] font-semibold tracking-wide text-ok uppercase"><GavelIcon size={14} weight="bold" /> {t("Decision")}</p>
       <p className="text-[15px] leading-snug font-medium break-words">{o.decision}</p>
       {o.rationale ? <p className="text-[13.5px] text-muted">{o.rationale}</p> : null}
       {o.options.length ? (
         <div className="grid gap-1">
-          <h4 className="text-[12.5px] font-semibold">Options weighed</h4>
+          <h4 className="text-[12.5px] font-semibold">{t("Options weighed")}</h4>
           <ul className="list-disc pl-5 text-[13px] text-muted">{o.options.map((x) => <li key={x}>{x}</li>)}</ul>
         </div>
       ) : null}
       {o.dissent.length ? (
         <div className="grid gap-1">
-          <h4 className="text-[12.5px] font-semibold">Dissent</h4>
+          <h4 className="text-[12.5px] font-semibold">{t("Dissent")}</h4>
           <ul className="list-disc pl-5 text-[13px] text-muted">{o.dissent.map((x) => <li key={x}>{x}</li>)}</ul>
         </div>
       ) : null}
       {o.actions.length ? (
         <div className="grid gap-1">
-          <h4 className="text-[12.5px] font-semibold">Next steps</h4>
+          <h4 className="text-[12.5px] font-semibold">{t("Next steps")}</h4>
           <ul className="grid gap-1 text-[13px]">
             {o.actions.map((a) => (
               <li key={a.action} className="flex min-w-0 gap-2"><CheckIcon size={14} className="mt-0.5 shrink-0 text-ok" /><span className="min-w-0 break-words">{a.owner ? <span className="font-medium">{a.owner}: </span> : null}{a.action}</span></li>
@@ -91,30 +95,33 @@ export function Outcome({ o, path }: { o: MeetingOutcome; path: string | null })
         </div>
       ) : null}
       <p className="text-[12px] text-muted">
-        A recommendation: any action still goes through approvals.
-        {path ? <> Saved to the brain as <Link to="/brain" search={{ path }} className="text-accent hover:underline">{path.split("/").pop()}</Link>.</> : null}
+        {t("A recommendation: any action still goes through approvals.")}
+        {path ? <> {savedBefore}<Link to="/brain" search={{ path }} className="text-accent hover:underline">{path.split("/").pop()}</Link>{savedAfter}</> : null}
       </p>
     </section>
   );
 }
 
-function Turn({ t, color }: { t: MeetingTurn; color?: string }) {
-  if (t.kind === "system") return <li className="mx-auto max-w-[90%] rounded-full bg-surface-2/70 px-3 py-1 text-center text-[12px] text-muted">{t.content}</li>;
-  if (t.kind === "outcome") return null;
-  const human = t.kind === "human";
-  const passed = t.content === "(nothing to add)";
+function Turn({ t: turn, color }: { t: MeetingTurn; color?: string }) {
+  const t = useT();
+  if (turn.kind === "system") return <li className="mx-auto max-w-[90%] rounded-full bg-surface-2/70 px-3 py-1 text-center text-[12px] text-muted">{turn.content}</li>;
+  if (turn.kind === "outcome") return null;
+  const human = turn.kind === "human";
+  // The API writes this exact text when an agent passes.
+  const passed = turn.content === "(nothing to add)";
   return (
     <li className={cn("flex min-w-0 gap-2.5", human && "flex-row-reverse")}>
-      {human ? null : <AgentAvatar name={t.name} color={color ?? "#888"} size="sm" />}
+      {human ? null : <AgentAvatar name={turn.name} color={color ?? "#888"} size="sm" />}
       <div className={cn("min-w-0 max-w-[85%] rounded-[var(--radius-md)] px-3 py-2", human ? "bg-accent text-accent-fg" : "bg-surface-2", passed && "bg-transparent px-0 py-1")}>
-        <p className={cn("text-[11.5px] font-medium", human ? "text-accent-fg/80" : "text-muted")}>{t.name}{human ? " (you)" : ""} · round {t.round}</p>
-        <p className={cn("text-[13.5px] whitespace-pre-wrap [overflow-wrap:anywhere]", passed && "text-muted italic")}>{t.content}</p>
+        <p className={cn("text-[11.5px] font-medium", human ? "text-accent-fg/80" : "text-muted")}>{human ? t("{name} (you) · round {round}", { name: turn.name, round: turn.round }) : t("{name} · round {round}", { name: turn.name, round: turn.round })}</p>
+        <p className={cn("text-[13.5px] whitespace-pre-wrap [overflow-wrap:anywhere]", passed && "text-muted italic")}>{passed ? t("(nothing to add)") : turn.content}</p>
       </div>
     </li>
   );
 }
 
 function MeetingSheet({ id, canWrite, onClose }: { id: string; canWrite: boolean; onClose: () => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: m, isLoading, error } = useQuery({ ...meetingQuery(id), refetchInterval: (q) => (q.state.data?.status === "running" ? 4000 : false) });
   const [text, setText] = useState("");
@@ -136,33 +143,33 @@ function MeetingSheet({ id, canWrite, onClose }: { id: string; canWrite: boolean
   });
   const stop = useMutation({
     mutationFn: () => api<Meeting>(`/api/meetings/${id}/cancel`, "POST"),
-    onSuccess: () => { refresh(); toast.success("Meeting stopped."); },
+    onSuccess: () => { refresh(); toast.success(t("Meeting stopped.")); },
   });
   const colors = Object.fromEntries((m?.participants ?? []).map((p) => [p.id, p.color]));
   const running = m?.status === "running";
 
   return (
-    <SideSheet open onOpenChange={(o) => !o && onClose()} title={m?.topic ?? "Meeting"}
+    <SideSheet open onOpenChange={(o) => !o && onClose()} title={m?.topic ?? t("Meeting")}
       description={m ? (
         <span className="grid gap-2">
           <span className="flex flex-wrap items-center gap-2">
-            <Pill tone={STATUS[m.status].tone} live={running}>{STATUS[m.status].label}</Pill>
+            <Pill tone={STATUS[m.status].tone} live={running}>{t(STATUS[m.status].label)}</Pill>
             <Faces m={m} />
             <span className="min-w-0">{m.participants.map((p) => p.name).join(", ")}</span>
           </span>
           {m.task ? <Link to="/tasks" search={{ task: m.task.id }} className="inline-flex w-fit max-w-full items-center gap-1.5 text-accent hover:underline"><KanbanIcon size={13} className="shrink-0" /><span className="truncate">{m.task.title}</span></Link> : null}
         </span>
       ) : undefined}
-      actions={running && canWrite ? <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}><StopIcon size={14} /> Stop</Button> : undefined}>
+      actions={running && canWrite ? <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}><StopIcon size={14} /> {t("Stop")}</Button> : undefined}>
       {isLoading ? <Skeleton className="h-48" /> : error || !m ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
           {m.outcome ? <Outcome o={m.outcome} path={m.decision_path} /> : null}
           {m.status === "failed" ? <p role="alert" className="rounded-sm border border-danger/30 bg-danger/8 px-3 py-2 text-[13px] text-danger">{m.error}</p> : null}
           <dl className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface-2/40 text-[12px]">
             {([
-              ["Round", `${Math.min(m.rounds_done + (running ? 1 : 0), m.max_rounds)} of ${m.max_rounds}`],
-              ["Tokens", `${tokensShort(m.tokens_used)} of ${tokensShort(m.token_budget)}`],
-              ["Started", timeAgo(m.created_at)],
+              [t("Round"), t("{a} of {b}", { a: Math.min(m.rounds_done + (running ? 1 : 0), m.max_rounds), b: m.max_rounds })],
+              [t("Tokens"), t("{a} of {b}", { a: tokensShort(m.tokens_used), b: tokensShort(m.token_budget) })],
+              [t("Started"), timeAgo(m.created_at)],
             ] as const).map(([k, v], i) => (
               <div key={k} className={cn("grid min-w-0 gap-0.5 px-3 py-2", i > 0 && "border-l border-border")}>
                 <dt className="text-muted">{k}</dt>
@@ -170,17 +177,17 @@ function MeetingSheet({ id, canWrite, onClose }: { id: string; canWrite: boolean
               </div>
             ))}
           </dl>
-          <ol aria-label="Transcript" aria-live="polite" className="grid grid-cols-[minmax(0,1fr)] gap-3">
-            {turns.map((t) => <Turn key={t.id} t={t} color={colors[t.speaker.replace("agent:", "")]} />)}
-            {running ? <li className="flex items-center gap-2 text-[12.5px] text-muted"><span className="size-1.5 rounded-full bg-accent motion-safe:animate-pulse" /> The next agent is thinking…</li> : null}
+          <ol aria-label={t("Transcript")} aria-live="polite" className="grid grid-cols-[minmax(0,1fr)] gap-3">
+            {turns.map((x) => <Turn key={x.id} t={x} color={colors[x.speaker.replace("agent:", "")]} />)}
+            {running ? <li className="flex items-center gap-2 text-[12.5px] text-muted"><span className="size-1.5 rounded-full bg-accent motion-safe:animate-pulse" /> {t("The next agent is thinking…")}</li> : null}
           </ol>
           <div ref={end} />
           {running && canWrite ? (
             <form className="sticky bottom-0 -mx-1 flex gap-2 border-t border-border bg-surface px-1 pt-3 pb-1" onSubmit={(e) => { e.preventDefault(); if (text.trim()) say.mutate(); }}>
-              <label htmlFor="interject" className="sr-only">Add to the discussion</label>
-              <input id="interject" value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a point; agents read it on their next turn"
+              <label htmlFor="interject" className="sr-only">{t("Add to the discussion")}</label>
+              <input id="interject" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Add a point; agents read it on their next turn")}
                 className="h-10 min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 text-[13.5px] focus-visible:border-accent focus-visible:outline-none" />
-              <Button type="submit" size="icon" aria-label="Send" disabled={!text.trim()} loading={say.isPending}><PaperPlaneRightIcon size={16} weight="fill" /></Button>
+              <Button type="submit" size="icon" aria-label={t("Send")} disabled={!text.trim()} loading={say.isPending}><PaperPlaneRightIcon size={16} weight="fill" /></Button>
             </form>
           ) : null}
         </div>
@@ -190,6 +197,7 @@ function MeetingSheet({ id, canWrite, onClose }: { id: string; canWrite: boolean
 }
 
 function NewMeeting({ taskId, onClose, onStarted }: { taskId?: string; onClose: () => void; onStarted: (id: string) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
   const { data: task } = useQuery({ ...taskQuery(taskId ?? ""), enabled: !!taskId });
@@ -203,21 +211,23 @@ function NewMeeting({ taskId, onClose, onStarted }: { taskId?: string; onClose: 
   const toggle = (id: string) => setChosen(picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= 5 ? picked : [...picked, id]);
   const start = useMutation({
     mutationFn: () => api<Meeting>("/api/meetings", "POST", { topic, participant_ids: picked, rounds: Number(rounds), task_id: taskId }),
-    onSuccess: (m) => { qc.invalidateQueries({ queryKey: teamKeys.meetings }); toast.success("Meeting started."); onStarted(m.id); },
+    onSuccess: (m) => { qc.invalidateQueries({ queryKey: teamKeys.meetings }); toast.success(t("Meeting started.")); onStarted(m.id); },
   });
+  const chair = picked.length ? agents.find((a) => a.id === picked[0])?.name : undefined;
+  const [postedBefore = "", postedAfter = ""] = t("The decision is posted to {task}.").split("{task}");
   return (
-    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title="New meeting" className="sm:max-w-xl"
-      description="Two to five agents discuss for a few rounds, then the first one you pick writes one decision summary."
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("New meeting")} className="sm:max-w-xl"
+      description={t("Two to five agents discuss for a few rounds, then the first one you pick writes one decision summary.")}
       footer={<>
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button loading={start.isPending} disabled={topic.trim().length < 3 || picked.length < 2} onClick={() => start.mutate()}><UsersThreeIcon size={16} /> Start meeting</Button>
+        <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+        <Button loading={start.isPending} disabled={topic.trim().length < 3 || picked.length < 2} onClick={() => start.mutate()}><UsersThreeIcon size={16} /> {t("Start meeting")}</Button>
       </>}>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-        {task ? <p className="flex items-start gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[13px] text-muted"><KanbanIcon size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">The decision is posted to <span className="font-medium text-fg">{task.task.title}</span>.</span></p> : null}
-        <TextareaField label="What should they decide?" rows={3} value={topic} onChange={(e) => setTopic(e.target.value)} autoFocus
-          placeholder="e.g. Which flour supplier should we use from next month, and why?" />
+        {task ? <p className="flex items-start gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[13px] text-muted"><KanbanIcon size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{postedBefore}<span className="font-medium text-fg">{task.task.title}</span>{postedAfter}</span></p> : null}
+        <TextareaField label={t("What should they decide?")} rows={3} value={topic} onChange={(e) => setTopic(e.target.value)} autoFocus
+          placeholder={t("e.g. Which flour supplier should we use from next month, and why?")} />
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">Who attends <span className="font-normal text-muted">({picked.length} of 5{picked.length ? `, ${agents.find((a) => a.id === picked[0])?.name} chairs` : ""})</span></legend>
+          <legend className="mb-1 text-[13px] font-medium">{t("Who attends")} <span className="font-normal text-muted">{chair ? t("({n} of 5, {name} chairs)", { n: picked.length, name: chair }) : t("({n} of 5)", { n: picked.length })}</span></legend>
           <div className="flex flex-wrap gap-2">
             {active.map((a) => {
               const on = picked.includes(a.id);
@@ -232,13 +242,13 @@ function NewMeeting({ taskId, onClose, onStarted }: { taskId?: string; onClose: 
           </div>
         </fieldset>
         <div className="grid gap-1.5">
-          <span id="rounds-label" className="text-[13px] font-medium">Rounds</span>
+          <span id="rounds-label" className="text-[13px] font-medium">{t("Rounds")}</span>
           <RadioGroup.Root aria-labelledby="rounds-label" value={rounds} onValueChange={setRounds} className="inline-flex w-fit gap-0.5 rounded-sm border border-border bg-surface-2/60 p-0.5">
             {["1", "2", "3", "4"].map((v) => (
               <RadioGroup.Item key={v} value={v} className="h-8 min-w-10 rounded-[6px] px-3.5 text-[13px] text-muted tabular transition-colors hover:text-fg data-[state=checked]:bg-surface data-[state=checked]:font-medium data-[state=checked]:text-fg data-[state=checked]:shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] data-[state=checked]:ring-1 data-[state=checked]:ring-border">{v}</RadioGroup.Item>
             ))}
           </RadioGroup.Root>
-          <p className="text-[12.5px] text-muted">Everyone speaks once per round. It ends early when nobody has anything new.</p>
+          <p className="text-[12.5px] text-muted">{t("Everyone speaks once per round. It ends early when nobody has anything new.")}</p>
         </div>
         <FormError message={start.error ? errorMessage(start.error) : null} />
       </div>
@@ -247,6 +257,7 @@ function NewMeeting({ taskId, onClose, onStarted }: { taskId?: string; onClose: 
 }
 
 export function MeetingsPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const search = useSearch({ strict: false }) as MeetingsSearch;
@@ -264,7 +275,7 @@ export function MeetingsPage() {
   const meetings = isLoading || error ? undefined : { length: (live.total ?? running.length) + pastTotal };
 
   const row = (m: Meeting) => {
-    const caller = m.initiator_agent_id ? `Called by ${m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? "an agent"}` : "Called by a person";
+    const caller = m.initiator_agent_id ? t("Called by {name}", { name: m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? t("an agent") }) : t("Called by a person");
     return (
       <ListRow
         key={m.id}
@@ -272,7 +283,7 @@ export function MeetingsPage() {
         leading={<IconTile icon={STATUS_ICON[m.status]} tone={STATUS[m.status].tone} size="sm" />}
         title={<span className="block whitespace-normal break-words">{m.topic}</span>}
         meta={<Meta items={[caller, m.task ? <span className="truncate">{m.task.title}</span> : null, timeAgo(m.created_at)]} />}
-        trailing={<><Faces m={m} size="sm" /><Pill tone={STATUS[m.status].tone} live={m.status === "running"}>{STATUS[m.status].label}</Pill></>}
+        trailing={<><Faces m={m} size="sm" /><Pill tone={STATUS[m.status].tone} live={m.status === "running"}>{t(STATUS[m.status].label)}</Pill></>}
       >
         {m.outcome ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-muted">{m.outcome.decision}</span> : null}
       </ListRow>
@@ -280,13 +291,13 @@ export function MeetingsPage() {
   };
   const decided = doneCount.total ?? past.filter((m) => m.status === "done").length;
 
-  const tabs = <Segmented label="Kind of meeting" value={search.tab === "minutes" ? "minutes" : "agents"} options={TABS} onChange={(t) => go(t === "minutes" ? { tab: "minutes" } : {})} className="w-fit" />;
+  const tabs = <Segmented label={t("Kind of meeting")} value={search.tab === "minutes" ? "minutes" : "agents"} options={TABS.map((x) => ({ ...x, label: t(x.label) }))} onChange={(v) => go(v === "minutes" ? { tab: "minutes" } : {})} className="w-fit" />;
 
   if (search.tab === "minutes") {
     return (
       <Page>
-        <PageHeader title="Meetings"
-          description="Upload a recording of a real meeting (voice or video): you get a timestamped transcript, minutes in English or Bahasa Melayu, and action items you can turn into tasks. Finished minutes go into the library so agents can look up past decisions." />
+        <PageHeader title={t("Meetings")}
+          description={t("Upload a recording of a real meeting (voice or video): you get a timestamped transcript, minutes in English or Bahasa Melayu, and action items you can turn into tasks. Finished minutes go into the library so agents can look up past decisions.")} />
         {tabs}
         <PeopleMeetings canWrite={canWrite} rec={search.rec} onOpen={(rec) => go({ tab: "minutes", rec })} />
       </Page>
@@ -295,31 +306,31 @@ export function MeetingsPage() {
 
   return (
     <Page>
-      <PageHeader title="Meetings"
-        description="Agents talk a decision through for a few rounds and come back with one summary: the decision, why, what else they weighed and who disagreed. Meetings recommend; they never approve anything."
-        actions={canWrite ? <Button data-guide="meetings.new" onClick={() => go({ new: 1 })}><PlusIcon size={16} weight="bold" /> New meeting</Button> : null} />
+      <PageHeader title={t("Meetings")}
+        description={t("Agents talk a decision through for a few rounds and come back with one summary: the decision, why, what else they weighed and who disagreed. Meetings recommend; they never approve anything.")}
+        actions={canWrite ? <Button data-guide="meetings.new" onClick={() => go({ new: 1 })}><PlusIcon size={16} weight="bold" /> {t("New meeting")}</Button> : null} />
       {tabs}
       {isLoading ? <Skeleton className="h-48 rounded-[var(--radius-md)]" /> : error || !meetings ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : !meetings.length ? (
-        <EmptyState icon={UsersThreeIcon} title="No meetings yet"
-          body="Agents call one with the consult tool when a task needs several views. You can also start one yourself, on its own or for a task."
-          action={canWrite ? <Button variant="outline" onClick={() => go({ new: 1 })}><ChatsTeardropIcon size={16} /> Start a meeting</Button> : undefined} />
+        <EmptyState icon={UsersThreeIcon} title={t("No meetings yet")}
+          body={t("Agents call one with the consult tool when a task needs several views. You can also start one yourself, on its own or for a task.")}
+          action={canWrite ? <Button variant="outline" onClick={() => go({ new: 1 })}><ChatsTeardropIcon size={16} /> {t("Start a meeting")}</Button> : undefined} />
       ) : (
         <>
           <StatGrid className="lg:grid-cols-3">
-            <Stat label="In progress" value={running.length} icon={ChatsTeardropIcon} tone="accent" hint={running.length ? "Agents are talking now" : "Nothing live"} />
-            <Stat label="Decided" value={decided} icon={GavelIcon} tone="ok" hint={`of ${pastTotal} finished`} />
-            <Stat label="Total meetings" value={meetings.length} icon={UsersThreeIcon} tone="neutral" className="max-lg:col-span-2" />
+            <Stat label={t("In progress")} value={running.length} icon={ChatsTeardropIcon} tone="accent" hint={running.length ? t("Agents are talking now") : t("Nothing live")} />
+            <Stat label={t("Decided")} value={decided} icon={GavelIcon} tone="ok" hint={t("of {n} finished", { n: pastTotal })} />
+            <Stat label={t("Total meetings")} value={meetings.length} icon={UsersThreeIcon} tone="neutral" className="max-lg:col-span-2" />
           </StatGrid>
           {running.length ? (
-            <Section title="Happening now" description="Open one to follow along or add a point.">
+            <Section title={t("Happening now")} description={t("Open one to follow along or add a point.")}>
               <ListCard data-guide="meetings.list" className="border-accent/40">{running.map(row)}</ListCard>
             </Section>
           ) : null}
           {past.length ? (
-            <Section title="Past meetings">
+            <Section title={t("Past meetings")}>
               <div className="grid gap-3">
                 <ListCard data-guide={running.length ? undefined : "meetings.list"}>{past.map(row)}</ListCard>
-                <LoadMore noun="meetings" shown={past.length} total={pastList.total} hasMore={pastList.hasMore} loading={pastList.isFetchingMore} onLoad={pastList.loadMore} />
+                <LoadMore noun={t("meetings")} shown={past.length} total={pastList.total} hasMore={pastList.hasMore} loading={pastList.isFetchingMore} onLoad={pastList.loadMore} />
               </div>
             </Section>
           ) : null}

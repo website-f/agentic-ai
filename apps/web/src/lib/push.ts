@@ -1,4 +1,6 @@
 /** Phone and desktop notifications (Web Push) and the install prompt. */
+import { t } from "@/i18n";
+
 import { api } from "./api";
 
 export type PushState = "unsupported" | "needs-install" | "denied" | "off" | "on";
@@ -43,9 +45,9 @@ function deviceLabel(): string {
 
 /** Must run from a tap: browsers only ask for permission after a user gesture. */
 export async function enablePush(): Promise<void> {
-  if (!supported()) throw new Error("This browser cannot show notifications.");
+  if (!supported()) throw new Error(t("This browser cannot show notifications."));
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("Notifications were not allowed. Change it in the browser's site settings.");
+  if (permission !== "granted") throw new Error(t("Notifications were not allowed. Change it in the browser's site settings."));
   const reg = (await registration()) ?? (await navigator.serviceWorker.ready);
   const { public_key } = await api<{ public_key: string }>("/api/push/key");
   let sub = await reg.pushManager.getSubscription();

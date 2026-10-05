@@ -248,6 +248,75 @@ def profile_form(req: Request):
     )
 
 
+@app.get("/frame")
+def framed(req: Request):
+    """The profile form inside a same-origin iframe (many government portals do this)."""
+    if not _signed_in(req):
+        return RedirectResponse("/login", 302)
+    return page(
+        "Framed profile",
+        "<h1>Supplier services</h1><p class=note>The form below is shown in a frame.</p>"
+        '<iframe src="/profile" title="Company profile form" style="width:100%;height:640px;'
+        'border:1px solid #ccd"></iframe>',
+    )
+
+
+LIVE_JS = """<script>
+let next = 4;
+const list = document.getElementById('notices');
+function row(k) {
+  const li = document.createElement('li');
+  li.innerHTML = 'Notice #' + k + ' <button type=button data-k="' + k + '">Open #' + k + '</button>';
+  return li;
+}
+for (let k = 3; k >= 1; k--) list.appendChild(row(k));
+list.addEventListener('click', (e) => {
+  const k = e.target.getAttribute && e.target.getAttribute('data-k');
+  if (k) document.getElementById('status').textContent = 'Opened #' + k;
+});
+document.getElementById('add').onclick = () => { list.insertBefore(row(next), list.firstChild); next++; };
+document.getElementById('redraw').onclick = () => {
+  const ks = Array.from(list.querySelectorAll('button')).map(b => b.getAttribute('data-k'));
+  list.innerHTML = '';
+  ks.forEach(k => list.appendChild(row(k)));
+};
+</script>"""
+
+
+@app.get("/live")
+def live(req: Request):
+    """A page that re-renders itself (new notices appear at the top; Redraw rebuilds the list),
+    for checking that element references survive re-renders."""
+    if not _signed_in(req):
+        return RedirectResponse("/login", 302)
+    return page(
+        "Live notices",
+        "<h1>Live notices</h1><p id=status class=note>Nothing opened yet.</p>"
+        "<button type=button id=add>Add a notice</button> "
+        "<button type=button id=redraw>Redraw the list</button>"
+        f"<ul id=notices></ul>{LIVE_JS}",
+    )
+
+
+@app.get("/big")
+def big(n: int = 1500) -> HTMLResponse:
+    """A long page (n table rows with a link and a button each) for snapshot size checks."""
+    n = max(1, min(n, 5000))
+    rows = "".join(
+        f"<tr><td>2026-10-{1 + i % 28:02d}</td><td>Agency {i % 17}</td>"
+        f"<td><a href=/inbox/{1 + i % 34}>Item {i}</a></td>"
+        f"<td><button type=button>Flag {i}</button></td></tr>"
+        for i in range(n)
+    )
+    return page("Big list", f"<h1>Big list</h1><p>{n} rows.</p><table>{rows}</table>", False)
+
+
+@app.get("/go")
+def go(to: str = "/") -> RedirectResponse:
+    """An open redirect, for checking that the browser's guards also see redirects."""
+    return RedirectResponse(to, 302)
+
+
 @app.post("/profile")
 async def profile_save(req: Request):
     if not _signed_in(req):

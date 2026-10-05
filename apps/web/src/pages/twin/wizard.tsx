@@ -24,13 +24,14 @@ import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { SwitchField } from "@/components/ui/switch";
+import { msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { previewTwin, saveTwin, startingAnswers, twinKeys, type TwinAnswers, type TwinState } from "@/lib/twin";
 import { cn } from "@/lib/utils";
 import { workKeys } from "@/lib/work";
 
-const STEPS = ["About you", "How it should work", "Review & create"] as const;
+const STEPS = [msg("About you"), msg("How it should work"), msg("Review & create")] as const;
 const ONLY_WHEN_ASKED = "Only when I ask";
 
 /** The labels of the chosen keys, in the options' order. */
@@ -40,6 +41,7 @@ function picked(options: { key: string; label: string; locked?: boolean }[], key
 
 /** The twin as it will look: avatar, name, role, what it does and what it asks first. */
 export function TwinPreviewCard({ a, state, className, compact }: { a: TwinAnswers; state: TwinState; className?: string; compact?: boolean }) {
+  const t = useT();
   const helps = picked(state.options.helps_with, a.helps_with);
   const asks = picked(state.options.ask_first, a.ask_first, true);
   const name = a.name.trim() || state.suggested.name;
@@ -65,14 +67,14 @@ export function TwinPreviewCard({ a, state, className, compact }: { a: TwinAnswe
             {a.job.trim() ? <p className="line-clamp-4 text-[13px] break-words text-fg/90">{a.job.trim()}</p> : null}
             {helps.length ? (
               <div className="grid gap-1.5">
-                <p className="text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase">Helps you with</p>
+                <p className="text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase">{t("Helps you with")}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {helps.map((h) => <Pill key={h} tone="accent">{h}</Pill>)}
                 </div>
               </div>
             ) : null}
             <div className="grid gap-1.5">
-              <p className="flex items-center gap-1 text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase"><HandIcon size={12} weight="bold" /> Asks you first</p>
+              <p className="flex items-center gap-1 text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase"><HandIcon size={12} weight="bold" /> {t("Asks you first")}</p>
               <ul className="grid gap-1 text-[12.5px]">
                 {asks.map((x) => (
                   <li key={x} className="flex items-start gap-1.5"><CheckIcon size={13} weight="bold" className="mt-0.5 shrink-0 text-accent" /> <span className="min-w-0">{x}</span></li>
@@ -92,6 +94,7 @@ export function TwinPreviewCard({ a, state, className, compact }: { a: TwinAnswe
 
 /** A toggle chip / card that reads as a checkbox to assistive tech. */
 function Choice({ on, onToggle, label, hint, locked, wide }: { on: boolean; onToggle: () => void; label: string; hint?: string; locked?: boolean; wide?: boolean }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -110,7 +113,7 @@ function Choice({ on, onToggle, label, hint, locked, wide }: { on: boolean; onTo
         {locked ? <LockSimpleIcon size={11} weight="bold" /> : on ? <CheckIcon size={12} weight="bold" /> : null}
       </span>
       <span className="grid min-w-0 gap-0.5">
-        <span className="text-[13.5px] font-medium break-words">{label}{locked ? <span className="ml-1.5 text-[11.5px] font-normal text-muted">Always</span> : null}</span>
+        <span className="text-[13.5px] font-medium break-words">{label}{locked ? <span className="ml-1.5 text-[11.5px] font-normal text-muted">{t("Always")}</span> : null}</span>
         {hint ? <span className="text-[12px] text-muted">{hint}</span> : null}
       </span>
     </button>
@@ -118,14 +121,15 @@ function Choice({ on, onToggle, label, hint, locked, wide }: { on: boolean; onTo
 }
 
 function StepDots({ step }: { step: number }) {
+  const t = useT();
   return (
-    <ol className="grid grid-cols-3 gap-2" aria-label="Steps">
+    <ol className="grid grid-cols-3 gap-2" aria-label={t("Steps")}>
       {STEPS.map((s, i) => (
         <li key={s} className="grid gap-1.5" aria-current={i === step ? "step" : undefined}>
           <span className="h-1 overflow-hidden rounded-full bg-surface-2">
             <motion.span className="block h-full rounded-full bg-accent" initial={false} animate={{ width: i <= step ? "100%" : "0%" }} transition={{ duration: 0.35, ease: "easeOut" }} />
           </span>
-          <span className={cn("truncate text-[11.5px]", i === step ? "font-medium text-fg" : "text-muted")}>{s}</span>
+          <span className={cn("truncate text-[11.5px]", i === step ? "font-medium text-fg" : "text-muted")}>{t(s)}</span>
         </li>
       ))}
     </ol>
@@ -160,6 +164,7 @@ function Celebrate({ a }: { a: TwinAnswers }) {
 }
 
 export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
@@ -182,10 +187,10 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
       qc.invalidateQueries({ queryKey: keys.status });
       const name = s.twin?.name ?? a.name;
       if (editing) {
-        toast.success(`Saved. ${name} uses its new persona from the next task or chat.`);
+        toast.success(t("Saved. {name} uses its new persona from the next task or chat.", { name }));
         onOpenChange(false);
       } else {
-        toast.success(`${name} is ready. Say hello!`);
+        toast.success(t("{name} is ready. Say hello!", { name }));
         setDone(s);
       }
     },
@@ -200,19 +205,19 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
   };
 
   const footer = done ? (
-    <Button onClick={finish} className="sm:min-w-40">Meet {done.twin?.name ?? "your twin"} <ArrowRightIcon size={16} /></Button>
+    <Button onClick={finish} className="sm:min-w-40">{done.twin?.name ? t("Meet {name}", { name: done.twin.name }) : t("Meet your twin")} <ArrowRightIcon size={16} /></Button>
   ) : (
     <>
       {step > 0 ? (
-        <Button variant="outline" onClick={() => setStep(step - 1)} disabled={save.isPending}><ArrowLeftIcon size={16} /> Back</Button>
+        <Button variant="outline" onClick={() => setStep(step - 1)} disabled={save.isPending}><ArrowLeftIcon size={16} /> {t("Back")}</Button>
       ) : (
-        <Button variant="outline" onClick={() => onOpenChange(false)}>{editing ? "Cancel" : "Not now"}</Button>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>{editing ? t("Cancel") : t("Not now")}</Button>
       )}
       {step < 2 ? (
-        <Button onClick={() => setStep(step + 1)} disabled={!valid}>Next <ArrowRightIcon size={16} /></Button>
+        <Button onClick={() => setStep(step + 1)} disabled={!valid}>{t("Next")} <ArrowRightIcon size={16} /></Button>
       ) : (
         <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!valid}>
-          <SparkleIcon size={16} weight="fill" /> {editing ? "Save changes" : "Create my twin"}
+          <SparkleIcon size={16} weight="fill" /> {editing ? t("Save changes") : t("Create my twin")}
         </Button>
       )}
     </>
@@ -223,21 +228,21 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
     <ResponsiveDialog
       open={open}
       onOpenChange={(o) => (save.isPending ? null : done && !o ? finish() : onOpenChange(o))}
-      title={done ? "Say hello to your twin" : editing ? `Edit ${state.twin?.name ?? "your twin"}` : "Meet your AI twin"}
-      description={done ? undefined : `Step ${step + 1} of 3 · ${STEPS[step]}`}
+      title={done ? t("Say hello to your twin") : editing ? (state.twin?.name ? t("Edit {name}", { name: state.twin.name }) : t("Edit your twin")) : t("Meet your AI twin")}
+      description={done ? undefined : `${t("Step {n} of {total}", { n: step + 1, total: STEPS.length })} · ${t(STEPS[step]!)}`}
       className="w-[min(96vw,56rem)]"
       footer={<div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">{footer}</div>}
     >
       {done && done.twin ? (
         <div className="grid justify-items-center gap-3 py-4 text-center">
           <Celebrate a={a} />
-          <h3 className="text-[18px] font-semibold text-balance">{done.twin.name} is ready</h3>
+          <h3 className="text-[18px] font-semibold text-balance">{t("{name} is ready", { name: done.twin.name })}</h3>
           <p className="max-w-md text-[13.5px] text-muted">
-            Your virtual self at work. It handles routine tasks the way you would, asks you before anything important, and tells you when it finishes.
+            {t("Your virtual self at work. It handles routine tasks the way you would, asks you before anything important, and tells you when it finishes.")}
           </p>
           <div className="flex flex-wrap justify-center gap-1.5">
             <TwinPill person={state.person.name} />
-            {done.polished ? <Pill tone="info">Persona polished with AI</Pill> : null}
+            {done.polished ? <Pill tone="info">{t("Persona polished with AI")}</Pill> : null}
           </div>
         </div>
       ) : (
@@ -257,16 +262,16 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                 {step === 0 ? (
                   <>
                     <p className="text-[13.5px] text-muted">
-                      Hi {first}! Your twin is your virtual self at work. Tell it a little about your job and it will handle routine work the way you would.
+                      {t("Hi {name}! Your twin is your virtual self at work. Tell it a little about your job and it will handle routine work the way you would.", { name: first })}
                     </p>
                     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 sm:items-start">
-                      <Field label="Your twin's name" value={a.name} maxLength={80} onChange={(e) => set("name", e.target.value)} hint="You can rename it any time." />
-                      <Field label="Your job title" value={a.role} maxLength={120} onChange={(e) => set("role", e.target.value)} placeholder={state.suggested.role} />
+                      <Field label={t("Your twin's name")} value={a.name} maxLength={80} onChange={(e) => set("name", e.target.value)} hint={t("You can rename it any time.")} />
+                      <Field label={t("Your job title")} value={a.role} maxLength={120} onChange={(e) => set("role", e.target.value)} placeholder={state.suggested.role} />
                     </div>
-                    <TextareaField label="What you do" rows={3} maxLength={600} value={a.job} onChange={(e) => set("job", e.target.value)}
-                      hint="A sentence or two in your own words. It is the first thing your twin knows about you." />
+                    <TextareaField label={t("What you do")} rows={3} maxLength={600} value={a.job} onChange={(e) => set("job", e.target.value)}
+                      hint={t("A sentence or two in your own words. It is the first thing your twin knows about you.")} />
                     <fieldset className="grid gap-2">
-                      <legend className="mb-2 text-[13px] font-medium">Languages you work in</legend>
+                      <legend className="mb-2 text-[13px] font-medium">{t("Languages you work in")}</legend>
                       <div className="flex flex-wrap gap-2">
                         {state.options.languages.map((l) => {
                           const on = a.languages.includes(l);
@@ -281,10 +286,10 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                       </div>
                     </fieldset>
                     <fieldset className="grid gap-2">
-                      <legend className="mb-2 text-[13px] font-medium">Its colour</legend>
-                      <div className="flex flex-wrap gap-2 sm:gap-2.5" role="radiogroup" aria-label="Colour">
+                      <legend className="mb-2 text-[13px] font-medium">{t("Its colour")}</legend>
+                      <div className="flex flex-wrap gap-2 sm:gap-2.5" role="radiogroup" aria-label={t("Colour")}>
                         {state.options.colors.map((c) => (
-                          <button key={c} type="button" role="radio" aria-checked={a.color === c} aria-label={`Colour ${c}`} onClick={() => set("color", c)}
+                          <button key={c} type="button" role="radio" aria-checked={a.color === c} aria-label={t("Colour {value}", { value: c })} onClick={() => set("color", c)}
                             className={cn("grid size-9 place-items-center rounded-full ring-offset-2 ring-offset-surface transition-transform hover:scale-105",
                               a.color === c && "ring-2 ring-fg/70")} style={{ background: c }}>
                             {a.color === c ? <CheckIcon size={15} weight="bold" className="text-white" /> : null}
@@ -296,22 +301,22 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                 ) : step === 1 ? (
                   <>
                     <fieldset className="grid gap-2">
-                      <legend className="mb-2 text-[13px] font-medium">How should it sound?</legend>
-                      <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tone">
-                        {state.options.tones.map((t) => (
-                          <button key={t.key} type="button" role="radio" aria-checked={a.tone === t.key} onClick={() => set("tone", t.key as TwinAnswers["tone"])}
+                      <legend className="mb-2 text-[13px] font-medium">{t("How should it sound?")}</legend>
+                      <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("Tone")}>
+                        {state.options.tones.map((tone) => (
+                          <button key={tone.key} type="button" role="radio" aria-checked={a.tone === tone.key} onClick={() => set("tone", tone.key as TwinAnswers["tone"])}
                             className={cn("grid min-h-11 gap-0.5 rounded-sm border px-3 py-2.5 text-left transition-colors",
-                              a.tone === t.key ? "border-accent/50 bg-accent-soft/60" : "border-border hover:border-accent/30 hover:bg-surface-2/50")}>
-                            <span className="text-[13.5px] font-medium">{t.label}</span>
-                            <span className="text-[12px] text-muted first-letter:uppercase">{t.hint}</span>
+                              a.tone === tone.key ? "border-accent/50 bg-accent-soft/60" : "border-border hover:border-accent/30 hover:bg-surface-2/50")}>
+                            <span className="text-[13.5px] font-medium">{tone.label}</span>
+                            <span className="text-[12px] text-muted first-letter:uppercase">{tone.hint}</span>
                           </button>
                         ))}
                       </div>
                     </fieldset>
-                    <TextareaField label="How you like to work (optional)" rows={2} maxLength={600} value={a.style} onChange={(e) => set("style", e.target.value)}
-                      placeholder="For example: I double-check figures and keep a list of what is pending." />
+                    <TextareaField label={t("How you like to work (optional)")} rows={2} maxLength={600} value={a.style} onChange={(e) => set("style", e.target.value)}
+                      placeholder={t("For example: I double-check figures and keep a list of what is pending.")} />
                     <fieldset className="grid gap-2">
-                      <legend className="mb-2 text-[13px] font-medium">What should it help with?</legend>
+                      <legend className="mb-2 text-[13px] font-medium">{t("What should it help with?")}</legend>
                       <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
                         {state.options.helps_with.map((h) => (
                           <Choice key={h.key} on={a.helps_with.includes(h.key)} onToggle={() => toggle("helps_with", h.key)} label={h.label} hint={h.hint} />
@@ -319,8 +324,8 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                       </div>
                     </fieldset>
                     <fieldset className="grid gap-2">
-                      <legend className="mb-1 text-[13px] font-medium">Always ask me before</legend>
-                      <p className="mb-1 text-[12.5px] text-muted">Your twin stops and asks you (on your phone too) before these. Untick what it may just do.</p>
+                      <legend className="mb-1 text-[13px] font-medium">{t("Always ask me before")}</legend>
+                      <p className="mb-1 text-[12.5px] text-muted">{t("Your twin stops and asks you (on your phone too) before these. Untick what it may just do.")}</p>
                       <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
                         {state.options.ask_first.map((o) => (
                           <Choice key={o.key} on={!!o.locked || a.ask_first.includes(o.key)} locked={o.locked} onToggle={() => toggle("ask_first", o.key)} label={o.label} hint={o.hint} />
@@ -329,36 +334,36 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                     </fieldset>
                     <div className="grid gap-3 rounded-sm border border-border bg-surface-2/40 p-3">
                       <div className="grid gap-1.5">
-                        <span className="text-[13px] font-medium">Working hours</span>
-                        <Select label="Working hours" className="w-full" value={a.hours} onValueChange={(v) => setA((x) => ({ ...x, hours: v, heartbeat: v === ONLY_WHEN_ASKED ? false : x.heartbeat }))}
+                        <span className="text-[13px] font-medium">{t("Working hours")}</span>
+                        <Select label={t("Working hours")} className="w-full" value={a.hours} onValueChange={(v) => setA((x) => ({ ...x, hours: v, heartbeat: v === ONLY_WHEN_ASKED ? false : x.heartbeat }))}
                           options={state.options.hours.map((h) => ({ value: h, label: h }))} />
                       </div>
                       <SwitchField checked={a.heartbeat} disabled={a.hours === ONLY_WHEN_ASKED} onCheckedChange={(v) => set("heartbeat", v)}
-                        label="Pick up waiting work by itself" hint="In your working hours it starts tasks queued for it, without being asked." />
+                        label={t("Pick up waiting work by itself")} hint={t("In your working hours it starts tasks queued for it, without being asked.")} />
                     </div>
                   </>
                 ) : (
                   <>
                     <TwinPreviewCard a={a} state={state} className="md:hidden" />
                     <div className="grid gap-2 rounded-sm border border-border p-3">
-                      <p className="text-[13px] font-medium">It follows your office's SOPs</p>
+                      <p className="text-[13px] font-medium">{t("It follows your office's SOPs")}</p>
                       {state.sops.length ? (
                         <ul className="grid gap-1 text-[12.5px] text-muted">
                           {state.sops.slice(0, 6).map((s) => <li key={s.id} className="flex min-w-0 gap-1.5"><CheckIcon size={13} weight="bold" className="mt-0.5 shrink-0 text-accent" /><span className="min-w-0 break-words"><span className="text-fg">{s.title}</span> · {s.scope_label}</span></li>)}
-                          {state.sops.length > 6 ? <li>and {state.sops.length - 6} more</li> : null}
+                          {state.sops.length > 6 ? <li>{t("and {n} more", { n: state.sops.length - 6 })}</li> : null}
                         </ul>
                       ) : (
-                        <p className="text-[12.5px] text-muted">No written SOPs for {state.person.department_name ?? "your team"} yet. It follows them as soon as they are added.</p>
+                        <p className="text-[12.5px] text-muted">{state.person.department_name ? t("No written SOPs for {team} yet. It follows them as soon as they are added.", { team: state.person.department_name }) : t("No written SOPs for your team yet. It follows them as soon as they are added.")}</p>
                       )}
                     </div>
-                    <SwitchField checked={polish} onCheckedChange={setPolish} label="Polish the wording with AI"
-                      hint="A quick model rewrites its persona in natural words. If none is available, your answers are used as written." />
+                    <SwitchField checked={polish} onCheckedChange={setPolish} label={t("Polish the wording with AI")}
+                      hint={t("A quick model rewrites its persona in natural words. If none is available, your answers are used as written.")} />
                     <details className="group rounded-sm border border-border" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && !preview.data) preview.mutate(); }}>
                       <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 px-3 text-[13px] font-medium">
-                        What it will be told <ArrowRightIcon size={14} className="text-muted transition-transform group-open:rotate-90" />
+                        {t("What it will be told")} <ArrowRightIcon size={14} className="text-muted transition-transform group-open:rotate-90" />
                       </summary>
                       <div className="border-t border-border px-3 py-2.5">
-                        {preview.isPending ? <p className="text-[12.5px] text-muted">Writing it up…</p> : preview.error ? (
+                        {preview.isPending ? <p className="text-[12.5px] text-muted">{t("Writing it up…")}</p> : preview.error ? (
                           <p className="text-[12.5px] text-danger">{errorMessage(preview.error)}</p>
                         ) : preview.data ? (
                           <pre className="max-h-64 overflow-y-auto font-sans text-[12.5px] leading-relaxed whitespace-pre-wrap text-muted">{preview.data.soul}</pre>
@@ -366,7 +371,7 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                       </div>
                     </details>
                     <p className="text-[12.5px] text-muted">
-                      {editing ? "Changes apply from its next task or chat." : `${a.name.trim() || "Your twin"} starts careful: it asks before anything on your list, and your manager can see its work like any agent in your team.`}
+                      {editing ? t("Changes apply from its next task or chat.") : a.name.trim() ? t("{name} starts careful: it asks before anything on your list, and your manager can see its work like any agent in your team.", { name: a.name.trim() }) : t("Your twin starts careful: it asks before anything on your list, and your manager can see its work like any agent in your team.")}
                     </p>
                     <FormError message={save.error ? errorMessage(save.error) : null} />
                   </>
@@ -375,7 +380,7 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
             </AnimatePresence>
             <aside className="hidden min-w-0 md:block">
               <div className="sticky top-0 grid gap-2">
-                <p className="text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase">Live preview</p>
+                <p className="text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase">{t("Live preview")}</p>
                 <TwinPreviewCard a={a} state={state} />
               </div>
             </aside>

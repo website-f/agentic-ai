@@ -8,6 +8,7 @@ import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
+import { locale, t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { filesQuery } from "@/lib/documents";
 import { learnFromSource, learningKeys, type LearnSourceIn } from "@/lib/learning";
@@ -22,6 +23,7 @@ const NO_AGENT = "__any__";
  *  background afterwards, and the autopilot may switch it on. Mount it fresh (with a key)
  *  each time it opens so the form starts empty. */
 export function LearnSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const [tab, setTab] = useState<SourceTab>("link");
   const [url, setUrl] = useState("");
@@ -47,7 +49,7 @@ export function LearnSourceDialog({ open, onOpenChange }: { open: boolean; onOpe
       qc.invalidateQueries({ queryKey: learningKeys.all });
       qc.invalidateQueries({ queryKey: skillKeys.all });
       qc.invalidateQueries({ queryKey: keys.status });
-      toast.success(`Drafted ${r.name}. It is being tested now.`);
+      toast.success(tr("Drafted {name}. It is being tested now.", { name: r.name }));
       onOpenChange(false);
     },
   });
@@ -59,13 +61,13 @@ export function LearnSourceDialog({ open, onOpenChange }: { open: boolean; onOpe
     <ResponsiveDialog
       open={open}
       onOpenChange={(o) => !learn.isPending && onOpenChange(o)}
-      title="Teach from a source"
-      description="Point at a page, a file or your own notes. An agent writes it up as a skill, tests it, and it goes live or waits for review depending on the autopilot."
+      title={t("Teach from a source")}
+      description={t("Point at a page, a file or your own notes. An agent writes it up as a skill, tests it, and it goes live or waits for review depending on the autopilot.")}
       className="sm:max-w-xl"
       footer={
         <>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={learn.isPending}>Cancel</Button>
-          <Button loading={learn.isPending} disabled={!canSubmit} onClick={() => learn.mutate()}>Draft the skill</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={learn.isPending}>{t("Cancel")}</Button>
+          <Button loading={learn.isPending} disabled={!canSubmit} onClick={() => learn.mutate()}>{t("Draft the skill")}</Button>
         </>
       }
     >
@@ -77,51 +79,51 @@ export function LearnSourceDialog({ open, onOpenChange }: { open: boolean; onOpe
         }}
       >
         <Segmented<SourceTab>
-          label="Source"
+          label={t("Source")}
           value={tab}
           onChange={(v) => { setTab(v); learn.reset(); }}
           options={[
-            { value: "link", label: "Link" },
-            { value: "file", label: "File" },
-            { value: "text", label: "Paste text" },
+            { value: "link", label: t("Link") },
+            { value: "file", label: t("File") },
+            { value: "text", label: t("Paste text") },
           ]}
           className="w-full sm:w-fit [&>button]:flex-1 [&>button]:justify-center"
         />
 
-        <div role="tabpanel" aria-label="Source" className="grid gap-1.5">
+        <div role="tabpanel" aria-label={t("Source")} className="grid gap-1.5">
           {tab === "link" ? (
-            <Field label="Web page" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/how-to"
-              hint="A public page: a guide, a policy, a supplier's instructions." autoFocus />
+            <Field label={t("Web page")} type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/how-to"
+              hint={t("A public page: a guide, a policy, a supplier's instructions.")} autoFocus />
           ) : tab === "file" ? (
             <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">File</span>
+              <span className="text-[13px] font-medium">{t("File")}</span>
               {filesLoading ? (
-                <p className="text-[13px] text-muted">Loading files…</p>
+                <p className="text-[13px] text-muted">{t("Loading files…")}</p>
               ) : ready.length ? (
-                <Select label="File" value={fileId} onValueChange={setFileId} placeholder="Choose a file" className="w-full min-w-0 [&>span:first-child]:truncate"
+                <Select label={t("File")} value={fileId} onValueChange={setFileId} placeholder={t("Choose a file")} className="w-full min-w-0 [&>span:first-child]:truncate"
                   options={ready.map((f) => ({ value: f.id, label: f.title || f.name, hint: f.branch_name ?? undefined }))} />
               ) : (
                 <p className="rounded-sm bg-surface-2/70 px-3 py-2 text-[13px] text-muted">
-                  No files ready yet. Upload one in <Link to="/files" className="text-accent hover:underline">Files</Link> first; it is read once and can then be taught from.
+                  {t("No files ready yet. Upload one in")} <Link to="/files" className="text-accent hover:underline">{t("Files")}</Link> {t("first; it is read once and can then be taught from.")}
                 </p>
               )}
-              {ready.length ? <p className="text-[12.5px] text-muted">From Files: a procedure, a manual or a checklist works best.</p> : null}
+              {ready.length ? <p className="text-[12.5px] text-muted">{t("From Files: a procedure, a manual or a checklist works best.")}</p> : null}
             </div>
           ) : (
-            <TextareaField label="Notes" value={text} onChange={(e) => setText(e.target.value)} rows={8} autoFocus
-              placeholder="Paste the steps, an email thread or your own write-up."
-              hint={text.trim().length < 40 ? "At least a few sentences." : `${text.trim().length.toLocaleString()} characters`} />
+            <TextareaField label={t("Notes")} value={text} onChange={(e) => setText(e.target.value)} rows={8} autoFocus
+              placeholder={t("Paste the steps, an email thread or your own write-up.")}
+              hint={text.trim().length < 40 ? t("At least a few sentences.") : t("{n} characters", { n: text.trim().length.toLocaleString(locale()) })} />
           )}
         </div>
 
-        <Field label="What should it learn?" value={focus} onChange={(e) => setFocus(e.target.value)} maxLength={300}
-          placeholder="e.g. how we register a new supplier" hint="The skill covers this, not everything in the source." />
+        <Field label={t("What should it learn?")} value={focus} onChange={(e) => setFocus(e.target.value)} maxLength={300}
+          placeholder={t("e.g. how we register a new supplier")} hint={t("The skill covers this, not everything in the source.")} />
 
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Agent <span className="font-normal text-muted">(optional)</span></span>
-          <Select label="Agent" value={agentId} onValueChange={setAgentId} className="w-full min-w-0"
-            options={[{ value: NO_AGENT, label: "Every agent" }, ...pickable.map((a) => ({ value: a.id, label: a.name, hint: a.role }))]} />
-          <p className="text-[12.5px] text-muted">Name an agent when the skill is only for its kind of work.</p>
+          <span className="text-[13px] font-medium">{t("Agent")} <span className="font-normal text-muted">{t("(optional)")}</span></span>
+          <Select label={t("Agent")} value={agentId} onValueChange={setAgentId} className="w-full min-w-0"
+            options={[{ value: NO_AGENT, label: t("Every agent") }, ...pickable.map((a) => ({ value: a.id, label: a.name, hint: a.role }))]} />
+          <p className="text-[12.5px] text-muted">{t("Name an agent when the skill is only for its kind of work.")}</p>
         </div>
 
         <FormError message={learn.error ? errorMessage(learn.error) : null} />

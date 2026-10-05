@@ -39,6 +39,7 @@ import type { ReactNode } from "react";
 import { LogoMark } from "@/components/logo";
 import type { GuideManifest } from "@/guide/manifest";
 import type { Slide, SlideIcon } from "@/guide/slides";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { Laptop, Phone } from "./devices";
@@ -233,8 +234,11 @@ function Frame({ index, total, read, children, className }: { index: number; tot
 }
 
 export function SlideView(props: SlideProps) {
+  const t = useT();
   const { slide, index, total, presenter, read } = props;
   const pts = slide.points ?? [];
+  // The presenter's name is highlighted inside the sentence; the sentence is translated whole.
+  const [byBefore = "", byAfter = ""] = t("Presented by {name}").split("{name}");
 
   if (slide.kind === "title") {
     return (
@@ -248,7 +252,9 @@ export function SlideView(props: SlideProps) {
             </Title>
             <Lead read={read}>{slide.lead}</Lead>
             <p className={cn("text-muted", read ? "text-[13px]" : "text-[19px]")}>
-              Presented by <span className="font-medium text-fg">{presenter.name}</span> · {presenter.workspace}
+              {byBefore}
+              <span className="font-medium text-fg">{presenter.name}</span>
+              {byAfter} · {presenter.workspace}
             </p>
           </div>
           <Devices {...props} />
@@ -375,7 +381,7 @@ export function SlideView(props: SlideProps) {
           <span className={cn("text-accent", read ? "text-[14px]" : "text-[22px]")}>{presenter.email}</span>
           <span className={cn("text-muted", read ? "text-[12.5px]" : "text-[18px]")}>{presenter.workspace}</span>
         </div>
-        <p className={cn("text-muted", read ? "text-[13px]" : "text-[20px]")}>Questions?</p>
+        <p className={cn("text-muted", read ? "text-[13px]" : "text-[20px]")}>{t("Questions?")}</p>
       </div>
     </Frame>
   );

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Pill } from "@/components/ui/pill";
 import { Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/ui/menu";
+import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
@@ -67,6 +68,7 @@ function below(tree: Node[], id: string): Set<string> {
 }
 
 function Card({ a, manage, managers, onMove, dragging }: { a: Agent; manage: boolean; managers: Agent[]; onMove: (to: string | null) => void; dragging?: boolean }) {
+  const t = useT();
   const { setNodeRef: dragRef, listeners, attributes, isDragging } = useDraggable({ id: a.id, disabled: !manage });
   // A colleague's agent (view only) can't become the new manager of the viewer's agent.
   const { setNodeRef: dropRef, isOver } = useDroppable({ id: a.id, disabled: a.view_only });
@@ -76,7 +78,7 @@ function Card({ a, manage, managers, onMove, dragging }: { a: Agent; manage: boo
         isOver && !isDragging ? "border-accent ring-3 ring-accent/20" : "border-border",
         (isDragging || dragging) && "opacity-40")}>
       {manage ? (
-        <button ref={dragRef} {...listeners} {...attributes} aria-label={`Drag ${a.name} to a new manager`}
+        <button ref={dragRef} {...listeners} {...attributes} aria-label={t("Drag {name} to a new manager", { name: a.name })}
           className="grid size-7 shrink-0 cursor-grab touch-none place-items-center rounded-sm text-muted hover:bg-surface-2 active:cursor-grabbing">
           <DotsSixVerticalIcon size={16} weight="bold" />
         </button>
@@ -86,16 +88,16 @@ function Card({ a, manage, managers, onMove, dragging }: { a: Agent; manage: boo
         <span className="block truncate text-[13.5px] font-medium">{a.name}</span>
         <span className="block truncate text-[12px] text-muted">{a.role}</span>
       </Link>
-      {a.role_kind === "orchestrator" ? <Pill tone="accent" title="Can hand out work to others"><CrownSimpleIcon size={12} weight="fill" /> Leads</Pill> : null}
-      {a.view_only ? <EyeIcon size={15} className="shrink-0 text-muted" aria-label="View only" /> : null}
-      {a.heartbeat ? <HeartbeatIcon size={15} className="shrink-0 text-ok" aria-label="Heartbeat on" /> : null}
+      {a.role_kind === "orchestrator" ? <Pill tone="accent" title={t("Can hand out work to others")}><CrownSimpleIcon size={12} weight="fill" /> {t("Leads")}</Pill> : null}
+      {a.view_only ? <EyeIcon size={15} className="shrink-0 text-muted" aria-label={t("View only")} /> : null}
+      {a.heartbeat ? <HeartbeatIcon size={15} className="shrink-0 text-ok" aria-label={t("Heartbeat on")} /> : null}
       {manage ? (
         <Menu>
-          <MenuTrigger className="shrink-0 rounded-sm px-2 py-1 text-[12px] text-muted hover:bg-surface-2 hover:text-fg">Reports to</MenuTrigger>
+          <MenuTrigger className="shrink-0 rounded-sm px-2 py-1 text-[12px] text-muted hover:bg-surface-2 hover:text-fg">{t("Reports to")}</MenuTrigger>
           <MenuContent className="max-h-80 overflow-y-auto">
-            <MenuLabel>{a.name} reports to</MenuLabel>
+            <MenuLabel>{t("{name} reports to", { name: a.name })}</MenuLabel>
             <MenuRadioGroup value={a.reports_to ?? TOP} onValueChange={(v) => onMove(v === TOP ? null : v)}>
-              <MenuRadioItem value={TOP}>No one (top level)</MenuRadioItem>
+              <MenuRadioItem value={TOP}>{t("No one (top level)")}</MenuRadioItem>
               {managers.map((m) => <MenuRadioItem key={m.id} value={m.id}>{m.name}</MenuRadioItem>)}
             </MenuRadioGroup>
           </MenuContent>
@@ -123,16 +125,18 @@ function Branch({ nodes, depth, ...rest }: { nodes: Node[]; depth: number; manag
 }
 
 function TopZone() {
+  const t = useT();
   const { setNodeRef, isOver } = useDroppable({ id: TOP });
   return (
     <div ref={setNodeRef} className={cn("rounded-[var(--radius-md)] border border-dashed px-3 py-2 text-[12.5px] text-muted", isOver ? "border-accent bg-accent-soft text-fg" : "border-border")}>
-      Drop here to report to no one
+      {t("Drop here to report to no one")}
     </div>
   );
 }
 
 /** Drag a card onto another agent to change who it reports to, or use "Reports to". */
 export function OrgChart({ agents, manage }: { agents: Agent[]; manage: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const tree = useMemo(() => buildTree(agents), [agents]);
   const [active, setActive] = useState<string | null>(null);
@@ -153,7 +157,7 @@ export function OrgChart({ agents, manage }: { agents: Agent[]; manage: boolean 
       if (ctx?.before) qc.setQueryData(workKeys.agents, ctx.before);
       toast.error(errorMessage(e));
     },
-    onSuccess: (r, { to }) => toast.success(to ? `${r.name} now reports to ${agents.find((x) => x.id === to)?.name}.` : `${r.name} is now top level.`),
+    onSuccess: (r, { to }) => toast.success(to ? tr("{name} now reports to {boss}.", { name: r.name, boss: agents.find((x) => x.id === to)?.name ?? "" }) : tr("{name} is now top level.", { name: r.name })),
     onSettled: () => qc.invalidateQueries({ queryKey: workKeys.agents }),
   });
   const move = (a: Agent, to: string | null) => {
@@ -166,7 +170,7 @@ export function OrgChart({ agents, manage }: { agents: Agent[]; manage: boolean 
     if (!a || !e.over || a.view_only) return;
     const to = e.over.id === TOP ? null : String(e.over.id);
     if (to && below(tree, a.id).has(to)) {
-      toast.error(`${a.name} cannot report to someone who reports to them.`);
+      toast.error(tr("{name} cannot report to someone who reports to them.", { name: a.name }));
       return;
     }
     move(a, to);
@@ -179,7 +183,7 @@ export function OrgChart({ agents, manage }: { agents: Agent[]; manage: boolean 
       <div className="grid max-w-3xl gap-3">
         <p className="flex items-center gap-2 text-[12.5px] text-muted">
           <TreeStructureIcon size={15} />
-          {manage ? "Drag an agent onto its new manager. Agents marked Leads can hand work to the people below them." : "Who reports to whom. Agents marked Leads can hand work to others."}
+          {manage ? t("Drag an agent onto its new manager. Agents marked Leads can hand work to the people below them.") : t("Who reports to whom. Agents marked Leads can hand work to others.")}
         </p>
         {manage && active ? <TopZone /> : null}
         <Branch nodes={tree} depth={0} manage={manage} tree={tree} all={agents} move={move} active={active} />

@@ -7,6 +7,7 @@ import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { usePagedList } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
@@ -20,6 +21,7 @@ const useHistory = (enabled = true) =>
 
 /** Waiting approvals are a short inbox: one full list. History pages. */
 function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
+  const t = useT();
   const waiting = useQuery({ ...approvalsQuery("pending"), enabled: state === "pending" });
   const history = useHistory(state === "history");
   const data = state === "pending" ? waiting.data : history.items;
@@ -41,9 +43,9 @@ function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
   if (error) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   if (!data?.length) {
     return state === "pending" ? (
-      <EmptyState icon={SealCheckIcon} title="Nothing waiting on you" body="When an agent needs permission or has a question, it shows up here and as a notification." />
+      <EmptyState icon={SealCheckIcon} title={t("Nothing waiting on you")} body={t("When an agent needs permission or has a question, it shows up here and as a notification.")} />
     ) : (
-      <EmptyState icon={ClockCounterClockwiseIcon} title="No decisions yet" body="Every approval, denial and answer is kept here with who made it and when." />
+      <EmptyState icon={ClockCounterClockwiseIcon} title={t("No decisions yet")} body={t("Every approval, denial and answer is kept here with who made it and when.")} />
     );
   }
   return (
@@ -61,6 +63,7 @@ function List({ state, canDecide }: { state: Tab; canDecide: boolean }) {
 }
 
 export function ApprovalsPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canDecide = me.permissions.includes("approvals.decide");
   const search = useSearch({ strict: false }) as { tab?: Tab };
@@ -71,18 +74,18 @@ export function ApprovalsPage() {
   return (
     <Page>
       <PageHeader
-        title="Approvals"
-        description={canDecide ? "Agents stop and wait here before risky actions, and when they need an answer from you." : "Your role can see decisions but not make them. Ask an approver or admin."}
+        title={t("Approvals")}
+        description={canDecide ? t("Agents stop and wait here before risky actions, and when they need an answer from you.") : t("Your role can see decisions but not make them. Ask an approver or admin.")}
       />
       <Segmented<Tab>
         guide="approvals.history"
-        label="Approvals"
+        label={t("Approvals")}
         className="w-fit"
         value={tab}
         onChange={(v) => navigate({ to: "/approvals", search: { tab: v }, replace: true })}
         options={[
-          { value: "pending", label: "Waiting", count: pending?.length },
-          { value: "history", label: "History", count: tab === "history" ? (history.total ?? history.items.length) : undefined },
+          { value: "pending", label: t("Waiting"), count: pending?.length },
+          { value: "history", label: t("History"), count: tab === "history" ? (history.total ?? history.items.length) : undefined },
         ]}
       />
       {tab === "pending" ? <List state="pending" canDecide={canDecide} /> : <List state="history" canDecide={false} />}

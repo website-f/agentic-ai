@@ -2,6 +2,8 @@
  * incidents, pings and budgets. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg, t } from "@/i18n";
+
 import { api } from "./api";
 
 export interface MeetingOutcome {
@@ -169,16 +171,17 @@ export const RUN_TONE: Record<RunStatus, "neutral" | "accent" | "ok" | "danger">
 
 /** Ready-made cron lines for the schedule form. Custom stays one click away. */
 export const CRON_PRESETS: { label: string; cron: string }[] = [
-  { label: "Every weekday at 9:00", cron: "0 9 * * 1-5" },
-  { label: "Every day at 18:00", cron: "0 18 * * *" },
-  { label: "Every Monday at 9:00", cron: "0 9 * * 1" },
-  { label: "Every Friday at 16:00", cron: "0 16 * * 5" },
-  { label: "1st of every month at 9:00", cron: "0 9 1 * *" },
-  { label: "Every hour, 9:00 to 17:00 on weekdays", cron: "0 9-17 * * 1-5" },
+  { label: msg("Every weekday at 9:00"), cron: "0 9 * * 1-5" },
+  { label: msg("Every day at 18:00"), cron: "0 18 * * *" },
+  { label: msg("Every Monday at 9:00"), cron: "0 9 * * 1" },
+  { label: msg("Every Friday at 16:00"), cron: "0 16 * * 5" },
+  { label: msg("1st of every month at 9:00"), cron: "0 9 1 * *" },
+  { label: msg("Every hour, 9:00 to 17:00 on weekdays"), cron: "0 9-17 * * 1-5" },
 ];
 
 export function describeCron(cron: string): string {
-  return CRON_PRESETS.find((p) => p.cron === cron)?.label ?? cron;
+  const label = CRON_PRESETS.find((p) => p.cron === cron)?.label;
+  return label ? t(label) : cron;
 }
 
 export function tokensShort(n: number | null | undefined): string {

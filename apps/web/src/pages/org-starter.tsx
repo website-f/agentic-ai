@@ -11,6 +11,7 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
+import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { workKeys } from "@/lib/work";
@@ -77,18 +78,19 @@ export function StarterTeamFields({
   onEnabled?: (v: boolean) => void;
   showSwitch?: boolean;
 }) {
+  const t = useT();
   const { data: catalog, isLoading, error } = useQuery(starterTeamsQuery);
   const picked = catalog?.find((i) => i.key === industry);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">Industry</span>
+        <span className="text-[13px] font-medium">{t("Industry")}</span>
         <Select
-          label="Industry"
+          label={t("Industry")}
           value={industry}
           onValueChange={onIndustry}
           className="w-full"
-          options={(catalog ?? [{ key: "general", label: "General business", description: "" }]).map((i) => ({
+          options={(catalog ?? [{ key: "general", label: t("General business"), description: "" }]).map((i) => ({
             value: i.key,
             label: i.label,
             hint: i.description,
@@ -99,22 +101,22 @@ export function StarterTeamFields({
         <SwitchField
           checked={enabled}
           onCheckedChange={onEnabled}
-          label="Add a ready-made AI team"
-          hint="Office agents placed in the right departments. They ask before acting and you can change or remove any of them."
+          label={t("Add a ready-made AI team")}
+          hint={t("Office agents placed in the right departments. They ask before acting and you can change or remove any of them.")}
         />
       ) : null}
       {enabled ? (
         isLoading ? (
           <Skeleton className="h-40 rounded-[var(--radius-md)]" />
         ) : error ? (
-          <FormError message={`Could not load the starter teams. ${errorMessage(error)}`} />
+          <FormError message={t("Could not load the starter teams. {error}", { error: errorMessage(error) })} />
         ) : picked ? (
           <div className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[var(--radius-md)] border border-border">
             <div className="flex items-center justify-between gap-2 border-b border-border bg-surface-2/40 px-3 py-2">
               <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium">
-                <UsersThreeIcon size={14} className="shrink-0 text-muted" /> Who joins
+                <UsersThreeIcon size={14} className="shrink-0 text-muted" /> {t("Who joins")}
               </span>
-              <Pill tone="accent">{picked.agents.length} agents</Pill>
+              <Pill tone="accent">{picked.agents.length === 1 ? t("1 agent") : t("{n} agents", { n: picked.agents.length })}</Pill>
             </div>
             <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border sm:max-h-72 sm:overflow-y-auto">
               {picked.agents.map((a) => (
@@ -122,7 +124,7 @@ export function StarterTeamFields({
                   <IconTile icon={SparkleIcon} tone={TONES[a.key] ?? "accent"} size="sm" />
                   <div className="grid min-w-0 gap-0.5">
                     <span className="text-[13px] font-medium break-words">
-                      {a.role} <span className="font-normal text-muted">in {a.department}</span>
+                      {a.role} <span className="font-normal text-muted">{t("in {department}", { department: a.department })}</span>
                     </span>
                     <span className="text-[12px] text-muted">{a.does}</span>
                   </div>
@@ -130,7 +132,7 @@ export function StarterTeamFields({
               ))}
             </ul>
             <p className="border-t border-border px-3 py-2 text-[12px] text-muted">
-              Each gets a friendly name (like {picked.agents[0]?.example_name}), autonomy set to ask first, and no heartbeat.
+              {t("Each gets a friendly name (like {name}), autonomy set to ask first, and no heartbeat.", { name: picked.agents[0]?.example_name ?? "" })}
             </p>
           </div>
         ) : null
@@ -153,6 +155,7 @@ export function StarterTeamDialog({
   branchName: string;
   initialIndustry?: string;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const [industry, setIndustry] = useState(initialIndustry || "general");
   const add = useMutation({
@@ -169,15 +172,15 @@ export function StarterTeamDialog({
     <ResponsiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add a ready-made AI team"
-      description={`For ${branchName}. Roles the company already has are skipped, so this is safe to run again.`}
+      title={t("Add a ready-made AI team")}
+      description={t("For {name}. Roles the company already has are skipped, so this is safe to run again.", { name: branchName })}
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button loading={add.isPending} onClick={() => add.mutate()}>
-            <CheckCircleIcon size={16} weight="bold" /> Add team
+            <CheckCircleIcon size={16} weight="bold" /> {t("Add team")}
           </Button>
         </>
       }
@@ -191,7 +194,8 @@ export function StarterTeamDialog({
 }
 
 export function teamToast(r: StarterResult, branchName: string): string {
-  if (!r.created.length) return `${branchName} already has every role in this team.`;
-  const skipped = r.skipped.length ? ` (${r.skipped.length} already there)` : "";
-  return `${r.created.length} agents joined ${branchName}${skipped}.`;
+  if (!r.created.length) return tr("{name} already has every role in this team.", { name: branchName });
+  const vars = { n: r.created.length, name: branchName, skipped: r.skipped.length };
+  if (r.created.length === 1) return r.skipped.length ? tr("1 agent joined {name} ({skipped} already there).", vars) : tr("1 agent joined {name}.", vars);
+  return r.skipped.length ? tr("{n} agents joined {name} ({skipped} already there).", vars) : tr("{n} agents joined {name}.", vars);
 }

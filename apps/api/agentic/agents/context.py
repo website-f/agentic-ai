@@ -18,6 +18,10 @@ between jumps and the provider's prompt cache keeps hitting.
 A tool call and its results are never separated, so the conversation always stays valid for
 every provider.
 
+P21: big results are also compressed when they are stored (compress.py: the model is sent the
+short version, people and expand_result see the original). Stubs point at expand_result instead
+of asking the agent to run the tool again, and budgets count what is actually sent.
+
 P17: the limits above suit big-context models. When the group's models have a smaller window
 (known from the provider's model list), every limit shrinks with it, so a 16k or 32k model is
 never sent a history it cannot hold.
@@ -34,6 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.fence import fence
+from . import compress
 
 log = logging.getLogger("agentic.context")
 
@@ -115,7 +120,8 @@ def tokens(text: str | None) -> int:
 
 
 def msg_tokens(m: Any) -> int:
-    n = tokens(m.content)
+    """Tokens this message costs when sent (a compressed tool result counts as compressed)."""
+    n = tokens(compress.model_text(m) if m.role == "tool" else m.content)
     if getattr(m, "tool_calls", None):
         n += tokens(json.dumps(m.tool_calls))
     return n + 4
@@ -150,11 +156,14 @@ def tail_start(msgs: list[Any], budget: int, *, user_first: bool = False) -> int
 
 
 def stub(m: Any) -> str:
+    """An old result shrunk to one line. It points at expand_result, which reads the stored
+    original, so the agent never has to re-run the tool (P21)."""
     text = (m.content or "").strip()
     first = re.sub(r"\s+", " ", text[:160])
     return (
         f"[{m.name or 'tool'} result from earlier, {len(text):,} characters, starts: {first}… "
-        "Shortened to save space; call the tool again if you need it in full.]"
+        f"Shortened to save space; read it in full with expand_result(message_id={m.id}), "
+        "adding query='words' for just the matching rows.]"
     )
 
 
@@ -345,6 +354,14 @@ def render(
                 m.id
             )
 
+    # The newest results (the trailing run of tool messages) may be sent whole while the agent
+    # is debugging; every other compressed result is sent compressed (compress.py).
+    newest: set[int] = set()
+    for m in reversed(history):
+        if m.role != "tool":
+            break
+        newest.add(m.id)
+
     out: list[dict[str, Any]] = []
     for m in head:
         d = to_openai(m)
@@ -356,6 +373,7 @@ def render(
         d = to_openai(m)
         if m.role == "tool":
             text = m.content or ""
+            d["content"] = compress.model_text(m, latest=m.id in newest)
             h = (
                 hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
                 if len(text) >= DUP_OVER
@@ -363,7 +381,7 @@ def render(
             )
             if h and latest.get(h) not in (None, m.id):
                 d["content"] = f"[Same {m.name or 'tool'} output as a later call; see that result.]"
-            elif m.id <= window.cut and len(text) > STUB_OVER:
+            elif m.id <= window.cut and len(d["content"] or "") > STUB_OVER:
                 d["content"] = stub(m)
         if extra and m.id in extra:
             d["content"] = f"{d.get('content') or ''}\n\n{extra[m.id]}"

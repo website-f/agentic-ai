@@ -1,6 +1,8 @@
 /** The learning engine (P17): what agents learned, how it was checked, and what it cost. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg } from "@/i18n";
+
 import { api } from "./api";
 import type { ProposalKind } from "./skills";
 
@@ -93,7 +95,7 @@ export function isAutoApproved(p: { status: string; decision_note: string | null
 
 /** Plain explanation of each autopilot mode, shown under its label. */
 export const MODE_HELP: Record<LearningMode, string> = {
-  review: "Nothing changes how agents work until a person approves it. Safest, and the most to review.",
-  auto_safe: "A change goes live by itself only when the safety scan is clean and its tests pass at least as well as the current version. The rest wait for you.",
-  auto: "Also switches on clean changes that have no tests yet. Fastest; every change can still be rolled back.",
+  review: msg("Nothing changes how agents work until a person approves it. Safest, and the most to review."),
+  auto_safe: msg("A change goes live by itself only when the safety scan is clean and its tests pass at least as well as the current version. The rest wait for you."),
+  auto: msg("Also switches on clean changes that have no tests yet. Fastest; every change can still be rolled back."),
 };

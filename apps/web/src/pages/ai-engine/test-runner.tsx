@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SwitchField } from "@/components/ui/switch";
+import { msg, useT } from "@/i18n";
 import { errorMessage, streamNdjson } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -21,13 +22,13 @@ export interface TestRequest {
 }
 
 const RATE_LABELS: Record<string, string> = {
-  "x-ratelimit-remaining-requests": "Requests left",
-  "x-ratelimit-remaining-tokens": "Tokens left",
-  "x-ratelimit-limit-requests": "Request limit",
-  "x-ratelimit-limit-tokens": "Token limit",
-  "x-ratelimit-reset-requests": "Requests reset",
-  "x-ratelimit-reset-tokens": "Tokens reset",
-  "retry-after": "Retry after (s)",
+  "x-ratelimit-remaining-requests": msg("Requests left"),
+  "x-ratelimit-remaining-tokens": msg("Tokens left"),
+  "x-ratelimit-limit-requests": msg("Request limit"),
+  "x-ratelimit-limit-tokens": msg("Token limit"),
+  "x-ratelimit-reset-requests": msg("Requests reset"),
+  "x-ratelimit-reset-tokens": msg("Tokens reset"),
+  "retry-after": msg("Retry after (s)"),
 };
 
 function StepIcon({ status }: { status: StepEvent["status"] }) {
@@ -79,6 +80,7 @@ export function useConnectionTest() {
 }
 
 export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: DoneEvent | null; error: string | null }) {
+  const t = useT();
   const reduce = useReducedMotion();
   if (error) {
     return (
@@ -116,10 +118,10 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
                 ) : null}
                 {s.usage ? (
                   <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11.5px] text-muted tabular">
-                    <span>{s.usage.prompt} in</span>
-                    <span>{s.usage.completion} out</span>
-                    {s.usage.cached ? <span>{s.usage.cached} cached</span> : null}
-                    {s.usage.reasoning ? <span>{s.usage.reasoning} thinking</span> : null}
+                    <span>{t("{n} in", { n: s.usage.prompt })}</span>
+                    <span>{t("{n} out", { n: s.usage.completion })}</span>
+                    {s.usage.cached ? <span>{t("{n} cached", { n: s.usage.cached })}</span> : null}
+                    {s.usage.reasoning ? <span>{t("{n} thinking", { n: s.usage.reasoning })}</span> : null}
                     <span>{usd(s.cost_usd)}</span>
                   </p>
                 ) : null}
@@ -127,7 +129,7 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
                   <dl className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]">
                     {Object.entries(s.rate).map(([k, v]) => (
                       <div key={k} className="flex gap-1">
-                        <dt className="text-muted">{RATE_LABELS[k] ?? k}</dt>
+                        <dt className="text-muted">{RATE_LABELS[k] ? t(RATE_LABELS[k]) : k}</dt>
                         <dd className="font-mono tabular">{v}</dd>
                       </div>
                     ))}
@@ -141,7 +143,7 @@ export function TestSteps({ steps, done, error }: { steps: StepEvent[]; done: Do
       {done ? (
         <p className={cn("flex items-start gap-1.5 rounded-sm px-3 py-2 text-[13px] font-medium", done.ok ? "bg-ok/10 text-ok" : "bg-danger/8 text-danger")}>
           {done.ok ? <CheckCircleIcon size={16} weight="fill" className="mt-px shrink-0" /> : <XCircleIcon size={16} weight="fill" className="mt-px shrink-0" />}
-          {done.ok ? "Connection works." : "The connection is not working yet. Fix the step marked in red and test again."}
+          {done.ok ? t("Connection works.") : t("The connection is not working yet. Fix the step marked in red and test again.")}
         </p>
       ) : null}
     </div>
@@ -168,18 +170,19 @@ export function TestControls({
   running: boolean;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="grid gap-1.5">
         <label htmlFor="test-model" className="text-[13px] font-medium">
-          Model to test with
+          {t("Model to test with")}
         </label>
         <input
           id="test-model"
           list="test-model-options"
           value={model}
           onChange={(e) => onModel(e.target.value)}
-          placeholder={models.length ? "Pick from the list or type an ID" : "Picked automatically"}
+          placeholder={models.length ? t("Pick from the list or type an ID") : t("Picked automatically")}
           className="h-10 w-full rounded-sm border border-border bg-surface px-3 font-mono text-[13px] placeholder:font-sans placeholder:text-muted/80 focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none"
         />
         <datalist id="test-model-options">
@@ -191,11 +194,11 @@ export function TestControls({
       <SwitchField
         checked={capabilities}
         onCheckedChange={onCapabilities}
-        label="Also check tool calling, JSON mode and embeddings"
-        hint="Three extra small requests. Results are saved on the model."
+        label={t("Also check tool calling, JSON mode and embeddings")}
+        hint={t("Three extra small requests. Results are saved on the model.")}
       />
       <Button variant="outline" onClick={onRun} loading={running} disabled={disabled}>
-        {!running ? <PlayIcon size={15} weight="fill" /> : null} Test connection
+        {!running ? <PlayIcon size={15} weight="fill" /> : null} {t("Test connection")}
       </Button>
     </div>
   );

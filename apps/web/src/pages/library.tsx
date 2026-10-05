@@ -24,6 +24,7 @@ import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { docKeys } from "@/lib/documents";
 import {
@@ -51,7 +52,8 @@ function ScopeText({ s }: { s: LibrarySource }) {
 }
 
 function Passage({ p }: { p: LibraryPassage }) {
-  const where = [p.page ? `p.${p.page}` : "", p.heading && p.heading !== p.title ? p.heading : ""].filter(Boolean).join(" — ");
+  const t = useT();
+  const where = [p.page ? t("p.{n}", { n: p.page }) : "", p.heading && p.heading !== p.title ? p.heading : ""].filter(Boolean).join(" — ");
   return (
     <li className="grid gap-2 px-4 py-3.5">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
@@ -63,8 +65,8 @@ function Passage({ p }: { p: LibraryPassage }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 max-sm:pl-8.5">
-          {p.strong ? <Pill tone="ok">Agents get this unasked</Pill> : null}
-          <Pill tone="neutral">{p.source_kind === "sop" ? "SOP" : "File"}</Pill>
+          {p.strong ? <Pill tone="ok">{t("Agents get this unasked")}</Pill> : null}
+          <Pill tone="neutral">{p.source_kind === "sop" ? "SOP" : t("File")}</Pill>
         </div>
       </div>
       <p className="ml-8.5 line-clamp-6 text-[13px] leading-relaxed whitespace-pre-line text-fg/85 max-sm:ml-0">{p.text}</p>
@@ -74,8 +76,8 @@ function Passage({ p }: { p: LibraryPassage }) {
         </span>
         <Button size="sm" variant="ghost" asChild>
           {p.source_kind === "file"
-            ? <Link to="/files" search={{ f: p.source_id }}><ArrowSquareOutIcon size={14} /> Open the file</Link>
-            : <Link to="/sops" search={{ sop: p.source_id }}><ArrowSquareOutIcon size={14} /> Open the SOP</Link>}
+            ? <Link to="/files" search={{ f: p.source_id }}><ArrowSquareOutIcon size={14} /> {t("Open the file")}</Link>
+            : <Link to="/sops" search={{ sop: p.source_id }}><ArrowSquareOutIcon size={14} /> {t("Open the SOP")}</Link>}
         </Button>
       </div>
     </li>
@@ -83,6 +85,7 @@ function Passage({ p }: { p: LibraryPassage }) {
 }
 
 function TrySearch() {
+  const t = useT();
   const [draft, setDraft] = useState("");
   const [q, setQ] = useState("");
   const { data: hits = [], isFetching, error, isFetched } = useQuery(librarySearchQuery(q));
@@ -92,19 +95,19 @@ function TrySearch() {
   };
   return (
     <Card data-guide="library.search">
-      <CardHeader icon={<IconTile icon={MagnifyingGlassIcon} size="sm" />} title="Try a search"
-        description="Ask the way an agent would. You see the passages it would find, with their page." />
+      <CardHeader icon={<IconTile icon={MagnifyingGlassIcon} size="sm" />} title={t("Try a search")}
+        description={t("Ask the way an agent would. You see the passages it would find, with their page.")} />
       <CardBody className="grid gap-3">
         <form onSubmit={submit} className="flex flex-wrap gap-2 max-sm:[&>*]:w-full">
           <label className="relative min-w-0 flex-1 basis-60">
-            <span className="sr-only">Search the library</span>
+            <span className="sr-only">{t("Search the library")}</span>
             <MagnifyingGlassIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. refund for damaged goods" className="pl-9" />
+            <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("e.g. refund for damaged goods")} className="pl-9" />
           </label>
-          <Button type="submit" loading={isFetching} disabled={draft.trim().length < 2}>Search</Button>
+          <Button type="submit" loading={isFetching} disabled={draft.trim().length < 2}>{t("Search")}</Button>
         </form>
         {error ? <p role="alert" className="text-[13px] text-danger">{errorMessage(error)}</p>
-          : q && isFetched && !hits.length ? <p className="text-[13px] text-muted">Nothing in the library matches “{q}”. Try other words.</p>
+          : q && isFetched && !hits.length ? <p className="text-[13px] text-muted">{t("Nothing in the library matches “{q}”. Try other words.", { q })}</p>
           : hits.length ? (
             <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
               {hits.map((p) => <Passage key={`${p.source_id}-${p.n}`} p={p} />)}
@@ -116,6 +119,7 @@ function TrySearch() {
 }
 
 function AddGuidelines() {
+  const t = useT();
   const qc = useQueryClient();
   const { data: me } = useQuery(meQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
@@ -136,16 +140,16 @@ function AddGuidelines() {
     }
     qc.invalidateQueries({ queryKey: libraryKeys.all });
     qc.invalidateQueries({ queryKey: docKeys.files });
-    if (added) toast.success(added === 1 ? "Added to the library. It is indexed once it has been read." : `${added} files added to the library.`);
+    if (added) toast.success(added === 1 ? tr("Added to the library. It is indexed once it has been read.") : tr("{n} files added to the library.", { n: added }));
   };
 
   return (
     <Card data-guide="library.upload">
-      <CardHeader icon={<IconTile icon={BooksIcon} size="sm" />} title="Add guidelines"
-        description="SOPs, policies, manuals, price rules. Pick who they are for, then drop the files." />
+      <CardHeader icon={<IconTile icon={BooksIcon} size="sm" />} title={t("Add guidelines")}
+        description={t("SOPs, policies, manuals, price rules. Pick who they are for, then drop the files.")} />
       <CardBody className="grid gap-3">
         <label className="grid gap-1.5">
-          <span className="text-[12.5px] font-medium text-muted">Who it is for</span>
+          <span className="text-[12.5px] font-medium text-muted">{t("Who it is for")}</span>
           <ScopeSelect value={scope} onChange={setPicked} className="w-full" />
         </label>
         <FileDrop compact branchId={target.branch_id} onUploaded={(fs) => void onUploaded(fs)} />
@@ -155,6 +159,7 @@ function AddGuidelines() {
 }
 
 export function LibraryPage() {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data, isLoading, error } = useQuery(libraryQuery);
@@ -169,7 +174,7 @@ export function LibraryPage() {
     mutationFn: reindexLibrary,
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: libraryKeys.all });
-      toast.success(r.state === "done" ? "The library was indexed again." : "Indexing again in the background.");
+      toast.success(r.state === "done" ? tr("The library was indexed again.") : tr("Indexing again in the background."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -178,7 +183,7 @@ export function LibraryPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: libraryKeys.all });
       qc.invalidateQueries({ queryKey: docKeys.files });
-      toast.success("Taken out of the library. The file itself is kept.");
+      toast.success(tr("Taken out of the library. The file itself is kept."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -188,40 +193,40 @@ export function LibraryPage() {
 
   return (
     <Page>
-      <PageHeader title="Library"
-        description="The office's guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used."
+      <PageHeader title={t("Library")}
+        description={t("The office's guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.")}
         actions={data?.can_reindex ? (
           <Button variant="outline" loading={reindex.isPending} onClick={() => reindex.mutate()}>
-            <ArrowClockwiseIcon size={16} /> Index again
+            <ArrowClockwiseIcon size={16} /> {t("Index again")}
           </Button>
         ) : null} />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {data?.can_edit ? <AddGuidelines /> : null}
         <StatGrid className="grid-cols-2 content-start lg:grid-cols-2">
-          <Stat label="Guidelines" value={files.length} icon={BooksIcon} hint="Files in the library" />
-          <Stat label="SOPs" value={sources.length - files.length} icon={FileTextIcon} tone="violet" hint="Searched by find_sop too" />
-          <Stat label="Passages" value={data?.passages ?? 0} icon={StackIcon} tone="info" hint="What agents search" />
-          <Stat label="On the way" value={reading} icon={HourglassMediumIcon} tone={reading ? "warn" : "neutral"} hint="Being read or indexed" />
+          <Stat label={t("Guidelines")} value={files.length} icon={BooksIcon} hint={t("Files in the library")} />
+          <Stat label={t("SOPs")} value={sources.length - files.length} icon={FileTextIcon} tone="violet" hint={t("Searched by find_sop too")} />
+          <Stat label={t("Passages")} value={data?.passages ?? 0} icon={StackIcon} tone="info" hint={t("What agents search")} />
+          <Stat label={t("On the way")} value={reading} icon={HourglassMediumIcon} tone={reading ? "warn" : "neutral"} hint={t("Being read or indexed")} />
         </StatGrid>
       </div>
 
       <TrySearch />
 
       <Toolbar>
-        <Segmented<Show> label="Show" value={show} onChange={setShow}
+        <Segmented<Show> label={t("Show")} value={show} onChange={setShow}
           options={[
-            { value: "all", label: "All", count: sources.length },
-            { value: "file", label: "Files", count: files.length },
-            { value: "sop", label: "SOPs", count: sources.length - files.length },
+            { value: "all", label: t("All"), count: sources.length },
+            { value: "file", label: t("Files"), count: files.length },
+            { value: "sop", label: t("SOPs"), count: sources.length - files.length },
           ]} />
       </Toolbar>
 
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !shown.length ? (
-          <EmptyState icon={BooksIcon} title={sources.length ? "Nothing here" : "The library is empty"}
-            body="Upload SOPs, policies and manuals. Agents search them and cite the page." />
+          <EmptyState icon={BooksIcon} title={sources.length ? t("Nothing here") : t("The library is empty")}
+            body={t("Upload SOPs, policies and manuals. Agents search them and cite the page.")} />
         ) : (
           <ListCard data-guide="library.sources">
             {shown.map((s) => (
@@ -235,21 +240,21 @@ export function LibraryPage() {
                 meta={<Meta items={[
                   s.kind === "sop" ? "SOP" : s.name !== s.title ? s.name : "",
                   <ScopeText key="scope" s={s} />,
-                  s.pages ? `${s.pages} page${s.pages > 1 ? "s" : ""}` : "",
-                  s.indexed_at ? `indexed ${timeAgo(s.indexed_at).toLowerCase()}` : "",
+                  s.pages ? (s.pages > 1 ? t("{n} pages", { n: s.pages }) : t("1 page")) : "",
+                  s.indexed_at ? t("indexed {when}", { when: timeAgo(s.indexed_at).toLowerCase() }) : "",
                 ]} />}
                 trailing={<>
                   <LibraryStatusPill status={s.status} passages={s.passages} />
                   {s.kind === "file" && data?.can_edit ? (
-                    <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}>Take out</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}>{t("Take out")}</Button>
                   ) : null}
                 </>} />
             ))}
           </ListCard>
         )}
 
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title="Take this file out of the library?"
-        confirmLabel="Take out" body="Agents stop finding it in searches. The file stays in Files, and you can add it back any time."
+      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={t("Take this file out of the library?")}
+        confirmLabel={t("Take out")} body={t("Agents stop finding it in searches. The file stays in Files, and you can add it back any time.")}
         onConfirm={async () => { if (removing) await takeOut.mutateAsync(removing.id); }} />
     </Page>
   );

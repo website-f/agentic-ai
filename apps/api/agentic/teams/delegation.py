@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.fence import fence
 from ..models import Agent, Task, TaskEvent
+from . import objectives
 
 HARD_MAX_CHILDREN = 10
 HARD_MAX_DEPTH = 3
@@ -251,6 +252,7 @@ async def plan(
                     labels=list(task.labels or []),
                     # helpers start from the original's memory, as it was for this task
                     memory_snapshot=task.memory_snapshot if helpers else None,
+                    **objectives.lineage(task),  # P21: same objective, same request
                 )
             )
         for c in children:

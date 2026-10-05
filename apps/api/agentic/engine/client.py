@@ -238,9 +238,43 @@ def shape_messages(
     return out
 
 
+CACHE_MARK = {"type": "ephemeral"}
+
+
+def wants_cache_control(base_url: str, model: str) -> bool:
+    """Anthropic models cache a prompt prefix only up to explicit breakpoints (OpenAI-style
+    providers cache automatically). True for Anthropic's own OpenAI-compatible endpoint and for
+    Claude models through OpenRouter, which passes the breakpoints on."""
+    host = host_of(base_url).lower()
+    m = model.lower()
+    if host == "api.anthropic.com" or host.endswith(".anthropic.com"):
+        return True
+    return host.endswith("openrouter.ai") and ("claude" in m or m.startswith("anthropic/"))
+
+
+def cache_breakpoints(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
+    """Mark the end of the system message and of the tool list as cacheable (P21). The prompt
+    reads tools -> system -> conversation, so the system mark also covers the tools; the tool
+    mark keeps the tools cached when an agent's instructions change between calls."""
+    out = list(messages)
+    last_system = max((i for i, m in enumerate(out) if m.get("role") == "system"), default=-1)
+    if last_system >= 0 and isinstance(out[last_system].get("content"), str):
+        m = dict(out[last_system])
+        m["content"] = [{"type": "text", "text": m["content"], "cache_control": CACHE_MARK}]
+        out[last_system] = m
+    marked = None
+    if tools:
+        marked = [*tools[:-1], {**tools[-1], "cache_control": CACHE_MARK}]
+    return out, marked
+
+
 def _quirk_for(error_text: str) -> str | None:
     """Newer models reject some classic parameters with a 400. Name the fix, if known."""
     t = error_text.lower()
+    if "cache_control" in t:
+        return "no_cache_control"
     if "max_completion_tokens" in t and "max_tokens" in t:
         return "max_completion_tokens"
     if "reasoning_content" in t and ("passed back" in t or "must be" in t):
@@ -280,10 +314,19 @@ async def chat(
     reasoning_effort: str | None = None,
 ) -> ChatResult:
     q = set(quirks)
+    cacheable = wants_cache_control(base_url, model)
+
+    def shaped() -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
+        msgs = shape_messages(messages, q)
+        if cacheable and "no_cache_control" not in q:
+            return cache_breakpoints(msgs, tools)
+        return msgs, tools
+
+    sent_messages, sent_tools = shaped()
     tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
     body: dict[str, Any] = {
         "model": model,
-        "messages": shape_messages(messages, q),
+        "messages": sent_messages,
         tokens_key: max_tokens,
     }
     if temperature is not None and "no_temperature" not in q:
@@ -296,7 +339,7 @@ async def chat(
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     if tools:
-        body["tools"] = tools
+        body["tools"] = sent_tools
         if tool_choice is not None:
             body["tool_choice"] = tool_choice
 
@@ -309,8 +352,10 @@ async def chat(
         q.add(fix)
         if fix == "max_completion_tokens":
             body["max_completion_tokens"] = body.pop("max_tokens", max_tokens)
-        elif fix == "echo_reasoning":
-            body["messages"] = shape_messages(messages, q)
+        elif fix in ("echo_reasoning", "no_cache_control"):
+            body["messages"], marked = shaped()
+            if tools:
+                body["tools"] = marked
         elif fix == "no_reasoning_effort":
             body.pop("reasoning_effort", None)
         else:

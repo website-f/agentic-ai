@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { guidePageFor } from "@/guide/lookup";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { NAV } from "@/nav";
 
@@ -78,10 +79,11 @@ export function PageHeader({
   /** Defaults to the page's nav section. */
   eyebrow?: ReactNode;
 }) {
+  const t = useT();
   const entry = useNavEntry();
   const guide = useGuideEntry();
   const IconCmp = icon === undefined ? entry?.icon : icon;
-  const kicker = eyebrow ?? entry?.section;
+  const kicker = eyebrow ?? (entry ? t(entry.section) : undefined);
   return (
     <div className="flex flex-col gap-4 pb-1 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 items-start gap-3.5">
@@ -98,8 +100,8 @@ export function PageHeader({
               <Link
                 to="/guide/$page"
                 params={{ page: guide.id }}
-                title={`Guide: how to use ${guide.title}`}
-                aria-label={`Help: how to use ${guide.title}`}
+                title={t("Guide: how to use {page}", { page: t(guide.title) })}
+                aria-label={t("Help: how to use {page}", { page: t(guide.title) })}
                 className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted transition-colors hover:border-accent/40 hover:bg-accent-soft hover:text-accent pointer-coarse:size-9 sm:mt-1"
               >
                 <QuestionIcon size={15} weight="bold" />

@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import SessionLocal, get_db
 from ...core.ssrf import BlockedURL, guard_url
 from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
-from ...engine import client, gateway, media, store, tester
+from ...engine import cache_health, client, gateway, media, store, tester
 from ...engine.presets import BY_ID, PRESETS, PRIMARY
-from ...models import AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck, Workspace
+from ...models import Agent, AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck, Workspace
 from ...services import audit
 from ..ai_schemas import (
     AISettingsOut,
@@ -699,4 +699,72 @@ async def usage(
         "by_model": by_model,
         "by_task": by_task,
         "daily": daily,
+    }
+
+
+@router.get("/cache-health")
+async def cache_health_report(
+    days: int = Query(default=7, ge=1, le=90),
+    principal: Principal = Depends(require("org.read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Prompt-cache drift per agent and job kind (P21): how often the system message + tool
+    list changed between calls of the same run, and how much of the prompt the provider served
+    from its cache. See engine/cache_health.py."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    q = (
+        select(
+            LLMCall.ts,
+            LLMCall.agent_id,
+            LLMCall.task,
+            LLMCall.task_id,
+            LLMCall.prefix_hash,
+            LLMCall.prompt_tokens,
+            LLMCall.cached_tokens,
+        )
+        .where(
+            LLMCall.workspace_id == principal.workspace_id,
+            LLMCall.ts >= since,
+            LLMCall.status == "ok",
+            LLMCall.prefix_hash.is_not(None),
+        )
+        .order_by(LLMCall.ts, LLMCall.id)
+        .limit(100_000)
+    )
+    calls = [
+        cache_health.Call(
+            ts=r.ts,
+            agent_id=r.agent_id,
+            task=r.task,
+            task_id=r.task_id,
+            prefix_hash=r.prefix_hash,
+            prompt_tokens=int(r.prompt_tokens or 0),
+            cached_tokens=int(r.cached_tokens or 0),
+        )
+        for r in await db.execute(q)
+    ]
+    ids = {c.agent_id for c in calls if c.agent_id}
+    names = (
+        {
+            a.id: a.name
+            for a in (
+                await db.execute(
+                    select(Agent.id, Agent.name).where(
+                        Agent.id.in_(ids), Agent.workspace_id == principal.workspace_id
+                    )
+                )
+            )
+        }
+        if ids
+        else {}
+    )
+    groups = cache_health.report(calls, names)
+    prompt = sum(c.prompt_tokens for c in calls)
+    cached = sum(c.cached_tokens for c in calls)
+    return {
+        "days": days,
+        "calls": len(calls),
+        "cached_share": round(cached / prompt, 3) if prompt else None,
+        "flagged": sum(1 for g in groups if g["flags"]),
+        "groups": groups,
     }

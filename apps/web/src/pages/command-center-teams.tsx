@@ -8,12 +8,14 @@ import { IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { budgetsQuery, pingsQuery, teamKeys, tokensShort, type BudgetRow } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
 
 /** Agents asking for something outside a task: work to do, or a budget running low. */
 export function PingsCard({ canWrite }: { canWrite: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: pings = [] } = useQuery(pingsQuery);
   const dismiss = useMutation({
@@ -26,8 +28,8 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
     <Card className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={BellRingingIcon} tone="warn" size="sm" />}
-        title="Agents asking"
-        description="Heartbeat check-ins and budget warnings."
+        title={t("Agents asking")}
+        description={t("Heartbeat check-ins and budget warnings.")}
         actions={<Pill tone="warn">{pings.length}</Pill>}
       />
       <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
@@ -39,7 +41,7 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
                 <span className="font-medium">{p.agent_name}</span>
                 <Pill tone={p.kind === "idle" ? "info" : "warn"}>
                   {p.kind === "idle" ? <HandWavingIcon size={12} weight="bold" /> : <CoinsIcon size={12} weight="bold" />}
-                  {p.kind === "idle" ? "Wants work" : "Budget"}
+                  {p.kind === "idle" ? t("Wants work") : t("Budget")}
                 </Pill>
               </p>
               <p className="mt-0.5 text-[13px] break-words">{p.message}</p>
@@ -48,11 +50,11 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
             {canWrite ? (
               <div className="ml-11 flex flex-wrap gap-2 sm:ml-0">
                 {p.kind === "idle" ? (
-                  <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: p.agent_id }}><PlusIcon size={14} weight="bold" /> Give a task</Link></Button>
+                  <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: p.agent_id }}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Link></Button>
                 ) : (
-                  <Button size="sm" variant="outline" asChild><Link to="/agents/$agentId" params={{ agentId: p.agent_id }} search={{ tab: "team" }}>See budget</Link></Button>
+                  <Button size="sm" variant="outline" asChild><Link to="/agents/$agentId" params={{ agentId: p.agent_id }} search={{ tab: "team" }}>{t("See budget")}</Link></Button>
                 )}
-                <Button size="sm" variant="ghost" disabled={dismiss.isPending} onClick={() => dismiss.mutate(p.id)}>Dismiss</Button>
+                <Button size="sm" variant="ghost" disabled={dismiss.isPending} onClick={() => dismiss.mutate(p.id)}>{t("Dismiss")}</Button>
               </div>
             ) : null}
           </li>
@@ -63,6 +65,7 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
 }
 
 function Row({ b }: { b: BudgetRow }) {
+  const t = useT();
   const daily = b.token_limit !== null && (b.token_ratio >= b.usd_ratio || b.usd_limit === null);
   const ratio = daily ? b.token_ratio : b.usd_ratio;
   const pct = Math.round(ratio * 100);
@@ -73,9 +76,9 @@ function Row({ b }: { b: BudgetRow }) {
           <AgentAvatar name={b.name} color={b.color} size="xs" />
           <span className="min-w-0 flex-1 truncate font-medium">{b.name}</span>
           <span className="text-muted tabular">
-            {daily ? `${tokensShort(b.tokens_today)} / ${tokensShort(b.token_limit)} today` : `$${b.usd_month.toFixed(2)} / $${(b.usd_limit ?? 0).toFixed(2)} this month`}
+            {daily ? t("{used} / {limit} today", { used: tokensShort(b.tokens_today), limit: tokensShort(b.token_limit) }) : t("${used} / ${limit} this month", { used: b.usd_month.toFixed(2), limit: (b.usd_limit ?? 0).toFixed(2) })}
           </span>
-          {ratio >= 1 ? <Pill tone="danger">Paused</Pill> : ratio >= 0.8 ? <Pill tone="warn">{pct}%</Pill> : null}
+          {ratio >= 1 ? <Pill tone="danger">{t("Paused")}</Pill> : ratio >= 0.8 ? <Pill tone="warn">{pct}%</Pill> : null}
         </span>
         <span className="h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
           <span className={cn("block h-full rounded-full", ratio >= 1 ? "bg-danger" : ratio >= 0.8 ? "bg-warn" : "bg-accent")} style={{ width: `${Math.min(100, pct)}%` }} />
@@ -87,6 +90,7 @@ function Row({ b }: { b: BudgetRow }) {
 
 /** Spend against budget, fullest first. Agents without a limit show today's tokens only. */
 export function BudgetsCard() {
+  const t = useT();
   const { data = [] } = useQuery(budgetsQuery);
   const limited = data.filter((b) => b.token_limit !== null || b.usd_limit !== null).sort((x, y) => Math.max(y.token_ratio, y.usd_ratio) - Math.max(x.token_ratio, x.usd_ratio));
   const free = data.filter((b) => b.token_limit === null && b.usd_limit === null && b.tokens_today > 0).sort((x, y) => y.tokens_today - x.tokens_today);
@@ -95,19 +99,19 @@ export function BudgetsCard() {
     <Card className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={WalletIcon} tone="orange" size="sm" />}
-        title="Spend vs budget"
-        description="Alert at 80 %, pause and ask at 100 %."
+        title={t("Spend vs budget")}
+        description={t("Alert at 80 %, pause and ask at 100 %.")}
       />
       {limited.length ? (
         <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">{limited.map((b) => <Row key={b.agent_id} b={b} />)}</ul>
       ) : (
         <p className="mx-4 mt-4 rounded-sm border border-dashed border-border px-4 py-3 text-[13px] text-muted sm:mx-5">
-          No agent has a budget yet. Set one on an agent's Team & budget tab.
+          {t("No agent has a budget yet. Set one on an agent's Team & budget tab.")}
         </p>
       )}
       {free.length ? (
         <div className="grid gap-2 px-4 py-3.5 sm:px-5">
-          <p className="text-[12px] font-medium text-muted">No limit, tokens used today</p>
+          <p className="text-[12px] font-medium text-muted">{t("No limit, tokens used today")}</p>
           <ul className="flex flex-wrap gap-2">
             {free.slice(0, 4).map((b) => (
               <li key={b.agent_id}>

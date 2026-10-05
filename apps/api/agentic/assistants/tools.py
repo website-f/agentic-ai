@@ -19,6 +19,7 @@ from ..agents.tools import Tool, ToolContext
 from ..core.fence import fence
 from ..core.valkey import valkey
 from ..models import Agent, EmailDraft, GoogleAccount, Membership, Task, User
+from ..teams import objectives
 from . import gmail, insights
 from .names import ASSISTANT_ONLY  # noqa: F401 - re-exported for the registry
 
@@ -223,6 +224,7 @@ async def _message_agent(ctx: ToolContext, args: dict[str, Any]) -> str:
         created_by=f"user:{ctx.agent.owner_user_id}",
         status="ready",
         position=float(lowest) - 1,
+        **objectives.lineage(ctx.task),  # P21: from a task, it serves the same objective
     )
     ctx.db.add(t)
     await ctx.db.flush()

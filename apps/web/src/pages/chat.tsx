@@ -8,6 +8,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
 import { useIsPhone } from "@/lib/use-media";
@@ -17,6 +18,7 @@ import { agentsQuery } from "@/lib/work";
 import { ChatPanel } from "./agents/chat-panel";
 
 export function ChatPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: agents, isLoading } = useQuery(agentsQuery);
   const search = useSearch({ strict: false }) as { agent?: string };
@@ -43,22 +45,22 @@ export function ChatPage() {
   if (!active.length) {
     return (
       <Page>
-        <PageHeader title="Chat" />
-        <EmptyState icon={ChatsCircleIcon} title="No agents to talk to yet" body="Create an agent, then chat with it here or from its profile."
-          action={<Button asChild>{staffOnly(me.permissions) ? <Link to="/twin">Meet your AI twin</Link> : <Link to="/agents/new">New agent</Link>}</Button>} />
+        <PageHeader title={t("Chat")} />
+        <EmptyState icon={ChatsCircleIcon} title={t("No agents to talk to yet")} body={t("Create an agent, then chat with it here or from its profile.")}
+          action={<Button asChild>{staffOnly(me.permissions) ? <Link to="/twin">{t("Meet your AI twin")}</Link> : <Link to="/agents/new">{t("New agent")}</Link>}</Button>} />
       </Page>
     );
   }
 
   const list = (
-    <aside data-guide="chat.agents" aria-label="Agents" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+    <aside data-guide="chat.agents" aria-label={t("Agents")} className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
       <div className="grid gap-2 border-b border-border p-2.5">
         <label className="relative block">
           <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find an agent" aria-label="Find an agent" type="search"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Find an agent")} aria-label={t("Find an agent")} type="search"
             className="h-10 w-full rounded-sm border border-transparent bg-surface-2 pr-3 pl-9 text-[13.5px] transition-colors placeholder:text-muted/80 focus-visible:border-accent focus-visible:bg-surface focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden" />
         </label>
-        <p className="px-1 text-[11.5px] font-medium tracking-[0.06em] text-muted uppercase">{shown.length} {shown.length === 1 ? "agent" : "agents"}</p>
+        <p className="px-1 text-[11.5px] font-medium tracking-[0.06em] text-muted uppercase">{shown.length === 1 ? t("1 agent") : t("{n} agents", { n: shown.length })}</p>
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
         {shown.map((a) => {
@@ -72,7 +74,7 @@ export function ChatPage() {
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[13.5px] font-medium">{a.name}</span>
-                    {a.status === "paused" ? <Pill className="shrink-0 px-1.5 py-0 text-[10.5px]">Paused</Pill> : working ? <Pill tone="accent" className="shrink-0 px-1.5 py-0 text-[10.5px]">Working</Pill> : null}
+                    {a.status === "paused" ? <Pill className="shrink-0 px-1.5 py-0 text-[10.5px]">{t("Paused")}</Pill> : working ? <Pill tone="accent" className="shrink-0 px-1.5 py-0 text-[10.5px]">{t("Working")}</Pill> : null}
                   </span>
                   <span className="block truncate text-[12px] text-muted">{a.role} · {a.branch_name}</span>
                 </span>
@@ -80,7 +82,7 @@ export function ChatPage() {
             </li>
           );
         })}
-        {!shown.length ? <li className="px-3 py-8 text-center text-[13px] text-muted">No agent matches "{q}".</li> : null}
+        {!shown.length ? <li className="px-3 py-8 text-center text-[13px] text-muted">{t("No agent matches \"{q}\".", { q })}</li> : null}
       </ul>
     </aside>
   );
@@ -90,7 +92,7 @@ export function ChatPage() {
     return (
       <Page className="gap-3 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon" aria-label="All agents" onClick={() => navigate({ to: "/chat", search: {} })} className="-ml-2">
+          <Button variant="ghost" size="icon" aria-label={t("All agents")} onClick={() => navigate({ to: "/chat", search: {} })} className="-ml-2">
             <ArrowLeftIcon size={18} />
           </Button>
           <AgentAvatar name={selected.name} color={selected.color} size="sm" working={selected.current_task?.status === "running"} />
@@ -107,7 +109,7 @@ export function ChatPage() {
 
   return (
     <Page className="max-w-7xl">
-      <PageHeader title="Chat" description="Talk to any agent directly. Actions that need approval become tasks." />
+      <PageHeader title={t("Chat")} description={t("Talk to any agent directly. Actions that need approval become tasks.")} />
       {phone ? (
         <div className="h-[calc(100dvh-17rem)] min-h-[20rem]">{list}</div>
       ) : (

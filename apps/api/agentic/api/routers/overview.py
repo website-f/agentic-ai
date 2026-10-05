@@ -31,6 +31,7 @@ from ...models import (
     Task,
     Workspace,
 )
+from ...teams import objectives
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api/overview", tags=["overview"])
@@ -329,6 +330,8 @@ async def build(db: AsyncSession, principal: Principal, days: int) -> dict[str, 
             for a in top
         ],
         "issues": issues[:30],
+        # P21: spend in the window per objective (its tasks and their request trees).
+        "objectives": await objectives.cost_by_objective(db, ws.id, sc, since),
     }
 
 

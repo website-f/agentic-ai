@@ -22,6 +22,7 @@ from ..agents import work_hours
 from ..core.db import SessionLocal
 from ..models import Agent, Incident, JobRun, Schedule, Task
 from ..services import events
+from . import objectives
 
 log = logging.getLogger("agentic.teams.schedules")
 
@@ -180,6 +181,7 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
             requires_review=s.requires_review,
             schedule_id=s.id,
             position=float(lowest) - 1,
+            **await objectives.schedule_lineage(db, s.id),  # P21: keeps its objective
         )
         db.add(t)
         await db.flush()

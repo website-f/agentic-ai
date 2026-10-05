@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
+import { useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { workKeys, type Agent, type Task } from "@/lib/work";
@@ -35,6 +36,7 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   onOpenChange: (o: boolean) => void;
   onStarted?: (t: Task) => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -47,18 +49,18 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
     queryFn: () => api<{ name: string; hosts: string[] }[]>(`/api/agents/${agent.id}/logins`),
     enabled: open,
   });
-  const hasBrowser = BROWSER_TOOLS.every((t) => (agent.tools ?? {})[t] && agent.tools[t] !== "deny");
+  const hasBrowser = BROWSER_TOOLS.every((k) => (agent.tools ?? {})[k] && agent.tools[k] !== "deny");
   const start = useMutation({
     mutationFn: () => api<Task>(`/api/agents/${agent.id}/web-task`, "POST", {
       url, instructions, mode, values: mode === "interact" ? values : "", output,
       login: login === NONE ? null : login,
     }),
-    onSuccess: (t) => {
+    onSuccess: (task) => {
       qc.invalidateQueries({ queryKey: workKeys.tasks });
       qc.invalidateQueries({ queryKey: workKeys.agents });
       qc.invalidateQueries({ queryKey: ["office"] });
-      toast.success(`${agent.name} is on it. Watch the browser here.`);
-      onStarted?.(t);
+      toast.success(t("{name} is on it. Watch the browser here.", { name: agent.name }));
+      onStarted?.(task);
       onOpenChange(false);
     },
   });
@@ -66,43 +68,43 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   const ready = url.trim().length > 3 && instructions.trim().length > 2;
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={`Browse for me: ${agent.name}`}
-      description="Give a link and say what you want. You can watch the browser live while it works."
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Browse for me: {name}", { name: agent.name })}
+      description={t("Give a link and say what you want. You can watch the browser live while it works.")}
       className="w-[min(94vw,36rem)]"
-      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-        <Button disabled={!ready} loading={start.isPending} onClick={() => start.mutate()}><BrowserIcon size={15} /> Start</Button></>}>
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button>
+        <Button disabled={!ready} loading={start.isPending} onClick={() => start.mutate()}><BrowserIcon size={15} /> {t("Start")}</Button></>}>
       <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (ready) start.mutate(); }}>
-        <Field label="Link" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… or portal.example.com/page" autoFocus error={fields.url} />
-        <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "read" | "interact")} aria-label="What it may do" className="grid gap-2 sm:grid-cols-2">
-          <Choice value="read" icon={MagnifyingGlassIcon} title="Find information" body="Reads the page (and the pages it links to). Fills in nothing." />
-          <Choice value="interact" icon={CursorClickIcon} title="Interact and fill in" body="Clicks, types and fills forms. Sending a form waits for your approval." />
+        <Field label={t("Link")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("https://… or portal.example.com/page")} autoFocus error={fields.url} />
+        <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "read" | "interact")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-2">
+          <Choice value="read" icon={MagnifyingGlassIcon} title={t("Find information")} body={t("Reads the page (and the pages it links to). Fills in nothing.")} />
+          <Choice value="interact" icon={CursorClickIcon} title={t("Interact and fill in")} body={t("Clicks, types and fills forms. Sending a form waits for your approval.")} />
         </RadioGroup.Root>
-        <TextareaField label={mode === "read" ? "What do you want to know?" : "What should it do?"} value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3}
+        <TextareaField label={mode === "read" ? t("What do you want to know?") : t("What should it do?")} value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3}
           placeholder={mode === "read"
-            ? "e.g. List every invitation to quote: reference, agency, item, value and closing date."
-            : "e.g. Update our company profile and save it."} error={fields.instructions} />
+            ? t("e.g. List every invitation to quote: reference, agency, item, value and closing date.")
+            : t("e.g. Update our company profile and save it.")} error={fields.instructions} />
         {mode === "interact" ? (
-          <TextareaField label="Values to fill in" value={values} onChange={(e) => setValues(e.target.value)} rows={4}
-            placeholder={"One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455"}
-            hint="It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them." />
+          <TextareaField label={t("Values to fill in")} value={values} onChange={(e) => setValues(e.target.value)} rows={4}
+            placeholder={t("One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455")}
+            hint={t("It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them.")} />
         ) : null}
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <span className="text-[13px] font-medium">Sign in with</span>
-            <Select value={login} onValueChange={setLogin} label="Saved login"
-              options={[{ value: NONE, label: "No login needed" }, ...(logins.data ?? []).map((l) => ({ value: l.name, label: l.name, hint: l.hosts.join(", ") }))]} />
+            <span className="text-[13px] font-medium">{t("Sign in with")}</span>
+            <Select value={login} onValueChange={setLogin} label={t("Saved login")}
+              options={[{ value: NONE, label: t("No login needed") }, ...(logins.data ?? []).map((l) => ({ value: l.name, label: l.name, hint: l.hosts.join(", ") }))]} />
           </div>
           <div className="grid gap-1.5">
-            <span className="text-[13px] font-medium">Answer as</span>
-            <Select value={output} onValueChange={(v) => setOutput(v as "answer" | "report")} label="Answer as"
-              options={[{ value: "answer", label: "A short answer" }, { value: "report", label: "A report with a table" }]} />
+            <span className="text-[13px] font-medium">{t("Answer as")}</span>
+            <Select value={output} onValueChange={(v) => setOutput(v as "answer" | "report")} label={t("Answer as")}
+              options={[{ value: "answer", label: t("A short answer") }, { value: "report", label: t("A report with a table") }]} />
           </div>
         </div>
         {!hasBrowser ? (
           <p className={cn("rounded-sm px-3 py-2 text-[12.5px]", agent.can_manage ? "bg-accent-soft text-accent" : "bg-warn/10 text-warn")}>
             {agent.can_manage
-              ? `${agent.name} does not have the browser yet: starting this gives it the browser tools (sending forms still asks you).`
-              : `${agent.name} does not have the browser. Ask whoever manages ${agent.name} to give it the browser tools.`}
+              ? t("{name} does not have the browser yet: starting this gives it the browser tools (sending forms still asks you).", { name: agent.name })
+              : t("{name} does not have the browser. Ask whoever manages {name} to give it the browser tools.", { name: agent.name })}
           </p>
         ) : null}
         <FormError message={start.error && !Object.keys(fields).length ? errorMessage(start.error) : null} />

@@ -23,6 +23,8 @@ export interface TutorialProgress {
 export interface Prefs {
   tutorial: { done?: string[]; dismissed?: boolean; track?: Track };
   onboarding: Record<string, unknown>;
+  /** P22: the app language this person chose. */
+  locale?: { language?: "en" | "ms" | null };
 }
 
 export const tutorialKeys = {

@@ -65,6 +65,9 @@ _BROWSER = {
     "browser_scroll": "allow",
     "browser_back": "allow",
     "browser_read": "allow",
+    "browser_snapshot": "allow",
+    "browser_find": "allow",
+    "browser_wait": "allow",
     "browser_login": "allow",
     "browser_submit": "ask",
     "browser_close": "allow",
@@ -130,7 +133,12 @@ HELPS: tuple[Help, ...] = (
 HELP_BY_KEY = {h.key: h for h in HELPS}
 
 ASKS: tuple[Ask, ...] = (
-    Ask("web", "Opening web pages", "Before it reads any website.", ("web_fetch", "browser_open")),
+    Ask(
+        "web",
+        "Opening web pages",
+        "Before it reads any website.",
+        ("web_fetch", "research_gather", "browser_open"),
+    ),
     Ask(
         "documents",
         "Drafting or changing documents",

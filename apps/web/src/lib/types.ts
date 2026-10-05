@@ -1,3 +1,5 @@
+import { msg } from "@/i18n";
+
 export type Role =
   | "owner"
   | "admin"
@@ -102,14 +104,15 @@ export interface SystemStatus {
   counts: Record<string, number>;
 }
 
+/** English keys (msg): render with t(ROLE_INFO[r].label). */
 export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
-  owner: { label: "Owner", blurb: "Everything, including owner access and workspace-level budgets." },
-  admin: { label: "Admin", blurb: "Members, organization, AI keys and policies." },
-  branch_manager: { label: "Branch manager", blurb: "Runs one branch: its agents, work, approvals, logins and people." },
-  hod: { label: "Head of department", blurb: "Runs one department: its agents, work, approvals and people." },
-  supervisor: { label: "Supervisor", blurb: "Gives the department's agents work and decides what they ask. Does not change agents." },
-  staff: { label: "Staff", blurb: "Has personal agents: creates them, gives them work, answers them." },
-  operator: { label: "Operator", blurb: "Creates and assigns work across the workspace, instructs agents." },
-  approver: { label: "Approver", blurb: "Decides approvals across the workspace and reviews what agents learn." },
-  viewer: { label: "Viewer", blurb: "Read only, the whole workspace." },
+  owner: { label: msg("Owner"), blurb: msg("Everything, including owner access and workspace-level budgets.") },
+  admin: { label: msg("Admin"), blurb: msg("Members, organization, AI keys and policies.") },
+  branch_manager: { label: msg("Branch manager"), blurb: msg("Runs one branch: its agents, work, approvals, logins and people.") },
+  hod: { label: msg("Head of department"), blurb: msg("Runs one department: its agents, work, approvals and people.") },
+  supervisor: { label: msg("Supervisor"), blurb: msg("Gives the department's agents work and decides what they ask. Does not change agents.") },
+  staff: { label: msg("Staff"), blurb: msg("Has personal agents: creates them, gives them work, answers them.") },
+  operator: { label: msg("Operator"), blurb: msg("Creates and assigns work across the workspace, instructs agents.") },
+  approver: { label: msg("Approver"), blurb: msg("Decides approvals across the workspace and reviews what agents learn.") },
+  viewer: { label: msg("Viewer"), blurb: msg("Read only, the whole workspace.") },
 };

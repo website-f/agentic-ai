@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { Trans } from "@/components/trans";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -28,6 +29,7 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { VoiceInput } from "@/components/voice-input";
+import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import {
   assistantKeys, assistantsQuery, calendarDraftsQuery, draftsQuery, QUICK_PROMPTS, type AssistantsHome, type CalendarDraft, type EmailDraft, type Preset,
@@ -40,31 +42,31 @@ import { workKeys, type Agent } from "@/lib/work";
 type Tab = "chat" | "drafts" | "settings";
 
 const PRESET_LOOK: Record<Preset["key"], { icon: Icon; tone: Tone; can: string[] }> = {
-  chief_of_staff: { icon: SparkleIcon, tone: "accent", can: ["Daily company pulse", "Who's slipping", "Chase people & agents", "Your inbox & calendar"] },
-  inbox: { icon: EnvelopeSimpleIcon, tone: "info", can: ["Reads Gmail", "What needs you today", "Drafts replies to approve"] },
-  analyst: { icon: ChartLineUpIcon, tone: "violet", can: ["Team performance", "Trends & tables", "Three actions"] },
-  custom: { icon: GearSixIcon, tone: "orange", can: ["Your own instructions"] },
+  chief_of_staff: { icon: SparkleIcon, tone: "accent", can: [msg("Daily company pulse"), msg("Who's slipping"), msg("Chase people & agents"), msg("Your inbox & calendar")] },
+  inbox: { icon: EnvelopeSimpleIcon, tone: "info", can: [msg("Reads Gmail"), msg("What needs you today"), msg("Drafts replies to approve")] },
+  analyst: { icon: ChartLineUpIcon, tone: "violet", can: [msg("Team performance"), msg("Trends & tables"), msg("Three actions")] },
+  custom: { icon: GearSixIcon, tone: "orange", can: [msg("Your own instructions")] },
 };
 
 /** What each tool looks like under a reply. */
 const TOOL_LOOK: Record<string, { label: string; icon: Icon }> = {
-  company_pulse: { label: "Company pulse", icon: ChartLineUpIcon },
-  team_performance: { label: "Team performance", icon: UsersThreeIcon },
-  slacking_report: { label: "Where things slip", icon: TrendDownIcon },
-  notify_person: { label: "Messaged a person", icon: WhatsappLogoIcon },
-  message_agent: { label: "Gave an agent a job", icon: LightningIcon },
-  email_search: { label: "Searched email", icon: MagnifyingGlassIcon },
-  email_read: { label: "Read an email", icon: EnvelopeSimpleIcon },
-  email_draft_reply: { label: "Drafted a reply", icon: PaperPlaneRightIcon },
-  email_draft: { label: "Drafted an email", icon: PaperPlaneRightIcon },
-  calendar_agenda: { label: "Read your calendar", icon: CalendarBlankIcon },
-  calendar_free_slots: { label: "Found free time", icon: CalendarCheckIcon },
-  calendar_create_event: { label: "Proposed an event", icon: CalendarPlusIcon },
-  calendar_update_event: { label: "Proposed a change", icon: CalendarBlankIcon },
-  calendar_cancel_event: { label: "Proposed a cancellation", icon: CalendarXIcon },
-  schedule_task: { label: "Set up a schedule", icon: ClockCountdownIcon },
-  list_my_schedules: { label: "Checked schedules", icon: ClockCountdownIcon },
-  cancel_schedule: { label: "Cancelled a schedule", icon: ClockCountdownIcon },
+  company_pulse: { label: msg("Company pulse"), icon: ChartLineUpIcon },
+  team_performance: { label: msg("Team performance"), icon: UsersThreeIcon },
+  slacking_report: { label: msg("Where things slip"), icon: TrendDownIcon },
+  notify_person: { label: msg("Messaged a person"), icon: WhatsappLogoIcon },
+  message_agent: { label: msg("Gave an agent a job"), icon: LightningIcon },
+  email_search: { label: msg("Searched email"), icon: MagnifyingGlassIcon },
+  email_read: { label: msg("Read an email"), icon: EnvelopeSimpleIcon },
+  email_draft_reply: { label: msg("Drafted a reply"), icon: PaperPlaneRightIcon },
+  email_draft: { label: msg("Drafted an email"), icon: PaperPlaneRightIcon },
+  calendar_agenda: { label: msg("Read your calendar"), icon: CalendarBlankIcon },
+  calendar_free_slots: { label: msg("Found free time"), icon: CalendarCheckIcon },
+  calendar_create_event: { label: msg("Proposed an event"), icon: CalendarPlusIcon },
+  calendar_update_event: { label: msg("Proposed a change"), icon: CalendarBlankIcon },
+  calendar_cancel_event: { label: msg("Proposed a cancellation"), icon: CalendarXIcon },
+  schedule_task: { label: msg("Set up a schedule"), icon: ClockCountdownIcon },
+  list_my_schedules: { label: msg("Checked schedules"), icon: ClockCountdownIcon },
+  cancel_schedule: { label: msg("Cancelled a schedule"), icon: ClockCountdownIcon },
 };
 
 /** Tools whose result waits on the Drafts tab. */
@@ -73,30 +75,31 @@ const PROPOSES = ["email_draft", "email_draft_reply", "calendar_create_event", "
 /** While the assistant works: what it is probably doing, from what was asked. */
 function thinkingLine(q: string): string {
   const s = q.toLowerCase();
-  if (/\bevery\b|remind me|\bdaily\b|\bweekly\b|\bmonthly\b/.test(s)) return "Setting up the schedule…";
-  if (/calendar|meeting|free time|free slot|\bbook\b|agenda/.test(s)) return "Checking your calendar…";
-  if (/inbox|email|mail|reply|draft/.test(s)) return "Going through your email…";
-  if (/slack|stuck|late|behind|slip/.test(s)) return "Looking for what's stuck…";
-  if (/who|staff|team|perform|doing well/.test(s)) return "Checking how everyone is doing…";
-  if (/tell|remind|chase|notify|whatsapp/.test(s)) return "Reaching out…";
-  return "Looking at the company…";
+  if (/\bevery\b|remind me|\bdaily\b|\bweekly\b|\bmonthly\b/.test(s)) return tr("Setting up the schedule…");
+  if (/calendar|meeting|free time|free slot|\bbook\b|agenda/.test(s)) return tr("Checking your calendar…");
+  if (/inbox|email|mail|reply|draft/.test(s)) return tr("Going through your email…");
+  if (/slack|stuck|late|behind|slip/.test(s)) return tr("Looking for what's stuck…");
+  if (/who|staff|team|perform|doing well/.test(s)) return tr("Checking how everyone is doing…");
+  if (/tell|remind|chase|notify|whatsapp/.test(s)) return tr("Reaching out…");
+  return tr("Looking at the company…");
 }
 
 // ---------------------------------------------------------------- creating
 
 function NewAssistant({ presets, onClose, onCreated }: { presets: Preset[]; onClose: () => void; onCreated: (a: Agent) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const [key, setKey] = useState<Preset["key"]>("chief_of_staff");
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
   const create = useMutation({
     mutationFn: () => api<Agent>("/api/assistants", "POST", { preset: key, name: name.trim() || undefined, instructions: notes.trim() || undefined }),
-    onSuccess: (a) => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(`${a.name} is ready.`); onCreated(a); },
+    onSuccess: (a) => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(t("{name} is ready.", { name: a.name })); onCreated(a); },
   });
   return (
-    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title="New assistant" className="w-[min(96vw,40rem)]"
-      description="Private to you: nobody else sees it or what you discuss."
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button loading={create.isPending} onClick={() => create.mutate()}><SparkleIcon size={15} /> Create</Button></>}>
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("New assistant")} className="w-[min(96vw,40rem)]"
+      description={t("Private to you: nobody else sees it or what you discuss.")}
+      footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button><Button loading={create.isPending} onClick={() => create.mutate()}><SparkleIcon size={15} /> {t("Create")}</Button></>}>
       <div className="grid gap-4">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {presets.map((p) => {
@@ -115,9 +118,9 @@ function NewAssistant({ presets, onClose, onCreated }: { presets: Preset[]; onCl
             );
           })}
         </div>
-        <Field label="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} placeholder={presets.find((p) => p.key === key)?.name} />
-        <TextareaField label="Anything it should know about you (optional)" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
-          placeholder="e.g. Reply in Bahasa Melayu to government clients. My weekly meeting is Monday 9am. Flag anything about cash flow first." />
+        <Field label={t("Name (optional)")} value={name} onChange={(e) => setName(e.target.value)} placeholder={presets.find((p) => p.key === key)?.name} />
+        <TextareaField label={t("Anything it should know about you (optional)")} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+          placeholder={t("e.g. Reply in Bahasa Melayu to government clients. My weekly meeting is Monday 9am. Flag anything about cash flow first.")} />
         <FormError message={create.error ? errorMessage(create.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -125,10 +128,11 @@ function NewAssistant({ presets, onClose, onCreated }: { presets: Preset[]; onCl
 }
 
 function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["key"]) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const create = useMutation({
     mutationFn: (preset: string) => api<Agent>("/api/assistants", "POST", { preset }),
-    onSuccess: (a) => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(`${a.name} is ready. Say hello.`); },
+    onSuccess: (a) => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(t("{name} is ready. Say hello.", { name: a.name })); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
@@ -136,9 +140,9 @@ function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["k
       <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface p-5 sm:p-8">
         <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 size-72 rounded-full bg-[radial-gradient(circle,var(--accent-soft),transparent_70%)]" />
         <div className="relative grid max-w-2xl gap-3">
-          <Pill tone="accent" className="w-fit"><LockSimpleIcon size={12} /> Private to you</Pill>
-          <h2 className="text-[22px] leading-tight font-semibold tracking-tight sm:text-[28px]">An assistant that knows the whole company, and your inbox.</h2>
-          <p className="text-[14px] text-muted">Ask what's happening, where you're slipping and who needs a push. It reads your Gmail and drafts replies you approve, and it chases your staff's agents, who message their people on WhatsApp.</p>
+          <Pill tone="accent" className="w-fit"><LockSimpleIcon size={12} /> {t("Private to you")}</Pill>
+          <h2 className="text-[22px] leading-tight font-semibold tracking-tight sm:text-[28px]">{t("An assistant that knows the whole company, and your inbox.")}</h2>
+          <p className="text-[14px] text-muted">{t("Ask what's happening, where you're slipping and who needs a push. It reads your Gmail and drafts replies you approve, and it chases your staff's agents, who message their people on WhatsApp.")}</p>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -153,11 +157,11 @@ function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["k
                 </div>
                 <p className="text-[13px] text-muted">{p.blurb}</p>
                 <ul className="grid gap-1 text-[12.5px]">
-                  {look.can.map((c) => <li key={c} className="flex items-center gap-1.5"><CheckCircleIcon size={14} weight="fill" className="text-ok" /> {c}</li>)}
+                  {look.can.map((c) => <li key={c} className="flex items-center gap-1.5"><CheckCircleIcon size={14} weight="fill" className="text-ok" /> {t(c)}</li>)}
                 </ul>
                 <div className="mt-auto flex gap-2 pt-1">
-                  <Button className="flex-1" loading={create.isPending && create.variables === p.key} onClick={() => create.mutate(p.key)}>Create</Button>
-                  <Button variant="ghost" onClick={() => onPick(p.key)}>Customise</Button>
+                  <Button className="flex-1" loading={create.isPending && create.variables === p.key} onClick={() => create.mutate(p.key)}>{t("Create")}</Button>
+                  <Button variant="ghost" onClick={() => onPick(p.key)}>{t("Customise")}</Button>
                 </div>
               </CardBody>
             </Card>
@@ -197,14 +201,15 @@ function SessionList({ sessions, current, onPick, onNew, loading }: {
   onNew: () => void;
   loading: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 p-2">
-        <Button variant="outline" className="w-full justify-start" onClick={onNew}><PlusIcon size={15} /> New conversation</Button>
+        <Button variant="outline" className="w-full justify-start" onClick={onNew}><PlusIcon size={15} /> {t("New conversation")}</Button>
       </div>
-      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2" aria-label="Conversations">
+      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2" aria-label={t("Conversations")}>
         {loading ? [0, 1, 2].map((i) => <li key={i}><Skeleton className="mb-1.5 h-12 rounded-sm" /></li>) : null}
-        {!loading && !sessions.length ? <li className="px-2 py-6 text-center text-[12.5px] text-muted">No conversations yet.</li> : null}
+        {!loading && !sessions.length ? <li className="px-2 py-6 text-center text-[12.5px] text-muted">{t("No conversations yet.")}</li> : null}
         {sessions.map((s) => {
           const on = s.id === current;
           const channel = isChannelChat(s);
@@ -214,7 +219,7 @@ function SessionList({ sessions, current, onPick, onNew, loading }: {
                 className={cn("flex min-h-12 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left transition-colors", on ? "bg-accent-soft" : "hover:bg-surface-2")}>
                 {channel ? <WhatsappLogoIcon size={16} className="shrink-0 text-ok" /> : <ChatCircleDotsIcon size={16} className={cn("shrink-0", on ? "text-accent" : "text-muted")} />}
                 <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-[13px]", on && "font-medium text-accent")}>{s.title || "Conversation"}</span>
+                  <span className={cn("block truncate text-[13px]", on && "font-medium text-accent")}>{s.title || t("Conversation")}</span>
                   <span className="block truncate text-[11.5px] text-muted">{timeAgo(s.updated_at)}</span>
                 </span>
               </button>
@@ -227,6 +232,7 @@ function SessionList({ sessions, current, onPick, onNew, loading }: {
 }
 
 function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; onDrafts: () => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const reduce = useReducedMotion();
   const phone = useIsPhone();
@@ -274,7 +280,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       setPicked(true);
       await qc.invalidateQueries({ queryKey: workKeys.messages(r.session_id) });
       qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
-      if (r.tools_used.some((t) => PROPOSES.includes(t))) {
+      if (r.tools_used.some((x) => PROPOSES.includes(x))) {
         qc.invalidateQueries({ queryKey: assistantKeys.allDrafts });
         qc.invalidateQueries({ queryKey: assistantKeys.allCalendar });
         qc.invalidateQueries({ queryKey: assistantKeys.home });
@@ -373,11 +379,11 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
   const pick = (id: string) => { setLocal([]); setSessionId(id); setPicked(true); setHistory(false); };
 
   const submit = (text = draft) => {
-    const t = text.trim();
-    if (!t || send.isPending) return;
+    const said = text.trim();
+    if (!said || send.isPending) return;
     setDraft("");
     stick.current = true;
-    send.mutate(t);
+    send.mutate(said);
   };
   const gmail = !!home.google.account;
   const cal = !!home.google.account?.calendar;
@@ -394,7 +400,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       data-guide="assistants.chat"
       role={full ? "dialog" : undefined}
       aria-modal={full || undefined}
-      aria-label={full ? `Chat with ${agent.name}, full screen` : undefined}
+      aria-label={full ? t("Chat with {name}, full screen", { name: agent.name }) : undefined}
       className={cn(
         "flex min-w-0 overflow-hidden bg-surface",
         full
@@ -404,11 +410,11 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
     >
       {/* Full screen on wide screens: the conversations sit beside the chat (and fold away). */}
       {railOpen ? (
-        <aside aria-label="Conversations" className="flex w-72 shrink-0 flex-col border-r border-border bg-surface-2/40">
+        <aside aria-label={t("Conversations")} className="flex w-72 shrink-0 flex-col border-r border-border bg-surface-2/40">
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
             <AgentAvatar name={agent.name} color={agent.color} size="sm" />
             <p className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{agent.name}</p>
-            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label="Hide conversations" title="Hide conversations"><SidebarSimpleIcon size={17} /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Hide conversations")} title={t("Hide conversations")}><SidebarSimpleIcon size={17} /></Button>
           </div>
           {list}
         </aside>
@@ -417,7 +423,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       <div className="relative flex min-w-0 flex-1 flex-col">
         <div className={cn("flex shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-4", full ? "h-14" : "py-2.5")}>
           {full && !phone && !rail ? (
-            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label="Show conversations" title="Show conversations"><SidebarSimpleIcon size={17} /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Show conversations")} title={t("Show conversations")}><SidebarSimpleIcon size={17} /></Button>
           ) : null}
           <AgentAvatar name={agent.name} color={agent.color} size="sm" working={send.isPending} />
           <div className="min-w-0 flex-1">
@@ -425,18 +431,18 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
             <p className="truncate text-[11.5px] text-muted">{send.isPending ? thinkingLine(asked) : title && current ? title : agent.role}</p>
           </div>
           {waiting ? (
-            <Button size="sm" variant="outline" onClick={() => { setFull(false); onDrafts(); }} title={`${waiting} to approve`}>
-              <CheckCircleIcon size={14} /> {waiting}<span className="max-sm:hidden"> to approve</span>
+            <Button size="sm" variant="outline" onClick={() => { setFull(false); onDrafts(); }} title={t("{n} to approve", { n: waiting })}>
+              <CheckCircleIcon size={14} /> {waiting}<span className="max-sm:hidden"> {t("to approve")}</span>
             </Button>
           ) : null}
           {!railOpen ? (
-            <Button size="icon-sm" variant="ghost" onClick={() => setHistory(true)} aria-label="Conversations" title="Conversations"><ClockCounterClockwiseIcon size={17} /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={() => setHistory(true)} aria-label={t("Conversations")} title={t("Conversations")}><ClockCounterClockwiseIcon size={17} /></Button>
           ) : null}
           {current ? (
-            <Button size="sm" variant="ghost" onClick={startNew} aria-label="New conversation" title="New conversation"><PlusIcon size={15} /><span className="max-md:hidden">New</span></Button>
+            <Button size="sm" variant="ghost" onClick={startNew} aria-label={t("New conversation")} title={t("New conversation")}><PlusIcon size={15} /><span className="max-md:hidden">{t("New")}</span></Button>
           ) : null}
           <Button size="icon-sm" variant="ghost" onClick={() => setFull((f) => !f)} aria-pressed={full}
-            aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (Esc)" : "Full screen (F)"}>
+            aria-label={full ? t("Exit full screen") : t("Full screen")} title={full ? t("Exit full screen (Esc)") : t("Full screen (F)")}>
             {full ? <ArrowsInSimpleIcon size={17} /> : <ArrowsOutSimpleIcon size={17} />}
           </Button>
         </div>
@@ -449,20 +455,20 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
               <div className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center gap-4 py-6 text-center">
                 <AgentAvatar name={agent.name} color={agent.color} size="lg" />
                 <div>
-                  <p className="text-[17px] font-semibold">Hi, I'm {agent.name}.</p>
-                  <p className="mt-1 text-[13px] text-muted">Ask me about the company, your team or your inbox. Try one of these:</p>
+                  <p className="text-[17px] font-semibold">{t("Hi, I'm {name}.", { name: agent.name })}</p>
+                  <p className="mt-1 text-[13px] text-muted">{t("Ask me about the company, your team or your inbox. Try one of these:")}</p>
                 </div>
                 <div data-guide="assistants.quick" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
                   {prompts.slice(0, 6).map((p) => (
                     <button key={p.label} type="button" onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
                       className="group flex min-h-11 items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border px-3.5 py-3 text-left text-[13px] transition-colors hover:border-accent/50 hover:bg-accent-soft/40">
-                      <span className="font-medium">{p.label}</span>
+                      <span className="font-medium">{t(p.label)}</span>
                       <ArrowRightIcon size={14} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
                     </button>
                   ))}
                 </div>
-                {!gmail ? <p className="text-[12px] text-muted">Connect Google in Settings and I can read your inbox and calendar too.</p>
-                  : !cal ? <p className="text-[12px] text-muted">Reconnect Google in Settings to add your calendar.</p> : null}
+                {!gmail ? <p className="text-[12px] text-muted">{t("Connect Google in Settings and I can read your inbox and calendar too.")}</p>
+                  : !cal ? <p className="text-[12px] text-muted">{t("Reconnect Google in Settings to add your calendar.")}</p> : null}
               </div>
             )
           ) : null}
@@ -481,12 +487,12 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
                     )}
                     {m.role === "assistant" && m.meta?.tools?.length ? (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {[...new Set(m.meta.tools)].map((t) => {
-                          const look = TOOL_LOOK[t];
+                        {[...new Set(m.meta.tools)].map((tool) => {
+                          const look = TOOL_LOOK[tool];
                           const IconCmp = look?.icon ?? LightningIcon;
                           return (
-                            <span key={t} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted">
-                              <IconCmp size={11} /> {look?.label ?? t.replace(/_/g, " ")}
+                            <span key={tool} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted">
+                              <IconCmp size={11} /> {look ? t(look.label) : tool.replace(/_/g, " ")}
                             </span>
                           );
                         })}
@@ -515,7 +521,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
               className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--composer-h,7.5rem)+0.75rem)] flex justify-center">
               <button type="button" onClick={() => { stick.current = true; toBottom(true); }}
                 className="pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium shadow-[var(--shadow-pop)] hover:border-accent/50 hover:text-accent">
-                <ArrowDownIcon size={14} weight="bold" /> {unseen ? "New reply" : "Jump to latest"}
+                <ArrowDownIcon size={14} weight="bold" /> {unseen ? t("New reply") : t("Jump to latest")}
               </button>
             </motion.div>
           ) : null}
@@ -528,22 +534,22 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
                 <button key={p.label} type="button" disabled={send.isPending}
                   onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
                   className="h-8 shrink-0 rounded-full border border-border px-3 text-[12px] whitespace-nowrap text-muted hover:border-accent/50 hover:text-fg disabled:opacity-50 pointer-coarse:h-9">
-                  {p.label}
+                  {t(p.label)}
                 </button>
               ))}
             </div>
           ) : null}
           <form className={cn("mx-auto flex w-full items-end gap-2 p-2.5 sm:p-3", full && "max-w-4xl")} onSubmit={(e) => { e.preventDefault(); submit(); }}>
-            <label htmlFor={`as-${agent.id}`} className="sr-only">Message {agent.name}</label>
+            <label htmlFor={`as-${agent.id}`} className="sr-only">{t("Message {name}", { name: agent.name })}</label>
             <textarea ref={box} id={`as-${agent.id}`} value={draft} rows={1}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
               disabled={agent.status !== "active"}
-              placeholder={agent.status !== "active" ? `${agent.name} is ${agent.status}` : phone ? "Ask anything…" : `Ask ${agent.name} anything…`}
+              placeholder={agent.status !== "active" ? t("{name} is {status}", { name: agent.name, status: agent.status === "paused" ? t("Paused").toLowerCase() : agent.status }) : phone ? t("Ask anything…") : t("Ask {name} anything…", { name: agent.name })}
               className="max-h-40 min-h-11 flex-1 resize-none rounded-[var(--radius-md)] border border-border bg-bg px-3.5 py-2.5 text-[14px] [field-sizing:content] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none disabled:opacity-60 max-sm:text-[16px]" />
             <VoiceInput round disabled={agent.status !== "active"}
-              onText={(t) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${t}` : t)); box.current?.focus(); }} />
-            <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || send.isPending} aria-label="Send">
+              onText={(said) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${said}` : said)); box.current?.focus(); }} />
+            <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || send.isPending} aria-label={t("Send")}>
               <PaperPlaneRightIcon size={18} weight="fill" />
             </Button>
           </form>
@@ -551,7 +557,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
       </div>
 
       {/* Conversations as a sheet: phones always, wide screens when the side list is not shown. */}
-      <SideSheet open={history} onOpenChange={setHistory} size="sm" title="Conversations" description={`Your chats with ${agent.name}. WhatsApp chats are listed too.`}>
+      <SideSheet open={history} onOpenChange={setHistory} size="sm" title={t("Conversations")} description={t("Your chats with {name}. WhatsApp chats are listed too.", { name: agent.name })}>
         {list}
       </SideSheet>
     </div>
@@ -561,6 +567,7 @@ function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; o
 // ---------------------------------------------------------------- drafts
 
 function DraftCard({ d }: { d: EmailDraft }) {
+  const t = useT();
   const qc = useQueryClient();
   const [body, setBody] = useState(d.body);
   const [subject, setSubject] = useState(d.subject);
@@ -569,7 +576,7 @@ function DraftCard({ d }: { d: EmailDraft }) {
   const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allDrafts }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
   const save = useMutation({
     mutationFn: () => api<EmailDraft>(`/api/email-drafts/${d.id}`, "PATCH", { body, subject }),
-    onSuccess: () => { refresh(); toast.success("Draft updated in Gmail."); },
+    onSuccess: () => { refresh(); toast.success(t("Draft updated in Gmail.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const send = useMutation({
@@ -577,69 +584,70 @@ function DraftCard({ d }: { d: EmailDraft }) {
       if (edited) await api(`/api/email-drafts/${d.id}`, "PATCH", { body, subject });
       return api<EmailDraft>(`/api/email-drafts/${d.id}/send`, "POST");
     },
-    onSuccess: () => { refresh(); toast.success(`Sent to ${d.to.replace(/<.*>/, "").trim() || d.to}.`); },
+    onSuccess: () => { refresh(); toast.success(t("Sent to {to}.", { to: d.to.replace(/<.*>/, "").trim() || d.to })); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const discard = useMutation({
     mutationFn: () => api(`/api/email-drafts/${d.id}/discard`, "POST"),
-    onSuccess: () => { refresh(); toast.success("Discarded."); },
+    onSuccess: () => { refresh(); toast.success(t("Discarded.")); },
   });
   return (
     <Card>
       <CardHeader icon={<IconTile icon={EnvelopeSimpleIcon} tone="info" size="sm" />}
-        title={<span className="break-words">To {d.to}</span>}
-        description={[d.agent_name ? `Drafted by ${d.agent_name}` : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
-        actions={<Pill tone="warn">Waiting for you</Pill>} />
+        title={<span className="break-words">{t("To {to}", { to: d.to })}</span>}
+        description={[d.agent_name ? t("Drafted by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+        actions={<Pill tone="warn">{t("Waiting for you")}</Pill>} />
       <CardBody className="grid gap-3">
         {d.is_reply && d.original_from ? (
           <div className="rounded-[var(--radius-sm)] border-l-2 border-border bg-surface-2/50 px-3 py-2 text-[12.5px] text-muted">
-            <p className="font-medium text-fg">In reply to {d.original_from}</p>
+            <p className="font-medium text-fg">{t("In reply to {from}", { from: d.original_from })}</p>
             {d.original_snippet ? <p className="mt-0.5 line-clamp-2">{d.original_snippet}</p> : null}
           </div>
         ) : null}
-        <Input value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Subject" className="font-medium" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={7} aria-label="Email body"
+        <Input value={subject} onChange={(e) => setSubject(e.target.value)} aria-label={t("Subject")} className="font-medium" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={7} aria-label={t("Email body")}
           className="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-[14px] leading-relaxed [field-sizing:content] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
         <div className="flex flex-wrap items-center gap-2 max-sm:[&>button]:flex-1">
-          <Button loading={send.isPending} onClick={() => send.mutate()}><PaperPlaneRightIcon size={15} weight="fill" /> {edited ? "Save and send" : "Send"}</Button>
-          {edited ? <Button variant="outline" loading={save.isPending} onClick={() => save.mutate()}>Save changes</Button> : null}
-          <Button variant="ghost" className="hover:text-danger" onClick={() => setDiscarding(true)}><TrashIcon size={14} /> Discard</Button>
+          <Button loading={send.isPending} onClick={() => send.mutate()}><PaperPlaneRightIcon size={15} weight="fill" /> {edited ? t("Save and send") : t("Send")}</Button>
+          {edited ? <Button variant="outline" loading={save.isPending} onClick={() => save.mutate()}>{t("Save changes")}</Button> : null}
+          <Button variant="ghost" className="hover:text-danger" onClick={() => setDiscarding(true)}><TrashIcon size={14} /> {t("Discard")}</Button>
         </div>
         {d.error ? <p className="text-[12.5px] text-danger">{d.error}</p> : null}
       </CardBody>
-      <ConfirmDialog open={discarding} onOpenChange={setDiscarding} title="Discard this draft?" danger confirmLabel="Discard"
-        body="It is removed from your Gmail drafts. Nothing was sent." onConfirm={async () => { await discard.mutateAsync(); }} />
+      <ConfirmDialog open={discarding} onOpenChange={setDiscarding} title={t("Discard this draft?")} danger confirmLabel={t("Discard")}
+        body={t("It is removed from your Gmail drafts. Nothing was sent.")} onConfirm={async () => { await discard.mutateAsync(); }} />
     </Card>
   );
 }
 
 const CAL_LOOK: Record<CalendarDraft["action"], { icon: Icon; tone: Tone; verb: string; confirm: string; done: string }> = {
-  create: { icon: CalendarPlusIcon, tone: "accent", verb: "New event", confirm: "Add to calendar", done: "Added to your calendar." },
-  update: { icon: CalendarBlankIcon, tone: "info", verb: "Change", confirm: "Save the change", done: "Calendar updated." },
-  cancel: { icon: CalendarXIcon, tone: "danger", verb: "Cancel", confirm: "Cancel the event", done: "Event cancelled." },
+  create: { icon: CalendarPlusIcon, tone: "accent", verb: msg("New event"), confirm: msg("Add to calendar"), done: msg("Added to your calendar.") },
+  update: { icon: CalendarBlankIcon, tone: "info", verb: msg("Change"), confirm: msg("Save the change"), done: msg("Calendar updated.") },
+  cancel: { icon: CalendarXIcon, tone: "danger", verb: msg("Cancel"), confirm: msg("Cancel the event"), done: msg("Event cancelled.") },
 };
 
 /** An event an assistant proposed. Nothing reaches Google (or the guests) until Confirm. */
 function CalendarDraftCard({ d }: { d: CalendarDraft }) {
+  const t = useT();
   const qc = useQueryClient();
   const look = CAL_LOOK[d.action];
   const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allCalendar }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
   const confirm = useMutation({
     mutationFn: () => api<CalendarDraft>(`/api/calendar-drafts/${d.id}/confirm`, "POST"),
-    onSuccess: () => { refresh(); toast.success(look.done + (d.notify ? " Guests were told." : "")); },
+    onSuccess: () => { refresh(); toast.success(t(look.done) + (d.notify ? ` ${t("Guests were told.")}` : "")); },
     onError: (e) => { refresh(); toast.error(errorMessage(e)); },
   });
   const discard = useMutation({
     mutationFn: () => api(`/api/calendar-drafts/${d.id}/discard`, "POST"),
-    onSuccess: () => { refresh(); toast.success("Discarded. Nothing changed in your calendar."); },
+    onSuccess: () => { refresh(); toast.success(t("Discarded. Nothing changed in your calendar.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
     <Card>
       <CardHeader icon={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
-        title={<span className="break-words">{look.verb}: {d.title}</span>}
-        description={[d.agent_name ? `Proposed by ${d.agent_name}` : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
-        actions={<Pill tone="warn">Waiting for you</Pill>} />
+        title={<span className="break-words">{t(look.verb)}: {d.title}</span>}
+        description={[d.agent_name ? t("Proposed by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+        actions={<Pill tone="warn">{t("Waiting for you")}</Pill>} />
       <CardBody className="grid gap-3">
         <p className="text-[13.5px] break-words">{d.summary}</p>
         {d.attendees.length || d.meet ? (
@@ -648,12 +656,12 @@ function CalendarDraftCard({ d }: { d: CalendarDraft }) {
             {d.meet ? <Pill tone="info"><VideoCameraIcon size={12} /> Google Meet</Pill> : null}
           </div>
         ) : null}
-        {d.notify ? <p className="text-[12px] text-muted">Guests get {d.action === "create" ? "an invitation" : "an update"} only when you confirm.</p> : null}
+        {d.notify ? <p className="text-[12px] text-muted">{d.action === "create" ? t("Guests get an invitation only when you confirm.") : t("Guests get an update only when you confirm.")}</p> : null}
         <div className="flex flex-wrap items-center gap-2 max-sm:[&>button]:flex-1">
           <Button variant={d.action === "cancel" ? "danger" : "primary"} loading={confirm.isPending} onClick={() => confirm.mutate()}>
-            <CalendarCheckIcon size={15} /> {look.confirm}
+            <CalendarCheckIcon size={15} /> {t(look.confirm)}
           </Button>
-          <Button variant="ghost" loading={discard.isPending} onClick={() => discard.mutate()}><TrashIcon size={14} /> Discard</Button>
+          <Button variant="ghost" loading={discard.isPending} onClick={() => discard.mutate()}><TrashIcon size={14} /> {t("Discard")}</Button>
         </div>
         {d.error ? <p className="text-[12.5px] text-danger">{d.error}</p> : null}
       </CardBody>
@@ -661,36 +669,39 @@ function CalendarDraftCard({ d }: { d: CalendarDraft }) {
   );
 }
 
+const HANDLED: Record<string, string> = { sent: msg("Sent"), done: msg("Done"), discarded: msg("Discarded"), failed: msg("Failed"), cancelled: msg("Cancelled") };
+
 function Drafts({ home }: { home: AssistantsHome }) {
+  const t = useT();
   const { data: pending = [], isLoading } = useQuery(draftsQuery("pending"));
   const { data: events = [], isLoading: loadingEvents } = useQuery(calendarDraftsQuery("pending"));
   const [history, setHistory] = useState(false);
   const { data: all = [] } = useQuery({ ...draftsQuery("all"), enabled: history });
   const { data: allEvents = [] } = useQuery({ ...calendarDraftsQuery("all"), enabled: history });
   if (!home.google.account && !events.length) {
-    return <EmptyState icon={EnvelopeSimpleIcon} title="Google isn't connected" body="Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here." />;
+    return <EmptyState icon={EnvelopeSimpleIcon} title={t("Google isn't connected")} body={t("Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here.")} />;
   }
   const done = [
     ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: `${d.subject} → ${d.to}`, at: d.decided_at ?? d.created_at })),
-    ...allEvents.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: CAL_LOOK[d.action].icon, status: d.status, ok: d.status === "done", text: `${CAL_LOOK[d.action].verb}: ${d.title}`, at: d.decided_at ?? d.created_at })),
+    ...allEvents.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: CAL_LOOK[d.action].icon, status: d.status, ok: d.status === "done", text: `${t(CAL_LOOK[d.action].verb)}: ${d.title}`, at: d.decided_at ?? d.created_at })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   return (
     <div className="grid gap-3">
       {isLoading || loadingEvents ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
-        : !pending.length && !events.length ? <EmptyState icon={CheckCircleIcon} title="Nothing waiting" body="When an assistant drafts an email or proposes a calendar event, it appears here and on your phone. You review it, then send or confirm." />
+        : !pending.length && !events.length ? <EmptyState icon={CheckCircleIcon} title={t("Nothing waiting")} body={t("When an assistant drafts an email or proposes a calendar event, it appears here and on your phone. You review it, then send or confirm.")} />
         : (
           <>
             {events.map((d) => <CalendarDraftCard key={d.id} d={d} />)}
             {pending.map((d) => <DraftCard key={d.id} d={d} />)}
           </>
         )}
-      <button type="button" onClick={() => setHistory((h) => !h)} className="w-fit text-[12.5px] text-muted hover:text-fg">{history ? "Hide" : "Show"} handled</button>
+      <button type="button" onClick={() => setHistory((h) => !h)} className="w-fit text-[12.5px] text-muted hover:text-fg">{history ? t("Hide handled") : t("Show handled")}</button>
       {history ? (
         <ul className="grid gap-1.5">
           {done.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-2 rounded-sm border border-border px-3 py-2 text-[12.5px]">
               <d.icon size={14} className="shrink-0 text-muted" />
-              <Pill tone={d.ok ? "ok" : d.status === "failed" ? "danger" : "neutral"}>{d.status}</Pill>
+              <Pill tone={d.ok ? "ok" : d.status === "failed" ? "danger" : "neutral"}>{HANDLED[d.status] ? t(HANDLED[d.status]!) : d.status}</Pill>
               <span className="min-w-0 flex-1 truncate">{d.text}</span>
               <span className="text-muted">{timeAgo(d.at)}</span>
             </li>
@@ -707,6 +718,7 @@ const pretty = (n: string | null) => (n ? `+${n.replace(/^(\d{2})(\d{2})(\d{3,4}
 
 /** Link my own WhatsApp to the office number, right here: a code, a wa.me link, and a wait. */
 function LinkWhatsApp({ home }: { home: AssistantsHome }) {
+  const t = useT();
   const qc = useQueryClient();
   const [code, setCode] = useState<{ code: string; url: string | null; expires_in: number } | null>(null);
   const get = useMutation({
@@ -717,30 +729,31 @@ function LinkWhatsApp({ home }: { home: AssistantsHome }) {
   // While a code is out, look every few seconds for the link to land.
   useEffect(() => {
     if (!code || home.whatsapp.linked) return;
-    const t = setInterval(() => qc.invalidateQueries({ queryKey: assistantKeys.home }), 4000);
-    const stop = setTimeout(() => clearInterval(t), code.expires_in * 1000);
-    return () => { clearInterval(t); clearTimeout(stop); };
+    const poll = setInterval(() => qc.invalidateQueries({ queryKey: assistantKeys.home }), 4000);
+    const stop = setTimeout(() => clearInterval(poll), code.expires_in * 1000);
+    return () => { clearInterval(poll); clearTimeout(stop); };
   }, [code, home.whatsapp.linked, qc]);
   const wasLinked = useRef(home.whatsapp.linked);
   useEffect(() => {
-    if (home.whatsapp.linked && !wasLinked.current) toast.success("WhatsApp linked. Notices and your assistant are on WhatsApp now.");
+    if (home.whatsapp.linked && !wasLinked.current) toast.success(t("WhatsApp linked. Notices and your assistant are on WhatsApp now."));
     wasLinked.current = home.whatsapp.linked;
-  }, [home.whatsapp.linked]);
-  if (home.whatsapp.linked) return <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Linked</Pill>;
-  if (home.whatsapp.status !== "WORKING") return <Button size="sm" variant="outline" asChild><Link to="/channels">Open Channels</Link></Button>;
-  if (!code) return <Button size="sm" loading={get.isPending} onClick={() => get.mutate()}>Link my WhatsApp</Button>;
+  }, [home.whatsapp.linked, t]);
+  if (home.whatsapp.linked) return <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> {t("Linked")}</Pill>;
+  if (home.whatsapp.status !== "WORKING") return <Button size="sm" variant="outline" asChild><Link to="/channels">{t("Open Channels")}</Link></Button>;
+  if (!code) return <Button size="sm" loading={get.isPending} onClick={() => get.mutate()}>{t("Link my WhatsApp")}</Button>;
   return (
     <div className="grid w-full gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
-      <p className="text-[12.5px]">From your phone, send this to <b>{pretty(home.whatsapp.number)}</b>:</p>
+      <p className="text-[12.5px]"><Trans text={t("From your phone, send this to {number}:")} values={{ number: <b>{pretty(home.whatsapp.number)}</b> }} /></p>
       <p className="rounded-sm bg-surface px-3 py-2 text-center font-mono text-[18px] font-semibold tracking-[0.15em] select-all">LINK {code.code}</p>
-      {code.url ? <Button size="sm" asChild><a href={code.url} target="_blank" rel="noreferrer"><WhatsappLogoIcon size={15} /> Open WhatsApp</a></Button> : null}
-      <p className="text-[11.5px] text-muted">Is {pretty(home.whatsapp.number)} your own phone? Then open WhatsApp, tap <b>Message yourself</b> and send it there. You can chat with your assistant in that chat; messages to yourself don't ring, so for alerts link a different number.</p>
-      <p className="flex items-center gap-1.5 text-[11.5px] text-muted"><span className="size-1.5 animate-pulse rounded-full bg-accent" /> Waiting for your message… (code valid 10 minutes)</p>
+      {code.url ? <Button size="sm" asChild><a href={code.url} target="_blank" rel="noreferrer"><WhatsappLogoIcon size={15} /> {t("Open WhatsApp")}</a></Button> : null}
+      <p className="text-[11.5px] text-muted"><Trans text={t("Is {number} your own phone? Then open WhatsApp, tap {button} and send it there. You can chat with your assistant in that chat; messages to yourself don't ring, so for alerts link a different number.")} values={{ number: pretty(home.whatsapp.number), button: <b>{t("Message yourself")}</b> }} /></p>
+      <p className="flex items-center gap-1.5 text-[11.5px] text-muted"><span className="size-1.5 animate-pulse rounded-full bg-accent" /> {t("Waiting for your message… (code valid 10 minutes)")}</p>
     </div>
   );
 }
 
 function Connections({ home }: { home: AssistantsHome }) {
+  const t = useT();
   const qc = useQueryClient();
   const [unlinking, setUnlinking] = useState(false);
   const g = home.google;
@@ -751,7 +764,7 @@ function Connections({ home }: { home: AssistantsHome }) {
   });
   const disconnect = useMutation({
     mutationFn: () => api("/api/integrations/google/account", "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success("Google disconnected."); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(t("Google disconnected.")); },
   });
   const row = (icon: Icon, tone: Tone, title: string, status: React.ReactNode, action: React.ReactNode) => (
     // The card is narrow at every size: the action sits under the text, never squeezing it.
@@ -763,51 +776,52 @@ function Connections({ home }: { home: AssistantsHome }) {
   );
   return (
     <Card data-guide="assistants.connections">
-      <CardHeader title="Connections" description="What your assistants can reach on your behalf." />
+      <CardHeader title={t("Connections")} description={t("What your assistants can reach on your behalf.")} />
       <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
         {row(EnvelopeSimpleIcon, "info", "Gmail",
-          g.account ? (g.account.status === "error" ? <span className="text-danger">{g.account.last_error}</span> : <>Connected as {g.account.email}. Drafts only; you send.</>)
-            : g.configured ? "Read your inbox and draft replies. Free." : g.can_configure ? "Set up Google sign-in first (Channels > Gmail)." : "Ask an admin to set up Google sign-in.",
+          g.account ? (g.account.status === "error" ? <span className="text-danger">{g.account.last_error}</span> : t("Connected as {email}. Drafts only; you send.", { email: g.account.email }))
+            : g.configured ? t("Read your inbox and draft replies. Free.") : g.can_configure ? t("Set up Google sign-in first (Channels > Gmail).") : t("Ask an admin to set up Google sign-in."),
           g.account ? (
             <>
-              {g.account.status === "error" ? <Button size="sm" onClick={() => connect.mutate()} loading={connect.isPending}>Reconnect</Button> : <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Connected</Pill>}
-              <Button size="sm" variant="ghost" onClick={() => setUnlinking(true)}>Disconnect</Button>
+              {g.account.status === "error" ? <Button size="sm" onClick={() => connect.mutate()} loading={connect.isPending}>{t("Reconnect")}</Button> : <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> {t("Connected")}</Pill>}
+              <Button size="sm" variant="ghost" onClick={() => setUnlinking(true)}>{t("Disconnect")}</Button>
             </>
-          ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>Connect Google</Button>
-            : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">Set up</Link></Button> : null)}
-        {row(CalendarBlankIcon, "accent", "Calendar",
-          g.account?.calendar ? <>Your Google Calendar. Assistants read it and find free time; events they propose wait for you.</>
-            : g.account ? "Connected before calendar access was added. Reconnect Google and tick the calendar box."
-            : "Connect Google above to add your calendar.",
-          g.account?.calendar ? <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> Connected</Pill>
-            : g.account ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><CalendarPlusIcon size={14} /> Reconnect Google to add Calendar</Button>
+          ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>{t("Connect Google")}</Button>
+            : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">{t("Set up")}</Link></Button> : null)}
+        {row(CalendarBlankIcon, "accent", t("Calendar"),
+          g.account?.calendar ? t("Your Google Calendar. Assistants read it and find free time; events they propose wait for you.")
+            : g.account ? t("Connected before calendar access was added. Reconnect Google and tick the calendar box.")
+            : t("Connect Google above to add your calendar."),
+          g.account?.calendar ? <Pill tone="ok"><CheckCircleIcon size={12} weight="fill" /> {t("Connected")}</Pill>
+            : g.account ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><CalendarPlusIcon size={14} /> {t("Reconnect Google to add Calendar")}</Button>
             : null)}
         {row(WhatsappLogoIcon, "ok", "WhatsApp",
-          !home.whatsapp.channel_id ? "Not set up for the office yet."
-            : home.whatsapp.status !== "WORKING" ? `The office number is not connected (${(home.whatsapp.status ?? "unknown").toLowerCase().replace(/_/g, " ")}). An admin reconnects it on Channels.`
-            : home.whatsapp.linked ? <>Office number {pretty(home.whatsapp.number)} connected, and your phone is linked: notices, drafts and chat reach you there.</>
-            : <>Office number {pretty(home.whatsapp.number)} is connected. Link <b>your</b> number to get notices and chat with your assistant.</>,
-          home.whatsapp.channel_id ? <LinkWhatsApp home={home} /> : <Button size="sm" variant="outline" asChild><Link to="/channels">Set up</Link></Button>)}
-        {row(ChatCircleDotsIcon, "neutral", "Where you get notices",
-          home.reach.length ? home.reach.map((r) => (r === "app" ? "this app" : r === "whatsapp" ? "WhatsApp" : "Telegram")).join(", ") : "Nowhere yet: turn on phone notifications or link WhatsApp.",
+          !home.whatsapp.channel_id ? t("Not set up for the office yet.")
+            : home.whatsapp.status !== "WORKING" ? t("The office number is not connected ({status}). An admin reconnects it on Channels.", { status: (home.whatsapp.status ?? "unknown").toLowerCase().replace(/_/g, " ") })
+            : home.whatsapp.linked ? t("Office number {number} connected, and your phone is linked: notices, drafts and chat reach you there.", { number: pretty(home.whatsapp.number) })
+            : <Trans text={t("Office number {number} is connected. Link {your} number to get notices and chat with your assistant.")} values={{ number: pretty(home.whatsapp.number), your: <b>{t("your")}</b> }} />,
+          home.whatsapp.channel_id ? <LinkWhatsApp home={home} /> : <Button size="sm" variant="outline" asChild><Link to="/channels">{t("Set up")}</Link></Button>)}
+        {row(ChatCircleDotsIcon, "neutral", t("Where you get notices"),
+          home.reach.length ? home.reach.map((r) => (r === "app" ? t("this app") : r === "whatsapp" ? "WhatsApp" : "Telegram")).join(", ") : t("Nowhere yet: turn on phone notifications or link WhatsApp."),
           null)}
       </ul>
-      <ConfirmDialog open={unlinking} onOpenChange={setUnlinking} title="Disconnect Google?" confirmLabel="Disconnect"
-        body="Your assistants stop reading your email and calendar. Drafts already in Gmail stay there." onConfirm={async () => { await disconnect.mutateAsync(); }} />
+      <ConfirmDialog open={unlinking} onOpenChange={setUnlinking} title={t("Disconnect Google?")} confirmLabel={t("Disconnect")}
+        body={t("Your assistants stop reading your email and calendar. Drafts already in Gmail stay there.")} onConfirm={async () => { await disconnect.mutateAsync(); }} />
     </Card>
   );
 }
 
 const TOOL_GROUPS: { label: string; hint: string; tools: string[]; on?: Record<string, string> }[] = [
-  { label: "Company reports", hint: "Pulse, team performance, where things slip", tools: ["company_pulse", "team_performance", "slacking_report"] },
-  { label: "Email", hint: "Read your Gmail and draft replies (you send)", tools: ["email_search", "email_read", "email_draft_reply", "email_draft"] },
-  { label: "Calendar", hint: "Read your calendar, find free time, propose events (you confirm)", tools: ["calendar_agenda", "calendar_free_slots", "calendar_create_event", "calendar_update_event", "calendar_cancel_event"] },
-  { label: "Reach people and agents", hint: "WhatsApp/app messages, jobs for other agents", tools: ["notify_person", "message_agent"] },
+  { label: msg("Company reports"), hint: msg("Pulse, team performance, where things slip"), tools: ["company_pulse", "team_performance", "slacking_report"] },
+  { label: msg("Email"), hint: msg("Read your Gmail and draft replies (you send)"), tools: ["email_search", "email_read", "email_draft_reply", "email_draft"] },
+  { label: msg("Calendar"), hint: msg("Read your calendar, find free time, propose events (you confirm)"), tools: ["calendar_agenda", "calendar_free_slots", "calendar_create_event", "calendar_update_event", "calendar_cancel_event"] },
+  { label: msg("Reach people and agents"), hint: msg("WhatsApp/app messages, jobs for other agents"), tools: ["notify_person", "message_agent"] },
   // Asking in chat is the OK; from anywhere else a schedule waits for your approval ("ask").
-  { label: "Schedules", hint: "Set up recurring or one-off jobs when you ask", tools: ["schedule_task", "list_my_schedules", "cancel_schedule"], on: { schedule_task: "ask" } },
+  { label: msg("Schedules"), hint: msg("Set up recurring or one-off jobs when you ask"), tools: ["schedule_task", "list_my_schedules", "cancel_schedule"], on: { schedule_task: "ask" } },
 ];
 
 function Settings({ agent, home }: { agent: Agent; home: AssistantsHome }) {
+  const t = useT();
   const qc = useQueryClient();
   const [name, setName] = useState(agent.name);
   const [soul, setSoul] = useState(agent.soul);
@@ -817,40 +831,40 @@ function Settings({ agent, home }: { agent: Agent; home: AssistantsHome }) {
   const dirty = name !== agent.name || soul !== agent.soul || group !== agent.model_group || JSON.stringify(tools) !== JSON.stringify(agent.tools);
   const save = useMutation({
     mutationFn: () => api<Agent>(`/api/agents/${agent.id}`, "PATCH", { name, soul, model_group: group, tools }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success("Saved."); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(t("Saved.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const retire = useMutation({
     mutationFn: () => api(`/api/agents/${agent.id}`, "PATCH", { status: "retired" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(`${agent.name} retired.`); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: assistantKeys.home }); toast.success(t("{name} retired.", { name: agent.name })); },
   });
-  const on = (g: string[]) => g.every((t) => (tools[t] ?? "allow") !== "deny");
+  const on = (g: string[]) => g.every((k) => (tools[k] ?? "allow") !== "deny");
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
       <Card>
-        <CardHeader title="Your assistant" description="Only you see it, and what you discuss." />
+        <CardHeader title={t("Your assistant")} description={t("Only you see it, and what you discuss.")} />
         <CardBody className="grid gap-4">
-          <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <TextareaField label="How it works for you" rows={9} value={soul} onChange={(e) => setSoul(e.target.value)} hint="Its instructions, in plain words. Add how you like things done." />
+          <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} />
+          <TextareaField label={t("How it works for you")} rows={9} value={soul} onChange={(e) => setSoul(e.target.value)} hint={t("Its instructions, in plain words. Add how you like things done.")} />
           <div className="grid gap-1.5">
-            <span className="text-[13px] font-medium">Thinking</span>
-            <Select value={group} onValueChange={setGroup} label="Model group" options={[{ value: "smart", label: "Smart (best answers)" }, { value: "fast", label: "Fast (cheaper)" }, { value: "reasoning", label: "Reasoning (deep analysis)" }]} />
+            <span className="text-[13px] font-medium">{t("Thinking")}</span>
+            <Select value={group} onValueChange={setGroup} label={t("Model group")} options={[{ value: "smart", label: t("Smart (best answers)") }, { value: "fast", label: t("Fast (cheaper)") }, { value: "reasoning", label: t("Reasoning (deep analysis)") }]} />
           </div>
           <div className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
             {TOOL_GROUPS.map((g) => (
-              <SwitchField key={g.label} checked={on(g.tools)} label={g.label} hint={g.hint}
-                onCheckedChange={(v) => setTools((t) => ({ ...t, ...Object.fromEntries(g.tools.map((x) => [x, v ? g.on?.[x] ?? "allow" : "deny"])) }))} />
+              <SwitchField key={g.label} checked={on(g.tools)} label={t(g.label)} hint={t(g.hint)}
+                onCheckedChange={(v) => setTools((cur) => ({ ...cur, ...Object.fromEntries(g.tools.map((x) => [x, v ? g.on?.[x] ?? "allow" : "deny"])) }))} />
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>Save</Button>
-            <Button variant="ghost" className="hover:text-danger" onClick={() => setRetiring(true)}><TrashIcon size={14} /> Retire</Button>
+            <Button disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button>
+            <Button variant="ghost" className="hover:text-danger" onClick={() => setRetiring(true)}><TrashIcon size={14} /> {t("Retire")}</Button>
           </div>
         </CardBody>
       </Card>
       <Connections home={home} />
-      <ConfirmDialog open={retiring} onOpenChange={setRetiring} title={`Retire ${agent.name}?`} danger confirmLabel="Retire"
-        body="It stops working for you. Your conversations stay in the records." onConfirm={async () => { await retire.mutateAsync(); }} />
+      <ConfirmDialog open={retiring} onOpenChange={setRetiring} title={t("Retire {name}?", { name: agent.name })} danger confirmLabel={t("Retire")}
+        body={t("It stops working for you. Your conversations stay in the records.")} onConfirm={async () => { await retire.mutateAsync(); }} />
     </div>
   );
 }
@@ -858,6 +872,7 @@ function Settings({ agent, home }: { agent: Agent; home: AssistantsHome }) {
 // ---------------------------------------------------------------- the page
 
 export function AssistantsPage() {
+  const t = useT();
   const search = useSearch({ from: "/app/assistants" });
   const navigate = useNavigate({ from: "/assistants" });
   const qc = useQueryClient();
@@ -869,31 +884,31 @@ export function AssistantsPage() {
   const waiting = (home?.drafts_pending ?? 0) + (home?.calendar_pending ?? 0);
   const go = (p: { a?: string; tab?: Tab }) => navigate({ search: (s) => ({ ...s, ...p, google: undefined, msg: undefined }), replace: true });
   const viewTabs = (
-    <Segmented<Tab> label="View" value={tab} onChange={(t) => go({ tab: t })} className="w-full sm:w-fit lg:w-full [&>button]:flex-1 [&>button]:justify-center"
+    <Segmented<Tab> label={t("View")} value={tab} onChange={(v) => go({ tab: v })} className="w-full sm:w-fit lg:w-full [&>button]:flex-1 [&>button]:justify-center"
       options={[
-        { value: "chat", label: "Chat" },
-        { value: "drafts", label: "Drafts", ...(waiting ? { count: waiting } : {}) },
-        { value: "settings", label: "Settings" },
+        { value: "chat", label: t("Chat") },
+        { value: "drafts", label: t("Drafts"), ...(waiting ? { count: waiting } : {}) },
+        { value: "settings", label: t("Settings") },
       ]} />
   );
 
   // Back from Google sign-in.
   useEffect(() => {
     if (!search.google) return;
-    if (search.google === "connected") toast.success(`Google connected${search.msg ? `: ${search.msg}` : ""}.`);
-    else toast.error(search.msg || "Google sign-in failed.");
+    if (search.google === "connected") toast.success(search.msg ? t("Google connected: {detail}.", { detail: search.msg }) : t("Google connected."));
+    else toast.error(search.msg || t("Google sign-in failed."));
     qc.invalidateQueries({ queryKey: assistantKeys.home });
     navigate({ search: (s) => ({ ...s, google: undefined, msg: undefined, tab: "settings" }), replace: true });
-  }, [search.google, search.msg, navigate, qc]);
+  }, [search.google, search.msg, navigate, qc, t]);
 
   return (
     // Phones in the chat: tighter page padding, so the conversation reaches down to the tab bar.
     <Page wide className={list.length && tab === "chat" ? "max-md:pt-3 max-md:pb-2" : undefined}>
       {/* On phones with assistants, the chat gets the screen: its own header names the assistant. */}
       <div className={list.length ? "max-md:hidden" : undefined}>
-        <PageHeader title="My assistants"
-          description="Your own private AI assistants: they know the whole company, read your inbox, and chase people for you."
-          actions={list.length ? <Button onClick={() => setCreating("chief_of_staff")}><PlusIcon size={16} weight="bold" /> New assistant</Button> : null} />
+        <PageHeader title={t("My assistants")}
+          description={t("Your own private AI assistants: they know the whole company, read your inbox, and chase people for you.")}
+          actions={list.length ? <Button onClick={() => setCreating("chief_of_staff")}><PlusIcon size={16} weight="bold" /> {t("New assistant")}</Button> : null} />
       </div>
       {isLoading ? <Skeleton className="h-[60dvh] rounded-[var(--radius-lg)]" />
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
@@ -922,26 +937,26 @@ export function AssistantsPage() {
                 })}
                 <button type="button" onClick={() => setCreating("custom")}
                   className="flex shrink-0 items-center gap-2 rounded-[var(--radius-md)] border border-dashed border-border px-3 py-2 text-[13px] text-muted hover:border-accent/50 hover:text-fg lg:w-full">
-                  <PlusIcon size={15} /> Add
+                  <PlusIcon size={15} /> {t("Add")}
                 </button>
               </div>
               <div data-guide="assistants.connections" className="mt-4 hidden gap-2 lg:grid">
-                <p className="text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">Connected</p>
-                <span className="flex min-w-0 items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={cn("shrink-0", home.google.account ? "text-ok" : "text-muted")} /> <span className="truncate">{home.google.account ? home.google.account.email : "Gmail not connected"}</span></span>
+                <p className="text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">{t("Connected")}</p>
+                <span className="flex min-w-0 items-center gap-2 text-[12.5px]"><EnvelopeSimpleIcon size={15} className={cn("shrink-0", home.google.account ? "text-ok" : "text-muted")} /> <span className="truncate">{home.google.account ? home.google.account.email : t("Gmail not connected")}</span></span>
                 {home.google.account ? (
-                  home.google.account.calendar ? <span className="flex items-center gap-2 text-[12.5px]"><CalendarBlankIcon size={15} className="text-ok" /> Calendar connected</span>
-                    : <button type="button" onClick={() => go({ tab: "settings" })} className="flex items-center gap-2 text-left text-[12.5px] text-warn hover:underline"><CalendarBlankIcon size={15} /> Add your calendar →</button>
+                  home.google.account.calendar ? <span className="flex items-center gap-2 text-[12.5px]"><CalendarBlankIcon size={15} className="text-ok" /> {t("Calendar connected")}</span>
+                    : <button type="button" onClick={() => go({ tab: "settings" })} className="flex items-center gap-2 text-left text-[12.5px] text-warn hover:underline"><CalendarBlankIcon size={15} /> {t("Add your calendar →")}</button>
                 ) : null}
                 <span className="flex items-center gap-2 text-[12.5px]">
                   <WhatsappLogoIcon size={15} className={home.whatsapp.status === "WORKING" ? "text-ok" : "text-muted"} />
-                  {!home.whatsapp.channel_id ? "WhatsApp not set up" : home.whatsapp.status === "WORKING" ? `Office ${pretty(home.whatsapp.number)}` : "Office WhatsApp offline"}
+                  {!home.whatsapp.channel_id ? t("WhatsApp not set up") : home.whatsapp.status === "WORKING" ? t("Office {number}", { number: pretty(home.whatsapp.number) }) : t("Office WhatsApp offline")}
                 </span>
                 {home.whatsapp.status === "WORKING" ? (
                   <button type="button" onClick={() => go({ tab: "settings" })} className={cn("flex items-center gap-2 pl-[23px] text-left text-[12px]", home.whatsapp.linked ? "text-ok" : "text-warn hover:underline")}>
-                    {home.whatsapp.linked ? "Your phone is linked" : "Link your phone →"}
+                    {home.whatsapp.linked ? t("Your phone is linked") : t("Link your phone →")}
                   </button>
                 ) : null}
-                {waiting ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {waiting} waiting for you</button> : null}
+                {waiting ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {t("{n} waiting for you", { n: waiting })}</button> : null}
               </div>
             </aside>
 

@@ -30,14 +30,18 @@ async def agent(c: httpx.AsyncClient, n: int, out: list) -> None:
             return {"error": f"HTTP {r.status_code}"}
         return r.json()
 
+    def ref(obs, label):  # elements carry stable refs (e5); find the field by its label
+        return next((e.get("ref") for e in obs.get("elements") or [] if label in str(e.get("label", "")).lower()), "e0")
+
     steps = []
     o = await act(action="goto", url=f"{PORTAL}/login")
     steps.append(("open", o.get("error")))
-    o = await act(action="type", element=1, text="demo.supplier", secret=True, secret_kind="username", hosts=["practice-portal"])
+    user, pw, sign = ref(o, "user id"), ref(o, "password"), ref(o, "sign in")
+    o = await act(action="type", ref=user, text="demo.supplier", secret=True, secret_kind="username", hosts=["practice-portal"])
     steps.append(("user", o.get("error")))
-    o = await act(action="type", element=2, text="practice-only-2026", secret=True, secret_kind="password", hosts=["practice-portal"])
+    o = await act(action="type", ref=pw, text="practice-only-2026", secret=True, secret_kind="password", hosts=["practice-portal"])
     steps.append(("pass", o.get("error")))
-    o = await act(action="login_submit", element=3, hosts=["practice-portal"])
+    o = await act(action="login_submit", ref=sign, hosts=["practice-portal"])
     steps.append(("signin", o.get("error") or o.get("title")))
     for page in (1, 2, 3):
         o = await act(action="goto", url=f"{PORTAL}/inbox?page_no={page}")

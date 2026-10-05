@@ -6,16 +6,18 @@ import type { GuideManifest } from "@/guide/manifest";
 import { PAGE_ICONS } from "@/guide/rich";
 import { pageById } from "@/guide/targets";
 import { shotOf, videoOf } from "@/guide/data";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 function Missing({ shotKey, phone }: { shotKey: string; phone?: boolean }) {
+  const t = useT();
   const page = pageById(shotKey.split(":")[0] ?? "");
   const IconCmp = page ? (PAGE_ICONS[page.id] ?? BookBookmarkIcon) : ImageIcon;
   return (
     <div className="grid size-full place-items-center bg-[radial-gradient(ellipse_at_top,var(--accent-soft),var(--surface-2)_75%)] text-center">
       <div className={cn("grid justify-items-center", phone ? "gap-[0.4em] px-[0.6em]" : "gap-[0.5em]")}>
         <IconCmp weight="duotone" className="size-[2.2em] text-accent" />
-        <span className="text-[0.85em] font-medium text-fg">{page?.title ?? "Screenshot"}</span>
+        <span className="text-[0.85em] font-medium text-fg">{page ? t(page.title) : t("Screenshot")}</span>
       </div>
     </div>
   );

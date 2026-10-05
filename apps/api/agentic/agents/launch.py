@@ -39,7 +39,7 @@ async def launch(
     agent = await db.get(Agent, t.assignee_agent_id)
     if agent is None or agent.status != "active":
         raise LaunchError(409, "agent_inactive", "The assigned agent is not active.")
-    if t.status in RUNNING:
+    if t.status in RUNNING and not restartable(t):
         raise LaunchError(409, "already_running", "This task is already running.")
     now = now or datetime.now(UTC)
     if actor not in CONTINUES:
@@ -52,6 +52,7 @@ async def launch(
     t.run_count += 1
     t.status = "ready"
     t.result = t.error = t.blocked_reason = None
+    t.blocked_owner = t.blocked_action = None
     # A retry is a fresh agent run. Keeping the previous run's call budget would make
     # a task that stopped at MAX_CALLS_PER_TASK fail again before the model gets a turn.
     t.steps_used = 0
@@ -70,6 +71,39 @@ async def launch(
     return None
 
 
+def restartable(t: Task) -> bool:
+    """Blocked without a live run (P21): parked behind its blockers, or handed to a person by
+    the liveness reconciler. A person may start these by hand."""
+    from ..teams import blockers, reconcile  # late: both reach back into this module
+
+    return t.status == "blocked" and (
+        blockers.parked(t) or (t.blocked_action or "").startswith(reconcile.STOPPED)
+    )
+
+
+async def send_back(db: AsyncSession, t: Task, agent: Agent, feedback: str, actor: str) -> None:
+    """Return finished work with feedback: the agent continues the same conversation in a new
+    run. One path for a person's send-back and a reviewer agent's (P21), so skill learning
+    sees both as a correction."""
+    from ..models import AgentMessage
+    from ..skills import store as skills_store
+
+    await skills_store.settle(db, t.id, "sent_back")
+    db.add(
+        AgentMessage(
+            workspace_id=t.workspace_id,
+            agent_id=agent.id,
+            task_id=t.id,
+            role="user",
+            content=f"Feedback on your last answer: {feedback}",
+            created_at=datetime.now(UTC),
+        )
+    )
+    await db.commit()
+    await runtime.task_event(db, t, "feedback", actor, feedback[:500])
+    await launch(db, t, actor)
+
+
 async def _defer(
     db: AsyncSession, t: Task, agent: Agent, at: datetime, now: datetime, actor: str
 ) -> None:
@@ -78,6 +112,7 @@ async def _defer(
     note = work_hours.waiting_note(agent.name, at, now, wh)
     t.status = "ready"
     t.blocked_reason = note
+    t.blocked_owner = t.blocked_action = None
     await db.commit()
     try:
         await dispatch.start_deferred(t.id, t.run_count, at)

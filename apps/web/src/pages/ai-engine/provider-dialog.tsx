@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
+import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 
@@ -14,9 +15,9 @@ import { aiKeys, type Preset, type Provider, type Tier } from "./data";
 import { TestControls, TestSteps, useConnectionTest } from "./test-runner";
 
 const TIERS = [
-  { value: "free", label: "Free tier", hint: "Calls are counted but cost $0." },
-  { value: "paid", label: "Paid", hint: "Cost comes from the model prices you set." },
-  { value: "local", label: "Local", hint: "Runs on your own hardware." },
+  { value: "free", label: msg("Free tier"), hint: msg("Calls are counted but cost $0.") },
+  { value: "paid", label: msg("Paid"), hint: msg("Cost comes from the model prices you set.") },
+  { value: "local", label: msg("Local"), hint: msg("Runs on your own hardware.") },
 ];
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
 
 /** Connect or edit a provider. Remounted with a fresh key per open by the caller. */
 export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) {
+  const t = useT();
   const qc = useQueryClient();
   const editing = !!provider;
   const [name, setName] = useState(provider?.name ?? preset?.name ?? "");
@@ -56,7 +58,7 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: aiKeys.providers });
       qc.invalidateQueries({ queryKey: keys.status });
-      toast.success(editing ? `${name} updated.` : `${name} connected.`);
+      toast.success(editing ? t("{name} updated.", { name }) : t("{name} connected.", { name }));
       onOpenChange(false);
     },
   });
@@ -77,16 +79,16 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
     <ResponsiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editing ? `Edit ${provider.name}` : preset ? `Connect ${preset.name}` : "Connect a provider"}
-      description={preset?.notes || (editing ? undefined : "Any service with an OpenAI-compatible API works here.")}
+      title={editing ? t("Edit {name}", { name: provider.name }) : preset ? t("Connect {name}", { name: preset.name }) : t("Connect a provider")}
+      description={preset?.notes || (editing ? undefined : t("Any service with an OpenAI-compatible API works here."))}
       className="w-[min(94vw,36rem)]"
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button loading={save.isPending} disabled={!canSave} onClick={() => save.mutate()}>
-            {editing ? "Save changes" : "Save provider"}
+            {editing ? t("Save changes") : t("Save provider")}
           </Button>
         </>
       }
@@ -99,13 +101,13 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
             rel="noreferrer"
             className="inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"
           >
-            Get a {preset.name} key <ArrowSquareOutIcon size={14} />
+            {t("Get a {name} key", { name: preset.name })} <ArrowSquareOutIcon size={14} />
           </a>
         ) : null}
 
         <div className="grid gap-1.5">
           <label htmlFor="provider-key" className="text-[13px] font-medium">
-            API key
+            {t("API key")}
           </label>
           <div className="relative">
             <input
@@ -115,14 +117,14 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
               spellCheck={false}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={editing ? `Saved key ${provider.key_hint}. Leave blank to keep it.` : "Paste the key"}
+              placeholder={editing ? t("Saved key {hint}. Leave blank to keep it.", { hint: provider.key_hint }) : t("Paste the key")}
               aria-invalid={!!fields.api_key}
               className="h-10 w-full rounded-sm border border-border bg-surface pr-11 pl-3 font-mono text-[13px] placeholder:font-sans placeholder:text-muted/80 focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none"
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
-              aria-label={showKey ? "Hide key" : "Show key"}
+              aria-label={showKey ? t("Hide key") : t("Show key")}
               className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg"
             >
               {showKey ? <EyeSlashIcon size={18} /> : <EyeIcon size={18} />}
@@ -130,24 +132,24 @@ export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) 
           </div>
           <p className="text-[12.5px] text-muted">
             {urlChanged
-              ? "You changed the address, so type the key again. A saved key is never sent to a new address."
-              : "Stored encrypted. Only the last four characters are ever shown again."}
+              ? t("You changed the address, so type the key again. A saved key is never sent to a new address.")
+              : t("Stored encrypted. Only the last four characters are ever shown again.")}
           </p>
         </div>
 
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
-          <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} error={fields.name} />
+          <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} error={fields.name} />
           <div className="grid gap-1.5">
-            <span className="text-[13px] font-medium">Billing</span>
-            <Select value={tier} onValueChange={(v) => setTier(v as Tier)} options={TIERS} label="Billing" />
+            <span className="text-[13px] font-medium">{t("Billing")}</span>
+            <Select value={tier} onValueChange={(v) => setTier(v as Tier)} options={TIERS.map((o) => ({ ...o, label: t(o.label), hint: t(o.hint) }))} label={t("Billing")} />
           </div>
         </div>
         <Field
-          label="API address"
+          label={t("API address")}
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
           className="[&_input]:font-mono [&_input]:text-[13px]"
-          hint={preset ? "Filled in for you. Change it only if the provider moved its API." : "The OpenAI-compatible base URL, usually ending in /v1."}
+          hint={preset ? t("Filled in for you. Change it only if the provider moved its API.") : t("The OpenAI-compatible base URL, usually ending in /v1.")}
           error={fields.base_url}
         />
 

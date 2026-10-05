@@ -6,7 +6,11 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { locale, msg, useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+
+/** The nouns callers pass, so each has a Malay entry; others show as given. */
+export const LOAD_MORE_NOUNS = [msg("items"), msg("tasks"), msg("files"), msg("documents"), msg("reports"), msg("meetings"), msg("broadcasts"), msg("decisions"), msg("proposals"), msg("entries"), msg("facts"), msg("runs")];
 
 export interface LoadMoreProps {
   /** Rows on screen now. */
@@ -32,6 +36,7 @@ export interface LoadMoreProps {
 }
 
 export function LoadMore({ shown, total, hasMore, loading, onLoad, noun = "items", auto = true, skeleton, margin = 480, className, compact, root }: LoadMoreProps) {
+  const t = useT();
   const sentinel = useRef<HTMLDivElement>(null);
   const load = useRef(onLoad);
   useEffect(() => {
@@ -50,10 +55,12 @@ export function LoadMore({ shown, total, hasMore, loading, onLoad, noun = "items
     return () => io.disconnect();
   }, [auto, hasMore, loading, margin, root]);
 
-  const count = total != null && total >= shown ? `Showing ${shown.toLocaleString()} of ${total.toLocaleString()} ${noun}` : `Showing ${shown.toLocaleString()} ${noun}`;
+  const n = shown.toLocaleString(locale());
+  const what = t(noun);
+  const count = total != null && total >= shown ? t("Showing {shown} of {total} {noun}", { shown: n, total: total.toLocaleString(locale()), noun: what }) : t("Showing {shown} {noun}", { shown: n, noun: what });
   if (!hasMore && !loading) {
     // The whole list is on screen: only say so when it spans more than one page.
-    return shown > 50 ? <p className={cn("py-2 text-center text-[12px] text-muted tabular", className)}>All {shown.toLocaleString()} {noun} shown</p> : null;
+    return shown > 50 ? <p className={cn("py-2 text-center text-[12px] text-muted tabular", className)}>{t("All {n} {noun} shown", { n, noun: what })}</p> : null;
   }
 
   return (
@@ -65,10 +72,10 @@ export function LoadMore({ shown, total, hasMore, loading, onLoad, noun = "items
       ) : null}
       <div ref={sentinel} aria-hidden className="h-px" />
       <div className={cn("flex min-w-0 items-center justify-center gap-3", compact ? "flex-col gap-1.5 py-1" : "flex-wrap py-1 max-sm:flex-col max-sm:gap-2")}>
-        <p role="status" aria-live="polite" className="min-w-0 text-center text-[12px] text-muted tabular">{loading ? `Loading more ${noun}…` : count}</p>
+        <p role="status" aria-live="polite" className="min-w-0 text-center text-[12px] text-muted tabular">{loading ? t("Loading more {noun}…", { noun: what }) : count}</p>
         {hasMore ? (
           <Button variant="outline" size="sm" className={cn("min-h-9", compact ? "w-full" : "max-sm:w-full")} loading={loading} onClick={onLoad}>
-            {!loading ? <ArrowDownIcon size={14} weight="bold" /> : null} Load more
+            {!loading ? <ArrowDownIcon size={14} weight="bold" /> : null} {t("Load more")}
           </Button>
         ) : null}
       </div>

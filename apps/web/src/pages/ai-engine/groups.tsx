@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { IconTile } from "@/components/page";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +44,14 @@ function MemberRow({
   canManage: boolean;
   onRemove: () => void;
 }) {
+  const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: memberKey(member), disabled: !canManage });
   const warning = !provider
-    ? "Provider removed"
+    ? t("Provider removed")
     : !provider.enabled
-      ? "Provider is off"
+      ? t("Provider is off")
       : model?.stale
-        ? "No longer offered"
+        ? t("No longer offered")
         : null;
   return (
     <li
@@ -64,7 +66,7 @@ function MemberRow({
         <button
           {...attributes}
           {...listeners}
-          aria-label={`Reorder ${member.model_id}`}
+          aria-label={t("Reorder {model}", { model: member.model_id })}
           className="grid size-9 shrink-0 cursor-grab touch-none place-items-center rounded-sm text-muted hover:bg-surface-2 active:cursor-grabbing sm:size-8"
         >
           <DotsSixVerticalIcon size={16} weight="bold" />
@@ -74,19 +76,19 @@ function MemberRow({
       <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-[12.5px]" title={member.model_id}>{member.model_id}</span>
-        <span className="block truncate text-[11.5px] text-muted">{provider?.name ?? "Removed provider"}</span>
+        <span className="block truncate text-[11.5px] text-muted">{provider?.name ?? t("Removed provider")}</span>
       </span>
       {warning ? (
         <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-warn" title={warning}>
           <WarningIcon size={13} weight="fill" /> <span className="hidden sm:inline">{warning}</span>
         </span>
       ) : provider && provider.cooling_seconds > 0 ? (
-        <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-info" title="Resting after an error">
+        <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-info" title={t("Resting after an error")}>
           <SnowflakeIcon size={13} />
         </span>
       ) : null}
       {canManage ? (
-        <button type="button" onClick={onRemove} aria-label={`Remove ${member.model_id}`} className="grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-danger/10 hover:text-danger sm:size-8">
+        <button type="button" onClick={onRemove} aria-label={t("Remove {model}", { model: member.model_id })} className="grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-danger/10 hover:text-danger sm:size-8">
           <XIcon size={14} />
         </button>
       ) : null}
@@ -105,6 +107,7 @@ function ModelPicker({
   exclude: Set<string>;
   onPick: (m: GroupMember) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const byProvider = useMemo(() => {
     const out = new Map<string, AIModel[]>();
@@ -121,7 +124,7 @@ function ModelPicker({
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button type="button" className="flex h-10 w-full items-center justify-center gap-1.5 rounded-sm border border-dashed border-border bg-surface/60 text-[13px] text-muted transition-colors hover:border-accent hover:text-accent">
-          <PlusIcon size={14} /> Add model
+          <PlusIcon size={14} /> {t("Add model")}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -130,11 +133,11 @@ function ModelPicker({
           sideOffset={6}
           className="z-50 w-[min(92vw,22rem)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
         >
-          <Command label="Pick a model" loop>
-            <Command.Input autoFocus placeholder="Search models" className="h-10 w-full border-b border-border bg-transparent px-3 text-[13.5px] outline-none placeholder:text-muted" />
+          <Command label={t("Pick a model")} loop>
+            <Command.Input autoFocus placeholder={t("Search models")} className="h-10 w-full border-b border-border bg-transparent px-3 text-[13.5px] outline-none placeholder:text-muted" />
             <Command.List className="max-h-72 overflow-y-auto p-1">
               <Command.Empty className="px-3 py-5 text-center text-[13px] text-muted">
-                {models.length ? "No model matches." : "No models listed yet. Test a provider first."}
+                {models.length ? t("No model matches.") : t("No models listed yet. Test a provider first.")}
               </Command.Empty>
               {[...byProvider.entries()].map(([pid, list]) => (
                 <Command.Group key={pid} heading={providers.get(pid)?.name ?? pid} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:text-muted">
@@ -174,6 +177,7 @@ function GroupCard({
   colors: Map<string, string>;
   canManage: boolean;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -215,7 +219,11 @@ function GroupCard({
           </div>
           <p className="text-[12.5px] text-muted">{group.description}</p>
           <p className="mt-1 text-[12px] text-muted tabular">
-            {group.members.length ? `${group.members.length} ${group.members.length === 1 ? "model" : "models"} in fallback order` : "No models yet"}
+            {group.members.length
+              ? group.members.length === 1
+                ? t("1 model in fallback order")
+                : t("{n} models in fallback order", { n: group.members.length })
+              : t("No models yet")}
           </p>
         </div>
       </header>
@@ -240,7 +248,7 @@ function GroupCard({
       </DndContext>
       {!group.members.length ? (
         <p className="rounded-sm border border-dashed border-border bg-surface/60 px-3 py-4 text-center text-[12.5px] text-muted">
-          Empty. Agents asking for {group.label.toLowerCase()} will get an error until you add a model.
+          {t("Empty. Agents asking for {group} will get an error until you add a model.", { group: group.label.toLowerCase() })}
         </p>
       ) : null}
       {canManage ? (
@@ -254,6 +262,7 @@ function GroupCard({
 }
 
 export function GroupsTab({ canManage }: { canManage: boolean }) {
+  const t = useT();
   const { data: groups, isLoading } = useQuery(groupsQuery);
   const { data: providerList = [] } = useQuery(providersQuery);
   const { data: models = [] } = useQuery(modelsQuery());
@@ -267,8 +276,8 @@ export function GroupsTab({ canManage }: { canManage: boolean }) {
       <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
         <IconTile icon={ArrowsDownUpIcon} size="sm" tone="info" />
         <p className="min-w-0 text-[13px] text-muted">
-          Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does.{" "}
-          {canManage ? <span className="text-fg">Drag the handle to change the order.</span> : null}
+          {t("Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does.")}{" "}
+          {canManage ? <span className="text-fg">{t("Drag the handle to change the order.")}</span> : null}
         </p>
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">

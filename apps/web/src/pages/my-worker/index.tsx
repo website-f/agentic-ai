@@ -40,6 +40,7 @@ import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { locale, msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import {
   addDuty,
@@ -61,6 +62,7 @@ import { workKeys, type Agent } from "@/lib/work";
 import { ChoiceCard, DutyForm, EMPTY_DUTY, HoursEditor, UrgentPill, useDutyReady, WeekTimeline } from "@/pages/welcome/parts";
 
 export function MyWorkerPage() {
+  const t = useT();
   const { data, isLoading, error } = useQuery(workerQuery);
   if (isLoading) {
     return (
@@ -75,7 +77,7 @@ export function MyWorkerPage() {
   if (error || !data) {
     return (
       <Page>
-        <PageHeader title="My AI worker" />
+        <PageHeader title={t("My AI worker")} />
         <FormError message={errorMessage(error)} />
       </Page>
     );
@@ -83,8 +85,8 @@ export function MyWorkerPage() {
   if (!data.eligible) {
     return (
       <Page>
-        <PageHeader title="My AI worker" />
-        <EmptyState icon={UserFocusIcon} title="This page is for staff" body="Staff hire one AI worker that works on their behalf. Managers add and run agents from Agents." action={<Button asChild><Link to="/agents">Go to Agents</Link></Button>} />
+        <PageHeader title={t("My AI worker")} />
+        <EmptyState icon={UserFocusIcon} title={t("This page is for staff")} body={t("Staff hire one AI worker that works on their behalf. Managers add and run agents from Agents.")} action={<Button asChild><Link to="/agents">{t("Go to Agents")}</Link></Button>} />
       </Page>
     );
   }
@@ -93,17 +95,18 @@ export function MyWorkerPage() {
 }
 
 function NotHired({ first }: { first: string }) {
+  const t = useT();
   return (
     <Page>
-      <PageHeader title="My AI worker" description="An AI worker of your own: it works on your behalf, at the hours you set, and asks you before anything important." />
+      <PageHeader title={t("My AI worker")} description={t("An AI worker of your own: it works on your behalf, at the hours you set, and asks you before anything important.")} />
       <section className="relative overflow-hidden rounded-[var(--radius-lg)] border border-accent/25 bg-surface p-6 shadow-[var(--shadow-soft)] sm:p-8">
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,var(--accent-soft),transparent_60%)]" />
         <div className="relative grid max-w-xl gap-3">
           <IconTile icon={SparkleIcon} size="lg" />
-          <h2 className="text-[20px] leading-snug font-semibold text-balance">Hire your AI worker, {first}</h2>
-          <p className="text-[13.5px] text-muted">Five short steps: where you work, who it is, its job, its working hours, and the offer letter.</p>
+          <h2 className="text-[20px] leading-snug font-semibold text-balance">{t("Hire your AI worker, {name}", { name: first })}</h2>
+          <p className="text-[13.5px] text-muted">{t("Five short steps: where you work, who it is, its job, its working hours, and the offer letter.")}</p>
           <Button asChild size="lg" className="justify-self-start max-sm:w-full">
-            <Link to="/welcome">Start hiring <ArrowRightIcon size={16} /></Link>
+            <Link to="/welcome">{t("Start hiring")} <ArrowRightIcon size={16} /></Link>
           </Button>
         </div>
       </section>
@@ -113,32 +116,33 @@ function NotHired({ first }: { first: string }) {
 
 /* ------------------------------------------------------------ status now */
 
-function statusOf(data: WorkerHome, twin: Agent): { label: string; detail: string | null; tone: "accent" | "warn" | "neutral" | "info" | "ok"; icon: Icon } {
+function statusOf(data: WorkerHome, twin: Agent, t: (s: string, v?: Record<string, string | number>) => string): { label: string; detail: string | null; tone: "accent" | "warn" | "neutral" | "info" | "ok"; icon: Icon; working?: boolean } {
   const busy = twin.current_task;
   const duty = data.duty;
-  if (twin.status === "paused") return { label: "Paused", detail: "A manager paused it. It does not start new work.", tone: "neutral", icon: MoonStarsIcon };
-  if (busy?.status === "blocked") return { label: "Waiting for you", detail: busy.title, tone: "warn", icon: HourglassIcon };
-  if (busy) return { label: "Working", detail: busy.title, tone: "accent", icon: SparkleIcon };
+  if (twin.status === "paused") return { label: t("Paused"), detail: t("A manager paused it. It does not start new work."), tone: "neutral", icon: MoonStarsIcon };
+  if (busy?.status === "blocked") return { label: t("Waiting for you"), detail: busy.title, tone: "warn", icon: HourglassIcon };
+  if (busy) return { label: t("Working"), detail: busy.title, tone: "accent", icon: SparkleIcon, working: true };
   if (duty && !duty.on) {
-    return { label: duty.label, detail: duty.state === "break" ? "Back to work after its break." : "New work waits until it is back.", tone: "neutral", icon: duty.state === "break" ? CoffeeIcon : MoonStarsIcon };
+    return { label: duty.label, detail: duty.state === "break" ? t("Back to work after its break.") : t("New work waits until it is back."), tone: "neutral", icon: duty.state === "break" ? CoffeeIcon : MoonStarsIcon };
   }
-  return { label: duty?.state === "working" ? `Free · ${duty.label.toLowerCase()}` : "Free for work", detail: "Give it something to do.", tone: "ok", icon: CheckCircleIcon };
+  return { label: duty?.state === "working" ? t("Free · {state}", { state: duty.label.toLowerCase() }) : t("Free for work"), detail: t("Give it something to do."), tone: "ok", icon: CheckCircleIcon };
 }
 
 function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
+  const t = useT();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const [dialog, setDialog] = useState<null | "hours" | "duty" | "workflows">(null);
-  const st = statusOf(data, twin);
+  const st = statusOf(data, twin, t);
   const counts = data.counts ?? { done_today: 0, open: 0, waiting: 0 };
   const duties = data.duties ?? [];
   const waiting = data.waiting ?? { approvals: [], reviews: [] };
-  const working = st.label === "Working";
+  const working = !!st.working;
   return (
     <Page>
       <PageHeader
-        title="My AI worker"
-        description={`${twin.name} works for you. Here is what it is doing, what needs you, and when it works.`}
+        title={t("My AI worker")}
+        description={t("{name} works for you. Here is what it is doing, what needs you, and when it works.", { name: twin.name })}
       />
 
       <Card className="relative overflow-hidden">
@@ -172,29 +176,29 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
               </motion.div>
               <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
                 <ClockIcon size={14} className="shrink-0" />
-                <span className="min-w-0 break-words">{twin.work_hours ? data.hours_label : "Works any time (no hours set)"}</span>
+                <span className="min-w-0 break-words">{twin.work_hours ? data.hours_label : t("Works any time (no hours set)")}</span>
               </p>
             </div>
           </div>
           <div data-guide="my-worker.actions" className="grid grid-cols-2 gap-2 lg:w-80">
-            <QuickAction icon={KanbanIcon} label="Give a task" onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })} />
-            <QuickAction icon={ChatCircleDotsIcon} label="Chat" onClick={() => navigate({ to: "/twin", search: { tab: "chat" } })} />
-            <QuickAction icon={ClockIcon} label="Change hours" onClick={() => setDialog("hours")} />
-            <QuickAction icon={RepeatIcon} label="Add a duty" onClick={() => setDialog("duty")} />
+            <QuickAction icon={KanbanIcon} label={t("Give a task")} onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })} />
+            <QuickAction icon={ChatCircleDotsIcon} label={t("Chat")} onClick={() => navigate({ to: "/twin", search: { tab: "chat" } })} />
+            <QuickAction icon={ClockIcon} label={t("Change hours")} onClick={() => setDialog("hours")} />
+            <QuickAction icon={RepeatIcon} label={t("Add a duty")} onClick={() => setDialog("duty")} />
           </div>
         </div>
       </Card>
 
       <StatGrid>
-        <Stat label="Done today" value={counts.done_today} icon={CheckCircleIcon} tone="ok" />
-        <Stat label="Open work" value={counts.open} icon={KanbanIcon} tone="accent" hint={twin.current_task ? `On: ${twin.current_task.title}` : undefined} />
-        <Stat label="Waiting for you" value={counts.waiting} icon={SealCheckIcon} tone={counts.waiting ? "warn" : "neutral"} />
-        <Stat label="Duties" value={duties.length} icon={RepeatIcon} tone="info" hint={duties.length ? "Recurring work" : "None yet"} />
+        <Stat label={t("Done today")} value={counts.done_today} icon={CheckCircleIcon} tone="ok" />
+        <Stat label={t("Open work")} value={counts.open} icon={KanbanIcon} tone="accent" hint={twin.current_task ? t("On: {title}", { title: twin.current_task.title }) : undefined} />
+        <Stat label={t("Waiting for you")} value={counts.waiting} icon={SealCheckIcon} tone={counts.waiting ? "warn" : "neutral"} />
+        <Stat label={t("Duties")} value={duties.length} icon={RepeatIcon} tone="info" hint={duties.length ? t("Recurring work") : t("None yet")} />
       </StatGrid>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="grid min-w-0 content-start gap-5">
-          <Section title="Waiting for you" description="Questions and approvals it needs, and finished work to review.">
+          <Section title={t("Waiting for you")} description={t("Questions and approvals it needs, and finished work to review.")}>
             {waiting.approvals.length || waiting.reviews.length ? (
               <ListCard>
                 {waiting.approvals.map((a) => (
@@ -202,26 +206,26 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
                     key={a.id}
                     onClick={() => navigate({ to: "/approve/$approvalId", params: { approvalId: a.id } })}
                     leading={<IconTile icon={a.kind === "question" ? ChatCircleDotsIcon : SealCheckIcon} size="sm" tone="warn" />}
-                    title={a.reason || (a.kind === "question" ? "It has a question" : `Wants to use ${a.tool_name}`)}
+                    title={a.reason || (a.kind === "question" ? t("It has a question") : t("Wants to use {tool}", { tool: a.tool_name }))}
                     meta={<Meta items={[a.task_title, timeAgo(a.created_at)]} />}
-                    trailing={<Pill tone="warn">{a.kind === "question" ? "Question" : "Approve?"}</Pill>}
+                    trailing={<Pill tone="warn">{a.kind === "question" ? t("Question") : t("Approve?")}</Pill>}
                   />
                 ))}
-                {waiting.reviews.map((t) => (
+                {waiting.reviews.map((r) => (
                   <ListRow
-                    key={t.id}
-                    onClick={() => navigate({ to: "/tasks", search: { task: t.id } })}
+                    key={r.id}
+                    onClick={() => navigate({ to: "/tasks", search: { task: r.id } })}
                     leading={<IconTile icon={ListChecksIcon} size="sm" tone="info" />}
-                    title={t.title}
-                    meta={<Meta items={["Finished, waiting for your review", timeAgo(t.updated_at)]} />}
-                    trailing={<Pill tone="info">Review</Pill>}
+                    title={r.title}
+                    meta={<Meta items={[t("Finished, waiting for your review"), timeAgo(r.updated_at)]} />}
+                    trailing={<Pill tone="info">{t("Review")}</Pill>}
                   />
                 ))}
               </ListCard>
             ) : (
               <Card className="flex items-center gap-3 p-4">
                 <IconTile icon={CheckCircleIcon} size="sm" tone="ok" />
-                <p className="min-w-0 text-[13.5px] text-muted">Nothing needs you right now.</p>
+                <p className="min-w-0 text-[13.5px] text-muted">{t("Nothing needs you right now.")}</p>
               </Card>
             )}
           </Section>
@@ -230,28 +234,28 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
         <div className="grid min-w-0 content-start gap-5">
           <Card data-guide="my-worker.week">
             <CardHeader
-              title="Its week"
-              description={twin.work_hours ? data.hours_label : "No hours set: it works any time."}
+              title={t("Its week")}
+              description={twin.work_hours ? data.hours_label : t("No hours set: it works any time.")}
               icon={<IconTile icon={CalendarDotsIcon} size="sm" />}
-              actions={<Button variant="outline" size="sm" onClick={() => setDialog("hours")}><PencilSimpleIcon size={14} /> Change</Button>}
+              actions={<Button variant="outline" size="sm" onClick={() => setDialog("hours")}><PencilSimpleIcon size={14} /> {t("Change")}</Button>}
             />
             <CardBody>
               {twin.work_hours ? (
                 <WeekTimeline key={twin.work_hours.tz} hours={twin.work_hours} />
               ) : (
-                <p className="text-[13px] text-muted">Set working hours so it rests like a colleague: work given at night waits for the morning.</p>
+                <p className="text-[13px] text-muted">{t("Set working hours so it rests like a colleague: work given at night waits for the morning.")}</p>
               )}
               {twin.work_hours?.urgent_anytime ? (
-                <p className="mt-3 flex items-center gap-1.5 text-[12.5px] text-muted"><LightningIcon size={13} weight="fill" className="text-danger" /> Urgent work may start outside these hours.</p>
+                <p className="mt-3 flex items-center gap-1.5 text-[12.5px] text-muted"><LightningIcon size={13} weight="fill" className="text-danger" /> {t("Urgent work may start outside these hours.")}</p>
               ) : null}
             </CardBody>
           </Card>
           <Card>
             <CardHeader
-              title="Duties"
-              description="Recurring work it does in its hours."
+              title={t("Duties")}
+              description={t("Recurring work it does in its hours.")}
               icon={<IconTile icon={RepeatIcon} size="sm" tone="info" />}
-              actions={<Button variant="outline" size="sm" onClick={() => setDialog("duty")}><PlusIcon size={14} weight="bold" /> Add</Button>}
+              actions={<Button variant="outline" size="sm" onClick={() => setDialog("duty")}><PlusIcon size={14} weight="bold" /> {t("Add")}</Button>}
             />
             {duties.length ? (
               <ul className="grid divide-y divide-border">
@@ -260,40 +264,40 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
                     <span className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] font-medium break-words">
                       {d.title}
                       {d.urgent ? <UrgentPill /> : null}
-                      {!d.enabled ? <Pill>Off</Pill> : null}
+                      {!d.enabled ? <Pill>{t("Off")}</Pill> : null}
                     </span>
-                    <span className="text-[12.5px] text-muted">{d.next_run ? `Next: ${new Date(d.next_run).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Not scheduled"}</span>
+                    <span className="text-[12.5px] text-muted">{d.next_run ? t("Next: {when}", { when: new Date(d.next_run).toLocaleString(locale(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }) : t("Not scheduled")}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <CardBody><p className="text-[13px] text-muted">No duties yet. Add one, like "every Monday at 9am, the weekly aging report".</p></CardBody>
+              <CardBody><p className="text-[13px] text-muted">{t("No duties yet. Add one, like \"every Monday at 9am, the weekly aging report\".")}</p></CardBody>
             )}
             <div className="border-t border-border px-4 py-2.5 sm:px-5">
-              <Link to="/schedules" className="inline-flex min-h-9 items-center gap-1 text-[13px] text-accent hover:underline">Manage in Schedules <ArrowRightIcon size={13} /></Link>
+              <Link to="/schedules" className="inline-flex min-h-9 items-center gap-1 text-[13px] text-accent hover:underline">{t("Manage in Schedules")} <ArrowRightIcon size={13} /></Link>
             </div>
           </Card>
           <Card>
             <CardHeader
-              title="Its job"
+              title={t("Its job")}
               icon={<IconTile icon={BlueprintIcon} size="sm" tone="violet" />}
-              actions={<Button variant="outline" size="sm" onClick={() => setDialog("workflows")}><FlowArrowIcon size={14} /> Workflows</Button>}
+              actions={<Button variant="outline" size="sm" onClick={() => setDialog("workflows")}><FlowArrowIcon size={14} /> {t("Workflows")}</Button>}
             />
             <CardBody className="grid gap-3">
               <p className="text-[13px]">
-                <span className="text-muted">Role playbook: </span>
-                {data.blueprint ?? <span className="text-muted">none (your own instructions)</span>}
+                <span className="text-muted">{t("Role playbook:")} </span>
+                {data.blueprint ?? <span className="text-muted">{t("none (your own instructions)")}</span>}
               </p>
               <div className="grid gap-1.5">
-                <p className="text-[12.5px] text-muted">Workflows it follows</p>
+                <p className="text-[12.5px] text-muted">{t("Workflows it follows")}</p>
                 {data.workflows?.length ? (
                   <div className="flex flex-wrap gap-1.5">{data.workflows.map((w) => <Pill key={w.id} tone="accent"><FlowArrowIcon size={12} weight="bold" /> {w.name}</Pill>)}</div>
                 ) : (
-                  <p className="text-[13px] text-muted">None yet.</p>
+                  <p className="text-[13px] text-muted">{t("None yet.")}</p>
                 )}
               </div>
               <Button variant="ghost" size="sm" asChild className="justify-self-start">
-                <Link to="/twin" search={{ edit: 1 }}><PencilSimpleIcon size={14} /> Edit its persona</Link>
+                <Link to="/twin" search={{ edit: 1 }}><PencilSimpleIcon size={14} /> {t("Edit its persona")}</Link>
               </Button>
             </CardBody>
           </Card>
@@ -323,54 +327,55 @@ function QuickAction({ icon: IconCmp, label, onClick }: { icon: Icon; label: str
 /* ------------------------------------------------------------ today */
 
 const KIND: Record<WorkerTask["kind"], { label: string; tone: Tone; pill: "accent" | "warn" | "neutral" | "ok" | "danger" | "info"; icon: Icon; order: number }> = {
-  working: { label: "Working", tone: "accent", pill: "accent", icon: SparkleIcon, order: 0 },
-  waiting: { label: "Needs you", tone: "warn", pill: "warn", icon: HourglassIcon, order: 1 },
-  review: { label: "Review", tone: "info", pill: "info", icon: ListChecksIcon, order: 2 },
-  queued: { label: "Queued", tone: "neutral", pill: "neutral", icon: ClockIcon, order: 3 },
-  done: { label: "Done", tone: "ok", pill: "ok", icon: CheckCircleIcon, order: 5 },
-  failed: { label: "Failed", tone: "danger", pill: "danger", icon: WarningIcon, order: 6 },
-  cancelled: { label: "Cancelled", tone: "neutral", pill: "neutral", icon: WarningIcon, order: 7 },
+  working: { label: msg("Working"), tone: "accent", pill: "accent", icon: SparkleIcon, order: 0 },
+  waiting: { label: msg("Needs you"), tone: "warn", pill: "warn", icon: HourglassIcon, order: 1 },
+  review: { label: msg("Review"), tone: "info", pill: "info", icon: ListChecksIcon, order: 2 },
+  queued: { label: msg("Queued"), tone: "neutral", pill: "neutral", icon: ClockIcon, order: 3 },
+  done: { label: msg("Done"), tone: "ok", pill: "ok", icon: CheckCircleIcon, order: 5 },
+  failed: { label: msg("Failed"), tone: "danger", pill: "danger", icon: WarningIcon, order: 6 },
+  cancelled: { label: msg("Cancelled"), tone: "neutral", pill: "neutral", icon: WarningIcon, order: 7 },
 };
 
 function Today({ data, twin }: { data: WorkerHome; twin: Agent }) {
+  const t = useT();
   const navigate = useNavigate();
   const tz = data.timezone;
   const tasks = [...(data.today ?? [])].sort((a, b) => KIND[a.kind].order - KIND[b.kind].order);
   const upcoming = data.upcoming ?? [];
   const empty = !tasks.length && !upcoming.length;
   return (
-    <Section title="Today" description={`Done, in progress, and what waits for ${twin.name}'s working hours.`}>
+    <Section title={t("Today")} description={t("Done, in progress, and what waits for {name}'s working hours.", { name: twin.name })}>
       {empty ? (
         <EmptyState
           icon={ListChecksIcon}
-          title="A quiet day so far"
-          body={`Give ${twin.name} something to do. Work given outside its hours waits for its next shift.`}
-          action={<Button onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })}><PlusIcon size={15} weight="bold" /> Give a task</Button>}
+          title={t("A quiet day so far")}
+          body={t("Give {name} something to do. Work given outside its hours waits for its next shift.", { name: twin.name })}
+          action={<Button onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })}><PlusIcon size={15} weight="bold" /> {t("Give a task")}</Button>}
         />
       ) : (
         <ol className="relative grid gap-0 rounded-[var(--radius-md)] border border-border bg-surface py-1">
-          {tasks.map((t) => {
-            const k = KIND[t.kind];
-            const waitsForHours = t.kind === "queued" && t.note?.startsWith("Starts when");
+          {tasks.map((task) => {
+            const k = KIND[task.kind];
+            const waitsForHours = task.kind === "queued" && task.note?.startsWith("Starts when");
             return (
-              <li key={t.id}>
+              <li key={task.id}>
                 <button
                   type="button"
-                  onClick={() => navigate({ to: "/tasks", search: { task: t.id } })}
+                  onClick={() => navigate({ to: "/tasks", search: { task: task.id } })}
                   className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2/60 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
                 >
                   <IconTile icon={waitsForHours ? MoonStarsIcon : k.icon} size="sm" tone={k.tone} />
                   <span className="grid min-w-0 gap-0.5">
                     <span className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] font-medium break-words">
-                      {t.title}
-                      {t.priority === "urgent" ? <UrgentPill /> : null}
+                      {task.title}
+                      {task.priority === "urgent" ? <UrgentPill /> : null}
                     </span>
                     <span className="text-[12.5px] break-words text-muted">
-                      {t.note ?? (t.kind === "done" && t.finished_at ? `Finished at ${clock(t.finished_at, tz)}` : t.kind === "working" && t.started_at ? `Started at ${clock(t.started_at, tz)}` : `Updated ${timeAgo(t.updated_at)}`)}
+                      {task.note ?? (task.kind === "done" && task.finished_at ? t("Finished at {time}", { time: clock(task.finished_at, tz) }) : task.kind === "working" && task.started_at ? t("Started at {time}", { time: clock(task.started_at, tz) }) : t("Updated {ago}", { ago: timeAgo(task.updated_at) }))}
                     </span>
                   </span>
                   <span className="max-sm:col-start-2">
-                    <Pill tone={waitsForHours ? "neutral" : k.pill}>{waitsForHours ? "Waits for its hours" : k.label}</Pill>
+                    <Pill tone={waitsForHours ? "neutral" : k.pill}>{waitsForHours ? t("Waits for its hours") : t(k.label)}</Pill>
                   </span>
                 </button>
               </li>
@@ -382,10 +387,10 @@ function Today({ data, twin }: { data: WorkerHome; twin: Agent }) {
               <span className="grid min-w-0 gap-0.5">
                 <span className="text-[14px] font-medium break-words">{u.title}</span>
                 <span className="text-[12.5px] text-muted">
-                  Duty at {clock(u.at, tz)}{u.starts_at !== u.at ? `, starts at ${clock(u.starts_at, tz)} when it is back` : ""}
+                  {u.starts_at !== u.at ? t("Duty at {at}, starts at {start} when it is back", { at: clock(u.at, tz), start: clock(u.starts_at, tz) }) : t("Duty at {at}", { at: clock(u.at, tz) })}
                 </span>
               </span>
-              <span className="max-sm:col-start-2"><Pill tone="info">Later today</Pill></span>
+              <span className="max-sm:col-start-2"><Pill tone="info">{t("Later today")}</Pill></span>
             </li>
           ))}
         </ol>
@@ -406,6 +411,7 @@ function useRefresh() {
 }
 
 function HoursDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
+  const t = useT();
   const staff = useQuery(staffQuery);
   const refresh = useRefresh();
   const [hours, setHours] = useState<WorkHours | null>(twin.work_hours ?? null);
@@ -414,7 +420,7 @@ function HoursDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
     mutationFn: (v: WorkHours | null) => saveHours(twin.id, v),
     onSuccess: (a) => {
       refresh();
-      toast.success(a.work_hours ? `Saved. ${a.name} works ${a.hours_label}.` : `${a.name} now works any time.`);
+      toast.success(a.work_hours ? t("Saved. {name} works {hours}.", { name: a.name, hours: a.hours_label ?? "" }) : t("{name} now works any time.", { name: a.name }));
       onClose();
     },
   });
@@ -422,21 +428,21 @@ function HoursDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
     <ResponsiveDialog
       open
       onOpenChange={(o) => (o ? null : onClose())}
-      title="Working hours"
-      description={`When ${twin.name} works and rests. Work given outside these hours waits.`}
+      title={t("Working hours")}
+      description={t("When {name} works and rests. Work given outside these hours waits.", { name: twin.name })}
       className="w-[min(96vw,40rem)]"
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {twin.work_hours ? <Button variant="ghost" onClick={() => save.mutate(null)} disabled={save.isPending}>Any time</Button> : null}
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => value && save.mutate(value)} loading={save.isPending} disabled={!value || !!hoursProblem(value)}>Save hours</Button>
+          {twin.work_hours ? <Button variant="ghost" onClick={() => save.mutate(null)} disabled={save.isPending}>{t("Any time")}</Button> : null}
+          <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={() => value && save.mutate(value)} loading={save.isPending} disabled={!value || !!hoursProblem(value)}>{t("Save hours")}</Button>
         </div>
       }
     >
       {value ? (
         <div className="grid min-w-0 gap-5">
           <div className="rounded-[var(--radius-md)] border border-border p-3.5">
-            <p className="mb-3 text-[12.5px] text-muted">{hoursProblem(value) ? "Not complete yet" : describeHours(value)}</p>
+            <p className="mb-3 text-[12.5px] text-muted">{hoursProblem(value) ? t("Not complete yet") : describeHours(value)}</p>
             <WeekTimeline key={value.tz} hours={value} />
           </div>
           <HoursEditor value={value} onChange={setHours} name={twin.name} />
@@ -450,6 +456,7 @@ function HoursDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
 }
 
 function DutyDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
+  const t = useT();
   const refresh = useRefresh();
   const [d, setD] = useState<DutyIn>({ ...EMPTY_DUTY });
   const ready = useDutyReady(d);
@@ -458,7 +465,7 @@ function DutyDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
     onSuccess: (r) => {
       refresh();
       if (r.warning) toast.warning(r.warning);
-      else toast.success(`Added. ${twin.name} does it ${r.summary}.`);
+      else toast.success(t("Added. {name} does it {when}.", { name: twin.name, when: r.summary }));
       onClose();
     },
   });
@@ -466,13 +473,13 @@ function DutyDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
     <ResponsiveDialog
       open
       onOpenChange={(o) => (o ? null : onClose())}
-      title="Add a duty"
-      description={`Recurring work ${twin.name} does in its working hours.`}
+      title={t("Add a duty")}
+      description={t("Recurring work {name} does in its working hours.", { name: twin.name })}
       className="w-[min(96vw,34rem)]"
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!ready}><PlusIcon size={15} weight="bold" /> Add duty</Button>
+          <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!ready}><PlusIcon size={15} weight="bold" /> {t("Add duty")}</Button>
         </div>
       }
     >
@@ -485,6 +492,7 @@ function DutyDialog({ twin, onClose }: { twin: Agent; onClose: () => void }) {
 }
 
 function WorkflowsDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const staff = useQuery(staffQuery);
   const refresh = useRefresh();
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -493,7 +501,7 @@ function WorkflowsDialog({ onClose }: { onClose: () => void }) {
     mutationFn: () => setWorkflows(current),
     onSuccess: () => {
       refresh();
-      toast.success("Saved. It follows these from its next task.");
+      toast.success(t("Saved. It follows these from its next task."));
       onClose();
     },
   });
@@ -501,13 +509,13 @@ function WorkflowsDialog({ onClose }: { onClose: () => void }) {
     <ResponsiveDialog
       open
       onOpenChange={(o) => (o ? null : onClose())}
-      title="Workflows it follows"
-      description="Step-by-step procedures it follows whenever the work matches."
+      title={t("Workflows it follows")}
+      description={t("Step-by-step procedures it follows whenever the work matches.")}
       className="w-[min(96vw,34rem)]"
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!staff.data}>Save</Button>
+          <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!staff.data}>{t("Save")}</Button>
         </div>
       }
     >
@@ -523,15 +531,15 @@ function WorkflowsDialog({ onClose }: { onClose: () => void }) {
                   on={on}
                   onToggle={() => setPicked(on ? current.filter((x) => x !== w.id) : [...current, w.id])}
                   title={w.name}
-                  hint={[w.description, `${w.steps} step${w.steps === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}
-                  trailing={w.status === "draft" ? <Pill>Draft</Pill> : null}
+                  hint={[w.description, w.steps === 1 ? t("1 step") : t("{n} steps", { n: w.steps })].filter(Boolean).join(" · ")}
+                  trailing={w.status === "draft" ? <Pill>{t("Draft")}</Pill> : null}
                 />
               );
             })}
             <FormError message={save.error ? errorMessage(save.error) : null} />
           </div>
         ) : (
-          <p className="text-[13px] text-muted">No workflows yet. Your manager can draw them in Workflows.</p>
+          <p className="text-[13px] text-muted">{t("No workflows yet. Your manager can draw them in Workflows.")}</p>
         )
       ) : (
         <Skeleton className="h-40 rounded-[var(--radius-md)]" />

@@ -13,6 +13,8 @@ class ToolOut(BaseModel):
     description: str
     risk: str
     default_mode: Mode
+    # When an agent has no setting for this tool, it uses its setting for this one instead.
+    follows: str | None = None
 
 
 class AgentIn(BaseModel):
@@ -167,6 +169,11 @@ class TaskIn(BaseModel):
     goal: str | None = Field(default=None, max_length=2000)  # P13: keep going until this is met
     # Follow this workflow as the task's procedure (its steps are added to the brief).
     workflow_id: str | None = Field(default=None, max_length=40)
+    objective_id: str | None = Field(default=None, max_length=40)  # P21: the objective it serves
+    # P21 accountable work: start only when these tasks are done; this task's own review
+    # stages ({stages, max_rounds}; {"stages": []} switches the inherited ones off).
+    blocked_by: list[str] = Field(default_factory=list, max_length=20)
+    review_policy: dict[str, Any] | None = None
 
 
 class TaskUpdateIn(BaseModel):
@@ -177,6 +184,7 @@ class TaskUpdateIn(BaseModel):
     status: Literal["triage", "ready", "done", "cancelled"] | None = None
     position: float | None = None
     labels: list[str] | None = Field(default=None, max_length=8)
+    objective_id: str | None = Field(default=None, max_length=40)  # P21: null unlinks
 
 
 class TaskOut(BaseModel):
@@ -213,6 +221,21 @@ class TaskOut(BaseModel):
     goal_tries: int = 0
     # Lists cut brief and result short (GET /api/tasks/{id} has the full text).
     truncated: bool = False
+    # P21: the objective it serves (lists fill the title) and the first task of its request.
+    objective_id: str | None = None
+    objective_title: str | None = None
+    root_task_id: str | None = None
+    # P21 accountable work: who moves it next and what they must do ("user:<id>" or
+    # "agent:<id>", with the name), the unfinished tasks it waits for, whether a person may
+    # start it by hand while it is blocked (parked, no live run), review round, and minutes
+    # without agent activity while running (detail only).
+    blocked_owner: str | None = None
+    blocked_owner_name: str | None = None
+    blocked_action: str | None = None
+    waiting_for: list[dict[str, Any]] = []
+    restartable: bool = False
+    review_round: int = 0
+    quiet_minutes: int | None = None
 
 
 class TaskEventOut(BaseModel):
@@ -267,6 +290,17 @@ class TaskDetailOut(BaseModel):
     children: list[TaskOut] = []
     parent: TaskOut | None = None
     meetings: list[dict[str, Any]] = []
+    # P21: {id, title, target, status, parent_title} and what the whole request cost:
+    # {root_task_id, tasks, usd, tokens}.
+    objective: dict[str, Any] | None = None
+    request: dict[str, Any] | None = None
+    # P21: every task it waits for (any status), the tasks that wait for it, the review
+    # history [{round, stage, decision, notes, reviewer_name, ts, review_task_id}], and the
+    # review stages that apply ({stages, max_rounds, summary}) or None.
+    blockers: list[dict[str, Any]] = []
+    blocking: list[dict[str, Any]] = []
+    reviews: list[dict[str, Any]] = []
+    review_policy: dict[str, Any] | None = None
 
 
 class Audience(BaseModel):

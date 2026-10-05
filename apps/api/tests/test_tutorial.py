@@ -250,17 +250,33 @@ async def test_prefs_keep_other_keys_and_are_per_person(client):
 
     other = await as_role(client, "vera@example.com", "viewer")
     try:
-        assert (await other.get("/api/me/prefs")).json() == {"tutorial": {}, "onboarding": {}}
+        assert (await other.get("/api/me/prefs")).json() == {
+            "tutorial": {},
+            "onboarding": {},
+            "locale": {},
+        }
         assert (await progress(other))["done"] == []
     finally:
         await other.aclose()
 
 
 def test_merge_helper_is_generic_for_whitelisted_keys():
-    assert prefs.KEYS == ("tutorial", "onboarding")
+    assert prefs.KEYS == ("tutorial", "onboarding", "locale")
     out = prefs.merge({"onboarding": {"a": 1}}, {"onboarding": {"b": 2}})
     assert out == {"onboarding": {"a": 1, "b": 2}}
     with pytest.raises(prefs.PrefsError):
         prefs.merge({}, {"admin": {"x": 1}})
-    assert prefs.visible(None) == {"tutorial": {}, "onboarding": {}}
-    assert prefs.visible({"tutorial": "junk"}) == {"tutorial": {}, "onboarding": {}}
+    assert prefs.visible(None) == {"tutorial": {}, "onboarding": {}, "locale": {}}
+    assert prefs.visible({"tutorial": "junk"}) == {"tutorial": {}, "onboarding": {}, "locale": {}}
+
+
+async def test_language_is_a_profile_setting(client, llm, temporal):
+    from .conftest import csrf
+
+    await office(client)
+    r = await client.put("/api/me/prefs", json={"locale": {"language": "ms"}}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["locale"] == {"language": "ms"}
+    bad = await client.put(
+        "/api/me/prefs", json={"locale": {"language": "fr"}}, headers=csrf(client)
+    )
+    assert bad.status_code == 422

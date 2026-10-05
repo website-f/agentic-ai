@@ -26,6 +26,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
+import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
 import { activityQuery, belongsTo, mergeFeed, monitorKeys, type AgentActivity, type FeedEvent } from "@/lib/monitor";
@@ -74,34 +75,34 @@ export function describe(e: FeedEvent): Line | null {
         return {
           icon: BrainIcon,
           tone: "text-accent",
-          title: tools.length ? `Decided to use ${tools.map((t) => t.tool).join(", ")}` : "Thought",
+          title: tools.length ? tr("Decided to use {tools}", { tools: tools.map((x) => x.tool).join(", ") }) : tr("Thought"),
           body: d.text || (tools[0]?.args ?? ""),
-          meta: [d.model, d.tokens ? `${tokensShort(d.tokens)} tokens` : null, d.cached ? `${tokensShort(d.cached)} cached` : null, d.cost_usd ? `$${Number(d.cost_usd).toFixed(4)}` : null].filter(Boolean).join(" · "),
+          meta: [d.model, d.tokens ? tr("{n} tokens", { n: tokensShort(d.tokens) }) : null, d.cached ? tr("{n} cached", { n: tokensShort(d.cached) }) : null, d.cost_usd ? `$${Number(d.cost_usd).toFixed(4)}` : null].filter(Boolean).join(" · "),
         };
       }
       case "tool_call":
-        return { icon: WrenchIcon, tone: "text-muted", title: `Using ${d.label ?? d.tool}`, body: d.args };
+        return { icon: WrenchIcon, tone: "text-muted", title: tr("Using {tool}", { tool: d.label ?? d.tool ?? "" }), body: d.args };
       case "tool_result":
-        return { icon: CheckCircleIcon, tone: "text-ok", title: `Got the result of ${d.tool}`, body: d.preview };
+        return { icon: CheckCircleIcon, tone: "text-ok", title: tr("Got the result of {tool}", { tool: d.tool ?? "" }), body: d.preview };
       case "browser":
         return {
           icon: d.action === "goto" ? BrowserIcon : CursorClickIcon,
           tone: d.error ? "text-danger" : "text-info",
-          title: `Browser: ${d.action}${d.target ? ` ${d.target}` : ""}`,
+          title: d.target ? tr("Browser: {action} {target}", { action: d.action ?? "", target: d.target }) : tr("Browser: {action}", { action: d.action ?? "" }),
           body: d.error ? String(d.error) : [d.title, d.url].filter(Boolean).join(" · "),
         };
       case "ask":
         return d.from_memory
-          ? { icon: LightningIcon, tone: "text-ok", title: `Knew the answer from the office memory (did not need to ask ${d.to})`, body: d.question }
-          : { icon: ChatCircleDotsIcon, tone: "text-accent", title: `Asked ${d.to}`, body: d.question };
+          ? { icon: LightningIcon, tone: "text-ok", title: tr("Knew the answer from the office memory (did not need to ask {name})", { name: d.to ?? "" }), body: d.question }
+          : { icon: ChatCircleDotsIcon, tone: "text-accent", title: tr("Asked {name}", { name: d.to ?? "" }), body: d.question };
       case "answer":
-        return { icon: CheckCircleIcon, tone: "text-ok", title: "Final answer", body: d.text };
+        return { icon: CheckCircleIcon, tone: "text-ok", title: tr("Final answer"), body: d.text };
       default:
         return { icon: CircleNotchIcon, tone: "text-muted", title: String(d.kind) };
     }
   }
-  if (e.type === "approval.requested") return { icon: HandIcon, tone: "text-warn", title: "Waiting on you", body: String(d.summary ?? "") };
-  if (e.type === "meeting.turn") return { icon: UsersThreeIcon, tone: "text-accent", title: "Said in a meeting", body: String(d.content ?? "") };
+  if (e.type === "approval.requested") return { icon: HandIcon, tone: "text-warn", title: tr("Waiting on you"), body: String(d.summary ?? "") };
+  if (e.type === "meeting.turn") return { icon: UsersThreeIcon, tone: "text-accent", title: tr("Said in a meeting"), body: String(d.content ?? "") };
   if (e.type === "task.event") {
     const icon = d.kind === "delegated" ? TreeStructureIcon : d.kind === "memory" ? BrainIcon : d.kind === "tool_blocked" ? WarningIcon : CircleNotchIcon;
     if (["tool", "status"].includes(String(d.kind))) return null; // covered by the activity lines
@@ -143,6 +144,7 @@ export function useAgentFeed(agentId: string) {
 
 /** The agent's browser, refreshed about once a second. `live` = the agent is still working. */
 export function Screen({ session, events, live = true }: { session: string; events: FeedEvent[]; live?: boolean }) {
+  const t = useT();
   const [tick, setTick] = useState(0);
   const [failed, setFailed] = useState(false);
   const [width, setWidth] = useState(VIEW_W);
@@ -152,11 +154,11 @@ export function Screen({ session, events, live = true }: { session: string; even
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       setTick((n) => n + 1);
       setNow(Date.now());
     }, 1000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, [live]);
   useEffect(() => {
     const el = box.current;
@@ -172,15 +174,15 @@ export function Screen({ session, events, live = true }: { session: string; even
       <figcaption className="flex items-center gap-2 border-b border-border bg-surface-2/60 px-3 py-1.5 text-[12px]">
         <span className="flex gap-1" aria-hidden><span className="size-2.5 rounded-full bg-danger/60" /><span className="size-2.5 rounded-full bg-warn/60" /><span className="size-2.5 rounded-full bg-ok/60" /></span>
         <span className="min-w-0 flex-1 truncate rounded-sm bg-surface px-2 py-0.5 font-mono text-muted" title={d.url}>{d.url ?? "about:blank"}</span>
-        <span className="shrink-0">{live ? <Pill tone="accent" live>Live</Pill> : <Pill>Last screen</Pill>}</span>
+        <span className="shrink-0">{live ? <Pill tone="accent" live>{t("Live")}</Pill> : <Pill>{t("Last screen")}</Pill>}</span>
       </figcaption>
       <div ref={box} className="relative aspect-[16/10] bg-surface-2">
         {/* Always requested (it retries every tick); a message covers it while nothing loads. */}
-        <img src={`/api/browser/${session}/frame.jpg?t=${tick}`} alt={`The agent's browser: ${d.title ?? "a web page"}`}
+        <img src={`/api/browser/${session}/frame.jpg?t=${tick}`} alt={d.title ? t("The agent's browser: {title}", { title: d.title }) : t("The agent's browser: a web page")}
           className={cn("absolute inset-0 size-full object-contain object-top", failed && "invisible")}
           onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
         {failed ? (
-          <p className="absolute inset-0 grid place-items-center text-[13px] text-muted">{live ? "The browser is starting…" : "The browser was closed."}</p>
+          <p className="absolute inset-0 grid place-items-center text-[13px] text-muted">{live ? t("The browser is starting…") : t("The browser was closed.")}</p>
         ) : null}
         {d.point && fresh ? (
           <span aria-hidden className="pointer-events-none absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-accent/25 motion-safe:animate-ping"
@@ -221,6 +223,7 @@ export function StepList({ lines, empty, className }: { lines: { e: FeedEvent; l
 /** Compact live view for side panels: screen (or what it is doing), and the latest steps.
  * `viewOnly`: the viewer only watches this agent (a colleague's), so nothing invites them to instruct it. */
 export function AgentLive({ agentId, name, viewOnly = false }: { agentId: string; name: string; viewOnly?: boolean }) {
+  const t = useT();
   const f = useAgentFeed(agentId);
   if (f.isLoading) return <Skeleton className="h-64 rounded-[var(--radius-md)]" />;
   if (f.error || !f.data) return <p role="alert" className="text-[13px] text-danger">{errorMessage(f.error)}</p>;
@@ -236,24 +239,24 @@ export function AgentLive({ agentId, name, viewOnly = false }: { agentId: string
             {f.thinking ? <BrainIcon size={18} weight="duotone" /> : last ? <last.icon size={18} weight="duotone" /> : <EyeIcon size={18} weight="duotone" />}
           </span>
           <div className="min-w-0">
-            <p className="text-[13.5px] font-medium">{f.thinking ? `${name} is thinking…` : last?.title ?? `${name} is at their desk`}</p>
-            <p className="text-[12px] text-muted">No browser open. When {name} works on the web, the screen shows here live.</p>
+            <p className="text-[13.5px] font-medium">{f.thinking ? t("{name} is thinking…", { name }) : last?.title ?? t("{name} is at their desk", { name })}</p>
+            <p className="text-[12px] text-muted">{t("No browser open. When {name} works on the web, the screen shows here live.", { name })}</p>
           </div>
         </div>
       )}
       {f.data.task ? (
         <p className="text-[12.5px] text-muted">
-          {f.thinking ? <span className="text-accent">Thinking… </span> : null}
-          {f.data.task.tokens ? `${f.data.task.calls} model calls, ${tokensShort(f.data.task.tokens)} tokens on this task so far.` : "Just started."}
-          {f.data.helpers?.length ? ` Helpers: ${f.data.helpers.map((h) => h.name).join(", ")}.` : ""}
+          {f.thinking ? <span className="text-accent">{t("Thinking…")} </span> : null}
+          {f.data.task.tokens ? t("{calls} model calls, {tokens} tokens on this task so far.", { calls: f.data.task.calls ?? 0, tokens: tokensShort(f.data.task.tokens) }) : t("Just started.")}
+          {f.data.helpers?.length ? ` ${t("Helpers: {names}.", { names: f.data.helpers.map((h) => h.name).join(", ") })}` : ""}
         </p>
       ) : null}
-      <section aria-label={`What ${name} is doing`} className="flex max-h-80 flex-col rounded-[var(--radius-md)] border border-border bg-surface">
+      <section aria-label={t("What {name} is doing", { name })} className="flex max-h-80 flex-col rounded-[var(--radius-md)] border border-border bg-surface">
         <h4 className="flex items-center justify-between border-b border-border px-4 py-2 text-[12.5px] font-semibold">
-          <span>Step by step <span className="font-normal text-muted">· {working ? "live" : "latest"}</span></span>
-          <Link to="/monitor" search={{ agent: agentId }} className="inline-flex items-center gap-1 font-normal text-accent hover:underline">Full monitor <ArrowSquareOutIcon size={12} /></Link>
+          <span>{t("Step by step")} <span className="font-normal text-muted">· {working ? t("live") : t("latest")}</span></span>
+          <Link to="/monitor" search={{ agent: agentId }} className="inline-flex items-center gap-1 font-normal text-accent hover:underline">{t("Full monitor")} <ArrowSquareOutIcon size={12} /></Link>
         </h4>
-        <StepList lines={f.lines.slice(-40)} empty={viewOnly ? `Nothing yet. When ${name} works, each step shows here.` : `Nothing yet. Give ${name} a task and watch it work here.`} className="flex-1" />
+        <StepList lines={f.lines.slice(-40)} empty={viewOnly ? t("Nothing yet. When {name} works, each step shows here.", { name }) : t("Nothing yet. Give {name} a task and watch it work here.", { name })} className="flex-1" />
       </section>
     </div>
   );
@@ -263,6 +266,7 @@ const DONE: Task["status"][] = ["review", "done", "failed"];
 
 /** What the agent produced: its latest finished tasks (with the result) and its reports. */
 export function AgentOutcome({ agentId, name }: { agentId: string; name: string }) {
+  const t = useT();
   const tasks = useQuery({
     queryKey: ["agent-outcome", agentId, "tasks"],
     queryFn: () => api<Task[]>(`/api/tasks?agent_id=${agentId}&status=${DONE.join(",")}&full=true`),
@@ -280,7 +284,7 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
   }), [agentId, qc]);
   const [open, setOpen] = useState<string | null>(null);
   const recent = [...(tasks.data ?? [])]
-    .filter((t) => !t.parent_task_id)
+    .filter((x) => !x.parent_task_id)
     .sort((a, b) => (b.finished_at ?? b.updated_at).localeCompare(a.finished_at ?? a.updated_at))
     .slice(0, 5);
   const first = recent[0]?.id ?? null;
@@ -294,7 +298,7 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{r.title}</span>
                   <span className="line-clamp-2 text-[12px] text-muted">{r.summary}</span>
-                  <span className="text-[11.5px] text-muted">{r.row_count ? `${r.row_count} rows · ` : ""}{timeAgo(r.created_at)}</span>
+                  <span className="text-[11.5px] text-muted">{r.row_count ? `${t("{n} rows", { n: r.row_count })} · ` : ""}{timeAgo(r.created_at)}</span>
                 </span>
               </Link>
             </li>
@@ -305,31 +309,31 @@ export function AgentOutcome({ agentId, name }: { agentId: string; name: string 
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       {tasks.isLoading ? <Skeleton className="h-24 rounded-[var(--radius-md)]" /> : recent.length ? (
         <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
-          {recent.map((t) => {
-            const expanded = shown === t.id;
-            const failed = t.status === "failed";
+          {recent.map((task) => {
+            const expanded = shown === task.id;
+            const failed = task.status === "failed";
             return (
-              <li key={t.id} className="overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-                <button onClick={() => setOpen(expanded ? "" : t.id)} aria-expanded={expanded} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-surface-2/50">
+              <li key={task.id} className="overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+                <button onClick={() => setOpen(expanded ? "" : task.id)} aria-expanded={expanded} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-surface-2/50">
                   {failed ? <XCircleIcon size={16} weight="duotone" className="shrink-0 text-danger" /> : <CheckCircleIcon size={16} weight="duotone" className="shrink-0 text-ok" />}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium">{t.title}</span>
-                    <span className="text-[11.5px] text-muted">{STATUS_INFO[t.status]?.label ?? t.status} · {timeAgo(t.finished_at ?? t.updated_at)}{t.steps_used ? ` · ${t.steps_used} model calls` : ""}</span>
+                    <span className="block truncate text-[13px] font-medium">{task.title}</span>
+                    <span className="text-[11.5px] text-muted">{STATUS_INFO[task.status] ? t(STATUS_INFO[task.status].label) : task.status} · {timeAgo(task.finished_at ?? task.updated_at)}{task.steps_used ? ` · ${t("{n} model calls", { n: task.steps_used })}` : ""}</span>
                   </span>
                   <CaretDownIcon size={13} className={cn("shrink-0 text-muted transition-transform", expanded && "rotate-180")} />
                 </button>
                 {expanded ? (
                   <div className="grid gap-2 border-t border-border px-4 py-3">
-                    {failed ? <p className="text-[13px] text-danger">{t.error ?? "Failed."}</p> : <Markdown className="max-h-80 overflow-y-auto text-[13px]">{t.result ?? "(no result text)"}</Markdown>}
-                    <Link to="/tasks" search={{ task: t.id }} className="text-[12.5px] text-accent hover:underline">Open the task: timeline, transcript, approvals</Link>
+                    {failed ? <p className="text-[13px] text-danger">{task.error ?? t("Failed.")}</p> : <Markdown className="max-h-80 overflow-y-auto text-[13px]">{task.result ?? t("(no result text)")}</Markdown>}
+                    <Link to="/tasks" search={{ task: task.id }} className="text-[12.5px] text-accent hover:underline">{t("Open the task: timeline, transcript, approvals")}</Link>
                   </div>
                 ) : null}
               </li>
             );
           })}
         </ul>
-      ) : <p className="text-[13px] text-muted">{name} has not finished any work yet.</p>}
-      {reportList ? <h4 className="mt-1 text-[12.5px] font-semibold text-muted">Reports</h4> : null}
+      ) : <p className="text-[13px] text-muted">{t("{name} has not finished any work yet.", { name })}</p>}
+      {reportList ? <h4 className="mt-1 text-[12.5px] font-semibold text-muted">{t("Reports")}</h4> : null}
       {reportList}
     </div>
   );

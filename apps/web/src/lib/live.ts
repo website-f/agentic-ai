@@ -6,8 +6,11 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { t } from "@/i18n";
+
 import { brainKeys } from "./brain";
 import { learningKeys } from "./learning";
+import { objectiveKeys } from "./objectives";
 import { keys } from "./queries";
 import { teamKeys } from "./teams";
 import { workKeys } from "./work";
@@ -44,10 +47,10 @@ export function onLiveEvent(fn: Listener): () => void {
 const OFFICE = ["office"] as const;
 
 const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
-  "task.created": [workKeys.tasks, keys.status],
-  "task.updated": [workKeys.tasks, workKeys.agents, keys.status, OFFICE],
+  "task.created": [workKeys.tasks, keys.status, objectiveKeys.all],
+  "task.updated": [workKeys.tasks, workKeys.agents, keys.status, OFFICE, objectiveKeys.all],
   "task.event": [workKeys.tasks],
-  "task.deleted": [workKeys.tasks, keys.status],
+  "task.deleted": [workKeys.tasks, keys.status, objectiveKeys.all],
   "approval.requested": [["approvals"], workKeys.tasks, keys.status, OFFICE],
   "approval.resolved": [["approvals"], workKeys.tasks, keys.status, OFFICE],
   "agent.upsert": [workKeys.agents, keys.status, OFFICE],
@@ -67,6 +70,8 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "file.ready": [["files"]],
   "document.updated": [["documents"]],
   "workflow_run.updated": [["workflow-runs"]],
+  "objective.updated": [objectiveKeys.all, workKeys.tasks],
+  "objective.budget": [objectiveKeys.all, ["approvals"]],
 };
 
 export function useLiveEvents() {
@@ -107,9 +112,13 @@ export function useLiveEvents() {
       }
       if (ev.type === "approval.requested") {
         const d = ev.data as { agent_name?: string; summary?: string; kind?: string };
-        toast(`${d.agent_name ?? "An agent"} ${d.kind === "question" ? "has a question" : "needs a decision"}`, {
+        const name = d.agent_name;
+        const title = d.kind === "question"
+          ? (name ? t("{name} has a question", { name }) : t("An agent has a question"))
+          : (name ? t("{name} needs a decision", { name }) : t("An agent needs a decision"));
+        toast(title, {
           description: d.summary,
-          action: { label: "Review", onClick: () => navigate({ to: "/approvals" }) },
+          action: { label: t("Review"), onClick: () => navigate({ to: "/approvals" }) },
           duration: 8000,
         });
       }

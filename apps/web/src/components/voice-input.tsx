@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { t as tr, useT } from "@/i18n";
 import { ApiError, errorMessage, readCookie } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { groupsQuery } from "@/pages/ai-engine/data";
 
 /** Longest recording the server accepts (it refuses more than 10 minutes). */
 const MAX_SECONDS = 600;
-const NOT_SET_UP = "Voice input needs a speech-to-text model. An admin can add one in AI Engine > Model groups > Speech to text.";
+const notSetUpText = () => tr("Voice input needs a speech-to-text model. An admin can add one in AI Engine > Model groups > Speech to text.");
 // Recorder formats in order of preference; Safari only offers audio/mp4.
 const TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 
@@ -30,10 +31,10 @@ async function transcribe(blob: Blob, seconds: number): Promise<string> {
       body: blob,
     });
   } catch {
-    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+    throw new ApiError(0, "network", tr("Could not reach the server. Check that the stack is running."));
   }
   const data = (await res.json().catch(() => null)) as { text?: string; code?: string; message?: string } | null;
-  if (!res.ok) throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? `Transcription failed (${res.status}).`);
+  if (!res.ok) throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? tr("Transcription failed ({status}).", { status: res.status }));
   return (data?.text ?? "").trim();
 }
 
@@ -59,6 +60,7 @@ export function VoiceInput({
   /** Match a round send button (the assistant composer). */
   round?: boolean;
 }) {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -74,7 +76,7 @@ export function VoiceInput({
   const release = () => {
     if (timer.current !== null) window.clearInterval(timer.current);
     timer.current = null;
-    stream.current?.getTracks().forEach((t) => t.stop());
+    stream.current?.getTracks().forEach((k) => k.stop());
     stream.current = null;
   };
 
@@ -84,7 +86,7 @@ export function VoiceInput({
       cancelled.current = true;
       if (recorder.current && recorder.current.state !== "inactive") recorder.current.stop();
       if (timer.current !== null) window.clearInterval(timer.current);
-      stream.current?.getTracks().forEach((t) => t.stop());
+      stream.current?.getTracks().forEach((k) => k.stop());
     },
     [],
   );
@@ -102,7 +104,7 @@ export function VoiceInput({
     try {
       const text = await transcribe(blob, seconds);
       if (text) onText(text);
-      else toast.info("No words were heard. Try again a little closer to the microphone.");
+      else toast.info(t("No words were heard. Try again a little closer to the microphone."));
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -112,11 +114,11 @@ export function VoiceInput({
 
   const start = async () => {
     if (notSetUp) {
-      toast.info(NOT_SET_UP);
+      toast.info(notSetUpText());
       return;
     }
     if (typeof window.MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      toast.error("This browser cannot record audio. Type your message instead.");
+      toast.error(t("This browser cannot record audio. Type your message instead."));
       return;
     }
     setPhase("starting");
@@ -127,21 +129,21 @@ export function VoiceInput({
       const name = e instanceof DOMException ? e.name : "";
       toast.error(
         name === "NotAllowedError" || name === "SecurityError"
-          ? "Microphone access is blocked. Allow it for this site in the browser settings, then try again."
+          ? t("Microphone access is blocked. Allow it for this site in the browser settings, then try again.")
           : name === "NotFoundError"
-            ? "No microphone was found on this device."
-            : "Could not start the microphone.",
+            ? t("No microphone was found on this device.")
+            : t("Could not start the microphone."),
       );
       setPhase("idle");
       return;
     }
-    const type = TYPES.find((t) => MediaRecorder.isTypeSupported(t));
+    const type = TYPES.find((k) => MediaRecorder.isTypeSupported(k));
     let rec: MediaRecorder;
     try {
       rec = new MediaRecorder(media, type ? { mimeType: type } : undefined);
     } catch {
-      media.getTracks().forEach((t) => t.stop());
-      toast.error("This browser cannot record audio. Type your message instead.");
+      media.getTracks().forEach((k) => k.stop());
+      toast.error(t("This browser cannot record audio. Type your message instead."));
       setPhase("idle");
       return;
     }
@@ -179,7 +181,7 @@ export function VoiceInput({
     return (
       <div
         role="group"
-        aria-label="Recording a voice message"
+        aria-label={t("Recording a voice message")}
         className={cn("flex shrink-0 items-center gap-1 rounded-full border border-danger/30 bg-danger/10 p-0.5", className)}
         onKeyDown={(e) => {
           if (e.key === "Escape") cancel();
@@ -188,8 +190,8 @@ export function VoiceInput({
         <button
           type="button"
           onClick={cancel}
-          aria-label="Cancel recording"
-          title="Cancel"
+          aria-label={t("Cancel recording")}
+          title={t("Cancel")}
           className="grid size-9 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-fg"
         >
           <XIcon size={15} weight="bold" />
@@ -197,13 +199,13 @@ export function VoiceInput({
         <span className="flex items-center gap-1.5 px-1 font-mono text-[12.5px] text-fg tabular-nums">
           <span aria-hidden className="size-2 rounded-full bg-danger motion-safe:animate-pulse" />
           <span aria-hidden>{clock(elapsed)}</span>
-          <span className="sr-only">Recording. Press stop to turn it into text.</span>
+          <span className="sr-only">{t("Recording. Press stop to turn it into text.")}</span>
         </span>
         <button
           type="button"
           onClick={stop}
-          aria-label="Stop recording and turn it into text"
-          title="Stop and transcribe"
+          aria-label={t("Stop recording and turn it into text")}
+          title={t("Stop and transcribe")}
           autoFocus
           className="grid size-9 place-items-center rounded-full bg-danger text-white transition-[filter] hover:brightness-110"
         >
@@ -222,8 +224,8 @@ export function VoiceInput({
       onClick={() => void start()}
       disabled={disabled || busy}
       loading={phase === "sending"}
-      aria-label={phase === "sending" ? "Turning your voice into text" : "Record a voice message"}
-      title={notSetUp ? "Voice input is not set up yet" : "Speak instead of typing"}
+      aria-label={phase === "sending" ? t("Turning your voice into text") : t("Record a voice message")}
+      title={notSetUp ? t("Voice input is not set up yet") : t("Speak instead of typing")}
       className={cn(round && "size-11 rounded-full", notSetUp && "opacity-60", className)}
     >
       {phase === "sending" ? null : <MicrophoneIcon size={19} />}

@@ -5,7 +5,7 @@ every login; branch managers and HODs (vault.manage) the logins of their branch;
 (vault.own) only their own, which only their own agents can use.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import vault
+from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import can
 from ...models import Agent, Branch, Credential
@@ -52,6 +53,9 @@ class LoginOut(BaseModel):
     created_at: datetime
     last_used_at: datetime | None
     can_manage: bool
+    # P21: when the login's signed-in browser session was saved (agents stay signed in).
+    session_saved_at: datetime | None = None
+    session_expires_at: datetime | None = None
 
 
 def vault_user():
@@ -88,6 +92,8 @@ def _sees(principal: Principal, c: Credential) -> bool:
 
 async def _out(db: AsyncSession, principal: Principal, c: Credential) -> LoginOut:
     b = await db.get(Branch, c.branch_id) if c.branch_id else None
+    st = await vault.state_row(db, c.id)
+    fresh = st is not None and not vault.expired(st)
     return LoginOut(
         id=c.id,
         name=c.name,
@@ -101,6 +107,12 @@ async def _out(db: AsyncSession, principal: Principal, c: Credential) -> LoginOu
         created_at=c.created_at,
         last_used_at=c.last_used_at,
         can_manage=_manages(principal, c),
+        session_saved_at=st.saved_at if st is not None and fresh else None,
+        session_expires_at=(
+            st.saved_at + timedelta(days=settings.browser_session_days)
+            if st is not None and fresh
+            else None
+        ),
     )
 
 
@@ -205,8 +217,10 @@ async def update_login(
     c = await _get(db, principal, login_id)
     changed: list[str] = []
     if body.hosts is not None:
-        c.hosts = vault.clean_hosts(body.hosts)
-        changed.append("hosts")
+        hosts = vault.clean_hosts(body.hosts)
+        if hosts != c.hosts:
+            c.hosts = hosts
+            changed.append("hosts")
     if body.agent_ids is not None:
         c.agent_ids = await _check_agents(db, principal, body.agent_ids)
         changed.append("agents")
@@ -214,6 +228,9 @@ async def update_login(
         user, pw = vault.reveal(c)
         vault.seal(c, body.username or user, body.password or pw)
         changed.append("secret")
+    if {"hosts", "secret"} & set(changed) and await vault.forget_state(db, c.id):
+        # A session saved for other sites or another account must not be reused.
+        changed.append("saved session dropped")
     await audit.record(
         db,
         principal.workspace_id,
@@ -241,5 +258,24 @@ async def delete_login(
         before={"name": c.name},
     )
     await db.delete(c)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/logins/{login_id}/session", status_code=status.HTTP_204_NO_CONTENT)
+async def forget_session(
+    login_id: str, principal: Principal = Depends(vault_user()), db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Forget the saved browser session: the next task signs in again with the login."""
+    c = await _get(db, principal, login_id)
+    dropped = await vault.forget_state(db, c.id)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "credential.session_forgotten",
+        target=c.id,
+        after={"name": c.name, "had_session": dropped},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

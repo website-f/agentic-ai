@@ -7,6 +7,8 @@ no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
 """
 
 import asyncio
+import hashlib
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -47,6 +49,20 @@ class GatewayReply:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     attempts: list[dict[str, Any]] = field(default_factory=list)
     reasoning_content: str = ""
+
+
+def prefix_hash(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> str:
+    """sha256 (first 16 hex) of what a provider's prompt cache keys on: the leading system
+    message(s) and the tool schemas, in the order they are sent (P21). When it changes between
+    two calls of the same agent and job, the cached prefix cannot be reused and the whole
+    prompt is billed again; GET /api/ai/cache-health reports how often that happens."""
+    system = []
+    for m in messages:
+        if m.get("role") != "system":
+            break
+        system.append(m.get("content"))
+    raw = json.dumps({"system": system, "tools": tools or []}, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 # The only jobs the tiny local backup model may do when reached through another group.
@@ -103,6 +119,7 @@ async def chat(
         ).all()
     }
 
+    prefix = prefix_hash(messages, tools)
     attempts: list[dict[str, Any]] = []
     waits: list[int] = []  # seconds until a cooling or rate-limited member is usable again
     failed: set[tuple[str, str]] = set()  # failed for good: waiting will not change them
@@ -193,6 +210,7 @@ async def chat(
             cost=cost,
             agent_id=agent_id,
             task_id=task_id,
+            prefix_hash=prefix,
         )
         langfuse.generation(
             workspace_id=workspace_id,

@@ -56,6 +56,8 @@ from .minutes_activities import (
     minutes_write,
 )
 from .minutes_workflows import MeetingMinutesWorkflow, MinutesPurgeWorkflow
+from .reconcile_activities import liveness_reconcile
+from .reconcile_workflows import LivenessReconcileWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
 from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
@@ -94,6 +96,7 @@ WORKFLOWS = [
     DeferredStartWorkflow,
     MeetingMinutesWorkflow,
     MinutesPurgeWorkflow,
+    LivenessReconcileWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -131,6 +134,7 @@ ACTIVITIES = [
     minutes_write,
     minutes_fail,
     minutes_purge,
+    liveness_reconcile,
 ]
 
 
@@ -144,6 +148,8 @@ async def ensure_schedules(client: Client) -> None:
         ("agent-heartbeat", HeartbeatWorkflow.run, timedelta(hours=1)),
         # Meeting recordings: delete audio past its retention days and abandoned uploads.
         ("minutes-purge", MinutesPurgeWorkflow.run, timedelta(hours=24)),
+        # P21: relaunch runs whose workflow is gone, flag silent runs (teams/reconcile.py).
+        ("liveness-reconcile", LivenessReconcileWorkflow.run, timedelta(minutes=10)),
     ]
     for schedule_id, run, every in jobs:
         try:

@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { IconTile, type Tone } from "@/components/page";
+import { msg, useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 /** One look per document kind, shared by lists, cards and pickers. */
@@ -43,15 +44,16 @@ export function FileTile({ mime, name, size = "md" }: { mime: string; name?: str
 }
 
 const STEPS = [
-  { to: "/company-kit", label: "Company kit" },
-  { to: "/files", label: "Files" },
-  { to: "/templates", label: "Templates" },
-  { to: "/documents", label: "Documents" },
-  { to: "/packs", label: "Packs" },
+  { to: "/company-kit", label: msg("Company kit") },
+  { to: "/files", label: msg("Files") },
+  { to: "/templates", label: msg("Templates") },
+  { to: "/documents", label: msg("Documents") },
+  { to: "/packs", label: msg("Packs") },
 ] as const;
 
 /** The Documents section is one flow; this strip shows where you are and links each step. */
 export function DocSteps({ current }: { current: (typeof STEPS)[number]["to"] }) {
+  const t = useT();
   const at = STEPS.findIndex((s) => s.to === current);
   const active = useRef<HTMLAnchorElement>(null);
   // On phones the strip scrolls: bring the current step into view.
@@ -59,7 +61,7 @@ export function DocSteps({ current }: { current: (typeof STEPS)[number]["to"] })
     active.current?.scrollIntoView({ inline: "center", block: "nearest" });
   }, []);
   return (
-    <nav aria-label="Document steps" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+    <nav aria-label={t("Document steps")} className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
       <ol className="flex w-max min-w-full items-center gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1">
         {STEPS.map((s, i) => {
           const on = i === at;
@@ -82,7 +84,7 @@ export function DocSteps({ current }: { current: (typeof STEPS)[number]["to"] })
                 >
                   {i + 1}
                 </span>
-                {s.label}
+                {t(s.label)}
               </Link>
               {i < STEPS.length - 1 ? <CaretRightIcon size={12} className="shrink-0 text-border" aria-hidden /> : null}
             </li>

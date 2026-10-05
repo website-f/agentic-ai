@@ -20,6 +20,7 @@ import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { locale, msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import {
   docKeys, documentQuery, exportUrl, fileUrl, kitQuery, STATUS_LABEL, versionsQuery,
@@ -32,15 +33,15 @@ import { KindTile } from "./visuals";
 type Values = Record<string, FieldValue>;
 
 const QUICK: { label: string; instruction: string }[] = [
-  { label: "Shorter", instruction: "Make it shorter and clearer, keeping every fact." },
-  { label: "More formal", instruction: "Make it more formal and professional, for a business letter in Malaysia." },
-  { label: "Friendlier", instruction: "Make it warmer and friendlier while staying professional." },
-  { label: "Fix grammar", instruction: "Fix grammar, spelling and punctuation only. Change nothing else." },
-  { label: "To Bahasa Melayu", instruction: "Translate into formal business Bahasa Melayu." },
-  { label: "To English", instruction: "Translate into clear business English." },
+  { label: msg("Shorter"), instruction: "Make it shorter and clearer, keeping every fact." },
+  { label: msg("More formal"), instruction: "Make it more formal and professional, for a business letter in Malaysia." },
+  { label: msg("Friendlier"), instruction: "Make it warmer and friendlier while staying professional." },
+  { label: msg("Fix grammar"), instruction: "Fix grammar, spelling and punctuation only. Change nothing else." },
+  { label: msg("To Bahasa Melayu"), instruction: "Translate into formal business Bahasa Melayu." },
+  { label: msg("To English"), instruction: "Translate into clear business English." },
 ];
 
-const money = (n: number) => n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n: number) => n.toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const num = (v: unknown) => {
   const n = Number(String(v ?? "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -49,35 +50,37 @@ const num = (v: unknown) => {
 // ---------------------------------------------------------------- fields
 
 function ItemsEditor({ value, onChange, disabled }: { value: LineItem[]; onChange: (v: LineItem[]) => void; disabled?: boolean }) {
+  const t = useT();
   const rows = value.length ? value : [];
   const set = (i: number, p: Partial<LineItem>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)));
   return (
     <div className="@container grid gap-2">
       <div className="hidden grid-cols-[minmax(0,1fr)_3.75rem_4.25rem_6rem_6rem_2rem] gap-2 px-1 text-[11.5px] font-medium text-muted @xl:grid">
-        <span>Description</span><span>Qty</span><span>Unit</span><span className="text-right">Unit price</span><span className="text-right">Amount</span><span />
+        <span>{t("Description")}</span><span>{t("Qty")}</span><span>{t("Unit")}</span><span className="text-right">{t("Unit price")}</span><span className="text-right">{t("Amount")}</span><span />
       </div>
       {rows.map((r, i) => (
         // Narrow column: description on its own row, numbers below. Wide: one row per line.
         <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_auto] items-center gap-2 rounded-sm border border-border bg-surface-2/30 p-2 @xl:grid-cols-[minmax(0,1fr)_3.75rem_4.25rem_6rem_6rem_2rem] @xl:rounded-none @xl:border-0 @xl:p-0">
-          <Input value={r.description} disabled={disabled} onChange={(e) => set(i, { description: e.target.value })} placeholder="What it is" aria-label="Description" className="col-span-4 h-9 @xl:col-span-1" />
-          <Input value={String(r.qty ?? "")} disabled={disabled} onChange={(e) => set(i, { qty: e.target.value })} inputMode="decimal" placeholder="Qty" aria-label="Quantity" className="h-9" />
-          <Input value={r.unit ?? ""} disabled={disabled} onChange={(e) => set(i, { unit: e.target.value })} placeholder="unit" aria-label="Unit" className="h-9" />
-          <Input value={String(r.unit_price ?? "")} disabled={disabled} onChange={(e) => set(i, { unit_price: e.target.value })} inputMode="decimal" placeholder="Price" aria-label="Unit price" className="h-9 text-right" />
+          <Input value={r.description} disabled={disabled} onChange={(e) => set(i, { description: e.target.value })} placeholder={t("What it is")} aria-label={t("Description")} className="col-span-4 h-9 @xl:col-span-1" />
+          <Input value={String(r.qty ?? "")} disabled={disabled} onChange={(e) => set(i, { qty: e.target.value })} inputMode="decimal" placeholder={t("Qty")} aria-label={t("Quantity")} className="h-9" />
+          <Input value={r.unit ?? ""} disabled={disabled} onChange={(e) => set(i, { unit: e.target.value })} placeholder={t("unit")} aria-label={t("Unit")} className="h-9" />
+          <Input value={String(r.unit_price ?? "")} disabled={disabled} onChange={(e) => set(i, { unit_price: e.target.value })} inputMode="decimal" placeholder={t("Price")} aria-label={t("Unit price")} className="h-9 text-right" />
           <span className="order-last col-span-4 flex items-center justify-between text-[13px] tabular-nums @xl:order-none @xl:col-span-1 @xl:justify-end">
-            <span className="text-[12px] text-muted @xl:hidden">Amount</span>
+            <span className="text-[12px] text-muted @xl:hidden">{t("Amount")}</span>
             <span className="font-medium">{money(num(r.qty || 1) * num(r.unit_price))}</span>
           </span>
-          <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label="Remove line" onClick={() => onChange(rows.filter((_, j) => j !== i))}><XIcon size={14} /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label={t("Remove line")} onClick={() => onChange(rows.filter((_, j) => j !== i))}><XIcon size={14} /></Button>
         </div>
       ))}
       <Button size="sm" variant="outline" className="w-fit" disabled={disabled} onClick={() => onChange([...rows, { description: "", qty: 1, unit: "", unit_price: "" }])}>
-        <PlusIcon size={14} /> Add a line
+        <PlusIcon size={14} /> {t("Add a line")}
       </Button>
     </div>
   );
 }
 
 function FieldInput({ f, value, onChange, disabled }: { f: TemplateField; value: FieldValue | undefined; onChange: (v: FieldValue) => void; disabled?: boolean }) {
+  const t = useT();
   const label = `${f.label}${f.required ? " *" : ""}`;
   if (f.type === "items") {
     return (
@@ -95,7 +98,7 @@ function FieldInput({ f, value, onChange, disabled }: { f: TemplateField; value:
     return (
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">{label}</span>
-        <Select value={str} onValueChange={onChange} label={f.label} disabled={disabled} placeholder="Choose" options={f.options.map((o) => ({ value: o, label: o }))} />
+        <Select value={str} onValueChange={onChange} label={f.label} disabled={disabled} placeholder={t("Choose")} options={f.options.map((o) => ({ value: o, label: o }))} />
       </div>
     );
   }
@@ -108,18 +111,19 @@ function FieldInput({ f, value, onChange, disabled }: { f: TemplateField; value:
 // ---------------------------------------------------------------- checks and paper
 
 function Checks({ checks, review, reviewing, onReview }: { checks: Check[]; review: Check[] | null; reviewing: boolean; onReview: () => void }) {
+  const t = useT();
   const errors = checks.filter((c) => c.level === "error");
   const warns = checks.filter((c) => c.level === "warn");
   return (
-    <section aria-label="Checks" className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3.5">
+    <section aria-label={t("Checks")} className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3.5">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
           {errors.length ? <WarningCircleIcon size={17} weight="fill" className="text-danger" />
             : warns.length ? <WarningIcon size={17} weight="fill" className="text-warn" />
             : <CheckCircleIcon size={17} weight="fill" className="text-ok" />}
-          {errors.length ? `${errors.length} to fix` : warns.length ? `${warns.length} to look at` : "All checks pass"}
+          {errors.length ? t("{n} to fix", { n: errors.length }) : warns.length ? t("{n} to look at", { n: warns.length }) : t("All checks pass")}
         </span>
-        <Button size="sm" variant="ghost" loading={reviewing} onClick={onReview}><SparkleIcon size={14} /> Review with AI</Button>
+        <Button size="sm" variant="ghost" loading={reviewing} onClick={onReview}><SparkleIcon size={14} /> {t("Review with AI")}</Button>
       </div>
       {checks.length ? (
         <ul className="grid gap-1 text-[12.5px]">
@@ -132,12 +136,12 @@ function Checks({ checks, review, reviewing, onReview }: { checks: Check[]; revi
       ) : null}
       {review ? (
         <div className="grid gap-1 border-t border-border pt-2">
-          <span className="text-[12px] font-medium text-muted">AI review</span>
+          <span className="text-[12px] font-medium text-muted">{t("AI review")}</span>
           {review.length ? (
             <ul className="grid gap-1 text-[12.5px]">
               {review.map((c) => <li key={c.text} className="flex gap-2"><span aria-hidden className={c.level === "error" ? "text-danger" : "text-warn"}>•</span>{c.text}</li>)}
             </ul>
-          ) : <p className="text-[12.5px] text-ok">Nothing to improve found.</p>}
+          ) : <p className="text-[12.5px] text-ok">{t("Nothing to improve found.")}</p>}
         </div>
       ) : null}
     </section>
@@ -145,6 +149,7 @@ function Checks({ checks, review, reviewing, onReview }: { checks: Check[]; revi
 }
 
 function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
+  const t = useT();
   const { data: kit } = useQuery({ ...kitQuery(doc.branch_id ?? ""), enabled: !!doc.branch_id });
   const data = (kit?.data ?? {}) as Record<string, string>;
   const accent = /^#[0-9a-f]{6}$/i.test(data.accent ?? "") ? data.accent : "#13895f";
@@ -152,7 +157,7 @@ function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
   const md = useMemo(() => preview.replace(/\[\[([^\]\n]+)\]\]/g, "`$1`"), [preview]);
   const contact = [data.phone, data.email, data.website].filter(Boolean).join("  ·  ");
   return (
-    <article aria-label="Preview" className="paper min-h-[40rem] min-w-0 rounded-[var(--radius-md)] border border-border bg-white px-4 py-6 text-[#191919] shadow-[var(--shadow-soft)] sm:px-[7%] sm:py-8">
+    <article aria-label={t("Preview")} className="paper min-h-[40rem] min-w-0 rounded-[var(--radius-md)] border border-border bg-white px-4 py-6 text-[#191919] shadow-[var(--shadow-soft)] sm:px-[7%] sm:py-8">
       {data.legal_name ? (
         <header className="mb-6">
           <div className="flex items-start gap-4">
@@ -168,10 +173,10 @@ function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
         </header>
       ) : (
         <p className="mb-5 rounded-sm bg-[#fff6dd] px-3 py-2 text-[12px] text-[#8a5a00]">
-          No letterhead yet — fill in the <Link to="/company-kit" search={{ b: doc.branch_id ?? undefined }} className="underline">company kit</Link>.
+          {t("No letterhead yet — fill in the")} <Link to="/company-kit" search={{ b: doc.branch_id ?? undefined }} className="underline">{t("company kit")}</Link>.
         </p>
       )}
-      <Markdown className="text-[12.5px] sm:text-[13.5px]">{md || "*Empty*"}</Markdown>
+      <Markdown className="text-[12.5px] sm:text-[13.5px]">{md || t("*Empty*")}</Markdown>
     </article>
   );
 }
@@ -179,6 +184,7 @@ function Paper({ doc, preview }: { doc: DocDetail; preview: string }) {
 // ---------------------------------------------------------------- the editor
 
 export function DocumentEditor({ id }: { id: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: me } = useQuery(meQuery);
   const { data: doc, error } = useQuery(documentQuery(id));
@@ -211,16 +217,16 @@ export function DocumentEditor({ id }: { id: string }) {
     setBody(doc.body);
     setValues(doc.values);
     setLive(null);
-    setTab((t) => t || (doc.fields.length ? "fields" : "text"));
+    setTab((cur) => cur || (doc.fields.length ? "fields" : "text"));
   }, [doc, dirty]);
 
   // Live preview and checks for unsaved edits.
   useEffect(() => {
     if (!dirty) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api<DocDetail>(`/api/documents/${id}/preview`, "POST", { body, values }).then(setLive).catch(() => {});
     }, 450);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [body, values, dirty, id]);
 
   const locked = doc?.status === "approved";
@@ -235,7 +241,7 @@ export function DocumentEditor({ id }: { id: string }) {
       qc.invalidateQueries({ queryKey: docKeys.versions(id) });
       setDirty(false);
       setLive(null);
-      toast.success("Saved.");
+      toast.success(tr("Saved."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -259,7 +265,7 @@ export function DocumentEditor({ id }: { id: string }) {
       qc.invalidateQueries({ queryKey: docKeys.documents });
       setDirty(false);
       setLive(null);
-      toast.success(d.status === "approved" ? "Approved — it is locked now." : d.status === "review" ? "Sent for review." : "Reopened for changes.");
+      toast.success(d.status === "approved" ? tr("Approved — it is locked now.") : d.status === "review" ? tr("Sent for review.") : tr("Reopened for changes."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -278,11 +284,11 @@ export function DocumentEditor({ id }: { id: string }) {
     mutationFn: () => api<{ values: Values }>(`/api/documents/${id}/ai-fill`, "POST", { request: fillText, file_ids: fillFiles.map((f) => f.id) }),
     onSuccess: ({ values: v }) => {
       const n = Object.keys(v).length;
-      if (!n) { toast.info("Nothing in that description matched the fields."); return; }
+      if (!n) { toast.info(tr("Nothing in that description matched the fields.")); return; }
       setValues((cur) => ({ ...cur, ...v }));
       setDirty(true);
       setFillOpen(false);
-      toast.success(`Filled ${n} field${n > 1 ? "s" : ""}. Check them, then save.`);
+      toast.success(n > 1 ? tr("Filled {n} fields. Check them, then save.", { n }) : tr("Filled 1 field. Check them, then save."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -302,14 +308,14 @@ export function DocumentEditor({ id }: { id: string }) {
       qc.setQueryData(docKeys.document(id), d);
       qc.invalidateQueries({ queryKey: docKeys.versions(id) });
       setDirty(false);
-      toast.success("Restored. The version before it is kept too.");
+      toast.success(tr("Restored. The version before it is kept too."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
 
   const del = useMutation({
     mutationFn: () => api(`/api/documents/${id}`, "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: docKeys.documents }); toast.success("Deleted."); window.history.back(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: docKeys.documents }); toast.success(tr("Deleted.")); window.history.back(); },
   });
 
   const { data: versions = [] } = useQuery({ ...versionsQuery(id), enabled: tab === "history" });
@@ -321,9 +327,9 @@ export function DocumentEditor({ id }: { id: string }) {
   const status = STATUS_LABEL[doc.status];
   const errors = shown.checks.filter((c) => c.level === "error").length;
   const tabs = [
-    ...(doc.fields.length ? [{ id: "fields", label: "Fields", icon: ListBulletsIcon, count: doc.fields.length }] : []),
-    ...(!doc.word_template ? [{ id: "text", label: "Text", icon: PencilSimpleLineIcon, count: 0 }] : []),
-    { id: "history", label: "History", icon: ClockCounterClockwiseIcon, count: 0 },
+    ...(doc.fields.length ? [{ id: "fields", label: t("Fields"), icon: ListBulletsIcon, count: doc.fields.length }] : []),
+    ...(!doc.word_template ? [{ id: "text", label: t("Text"), icon: PencilSimpleLineIcon, count: 0 }] : []),
+    { id: "history", label: t("History"), icon: ClockCounterClockwiseIcon, count: 0 },
   ];
   const onSelect = () => {
     const el = area.current;
@@ -333,38 +339,38 @@ export function DocumentEditor({ id }: { id: string }) {
 
   const exportMenu = (
     <Menu>
-      <MenuTrigger asChild><Button size="sm" variant="outline"><DownloadSimpleIcon size={14} /> Export</Button></MenuTrigger>
+      <MenuTrigger asChild><Button size="sm" variant="outline"><DownloadSimpleIcon size={14} /> {t("Export")}</Button></MenuTrigger>
       <MenuContent>
-        <MenuItem icon={<FilePdfIcon />} onSelect={() => window.open(exportUrl(id, "pdf", true), "_blank", "noopener")}>Open PDF</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "pdf"); }}>Download PDF</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "docx"); }}>Download Word</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "xlsx"); }}>Download Excel</MenuItem>
+        <MenuItem icon={<FilePdfIcon />} onSelect={() => window.open(exportUrl(id, "pdf", true), "_blank", "noopener")}>{t("Open PDF")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "pdf"); }}>{t("Download PDF")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "docx"); }}>{t("Download Word")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "xlsx"); }}>{t("Download Excel")}</MenuItem>
         <MenuSeparator />
-        <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Delete document</MenuItem>
+        <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Delete document")}</MenuItem>
       </MenuContent>
     </Menu>
   );
   const statusActions = (
     <>
-      {doc.status === "draft" ? <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => setStatus.mutate("review")}>Send for review</Button> : null}
+      {doc.status === "draft" ? <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => setStatus.mutate("review")}>{t("Send for review")}</Button> : null}
       {doc.status !== "approved" && canApprove ? (
-        <Button size="sm" disabled={errors > 0} title={errors ? "Fix the checks first" : undefined} loading={setStatus.isPending} onClick={() => setStatus.mutate("approved")}>
-          <SealCheckIcon size={15} /> Approve
+        <Button size="sm" disabled={errors > 0} title={errors ? t("Fix the checks first") : undefined} loading={setStatus.isPending} onClick={() => setStatus.mutate("approved")}>
+          <SealCheckIcon size={15} /> {t("Approve")}
         </Button>
       ) : null}
-      {doc.status === "approved" ? <Button size="sm" variant="outline" loading={setStatus.isPending} onClick={() => setStatus.mutate("draft")}>Reopen</Button> : null}
+      {doc.status === "approved" ? <Button size="sm" variant="outline" loading={setStatus.isPending} onClick={() => setStatus.mutate("draft")}>{t("Reopen")}</Button> : null}
     </>
   );
-  const saveButton = !locked ? <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={saveNow}>Save</Button> : null;
+  const saveButton = !locked ? <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={saveNow}>{t("Save")}</Button> : null;
   const actions = <>{saveButton}{exportMenu}{statusActions}</>;
   const checkCount = shown.checks.length;
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Link to="/documents" className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> All documents</Link>
+        <Link to="/documents" className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-fg"><ArrowLeftIcon size={14} /> {t("All documents")}</Link>
         <span className="flex-1" />
-        {dirty ? <span className="inline-flex items-center gap-1.5 text-[12px] text-warn"><span className="size-1.5 rounded-full bg-warn" />Unsaved changes</span> : null}
+        {dirty ? <span className="inline-flex items-center gap-1.5 text-[12px] text-warn"><span className="size-1.5 rounded-full bg-warn" />{t("Unsaved changes")}</span> : null}
         <div className="hidden items-center gap-2 md:flex">{actions}</div>
         <span className="md:hidden">{exportMenu}</span>
       </div>
@@ -372,42 +378,42 @@ export function DocumentEditor({ id }: { id: string }) {
       <div className="flex items-start gap-3.5">
         <span className="mt-1 hidden sm:block"><KindTile kind={doc.kind} size="lg" /></span>
         <div className="grid min-w-0 flex-1 gap-1.5">
-          <textarea value={title} disabled={locked} rows={1} aria-label="Title"
+          <textarea value={title} disabled={locked} rows={1} aria-label={t("Title")}
             onChange={(e) => { setTitle(e.target.value.replace(/\n/g, " ")); setDirty(true); }}
             onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
             className="w-full resize-none bg-transparent text-[20px] leading-tight font-semibold tracking-tight outline-none [field-sizing:content] disabled:opacity-100 sm:text-[24px]" />
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px] text-muted">
-            <Pill tone={status.tone}>{status.label}</Pill>
+            <Pill tone={status.tone}>{t(status.label)}</Pill>
             {doc.number ? <Pill className="font-mono">{doc.number}</Pill> : null}
             <Meta items={[
               doc.branch_name,
               doc.template_name,
-              doc.agent_name ? <span className="inline-flex items-center gap-1"><RobotIcon size={13} weight="duotone" className="text-accent" />drafted by {doc.agent_name}</span> : "by a person",
+              doc.agent_name ? <span className="inline-flex items-center gap-1"><RobotIcon size={13} weight="duotone" className="text-accent" />{t("drafted by {name}", { name: doc.agent_name })}</span> : t("by a person"),
               `v${doc.version}, ${timeAgo(doc.updated_at)}`,
-              doc.task_id ? <Link to="/tasks" search={{ task: doc.task_id }} className="text-accent underline-offset-2 hover:underline">open the task</Link> : null,
+              doc.task_id ? <Link to="/tasks" search={{ task: doc.task_id }} className="text-accent underline-offset-2 hover:underline">{t("open the task")}</Link> : null,
             ]} />
           </div>
         </div>
       </div>
 
-      {locked ? <p className="flex items-center gap-2 rounded-sm bg-ok/10 px-3 py-2 text-[13px] text-ok"><SealCheckIcon size={16} weight="fill" /> Approved — locked. Reopen it to make changes.</p> : null}
+      {locked ? <p className="flex items-center gap-2 rounded-sm bg-ok/10 px-3 py-2 text-[13px] text-ok"><SealCheckIcon size={16} weight="fill" /> {t("Approved — locked. Reopen it to make changes.")}</p> : null}
 
-      <Segmented<"edit" | "preview"> label="Pane" value={pane} onChange={setPane} className="w-full xl:hidden [&>button]:flex-1 [&>button]:justify-center"
+      <Segmented<"edit" | "preview"> label={t("Pane")} value={pane} onChange={setPane} className="w-full xl:hidden [&>button]:flex-1 [&>button]:justify-center"
         options={[
-          { value: "edit", label: "Edit" },
-          { value: "preview", label: "Preview", ...(checkCount ? { count: checkCount } : {}) },
+          { value: "edit", label: t("Edit") },
+          { value: "preview", label: t("Preview"), ...(checkCount ? { count: checkCount } : {}) },
         ]} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className={cn("grid min-w-0 content-start gap-3", pane !== "edit" && "max-xl:hidden")}>
           <Tabs.Root value={tab} onValueChange={setTab}>
-            <Tabs.List aria-label="Edit" className="mb-3 flex gap-1 overflow-x-auto border-b border-border">
-              {tabs.map((t) => (
-                <Tabs.Trigger key={t.id} value={t.id}
+            <Tabs.List aria-label={t("Edit")} className="mb-3 flex gap-1 overflow-x-auto border-b border-border">
+              {tabs.map((tb) => (
+                <Tabs.Trigger key={tb.id} value={tb.id}
                   className="-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-[13.5px] text-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg">
-                  <t.icon size={15} />
-                  {t.label}
-                  {t.count ? <span className="rounded-full bg-surface-2 px-1.5 text-[11px] text-muted tabular">{t.count}</span> : null}
+                  <tb.icon size={15} />
+                  {tb.label}
+                  {tb.count ? <span className="rounded-full bg-surface-2 px-1.5 text-[11px] text-muted tabular">{tb.count}</span> : null}
                 </Tabs.Trigger>
               ))}
             </Tabs.List>
@@ -416,19 +422,19 @@ export function DocumentEditor({ id }: { id: string }) {
               {!locked ? (
                 fillOpen ? (
                   <div className="grid gap-2 rounded-[var(--radius-md)] border border-accent/40 bg-accent-soft/40 p-3">
-                    <TextareaField label="Describe it" rows={3} value={fillText} onChange={(e) => setFillText(e.target.value)} autoFocus
-                      placeholder="e.g. Quote Syarikat Bina, attn Encik Rahim: 12 months cleaning at RM1,850, valid 30 days."
-                      hint="Only what you write (and attached files) is used; nothing is invented." />
+                    <TextareaField label={t("Describe it")} rows={3} value={fillText} onChange={(e) => setFillText(e.target.value)} autoFocus
+                      placeholder={t("e.g. Quote Syarikat Bina, attn Encik Rahim: 12 months cleaning at RM1,850, valid 30 days.")}
+                      hint={t("Only what you write (and attached files) is used; nothing is invented.")} />
                     <div className="flex flex-wrap items-center gap-2">
                       {fillFiles.map((f) => <Pill key={f.id}>{f.name}</Pill>)}
-                      <Button size="sm" variant="ghost" onClick={() => setPicking(true)}><PaperclipIcon size={14} /> From a file</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setPicking(true)}><PaperclipIcon size={14} /> {t("From a file")}</Button>
                       <span className="flex-1" />
-                      <Button size="sm" variant="ghost" onClick={() => setFillOpen(false)}>Cancel</Button>
-                      <Button size="sm" disabled={fillText.trim().length < 3} loading={aiFill.isPending} onClick={() => aiFill.mutate()}><MagicWandIcon size={14} /> Fill fields</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setFillOpen(false)}>{t("Cancel")}</Button>
+                      <Button size="sm" disabled={fillText.trim().length < 3} loading={aiFill.isPending} onClick={() => aiFill.mutate()}><MagicWandIcon size={14} /> {t("Fill fields")}</Button>
                     </div>
                   </div>
                 ) : (
-                  <Button size="sm" variant="outline" className="w-fit" onClick={() => setFillOpen(true)}><MagicWandIcon size={14} /> Fill with AI</Button>
+                  <Button size="sm" variant="outline" className="w-fit" onClick={() => setFillOpen(true)}><MagicWandIcon size={14} /> {t("Fill with AI")}</Button>
                 )
               ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
@@ -436,9 +442,9 @@ export function DocumentEditor({ id }: { id: string }) {
               </div>
               {shown.totals ? (
                 <dl className="ml-auto grid w-full max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 rounded-[var(--radius-md)] border border-border p-3 text-[13px] tabular-nums">
-                  <dt className="text-muted">Subtotal</dt><dd className="text-right">{money(shown.totals.subtotal)}</dd>
-                  {shown.totals.tax ? <><dt className="text-muted">Tax</dt><dd className="text-right">{money(shown.totals.tax)}</dd></> : null}
-                  <dt className="font-semibold">Total</dt><dd className="text-right font-semibold">{money(shown.totals.total)}</dd>
+                  <dt className="text-muted">{t("Subtotal")}</dt><dd className="text-right">{money(shown.totals.subtotal)}</dd>
+                  {shown.totals.tax ? <><dt className="text-muted">{t("Tax")}</dt><dd className="text-right">{money(shown.totals.tax)}</dd></> : null}
+                  <dt className="font-semibold">{t("Total")}</dt><dd className="text-right font-semibold">{money(shown.totals.total)}</dd>
                 </dl>
               ) : null}
             </Tabs.Content>
@@ -447,50 +453,50 @@ export function DocumentEditor({ id }: { id: string }) {
               {!locked ? (
                 <div className="flex flex-wrap items-center gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface-2/50 p-2">
                   <TextAaIcon size={16} className="text-muted" aria-hidden />
-                  <span className="mr-1 text-[12px] text-muted">{sel ? `Rewrite ${sel.b - sel.a} selected characters:` : "Select text to rewrite it:"}</span>
+                  <span className="mr-1 text-[12px] text-muted">{sel ? t("Rewrite {n} selected characters:", { n: sel.b - sel.a }) : t("Select text to rewrite it:")}</span>
                   {QUICK.map((q) => (
                     <button key={q.label} type="button" disabled={!sel || rewrite.isPending} onClick={() => rewrite.mutate(q.instruction)}
                       className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[12px] enabled:hover:border-accent enabled:hover:text-accent disabled:opacity-50">
-                      {q.label}
+                      {t(q.label)}
                     </button>
                   ))}
                   <form className="flex min-w-0 flex-1 basis-48 gap-1.5" onSubmit={(e) => { e.preventDefault(); if (sel && custom.trim()) rewrite.mutate(custom.trim()); }}>
-                    <Input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="or say how…" disabled={!sel} className="h-7 text-[12px]" aria-label="Custom rewrite instruction" />
-                    <Button size="sm" type="submit" className="h-7" disabled={!sel || !custom.trim()} loading={rewrite.isPending}>Go</Button>
+                    <Input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder={t("or say how…")} disabled={!sel} className="h-7 text-[12px]" aria-label={t("Custom rewrite instruction")} />
+                    <Button size="sm" type="submit" className="h-7" disabled={!sel || !custom.trim()} loading={rewrite.isPending}>{t("Go")}</Button>
                   </form>
                 </div>
               ) : null}
               {suggestion ? (
                 <div className="grid gap-2 rounded-[var(--radius-md)] border border-accent/40 bg-accent-soft/40 p-3 text-[13px]">
-                  <span className="text-[12px] font-medium text-muted">Suggested rewrite</span>
+                  <span className="text-[12px] font-medium text-muted">{t("Suggested rewrite")}</span>
                   <p className="whitespace-pre-wrap text-muted line-through decoration-danger/50">{suggestion.from}</p>
                   <p className="whitespace-pre-wrap">{suggestion.to}</p>
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => {
                       setBody((b) => b.slice(0, suggestion.a) + suggestion.to + b.slice(suggestion.b));
                       setDirty(true); setSuggestion(null); setSel(null);
-                    }}>Use it</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setSuggestion(null)}>Discard</Button>
+                    }}>{t("Use it")}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSuggestion(null)}>{t("Discard")}</Button>
                   </div>
                 </div>
               ) : null}
               <textarea ref={area} value={body} disabled={locked} onSelect={onSelect} onChange={(e) => { setBody(e.target.value); setDirty(true); }}
-                rows={22} spellCheck aria-label="Document text"
+                rows={22} spellCheck aria-label={t("Document text")}
                 className="min-h-[28rem] w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-80" />
-              <p className="text-[12px] text-muted"># heading · **bold** · - list · | table | · {"{{placeholders}}"} fill from the fields and the company kit · \pagebreak starts a new page.</p>
+              <p className="text-[12px] text-muted">{t("# heading · **bold** · - list · | table | · {{placeholders}} fill from the fields and the company kit · \\pagebreak starts a new page.")}</p>
             </Tabs.Content>
 
             <Tabs.Content value="history" className="outline-none">
-              {!versions.length ? <p className="text-[13px] text-muted">No earlier versions yet. Every save keeps the one before.</p> : (
+              {!versions.length ? <p className="text-[13px] text-muted">{t("No earlier versions yet. Every save keeps the one before.")}</p> : (
                 <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border">
                   {versions.map((v) => (
                     <li key={v.version} className="flex items-center gap-3 px-3 py-2.5">
                       <ClockCounterClockwiseIcon size={16} className="text-muted" />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[13px] font-medium">Version {v.version}{v.note ? ` — ${v.note}` : ""}</span>
-                        <span className="block text-[12px] text-muted">{timeAgo(v.created_at)} · {v.author.startsWith("agent:") ? "an agent" : "a person"}</span>
+                        <span className="block text-[13px] font-medium">{t("Version {n}", { n: v.version })}{v.note ? ` — ${v.note}` : ""}</span>
+                        <span className="block text-[12px] text-muted">{timeAgo(v.created_at)} · {v.author.startsWith("agent:") ? t("an agent") : t("a person")}</span>
                       </span>
-                      {!locked ? <Button size="sm" variant="ghost" loading={restore.isPending} onClick={() => restore.mutate(v.version)}><ArrowCounterClockwiseIcon size={14} /> Restore</Button> : null}
+                      {!locked ? <Button size="sm" variant="ghost" loading={restore.isPending} onClick={() => restore.mutate(v.version)}><ArrowCounterClockwiseIcon size={14} /> {t("Restore")}</Button> : null}
                     </li>
                   ))}
                 </ul>
@@ -507,10 +513,10 @@ export function DocumentEditor({ id }: { id: string }) {
 
       <ActionBar className="md:hidden">{saveButton}{statusActions}</ActionBar>
 
-      <FilePicker open={picking} onOpenChange={setPicking} branchId={doc.branch_id} title="Fill from a file"
+      <FilePicker open={picking} onOpenChange={setPicking} branchId={doc.branch_id} title={t("Fill from a file")}
         onPick={(f) => setFillFiles((fs) => (fs.some((x) => x.id === f.id) ? fs : [...fs, { id: f.id, name: f.name }]))} />
-      <ConfirmDialog open={removing} onOpenChange={setRemoving} title="Delete this document?" danger confirmLabel="Delete"
-        body="Its versions go too. Packs that use it will show the item as missing." onConfirm={async () => { await del.mutateAsync(); }} />
+      <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete this document?")} danger confirmLabel={t("Delete")}
+        body={t("Its versions go too. Packs that use it will show the item as missing.")} onConfirm={async () => { await del.mutateAsync(); }} />
     </div>
   );
 }

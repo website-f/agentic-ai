@@ -22,7 +22,11 @@ log = logging.getLogger("agentic.mcp")
 
 PROTOCOL = "2025-06-18"
 TIMEOUT = 30
-MAX_RESULT = 12_000
+# P21: results are no longer cut at 12,000 characters (an error at the end was lost). The full
+# text is stored (up to this sanity limit, keeping head AND tail), and the model is sent a
+# compressed version capped with a note that expand_result can page through (compress.py).
+MAX_STORED = 200_000
+STORED_TAIL = 50_000
 
 
 class McpError(Exception):
@@ -117,5 +121,14 @@ async def call_tool(url: str, header: str, tool: str, arguments: dict[str, Any])
                 parts.append(json.dumps(block)[:1000])
     text = "\n".join(p for p in parts if p).strip() or json.dumps(result)[:2000]
     if result.get("isError"):
-        return f"The tool reported an error: {text[:MAX_RESULT]}"
-    return text[:MAX_RESULT]
+        return f"The tool reported an error: {_bounded(text)}"
+    return _bounded(text)
+
+
+def _bounded(text: str) -> str:
+    """Huge answers keep their beginning and their end (where errors usually are)."""
+    if len(text) <= MAX_STORED:
+        return text
+    head = MAX_STORED - STORED_TAIL
+    cut = len(text) - MAX_STORED
+    return f"{text[:head]}\n[… {cut:,} characters cut by the office …]\n{text[-STORED_TAIL:]}"

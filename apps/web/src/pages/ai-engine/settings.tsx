@@ -6,11 +6,13 @@ import { Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 
 import { aiKeys, aiSettingsQuery } from "./data";
 
 export function SettingsTab({ canManage }: { canManage: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const settings = useQuery(aiSettingsQuery);
   const [value, setValue] = useState("");
@@ -24,7 +26,7 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
       api("/api/ai/settings", "PATCH", { max_task_model_calls: maxTaskModelCalls }),
     onSuccess: (data) => {
       queryClient.setQueryData(aiKeys.settings, data);
-      toast.success("AI Engine settings saved.");
+      toast.success(t("AI Engine settings saved."));
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -39,13 +41,13 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
   return (
     <div className="grid max-w-2xl gap-8">
       <Section
-        title="Task safety limit"
-        description="Controls how many model calls one task may make before it is stopped as unfinished."
+        title={t("Task safety limit")}
+        description={t("Controls how many model calls one task may make before it is stopped as unfinished.")}
       >
         <div className="rounded-[var(--radius-md)] border border-border bg-surface p-5">
           <div className="grid gap-5 sm:grid-cols-[minmax(0,18rem)_1fr] sm:items-end">
             <Field
-              label="Maximum model calls per task"
+              label={t("Maximum model calls per task")}
               type="number"
               min={1}
               max={hardMax}
@@ -53,11 +55,10 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
               value={value}
               disabled={!canManage}
               onChange={(event) => setValue(event.target.value)}
-              hint={`Default: 30. Allowed range: 1–${hardMax}.`}
+              hint={t("Default: 30. Allowed range: 1–{max}.", { max: hardMax })}
             />
             <div className="text-[13px] leading-relaxed text-muted">
-              This is a workspace-wide limit for agent tasks. A higher value gives long-running
-              research tasks more room, but can increase runtime and model cost.
+              {t("This is a workspace-wide limit for agent tasks. A higher value gives long-running research tasks more room, but can increase runtime and model cost.")}
             </div>
           </div>
           {canManage ? (
@@ -67,12 +68,12 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
                 disabled={!valid || save.isPending || parsed === settings.data.max_task_model_calls}
                 loading={save.isPending}
               >
-                Save limit
+                {t("Save limit")}
               </Button>
             </div>
           ) : (
             <p className="mt-4 border-t border-border pt-4 text-[12.5px] text-muted">
-              You need AI Engine management permission to change this limit.
+              {t("You need AI Engine management permission to change this limit.")}
             </p>
           )}
         </div>

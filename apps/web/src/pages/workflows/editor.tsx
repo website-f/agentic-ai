@@ -21,6 +21,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { SwitchField } from "@/components/ui/switch";
+import { msg, t, useLang, useT, type Vars } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
@@ -44,23 +45,24 @@ const QUICK = ["task", "research", "write", "email", "template", "check", "decis
 
 interface Issue { id?: string; text: string }
 
-function findIssues(g: Graph): Issue[] {
+/** `t` is passed in so the list is rebuilt when the language changes. */
+function findIssues(g: Graph, t: (text: string, vars?: Vars) => string): Issue[] {
   const flow = g.nodes.filter((n) => n.type !== "note");
   const ids = new Set(flow.map((n) => n.id));
   const edges = g.edges.filter((e) => ids.has(e.from) && ids.has(e.to));
   const out: Issue[] = [];
   if (!flow.length) return out;
-  if (!flow.some((n) => n.type === "start")) out.push({ text: "Add a Start step so a run knows where the job comes in." });
-  if (!flow.some((n) => n.type === "end")) out.push({ text: "Add an End step so it's clear when the job is finished." });
+  if (!flow.some((n) => n.type === "start")) out.push({ text: t("Add a Start step so a run knows where the job comes in.") });
+  if (!flow.some((n) => n.type === "end")) out.push({ text: t("Add an End step so it's clear when the job is finished.") });
   for (const n of flow) {
     const ins = edges.filter((e) => e.to === n.id);
     const outs = edges.filter((e) => e.from === n.id);
-    const name = `"${n.title || itemFor(n).label}"`;
-    if (n.type !== "start" && !ins.length) out.push({ id: n.id, text: `${name} has nothing leading into it, so a run never reaches it.` });
-    if (n.type !== "end" && !outs.length) out.push({ id: n.id, text: `${name} leads nowhere. Connect it to the next step or an End.` });
-    if (n.type === "decision" && outs.length < 2) out.push({ id: n.id, text: `${name} needs at least two branches.` });
-    if (n.type === "decision" && outs.some((e) => !e.label.trim())) out.push({ id: n.id, text: `Label every branch of ${name} (e.g. yes / no).` });
-    if (n.type === "decision" && n.decider === "agent" && !n.agent_id && !n.role) out.push({ id: n.id, text: `Say which agent decides ${name}, or let a person decide.` });
+    const name = `"${n.title || t(itemFor(n).label)}"`;
+    if (n.type !== "start" && !ins.length) out.push({ id: n.id, text: t("{name} has nothing leading into it, so a run never reaches it.", { name }) });
+    if (n.type !== "end" && !outs.length) out.push({ id: n.id, text: t("{name} leads nowhere. Connect it to the next step or an End.", { name }) });
+    if (n.type === "decision" && outs.length < 2) out.push({ id: n.id, text: t("{name} needs at least two branches.", { name }) });
+    if (n.type === "decision" && outs.some((e) => !e.label.trim())) out.push({ id: n.id, text: t("Label every branch of {name} (e.g. yes / no).", { name }) });
+    if (n.type === "decision" && n.decider === "agent" && !n.agent_id && !n.role) out.push({ id: n.id, text: t("Say which agent decides {name}, or let a person decide.", { name }) });
   }
   // A connection back to an earlier step: a run does each step once, so the loop never repeats.
   const color = new Map<string, number>();
@@ -78,7 +80,7 @@ function findIssues(g: Graph): Issue[] {
   for (const n of flow) {
     if ((color.get(n.id) ?? 0) === 0) {
       const hit = visit(n.id);
-      if (hit) { out.push({ id: hit, text: `A connection loops back to "${g.nodes.find((x) => x.id === hit)?.title || "a step"}". A run does each step once; add a new step for the second pass instead.` }); break; }
+      if (hit) { out.push({ id: hit, text: t("A connection loops back to \"{name}\". A run does each step once; add a new step for the second pass instead.", { name: g.nodes.find((x) => x.id === hit)?.title || t("a step") }) }); break; }
     }
   }
   return out;
@@ -86,14 +88,19 @@ function findIssues(g: Graph): Issue[] {
 
 // ---------------------------------------------------------------- the library (palette)
 
+/** A library item matches a search in English or in the language on screen. */
+const matches = (i: LibItem, needle: string, withGroup = true) =>
+  `${i.label} ${i.desc} ${t(i.label)} ${t(i.desc)}${withGroup ? ` ${i.group} ${t(i.group)}` : ""}`.toLowerCase().includes(needle);
+
 function Palette({ onAdd, compact }: { onAdd: (key: string) => void; compact?: boolean }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
-  const items = LIBRARY.filter((i) => !needle || `${i.label} ${i.desc} ${i.group}`.toLowerCase().includes(needle));
+  const items = LIBRARY.filter((i) => !needle || matches(i, needle));
   return (
     <div className="flex min-h-0 flex-col">
       <div className={cn("shrink-0", compact ? "pb-3" : "p-3 pb-2")}>
-        <SearchInput value={q} onChange={setQ} placeholder="Search steps" />
+        <SearchInput value={q} onChange={setQ} placeholder={t("Search steps")} />
       </div>
       <div className={cn("min-h-0 flex-1 overflow-y-auto", compact ? "" : "px-3 pb-3")}>
         {GROUPS.map((g) => {
@@ -101,29 +108,30 @@ function Palette({ onAdd, compact }: { onAdd: (key: string) => void; compact?: b
           if (!list.length) return null;
           return (
             <div key={g} className="mb-3">
-              <p className="mb-1.5 px-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">{g}</p>
+              <p className="mb-1.5 px-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase">{t(g)}</p>
               <div className="grid gap-1">
                 {list.map((i) => <PaletteItem key={i.key} item={i} onAdd={() => onAdd(i.key)} />)}
               </div>
             </div>
           );
         })}
-        {!items.length ? <p className="px-1 py-6 text-center text-[13px] text-muted">No step matches "{q}".</p> : null}
+        {!items.length ? <p className="px-1 py-6 text-center text-[13px] text-muted">{t("No step matches \"{q}\".", { q })}</p> : null}
       </div>
     </div>
   );
 }
 
 function PaletteItem({ item, onAdd }: { item: LibItem; onAdd: () => void }) {
+  const t = useT();
   return (
     <button type="button" draggable onClick={onAdd}
       onDragStart={(e) => { e.dataTransfer.setData("application/x-workflow-step", item.key); e.dataTransfer.effectAllowed = "copy"; }}
-      title={`${item.label}: ${item.desc}. Drag onto the board, or click to add.`}
+      title={t("{label}: {desc}. Drag onto the board, or click to add.", { label: t(item.label), desc: t(item.desc) })}
       className="group grid min-h-11 w-full cursor-grab grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[var(--radius-sm)] border border-transparent px-1.5 py-1.5 text-left transition-colors hover:border-border hover:bg-surface active:cursor-grabbing">
       <IconTile icon={item.icon} tone={item.tone} size="sm" />
       <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium">{item.label}</span>
-        <span className="block truncate text-[11.5px] text-muted">{item.desc}</span>
+        <span className="block truncate text-[13px] font-medium">{t(item.label)}</span>
+        <span className="block truncate text-[11.5px] text-muted">{t(item.desc)}</span>
       </span>
       <PlusIcon size={14} className="text-muted opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
@@ -133,23 +141,24 @@ function PaletteItem({ item, onAdd }: { item: LibItem; onAdd: () => void }) {
 // ---------------------------------------------------------------- quick add (connection dropped on empty space)
 
 function QuickAdd({ at, onPick, onClose }: { at: Pt; onPick: (key: string) => void; onClose: () => void }) {
+  const t = useT();
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
-  const list = needle ? LIBRARY.filter((i) => i.type !== "start" && i.type !== "note" && `${i.label} ${i.desc}`.toLowerCase().includes(needle)) : QUICK.map((k) => libItem(k)!);
+  const list = needle ? LIBRARY.filter((i) => i.type !== "start" && i.type !== "note" && matches(i, needle, false)) : QUICK.map((k) => libItem(k)!);
   return (
     <div className="absolute z-20 w-64 rounded-[var(--radius-md)] border border-border bg-surface p-2 shadow-[var(--shadow-pop)]"
       style={{ left: Math.max(8, at.x - 128), top: at.y + 8 }} onPointerDown={(e) => e.stopPropagation()}>
       <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
-        <span className="text-[12px] font-semibold">Add the next step</span>
-        <button type="button" aria-label="Close" onClick={onClose} className="grid size-7 place-items-center rounded-sm text-muted hover:bg-surface-2"><XIcon size={13} /></button>
+        <span className="text-[12px] font-semibold">{t("Add the next step")}</span>
+        <button type="button" aria-label={t("Close")} onClick={onClose} className="grid size-7 place-items-center rounded-sm text-muted hover:bg-surface-2"><XIcon size={13} /></button>
       </div>
-      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" aria-label="Search steps"
+      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search…")} aria-label={t("Search steps")}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); if (e.key === "Enter" && list[0]) onPick(list[0].key); }}
         className="mb-1.5 h-8 w-full rounded-sm border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent" />
       <div className="grid max-h-64 gap-0.5 overflow-y-auto">
         {list.map((i) => (
           <button key={i.key} type="button" onClick={() => onPick(i.key)} className="flex min-h-9 items-center gap-2 rounded-sm px-1.5 text-left text-[13px] hover:bg-surface-2">
-            <IconTile icon={i.icon} tone={i.tone} size="sm" className="size-7" /> <span className="truncate">{i.label}</span>
+            <IconTile icon={i.icon} tone={i.tone} size="sm" className="size-7" /> <span className="truncate">{t(i.label)}</span>
           </button>
         ))}
       </div>
@@ -168,18 +177,20 @@ function NodeInspector({ node, graph, onPatch, onKind, onDelete, onDuplicate, on
   onRemoveEdge: (id: string) => void;
   onSelect: (s: Sel) => void;
 }) {
+  const t = useT();
+  const lang = useLang((s) => s.lang);
   const { data: agents = [] } = useQuery(agentsQuery);
   const usable = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only);
   const item = itemFor(node);
   const outs = graph.edges.filter((e) => e.from === node.id);
   const ins = graph.edges.filter((e) => e.to === node.id);
-  const title = (id: string) => { const n = graph.nodes.find((x) => x.id === id); return n ? n.title || itemFor(n).label : "?"; };
+  const title = (id: string) => { const n = graph.nodes.find((x) => x.id === id); return n ? n.title || t(itemFor(n).label) : "?"; };
   const work = node.type === "step" || node.type === "handoff";
   const agentPick = (label: string) => (
     <div className="grid gap-1.5">
       <span className="text-[13px] font-medium">{label}</span>
       <Select value={node.agent_id || NOBODY} onValueChange={(v) => onPatch({ agent_id: v === NOBODY ? "" : v }, "agent")} label={label}
-        options={[{ value: NOBODY, label: "Choose when the run starts" }, ...usable.map((a) => ({ value: a.id, label: a.name, hint: `${a.role}, ${a.branch_name}` }))]} />
+        options={[{ value: NOBODY, label: t("Choose when the run starts") }, ...usable.map((a) => ({ value: a.id, label: a.name, hint: `${a.role}, ${a.branch_name}` }))]} />
     </div>
   );
   return (
@@ -190,36 +201,36 @@ function NodeInspector({ node, graph, onPatch, onKind, onDelete, onDuplicate, on
           <Menu>
             <MenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-sm text-[11px] font-semibold tracking-[0.06em] text-muted uppercase hover:text-fg">
-                {item.label} <CaretDownIcon size={11} />
+                {t(item.label)} <CaretDownIcon size={11} />
               </button>
             </MenuTrigger>
             <MenuContent className="max-h-80 w-60 overflow-y-auto">
               {GROUPS.map((g) => (
                 <div key={g}>
-                  <MenuLabel>{g}</MenuLabel>
+                  <MenuLabel>{t(g)}</MenuLabel>
                   {LIBRARY.filter((i) => i.group === g).map((i) => (
-                    <MenuItem key={i.key} icon={<i.icon />} onSelect={() => onKind(i.key)}>{i.label}</MenuItem>
+                    <MenuItem key={i.key} icon={<i.icon />} onSelect={() => onKind(i.key)}>{t(i.label)}</MenuItem>
                   ))}
                 </div>
               ))}
             </MenuContent>
           </Menu>
-          <p className="text-[12.5px] text-muted">{item.desc}</p>
+          <p className="text-[12.5px] text-muted">{t(item.desc)}</p>
         </div>
       </div>
 
-      <Field label={node.type === "note" ? "Heading" : "Name of this step"} value={node.title} onChange={(e) => onPatch({ title: e.target.value }, "title")} />
-      <TextareaField label={node.type === "input" ? "What to ask" : node.type === "note" ? "Note" : "What happens here"} rows={3} value={node.body}
+      <Field label={node.type === "note" ? t("Heading") : t("Name of this step")} value={node.title} onChange={(e) => onPatch({ title: e.target.value }, "title")} />
+      <TextareaField label={node.type === "input" ? t("What to ask") : node.type === "note" ? t("Note") : t("What happens here")} rows={3} value={node.body}
         onChange={(e) => onPatch({ body: e.target.value }, "body")}
-        placeholder={node.type === "input" ? "e.g. Which purchase order is this invoice for?" : node.type === "note" ? "Anything people should know" : "What this step produces, in a sentence."}
-        hint={work ? "The agent gets this as its instructions, plus what the steps before it produced." : undefined} />
+        placeholder={node.type === "input" ? t("e.g. Which purchase order is this invoice for?") : node.type === "note" ? t("Anything people should know") : t("What this step produces, in a sentence.")}
+        hint={work ? t("The agent gets this as its instructions, plus what the steps before it produced.") : undefined} />
 
       {work ? (
         <>
-          <Field label="Who does it (department or job)" value={node.role} onChange={(e) => onPatch({ role: e.target.value }, "role")} placeholder="e.g. Finance" hint="Used to suggest an agent when a run starts." />
-          {agentPick("Agent")}
+          <Field label={t("Who does it (department or job)")} value={node.role} onChange={(e) => onPatch({ role: e.target.value }, "role")} placeholder={t("e.g. Finance")} hint={t("Used to suggest an agent when a run starts.")} />
+          {agentPick(t("Agent"))}
           <SwitchField checked={!!node.review} onCheckedChange={(v) => onPatch({ review: v }, "review")}
-            label="I check it before it moves on" hint="The run waits until you accept the result (or send it back)." />
+            label={t("I check it before it moves on")} hint={t("The run waits until you accept the result (or send it back).")} />
         </>
       ) : null}
 
@@ -227,76 +238,78 @@ function NodeInspector({ node, graph, onPatch, onKind, onDelete, onDuplicate, on
         <>
           {node.action !== "approval" ? (
             <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">Who decides</span>
-              <Select value={node.decider ?? "person"} onValueChange={(v) => onPatch({ decider: v as "person" | "agent" }, "decider")} label="Who decides"
-                options={[{ value: "person", label: "A person (the run waits for you)" }, { value: "agent", label: "An agent picks a branch" }]} />
+              <span className="text-[13px] font-medium">{t("Who decides")}</span>
+              <Select value={node.decider ?? "person"} onValueChange={(v) => onPatch({ decider: v as "person" | "agent" }, "decider")} label={t("Who decides")}
+                options={[{ value: "person", label: t("A person (the run waits for you)") }, { value: "agent", label: t("An agent picks a branch") }]} />
             </div>
-          ) : <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">A person approves or rejects; the run waits for them.</p>}
-          {node.decider === "agent" && node.action !== "approval" ? agentPick("Agent that decides") : null}
+          ) : <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">{t("A person approves or rejects; the run waits for them.")}</p>}
+          {node.decider === "agent" && node.action !== "approval" ? agentPick(t("Agent that decides")) : null}
         </>
       ) : null}
 
       {node.type === "wait" ? (
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-end gap-2">
-          <Field label="Wait for" type="number" min={1} max={999} value={String(node.wait_amount ?? 1)}
+          <Field label={t("Wait for")} type="number" min={1} max={999} value={String(node.wait_amount ?? 1)}
             onChange={(e) => onPatch({ wait_amount: Math.max(1, Math.min(999, Number(e.target.value) || 1)) }, "wait")} />
-          <Select value={node.wait_unit ?? "hours"} onValueChange={(v) => onPatch({ wait_unit: v as WaitUnit }, "wait_unit")} label="Unit"
-            options={[{ value: "minutes", label: "Minutes" }, { value: "hours", label: "Hours" }, { value: "days", label: "Days" }]} />
+          <Select value={node.wait_unit ?? "hours"} onValueChange={(v) => onPatch({ wait_unit: v as WaitUnit }, "wait_unit")} label={t("Unit")}
+            // "Minutes" alone is meeting minutes in Malay (Minit mesyuarat); the time unit has its own key.
+            options={[{ value: "minutes", label: lang === "ms" ? t("Minutes (time)") : "Minutes" }, { value: "hours", label: t("Hours") }, { value: "days", label: t("Days") }]} />
         </div>
       ) : null}
-      {node.type === "input" ? <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">The run pauses until someone types the answer. Every later step sees it.</p> : null}
-      {node.type === "note" ? <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">Notes are for people reading the workflow. Runs skip them.</p> : null}
+      {node.type === "input" ? <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">{t("The run pauses until someone types the answer. Every later step sees it.")}</p> : null}
+      {node.type === "note" ? <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">{t("Notes are for people reading the workflow. Runs skip them.")}</p> : null}
 
       {node.type !== "note" && (outs.length || ins.length) ? (
         <div className="grid gap-2">
-          <span className="text-[13px] font-medium">{node.type === "decision" ? "Branches" : "Connections"}</span>
+          <span className="text-[13px] font-medium">{node.type === "decision" ? t("Branches") : t("Connections")}</span>
           <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
             {outs.map((e) => (
               <li key={e.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
                 {node.type === "decision" ? (
                   <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
-                    <Input value={e.label} onChange={(ev) => onEdgeLabel(e.id, ev.target.value)} placeholder="label" aria-label={`Branch to ${title(e.to)}`} className="h-9" />
+                    <Input value={e.label} onChange={(ev) => onEdgeLabel(e.id, ev.target.value)} placeholder={t("label")} aria-label={t("Branch to {name}", { name: title(e.to) })} className="h-9" />
                     <button type="button" onClick={() => onSelect({ kind: "node", id: e.to })} className="truncate text-left text-[12.5px] text-muted hover:text-accent">→ {title(e.to)}</button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => onSelect({ kind: "node", id: e.to })} className="truncate rounded-sm px-2 py-1.5 text-left text-[12.5px] hover:bg-surface-2">Next → {title(e.to)}</button>
+                  <button type="button" onClick={() => onSelect({ kind: "node", id: e.to })} className="truncate rounded-sm px-2 py-1.5 text-left text-[12.5px] hover:bg-surface-2">{t("Next → {name}", { name: title(e.to) })}</button>
                 )}
-                <button type="button" aria-label={`Remove connection to ${title(e.to)}`} onClick={() => onRemoveEdge(e.id)} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-danger"><XIcon size={13} /></button>
+                <button type="button" aria-label={t("Remove connection to {name}", { name: title(e.to) })} onClick={() => onRemoveEdge(e.id)} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-danger"><XIcon size={13} /></button>
               </li>
             ))}
             {ins.map((e) => (
-              <li key={e.id}><button type="button" onClick={() => onSelect({ kind: "node", id: e.from })} className="w-full truncate rounded-sm px-2 py-1.5 text-left text-[12.5px] text-muted hover:bg-surface-2">From ← {title(e.from)}{e.label ? ` (${e.label})` : ""}</button></li>
+              <li key={e.id}><button type="button" onClick={() => onSelect({ kind: "node", id: e.from })} className="w-full truncate rounded-sm px-2 py-1.5 text-left text-[12.5px] text-muted hover:bg-surface-2">{t("From ← {name}", { name: title(e.from) })}{e.label ? ` (${e.label})` : ""}</button></li>
             ))}
           </ul>
-          {node.type === "decision" ? <p className="text-[12px] text-muted">Drag from the step's bottom dot to add another branch.</p> : null}
+          {node.type === "decision" ? <p className="text-[12px] text-muted">{t("Drag from the step's bottom dot to add another branch.")}</p> : null}
         </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-        <Button size="sm" variant="outline" onClick={onDuplicate}><CopyIcon size={14} /> Duplicate</Button>
-        <Button size="sm" variant="ghost" className="hover:text-danger" onClick={onDelete}><TrashIcon size={14} /> Delete</Button>
+        <Button size="sm" variant="outline" onClick={onDuplicate}><CopyIcon size={14} /> {t("Duplicate")}</Button>
+        <Button size="sm" variant="ghost" className="hover:text-danger" onClick={onDelete}><TrashIcon size={14} /> {t("Delete")}</Button>
       </div>
     </div>
   );
 }
 
 function EdgeInspector({ edge, graph, onLabel, onRemove, onInsert }: { edge: WEdge; graph: Graph; onLabel: (l: string) => void; onRemove: () => void; onInsert: () => void }) {
-  const t = (id: string) => { const n = graph.nodes.find((x) => x.id === id); return n ? n.title || itemFor(n).label : "?"; };
+  const t = useT();
+  const nameOf = (id: string) => { const n = graph.nodes.find((x) => x.id === id); return n ? n.title || t(itemFor(n).label) : "?"; };
   const fromDecision = graph.nodes.find((n) => n.id === edge.from)?.type === "decision";
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex items-start gap-3">
         <IconTile icon={FlowArrowIcon} tone="neutral" />
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">Connection</p>
-          <p className="text-[13px] break-words">{t(edge.from)} → {t(edge.to)}</p>
+          <p className="text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">{t("Connection")}</p>
+          <p className="text-[13px] break-words">{nameOf(edge.from)} → {nameOf(edge.to)}</p>
         </div>
       </div>
-      <Field label={fromDecision ? "Branch label" : "Label (optional)"} value={edge.label} onChange={(e) => onLabel(e.target.value)} placeholder={fromDecision ? "e.g. yes" : "e.g. if urgent"}
-        hint={fromDecision ? "The choice a person (or agent) picks to go this way." : undefined} />
+      <Field label={fromDecision ? t("Branch label") : t("Label (optional)")} value={edge.label} onChange={(e) => onLabel(e.target.value)} placeholder={fromDecision ? t("e.g. yes") : t("e.g. if urgent")}
+        hint={fromDecision ? t("The choice a person (or agent) picks to go this way.") : undefined} />
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-        <Button size="sm" variant="outline" onClick={onInsert}><PlusIcon size={14} /> Insert a step here</Button>
-        <Button size="sm" variant="ghost" className="hover:text-danger" onClick={onRemove}><TrashIcon size={14} /> Remove</Button>
+        <Button size="sm" variant="outline" onClick={onInsert}><PlusIcon size={14} /> {t("Insert a step here")}</Button>
+        <Button size="sm" variant="ghost" className="hover:text-danger" onClick={onRemove}><TrashIcon size={14} /> {t("Remove")}</Button>
       </div>
     </div>
   );
@@ -308,25 +321,27 @@ function WorkflowSettings({ description, setDescription, active, setActive, agen
   agentIds: string[]; setAgentIds: (f: (s: string[]) => string[]) => void;
   graph: Graph; procedure?: string;
 }) {
+  const t = useT();
   const { data: agents = [] } = useQuery(agentsQuery);
   const mine = agents.filter((a) => a.status !== "retired" && !a.clone_of && a.can_manage && !a.view_only);
   const counts = GROUPS.map((g) => [g, graph.nodes.filter((n) => itemFor(n).group === g).length] as const).filter(([, c]) => c);
+  const steps = graph.nodes.filter((n) => n.type !== "note").length;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div>
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">This workflow</p>
-        <p className="text-[12.5px] text-muted">Select a step or connection to edit it.</p>
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">{t("This workflow")}</p>
+        <p className="text-[12.5px] text-muted">{t("Select a step or connection to edit it.")}</p>
       </div>
-      <TextareaField label="What it's for" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One line: the job this handles" />
+      <TextareaField label={t("What it's for")} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("One line: the job this handles")} />
       <div className="flex flex-wrap gap-1.5">
-        <Pill>{graph.nodes.filter((n) => n.type !== "note").length} steps</Pill>
-        {counts.map(([g, c]) => <Pill key={g} tone="neutral">{g} {c}</Pill>)}
+        <Pill>{steps === 1 ? t("1 step") : t("{n} steps", { n: steps })}</Pill>
+        {counts.map(([g, c]) => <Pill key={g} tone="neutral">{t(g)} {c}</Pill>)}
       </div>
       <div className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
-        <SwitchField checked={active} onCheckedChange={setActive} label="Agents follow it"
-          hint="Active workflows are added to the instructions of the agents below, like an SOP." />
+        <SwitchField checked={active} onCheckedChange={setActive} label={t("Agents follow it")}
+          hint={t("Active workflows are added to the instructions of the agents below, like an SOP.")} />
         <div className="grid gap-2">
-          <span className="text-[13px] font-medium">Agents that follow it</span>
+          <span className="text-[13px] font-medium">{t("Agents that follow it")}</span>
           {mine.length ? (
             <div className="flex flex-wrap gap-1.5">
               {mine.map((a) => {
@@ -339,18 +354,18 @@ function WorkflowSettings({ description, setDescription, active, setActive, agen
                 );
               })}
             </div>
-          ) : <p className="text-[12.5px] text-muted">No agents you can manage yet.</p>}
+          ) : <p className="text-[12.5px] text-muted">{t("No agents you can manage yet.")}</p>}
         </div>
       </div>
       <div className="grid gap-1.5 rounded-[var(--radius-md)] border border-border p-3 text-[12.5px] text-muted">
-        <span className="font-medium text-fg">Three ways to use it</span>
-        <span><b className="font-medium text-fg">Run it</b>: each step goes to its agent, you take the decisions.</span>
-        <span><b className="font-medium text-fg">Give it with a task</b>: pick it in New task; the agent follows the steps.</span>
-        <span><b className="font-medium text-fg">Make it standard</b>: switch on "Agents follow it" above.</span>
+        <span className="font-medium text-fg">{t("Three ways to use it")}</span>
+        <span><b className="font-medium text-fg">{t("Run it")}</b>: {t("each step goes to its agent, you take the decisions.")}</span>
+        <span><b className="font-medium text-fg">{t("Give it with a task")}</b>: {t("pick it in New task; the agent follows the steps.")}</span>
+        <span><b className="font-medium text-fg">{t("Make it standard")}</b>: {t("switch on \"Agents follow it\" above.")}</span>
       </div>
       {procedure ? (
         <details className="rounded-[var(--radius-md)] border border-border p-3 text-[12.5px]">
-          <summary className="cursor-pointer font-medium">What agents read (as saved)</summary>
+          <summary className="cursor-pointer font-medium">{t("What agents read (as saved)")}</summary>
           <pre className="mt-2 max-h-72 overflow-auto font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted">{procedure}</pre>
         </details>
       ) : null}
@@ -360,27 +375,31 @@ function WorkflowSettings({ description, setDescription, active, setActive, agen
 
 // ---------------------------------------------------------------- AI help
 
-const IMPROVE_IDEAS = ["Add approvals wherever money is spent", "Handle the 'no' and 'rejected' cases", "Add a check before anything goes to a client", "Split big steps into smaller ones", "Make it shorter"];
+const IMPROVE_IDEAS = [
+  msg("Add approvals wherever money is spent"), msg("Handle the 'no' and 'rejected' cases"), msg("Add a check before anything goes to a client"),
+  msg("Split big steps into smaller ones"), msg("Make it shorter"),
+];
 
 export function AiDialog({ graph, onClose, onResult }: { graph: Graph | null; onClose: () => void; onResult: (g: Graph) => void }) {
+  const t = useT();
   const improving = !!graph?.nodes.length;
   const [text, setText] = useState("");
   const go = useMutation({
     mutationFn: () => api<{ graph: Graph }>("/api/workflows/draft", "POST", improving ? { description: text, graph } : { description: text }),
-    onSuccess: (r) => { onResult(r.graph); toast.success(improving ? "Improved. Undo (Ctrl+Z) brings the old one back." : "Drafted. Change anything on the board."); onClose(); },
+    onSuccess: (r) => { onResult(r.graph); toast.success(improving ? t("Improved. Undo (Ctrl+Z) brings the old one back.") : t("Drafted. Change anything on the board.")); onClose(); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
-    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={improving ? "Improve with AI" : "Draft with AI"} className="w-[min(96vw,36rem)]"
-      description={improving ? "Say what to change. The analyst agent rewrites the workflow; agents and reviews you set on steps are kept." : "Describe the job in plain words: who does what, where it branches, who approves. The analyst agent draws it."}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button loading={go.isPending} disabled={!improving && text.trim().length < 10} onClick={() => go.mutate()}><SparkleIcon size={15} /> {improving ? "Improve it" : "Draft it"}</Button></>}>
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={improving ? t("Improve with AI") : t("Draft with AI")} className="w-[min(96vw,36rem)]"
+      description={improving ? t("Say what to change. The analyst agent rewrites the workflow; agents and reviews you set on steps are kept.") : t("Describe the job in plain words: who does what, where it branches, who approves. The analyst agent draws it.")}
+      footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
+        <Button loading={go.isPending} disabled={!improving && text.trim().length < 10} onClick={() => go.mutate()}><SparkleIcon size={15} /> {improving ? t("Improve it") : t("Draft it")}</Button></>}>
       <div className="grid gap-3">
-        <TextareaField label={improving ? "What to change (optional)" : "The job"} rows={improving ? 3 : 6} value={text} onChange={(e) => setText(e.target.value)} autoFocus
-          placeholder={improving ? "e.g. After the quote, wait 3 days and follow up if the client hasn't replied." : "e.g. When a supplier invoice arrives: read it, ask finance for the PO number, check it matches, the manager approves, record it in the payables sheet and email the supplier."} />
+        <TextareaField label={improving ? t("What to change (optional)") : t("The job")} rows={improving ? 3 : 6} value={text} onChange={(e) => setText(e.target.value)} autoFocus
+          placeholder={improving ? t("e.g. After the quote, wait 3 days and follow up if the client hasn't replied.") : t("e.g. When a supplier invoice arrives: read it, ask finance for the PO number, check it matches, the manager approves, record it in the payables sheet and email the supplier.")} />
         {improving ? (
           <div className="flex flex-wrap gap-1.5">
-            {IMPROVE_IDEAS.map((i) => <button key={i} type="button" onClick={() => setText(i)} className="min-h-8 rounded-full border border-border px-3 text-[12px] hover:border-accent hover:text-accent">{i}</button>)}
+            {IMPROVE_IDEAS.map((i) => <button key={i} type="button" onClick={() => setText(t(i))} className="min-h-8 rounded-full border border-border px-3 text-[12px] hover:border-accent hover:text-accent">{t(i)}</button>)}
           </div>
         ) : null}
         <FormError message={go.error ? errorMessage(go.error) : null} />
@@ -398,6 +417,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
   onSaved: (wf: Workflow) => void;
   onOpenRun: (id: string) => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const wide = useMedia("(min-width: 1024px)");
   const { data: agents = [] } = useQuery(agentsQuery);
@@ -421,12 +441,12 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
   const [removing, setRemoving] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
-  const lastEdit = useRef<{ key: string; t: number }>({ key: "", t: 0 });
+  const lastEdit = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const board = useRef<HTMLDivElement>(null);
 
   const snapshot = JSON.stringify({ name, description, graph, active, agentIds });
   const dirty = snapshot !== baseline;
-  const issues = useMemo(() => findIssues(graph), [graph]);
+  const issues = useMemo(() => findIssues(graph, t), [graph, t]);
   const issueIds = useMemo(() => new Set(issues.map((i) => i.id).filter(Boolean) as string[]), [issues]);
 
   const remember = useCallback(() => {
@@ -435,8 +455,8 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
   /** Typing in a field: one undo step per field per burst, not per key. */
   const rememberBurst = (key: string) => {
     const now = Date.now();
-    if (lastEdit.current.key !== key || now - lastEdit.current.t > 1500) remember();
-    lastEdit.current = { key, t: now };
+    if (lastEdit.current.key !== key || now - lastEdit.current.at > 1500) remember();
+    lastEdit.current = { key, at: now };
   };
   const change = (g: Graph) => { remember(); setGraph(g); };
   const undo = useCallback(() => {
@@ -452,7 +472,8 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
 
   const nodeFrom = (key: string, at: Pt): WNode => {
     const it = libItem(key) ?? libItem("task")!;
-    return { id: newNodeId(), type: it.type, action: it.action, title: it.type === "end" ? "Done" : it.label, body: "", role: "", x: at.x, y: at.y, ...it.init };
+    // New steps are named in the language on screen; after that the name is the user's text.
+    return { id: newNodeId(), type: it.type, action: it.action, title: it.type === "end" ? t("Done") : t(it.label), body: "", role: "", x: at.x, y: at.y, ...it.init };
   };
   const center = (): Pt => {
     // Below the selected step, else below the last one added.
@@ -514,11 +535,11 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
     if (sel?.kind !== "node") return;
     const n = graph.nodes.find((x) => x.id === sel.id);
     if (!n) return;
-    const copy = { ...n, id: newNodeId(), x: n.x + 40, y: n.y + 40, title: n.title ? `${n.title} (copy)` : n.title };
+    const copy = { ...n, id: newNodeId(), x: n.x + 40, y: n.y + 40, title: n.title ? t("{title} (copy)", { title: n.title }) : n.title };
     remember();
     setGraph((g) => ({ ...g, nodes: [...g.nodes, copy] }));
     setSel({ kind: "node", id: copy.id });
-  }, [sel, graph.nodes, remember]);
+  }, [sel, graph.nodes, remember, t]);
   const setEdgeLabel = (id: string, label: string) => {
     rememberBurst(`edge:${id}`);
     setGraph((g) => ({ ...g, edges: g.edges.map((e) => (e.id === id ? { ...e, label } : e)) }));
@@ -533,20 +554,20 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       qc.invalidateQueries({ queryKey: workflowKeys.all });
       qc.invalidateQueries({ queryKey: workKeys.agents });
       setBaseline(snapshot);
-      toast.success(existing ? "Saved." : `"${wf.name}" created.`);
+      toast.success(existing ? t("Saved.") : t("\"{name}\" created.", { name: wf.name }));
       onSaved(wf);
     },
     onError: (e) => toast.error(e instanceof ApiError && e.fields.name ? e.fields.name : errorMessage(e)),
   });
   const del = useMutation({
     mutationFn: () => api(`/api/workflows/${existing!.id}`, "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: workflowKeys.all }); toast.success("Workflow deleted."); onClose(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: workflowKeys.all }); toast.success(t("Workflow deleted.")); onClose(); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const trySave = useCallback(() => {
-    if (!name.trim()) { toast.error("Give the workflow a name first."); document.getElementById("wf-name")?.focus(); return; }
+    if (!name.trim()) { toast.error(t("Give the workflow a name first.")); document.getElementById("wf-name")?.focus(); return; }
     if (!save.isPending) save.mutate();
-  }, [name, save]);
+  }, [name, save, t]);
 
   // Keyboard: delete, undo/redo, duplicate, save, escape.
   useEffect(() => {
@@ -601,14 +622,14 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
     <div className="pointer-events-auto grid max-w-sm justify-items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-surface/95 p-6 text-center shadow-[var(--shadow-soft)] backdrop-blur">
       <IconTile icon={TreeStructureIcon} size="lg" />
       <div>
-        <p className="text-[15px] font-semibold">Start the workflow</p>
-        <p className="mt-1 text-[13px] text-muted">Drag steps from the library, or add the basics and build from there.</p>
+        <p className="text-[15px] font-semibold">{t("Start the workflow")}</p>
+        <p className="mt-1 text-[13px] text-muted">{t("Drag steps from the library, or add the basics and build from there.")}</p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
         <Button size="sm" onClick={() => { const s = nodeFrom("start", { x: 80, y: 60 }); const e = nodeFrom("end", { x: 80, y: 480 }); change({ nodes: [s, e], edges: [] }); setSel({ kind: "node", id: s.id }); }}>
-          <PlusIcon size={14} /> Start and End
+          <PlusIcon size={14} /> {t("Start and End")}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setAi(true)}><SparkleIcon size={14} /> Draft with AI</Button>
+        <Button size="sm" variant="outline" onClick={() => setAi(true)}><SparkleIcon size={14} /> {t("Draft with AI")}</Button>
       </div>
     </div>
   );
@@ -618,57 +639,57 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
     <div className="fixed inset-0 z-40 flex flex-col bg-bg" style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
       {/* top bar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 sm:px-4">
-        <Button variant="ghost" size="icon-sm" aria-label="All workflows" onClick={() => (dirty ? setLeaving(true) : onClose())}><ArrowLeftIcon size={17} /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={t("All workflows")} onClick={() => (dirty ? setLeaving(true) : onClose())}><ArrowLeftIcon size={17} /></Button>
         <IconTile icon={FlowArrowIcon} size="sm" className="hidden sm:grid" />
         <div className="min-w-0 flex-1 basis-40">
-          <input id="wf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this workflow" aria-label="Workflow name"
+          <input id="wf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Name this workflow")} aria-label={t("Workflow name")}
             className="w-full min-w-0 truncate rounded-sm bg-transparent px-1 text-[16px] font-semibold outline-none hover:bg-surface-2/60 focus:bg-surface-2/60" />
-          <div className="flex items-center gap-2 px-1 text-[11.5px] text-muted">
-            <span className={cn("inline-flex items-center gap-1", active ? "text-ok" : "")}><span className={cn("size-1.5 rounded-full", active ? "bg-ok" : "bg-border")} />{active ? "Active" : "Draft"}</span>
+          <div className="flex min-w-0 items-center gap-2 px-1 text-[11.5px] text-muted">
+            <span className={cn("inline-flex shrink-0 items-center gap-1", active ? "text-ok" : "")}><span className={cn("size-1.5 rounded-full", active ? "bg-ok" : "bg-border")} />{active ? t("Active") : t("Draft")}</span>
             <span>·</span>
-            <span className={dirty ? "text-warn" : ""}>{dirty ? "Unsaved changes" : existing ? "All saved" : "Not saved yet"}</span>
+            <span className={cn("truncate", dirty && "text-warn")}>{dirty ? t("Unsaved changes") : existing ? t("All saved") : t("Not saved yet")}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
           <div className="hidden items-center gap-0.5 sm:flex">
-            <Button variant="ghost" size="icon-sm" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled={!hist.past.length} onClick={undo}><ArrowCounterClockwiseIcon size={16} /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Redo (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)" disabled={!hist.future.length} onClick={redo}><ArrowClockwiseIcon size={16} /></Button>
-            <Button variant="ghost" size="sm" title="Lay the steps out neatly" disabled={!graph.nodes.length} onClick={() => { change(tidy(graph)); setFitSignal((n) => n + 1); }}>
-              <TreeStructureIcon size={15} /> <span className="hidden xl:inline">Tidy up</span>
+            <Button variant="ghost" size="icon-sm" aria-label={t("Undo (Ctrl+Z)")} title={t("Undo (Ctrl+Z)")} disabled={!hist.past.length} onClick={undo}><ArrowCounterClockwiseIcon size={16} /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label={t("Redo (Ctrl+Shift+Z)")} title={t("Redo (Ctrl+Shift+Z)")} disabled={!hist.future.length} onClick={redo}><ArrowClockwiseIcon size={16} /></Button>
+            <Button variant="ghost" size="sm" title={t("Lay the steps out neatly")} disabled={!graph.nodes.length} onClick={() => { change(tidy(graph)); setFitSignal((n) => n + 1); }}>
+              <TreeStructureIcon size={15} /> <span className="hidden xl:inline">{t("Tidy up")}</span>
             </Button>
           </div>
           <Menu>
             <MenuTrigger asChild>
               <Button variant="ghost" size="sm" className={cn(issues.length ? "text-warn hover:text-warn" : "text-ok hover:text-ok")} disabled={!graph.nodes.length}>
                 {issues.length ? <WarningCircleIcon size={15} weight="fill" /> : <CheckCircleIcon size={15} weight="fill" />}
-                <span className="hidden md:inline">{issues.length ? `${issues.length} to fix` : "Looks good"}</span>
+                <span className="hidden md:inline">{issues.length ? t("{n} to fix", { n: issues.length }) : t("Looks good")}</span>
               </Button>
             </MenuTrigger>
             <MenuContent align="end" className="w-80">
-              <MenuLabel>{issues.length ? "Before running it" : "No problems found"}</MenuLabel>
+              <MenuLabel>{issues.length ? t("Before running it") : t("No problems found")}</MenuLabel>
               {issues.length ? issues.map((i, k) => (
                 <MenuItem key={k} icon={<WarningCircleIcon />} onSelect={() => i.id && onSelect({ kind: "node", id: i.id })}>
                   <span className="whitespace-normal">{i.text}</span>
                 </MenuItem>
-              )) : <p className="px-2.5 pb-2 text-[12.5px] text-muted">Every step is reachable, leads somewhere, and every decision has labelled branches.</p>}
+              )) : <p className="px-2.5 pb-2 text-[12.5px] text-muted">{t("Every step is reachable, leads somewhere, and every decision has labelled branches.")}</p>}
             </MenuContent>
           </Menu>
-          <Button variant="outline" size="sm" onClick={() => setAi(true)} className="max-sm:px-2.5"><SparkleIcon size={15} /> <span className="hidden sm:inline">{graph.nodes.length ? "Improve with AI" : "Draft with AI"}</span></Button>
-          <Button size="sm" variant={existing ? "outline" : "primary"} loading={save.isPending} disabled={!dirty && !!existing} onClick={trySave}>Save</Button>
+          <Button variant="outline" size="sm" onClick={() => setAi(true)} className="max-sm:px-2.5"><SparkleIcon size={15} /> <span className="hidden sm:inline">{graph.nodes.length ? t("Improve with AI") : t("Draft with AI")}</span></Button>
+          <Button size="sm" variant={existing ? "outline" : "primary"} loading={save.isPending} disabled={!dirty && !!existing} onClick={trySave}>{t("Save")}</Button>
           {existing ? (
-            <Button data-guide="workflows.run" size="sm" disabled={dirty || !graph.nodes.length} title={dirty ? "Save your changes first" : undefined} onClick={() => setRunning(true)}>
-              <PlayIcon size={14} weight="fill" /> <span className="hidden sm:inline">Run</span>
+            <Button data-guide="workflows.run" size="sm" disabled={dirty || !graph.nodes.length} title={dirty ? t("Save your changes first") : undefined} onClick={() => setRunning(true)}>
+              <PlayIcon size={14} weight="fill" /> <span className="hidden sm:inline">{t("Run")}</span>
             </Button>
           ) : null}
           <Menu>
-            <MenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="More"><DotsThreeIcon size={18} weight="bold" /></Button></MenuTrigger>
+            <MenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={t("More")}><DotsThreeIcon size={18} weight="bold" /></Button></MenuTrigger>
             <MenuContent align="end">
-              <MenuItem icon={<ArrowCounterClockwiseIcon />} onSelect={undo}>Undo</MenuItem>
-              <MenuItem icon={<ArrowClockwiseIcon />} onSelect={redo}>Redo</MenuItem>
-              <MenuItem icon={<TreeStructureIcon />} onSelect={() => { change(tidy(graph)); setFitSignal((n) => n + 1); }}>Tidy up</MenuItem>
-              <MenuItem icon={<KeyboardIcon />} onSelect={() => setKeysOpen(true)}>Keyboard shortcuts</MenuItem>
-              {existing ? <><MenuSeparator /><MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Delete workflow</MenuItem></> : null}
+              <MenuItem icon={<ArrowCounterClockwiseIcon />} onSelect={undo}>{t("Undo")}</MenuItem>
+              <MenuItem icon={<ArrowClockwiseIcon />} onSelect={redo}>{t("Redo")}</MenuItem>
+              <MenuItem icon={<TreeStructureIcon />} onSelect={() => { change(tidy(graph)); setFitSignal((n) => n + 1); }}>{t("Tidy up")}</MenuItem>
+              <MenuItem icon={<KeyboardIcon />} onSelect={() => setKeysOpen(true)}>{t("Keyboard shortcuts")}</MenuItem>
+              {existing ? <><MenuSeparator /><MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Delete workflow")}</MenuItem></> : null}
             </MenuContent>
           </Menu>
         </div>
@@ -677,13 +698,13 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       {/* body */}
       <div className="flex min-h-0 flex-1">
         {wide && paletteOpen ? (
-          <aside className="flex w-[17rem] shrink-0 flex-col border-r border-border bg-surface/60" aria-label="Step library">
+          <aside className="flex w-[17rem] shrink-0 flex-col border-r border-border bg-surface/60" aria-label={t("Step library")}>
             <div className="flex items-center justify-between px-3 pt-3">
-              <span className="text-[13px] font-semibold">Steps</span>
-              <Button variant="ghost" size="icon-sm" aria-label="Hide the step library" onClick={() => setPaletteOpen(false)}><SidebarSimpleIcon size={16} /></Button>
+              <span className="text-[13px] font-semibold">{t("Steps")}</span>
+              <Button variant="ghost" size="icon-sm" aria-label={t("Hide the step library")} onClick={() => setPaletteOpen(false)}><SidebarSimpleIcon size={16} /></Button>
             </div>
             <Palette onAdd={(k) => add(k)} />
-            <p className="border-t border-border px-3 py-2 text-[11.5px] text-muted">Drag onto the board, or click to add {sel?.kind === "node" ? "after the selected step" : "it"}.</p>
+            <p className="border-t border-border px-3 py-2 text-[11.5px] text-muted">{sel?.kind === "node" ? t("Drag onto the board, or click to add after the selected step.") : t("Drag onto the board, or click to add it.")}</p>
           </aside>
         ) : null}
 
@@ -707,61 +728,61 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
               }} />
           ) : null}
           {wide && !paletteOpen ? (
-            <Button size="sm" variant="outline" className="absolute top-5 left-5 shadow-[var(--shadow-soft)]" onClick={() => setPaletteOpen(true)}><ListBulletsIcon size={15} /> Steps</Button>
+            <Button size="sm" variant="outline" className="absolute top-5 left-5 shadow-[var(--shadow-soft)]" onClick={() => setPaletteOpen(true)}><ListBulletsIcon size={15} /> {t("Steps")}</Button>
           ) : null}
           {!wide ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center gap-2 px-4">
-              <Button className="pointer-events-auto shadow-[var(--shadow-pop)]" onClick={() => setSheet("palette")}><PlusIcon size={16} weight="bold" /> Add step</Button>
+              <Button className="pointer-events-auto shadow-[var(--shadow-pop)]" onClick={() => setSheet("palette")}><PlusIcon size={16} weight="bold" /> {t("Add step")}</Button>
               <Button variant="outline" className="pointer-events-auto bg-surface shadow-[var(--shadow-pop)]" onClick={() => setSheet("inspect")}>
-                <SlidersHorizontalIcon size={16} /> {sel ? "Edit" : "Settings"}
+                <SlidersHorizontalIcon size={16} /> {sel ? t("Edit") : t("Settings")}
               </Button>
             </div>
           ) : null}
         </div>
 
         {wide ? (
-          <aside className="w-[21rem] shrink-0 overflow-y-auto border-l border-border bg-surface p-4 xl:w-[23rem]" aria-label="Details">
+          <aside className="w-[21rem] shrink-0 overflow-y-auto border-l border-border bg-surface p-4 xl:w-[23rem]" aria-label={t("Details")}>
             {inspector}
           </aside>
         ) : null}
       </div>
 
       {!wide ? (
-        <SideSheet open={sheet === "palette"} onOpenChange={(o) => !o && setSheet(null)} title="Add a step"
-          description={sel?.kind === "node" ? "It goes after the selected step, connected." : "Tap a step to add it to the board."}>
+        <SideSheet open={sheet === "palette"} onOpenChange={(o) => !o && setSheet(null)} title={t("Add a step")}
+          description={sel?.kind === "node" ? t("It goes after the selected step, connected.") : t("Tap a step to add it to the board.")}>
           <Palette onAdd={(k) => add(k)} compact />
         </SideSheet>
       ) : null}
       {!wide ? (
-        <SideSheet open={sheet === "inspect"} onOpenChange={(o) => !o && setSheet(null)} title={selectedNode ? "Edit step" : selectedEdge ? "Connection" : "Workflow settings"}>
+        <SideSheet open={sheet === "inspect"} onOpenChange={(o) => !o && setSheet(null)} title={selectedNode ? t("Edit step") : selectedEdge ? t("Connection") : t("Workflow settings")}>
           {inspector}
         </SideSheet>
       ) : null}
 
       {existing ? (
         <details className="shrink-0 border-t border-border bg-surface px-4 py-2 text-[13px] max-md:hidden">
-          <summary className="cursor-pointer font-medium text-muted hover:text-fg">Runs of this workflow</summary>
+          <summary className="cursor-pointer font-medium text-muted hover:text-fg">{t("Runs of this workflow")}</summary>
           <div className="max-h-72 overflow-y-auto pt-2"><RecentRuns workflowId={existing.id} onOpen={onOpenRun} /></div>
         </details>
       ) : null}
 
       {ai ? <AiDialog graph={graph.nodes.length ? graph : null} onClose={() => setAi(false)} onResult={(g) => { change(g); setSel(null); setFitSignal((n) => n + 1); }} /> : null}
       {running && existing ? <StartRunDialog wf={existing} onClose={() => setRunning(false)} /> : null}
-      <ResponsiveDialog open={keysOpen} onOpenChange={setKeysOpen} title="Keyboard shortcuts">
+      <ResponsiveDialog open={keysOpen} onOpenChange={setKeysOpen} title={t("Keyboard shortcuts")}>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
-          {[["Ctrl + S", "Save"], ["Ctrl + Z", "Undo"], ["Ctrl + Shift + Z", "Redo"], ["Ctrl + D", "Duplicate the selected step"], ["Delete", "Delete the selection"], ["Esc", "Clear the selection"],
-            ["Drag the board", "Pan (also middle mouse, or Space + drag)"], ["Scroll wheel", "Zoom at the pointer"], ["Shift + scroll", "Pan sideways"],
-            ["Trackpad", "Two fingers pan, pinch zooms"], ["+ / − / 0", "Zoom in, out, back to 100%"], ["Shift + 1", "Fit the whole workflow"], ["Arrow keys", "Pan (when nothing is selected)"],
-            ["Shift + drag", "Select several steps"], ["Drag the + dot", "Connect to a step, or drop on empty space to add one"],
-            ["Touch", "One finger pans, pinch zooms, double tap zooms in, long press picks a step up"]].map(([k, v]) => (
+          {[["Ctrl + S", t("Save")], ["Ctrl + Z", t("Undo")], ["Ctrl + Shift + Z", t("Redo")], ["Ctrl + D", t("Duplicate the selected step")], ["Delete", t("Delete the selection")], ["Esc", t("Clear the selection")],
+            [t("Drag the board"), t("Pan (also middle mouse, or Space + drag)")], [t("Scroll wheel"), t("Zoom at the pointer")], [t("Shift + scroll"), t("Pan sideways")],
+            [t("Trackpad"), t("Two fingers pan, pinch zooms")], ["+ / − / 0", t("Zoom in, out, back to 100%")], ["Shift + 1", t("Fit the whole workflow")], [t("Arrow keys"), t("Pan (when nothing is selected)")],
+            [t("Shift + drag"), t("Select several steps")], [t("Drag the + dot"), t("Connect to a step, or drop on empty space to add one")],
+            [t("Touch"), t("One finger pans, pinch zooms, double tap zooms in, long press picks a step up")]].map(([k, v]) => (
             <div key={k} className="contents"><dt><kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11.5px]">{k}</kbd></dt><dd className="text-muted">{v}</dd></div>
           ))}
         </dl>
       </ResponsiveDialog>
-      <ConfirmDialog open={leaving} onOpenChange={setLeaving} title="Leave without saving?" danger confirmLabel="Discard changes"
-        body="Your changes to this workflow will be lost." onConfirm={async () => onClose()} />
-      {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={`Delete ${existing.name}?`} danger confirmLabel="Delete"
-        body="Agents following it stop following it. Its finished runs are deleted; tasks they created stay on the board." onConfirm={async () => { await del.mutateAsync(); }} /> : null}
+      <ConfirmDialog open={leaving} onOpenChange={setLeaving} title={t("Leave without saving?")} danger confirmLabel={t("Discard changes")}
+        body={t("Your changes to this workflow will be lost.")} onConfirm={async () => onClose()} />
+      {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete {name}?", { name: existing.name })} danger confirmLabel={t("Delete")}
+        body={t("Agents following it stop following it. Its finished runs are deleted; tasks they created stay on the board.")} onConfirm={async () => { await del.mutateAsync(); }} /> : null}
     </div>
   );
 }

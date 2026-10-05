@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import get_db
 from ...core.valkey import valkey, valkey_bytes
 from ...models import Agent, Event, LLMCall, Task
+from ...teams import reconcile
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["monitor"])
@@ -109,6 +110,8 @@ async def activity(
             "id": current.id,
             "title": current.title,
             "status": current.status,
+            # P21: minutes without agent activity (15+), else null. Never stopped for it.
+            "quiet_minutes": await reconcile.quiet_minutes(db, current),
             **(task_spent or {}),
         }
         if current
@@ -163,7 +166,12 @@ async def wall(
                     "branch_id": a.branch_id,
                     "clone_of": a.clone_of,
                 },
-                "task": {"id": t.id, "title": t.title, "status": t.status},
+                "task": {
+                    "id": t.id,
+                    "title": t.title,
+                    "status": t.status,
+                    "quiet_minutes": await reconcile.quiet_minutes(db, t),  # P21
+                },
                 "browser": {"session": sid} if sid else None,
                 "last": {"ts": last.ts, "data": last.data} if last else None,
             }

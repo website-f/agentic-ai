@@ -4,6 +4,7 @@
 import { CoffeeIcon, EyeIcon, LockSimpleIcon, MoonStarsIcon, UserFocusIcon } from "@phosphor-icons/react";
 
 import { Pill } from "@/components/ui/pill";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 type Access = {
@@ -26,26 +27,30 @@ export function canShare(a: Access): boolean {
 }
 
 export function ViewOnlyPill({ className }: { className?: string }) {
+  const t = useT();
   return (
-    <Pill tone="neutral" className={cn("shrink-0", className)} title="You can watch this agent work, but not instruct or change it">
-      <EyeIcon size={12} weight="bold" /> View only
+    <Pill tone="neutral" className={cn("shrink-0", className)} title={t("You can watch this agent work, but not instruct or change it")}>
+      <EyeIcon size={12} weight="bold" /> {t("View only")}
     </Pill>
   );
 }
 
 export function PrivatePill({ className }: { className?: string }) {
+  const t = useT();
   return (
-    <Pill tone="neutral" className={cn("shrink-0", className)} title="Your personal assistant: only you see it">
-      <LockSimpleIcon size={12} weight="bold" /> Private
+    <Pill tone="neutral" className={cn("shrink-0", className)} title={t("Your personal assistant: only you see it")}>
+      <LockSimpleIcon size={12} weight="bold" /> {t("Private")}
     </Pill>
   );
 }
 
 /** P18: a staff member's AI twin, their virtual self at work. */
 export function TwinPill({ person, className }: { person?: string | null; className?: string }) {
+  const t = useT();
+  const title = person ? t("The AI twin of {person}: it works the way they would and asks them first", { person }) : t("The AI twin of a staff member: it works the way they would and asks them first");
   return (
-    <Pill tone="accent" className={cn("shrink-0", className)} title={`The AI twin of ${person ?? "a staff member"}: it works the way they would and asks them first`}>
-      <UserFocusIcon size={12} weight="bold" /> Twin of {person ?? "staff"}
+    <Pill tone="accent" className={cn("shrink-0", className)} title={title}>
+      <UserFocusIcon size={12} weight="bold" /> {person ? t("Twin of {person}", { person }) : t("Twin of staff")}
     </Pill>
   );
 }
@@ -53,10 +58,11 @@ export function TwinPill({ person, className }: { person?: string | null; classN
 /** P19: an agent with working hours that is off duty or on a break right now
  * ("Off duty until 09:00 tomorrow"). Nothing while it is on duty or has no hours. */
 export function OffDutyPill({ duty, hours, className }: { duty?: Access["duty"]; hours?: string | null; className?: string }) {
+  const t = useT();
   if (!duty || duty.on) return null;
   const Glyph = duty.state === "break" ? CoffeeIcon : MoonStarsIcon;
   return (
-    <Pill tone="neutral" className={cn("shrink-0", className)} title={hours ? `Works ${hours}. New work waits until it is back.` : undefined}>
+    <Pill tone="neutral" className={cn("shrink-0", className)} title={hours ? t("Works {hours}. New work waits until it is back.", { hours }) : undefined}>
       <Glyph size={12} weight="bold" /> {duty.label}
     </Pill>
   );

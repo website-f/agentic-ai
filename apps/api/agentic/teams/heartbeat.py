@@ -12,6 +12,7 @@ from ..agents import work_hours as wh
 from ..core.db import SessionLocal
 from ..models import Agent, JobRun, Task, Workspace
 from . import budget
+from .blockers import parked
 
 log = logging.getLogger("agentic.teams.heartbeat")
 
@@ -73,7 +74,8 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
                         .order_by(Task.created_at)
                     )
                 ).all()
-                if any(t.status in ("running", "blocked") for t in tasks):
+                # P21: work parked behind its blockers is not work in hand.
+                if any(t.status in ("running", "blocked") and not parked(t) for t in tasks):
                     continue
                 queued = [
                     t

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
 
-KEYS: tuple[str, ...] = ("tutorial", "onboarding")
+KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale")
 MAX_KEY_BYTES = 8_000  # one key's object, as JSON
 
 
@@ -60,7 +60,21 @@ def _tutorial(sub: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {"tutorial": _tutorial}
+def _locale(sub: dict[str, Any]) -> dict[str, Any]:
+    """P22: the person's language for the app (and notices): en | ms."""
+    extra = set(sub) - {"language"}
+    if extra:
+        raise PrefsError(f"locale does not keep {', '.join(sorted(extra))}.")
+    v = sub.get("language")
+    if v is not None and v not in ("en", "ms"):
+        raise PrefsError("locale.language must be en or ms.")
+    return {"language": v}
+
+
+VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "tutorial": _tutorial,
+    "locale": _locale,
+}
 
 
 def visible(prefs: dict[str, Any] | None) -> dict[str, Any]:

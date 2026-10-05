@@ -1,17 +1,19 @@
-import { ArchiveIcon, ChartBarIcon, CurrencyDollarIcon, LightningIcon, TextAaIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, ChartBarIcon, CheckCircleIcon, CurrencyDollarIcon, LightningIcon, TextAaIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 
 import { EmptyState } from "@/components/page";
 import { Meta } from "@/components/ui/card";
+import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
+import { locale, msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { compact, providerColors, providersQuery, usageQuery, usd, type UsageRow } from "./data";
+import { cacheHealthQuery, compact, providerColors, providersQuery, usageQuery, usd, type CacheHealthGroup, type UsageRow } from "./data";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -33,10 +35,11 @@ function dayKeys(days: number): string[] {
 }
 
 function shortDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale(), { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
 function ChartTooltip({ active, payload, label }: TooltipContentProps<number, string>) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   const rows = payload.filter((p) => Number(p.value) > 0).reverse();
   const total = rows.reduce((s, p) => s + Number(p.value), 0);
@@ -53,37 +56,38 @@ function ChartTooltip({ active, payload, label }: TooltipContentProps<number, st
             </li>
           ))}
           <li className="mt-1 flex justify-between border-t border-border pt-1">
-            <span className="text-muted">Total</span>
+            <span className="text-muted">{t("Total")}</span>
             <span className="font-mono tabular">{compact(total)}</span>
           </li>
         </ul>
       ) : (
-        <p className="text-muted">No calls</p>
+        <p className="text-muted">{t("No calls")}</p>
       )}
     </div>
   );
 }
 
-function StatStrip({ t }: { t: UsageRow }) {
-  const tokens = t.prompt + t.completion;
+function StatStrip({ u }: { u: UsageRow }) {
+  const t = useT();
+  const tokens = u.prompt + u.completion;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <Stat label="Calls" value={compact(t.calls)} icon={LightningIcon} tone="accent" hint="Every model request" />
-      <Stat label="Tokens" value={compact(tokens)} icon={TextAaIcon} tone="info" hint={`${compact(t.prompt)} in, ${compact(t.completion)} out`} />
-      <Stat label="Served from cache" value={pct(t.cached, t.prompt)} icon={ArchiveIcon} tone="violet" hint="Share of input tokens" />
+      <Stat label={t("Calls")} value={compact(u.calls)} icon={LightningIcon} tone="accent" hint={t("Every model request")} />
+      <Stat label={t("Tokens")} value={compact(tokens)} icon={TextAaIcon} tone="info" hint={t("{in} in, {out} out", { in: compact(u.prompt), out: compact(u.completion) })} />
+      <Stat label={t("Served from cache")} value={pct(u.cached, u.prompt)} icon={ArchiveIcon} tone="violet" hint={t("Share of input tokens")} />
       <Stat
-        label="Cost"
-        value={usd(t.cost)}
+        label={t("Cost")}
+        value={usd(u.cost)}
         icon={CurrencyDollarIcon}
         tone="ok"
-        hint={t.unpriced ? `${t.unpriced} ${t.unpriced === 1 ? "call" : "calls"} unpriced` : "All calls priced"}
+        hint={u.unpriced ? (u.unpriced === 1 ? t("1 call unpriced") : t("{n} calls unpriced", { n: u.unpriced })) : t("All calls priced")}
       />
       <Stat
-        label="Errors"
-        value={pct(t.errors, t.calls)}
+        label={t("Errors")}
+        value={pct(u.errors, u.calls)}
         icon={WarningCircleIcon}
-        tone={t.errors > 0 ? "danger" : "neutral"}
-        hint={`${t.errors} failed ${t.errors === 1 ? "call" : "calls"}`}
+        tone={u.errors > 0 ? "danger" : "neutral"}
+        hint={u.errors === 1 ? t("1 failed call") : t("{n} failed calls", { n: u.errors })}
         className="col-span-2 sm:col-span-1"
       />
     </div>
@@ -98,8 +102,9 @@ function Swatch({ color }: { color: string }) {
 }
 
 function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<string, string>; label: RowLabel }) {
+  const t = useT();
   const avg = (r: UsageRow) => (r.avg_latency ? `${(r.avg_latency / 1000).toFixed(1)} s` : "-");
-  const cost = (r: UsageRow) => (r.unpriced && !r.cost ? "Unpriced" : usd(r.cost));
+  const cost = (r: UsageRow) => (r.unpriced && !r.cost ? t("Unpriced") : usd(r.cost));
   return (
     <>
       {/* Phones: one compact row each, headline numbers on the right, the rest underneath. */}
@@ -122,10 +127,10 @@ function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<str
               <p className={cn("flex flex-wrap gap-x-1.5 text-[12px] text-muted tabular", l.swatch && "pl-[18px]")}>
                 <Meta
                   items={[
-                    `${compact(r.calls)} ${r.calls === 1 ? "call" : "calls"}`,
-                    `${pct(r.cached, r.prompt)} cached`,
-                    r.errors > 0 ? <span className="text-danger">{r.errors} failed</span> : "no errors",
-                    `avg ${avg(r)}`,
+                    r.calls === 1 ? t("1 call") : t("{n} calls", { n: compact(r.calls) }),
+                    t("{pct} cached", { pct: pct(r.cached, r.prompt) }),
+                    r.errors > 0 ? <span className="text-danger">{t("{n} failed", { n: r.errors })}</span> : t("no errors"),
+                    t("avg {time}", { time: avg(r) }),
                   ]}
                 />
               </p>
@@ -137,13 +142,13 @@ function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<str
         <table className="w-full min-w-[40rem] text-left text-[13px]">
           <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
             <tr>
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 text-right font-medium">Calls</th>
-              <th className="px-3 py-2 text-right font-medium">Tokens</th>
-              <th className="px-3 py-2 text-right font-medium">From cache</th>
-              <th className="px-3 py-2 text-right font-medium">Cost</th>
-              <th className="px-3 py-2 text-right font-medium">Errors</th>
-              <th className="px-4 py-2 text-right font-medium">Avg time</th>
+              <th className="px-4 py-2 font-medium">{t("Name")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("Calls")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("Tokens")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("From cache")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("Cost")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("Errors")}</th>
+              <th className="px-4 py-2 text-right font-medium">{t("Avg time")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -176,7 +181,7 @@ function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<str
   );
 }
 
-const TASK_LABELS: Record<string, string> = { "engine.test": "Connection tests", playground: "Playground" };
+const TASK_LABELS: Record<string, string> = { "engine.test": msg("Connection tests"), playground: msg("Playground") };
 
 function UsageBreakdown({
   view,
@@ -187,8 +192,9 @@ function UsageBreakdown({
   view: Breakdown;
   onView: (v: Breakdown) => void;
   colors: Map<string, string>;
-  sets: Record<Breakdown, { label: string; rows: UsageRow[]; row: RowLabel }>;
+  sets: Record<Breakdown, { label: string; blurb: string; rows: UsageRow[]; row: RowLabel }>;
 }) {
+  const t = useT();
   const keys = (Object.keys(sets) as Breakdown[]).filter((k) => sets[k].rows.length);
   if (!keys.length) return null;
   const current = keys.includes(view) ? view : keys[0]!;
@@ -197,12 +203,12 @@ function UsageBreakdown({
     <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h3 className="text-[14px] font-semibold">Breakdown</h3>
-          <p className="text-[12.5px] text-muted">Calls, tokens and cost grouped by {set.label.toLowerCase()}.</p>
+          <h3 className="text-[14px] font-semibold">{t("Breakdown")}</h3>
+          <p className="text-[12.5px] text-muted">{set.blurb}</p>
         </div>
         <Segmented
           size="sm"
-          label="Group usage by"
+          label={t("Group usage by")}
           value={current}
           onChange={onView}
           options={keys.map((k) => ({ value: k, label: sets[k].label, count: sets[k].rows.length }))}
@@ -213,7 +219,83 @@ function UsageBreakdown({
   );
 }
 
+const KIND_LABELS: Record<string, string> = {
+  "agent.task": msg("Tasks"),
+  "agent.chat": msg("Chat"),
+  "agent.api": msg("API chat"),
+  "context.compact": msg("Context checkpoints"),
+};
+
+function share(v: number | null): string {
+  return v === null ? "-" : pct(v, 1);
+}
+
+/** P21: does each agent keep its instructions (system message + tools) stable between calls,
+ * so the provider can serve them from its prompt cache? */
+function PromptCacheCard({ days }: { days: number }) {
+  const t = useT();
+  const { data } = useQuery(cacheHealthQuery(days));
+  if (!data || data.calls === 0) return null;
+  const rows = data.groups.filter((g) => g.flags.length || g.calls >= 5).slice(0, 6);
+  const flagged = data.groups.filter((g) => g.flags.length);
+  const kind = (g: CacheHealthGroup) => {
+    const label = KIND_LABELS[g.task];
+    return label ? t(label) : g.task;
+  };
+  return (
+    <section className="min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+        <div className="min-w-0">
+          <h3 className="text-[14px] font-semibold">{t("Prompt cache")}</h3>
+          <p className="text-[12.5px] text-muted">
+            {t("When an agent sends the same instructions on every call, the provider reuses them from its cache and bills much less.")}
+          </p>
+        </div>
+        <Pill tone={flagged.length ? "warn" : "ok"}>{flagged.length ? t("{n} to look at", { n: flagged.length }) : t("Stable")}</Pill>
+      </div>
+      {flagged.length ? (
+        <ul className="grid gap-2 border-b border-border px-4 py-3 sm:px-5">
+          {flagged.map((g) => (
+            <li key={`${g.agent_id}-${g.task}`} className="flex items-start gap-2 text-[13px]">
+              <WarningCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-warn" />
+              <span className="min-w-0">
+                {g.note} <span className="text-muted">{t("({kind}: changed on {pct} of calls)", { kind: kind(g), pct: pct(g.changes, Math.max(g.calls - 1, 1)) })}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="flex items-start gap-2 border-b border-border px-4 py-3 text-[13px] sm:px-5">
+          <CheckCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-ok" />
+          {t("Every agent keeps its instructions the same between calls, so the provider can reuse its cache.")}
+        </p>
+      )}
+      {rows.length ? (
+        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
+          {rows.map((g) => (
+            <li key={`${g.agent_id}-${g.task}`} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-4 py-2.5 sm:px-5">
+              <span className="min-w-0 text-[13px]">
+                <span className="font-medium">{g.agent_name}</span> <span className="text-muted">· {kind(g)}</span>
+              </span>
+              <span className="flex flex-wrap gap-x-1.5 text-[12px] text-muted tabular">
+                <Meta
+                  items={[
+                    g.calls === 1 ? t("1 call") : t("{n} calls", { n: compact(g.calls) }),
+                    g.prefixes === 1 ? t("1 version of its instructions") : t("{n} versions of its instructions", { n: g.prefixes }),
+                    t("{pct} from cache", { pct: share(g.cached_share) }),
+                  ]}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 export function UsageTab() {
+  const t = useT();
   const [days, setDays] = useState<number>(7);
   const [view, setView] = useState<Breakdown>("provider");
   const { data, isLoading, error } = useQuery(usageQuery(days));
@@ -238,12 +320,12 @@ export function UsageTab() {
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="min-w-0 text-[13.5px] text-muted">Every model call, including failures, connection tests and fallbacks.</p>
+        <p className="min-w-0 text-[13.5px] text-muted">{t("Every model call, including failures, connection tests and fallbacks.")}</p>
         <Segmented
-          label="Time range"
+          label={t("Time range")}
           value={String(days)}
           onChange={(v) => setDays(Number(v))}
-          options={RANGES.map((r) => ({ value: String(r), label: `${r} days` }))}
+          options={RANGES.map((r) => ({ value: String(r), label: t("{n} days", { n: r }) }))}
         />
       </div>
 
@@ -253,20 +335,20 @@ export function UsageTab() {
           <Skeleton className="h-80 rounded-[var(--radius-md)]" />
         </div>
       ) : error ? (
-        <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">Could not load usage. {errorMessage(error)}</div>
+        <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">{t("Could not load usage.")} {errorMessage(error)}</div>
       ) : !data || data.totals.calls === 0 ? (
-        <EmptyState icon={ChartBarIcon} title={`No model calls in the last ${days} days`} body="Usage appears here as soon as a provider is tested or the playground runs. Agents add to it from P2." />
+        <EmptyState icon={ChartBarIcon} title={t("No model calls in the last {n} days", { n: days })} body={t("Usage appears here as soon as a provider is tested or the playground runs. Agents add to it from P2.")} />
       ) : (
         <>
-          <StatStrip t={data.totals} />
+          <StatStrip u={data.totals} />
 
           <section className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="text-[14px] font-semibold">Tokens per day by provider</h3>
-                <p className="text-[12.5px] text-muted">Last {days} days, stacked by provider.</p>
+                <h3 className="text-[14px] font-semibold">{t("Tokens per day by provider")}</h3>
+                <p className="text-[12.5px] text-muted">{t("Last {n} days, stacked by provider.", { n: days })}</p>
               </div>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" aria-label="Legend">
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" aria-label={t("Legend")}>
                 {series.map((s) => (
                   <li key={s} className="flex items-center gap-1.5">
                     <span aria-hidden className="size-2.5 rounded-[3px]" style={{ background: colors.get(s) ?? "var(--series-other)" }} />
@@ -305,11 +387,18 @@ export function UsageTab() {
             onView={setView}
             colors={colors}
             sets={{
-              provider: { label: "Provider", rows: data.by_provider, row: (r) => ({ main: r.provider ?? "", swatch: r.provider }) },
-              model: { label: "Model", rows: data.by_model, row: (r) => ({ main: r.provider ?? "", sub: r.model, swatch: r.provider }) },
-              task: { label: "Kind of work", rows: data.by_task, row: (r) => ({ main: TASK_LABELS[r.task ?? ""] ?? r.task ?? "" }) },
+              provider: { label: t("Provider"), blurb: t("Calls, tokens and cost grouped by provider."), rows: data.by_provider, row: (r) => ({ main: r.provider ?? "", swatch: r.provider }) },
+              model: { label: t("Model"), blurb: t("Calls, tokens and cost grouped by model."), rows: data.by_model, row: (r) => ({ main: r.provider ?? "", sub: r.model, swatch: r.provider }) },
+              task: {
+                label: t("Kind of work"),
+                blurb: t("Calls, tokens and cost grouped by kind of work."),
+                rows: data.by_task,
+                row: (r) => ({ main: TASK_LABELS[r.task ?? ""] ? t(TASK_LABELS[r.task ?? ""]!) : (r.task ?? "") }),
+              },
             }}
           />
+
+          <PromptCacheCard days={days} />
         </>
       )}
     </div>

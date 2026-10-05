@@ -1,6 +1,8 @@
 /** Types and queries for Skills (P4): library, proposals, test cases, evals. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg } from "@/i18n";
+
 import { api } from "./api";
 
 export interface SkillStats {
@@ -129,8 +131,8 @@ export const proposalsQuery = (state: "pending" | "decided" | "all" = "pending")
 export const proposalQuery = (id: string) =>
   queryOptions({ queryKey: skillKeys.proposal(id), queryFn: () => api<ProposalDetail>(`/api/skill-proposals/${id}`) });
 
-export const KIND_LABEL: Record<ProposalKind, string> = { new: "New skill", patch: "Update", merge: "Merge", retire: "Retire" };
-export const TRUST_LABEL: Record<Skill["trust"], string> = { builtin: "Built in", official: "Official", trusted: "Learned" };
+export const KIND_LABEL: Record<ProposalKind, string> = { new: msg("New skill"), patch: msg("Update"), merge: msg("Merge"), retire: msg("Retire") };
+export const TRUST_LABEL: Record<Skill["trust"], string> = { builtin: msg("Built in"), official: msg("Official"), trusted: msg("Learned") };
 
 export function pct(n: number | null | undefined): string {
   return n === null || n === undefined ? "–" : `${Math.round(n * 100)}%`;

@@ -13,6 +13,7 @@ import {
 
 import { AppShell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
@@ -68,6 +69,7 @@ const page = {
   impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
   guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
   present: lazyRouteComponent(() => import("@/pages/present"), "PresentPage"),
+  objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -80,18 +82,19 @@ interface RouterContext {
 }
 
 function RootError({ error }: { error: unknown }) {
+  const t = useT();
   const router = useRouter();
   const offline = error instanceof ApiError && error.code === "network";
   return (
     <div className="grid min-h-dvh place-items-center px-6">
       <div className="max-w-sm">
         <PlugsIcon size={32} weight="duotone" className="text-danger" />
-        <h1 className="mt-3 text-lg font-semibold">{offline ? "The server is not answering" : "This page failed to load"}</h1>
+        <h1 className="mt-3 text-lg font-semibold">{offline ? t("The server is not answering") : t("This page failed to load")}</h1>
         <p className="mt-1 text-[13.5px] text-muted">
-          {offline ? "Start the stack with docker compose up -d, then try again." : errorMessage(error)}
+          {offline ? t("Start the stack with docker compose up -d, then try again.") : errorMessage(error)}
         </p>
         <Button className="mt-5" onClick={() => router.invalidate()}>
-          <ArrowClockwiseIcon size={16} /> Try again
+          <ArrowClockwiseIcon size={16} /> {t("Try again")}
         </Button>
       </div>
     </div>
@@ -241,8 +244,8 @@ const agentDetailRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/tasks",
-  validateSearch: (s: Record<string, unknown>): { task?: string; new?: number; agent?: string; brief?: string } => ({
-    task: str(s.task), new: num(s.new), agent: str(s.agent), brief: str(s.brief),
+  validateSearch: (s: Record<string, unknown>): { task?: string; new?: number; agent?: string; brief?: string; objective?: string } => ({
+    task: str(s.task), new: num(s.new), agent: str(s.agent), brief: str(s.brief), objective: str(s.objective),
   }),
   component: page.tasks,
 });
@@ -469,6 +472,14 @@ const guidePageRoute = createRoute({
   component: page.guide,
 });
 
+// P21: company objectives; o opens one, new=1 opens the create form.
+const objectivesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/objectives",
+  validateSearch: (s: Record<string, unknown>): { o?: string; new?: number } => ({ o: str(s.o), new: num(s.new) }),
+  component: page.objectives,
+});
+
 // The client presentation runs full screen without the app shell (like /welcome), signed in.
 const presentRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -543,6 +554,7 @@ const routeTree = rootRoute.addChildren([
     impactRoute,
     guideRoute,
     guidePageRoute,
+    objectivesRoute,
   ]),
 ]);
 

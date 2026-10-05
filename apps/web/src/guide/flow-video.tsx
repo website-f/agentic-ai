@@ -3,17 +3,20 @@
 import { FilmStripIcon, PlayIcon } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
-import { FLOW_DOCS } from "./content";
+import { useGuideText } from "./lang";
 import type { GuideVideo } from "./manifest";
 
 export const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
 export function FlowVideo({ id, title, video }: { id: string; title: string; video?: GuideVideo }) {
+  const t = useT();
+  const gt = useGuideText();
   const ref = useRef<HTMLVideoElement>(null);
   const [now, setNow] = useState(0);
-  const doc = FLOW_DOCS[id];
+  const doc = gt.flowDocs[id];
   const chapters = video?.chapters ?? [];
   const current = chapters.reduce((acc, c, i) => (c.t <= now + 0.25 ? i : acc), -1);
   const seek = (t: number) => {
@@ -25,7 +28,7 @@ export function FlowVideo({ id, title, video }: { id: string; title: string; vid
   const mobile = video?.device === "mobile";
 
   return (
-    <div className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4" id={`video-${id}`}>
+    <div className="@container grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4" id={`video-${id}`}>
       <div className="flex min-w-0 items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent-soft text-accent">
           <FilmStripIcon size={18} weight="duotone" />
@@ -35,7 +38,7 @@ export function FlowVideo({ id, title, video }: { id: string; title: string; vid
           {doc ? <p className="text-[13px] text-muted">{doc.summary}</p> : null}
         </div>
       </div>
-      <div className={cn("grid min-w-0 gap-3", mobile ? "sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:items-start" : "grid-cols-1")}>
+      <div className={cn("grid min-w-0 gap-3", mobile ? "@md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] @md:items-start" : "grid-cols-1")}>
         {video ? (
           <video
             ref={ref}
@@ -54,12 +57,12 @@ export function FlowVideo({ id, title, video }: { id: string; title: string; vid
           <div className="grid aspect-video place-items-center rounded-[var(--radius-sm)] border border-dashed border-border bg-surface-2/50 px-4 text-center">
             <div className="grid justify-items-center gap-1.5">
               <PlayIcon size={22} weight="duotone" className="text-accent" />
-              <p className="text-[12.5px] text-muted">The video for this flow has not been recorded yet. The steps are below.</p>
+              <p className="text-[12.5px] text-muted">{t("The video for this flow has not been recorded yet. The steps are below.")}</p>
             </div>
           </div>
         )}
         {chapters.length ? (
-          <ol className="grid content-start gap-1" aria-label="Chapters">
+          <ol className="grid content-start gap-1" aria-label={t("Chapters")}>
             {chapters.map((c, i) => (
               <li key={`${c.t}-${i}`}>
                 <button
@@ -71,7 +74,7 @@ export function FlowVideo({ id, title, video }: { id: string; title: string; vid
                   )}
                 >
                   <span className={cn("shrink-0 font-mono text-[12px] tabular", i === current ? "text-accent" : "text-muted")}>{clock(c.t)}</span>
-                  <span className="min-w-0 break-words">{c.label}</span>
+                  <span className="min-w-0 break-words">{gt.chapterLabel(c.label)}</span>
                 </button>
               </li>
             ))}

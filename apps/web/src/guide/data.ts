@@ -75,29 +75,48 @@ export interface SearchHit {
   score: number;
 }
 
-function docTexts(page: GuidePage, doc: PageDoc): { where: string; text: string; weight: number }[] {
+/** Where a hit was found, in the reader's language (English by default). */
+export interface SearchLabels {
+  page: string;
+  about: string;
+  can: string;
+  tip: string;
+  onScreen: string;
+}
+
+const EN_LABELS: SearchLabels = { page: "Page", about: "About", can: "What you can do", tip: "Tip", onScreen: "On screen" };
+
+/** The pages and words to search: the English ones unless a translation is passed in. */
+export interface SearchSource {
+  pages?: GuidePage[];
+  docs?: Record<string, PageDoc>;
+  labels?: SearchLabels;
+}
+
+function docTexts(page: GuidePage, doc: PageDoc, l: SearchLabels): { where: string; text: string; weight: number }[] {
   return [
-    { where: "Page", text: page.title, weight: 6 },
-    { where: "About", text: doc.purpose, weight: 3 },
-    ...doc.can.map((t) => ({ where: "What you can do", text: t, weight: 2 })),
+    { where: l.page, text: page.title, weight: 6 },
+    { where: l.about, text: doc.purpose, weight: 3 },
+    ...doc.can.map((t) => ({ where: l.can, text: t, weight: 2 })),
     ...doc.howto.flatMap((r) => [
       { where: r.title, text: r.title, weight: 4 },
       ...r.steps.map((st) => ({ where: r.title, text: st.text, weight: 1 })),
     ]),
-    ...doc.tips.map((t) => ({ where: "Tip", text: t, weight: 1 })),
-    ...page.targets.map((t) => ({ where: "On screen", text: t.label, weight: 1 })),
+    ...doc.tips.map((t) => ({ where: l.tip, text: t, weight: 1 })),
+    ...page.targets.map((t) => ({ where: l.onScreen, text: t.label, weight: 1 })),
   ];
 }
 
 /** Every word of the query must appear somewhere on the page; hits are ranked by where they match. */
-export function searchGuide(query: string, limit = 30): SearchHit[] {
+export function searchGuide(query: string, limit = 30, src: SearchSource = {}): SearchHit[] {
   const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
   if (!words.length) return [];
+  const { pages = GUIDE_PAGES, docs = PAGE_DOCS, labels = EN_LABELS } = src;
   const hits: SearchHit[] = [];
-  for (const page of GUIDE_PAGES) {
-    const doc = PAGE_DOCS[page.id];
+  for (const page of pages) {
+    const doc = docs[page.id];
     if (!doc) continue;
-    const texts = docTexts(page, doc).map((t) => ({ ...t, text: plain(t.text), low: plain(t.text).toLowerCase() }));
+    const texts = docTexts(page, doc, labels).map((t) => ({ ...t, text: plain(t.text), low: plain(t.text).toLowerCase() }));
     const all = texts.map((t) => t.low).join(" ");
     if (!words.every((w) => all.includes(w))) continue;
     let best: (typeof texts)[number] | undefined;

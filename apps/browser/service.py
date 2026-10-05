@@ -2,23 +2,33 @@
 
 Only the worker can reach it (its own Docker network, token checked). Every request the
 page makes passes a guard that refuses non-public addresses, so a hostile page cannot use
-the browser to reach anything internal. Pages are reduced to numbered elements
-(set-of-marks) so the model can act on "element 7" instead of guessing selectors, and
-every action returns a JPEG frame for the live monitor.
+the browser to reach anything internal. A session may also carry an allow-list of hosts
+(a "Browse for me" task stays on its site): pages elsewhere are refused with a clear error.
+
+Pages are reduced to an accessibility-style tree (snapshot.py) whose element refs (e17, f1e3
+inside an iframe) are stable: an element that survives a re-render keeps its ref, so a ref
+the model picked never silently points at another element. After an action only what
+changed since the model's last view is sent (a delta), the whole tree on a navigation or a
+big change. Every action returns a JPEG frame for the live monitor.
 
 Form submits are refused unless the call says allow_submit (the agent's browser_submit
 tool, which always needs a person's approval).
 
 Saved logins (P9) arrive as `secret` typing: the service types them only when the page is
 on one of the login's hosts, marks the field, and never returns a secret or password
-field's value, so neither the model nor the monitor ever sees it.
+field's value, so neither the model nor the monitor ever sees it. A signed-in session can
+be exported (cookies + local storage, only for the login's hosts) and handed back when a
+later task opens its context, so agents stay signed in like a person does (P21); the worker
+encrypts it, this service never stores it.
 """
 
 import asyncio
 import base64
 import ipaddress
+import json
 import logging
 import os
+import re
 import secrets
 import socket
 import time
@@ -30,6 +40,24 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from snapshot import (
+    MARKS_JS,
+    SNAPSHOT_JS,
+    Delta,
+    History,
+    diff,
+    footer,
+    form_elements,
+    frame_of,
+    host_matches,
+    node_line,
+    parse_ref,
+    render,
+    text_delta,
+    uncovered_text,
+)
+from snapshot import find as find_nodes
+
 log = logging.getLogger("browser")
 TOKEN = os.environ.get("BROWSER_TOKEN", "dev-browser-token")
 MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "6"))
@@ -39,8 +67,11 @@ MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "6"))
 PER_PROCESS = max(1, int(os.environ.get("BROWSER_PER_PROCESS", "2")))
 IDLE_SECONDS = int(os.environ.get("BROWSER_IDLE_SECONDS", "600"))
 VIEWPORT = {"width": 1280, "height": 800}
-MAX_ELEMENTS = 60
 TEXT_CHARS = 2500
+READ_CHARS = 12_000
+HTML_CHARS = 1_500_000
+STATE_BYTES = 512 * 1024  # an exported session bigger than this keeps its cookies only
+WAIT_MAX = 30
 # Camoufox's humanized cursor deadlocks once 3+ contexts click at the same time (helpers
 # working in parallel), so it is off unless asked for.
 HUMANIZE = os.environ.get("BROWSER_HUMANIZE", "false").lower() in ("1", "true", "yes")
@@ -51,40 +82,6 @@ WEDGE_WINDOW = 120
 # Dev only: extra host names allowed although they are private (the practice portal on the
 # browser network). Empty in production.
 ALLOW_HOSTS = {h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()}
-
-MARK_JS = """(max) => {
-  const sel = 'a[href], button, input:not([type=hidden]), textarea, select, [role=button], ' +
-    '[role=link], [role=checkbox], [role=tab], [contenteditable=true], summary';
-  document.querySelectorAll('[data-agentic-n]').forEach(e => e.removeAttribute('data-agentic-n'));
-  const out = []; let n = 0;
-  for (const el of document.querySelectorAll(sel)) {
-    const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
-    if (r.width < 2 || r.height < 2 || st.visibility === 'hidden' || st.display === 'none') continue;
-    if (r.bottom < -50 || r.top > innerHeight * 2.5) continue;
-    n++; el.setAttribute('data-agentic-n', String(n));
-    const tag = el.tagName.toLowerCase(); const type = (el.getAttribute('type') || '').toLowerCase();
-    let label = el.getAttribute('aria-label') || (el.labels && el.labels[0] && el.labels[0].innerText)
-      || el.getAttribute('placeholder') || el.getAttribute('name') || el.innerText || el.value
-      || el.getAttribute('title') || el.getAttribute('href') || '';
-    label = String(label).replace(/\\s+/g, ' ').trim().slice(0, 80);
-    const submit = (tag === 'button' && (type === '' || type === 'submit') && !!el.form)
-      || (tag === 'input' && (type === 'submit' || type === 'image'));
-    const item = {n, tag, type, label, submit};
-    if (tag === 'input' || tag === 'textarea') {
-      const hide = type === 'password' || el.hasAttribute('data-agentic-secret');
-      item.value = hide ? (el.value ? '(filled, hidden)' : '') : String(el.value || '').slice(0, 60);
-    }
-    if (type === 'checkbox' || type === 'radio') item.checked = !!el.checked;
-    if (tag === 'select') {
-      item.options = Array.from(el.options).slice(0, 20).map(o => o.text.trim());
-      const chosen = el.options[el.selectedIndex];
-      item.value = chosen && chosen.value !== '' ? chosen.text.trim().slice(0, 60) : '';
-    }
-    out.push(item);
-    if (n >= max) break;
-  }
-  return out;
-}"""
 
 
 BOLD_ROWS_JS = """() => {
@@ -98,6 +95,39 @@ BOLD_ROWS_JS = """() => {
   }
   return out;
 }"""
+
+# The page's text, plus the text of same-origin iframes (their fields are in the snapshot).
+TEXT_JS = """() => {
+  let t = document.body ? document.body.innerText : '';
+  for (const f of document.querySelectorAll('iframe,frame')) {
+    try {
+      const d = f.contentDocument;
+      if (d && d.body) t += '\\n[frame: ' + (f.title || f.name || 'untitled') + ']\\n' + d.body.innerText;
+    } catch (e) {}
+  }
+  return t;
+}"""
+
+WAIT_TEXT_JS = """(needle) => {
+  const has = (d) => !!(d && d.body && d.body.innerText.toLowerCase().includes(needle));
+  if (has(document)) return true;
+  for (const f of document.querySelectorAll('iframe,frame')) { try { if (has(f.contentDocument)) return true; } catch (e) {} }
+  return false;
+}"""
+
+SUBMIT_JS = (
+    "(el) => ({submit: (el.tagName === 'BUTTON' && (!el.type || el.type === 'submit') && !!el.form)"
+    " || (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'image'))})"
+)
+
+
+def blocked_text(url: str, allowed: list[str]) -> str:
+    host = urlparse(url).hostname or url
+    return (
+        f"BLOCKED_SITE: this task may only open pages on {', '.join(allowed)}; {host} is not "
+        "one of them. Do the work on the allowed site, or ask a person (ask_human) if you "
+        "really need another site."
+    )
 
 
 # ---------------------------------------------------------------- the network guard
@@ -134,11 +164,27 @@ async def host_ok(host: str | None) -> bool:
     return ok
 
 
-async def _route(route: Any) -> None:
+def _top_navigation(request: Any) -> bool:
+    try:
+        return bool(request.is_navigation_request()) and request.frame.parent_frame is None
+    except Exception:  # noqa: BLE001 - service-worker requests have no frame
+        return False
+
+
+async def _route(route: Any, sess: "Session | None" = None) -> None:
     u = urlparse(route.request.url)
     if u.scheme in ("data", "blob", "about"):
         await route.continue_()
     elif u.scheme in ("http", "https") and await host_ok(u.hostname):
+        if (
+            sess is not None
+            and sess.allowed
+            and _top_navigation(route.request)
+            and not host_matches(route.request.url, sess.allowed)
+        ):
+            sess.blocked = route.request.url
+            await route.abort("blockedbyclient")
+            return
         await route.continue_()
     else:
         await route.abort("blockedbyclient")
@@ -177,8 +223,14 @@ class Slot:
 
 
 class Session:
-    def __init__(self, sid: str, context: Any, page: Any, owner: dict[str, str], slot: Slot) -> None:
-        self.id, self.context, self.page, self.owner, self.slot = sid, context, page, owner, slot
+    def __init__(self, sid: str, owner: dict[str, Any], slot: Slot, allowed: list[str] | None) -> None:
+        self.id, self.owner, self.slot = sid, owner, slot
+        self.context: Any = None
+        self.page: Any = None
+        self.allowed = [h.lower() for h in (allowed or []) if h] or None
+        self.blocked: str | None = None
+        self.unsafe: str | None = None
+        self.history = History()
         self.last = time.time()
         self.lock = asyncio.Lock()
 
@@ -264,12 +316,20 @@ def _auth(token: str | None) -> None:
 class Open(BaseModel):
     task_id: str = Field(max_length=60)
     agent_id: str = Field(max_length=60)
+    # Pages (top-level navigations) only on these hosts and their subdomains; None = any
+    # public site.
+    allowed_hosts: list[str] | None = Field(default=None, max_length=40)
+    # A saved session (cookies + origins) to open the context with. Never logged or echoed.
+    storage_state: dict[str, Any] | None = None
 
 
 class Act(BaseModel):
-    action: str  # goto | click | type | select | check | press | scroll | back | read | look
+    # goto | click | type | select | check | press | scroll | back | read | look | snapshot |
+    # find | wait | verify | login_submit
+    action: str
     url: str | None = None
-    element: int | None = None
+    element: int | None = None  # an old numbered view: element 7 is ref e7
+    ref: str | None = Field(default=None, max_length=24)
     text: str | None = Field(default=None, max_length=5000)
     key: str | None = None
     dy: int = 600
@@ -277,11 +337,18 @@ class Act(BaseModel):
     secret: bool = False  # a saved login: typed only on `hosts`, never echoed back
     secret_kind: str = ""  # username | password (a password goes only into a password field)
     hosts: list[str] = Field(default_factory=list, max_length=20)
+    since: int | None = None  # the snapshot revision the model last saw (for deltas)
+    full: bool = False  # snapshot: every text block too, not only what can be acted on
+    scope: str | None = Field(default=None, max_length=24)  # snapshot: one container's ref
+    marks: bool = False  # draw the refs on the returned frame (set-of-marks, for vision)
+    role: str = Field(default="", max_length=40)  # find
+    name: str = Field(default="", max_length=200)  # find: words in the accessible name
+    timeout: float = 10  # wait, seconds (at most WAIT_MAX)
+    state: str = "visible"  # wait for a ref: visible | hidden
 
 
-def host_matches(url: str, hosts: list[str]) -> bool:
-    h = (urlparse(url).hostname or "").lower()
-    return any(h == x.lower() or h.endswith("." + x.lower()) for x in hosts if x)
+class StateIn(BaseModel):
+    hosts: list[str] = Field(min_length=1, max_length=20)
 
 
 async def _shot(page: Any) -> bytes:
@@ -290,6 +357,17 @@ async def _shot(page: Any) -> bytes:
 
 async def _frame(page: Any) -> str:
     return base64.b64encode(await _shot(page)).decode()
+
+
+async def _marked_frame(page: Any) -> str:
+    try:
+        await page.evaluate(MARKS_JS, True)
+        return await _frame(page)
+    finally:
+        try:
+            await page.evaluate(MARKS_JS, False)
+        except Exception:  # noqa: BLE001 - the page went away
+            pass
 
 
 async def _press(page: Any, loc: Any) -> None:
@@ -301,46 +379,144 @@ async def _press(page: Any, loc: Any) -> None:
         pass
 
 
-async def _marked(page: Any, element: int) -> Any | None:
-    """Resolve a numbered element without letting a damaged DOM strand the task.
+def _target(body: Act) -> str | None:
+    return parse_ref(body.ref) if body.ref else parse_ref(body.element)
 
-    The page is re-rendered by some portal applications between observation and action.
-    That can briefly leave more than one node carrying the same marker.  Playwright's
-    normal locator is strict and raises in that case; the agent then burns model steps
-    retrying the same impossible click.  Prefer a visible match and, if a portal still
-    exposes duplicates, use the first current match and let the next observation refresh
-    the numbered view.
+
+async def _locate(page: Any, ref: str) -> Any | None:
+    """The element a ref names, now; None when it is gone (the page changed).
+
+    A ref lives on the element (data-agentic-ref) and in the page's registry. A re-render
+    can briefly leave a clone carrying the same attribute; the registry tells the real one
+    apart, else the visible one is used.
     """
-    loc = page.locator(f'[data-agentic-n="{element}"]:visible')
+    fr = frame_of(ref)
+    root = page.frame_locator(f'[data-agentic-ref="{fr}"]') if fr else page
+    loc = root.locator(f'[data-agentic-ref="{ref}"]')
     count = await loc.count()
     if count == 0:
         return None
-    if count > 1:
-        log.warning("element marker %s matched %d visible nodes; using the first", element, count)
-    return loc.first
+    if count == 1:
+        return loc
+    if not fr:
+        idx = await loc.evaluate_all(
+            "(els, ref) => els.findIndex(e => window.__agenticRefs && window.__agenticRefs.map.get(e) === ref)",
+            ref,
+        )
+        if isinstance(idx, int) and idx >= 0:
+            return loc.nth(idx)
+    log.warning("ref %s matched %d nodes; using the first visible", ref, count)
+    vis = root.locator(f'[data-agentic-ref="{ref}"]:visible')
+    return vis.first if await vis.count() else loc.first
 
 
-async def _observe(s: Session, point: dict[str, float] | None = None, read: bool = False) -> dict[str, Any]:
+def _gone(ref: str | None) -> str:
+    if not ref:
+        return "Give the element's ref from the page view (for example e12)."
+    return f"There is no element {ref} on the page now (it changed). Use the refs in the view below."
+
+
+async def _snapshot_nodes(page: Any, *, full: bool = False, scope: str | None = None) -> dict[str, Any]:
+    raw = await page.evaluate(SNAPSHOT_JS, {"full": full, "scope": scope})
+    if not isinstance(raw, dict):
+        return {"nodes": [], "doc": "", "auth_form": None}
+    return raw
+
+
+async def _guard_frames(s: Session) -> None:
+    """Routes only see the first URL of a redirect chain, so a page can be redirected to a
+    non-public address (or off the allowed hosts). Such a page or frame is blanked before
+    anything of it is read or shown. The request itself has been made by then: egress rules
+    on the browser's network (no private ranges) are the full fix."""
+    page = s.page
+    for fr in list(page.frames):
+        u = fr.url
+        if not u.startswith(("http:", "https:")) or await host_ok(urlparse(u).hostname):
+            continue
+        s.unsafe = urlparse(u).hostname or u
+        try:
+            await fr.goto("about:blank", timeout=5000)
+        except Exception:  # noqa: BLE001 - a detached frame
+            pass
+    if s.allowed and page.url.startswith("http") and not host_matches(page.url, s.allowed):
+        s.blocked = page.url
+        try:
+            await page.go_back(timeout=8000)
+        except Exception:  # noqa: BLE001
+            pass
+        if page.url.startswith("http") and not host_matches(page.url, s.allowed):
+            await page.goto("about:blank")
+
+
+async def _observe(
+    s: Session,
+    point: dict[str, float] | None = None,
+    *,
+    read: bool = False,
+    since: int | None = None,
+    force_full: bool = False,
+    marks: bool = False,
+) -> dict[str, Any]:
     page = s.page
     try:
         await page.wait_for_load_state("domcontentloaded", timeout=8000)
     except Exception:  # noqa: BLE001 - observe whatever is there
         pass
-    elements = await page.evaluate(MARK_JS, MAX_ELEMENTS)
-    text = await page.evaluate("() => (document.body ? document.body.innerText : '')")
-    text = " ".join(str(text).split())
-    # Table rows in bold usually mean unread or new; the plain text loses that.
-    bold = await page.evaluate(BOLD_ROWS_JS)
-    return {
+    try:  # frames load after the page: give them a moment so their fields are seen
+        if await page.evaluate("() => !!document.querySelector('iframe,frame')"):
+            await page.wait_for_load_state("load", timeout=4000)
+    except Exception:  # noqa: BLE001
+        pass
+    await _guard_frames(s)
+    raw = await _snapshot_nodes(page)
+    nodes = raw.get("nodes") or []
+    rendered = render(nodes)
+    text = str(await page.evaluate(TEXT_JS) or "")
+    flat = " ".join(text.split())
+    prev = s.history.get(since) if since is not None else None
+    snap = s.history.add(str(raw.get("doc") or ""), page.url, rendered.lines, text)
+    d = Delta("full", [], [], [], 1.0) if force_full else diff(prev, snap)
+    obs: dict[str, Any] = {
         "url": page.url,
         "title": await page.title(),
-        "elements": elements,
-        "text": text[: (12_000 if read else TEXT_CHARS)],
-        "text_chars": len(text),
-        "bold_rows": bold,
+        "rev": snap.rev,
+        "since": prev.rev if prev else None,
+        "mode": d.mode,
+        "auth_form": raw.get("auth_form"),
+        "omitted": rendered.omitted,
+        "elements": form_elements(nodes),
+        "text_chars": len(flat),
         "point": point,
-        "frame": await _frame(page),
     }
+    if d.mode == "full":
+        obs["snapshot"] = rendered.text() + ("\n" + footer(rendered) if rendered.omitted else "")
+        if raw.get("truncated"):
+            obs["snapshot"] += "\n(a very long page: only its first part was read; use browser_find)"
+        obs["text"] = flat[: (READ_CHARS if read else TEXT_CHARS)]
+        obs["text_rest"] = uncovered_text(text, [line for _, line in rendered.lines])
+        # Table rows in bold usually mean unread or new; the plain text loses that.
+        obs["bold_rows"] = await page.evaluate(BOLD_ROWS_JS)
+    else:
+        obs["delta"] = d.text()
+        obs["counts"] = [len(d.added), len(d.removed), len(d.changed)]
+        obs["text_delta"] = text_delta(prev.text if prev else "", text)
+        if read:
+            obs["text"] = flat[:READ_CHARS]
+    if read:
+        try:
+            obs["html"] = (await page.content())[:HTML_CHARS]
+        except Exception:  # noqa: BLE001 - text is enough
+            pass
+    if s.blocked and s.allowed:
+        obs["error"] = blocked_text(s.blocked, s.allowed)
+        s.blocked = None
+    if s.unsafe:
+        obs["error"] = (
+            f"The page sent the browser to {s.unsafe}, a non-public address; it was blocked."
+        )
+        s.unsafe = None
+    obs["frame"] = await (_marked_frame(page) if marks else _frame(page))
+    return obs
 
 
 @app.get("/healthz")
@@ -351,16 +527,27 @@ async def healthz() -> dict[str, Any]:
         "processes": sum(1 for x in state["slots"] if x.browser is not None),
         "restarts": state["restarts"],
         "humanize": HUMANIZE,
+        "snapshots": "a11y-refs",
     }
 
 
+def _clean_state(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    cookies = [c for c in raw.get("cookies") or [] if isinstance(c, dict) and c.get("name") and c.get("domain")]
+    origins = [o for o in raw.get("origins") or [] if isinstance(o, dict) and str(o.get("origin", "")).startswith("http")]
+    if not cookies and not origins:
+        return None
+    return {"cookies": cookies[:300], "origins": origins[:20]}
+
+
 @app.post("/sessions")
-async def open_session(body: Open, x_browser_token: str | None = Header(default=None)) -> dict[str, str]:
+async def open_session(body: Open, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
     _auth(x_browser_token)
     for sess in state["sessions"].values():
         if sess.owner["task_id"] == body.task_id:
             sess.last = time.time()
-            return {"id": sess.id}
+            return {"id": sess.id, "restored": False, "reused": True}
     slot = _slot_for_new()
     if slot is None:
         # Full: free the longest-idle session, but never one used in the last minute.
@@ -372,16 +559,147 @@ async def open_session(body: Open, x_browser_token: str | None = Header(default=
         assert slot is not None
     sid = "bs_" + secrets.token_hex(8)
     slot.sessions.add(sid)  # reserve the place before the (slow) launch
+    restore = _clean_state(body.storage_state)
+    sess = Session(sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts)
     try:
         browser = await slot.get()
-        context = await browser.new_context(viewport=VIEWPORT, accept_downloads=False)
-        await context.route("**/*", _route)
-        page = await context.new_page()
+        kwargs: dict[str, Any] = {"viewport": VIEWPORT, "accept_downloads": False}
+        if restore:
+            kwargs["storage_state"] = restore
+        try:
+            sess.context = await browser.new_context(**kwargs)
+        except Exception:  # noqa: BLE001 - a damaged saved session: start clean
+            if not restore:
+                raise
+            log.warning("saved session for %s could not be loaded; starting clean", sid)
+            restore = None
+            sess.context = await browser.new_context(viewport=VIEWPORT, accept_downloads=False)
+
+        async def route(r: Any) -> None:
+            await _route(r, sess)
+
+        await sess.context.route("**/*", route)
+        sess.page = await sess.context.new_page()
     except Exception:
         slot.sessions.discard(sid)
         raise
-    state["sessions"][sid] = Session(sid, context, page, body.model_dump(), slot)
-    return {"id": sid}
+    state["sessions"][sid] = sess
+    return {"id": sid, "restored": bool(restore), "reused": False}
+
+
+def _cookie_for(domain: str, hosts: list[str]) -> bool:
+    d = domain.lower().lstrip(".")
+    for h in hosts:
+        h = h.lower()
+        # the login's hosts and their subdomains, and parent-domain cookies they send
+        if d == h or d.endswith("." + h) or (h.endswith("." + d) and "." in d):
+            return True
+    return False
+
+
+@app.post("/sessions/{sid}/state")
+async def export_state(sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """The context's cookies and local storage for these hosts only (a saved login's)."""
+    _auth(x_browser_token)
+    s = state["sessions"].get(sid)
+    if s is None:
+        raise HTTPException(404, "no such session")
+    async with s.lock:
+        raw = await s.context.storage_state()
+    cookies = [c for c in raw.get("cookies") or [] if _cookie_for(str(c.get("domain", "")), body.hosts)]
+    origins = [o for o in raw.get("origins") or [] if host_matches(str(o.get("origin", "")), body.hosts)]
+    out = {"cookies": cookies, "origins": origins}
+    if len(json.dumps(out)) > STATE_BYTES:
+        out = {"cookies": cookies, "origins": []}
+    return {"state": out, "cookies": len(cookies), "origins": len(out["origins"])}
+
+
+@app.post("/sessions/{sid}/forget")
+async def forget_state(sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)) -> dict[str, bool]:
+    """Drop a restored session that no longer works: its cookies, and the site's storage."""
+    _auth(x_browser_token)
+    s = state["sessions"].get(sid)
+    if s is None:
+        raise HTTPException(404, "no such session")
+    async with s.lock:
+        for h in body.hosts:
+            await s.context.clear_cookies(domain=re.compile(r"^\.?(.*\.)?" + re.escape(h.lower()) + "$"))
+        if host_matches(s.page.url, body.hosts):
+            try:
+                await s.page.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }")
+            except Exception:  # noqa: BLE001
+                pass
+    return {"ok": True}
+
+
+async def _do_snapshot(s: Session, body: Act) -> dict[str, Any]:
+    """An explicit snapshot: always the whole tree (or one container, or every text block)."""
+    page = s.page
+    if not body.full and not body.scope:
+        return await _observe(s, since=None, force_full=True, marks=body.marks)
+    raw = await _snapshot_nodes(page, full=body.full, scope=parse_ref(body.scope) if body.scope else None)
+    if raw.get("error"):
+        obs = await _observe(s, since=body.since, marks=body.marks)
+        obs["error"] = str(raw["error"]) + ". Use a ref from the view below."
+        return obs
+    rendered = render(raw.get("nodes") or [], full=True)
+    return {
+        "url": page.url,
+        "title": await page.title(),
+        "rev": s.history.rev,
+        "mode": "full",
+        "scope": body.scope,
+        "snapshot": rendered.text() + ("\n" + footer(rendered) if rendered.omitted else ""),
+        "omitted": rendered.omitted,
+        "auth_form": raw.get("auth_form"),
+        "elements": form_elements(raw.get("nodes") or []),
+        "frame": await (_marked_frame(page) if body.marks else _frame(page)),
+    }
+
+
+async def _do_find(s: Session, body: Act) -> dict[str, Any]:
+    raw = await _snapshot_nodes(s.page, full=True)
+    hits = find_nodes(raw.get("nodes") or [], body.role, body.name, body.text or "")
+    lines = []
+    for n in hits[:25]:
+        line = node_line(n)
+        if n.get("ref") and f"[{n['ref']}]" not in line:
+            line += f" [{n['ref']}]"
+        lines.append(line)
+    return {
+        "url": s.page.url,
+        "title": await s.page.title(),
+        "rev": s.history.rev,
+        "found": lines,
+        "matches": len(hits),
+        "frame": await _frame(s.page),
+    }
+
+
+async def _do_wait(s: Session, body: Act) -> str | None:
+    """Wait for text, a URL or an element; an error text when it did not happen in time."""
+    page = s.page
+    ms = int(max(0.5, min(float(body.timeout or 10), WAIT_MAX)) * 1000)
+    try:
+        if body.text:
+            await page.wait_for_function(WAIT_TEXT_JS, arg=body.text.strip().lower(), timeout=ms, polling=250)
+        elif body.url:
+            needle = body.url.strip()
+            await page.wait_for_url(lambda u: needle in u, timeout=ms)
+        else:
+            ref = _target(body)
+            if not ref:
+                return "Say what to wait for: text, url or ref."
+            loc = await _locate(page, ref)
+            if loc is None:
+                return None if body.state == "hidden" else _gone(ref)
+            await loc.wait_for(state="hidden" if body.state == "hidden" else "visible", timeout=ms)
+    except Exception as e:  # noqa: BLE001
+        if "Timeout" in e.__class__.__name__:
+            what = body.text or body.url or body.ref or body.element
+            return f"Waited {ms // 1000} s: {what!s} did not show up."
+        raise
+    return None
 
 
 @app.post("/sessions/{sid}/act")
@@ -394,20 +712,46 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
         s.last = time.time()
         page = s.page
         point = None
+        note = None
         try:
             if body.action == "goto":
                 u = urlparse(body.url or "")
                 if u.scheme not in ("http", "https") or not await host_ok(u.hostname):
                     return {"error": "That address is not allowed (only public http/https sites)."}
+                if s.allowed and not host_matches(body.url or "", s.allowed):
+                    return {"error": blocked_text(body.url or "", s.allowed)}
                 await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+            elif body.action == "verify":
+                # Is a restored session still signed in? Load its check page: it must stay on
+                # the login's hosts and show no sign-in or one-time-code form.
+                u = urlparse(body.url or "")
+                if u.scheme not in ("http", "https") or not host_matches(body.url or "", body.hosts):
+                    return {"error": "The check page is not on this login's site.", "verified": False}
+                if s.allowed and not host_matches(body.url or "", s.allowed):
+                    return {"error": blocked_text(body.url or "", s.allowed), "verified": False}
+                await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:  # noqa: BLE001
+                    pass
+                obs = await _observe(s, since=None, force_full=True)
+                obs["verified"] = host_matches(page.url, body.hosts) and not obs.get("auth_form")
+                return obs
+            elif body.action == "snapshot" or body.action == "look":
+                return await _do_snapshot(s, body)
+            elif body.action == "find":
+                return await _do_find(s, body)
+            elif body.action == "wait":
+                note = await _do_wait(s, body)
             elif body.action == "login_submit":
                 # The sign-in button of the form that holds the saved password: the only
                 # submit that needs no person, because saving the login allowed it.
                 if not body.hosts or not host_matches(page.url, body.hosts):
                     return {"error": "This saved login is not for this site."}
-                loc = await _marked(page, int(body.element or 0))
+                ref = _target(body)
+                loc = await _locate(page, ref) if ref else None
                 if loc is None:
-                    return {"error": f"There is no element {body.element} now. Look at the page again."}
+                    return {"error": _gone(ref)}
                 same_form = await loc.evaluate(
                     "(el) => { const f = el.form || el.closest('form');"
                     " return !!f && !!f.querySelector('input[type=password][data-agentic-secret]'); }"
@@ -423,13 +767,13 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 except Exception:  # noqa: BLE001
                     pass
             elif body.action in ("click", "type", "select", "check"):
-                loc = await _marked(page, int(body.element or 0))
+                ref = _target(body)
+                loc = await _locate(page, ref) if ref else None
                 if loc is None:
-                    return {"error": f"There is no element {body.element} now. Look at the page again."}
-                info = await loc.evaluate(
-                    "(el) => ({submit: (el.tagName === 'BUTTON' && (!el.type || el.type === 'submit') && !!el.form)"
-                    " || (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'image'))})"
-                )
+                    obs = await _observe(s, since=body.since)
+                    obs["error"] = _gone(ref)
+                    return obs
+                info = await loc.evaluate(SUBMIT_JS)
                 box = await loc.bounding_box()
                 if box:
                     point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
@@ -471,7 +815,7 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 await asyncio.sleep(0.4)
             elif body.action == "back":
                 await page.go_back(timeout=15_000)
-            elif body.action not in ("read", "look"):
+            elif body.action != "read":
                 return {"error": f"unknown action {body.action}"}
         except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
             err = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
@@ -479,13 +823,19 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 await _note_timeout(s)
                 if sid not in state["sessions"]:  # the browser was just restarted
                     return {"error": f"{err}. The browser was stuck and has been restarted: open the page again."}
+            if s.blocked and s.allowed:
+                err = blocked_text(s.blocked, s.allowed)
+                s.blocked = None
             try:
-                obs = await asyncio.wait_for(_observe(s), 15)
+                obs = await asyncio.wait_for(_observe(s, since=body.since), 15)
             except Exception:  # noqa: BLE001 - the page itself is unusable
                 return {"error": err}
             obs["error"] = err
             return obs
-        return await _observe(s, point, read=body.action == "read")
+        obs = await _observe(s, point, read=body.action == "read", since=body.since, marks=body.marks)
+        if note:
+            obs["error"] = note
+        return obs
 
 
 @app.get("/sessions/{sid}/frame")

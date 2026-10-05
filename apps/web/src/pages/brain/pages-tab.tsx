@@ -23,6 +23,7 @@ import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { brainKeys, KIND_INFO, pageQuery, pagesQuery, type BrainPage, type PageSummary } from "@/lib/brain";
 import { cn, timeAgo } from "@/lib/utils";
@@ -31,11 +32,11 @@ import { linkName, WikiMarkdown } from "./wiki-markdown";
 
 const PROTECTED = new Set(["AGENTS.md", "log.md", "index.md"]);
 const FOLDERS = [
-  { value: "wiki/entities", label: "wiki/entities: people, companies, products" },
-  { value: "wiki/topics", label: "wiki/topics: how things work" },
-  { value: "wiki/decisions", label: "wiki/decisions: what was decided and why" },
-  { value: "wiki/howto", label: "wiki/howto: step-by-step guides" },
-  { value: "raw", label: "raw: sources kept as they were" },
+  { value: "wiki/entities", label: msg("wiki/entities: people, companies, products") },
+  { value: "wiki/topics", label: msg("wiki/topics: how things work") },
+  { value: "wiki/decisions", label: msg("wiki/decisions: what was decided and why") },
+  { value: "wiki/howto", label: msg("wiki/howto: step-by-step guides") },
+  { value: "raw", label: msg("raw: sources kept as they were") },
 ];
 
 function folderOf(path: string): string {
@@ -44,6 +45,7 @@ function folderOf(path: string): string {
 }
 
 function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: string | null; onSelect: (path: string) => void }) {
+  const t = useT();
   const [filter, setFilter] = useState("");
   const groups = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -58,14 +60,14 @@ function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: s
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
-      <SearchInput guide="brain.search" value={filter} onChange={setFilter} placeholder="Filter pages" className="basis-auto" />
-      <nav aria-label="Vault pages" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1.5">
+      <SearchInput guide="brain.search" value={filter} onChange={setFilter} placeholder={t("Filter pages")} className="basis-auto" />
+      <nav aria-label={t("Vault pages")} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1.5">
         {groups.map(([folder, items]) => (
           <details key={folder || "(top)"} open className="group min-w-0">
             <summary className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-[12.5px] font-medium text-muted select-none hover:bg-surface-2/60 [&::-webkit-details-marker]:hidden">
               <CaretRightIcon size={11} weight="bold" className="shrink-0 transition-transform group-open:rotate-90" />
               <FolderSimpleIcon size={15} weight="duotone" className="shrink-0" />
-              <span className="min-w-0 truncate" title={folder || "Vault"}>{folder || "Vault"}</span>
+              <span className="min-w-0 truncate" title={folder || t("Vault")}>{folder || t("Vault")}</span>
               <span className="ml-auto shrink-0 rounded-full bg-surface-2 px-1.5 text-[11px] tabular">{items.length}</span>
             </summary>
             <ul className="mt-0.5 ml-[13px] grid min-w-0 grid-cols-[minmax(0,1fr)] gap-px border-l border-border pl-2">
@@ -89,13 +91,14 @@ function Tree({ pages, selected, onSelect }: { pages: PageSummary[]; selected: s
             </ul>
           </details>
         ))}
-        {!groups.length ? <p className="px-2 py-3 text-[13px] text-muted">No page matches.</p> : null}
+        {!groups.length ? <p className="px-2 py-3 text-[13px] text-muted">{t("No page matches.")}</p> : null}
       </nav>
     </div>
   );
 }
 
 function NewPageDialog({ open, onOpenChange, onCreated, initialName }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (p: BrainPage) => void; initialName?: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const [folder, setFolder] = useState("wiki/topics");
   const [name, setName] = useState(initialName ?? "");
@@ -108,11 +111,11 @@ function NewPageDialog({ open, onOpenChange, onCreated, initialName }: { open: b
     },
   });
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title="New page" description="One topic per page. Agents and people link to it with [[its-name]]."
-      footer={<Button loading={create.isPending} disabled={!slug} onClick={() => create.mutate()}>Create page</Button>}>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("New page")} description={t("One topic per page. Agents and people link to it with [[its-name]].")}
+      footer={<Button loading={create.isPending} disabled={!slug} onClick={() => create.mutate()}>{t("Create page")}</Button>}>
       <div className="grid gap-4">
-        <Select value={folder} onValueChange={setFolder} label="Folder" options={FOLDERS} />
-        <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maju Trading" hint={slug ? `Saved as ${folder}/${slug}.md` : undefined} autoFocus />
+        <Select value={folder} onValueChange={setFolder} label={t("Folder")} options={FOLDERS.map((f) => ({ value: f.value, label: t(f.label) }))} />
+        <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("e.g. Maju Trading")} hint={slug ? t("Saved as {path}", { path: `${folder}/${slug}.md` }) : undefined} autoFocus />
         <FormError message={create.error ? errorMessage(create.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -127,6 +130,7 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
   onCreate: (name: string) => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: page, isLoading, error } = useQuery(pageQuery(path));
   const [draft, setDraft] = useState<string | null>(null);
@@ -149,7 +153,7 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
       qc.invalidateQueries({ queryKey: brainKeys.graph });
       setDraft(null);
       setMessage("");
-      toast.success("Saved. Agents see the change from their next search.");
+      toast.success(tr("Saved. Agents see the change from their next search."));
     },
   });
 
@@ -168,7 +172,7 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
   return (
     <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
       <button type="button" onClick={onBack} className="inline-flex min-h-9 w-fit items-center gap-1.5 text-[13px] text-muted hover:text-fg lg:hidden">
-        <ArrowLeftIcon size={14} /> All pages
+        <ArrowLeftIcon size={14} /> {t("All pages")}
       </button>
       <Card>
         <header className="grid gap-3 p-4 sm:p-5">
@@ -183,38 +187,38 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
             {editable ? (
               <div className="flex shrink-0 flex-wrap gap-2">
                 {draft === null ? (
-                  <Button size="sm" variant="outline" onClick={() => setDraft(page.body)}><PencilSimpleIcon size={14} /> Edit</Button>
+                  <Button size="sm" variant="outline" onClick={() => setDraft(page.body)}><PencilSimpleIcon size={14} /> {t("Edit")}</Button>
                 ) : (
                   <>
-                    <Button size="sm" loading={save.isPending} disabled={draft === page.body} onClick={() => save.mutate()}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
+                    <Button size="sm" loading={save.isPending} disabled={draft === page.body} onClick={() => save.mutate()}>{t("Save")}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>{t("Cancel")}</Button>
                   </>
                 )}
                 {!PROTECTED.has(page.path) && draft === null ? (
-                  <Button size="icon-sm" variant="ghost" aria-label="Delete page" onClick={() => setDeleting(true)}><TrashIcon size={15} /></Button>
+                  <Button size="icon-sm" variant="ghost" aria-label={t("Delete page")} onClick={() => setDeleting(true)}><TrashIcon size={15} /></Button>
                 ) : null}
               </div>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-            <Pill><span aria-hidden className="size-2 rounded-full" style={{ background: KIND_INFO[page.kind].color }} />{KIND_INFO[page.kind].label}</Pill>
-            {Array.isArray(tags) ? tags.map((t) => <Pill key={t} tone="neutral">#{t}</Pill>) : null}
-            <span className="min-w-0">Edited by {page.updated_by_name} {timeAgo(page.updated_at).toLowerCase()}</span>
+            <Pill><span aria-hidden className="size-2 rounded-full" style={{ background: KIND_INFO[page.kind].color }} />{t(KIND_INFO[page.kind].label)}</Pill>
+            {Array.isArray(tags) ? tags.map((tag) => <Pill key={tag} tone="neutral">#{tag}</Pill>) : null}
+            <span className="min-w-0">{t("Edited by {name} {when}", { name: page.updated_by_name, when: timeAgo(page.updated_at).toLowerCase() })}</span>
           </div>
         </header>
         <div className="border-t border-border">
           {draft !== null ? (
             <div className="grid gap-2 p-4 sm:p-5">
-              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={22} aria-label="Page (Markdown)" spellCheck
+              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={22} aria-label={t("Page (Markdown)")} spellCheck
                 className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
-              <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What changed (optional, kept in the history)" className="h-10 text-[13px]" />
-              <p className="text-[12px] text-muted">Markdown. Link pages with [[page-name]]; add tags in a --- frontmatter block.</p>
+              <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t("What changed (optional, kept in the history)")} className="h-10 text-[13px]" />
+              <p className="text-[12px] text-muted">{t("Markdown. Link pages with [[page-name]]; add tags in a --- frontmatter block.")}</p>
               <FormError message={save.error ? errorMessage(save.error) : null} />
             </div>
           ) : (
             <div className="min-w-0 overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
-              <WikiMarkdown body={page.body || "_Empty page_"} title={page.title} resolve={(n) => byName.get(n) ?? null}
-                onOpen={(p, name) => (p ? onOpen(p) : canWrite ? onCreate(name) : toast(`There is no page called “${name}” yet.`))} />
+              <WikiMarkdown body={page.body || t("_Empty page_")} title={page.title} resolve={(n) => byName.get(n) ?? null}
+                onOpen={(p, name) => (p ? onOpen(p) : canWrite ? onCreate(name) : toast(tr("There is no page called “{name}” yet.", { name })))} />
             </div>
           )}
         </div>
@@ -222,11 +226,11 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader icon={<IconTile icon={LinkSimpleIcon} size="sm" tone="info" />} title="Links"
-            description={`${page.backlinks.length} in · ${page.links.length} out`} />
+          <CardHeader icon={<IconTile icon={LinkSimpleIcon} size="sm" tone="info" />} title={t("Links")}
+            description={t("{in} in · {out} out", { in: page.backlinks.length, out: page.links.length })} />
           <CardBody className="grid gap-4">
             <section className="grid content-start gap-1.5">
-              <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">Linked from</h3>
+              <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">{t("Linked from")}</h3>
               {page.backlinks.length ? (
                 <ul className="grid gap-0.5">
                   {page.backlinks.map((b) => (
@@ -235,16 +239,16 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
                     </li>
                   ))}
                 </ul>
-              ) : <p className="text-[12.5px] text-muted">No page links here yet.</p>}
+              ) : <p className="text-[12.5px] text-muted">{t("No page links here yet.")}</p>}
             </section>
             {page.links.length ? (
               <section className="grid content-start gap-1.5">
-                <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">Links to</h3>
+                <h3 className="text-[12px] font-medium tracking-[0.04em] text-muted uppercase">{t("Links to")}</h3>
                 <ul className="grid gap-0.5">
                   {page.links.map((l) => (
                     <li key={l.name} className="min-w-0 text-[13px]">
                       {l.path ? <button type="button" onClick={() => onOpen(l.path!)} className="min-h-8 text-left break-words text-accent hover:underline">{l.title ?? l.name}</button>
-                        : <span className="break-words text-muted">{l.name} <span className="text-[11.5px]">(no page yet)</span></span>}
+                        : <span className="break-words text-muted">{l.name} <span className="text-[11.5px]">{t("(no page yet)")}</span></span>}
                     </li>
                   ))}
                 </ul>
@@ -253,8 +257,8 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
           </CardBody>
         </Card>
         <Card>
-          <CardHeader icon={<IconTile icon={ClockCounterClockwiseIcon} size="sm" tone="neutral" />} title="History"
-            description={`${page.history.length} ${page.history.length === 1 ? "version" : "versions"} in git`} />
+          <CardHeader icon={<IconTile icon={ClockCounterClockwiseIcon} size="sm" tone="neutral" />} title={t("History")}
+            description={page.history.length === 1 ? t("1 version in git") : t("{n} versions in git", { n: page.history.length })} />
           <ol className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
             {page.history.map((h) => (
               <li key={h.commit} className="grid min-w-0 gap-0.5 px-4 py-2.5 text-[12.5px] sm:px-5">
@@ -267,13 +271,13 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
           </ol>
         </Card>
       </div>
-      <ConfirmDialog open={deleting} onOpenChange={setDeleting} danger title={`Delete ${page.title}?`} confirmLabel="Delete page"
-        body="Agents stop finding it. The page stays in the vault's git history, so it can be brought back."
+      <ConfirmDialog open={deleting} onOpenChange={setDeleting} danger title={t("Delete {name}?", { name: page.title })} confirmLabel={t("Delete page")}
+        body={t("Agents stop finding it. The page stays in the vault's git history, so it can be brought back.")}
         onConfirm={async () => {
           try {
             await api(`/api/brain/page?path=${encodeURIComponent(path)}`, "DELETE");
             qc.invalidateQueries({ queryKey: brainKeys.all });
-            toast.success("Page deleted.");
+            toast.success(tr("Page deleted."));
             onBack();
           } catch (e) {
             toast.error(errorMessage(e));
@@ -284,6 +288,7 @@ function PageView({ path, pages, canWrite, onOpen, onCreate, onBack }: {
 }
 
 export function PagesTab({ selected, onSelect, canWrite }: { selected: string | null; onSelect: (path: string | null) => void; canWrite: boolean }) {
+  const t = useT();
   const { data: pages, isLoading, error } = useQuery(pagesQuery);
   const [creating, setCreating] = useState<{ n: number; name?: string } | null>(null);
   const knowledge = (pages ?? []).filter((p) => !["root", "log"].includes(p.kind)).length;
@@ -304,7 +309,7 @@ export function PagesTab({ selected, onSelect, canWrite }: { selected: string | 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <aside className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2", selected && "max-lg:hidden")}>
-        {canWrite ? <Button variant="outline" onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> New page</Button> : null}
+        {canWrite ? <Button variant="outline" onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> {t("New page")}</Button> : null}
         <Tree pages={pages} selected={selected} onSelect={onSelect} />
       </aside>
       <div className={cn("min-w-0", !selected && "max-lg:hidden")}>
@@ -312,10 +317,10 @@ export function PagesTab({ selected, onSelect, canWrite }: { selected: string | 
           <PageView key={selected} path={selected} pages={pages} canWrite={canWrite} onOpen={onSelect} onBack={() => onSelect(null)}
             onCreate={(name) => setCreating({ n: Date.now(), name })} />
         ) : (
-          <EmptyState icon={FileTextIcon} title={knowledge ? "Pick a page" : "The wiki is empty"}
-            body={knowledge ? "Pages are plain markdown with [[links]]. Agents read them when they recall, and write them when they learn something the team should know."
-              : "Agents add pages as they work. You can start one too: a supplier, a client, how month-end works."}
-            action={canWrite ? <Button onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> New page</Button> : undefined} />
+          <EmptyState icon={FileTextIcon} title={knowledge ? t("Pick a page") : t("The wiki is empty")}
+            body={knowledge ? t("Pages are plain markdown with [[links]]. Agents read them when they recall, and write them when they learn something the team should know.")
+              : t("Agents add pages as they work. You can start one too: a supplier, a client, how month-end works.")}
+            action={canWrite ? <Button onClick={() => setCreating({ n: Date.now() })}><PlusIcon size={15} weight="bold" /> {t("New page")}</Button> : undefined} />
         )}
       </div>
       {creating ? (

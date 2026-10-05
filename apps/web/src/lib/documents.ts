@@ -1,6 +1,8 @@
 /** Document Studio (P10): files, company kits, templates, documents and submission packs. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg, t } from "@/i18n";
+
 import { api, ApiError, readCookie } from "./api";
 
 export const docKeys = {
@@ -74,7 +76,7 @@ export const fileQuery = (id: string) =>
 /** Upload one file as raw bytes (the API takes application/octet-stream on this path). */
 export async function uploadFile(file: File, params: { branch_id?: string | null; task_id?: string | null } = {}): Promise<DocFile> {
   if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-    throw new ApiError(413, "file_too_large", `${file.name} is over ${MAX_UPLOAD_MB} MB.`);
+    throw new ApiError(413, "file_too_large", t("{name} is over {mb} MB.", { name: file.name, mb: MAX_UPLOAD_MB }));
   }
   const q = new URLSearchParams({ name: file.name });
   if (params.branch_id) q.set("branch_id", params.branch_id);
@@ -92,10 +94,10 @@ export async function uploadFile(file: File, params: { branch_id?: string | null
       body: file,
     });
   } catch {
-    throw new ApiError(0, "network", "Could not reach the server. Check that the stack is running.");
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
   }
   const data = (await res.json().catch(() => null)) as (DocFile & { code?: string; message?: string }) | null;
-  if (!res.ok) throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? `Upload failed (${res.status}).`);
+  if (!res.ok) throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? t("Upload failed ({status}).", { status: res.status }));
   return data as DocFile;
 }
 
@@ -169,28 +171,28 @@ export interface DocTemplate {
 export const templatesQuery = queryOptions({ queryKey: docKeys.templates, queryFn: () => api<DocTemplate[]>("/api/doc-templates") });
 
 export const FIELD_TYPES: { value: FieldType; label: string }[] = [
-  { value: "text", label: "Short text" },
-  { value: "longtext", label: "Long text" },
-  { value: "date", label: "Date" },
-  { value: "number", label: "Number" },
-  { value: "money", label: "Amount" },
-  { value: "items", label: "Line items" },
-  { value: "choice", label: "Choice" },
+  { value: "text", label: msg("Short text") },
+  { value: "longtext", label: msg("Long text") },
+  { value: "date", label: msg("Date") },
+  { value: "number", label: msg("Number") },
+  { value: "money", label: msg("Amount") },
+  { value: "items", label: msg("Line items") },
+  { value: "choice", label: msg("Choice") },
 ];
 
 /** Placeholders anyone can drop into a template; company ones come from the kit. */
 export const BUILTIN_PLACEHOLDERS: { token: string; label: string }[] = [
-  { token: "{{company.legal_name}}", label: "Company name" },
-  { token: "{{company.reg_no}}", label: "Registration no." },
-  { token: "{{company.address}}", label: "Address" },
-  { token: "{{company.phone}}", label: "Phone" },
-  { token: "{{company.email}}", label: "Email" },
-  { token: "{{doc.number}}", label: "Document no." },
-  { token: "{{doc.date}}", label: "Date" },
-  { token: "{{items}}", label: "Line items table" },
-  { token: "{{total}}", label: "Total" },
-  { token: "{{total_words}}", label: "Total in words" },
-  { token: "{{signature}}", label: "Signature block" },
+  { token: "{{company.legal_name}}", label: msg("Company name") },
+  { token: "{{company.reg_no}}", label: msg("Registration no.") },
+  { token: "{{company.address}}", label: msg("Address") },
+  { token: "{{company.phone}}", label: msg("Phone") },
+  { token: "{{company.email}}", label: msg("Email") },
+  { token: "{{doc.number}}", label: msg("Document no.") },
+  { token: "{{doc.date}}", label: msg("Date") },
+  { token: "{{items}}", label: msg("Line items table") },
+  { token: "{{total}}", label: msg("Total") },
+  { token: "{{total_words}}", label: msg("Total in words") },
+  { token: "{{signature}}", label: msg("Signature block") },
 ];
 
 // ---------------------------------------------------------------- documents
@@ -275,9 +277,9 @@ export const exportUrl = (id: string, format: "pdf" | "docx" | "xlsx", inline = 
   `/api/documents/${id}/export?format=${format}${inline ? "&inline=1" : ""}`;
 
 export const STATUS_LABEL: Record<DocStatus, { label: string; tone: "neutral" | "info" | "ok" }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  review: { label: "In review", tone: "info" },
-  approved: { label: "Approved", tone: "ok" },
+  draft: { label: msg("Draft"), tone: "neutral" },
+  review: { label: msg("In review"), tone: "info" },
+  approved: { label: msg("Approved"), tone: "ok" },
 };
 
 // ---------------------------------------------------------------- packs

@@ -38,6 +38,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { SwitchField } from "@/components/ui/switch";
+import { locale, msg, t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import {
   LEARNING_RANGES,
@@ -69,43 +70,47 @@ const KIND_LOOK: Record<ProposalKind, { icon: Icon; tone: Tone }> = {
   retire: { icon: ArchiveIcon, tone: "neutral" },
 };
 const STATUS_TONE = { pending: "warn", approved: "ok", rejected: "danger", superseded: "neutral" } as const;
-const STATUS_LABEL = { pending: "Waiting", approved: "Approved", rejected: "Rejected", superseded: "Replaced" } as const;
-const MODE_TITLE: Record<LearningMode, string> = { review: "Review everything", auto_safe: "Proven changes go live", auto: "Clean changes go live" };
+const STATUS_LABEL = { pending: msg("Waiting"), approved: msg("Approved"), rejected: msg("Rejected"), superseded: msg("Replaced") } as const;
+const DECIDED_BY = { pending: msg("proposed by {name}"), approved: msg("approved by {name}"), rejected: msg("rejected by {name}"), superseded: msg("replaced by {name}") } as const;
+const MODE_TITLE: Record<LearningMode, string> = { review: msg("Review everything"), auto_safe: msg("Proven changes go live"), auto: msg("Clean changes go live") };
 const SERIES = [
-  { key: "proposed", label: "Skill drafts", color: "var(--series-1)" },
-  { key: "approved", label: "Skills switched on", color: "var(--series-2)" },
-  { key: "facts", label: "Facts learned", color: "var(--series-3)" },
+  { key: "proposed", label: msg("Skill drafts"), color: "var(--series-1)" },
+  { key: "approved", label: msg("Skills switched on"), color: "var(--series-2)" },
+  { key: "facts", label: msg("Facts learned"), color: "var(--series-3)" },
 ] as const;
-const SOURCE_LABEL: Record<string, string> = { task: "tasks", chat: "chats", person: "people", agent: "agents", dream: "the nightly dream" };
+const SOURCE_LABEL: Record<string, string> = { task: msg("tasks"), chat: msg("chats"), person: msg("people"), agent: msg("agents"), dream: msg("the nightly dream") };
 
 function shortDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale(), { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
 function evalText(e: LearningDecision["eval"]): string | null {
   if (!e) return null;
-  if (e.new) return `Tests ${e.new[0]}/${e.new[1]}${e.old ? ` (was ${e.old[0]}/${e.old[1]})` : ""}`;
-  return e.error ? "Tests could not run" : null;
+  if (e.new) return e.old
+    ? tr("Tests {passed}/{total} (was {oldPassed}/{oldTotal})", { passed: e.new[0], total: e.new[1], oldPassed: e.old[0], oldTotal: e.old[1] })
+    : tr("Tests {passed}/{total}", { passed: e.new[0], total: e.new[1] });
+  return e.error ? tr("Tests could not run") : null;
 }
 
 /** The ways an agent comes to learn something, for empty states. */
 const HOW: { icon: Icon; tone: Tone; title: string; body: string }[] = [
-  { icon: ListNumbersIcon, tone: "info", title: "Long jobs", body: "A task that took many tool calls is written up as a skill, so the next one is quicker." },
-  { icon: ChatCircleTextIcon, tone: "warn", title: "Corrections", body: "When you send work back, the agent turns the correction into an update." },
-  { icon: WarningIcon, tone: "danger", title: "Failures", body: "A failed attempt that was then fixed becomes a pitfall in the skill." },
-  { icon: BrainIcon, tone: "violet", title: "“Remember how to do this”", body: "Say it in chat or on a task and the agent drafts a skill on the spot." },
-  { icon: BookOpenTextIcon, tone: "accent", title: "A source", body: "Teach from a web page, a file or pasted notes with Teach from a source." },
+  { icon: ListNumbersIcon, tone: "info", title: msg("Long jobs"), body: msg("A task that took many tool calls is written up as a skill, so the next one is quicker.") },
+  { icon: ChatCircleTextIcon, tone: "warn", title: msg("Corrections"), body: msg("When you send work back, the agent turns the correction into an update.") },
+  { icon: WarningIcon, tone: "danger", title: msg("Failures"), body: msg("A failed attempt that was then fixed becomes a pitfall in the skill.") },
+  { icon: BrainIcon, tone: "violet", title: msg("“Remember how to do this”"), body: msg("Say it in chat or on a task and the agent drafts a skill on the spot.") },
+  { icon: BookOpenTextIcon, tone: "accent", title: msg("A source"), body: msg("Teach from a web page, a file or pasted notes with Teach from a source.") },
 ];
 
 function HowItLearns({ className }: { className?: string }) {
+  const t = useT();
   return (
     <ul className={cn("grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2", className)}>
       {HOW.map((h) => (
         <li key={h.title} className="flex min-w-0 items-start gap-3">
           <IconTile icon={h.icon} tone={h.tone} size="sm" />
           <span className="min-w-0">
-            <span className="block text-[13px] font-medium">{h.title}</span>
-            <span className="block text-[12.5px] break-words text-muted">{h.body}</span>
+            <span className="block text-[13px] font-medium">{t(h.title)}</span>
+            <span className="block text-[12.5px] break-words text-muted">{t(h.body)}</span>
           </span>
         </li>
       ))}
@@ -114,49 +119,52 @@ function HowItLearns({ className }: { className?: string }) {
 }
 
 function Trend({ now, prev }: { now: number | null; prev: number | null }) {
-  if (now === null) return <>Nothing judged yet</>;
-  if (prev === null) return <>No earlier period to compare</>;
+  const t = useT();
+  if (now === null) return <>{t("Nothing judged yet")}</>;
+  if (prev === null) return <>{t("No earlier period to compare")}</>;
   const points = Math.round((now - prev) * 100);
-  if (!points) return <>Same as the period before</>;
+  if (!points) return <>{t("Same as the period before")}</>;
   const up = points > 0;
   const Arrow = up ? ArrowUpRightIcon : ArrowDownRightIcon;
   return (
     <span className="inline-flex items-center gap-1">
       <span className={cn("inline-flex items-center gap-0.5 font-medium", up ? "text-ok" : "text-danger")}>
-        <Arrow size={12} weight="bold" aria-hidden /> {up ? "+" : "−"}{Math.abs(points)} pts
+        <Arrow size={12} weight="bold" aria-hidden /> {t("{sign}{n} pts", { sign: up ? "+" : "−", n: Math.abs(points) })}
       </span>
-      <span>vs the period before</span>
+      <span>{t("vs the period before")}</span>
     </span>
   );
 }
 
 function Kpis({ o, onWaiting }: { o: LearningOverview; onWaiting: () => void }) {
+  const t = useT();
   const learned = o.proposals.approved_auto + o.proposals.approved_human;
   return (
     <StatGrid guide="learning.kpis" className={KPI_GRID}>
-      <Stat label="Skills learned" value={learned} icon={GraduationCapIcon} tone="accent"
-        hint={learned ? `${o.proposals.approved_auto} by autopilot` : `${o.skills.active} active in all`} />
-      <Stat label="Waiting for review" value={o.proposals.waiting} icon={SealQuestionIcon} tone={o.proposals.waiting ? "warn" : "neutral"}
-        hint={o.proposals.waiting ? "Open the review queue" : "All caught up"} onClick={onWaiting} />
-      <Stat label="Skill success" value={pct(o.uses.success_rate)} icon={CheckCircleIcon} tone="ok"
+      <Stat label={t("Skills learned")} value={learned} icon={GraduationCapIcon} tone="accent"
+        hint={learned ? t("{n} by autopilot", { n: o.proposals.approved_auto }) : t("{n} active in all", { n: o.skills.active })} />
+      <Stat label={t("Waiting for review")} value={o.proposals.waiting} icon={SealQuestionIcon} tone={o.proposals.waiting ? "warn" : "neutral"}
+        hint={o.proposals.waiting ? t("Open the review queue") : t("All caught up")} onClick={onWaiting} />
+      <Stat label={t("Skill success")} value={pct(o.uses.success_rate)} icon={CheckCircleIcon} tone="ok"
         hint={<Trend now={o.uses.success_rate} prev={o.uses.prev_success_rate} />} />
-      <Stat label="Facts learned" value={o.facts.learned} icon={LightbulbIcon} tone="warn"
-        hint={o.facts.replaced ? `${o.facts.replaced} replaced by newer ones` : "None replaced"} />
-      <Stat label="Test pass rate" value={pct(o.proposals.eval_pass_rate)} icon={FlaskIcon} tone="info"
-        hint={o.proposals.eval_pass_rate === null ? "No drafts tested yet" : "Across tested drafts"} />
-      <Stat label="Learning spend" value={usdShort(o.spend.cost_usd)} icon={CoinsIcon} tone="orange"
-        hint={`${compact(o.spend.tokens)} tokens, ${o.spend.calls} calls`} />
+      <Stat label={t("Facts learned")} value={o.facts.learned} icon={LightbulbIcon} tone="warn"
+        hint={o.facts.replaced ? t("{n} replaced by newer ones", { n: o.facts.replaced }) : t("None replaced")} />
+      <Stat label={t("Test pass rate")} value={pct(o.proposals.eval_pass_rate)} icon={FlaskIcon} tone="info"
+        hint={o.proposals.eval_pass_rate === null ? t("No drafts tested yet") : t("Across tested drafts")} />
+      <Stat label={t("Learning spend")} value={usdShort(o.spend.cost_usd)} icon={CoinsIcon} tone="orange"
+        hint={t("{tokens} tokens, {calls} calls", { tokens: compact(o.spend.tokens), calls: o.spend.calls })} />
     </StatGrid>
   );
 }
 
 function Autopilot({ o }: { o: LearningOverview }) {
+  const t = useT();
   const qc = useQueryClient();
   const save = useMutation({
     mutationFn: setLearningMode,
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: learningKeys.all });
-      toast.success(r.mode === "review" ? "Saved. Every skill change now waits for a person." : "Saved. The autopilot uses the new rule from the next change.");
+      toast.success(r.mode === "review" ? tr("Saved. Every skill change now waits for a person.") : tr("Saved. The autopilot uses the new rule from the next change."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -165,17 +173,17 @@ function Autopilot({ o }: { o: LearningOverview }) {
     mutationFn: setSelfCheck,
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: learningKeys.all });
-      toast.success(r.self_check ? "Self-check is on: work is reviewed before hand-in." : "Self-check is off.");
+      toast.success(r.self_check ? tr("Self-check is on: work is reviewed before hand-in.") : tr("Self-check is off."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
-    <Card data-guide="learning.autopilot" aria-label="Autopilot" className="flex flex-col">
-      <CardHeader icon={<IconTile icon={RobotIcon} tone="violet" size="sm" />} title="Autopilot"
-        description="Which learned skill changes go live without a person." />
+    <Card data-guide="learning.autopilot" aria-label={t("Autopilot")} className="flex flex-col">
+      <CardHeader icon={<IconTile icon={RobotIcon} tone="violet" size="sm" />} title={t("Autopilot")}
+        description={t("Which learned skill changes go live without a person.")} />
       <CardBody className="grid gap-3">
         <RadioGroup.Root value={value} onValueChange={(v) => save.mutate(v as LearningMode)} disabled={!o.can_configure || save.isPending}
-          aria-label="Autopilot mode" className="grid grid-cols-[minmax(0,1fr)] gap-2">
+          aria-label={t("Autopilot mode")} className="grid grid-cols-[minmax(0,1fr)] gap-2">
           {o.modes.map((m) => (
             <RadioGroup.Item key={m.key} value={m.key}
               className={cn(
@@ -188,24 +196,24 @@ function Autopilot({ o }: { o: LearningOverview }) {
               </span>
               <span className="grid min-w-0 gap-0.5">
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
-                  {MODE_TITLE[m.key] ?? m.label}
-                  {m.key === "auto_safe" ? <Pill tone="accent" className="px-2 text-[11px] leading-[18px]">Recommended</Pill> : null}
+                  {t(MODE_TITLE[m.key] ?? m.label)}
+                  {m.key === "auto_safe" ? <Pill tone="accent" className="px-2 text-[11px] leading-[18px]">{t("Recommended")}</Pill> : null}
                 </span>
-                <span className="text-[12.5px] break-words text-muted">{MODE_HELP[m.key] ?? m.label}</span>
+                <span className="text-[12.5px] break-words text-muted">{t(MODE_HELP[m.key] ?? m.label)}</span>
               </span>
             </RadioGroup.Item>
           ))}
         </RadioGroup.Root>
         <p className="text-[12px] text-muted">
-          {o.can_configure ? "Every automatic change is versioned and can be put back from the skill's version list." : "Only an owner or admin can change this."}
+          {o.can_configure ? t("Every automatic change is versioned and can be put back from the skill's version list.") : t("Only an owner or admin can change this.")}
         </p>
         <div className="border-t border-border pt-3">
           <SwitchField
             checked={check.isPending && check.variables !== undefined ? check.variables : o.self_check}
             onCheckedChange={(v) => check.mutate(v)}
             disabled={!o.can_configure || check.isPending}
-            label="Self-check before hand-in"
-            hint="A second model reads finished work against the request and the procedure. If something is missing or a number has no support, the agent fixes it once before you see it, and the lesson goes into its skills."
+            label={t("Self-check before hand-in")}
+            hint={t("A second model reads finished work against the request and the procedure. If something is missing or a number has no support, the agent fixes it once before you see it, and the lesson goes into its skills.")}
           />
         </div>
       </CardBody>
@@ -214,6 +222,7 @@ function Autopilot({ o }: { o: LearningOverview }) {
 }
 
 function ChartTooltip({ active, payload, label }: TooltipContentProps<number, string>) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   return (
     <div className="min-w-44 rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2 text-[12.5px] shadow-[var(--shadow-pop)]">
@@ -222,7 +231,7 @@ function ChartTooltip({ active, payload, label }: TooltipContentProps<number, st
         {SERIES.map((s) => (
           <li key={s.key} className="flex items-center gap-2">
             <span aria-hidden className="h-0.5 w-3 rounded-full" style={{ background: s.color }} />
-            <span className="flex-1 text-muted">{s.label}</span>
+            <span className="flex-1 text-muted">{t(s.label)}</span>
             <span className="font-mono tabular">{Number(payload.find((p) => p.dataKey === s.key)?.value ?? 0)}</span>
           </li>
         ))}
@@ -232,6 +241,7 @@ function ChartTooltip({ active, payload, label }: TooltipContentProps<number, st
 }
 
 function DailyChart({ o }: { o: LearningOverview }) {
+  const t = useT();
   const totals = useMemo(
     () => Object.fromEntries(SERIES.map((s) => [s.key, o.series.reduce((n, d) => n + d[s.key], 0)])) as Record<(typeof SERIES)[number]["key"], number>,
     [o.series],
@@ -239,15 +249,15 @@ function DailyChart({ o }: { o: LearningOverview }) {
   const sources = Object.entries(o.facts.by_source).filter(([, n]) => n);
   const empty = !totals.proposed && !totals.approved && !totals.facts;
   return (
-    <Card aria-label="Learning per day" className="flex flex-col">
-      <CardHeader icon={<IconTile icon={ChartLineIcon} tone="info" size="sm" />} title="Learning per day"
-        description={`Skill drafts, skills switched on and facts learned in the last ${o.days} days.`} />
+    <Card aria-label={t("Learning per day")} className="flex flex-col">
+      <CardHeader icon={<IconTile icon={ChartLineIcon} tone="info" size="sm" />} title={t("Learning per day")}
+        description={t("Skill drafts, skills switched on and facts learned in the last {n} days.", { n: o.days })} />
       <CardBody className="grid flex-1 content-start gap-3">
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" aria-label="Legend">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" aria-label={t("Legend")}>
           {SERIES.map((s) => (
             <li key={s.key} className="flex items-center gap-1.5">
               <span aria-hidden className="h-0.5 w-3.5 rounded-full" style={{ background: s.color }} />
-              {s.label} <span className="font-medium tabular">{totals[s.key]}</span>
+              {t(s.label)} <span className="font-medium tabular">{totals[s.key]}</span>
             </li>
           ))}
         </ul>
@@ -259,19 +269,19 @@ function DailyChart({ o }: { o: LearningOverview }) {
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted)" }} tickLine={false} axisLine={false} />
               <Tooltip cursor={{ stroke: "var(--color-border)" }} content={(p) => <ChartTooltip {...(p as TooltipContentProps<number, string>)} />} />
               {SERIES.map((s) => (
-                <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
+                <Line key={s.key} type="monotone" dataKey={s.key} name={t(s.label)} stroke={s.color} strokeWidth={2}
                   dot={o.days <= 7 ? { r: 3.5, fill: s.color, stroke: "var(--color-surface)", strokeWidth: 2 } : false}
                   activeDot={{ r: 5, stroke: "var(--color-surface)", strokeWidth: 2 }} isAnimationActive={false} />
               ))}
             </LineChart>
           </ResponsiveContainer>
           {empty ? (
-            <p className="pointer-events-none absolute inset-0 grid place-items-center text-[13px] text-muted">Nothing learned in this period yet.</p>
+            <p className="pointer-events-none absolute inset-0 grid place-items-center text-[13px] text-muted">{t("Nothing learned in this period yet.")}</p>
           ) : null}
         </div>
         {sources.length ? (
           <p className="text-[12px] break-words text-muted">
-            Facts came from {sources.map(([k, n]) => `${SOURCE_LABEL[k] ?? k} (${n})`).join(", ")}.
+            {t("Facts came from {list}.", { list: sources.map(([k, n]) => `${SOURCE_LABEL[k] ? t(SOURCE_LABEL[k]) : k} (${n})`).join(", ") })}
           </p>
         ) : null}
       </CardBody>
@@ -280,11 +290,12 @@ function DailyChart({ o }: { o: LearningOverview }) {
 }
 
 function DecisionRow({ d, onOpen }: { d: LearningDecision; onOpen: () => void }) {
+  const t = useT();
   const look = KIND_LOOK[d.kind] ?? KIND_LOOK.new;
   const ev = evalText(d.eval);
-  const who = d.status === "pending"
-    ? `proposed by ${d.proposed_by}`
-    : d.decided_by ? `${STATUS_LABEL[d.status].toLowerCase()} by ${d.decided_by}` : `proposed by ${d.proposed_by}`;
+  const who = d.status !== "pending" && d.decided_by
+    ? t(DECIDED_BY[d.status] ?? DECIDED_BY.approved, { name: d.decided_by })
+    : t("proposed by {name}", { name: d.proposed_by });
   return (
     <li>
       <button type="button" onClick={onOpen}
@@ -293,9 +304,9 @@ function DecisionRow({ d, onOpen }: { d: LearningDecision; onOpen: () => void })
         <span className="grid min-w-0 gap-1">
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{d.name}</span>
-            <Pill tone="accent">{KIND_LABEL[d.kind] ?? d.kind}</Pill>
-            <Pill tone={STATUS_TONE[d.status] ?? "neutral"}>{STATUS_LABEL[d.status] ?? d.status}</Pill>
-            {d.auto && d.status === "approved" ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> Auto-approved</Pill> : null}
+            <Pill tone="accent">{KIND_LABEL[d.kind] ? t(KIND_LABEL[d.kind]) : d.kind}</Pill>
+            <Pill tone={STATUS_TONE[d.status] ?? "neutral"}>{STATUS_LABEL[d.status] ? t(STATUS_LABEL[d.status]) : d.status}</Pill>
+            {d.auto && d.status === "approved" ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> {t("Auto-approved")}</Pill> : null}
           </span>
           {d.note ? <span className="line-clamp-2 text-[12.5px] break-words text-fg/80">{d.note}</span>
             : d.reason ? <span className="line-clamp-2 text-[12.5px] break-words text-muted">{d.reason}</span> : null}
@@ -311,28 +322,29 @@ function DecisionRow({ d, onOpen }: { d: LearningDecision; onOpen: () => void })
 const RECENT_FIRST = 6;
 
 function Recent({ o, onOpen, brief }: { o: LearningOverview; onOpen: (id: string) => void; brief?: boolean }) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const shown = all ? o.recent : o.recent.slice(0, RECENT_FIRST);
   return (
-    <Card data-guide="learning.recent" aria-label="Recent decisions" className="overflow-hidden">
-      <CardHeader icon={<IconTile icon={SealQuestionIcon} tone="accent" size="sm" />} title="Recent decisions"
-        description="Skill changes agents proposed, how they tested, and who switched them on." />
+    <Card data-guide="learning.recent" aria-label={t("Recent decisions")} className="overflow-hidden">
+      <CardHeader icon={<IconTile icon={SealQuestionIcon} tone="accent" size="sm" />} title={t("Recent decisions")}
+        description={t("Skill changes agents proposed, how they tested, and who switched them on.")} />
       {o.recent.length ? (
         <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
           {shown.map((d) => <DecisionRow key={d.id} d={d} onOpen={() => onOpen(d.id)} />)}
           {o.recent.length > RECENT_FIRST ? (
             <li className="flex justify-center px-4 py-2">
               <Button size="sm" variant="ghost" className="max-sm:h-9 max-sm:w-full" onClick={() => setAll(!all)}>
-                {all ? "Show fewer" : `Show all ${o.recent.length}`}
+                {all ? t("Show fewer") : t("Show all {n}", { n: o.recent.length })}
               </Button>
             </li>
           ) : null}
         </ul>
       ) : brief ? (
-        <p className="px-4 py-8 text-center text-[13px] text-muted sm:px-5">No skill changes yet.</p>
+        <p className="px-4 py-8 text-center text-[13px] text-muted sm:px-5">{t("No skill changes yet.")}</p>
       ) : (
         <CardBody className="grid gap-4">
-          <p className="text-[13px] text-muted">No skill changes yet. Agents learn in five ways:</p>
+          <p className="text-[13px] text-muted">{t("No skill changes yet. Agents learn in five ways:")}</p>
           <HowItLearns />
         </CardBody>
       )}
@@ -341,16 +353,17 @@ function Recent({ o, onOpen, brief }: { o: LearningOverview; onOpen: (id: string
 }
 
 function TopSkills({ o, onOpen }: { o: LearningOverview; onOpen: (id: string) => void }) {
+  const t = useT();
   return (
-    <Card aria-label="Top skills" className="overflow-hidden">
-      <CardHeader icon={<IconTile icon={RankingIcon} tone="ok" size="sm" />} title="Most used skills" description={`In the last ${o.days} days.`} />
+    <Card aria-label={t("Top skills")} className="overflow-hidden">
+      <CardHeader icon={<IconTile icon={RankingIcon} tone="ok" size="sm" />} title={t("Most used skills")} description={t("In the last {n} days.", { n: o.days })} />
       {o.top_skills.length ? (
         <table className="w-full table-fixed text-[13px]">
           <thead className="border-b border-border bg-surface-2/50 text-left text-[12px] text-muted">
             <tr>
-              <th scope="col" className="py-2 pr-2 pl-4 font-medium sm:pl-5">Skill</th>
-              <th scope="col" className="w-14 px-2 py-2 text-right font-medium">Uses</th>
-              <th scope="col" className="w-[4.5rem] py-2 pr-4 pl-2 text-right font-medium sm:pr-5">Success</th>
+              <th scope="col" className="py-2 pr-2 pl-4 font-medium sm:pl-5">{t("Skill")}</th>
+              <th scope="col" className="w-14 px-2 py-2 text-right font-medium">{t("Uses")}</th>
+              <th scope="col" className="w-[4.5rem] py-2 pr-4 pl-2 text-right font-medium sm:pr-5">{t("Success")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -359,7 +372,7 @@ function TopSkills({ o, onOpen }: { o: LearningOverview; onOpen: (id: string) =>
                 <td className="py-2.5 pr-2 pl-4 sm:pl-5">
                   <button type="button" onClick={() => onOpen(s.id)} className="grid min-w-0 text-left hover:text-accent">
                     <span className="font-mono text-[13px] font-medium break-all">{s.name}</span>
-                    <span className="text-[11.5px] text-muted tabular">version {s.version}</span>
+                    <span className="text-[11.5px] text-muted tabular">{t("version {n}", { n: s.version })}</span>
                   </button>
                 </td>
                 <td className="px-2 py-2.5 text-right tabular">{s.uses}</td>
@@ -371,7 +384,7 @@ function TopSkills({ o, onOpen }: { o: LearningOverview; onOpen: (id: string) =>
           </tbody>
         </table>
       ) : (
-        <p className="px-4 py-8 text-center text-[13px] text-muted sm:px-5">No skill was used in this period.</p>
+        <p className="px-4 py-8 text-center text-[13px] text-muted sm:px-5">{t("No skill was used in this period.")}</p>
       )}
     </Card>
   );
@@ -392,6 +405,7 @@ function LoadingState() {
 }
 
 export function LearningPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
@@ -408,45 +422,45 @@ export function LearningPage() {
   return (
     <Page className="max-w-7xl">
       <PageHeader
-        title="Learning"
-        description="What your agents learned, how it was checked, and what it cost."
+        title={t("Learning")}
+        description={t("What your agents learned, how it was checked, and what it cost.")}
         actions={
           <>
             {canExport ? (
               <Button variant="outline" size="sm" className="max-sm:h-9" asChild>
-                <a href={trajectoriesUrl(90)} download title="Finished tasks from the last 90 days as ShareGPT conversations (JSONL). Private agents are left out and secrets are redacted.">
-                  <DownloadSimpleIcon size={15} /> Download training data
+                <a href={trajectoriesUrl(90)} download title={t("Finished tasks from the last 90 days as ShareGPT conversations (JSONL). Private agents are left out and secrets are redacted.")}>
+                  <DownloadSimpleIcon size={15} /> {t("Download training data")}
                 </a>
               </Button>
             ) : null}
             {canWrite ? (
-              <Button size="sm" className="max-sm:h-9" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={15} /> Teach from a source</Button>
+              <Button size="sm" className="max-sm:h-9" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={15} /> {t("Teach from a source")}</Button>
             ) : null}
           </>
         }
       />
 
       <Segmented
-        label="Period"
+        label={t("Period")}
         value={String(days)}
         onChange={(v) => navigate({ to: "/learning", search: { days: Number(v) }, replace: true })}
-        options={LEARNING_RANGES.map((r) => ({ value: String(r), label: `${r} days` }))}
+        options={LEARNING_RANGES.map((r) => ({ value: String(r), label: t("{n} days", { n: r }) }))}
         className="w-fit max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center"
       />
 
       {isLoading ? <LoadingState /> : error || !o ? (
         <p role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
-          Could not load learning. {errorMessage(error)}
+          {t("Could not load learning.")} {errorMessage(error)}
         </p>
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
           <Kpis o={o} onWaiting={() => navigate({ to: "/skills", search: { tab: "proposals" } })} />
 
           {quiet ? (
-            <Card aria-label="How agents learn">
-              <CardHeader icon={<IconTile icon={GraduationCapIcon} size="sm" />} title={`Nothing learned in the last ${days} days`}
-                description="Learning happens on its own as agents work. Each change is tested before it goes live."
-                actions={canWrite ? <Button size="sm" variant="outline" onClick={() => setTeaching((n) => n + 1)}>Teach from a source <ArrowRightIcon size={14} /></Button> : null} />
+            <Card aria-label={t("How agents learn")}>
+              <CardHeader icon={<IconTile icon={GraduationCapIcon} size="sm" />} title={t("Nothing learned in the last {n} days", { n: days })}
+                description={t("Learning happens on its own as agents work. Each change is tested before it goes live.")}
+                actions={canWrite ? <Button size="sm" variant="outline" onClick={() => setTeaching((n) => n + 1)}>{t("Teach from a source")} <ArrowRightIcon size={14} /></Button> : null} />
               <CardBody><HowItLearns /></CardBody>
             </Card>
           ) : null}

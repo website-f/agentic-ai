@@ -1,6 +1,8 @@
 /** Types and queries for agents, SOPs, tasks, approvals and broadcasts (P2). */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg } from "@/i18n";
+
 import { api } from "./api";
 
 export type ToolMode = "allow" | "ask" | "deny";
@@ -24,6 +26,8 @@ export interface ToolInfo {
   description: string;
   risk: "low" | "medium" | "high";
   default_mode: ToolMode;
+  /** Unset on an agent: uses the agent's setting for this tool instead. */
+  follows?: string | null;
 }
 
 export interface Agent {
@@ -115,6 +119,10 @@ export interface Task {
   goal_tries?: number;
   /** Lists cut brief and result short; the detail (taskQuery) always has the full text. */
   truncated?: boolean;
+  /** P21: the objective it serves (lists carry its title) and the first task of its request. */
+  objective_id?: string | null;
+  objective_title?: string | null;
+  root_task_id?: string | null;
 }
 
 /** POST /api/tasks/retry-failed */
@@ -176,6 +184,9 @@ export interface TaskDetail {
   children: Task[];
   parent: Task | null;
   meetings: { id: string; topic: string; status: string; outcome: { decision: string } | null }[];
+  /** P21: the objective it serves, and what its whole request cost so far. */
+  objective?: import("./objectives").TaskObjective | null;
+  request?: import("./objectives").RequestCost | null;
 }
 
 export interface Audience {
@@ -255,19 +266,19 @@ export const broadcastQuery = (id: string) =>
   queryOptions({ queryKey: workKeys.broadcast(id), queryFn: () => api<Broadcast>(`/api/broadcasts/${id}`) });
 
 export const STATUS_INFO: Record<TaskStatus, { label: string; tone: "neutral" | "accent" | "ok" | "warn" | "danger" | "info" }> = {
-  triage: { label: "Triage", tone: "neutral" },
-  ready: { label: "Ready", tone: "info" },
-  running: { label: "Running", tone: "accent" },
-  blocked: { label: "Waiting on you", tone: "warn" },
-  review: { label: "In review", tone: "info" },
-  done: { label: "Done", tone: "ok" },
-  failed: { label: "Failed", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  triage: { label: msg("Triage"), tone: "neutral" },
+  ready: { label: msg("Ready"), tone: "info" },
+  running: { label: msg("Running"), tone: "accent" },
+  blocked: { label: msg("Waiting"), tone: "warn" },
+  review: { label: msg("In review"), tone: "info" },
+  done: { label: msg("Done"), tone: "ok" },
+  failed: { label: msg("Failed"), tone: "danger" },
+  cancelled: { label: msg("Cancelled"), tone: "neutral" },
 };
 
 export const PRIORITY_INFO: Record<Priority, { label: string; tone: "neutral" | "info" | "warn" | "danger" }> = {
-  low: { label: "Low", tone: "neutral" },
-  normal: { label: "Normal", tone: "neutral" },
-  high: { label: "High", tone: "warn" },
-  urgent: { label: "Urgent", tone: "danger" },
+  low: { label: msg("Low"), tone: "neutral" },
+  normal: { label: msg("Normal"), tone: "neutral" },
+  high: { label: msg("High"), tone: "warn" },
+  urgent: { label: msg("Urgent"), tone: "danger" },
 };

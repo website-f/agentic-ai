@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch, runtime, twin, work_hours
 from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
-from ...agents.tools import TOOLS
+from ...agents.tools import FOLLOWS, TOOLS
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
 from ...engine import gateway
@@ -253,6 +253,7 @@ async def tools(_: Principal = Depends(require("read"))) -> list[ToolOut]:
             description=t.description,
             risk=t.risk,
             default_mode=t.default_mode,  # type: ignore[arg-type]
+            follows=FOLLOWS.get(t.name),
         )
         for t in TOOLS.values()
     ]  # type: ignore[arg-type]

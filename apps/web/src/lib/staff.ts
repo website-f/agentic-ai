@@ -1,6 +1,8 @@
 /** Staff onboarding ("hire your AI worker") and the staff home (P19). */
 import { queryOptions } from "@tanstack/react-query";
 
+import { locale, msg, t } from "@/i18n";
+
 import { api } from "./api";
 import type { Agent, TaskStatus } from "./work";
 
@@ -143,7 +145,8 @@ export const saveHours = (agentId: string, work_hours: WorkHours | null) => api<
 
 /* ------------------------------------------------------------ hours, on the client */
 
-export const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+/** English keys (they also match Intl's en-US weekday names): render with t(). */
+export const DAY_SHORT = [msg("Mon"), msg("Tue"), msg("Wed"), msg("Thu"), msg("Fri"), msg("Sat"), msg("Sun")] as const;
 
 export const mins = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -153,11 +156,11 @@ export const mins = (hhmm: string) => {
 /** "Mon–Fri", "Mon, Wed, Fri", "Every day". */
 export function daysLabel(days: number[]): string {
   const d = [...days].sort((a, b) => a - b);
-  if (d.length === 7) return "Every day";
-  if (!d.length) return "No days";
+  if (d.length === 7) return t("Every day");
+  if (!d.length) return t("No days");
   const run = d.length >= 3 && d.every((x, i) => i === 0 || x === d[i - 1]! + 1);
-  if (run) return `${DAY_SHORT[d[0]! - 1]}–${DAY_SHORT[d[d.length - 1]! - 1]}`;
-  return d.map((x) => DAY_SHORT[x - 1]).join(", ");
+  if (run) return `${t(DAY_SHORT[d[0]! - 1]!)}–${t(DAY_SHORT[d[d.length - 1]! - 1]!)}`;
+  return d.map((x) => t(DAY_SHORT[x - 1]!)).join(", ");
 }
 
 /** The same one-liner the server writes: "Mon–Fri 09:00–18:00, lunch 13:00–14:00". */
@@ -165,21 +168,21 @@ export function describeHours(wh: WorkHours): string {
   let out = `${daysLabel(wh.days)} ${wh.start}–${wh.end}`;
   wh.breaks.forEach((b, i) => {
     const lunch = i === 0 && mins(b.start) >= 660 && mins(b.start) <= 900;
-    out += `, ${lunch ? "lunch" : "break"} ${b.start}–${b.end}`;
+    out += `, ${lunch ? t("lunch {start}–{end}", { start: b.start, end: b.end }) : t("break {start}–{end}", { start: b.start, end: b.end })}`;
   });
   return out;
 }
 
 /** What is wrong with the hours, in words, or null (mirrors agents/work_hours.clean). */
 export function hoursProblem(wh: WorkHours): string | null {
-  if (!wh.days.length) return "Pick at least one working day.";
-  if (mins(wh.start) >= mins(wh.end)) return "The day must end after it starts (overnight shifts are not supported).";
+  if (!wh.days.length) return t("Pick at least one working day.");
+  if (mins(wh.start) >= mins(wh.end)) return t("The day must end after it starts (overnight shifts are not supported).");
   const sorted = [...wh.breaks].sort((a, b) => mins(a.start) - mins(b.start));
   for (const b of sorted) {
-    if (mins(b.start) >= mins(b.end)) return `The break ${b.start}–${b.end} must end after it starts.`;
-    if (mins(b.start) < mins(wh.start) || mins(b.end) > mins(wh.end)) return `The break ${b.start}–${b.end} must be inside the working day.`;
+    if (mins(b.start) >= mins(b.end)) return t("The break {start}–{end} must end after it starts.", { start: b.start, end: b.end });
+    if (mins(b.start) < mins(wh.start) || mins(b.end) > mins(wh.end)) return t("The break {start}–{end} must be inside the working day.", { start: b.start, end: b.end });
   }
-  for (let i = 1; i < sorted.length; i++) if (mins(sorted[i]!.start) < mins(sorted[i - 1]!.end)) return "Breaks must not overlap.";
+  for (let i = 1; i < sorted.length; i++) if (mins(sorted[i]!.start) < mins(sorted[i - 1]!.end)) return t("Breaks must not overlap.");
   return null;
 }
 
@@ -187,7 +190,7 @@ export function hoursProblem(wh: WorkHours): string | null {
 export function clock(iso: string | null | undefined, tz?: string): string {
   if (!iso) return "";
   try {
-    return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(new Date(iso));
+    return new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(new Date(iso));
   } catch {
     return new Date(iso).toTimeString().slice(0, 5);
   }

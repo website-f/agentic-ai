@@ -1,6 +1,8 @@
 /** Workflows (P9): visual procedures drawn on a canvas or drafted by an analyst agent. */
 import { queryOptions } from "@tanstack/react-query";
 
+import { msg } from "@/i18n";
+
 import { api } from "./api";
 
 export type NodeType = "start" | "step" | "decision" | "handoff" | "input" | "wait" | "end" | "note";
@@ -59,14 +61,14 @@ export const workflowsQuery = queryOptions({
 });
 
 export const NODE_TYPES: { type: NodeType; label: string; color: string }[] = [
-  { type: "start", label: "Start", color: "var(--series-3)" },
-  { type: "step", label: "Step", color: "var(--series-1)" },
-  { type: "decision", label: "Decision", color: "var(--series-4)" },
-  { type: "handoff", label: "Hand off", color: "var(--series-7)" },
-  { type: "input", label: "Ask a person", color: "var(--series-5)" },
-  { type: "wait", label: "Wait", color: "var(--series-2)" },
-  { type: "end", label: "End", color: "var(--series-8)" },
-  { type: "note", label: "Note", color: "var(--series-other)" },
+  { type: "start", label: msg("Start"), color: "var(--series-3)" },
+  { type: "step", label: msg("Step"), color: "var(--series-1)" },
+  { type: "decision", label: msg("Decision"), color: "var(--series-4)" },
+  { type: "handoff", label: msg("Hand off"), color: "var(--series-7)" },
+  { type: "input", label: msg("Ask a person"), color: "var(--series-5)" },
+  { type: "wait", label: msg("Wait"), color: "var(--series-2)" },
+  { type: "end", label: msg("End"), color: "var(--series-8)" },
+  { type: "note", label: msg("Note"), color: "var(--series-other)" },
 ];
 
 export const NODE_COLOR: Record<NodeType, string> = Object.fromEntries(
@@ -149,15 +151,15 @@ export const runQuery = (id: string) =>
   });
 
 export const RUN_STATUS: Record<RunStatus, { label: string; tone: "info" | "warn" | "ok" | "danger" | "neutral" }> = {
-  running: { label: "Running", tone: "info" },
-  waiting: { label: "Needs you", tone: "warn" },
-  done: { label: "Done", tone: "ok" },
-  failed: { label: "Failed", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+  running: { label: msg("Running"), tone: "info" },
+  waiting: { label: msg("Needs you"), tone: "warn" },
+  done: { label: msg("Done"), tone: "ok" },
+  failed: { label: msg("Failed"), tone: "danger" },
+  cancelled: { label: msg("Cancelled"), tone: "neutral" },
 };
 
 export const STEP_LABEL: Record<StepStatus, string> = {
-  pending: "Not reached", ready: "Starting", running: "Working", waiting: "Waiting for you", scheduled: "Pausing",
-  review: "Waiting for your review", blocked: "Asked a question", done: "Done", failed: "Failed", skipped: "Skipped",
+  pending: msg("Not reached"), ready: msg("Starting"), running: msg("Working"), waiting: msg("Waiting for you"), scheduled: msg("Pausing"),
+  review: msg("Waiting for your review"), blocked: msg("Asked a question"), done: msg("Done"), failed: msg("Failed"), skipped: msg("Skipped"),
 };
 

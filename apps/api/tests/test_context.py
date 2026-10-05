@@ -90,7 +90,9 @@ async def test_old_results_become_stubs_and_the_cut_moves_in_jumps():
         for d in sent
         if d["role"] == "tool" and d["content"].startswith("[web_fetch result from earlier")
     ]
-    assert old and "call the tool again" in old[0]["content"]
+    # P21: a stub points at the stored original instead of asking for the tool to run again.
+    assert old and "expand_result(message_id=" in old[0]["content"]
+    assert "call the tool again" not in old[0]["content"]
     assert sent[-1]["content"] == h[-1].content  # the newest result is in full
     before = sum(context.tokens(json.dumps(openai(m))) for m in h)
     after = sum(context.tokens(json.dumps(d)) for d in sent)

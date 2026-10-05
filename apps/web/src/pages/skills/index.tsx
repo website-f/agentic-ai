@@ -18,6 +18,7 @@ import { LoadMore } from "@/components/load-more";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { isAutoApproved } from "@/lib/learning";
 import { keys, meQuery } from "@/lib/queries";
@@ -39,7 +40,9 @@ export interface SkillsSearch {
   proposal?: string;
 }
 
-const TAB_LABEL: Record<SkillTab, string> = { library: "Library", proposals: "Proposals", history: "History" };
+const TAB_LABEL: Record<SkillTab, string> = { library: msg("Library"), proposals: msg("Proposals"), history: msg("History") };
+const STATUS_LABEL: Record<Proposal["status"], string> = { pending: msg("pending"), approved: msg("approved"), rejected: msg("rejected"), superseded: msg("superseded") };
+const DECIDED_BY: Record<Proposal["status"], string> = { pending: msg("pending, {name}"), approved: msg("approved by {name}"), rejected: msg("rejected by {name}"), superseded: msg("superseded by {name}") };
 const TRUST_TONE = { trusted: "info", official: "accent", builtin: "neutral" } as const;
 const KIND_LOOK: Record<ProposalKind, { icon: typeof LightningIcon; tone: Tone }> = {
   new: { icon: SparkleIcon, tone: "accent" },
@@ -71,6 +74,7 @@ What the finished answer looks like.
 `;
 
 function NewSkill({ open, onOpenChange, canDecide }: { open: boolean; onOpenChange: (o: boolean) => void; canDecide: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -80,19 +84,19 @@ function NewSkill({ open, onOpenChange, canDecide }: { open: boolean; onOpenChan
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: skillKeys.all });
       qc.invalidateQueries({ queryKey: keys.status });
-      toast.success(r.skill ? "Published. Agents see it from their next step." : "Sent for review.");
+      toast.success(r.skill ? tr("Published. Agents see it from their next step.") : tr("Sent for review."));
       onOpenChange(false);
     },
   });
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title="New skill" className="sm:max-w-2xl"
-      description="A procedure agents load when a task matches. Keep it general: no client names, amounts or dates."
-      footer={<Button loading={create.isPending} disabled={name.trim().length < 2 || description.trim().length < 10} onClick={() => create.mutate()}>{canDecide ? "Publish" : "Send for review"}</Button>}>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("New skill")} className="sm:max-w-2xl"
+      description={t("A procedure agents load when a task matches. Keep it general: no client names, amounts or dates.")}
+      footer={<Button loading={create.isPending} disabled={name.trim().length < 2 || description.trim().length < 10} onClick={() => create.mutate()}>{canDecide ? t("Publish") : t("Send for review")}</Button>}>
       <div className="grid gap-3">
-        <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. reconcile-bank-statement" autoFocus />
-        <Field label="Description" value={description} onChange={(e) => setDescription(e.target.value)} hint="One sentence: what it does and when to use it. Agents choose by this." />
+        <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("e.g. reconcile-bank-statement")} autoFocus />
+        <Field label={t("Description")} value={description} onChange={(e) => setDescription(e.target.value)} hint={t("One sentence: what it does and when to use it. Agents choose by this.")} />
         <div className="grid gap-1.5">
-          <label htmlFor="new-skill-body" className="text-[13px] font-medium">Instructions</label>
+          <label htmlFor="new-skill-body" className="text-[13px] font-medium">{t("Instructions")}</label>
           <textarea id="new-skill-body" value={body} onChange={(e) => setBody(e.target.value)} rows={14}
             className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
         </div>
@@ -103,6 +107,7 @@ function NewSkill({ open, onOpenChange, canDecide }: { open: boolean; onOpenChan
 }
 
 function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
+  const t = useT();
   const judged = s.stats.accepted + s.stats.sent_back + s.stats.failed;
   const low = s.stats.success_rate !== null && judged >= 5 && s.stats.success_rate < 0.7;
   return (
@@ -113,21 +118,21 @@ function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
         <span className="grid min-w-0 gap-1">
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{s.name}</span>
-            <Pill tone={TRUST_TONE[s.trust]}>{TRUST_LABEL[s.trust]}</Pill>
+            <Pill tone={TRUST_TONE[s.trust]}>{t(TRUST_LABEL[s.trust])}</Pill>
             <span className="text-[12px] text-muted tabular">v{s.version}</span>
-            {s.pending ? <Pill tone="warn">{s.pending} to review</Pill> : null}
-            {low ? <Pill tone="danger">Often sent back</Pill> : null}
+            {s.pending ? <Pill tone="warn">{t("{n} to review", { n: s.pending })}</Pill> : null}
+            {low ? <Pill tone="danger">{t("Often sent back")}</Pill> : null}
           </span>
           <span className="line-clamp-2 text-[13px] break-words text-muted">{s.description}</span>
         </span>
         <span className="col-span-2 grid grid-cols-3 gap-2 rounded-[var(--radius-sm)] bg-surface-2/60 px-3 py-2 text-[11.5px] text-muted md:col-span-1 md:w-72 md:bg-transparent md:p-0">
-          <span><span className="block text-[15px] font-semibold text-fg tabular">{s.stats.uses}</span>uses</span>
-          <span><span className="block text-[15px] font-semibold text-fg tabular">{pct(s.stats.success_rate)}</span>accepted</span>
+          <span><span className="block text-[15px] font-semibold text-fg tabular">{s.stats.uses}</span>{t("uses")}</span>
+          <span><span className="block text-[15px] font-semibold text-fg tabular">{pct(s.stats.success_rate)}</span>{t("accepted")}</span>
           <span>
             <span className={cn("block text-[15px] font-semibold tabular", s.saved_pct && s.saved_pct > 0 ? "text-ok" : "text-fg")}>
               {s.saved_pct !== null ? `−${pct(s.saved_pct)}` : compact(s.stats.avg_tokens)}
             </span>
-            {s.saved_pct !== null ? "tokens" : "tokens/task"}
+            {s.saved_pct !== null ? t("tokens") : t("tokens/task")}
           </span>
         </span>
       </button>
@@ -136,11 +141,12 @@ function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
 }
 
 function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
+  const t = useT();
   const blocks = p.scan.filter((f) => f.level === "block").length;
   const warns = p.scan.length - blocks;
   const look = KIND_LOOK[p.kind];
   const auto = isAutoApproved(p);
-  const decider = p.decided_by_name ?? (/^(Approved|Closed) automatically/.test(p.decision_note ?? "") ? "the autopilot" : null);
+  const decider = p.decided_by_name ?? (/^(Approved|Closed) automatically/.test(p.decision_note ?? "") ? t("the autopilot") : null);
   return (
     <li>
       <button type="button" onClick={onOpen} className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60">
@@ -148,12 +154,12 @@ function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
         <span className="grid min-w-0 gap-1.5">
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{p.name}</span>
-            <Pill tone="accent">{KIND_LABEL[p.kind]}</Pill>
-            {p.status !== "pending" ? <Pill tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "neutral"}>{p.status}</Pill> : null}
-            {auto ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> Auto-approved</Pill> : null}
-            {blocks ? <Pill tone="danger"><ShieldWarningIcon size={12} weight="fill" /> Must fix</Pill> : warns ? <Pill tone="warn">{warns} to check</Pill> : null}
-            {p.eval?.new ? <SuiteBadge suite={p.eval.new} label="Tests" /> : null}
-            {p.stale ? <Pill tone="warn">Outdated draft</Pill> : null}
+            <Pill tone="accent">{t(KIND_LABEL[p.kind])}</Pill>
+            {p.status !== "pending" ? <Pill tone={p.status === "approved" ? "ok" : p.status === "rejected" ? "danger" : "neutral"}>{t(STATUS_LABEL[p.status])}</Pill> : null}
+            {auto ? <Pill tone="info"><RobotIcon size={12} weight="fill" aria-hidden /> {t("Auto-approved")}</Pill> : null}
+            {blocks ? <Pill tone="danger"><ShieldWarningIcon size={12} weight="fill" /> {t("Must fix")}</Pill> : warns ? <Pill tone="warn">{t("{n} to check", { n: warns })}</Pill> : null}
+            {p.eval?.new ? <SuiteBadge suite={p.eval.new} label={t("Tests")} /> : null}
+            {p.stale ? <Pill tone="warn">{t("Outdated draft")}</Pill> : null}
           </span>
           {p.reason ? <span className="line-clamp-2 text-[13px] break-words text-muted">{p.reason}</span> : null}
           {p.decision_note ? (
@@ -164,9 +170,9 @@ function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
           <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">
             <Meta items={[
               p.proposed_by_name,
-              p.source_task ? <span key="t" className="break-words">from “{p.source_task.title}”</span> : null,
+              p.source_task ? <span key="t" className="break-words">{t("from “{title}”", { title: p.source_task.title })}</span> : null,
               timeAgo(p.created_at).toLowerCase(),
-              decider ? `${p.status} by ${decider}` : null,
+              decider ? t(DECIDED_BY[p.status], { name: decider }) : null,
             ]} />
           </span>
         </span>
@@ -176,6 +182,7 @@ function ProposalRow({ p, onOpen }: { p: Proposal; onOpen: () => void }) {
 }
 
 export function SkillsPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
@@ -208,43 +215,43 @@ export function SkillsPage() {
   return (
     <Page>
       <PageHeader
-        title="Skills"
-        description="Procedures your agents load when a task matches, so the second time is faster and cheaper. Agents propose new ones from their work; nothing is used until a person approves it."
+        title={t("Skills")}
+        description={t("Procedures your agents load when a task matches, so the second time is faster and cheaper. Agents propose new ones from their work; nothing is used until a person approves it.")}
         actions={canWrite ? (
           <>
-            <Button data-guide="skills.teach" variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> Teach from a source</Button>
-            <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> New skill</Button>
+            <Button data-guide="skills.teach" variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> {t("Teach from a source")}</Button>
+            <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New skill")}</Button>
           </>
         ) : null}
       />
       {skills && state === "active" ? (
         <StatGrid>
-          <Stat label="Active skills" value={skills.length} icon={LightningIcon} tone="accent" hint="Agents load these when a task matches" onClick={() => go({ tab: "library" })} active={tab === "library"} />
-          <Stat guide="skills.proposals" label="To review" value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
-            hint={pendingCount ? "Waiting for a person" : "All caught up"} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
-          <Stat label="Uses" value={totals.uses} icon={ChartLineUpIcon} tone="info" hint="Across all active skills" />
-          <Stat label="Accepted" value={pct(totals.rate)} icon={CheckCircleIcon} tone="ok" hint={totals.judged ? `${totals.judged} results judged` : "Nothing judged yet"} />
+          <Stat label={t("Active skills")} value={skills.length} icon={LightningIcon} tone="accent" hint={t("Agents load these when a task matches")} onClick={() => go({ tab: "library" })} active={tab === "library"} />
+          <Stat guide="skills.proposals" label={t("To review")} value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
+            hint={pendingCount ? t("Waiting for a person") : t("All caught up")} onClick={() => go({ tab: "proposals" })} active={tab === "proposals"} />
+          <Stat label={t("Uses")} value={totals.uses} icon={ChartLineUpIcon} tone="info" hint={t("Across all active skills")} />
+          <Stat label={t("Accepted")} value={pct(totals.rate)} icon={CheckCircleIcon} tone="ok" hint={totals.judged ? t("{n} results judged", { n: totals.judged }) : t("Nothing judged yet")} />
         </StatGrid>
       ) : null}
 
-      <Segmented<SkillTab> label="Skills sections" value={tab} onChange={(v) => navigate({ to: "/skills", search: { tab: v }, replace: true })} className="w-fit"
-        options={SKILL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: t === "proposals" ? pendingCount : t === "library" ? skills?.length : undefined }))} />
+      <Segmented<SkillTab> label={t("Skills sections")} value={tab} onChange={(v) => navigate({ to: "/skills", search: { tab: v }, replace: true })} className="w-fit"
+        options={SKILL_TABS.map((k) => ({ value: k, label: t(TAB_LABEL[k]), count: k === "proposals" ? pendingCount : k === "library" ? skills?.length : undefined }))} />
 
-      <div role="tabpanel" aria-label={TAB_LABEL[tab]} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+      <div role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
         {tab === "library" ? (
           <>
             <Toolbar>
-              <Segmented<"active" | "retired"> label="Which skills" size="sm" value={state} onChange={setState}
-                options={[{ value: "active", label: "Active" }, { value: "retired", label: "Retired" }]} />
-              <SearchInput value={q} onChange={setQ} placeholder="Search skills" className="sm:ml-auto sm:max-w-72" />
+              <Segmented<"active" | "retired"> label={t("Which skills")} size="sm" value={state} onChange={setState}
+                options={[{ value: "active", label: t("Active") }, { value: "retired", label: t("Retired") }]} />
+              <SearchInput value={q} onChange={setQ} placeholder={t("Search skills")} className="sm:ml-auto sm:max-w-72" />
             </Toolbar>
             {isLoading ? <ListSkeleton /> : error || !skills ? (
               <p role="alert" className="text-danger">{errorMessage(error)}</p>
             ) : !skills.length ? (
-              <EmptyState icon={LightningIcon} title={state === "retired" ? "Nothing retired" : "No skills yet"}
-                body={state === "retired" ? "Retired skills land here and can be restored." : "When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself."} />
+              <EmptyState icon={LightningIcon} title={state === "retired" ? t("Nothing retired") : t("No skills yet")}
+                body={state === "retired" ? t("Retired skills land here and can be restored.") : t("When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself.")} />
             ) : !shown.length ? (
-              <EmptyState icon={LightningIcon} title="No skill matches" body="Try another word." />
+              <EmptyState icon={LightningIcon} title={t("No skill matches")} body={t("Try another word.")} />
             ) : (
               <ListCard data-guide="skills.list">
                 {shown.map((s) => <SkillRow key={s.id} s={s} onOpen={() => go({ skill: s.id })} />)}
@@ -260,8 +267,8 @@ export function SkillsPage() {
               <LoadMore noun="proposals" shown={pending.length} total={pendingList.total} hasMore={pendingList.hasMore} loading={pendingList.isFetchingMore} onLoad={pendingList.loadMore} />
             </>
           ) : (
-            <EmptyState icon={SealQuestionIcon} title="Nothing to review"
-              body="Agents propose a skill after work that took many steps or several rounds of corrections, and the nightly curator proposes merges and retirements. They wait here for you." />
+            <EmptyState icon={SealQuestionIcon} title={t("Nothing to review")}
+              body={t("Agents propose a skill after work that took many steps or several rounds of corrections, and the nightly curator proposes merges and retirements. They wait here for you.")} />
           )
         ) : decided.length ? (
           <>
@@ -271,7 +278,7 @@ export function SkillsPage() {
             <LoadMore noun="decisions" shown={decided.length} total={decidedList.total} hasMore={decidedList.hasMore} loading={decidedList.isFetchingMore} onLoad={decidedList.loadMore} />
           </>
         ) : (
-          <EmptyState icon={ClockCounterClockwiseIcon} title="No decisions yet" body="Decisions on proposals appear here." />
+          <EmptyState icon={ClockCounterClockwiseIcon} title={t("No decisions yet")} body={t("Decisions on proposals appear here.")} />
         )}
       </div>
 

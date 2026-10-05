@@ -15,9 +15,10 @@ import {
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { IconTile } from "@/components/page";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { createViewport, toWorld, type Camera, type Rect, type Viewport } from "@/lib/viewport";
-import type { Graph, StepStatus, WEdge, WNode } from "@/lib/workflows";
+import { STEP_LABEL, type Graph, type StepStatus, type WEdge, type WNode } from "@/lib/workflows";
 
 import { itemFor, subtitle, TONE_VAR } from "./library";
 
@@ -143,6 +144,7 @@ export function Canvas({
   multi?: string[];
   onMulti?: (ids: string[]) => void;
 }) {
+  const t = useT();
   const box = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const vp = useRef<Viewport | null>(null);
@@ -405,8 +407,8 @@ export function Canvas({
   }, [fit, graph.nodes.length, size.w, size.h]);
   useEffect(() => {
     if (fitSignal) {
-      const t = requestAnimationFrame(() => fit(280));
-      return () => cancelAnimationFrame(t);
+      const frame = requestAnimationFrame(() => fit(280));
+      return () => cancelAnimationFrame(frame);
     }
     // Only an explicit request re-fits; the graph changing must not move the view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -489,8 +491,8 @@ export function Canvas({
       <div
         ref={box}
         role="application"
-        aria-label="Workflow board"
-        aria-roledescription="canvas"
+        aria-label={t("Workflow board")}
+        aria-roledescription={t("canvas")}
         tabIndex={0}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -523,29 +525,29 @@ export function Canvas({
       {armed ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
           <span className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-accent/40 bg-surface/95 py-1 pr-1 pl-3 text-[12.5px] shadow-[var(--shadow-soft)] backdrop-blur">
-            Tap the step to connect to
-            <button type="button" onClick={() => setArmed(null)} className="h-7 rounded-full px-2.5 text-[12px] font-medium text-muted hover:bg-surface-2 hover:text-fg">Cancel</button>
+            {t("Tap the step to connect to")}
+            <button type="button" onClick={() => setArmed(null)} className="h-7 rounded-full px-2.5 text-[12px] font-medium text-muted hover:bg-surface-2 hover:text-fg">{t("Cancel")}</button>
           </span>
         </div>
       ) : (multi?.length ?? 0) > 1 ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
           <span className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border bg-surface/95 py-1 pr-1 pl-3 text-[12.5px] shadow-[var(--shadow-soft)] backdrop-blur">
-            {multi!.length} steps selected <span className="text-muted max-sm:hidden">· drag one to move them all · Delete removes them</span>
-            <button type="button" onClick={() => onMulti?.([])} className="h-7 rounded-full px-2.5 text-[12px] font-medium text-muted hover:bg-surface-2 hover:text-fg">Clear</button>
+            {t("{n} steps selected", { n: multi!.length })} <span className="text-muted max-sm:hidden">{t("· drag one to move them all · Delete removes them")}</span>
+            <button type="button" onClick={() => onMulti?.([])} className="h-7 rounded-full px-2.5 text-[12px] font-medium text-muted hover:bg-surface-2 hover:text-fg">{t("Clear")}</button>
           </span>
         </div>
       ) : null}
 
       {/* zoom controls */}
       <div className="absolute bottom-3 left-3 flex items-center gap-0.5 rounded-[var(--radius-sm)] border border-border bg-surface/95 p-0.5 shadow-[var(--shadow-soft)] backdrop-blur">
-        <CtlButton label="Zoom out (-)" onClick={() => vp.current?.zoomBy(1 / 1.25, center, 160)}><MinusIcon size={14} /></CtlButton>
-        <button type="button" onClick={() => vp.current?.zoomTo(1, center, 180)} className="h-9 min-w-12 rounded-sm px-1 text-[12px] font-medium tabular text-muted hover:bg-surface-2 hover:text-fg" title="Reset to 100% (0)" aria-label={`Zoom ${Math.round(view.k * 100)}%. Reset to 100%`}>
+        <CtlButton label={t("Zoom out (-)")} onClick={() => vp.current?.zoomBy(1 / 1.25, center, 160)}><MinusIcon size={14} /></CtlButton>
+        <button type="button" onClick={() => vp.current?.zoomTo(1, center, 180)} className="h-9 min-w-12 rounded-sm px-1 text-[12px] font-medium tabular text-muted hover:bg-surface-2 hover:text-fg" title={t("Reset to 100% (0)")} aria-label={t("Zoom {n}%. Reset to 100%", { n: Math.round(view.k * 100) })}>
           {Math.round(view.k * 100)}%
         </button>
-        <CtlButton label="Zoom in (+)" onClick={() => vp.current?.zoomBy(1.25, center, 160)}><PlusIcon size={14} /></CtlButton>
+        <CtlButton label={t("Zoom in (+)")} onClick={() => vp.current?.zoomBy(1.25, center, 160)}><PlusIcon size={14} /></CtlButton>
         <span className="mx-0.5 h-5 w-px bg-border" />
-        <CtlButton label="Fit to screen (Shift+1)" onClick={() => fit(280)}><CornersOutIcon size={15} /></CtlButton>
-        {size.w > 520 ? <CtlButton label={mini ? "Hide map" : "Show map"} onClick={() => setMini((m) => !m)} active={mini}><MapTrifoldIcon size={15} /></CtlButton> : null}
+        <CtlButton label={t("Fit to screen (Shift+1)")} onClick={() => fit(280)}><CornersOutIcon size={15} /></CtlButton>
+        {size.w > 520 ? <CtlButton label={mini ? t("Hide map") : t("Show map")} onClick={() => setMini((m) => !m)} active={mini}><MapTrifoldIcon size={15} /></CtlButton> : null}
       </div>
 
       {/* minimap: click or drag to move the view */}
@@ -555,7 +557,7 @@ export function Canvas({
       ) : null}
       {readOnly && graph.nodes.length ? (
         <span className="pointer-events-none absolute top-3 left-3 inline-flex items-center gap-1 rounded-full border border-border bg-surface/90 px-2 py-0.5 text-[11px] text-muted backdrop-blur max-sm:hidden">
-          <ArrowsInIcon size={11} /> Drag to pan · pinch or Ctrl+scroll to zoom
+          <ArrowsInIcon size={11} /> {t("Drag to pan · pinch or Ctrl+scroll to zoom")}
         </span>
       ) : null}
     </div>
@@ -577,6 +579,8 @@ const BoardContent = memo(function BoardContent({
   insertOnEdge: (ed: WEdge, at: Pt) => void;
   removeEdge: (id: string) => void;
 }) {
+  // Subscribes to the language only: pans and zooms still never re-render the cards.
+  const t = useT();
   const edgeColor = "color-mix(in oklab, var(--border) 45%, var(--text-muted))";
   const selEdge = selected?.kind === "edge" ? graph.edges.find((ed) => ed.id === selected.id) : null;
   const connecting = linkingFrom ?? armed;
@@ -638,7 +642,7 @@ const BoardContent = memo(function BoardContent({
               className={cn("absolute rounded-[var(--radius-sm)] border bg-[color-mix(in_oklab,var(--warn)_12%,var(--surface))] px-3 py-2.5 shadow-[var(--shadow-soft)]",
                 on ? "border-warn ring-2 ring-warn/30" : "border-warn/30", readOnly ? "cursor-pointer" : "cursor-grab active:cursor-grabbing")}
               style={{ left: n.x, top: n.y, width: NOTE_W, minHeight: NODE_H }}>
-              <p className="text-[12.5px] font-semibold break-words">{n.title || "Note"}</p>
+              <p className="text-[12.5px] font-semibold break-words">{n.title || t("Note")}</p>
               {n.body ? <p className="mt-0.5 text-[12px] leading-snug break-words whitespace-pre-wrap text-muted">{n.body}</p> : null}
             </div>
           );
@@ -655,18 +659,18 @@ const BoardContent = memo(function BoardContent({
             <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: TONE_VAR[item.tone] }} />
             <IconTile icon={item.icon} tone={item.tone} size="sm" className="mt-0.5" />
             <div className="grid min-w-0 flex-1 gap-0.5">
-              <span className="text-[10.5px] font-semibold tracking-[0.05em] text-muted uppercase">{item.label}</span>
-              <span className="line-clamp-2 text-[13px] leading-snug font-medium break-words" title={n.title}>{n.title || item.label}</span>
+              <span className="truncate text-[10.5px] font-semibold tracking-[0.05em] text-muted uppercase">{t(item.label)}</span>
+              <span className="line-clamp-2 text-[13px] leading-snug font-medium break-words" title={n.title}>{n.title || t(item.label)}</span>
               {sub ? <span className="truncate text-[11.5px] text-muted">{sub}</span> : null}
             </div>
-            {run && RUN_DOT[run] ? <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", RUN_DOT[run])} aria-label={run} /> : null}
-            {issues?.has(n.id) && !run ? <WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0 text-warn" aria-label="Needs attention" /> : null}
+            {run && RUN_DOT[run] ? <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", RUN_DOT[run])} aria-label={t(STEP_LABEL[run])} /> : null}
+            {issues?.has(n.id) && !run ? <WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0 text-warn" aria-label={t("Needs attention")} /> : null}
             {/* ports */}
             {n.type !== "start" ? <span aria-hidden className="absolute -top-[5px] left-1/2 size-2.5 -translate-x-1/2 rounded-full border-2 border-surface bg-border" /> : null}
             {!readOnly && n.type !== "end" ? (
               // A span that is not focusable: Android Chrome's touch adjustment prefers focusable
               // elements inside a card, so a focusable dot would steal taps meant for the card.
-              <span role="button" data-vp="ignore" aria-label={`Connect ${n.title || item.label} to the next step`} onPointerDown={(e) => startLink(e, n)}
+              <span role="button" data-vp="ignore" aria-label={t("Connect {name} to the next step", { name: n.title || t(item.label) })} onPointerDown={(e) => startLink(e, n)}
                 style={{ scale: `clamp(${armed === n.id ? 1.25 : 1}, calc(var(--wf-inv, 1) * 0.55), 2.6)` }}
                 className={cn("absolute -bottom-[9px] left-1/2 grid size-[18px] origin-top -translate-x-1/2 touch-none place-items-center rounded-full border-2 border-surface bg-accent text-accent-fg shadow group-hover:opacity-100 before:absolute before:-inset-3 before:content-['']",
                   armed === n.id ? "opacity-100 ring-4 ring-accent/30" : "opacity-80")}>
@@ -684,10 +688,10 @@ const BoardContent = memo(function BoardContent({
           <div data-vp="ignore" className="absolute flex -translate-x-1/2 translate-y-3 gap-1" style={{ left: m.x, top: m.y }} onPointerDown={(e) => e.stopPropagation()}>
             {hasInsert ? (
               <button type="button" onClick={() => insertOnEdge(selEdge, m)} className="inline-flex h-8 items-center gap-1 rounded-full border border-border bg-surface px-2.5 text-[12px] font-medium shadow-[var(--shadow-soft)] hover:border-accent hover:text-accent">
-                <PlusIcon size={12} weight="bold" /> Insert step
+                <PlusIcon size={12} weight="bold" /> {t("Insert step")}
               </button>
             ) : null}
-            <button type="button" aria-label="Remove connection" onClick={() => removeEdge(selEdge.id)}
+            <button type="button" aria-label={t("Remove connection")} onClick={() => removeEdge(selEdge.id)}
               className="grid size-8 place-items-center rounded-full border border-border bg-surface shadow-[var(--shadow-soft)] hover:border-danger hover:text-danger">
               <TrashIcon size={13} />
             </button>
@@ -719,8 +723,9 @@ function Minimap({ nodes, view, size, bounds: b, status, onCenter }: {
   const oy = (H - (b.h + pad * 2) * s) / 2 - (b.y - pad) * s;
   const vx = (-view.x / view.k) * s + ox;
   const vy = (-view.y / view.k) * s + oy;
+  const t = useT();
   const dragging = useRef(false);
-  const at = (e: React.PointerEvent<SVGSVGElement>): Pt => {
+  const at =(e: React.PointerEvent<SVGSVGElement>): Pt => {
     const r = e.currentTarget.getBoundingClientRect();
     return { x: (e.clientX - r.left - ox) / s, y: (e.clientY - r.top - oy) / s };
   };
@@ -739,7 +744,7 @@ function Minimap({ nodes, view, size, bounds: b, status, onCenter }: {
       }}
       onPointerMove={(e) => { if (dragging.current) onCenter(at(e)); }}
       onPointerUp={end} onPointerCancel={end}
-      className="absolute right-3 bottom-3 cursor-pointer touch-none rounded-[var(--radius-sm)] border border-border bg-surface/95 shadow-[var(--shadow-soft)] backdrop-blur active:cursor-grabbing" aria-label="Map of the workflow. Click or drag to move the view.">
+      className="absolute right-3 bottom-3 cursor-pointer touch-none rounded-[var(--radius-sm)] border border-border bg-surface/95 shadow-[var(--shadow-soft)] backdrop-blur active:cursor-grabbing" aria-label={t("Map of the workflow. Click or drag to move the view.")}>
       {nodes.map((n) => {
         const it = itemFor(n);
         const st = status?.[n.id];

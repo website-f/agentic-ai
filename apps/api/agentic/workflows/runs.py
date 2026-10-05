@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import launch
 from ..models import Agent, DocFile, Task, WorkflowRun
 from ..services import events
+from ..teams import objectives
 from .procedure import ACTIONS, WAIT_UNITS, clean_graph, runnable, wait_text
 
 log = logging.getLogger("agentic.runs")
@@ -283,6 +284,7 @@ async def _launch(db: AsyncSession, run: WorkflowRun, node: dict[str, Any]) -> d
         position=float(lowest) - 1,
         output_schema=schema,
         workflow_run_id=run.id,
+        **await objectives.run_lineage(db, run.id),  # P21: one request, one objective
     )
     db.add(t)
     await db.flush()

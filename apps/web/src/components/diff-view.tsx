@@ -2,6 +2,7 @@ import { diffLines } from "diff";
 import { RadioGroup } from "radix-ui";
 import { useMemo, useState } from "react";
 
+import { useT } from "@/i18n";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,10 @@ function Cell({ row, side }: { row: Row | null; side: "a" | "b" }) {
 }
 
 /** Line diff of two texts. Side by side on wide screens, unified on phones. */
-export function DiffView({ before, after, labels = ["Current", "Proposed"] }: { before: string; after: string; labels?: [string, string] }) {
+export function DiffView({ before, after, labels: given }: { before: string; after: string; labels?: [string, string] }) {
+  const t = useT();
+  const labels = given ?? [t("Current"), t("Proposed")];
+  const LAYOUT = { split: t("Side by side"), unified: t("One column") };
   const phone = useIsPhone();
   const [mode, setMode] = useState<"split" | "unified">("split");
   const r = useMemo(() => rows(before, after), [before, after]);
@@ -72,11 +76,11 @@ export function DiffView({ before, after, labels = ["Current", "Proposed"] }: { 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <div className="flex items-center justify-between gap-2 text-[12.5px]">
-        <span className="text-muted"><span className="font-medium text-ok">+{added}</span> <span className="font-medium text-danger">−{removed}</span> lines</span>
+        <span className="text-muted"><span className="font-medium text-ok">+{added}</span> <span className="font-medium text-danger">−{removed}</span> {t("lines")}</span>
         {!phone ? (
-          <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "split" | "unified")} aria-label="Diff layout" className="inline-flex gap-0.5 rounded-sm border border-border bg-surface-2/60 p-0.5">
+          <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "split" | "unified")} aria-label={t("Diff layout")} className="inline-flex gap-0.5 rounded-sm border border-border bg-surface-2/60 p-0.5">
             {(["split", "unified"] as const).map((v) => (
-              <RadioGroup.Item key={v} value={v} className="h-7 rounded-[6px] px-2.5 text-[12px] text-muted capitalize transition-colors hover:text-fg data-[state=checked]:bg-surface data-[state=checked]:font-medium data-[state=checked]:text-fg data-[state=checked]:shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] data-[state=checked]:ring-1 data-[state=checked]:ring-border">{v}</RadioGroup.Item>
+              <RadioGroup.Item key={v} value={v} className="h-7 rounded-[6px] px-2.5 text-[12px] text-muted transition-colors hover:text-fg data-[state=checked]:bg-surface data-[state=checked]:font-medium data-[state=checked]:text-fg data-[state=checked]:shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] data-[state=checked]:ring-1 data-[state=checked]:ring-border">{LAYOUT[v]}</RadioGroup.Item>
             ))}
           </RadioGroup.Root>
         ) : null}

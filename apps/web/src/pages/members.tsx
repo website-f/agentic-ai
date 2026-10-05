@@ -15,6 +15,7 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { msg, t as tr, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
@@ -25,6 +26,15 @@ const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", 
 const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
 const NONE = "none";
 
+// Roles that are not tied to a branch or department (the English keeps its plural).
+const WHOLE_WORKSPACE: Partial<Record<Role, string>> = {
+  owner: msg("Owners see the whole workspace."),
+  admin: msg("Admins see the whole workspace."),
+  operator: msg("Operators see the whole workspace."),
+  approver: msg("Approvers see the whole workspace."),
+  viewer: msg("Viewers see the whole workspace."),
+};
+
 function assignable(me: Me): Role[] {
   if (me.permissions.includes("members.manage")) {
     return ROLES.filter((r) => r !== "owner" || me.permissions.includes("members.assign_owner"));
@@ -33,7 +43,7 @@ function assignable(me: Me): Role[] {
 }
 
 function roleOptions(roles: Role[]) {
-  return roles.map((r) => ({ value: r, label: ROLE_INFO[r].label, hint: ROLE_INFO[r].blurb }));
+  return roles.map((r) => ({ value: r, label: tr(ROLE_INFO[r].label), hint: tr(ROLE_INFO[r].blurb) }));
 }
 
 /** Where a scoped member sits: branch managers and staff pick a branch, HODs and supervisors a department. */
@@ -45,28 +55,30 @@ function Placement({ role, branches, branchId, departmentId, onChange, lockBranc
   onChange: (b: string, d: string) => void;
   lockBranch?: string | null;
 }) {
+  const t = useT();
   if (!SCOPED_ROLES.includes(role)) {
-    return <p className="text-[12.5px] text-muted">{ROLE_INFO[role].label}s see the whole workspace.</p>;
+    const line = WHOLE_WORKSPACE[role];
+    return <p className="text-[12.5px] text-muted">{line ? t(line) : t("{role} sees the whole workspace.", { role: t(ROLE_INFO[role].label) })}</p>;
   }
   const list = lockBranch ? branches.filter((b) => b.id === lockBranch) : branches;
   const branch = list.find((b) => b.id === branchId) ?? list[0];
   const needsDept = role === "hod" || role === "supervisor";
   const deptOptions = [
-    ...(needsDept ? [] : [{ value: NONE, label: "Any department" }]),
+    ...(needsDept ? [] : [{ value: NONE, label: t("Any department") }]),
     ...(branch?.departments ?? []).map((d) => ({ value: d.id, label: d.name })),
   ];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
       <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">Branch</span>
-        <Select value={branch?.id ?? ""} onValueChange={(v) => onChange(v, NONE)} label="Branch" placeholder="Pick a branch"
+        <span className="text-[13px] font-medium">{t("Branch")}</span>
+        <Select value={branch?.id ?? ""} onValueChange={(v) => onChange(v, NONE)} label={t("Branch")} placeholder={t("Pick a branch")}
           options={list.map((b) => ({ value: b.id, label: b.name }))} />
       </div>
       {role === "branch_manager" ? null : (
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Department{needsDept ? "" : " (optional)"}</span>
-          <Select value={departmentId || (needsDept ? "" : NONE)} onValueChange={(v) => onChange(branch?.id ?? "", v)} label="Department"
-            placeholder="Pick a department" options={deptOptions} />
+          <span className="text-[13px] font-medium">{needsDept ? t("Department") : t("Department (optional)")}</span>
+          <Select value={departmentId || (needsDept ? "" : NONE)} onValueChange={(v) => onChange(branch?.id ?? "", v)} label={t("Department")}
+            placeholder={t("Pick a department")} options={deptOptions} />
         </div>
       )}
     </div>
@@ -79,23 +91,30 @@ function placementBody(role: Role, branchId: string, departmentId: string) {
 }
 
 function TempPassword({ email, password }: { email: string; password: string }) {
+  const t = useT();
+  // The email stays bold inside the translated sentence.
+  const [before = "", after = ""] = t(
+    "Give this temporary password to {email}. It is shown only once. They will pick their own password the first time they sign in.",
+  ).split("{email}");
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(password);
-      toast.success("Copied.");
+      toast.success(t("Copied."));
     } catch {
-      toast.error("Copy blocked by the browser. Select the password and copy it by hand.");
+      toast.error(t("Copy blocked by the browser. Select the password and copy it by hand."));
     }
   };
   return (
     <div className="grid gap-3">
       <p className="text-[13.5px] text-muted">
-        Give this temporary password to <span className="font-medium text-fg">{email}</span>. It is shown only once. They will pick their own password the first time they sign in.
+        {before}
+        <span className="font-medium text-fg">{email}</span>
+        {after}
       </p>
       <div className="flex items-center gap-2 rounded-sm border border-border bg-surface-2 p-1.5 pl-3">
         <code className="min-w-0 flex-1 font-mono text-[15px] tracking-wide break-all select-all">{password}</code>
         <Button size="sm" variant="outline" onClick={copy}>
-          <CopyIcon size={15} /> Copy
+          <CopyIcon size={15} /> {t("Copy")}
         </Button>
       </div>
     </div>
@@ -103,6 +122,7 @@ function TempPassword({ email, password }: { email: string; password: string }) 
 }
 
 function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChange: (o: boolean) => void; me: Me }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const roles = assignable(me);
@@ -120,14 +140,14 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
       qc.invalidateQueries({ queryKey: keys.members });
       qc.invalidateQueries({ queryKey: keys.status });
       setResult({ email, password: r.temp_password });
-      if (!r.temp_password) toast.success(`${email} added. They sign in with their existing password.`);
+      if (!r.temp_password) toast.success(t("{email} added. They sign in with their existing password.", { email }));
     },
   });
   const fields = add.error instanceof ApiError ? add.error.fields : {};
 
   if (result?.password) {
     return (
-      <ResponsiveDialog open={open} onOpenChange={onOpenChange} title="Member added" footer={<Button onClick={() => onOpenChange(false)}>Done</Button>}>
+      <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Member added")} footer={<Button onClick={() => onOpenChange(false)}>{t("Done")}</Button>}>
         <TempPassword email={result.email} password={result.password} />
       </ResponsiveDialog>
     );
@@ -137,24 +157,24 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
     <ResponsiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add member"
-      description="They get a temporary password to sign in with."
+      title={t("Add member")}
+      description={t("They get a temporary password to sign in with.")}
       footer={
         <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button>
           <Button loading={add.isPending} disabled={!email || !name} onClick={() => add.mutate(undefined, { onSuccess: (r) => !r.temp_password && onOpenChange(false) })}>
-            Add member
+            {t("Add member")}
           </Button>
         </>
       }
     >
       <div className="grid gap-4">
-        <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus error={fields.name} />
-        <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fields.email} />
+        <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} autoFocus error={fields.name} />
+        <Field label={t("Email")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fields.email} />
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Role</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label="Role" />
-          <p className="text-[12.5px] text-muted">{ROLE_INFO[role].blurb}</p>
+          <span className="text-[13px] font-medium">{t("Role")}</span>
+          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label={t("Role")} />
+          <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
         <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
           onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
@@ -165,6 +185,7 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
 }
 
 function AccessDialog({ member, me, open, onOpenChange }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const roles = assignable(me);
@@ -176,18 +197,18 @@ function AccessDialog({ member, me, open, onOpenChange }: { member: Member; me: 
     mutationFn: () => api(`/api/members/${member.user_id}`, "PATCH", { role, ...placementBody(role, branchId || branches[0]?.id || "", departmentId) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.members });
-      toast.success(`${member.name} is now ${ROLE_INFO[role].label.toLowerCase()}.`);
+      toast.success(t("{name} is now {role}.", { name: member.name, role: t(ROLE_INFO[role].label).toLowerCase() }));
       onOpenChange(false);
     },
   });
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={`Access for ${member.name}`}
-      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button loading={save.isPending} onClick={() => save.mutate()}>Save</Button></>}>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Access for {name}", { name: member.name })}
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button></>}>
       <div className="grid gap-4">
         <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium">Role</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles.includes(member.role) ? roles : [member.role, ...roles])} label="Role" />
-          <p className="text-[12.5px] text-muted">{ROLE_INFO[role].blurb}</p>
+          <span className="text-[13px] font-medium">{t("Role")}</span>
+          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles.includes(member.role) ? roles : [member.role, ...roles])} label={t("Role")} />
+          <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
         <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
           onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
@@ -203,6 +224,7 @@ function where(m: Member): string | null {
 }
 
 function MemberRow({ member, me }: { member: Member; me: Me }) {
+  const t = useT();
   const qc = useQueryClient();
   const isMe = member.user_id === me.user.id;
   const roles = assignable(me);
@@ -235,36 +257,36 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
       <div className="col-start-2 row-start-1 min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
           <span className="min-w-0 break-words">{member.name}</span>
-          {isMe ? <Pill tone="accent">You</Pill> : null}
-          {member.must_change_password ? <Pill tone="warn">Temporary password</Pill> : null}
+          {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
+          {member.must_change_password ? <Pill tone="warn">{t("Temporary password")}</Pill> : null}
         </p>
         <p className="text-[12.5px] break-all text-muted">{member.email}</p>
         <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
           <Meta
             items={[
-              member.last_login_at ? `Signed in ${timeAgo(member.last_login_at).toLowerCase()}` : "Never signed in",
-              member.agents ? `${member.agents} personal agent${member.agents === 1 ? "" : "s"}` : null,
+              member.last_login_at ? t("Signed in {when}", { when: timeAgo(member.last_login_at).toLowerCase() }) : t("Never signed in"),
+              member.agents ? (member.agents === 1 ? t("1 personal agent") : t("{n} personal agents", { n: member.agents })) : null,
             ]}
           />
         </p>
       </div>
       <div className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:col-start-3 sm:row-start-1 sm:grid sm:justify-items-end sm:gap-0.5 sm:text-right">
-        <Pill tone={member.role === "owner" || member.role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[member.role]?.label ?? member.role}</Pill>
+        <Pill tone={member.role === "owner" || member.role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[member.role] ? t(ROLE_INFO[member.role].label) : member.role}</Pill>
         {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
       </div>
       <div className="col-start-3 row-start-1 sm:col-start-4">
         {editable ? (
           <Menu>
             <MenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={`Options for ${member.name}`}>
+              <Button variant="ghost" size="icon" aria-label={t("Options for {name}", { name: member.name })}>
                 <DotsThreeIcon size={20} weight="bold" />
               </Button>
             </MenuTrigger>
             <MenuContent>
-              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>Change role or place</MenuItem>
-              <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>Reset password</MenuItem>
+              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
+              <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
               <MenuSeparator />
-              <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>Remove from workspace</MenuItem>
+              <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Remove from workspace")}</MenuItem>
             </MenuContent>
           </Menu>
         ) : <span aria-hidden className="block size-10" />}
@@ -273,21 +295,21 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
-        title={`Remove ${member.name}?`}
-        body="They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner."
-        confirmLabel="Remove"
+        title={t("Remove {name}?", { name: member.name })}
+        body={t("They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner.")}
+        confirmLabel={t("Remove")}
         danger
         onConfirm={async () => {
           try {
             await api(`/api/members/${member.user_id}`, "DELETE");
             refresh();
-            toast.success(`${member.name} removed.`);
+            toast.success(t("{name} removed.", { name: member.name }));
           } catch (e) {
             toast.error(errorMessage(e));
           }
         }}
       />
-      <ResponsiveDialog open={!!reset} onOpenChange={() => setReset(null)} title="Password reset" footer={<Button onClick={() => setReset(null)}>Done</Button>}>
+      <ResponsiveDialog open={!!reset} onOpenChange={() => setReset(null)} title={t("Password reset")} footer={<Button onClick={() => setReset(null)}>{t("Done")}</Button>}>
         {reset ? <TempPassword email={member.email} password={reset} /> : null}
       </ResponsiveDialog>
     </li>
@@ -295,6 +317,7 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
 }
 
 export function MembersPage() {
+  const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
   const { data: members, isLoading, error } = useQuery(membersQuery);
@@ -315,11 +338,11 @@ export function MembersPage() {
   return (
     <Page>
       <PageHeader
-        title="Members"
-        description={scoped ? `People in ${me.scope?.label}, and what their role lets them do.` : "People who can sign in to this workspace, where they sit, and what their role lets them do."}
+        title={t("Members")}
+        description={scoped ? t("People in {place}, and what their role lets them do.", { place: me.scope?.label ?? "" }) : t("People who can sign in to this workspace, where they sit, and what their role lets them do.")}
         actions={canAdd ? (
           <Button data-guide="settings.add" onClick={openAdd}>
-            <UserPlusIcon size={16} weight="bold" /> Add member
+            <UserPlusIcon size={16} weight="bold" /> {t("Add member")}
           </Button>
         ) : null}
       />
@@ -330,15 +353,15 @@ export function MembersPage() {
         </div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
-          Could not load members. {errorMessage(error)}
+          {t("Could not load members.")} {errorMessage(error)}
         </div>
       ) : (
         <>
           <StatGrid>
-            <Stat label="Members" value={list.length} icon={UsersIcon} hint="Can sign in here" />
-            <Stat label="Owners and admins" value={list.filter((m) => m.role === "owner" || m.role === "admin").length} icon={CrownSimpleIcon} tone="violet" hint="Full workspace access" />
-            <Stat label="Temporary password" value={list.filter((m) => m.must_change_password).length} icon={KeyIcon} tone={list.some((m) => m.must_change_password) ? "warn" : "neutral"} hint="Yet to pick their own" />
-            <Stat label="Personal agents" value={list.reduce((n, m) => n + (m.agents ?? 0), 0)} icon={RobotIcon} tone="info" hint="Owned by members" />
+            <Stat label={t("Members")} value={list.length} icon={UsersIcon} hint={t("Can sign in here")} />
+            <Stat label={t("Owners and admins")} value={list.filter((m) => m.role === "owner" || m.role === "admin").length} icon={CrownSimpleIcon} tone="violet" hint={t("Full workspace access")} />
+            <Stat label={t("Temporary password")} value={list.filter((m) => m.must_change_password).length} icon={KeyIcon} tone={list.some((m) => m.must_change_password) ? "warn" : "neutral"} hint={t("Yet to pick their own")} />
+            <Stat label={t("Personal agents")} value={list.reduce((n, m) => n + (m.agents ?? 0), 0)} icon={RobotIcon} tone="info" hint={t("Owned by members")} />
           </StatGrid>
           <ul data-guide="settings.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
             {list.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
@@ -346,18 +369,18 @@ export function MembersPage() {
         </>
       )}
 
-      <Section title="Roles" description="What each role lets a person do. Scoped roles only see their own part of the workspace.">
+      <Section title={t("Roles")} description={t("What each role lets a person do. Scoped roles only see their own part of the workspace.")}>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ROLES.map((r) => {
             const count = list.filter((m) => m.role === r).length;
             return (
               <div key={r} className="grid content-start gap-1 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
-                  <span className="min-w-0 flex-1">{ROLE_INFO[r].label}</span>
-                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? "Own agents" : r === "branch_manager" ? "One branch" : "One department"}</Pill> : null}
+                  <span className="min-w-0 flex-1">{t(ROLE_INFO[r].label)}</span>
+                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? t("Own agents") : r === "branch_manager" ? t("One branch") : t("One department")}</Pill> : null}
                 </p>
-                <p className="text-[12.5px] text-muted">{ROLE_INFO[r].blurb}</p>
-                <p className="text-[12px] text-muted tabular">{count ? `${count} ${count === 1 ? "member" : "members"}` : "Nobody yet"}</p>
+                <p className="text-[12.5px] text-muted">{t(ROLE_INFO[r].blurb)}</p>
+                <p className="text-[12px] text-muted tabular">{count ? (count === 1 ? t("1 member") : t("{n} members", { n: count })) : t("Nobody yet")}</p>
               </div>
             );
           })}
