@@ -164,6 +164,15 @@ def render(markdown: str, title: str = "", lh: Letterhead | None = None) -> byte
                 _add_runs(p, line, 9.5, italic=True)
             for run in p.runs:
                 run.font.color.rgb = GREY
+        elif b.kind == "numbers" and b.start != 1:
+            # Word's List Number always restarts at 1; a list that starts later is numbered
+            # by hand so a letter's "2. ... 3. ..." keeps its numbers.
+            for n, item in enumerate(b.lines, b.start):
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Pt(18)
+                p.paragraph_format.first_line_indent = Pt(-18)
+                p.add_run(f"{n}.\t")
+                _add_runs(p, item)
         elif b.kind in ("bullets", "numbers"):
             style = "List Bullet" if b.kind == "bullets" else "List Number"
             for item in b.lines:

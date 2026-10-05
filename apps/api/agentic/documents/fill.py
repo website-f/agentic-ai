@@ -90,7 +90,32 @@ def money(x: float) -> str:
     return f"{x:,.2f}"
 
 
-def fmt_date(value: Any) -> str:
+_MS_MONTHS = (
+    "Januari",
+    "Februari",
+    "Mac",
+    "April",
+    "Mei",
+    "Jun",
+    "Julai",
+    "Ogos",
+    "September",
+    "Oktober",
+    "November",
+    "Disember",
+)
+# Words a Malay letter or form uses that an English one does not.
+_MALAY_BODY = re.compile(
+    r"\b(Tarikh|Kepada|Tuan/Puan|Yang benar|Sekian|Dengan hormatnya|Ruj\. kami|Perkara)\b"
+)
+
+
+def body_language(body: str) -> str:
+    """ms when the template is written in Malay (two or more Malay letter words), else en."""
+    return "ms" if len(set(_MALAY_BODY.findall(body or ""))) >= 2 else "en"
+
+
+def fmt_date(value: Any, lang: str = "en") -> str:
     if isinstance(value, date):
         d = value
     else:
@@ -98,6 +123,8 @@ def fmt_date(value: Any) -> str:
             d = date.fromisoformat(str(value).strip()[:10])
         except ValueError:
             return str(value or "")
+    if lang == "ms":
+        return f"{d.day} {_MS_MONTHS[d.month - 1]} {d.year}"
     return f"{d.day} {d:%B %Y}"
 
 
@@ -185,8 +212,9 @@ def context(
     kit: dict[str, Any],
     meta: dict[str, str],
     today: date,
+    lang: str = "en",
 ) -> tuple[dict[str, str], Filled]:
-    """Every placeholder's text. Empty strings mean 'no value'."""
+    """Every placeholder's text. Empty strings mean 'no value'. Dates follow `lang`."""
     info = Filled(markdown="")
     ctx: dict[str, str] = {}
     cur = str(kit.get("currency") or "RM").strip() or "RM"
@@ -197,10 +225,10 @@ def context(
                     ctx[f"company.{c['key']}"] = str(c.get("value") or "")
         elif not isinstance(v, list | dict):
             ctx[f"company.{k}"] = str(v if v is not None else "")
-    ctx["today"] = fmt_date(today)
+    ctx["today"] = fmt_date(today, lang)
     ctx["doc.number"] = meta.get("number", "")
     ctx["doc.title"] = meta.get("title", "")
-    ctx["doc.date"] = fmt_date(values.get("date") or today)
+    ctx["doc.date"] = fmt_date(values.get("date") or today, lang)
 
     types = {str(f.get("key")): str(f.get("type", "text")) for f in fields}
     for k, v in values.items():
@@ -208,7 +236,7 @@ def context(
         if t == "items" or isinstance(v, list | dict):
             continue
         if t == "date" and v:
-            ctx[k] = fmt_date(v)
+            ctx[k] = fmt_date(v, lang)
         elif t == "money" and number(v) is not None:
             ctx[k] = f"{cur} {money(number(v) or 0)}"
         else:
@@ -233,13 +261,18 @@ def context(
         ctx["total_words"] = amount_in_words(totals["total"], cur)
         info.totals, info.items = totals, items
 
+    blank_name, blank_company = (
+        ("[[Nama penandatangan]]", "[[Nama syarikat]]")
+        if lang == "ms"
+        else ("[[Signatory name]]", "[[Legal name]]")
+    )
     sig = [
         "______________________________",
-        f"**{kit.get('signatory_name') or '[[Signatory name]]'}**",
+        f"**{kit.get('signatory_name') or blank_name}**",
     ]
     if kit.get("signatory_title"):
         sig.append(str(kit["signatory_title"]))
-    sig.append(str(kit.get("legal_name") or "[[Legal name]]"))
+    sig.append(str(kit.get("legal_name") or blank_company))
     ctx["signature"] = "\n".join(sig)
     return ctx, info
 
@@ -300,7 +333,7 @@ def fill(
     meta: dict[str, str],
     today: date,
 ) -> Filled:
-    ctx, info = context(values or {}, fields or [], kit or {}, meta, today)
+    ctx, info = context(values or {}, fields or [], kit or {}, meta, today, body_language(body))
     info.markdown, info.missing = fill_text(body, ctx, fields or [])
     return info
 

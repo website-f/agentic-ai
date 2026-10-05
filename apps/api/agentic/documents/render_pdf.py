@@ -224,7 +224,7 @@ class _PDF(FPDF):
             self.ln(2)
         elif b.kind in ("bullets", "numbers"):
             left = self.l_margin
-            for n, item in enumerate(b.lines, 1):
+            for n, item in enumerate(b.lines, b.start):
                 mark = "•" if b.kind == "bullets" else f"{n}."
                 self.set_x(left + 1.5)
                 self.font(10)

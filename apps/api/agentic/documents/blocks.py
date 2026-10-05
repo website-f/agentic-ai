@@ -29,6 +29,8 @@ class Block:
     lines: list[str] = field(default_factory=list)  # para / note lines, list items
     header: list[str] = field(default_factory=list)  # table
     rows: list[list[str]] = field(default_factory=list)
+    # numbers: the first item's number, so "2. ... 3. ..." in a letter stays 2, 3 (not 1, 2).
+    start: int = 1
 
 
 def runs(text: str) -> list[Run]:
@@ -107,6 +109,7 @@ def parse(md: str) -> list[Block]:
         if re.match(r"^[-*•]\s+", line) or _NUMBERED.match(line):
             flush()
             kind = "numbers" if _NUMBERED.match(line) else "bullets"
+            first = re.match(r"^(\d{1,3})", line) if kind == "numbers" else None
             items: list[str] = []
             while i < len(lines):
                 s = lines[i].strip()
@@ -119,7 +122,7 @@ def parse(md: str) -> list[Block]:
                 else:
                     break
                 i += 1
-            blocks.append(Block(kind, lines=items))
+            blocks.append(Block(kind, lines=items, start=int(first.group(1)) if first else 1))
             continue
         if line.startswith(">"):
             flush()
@@ -151,7 +154,7 @@ def to_preview_markdown(md: str) -> str:
         elif b.kind == "bullets":
             out.append("\n".join(f"- {x}" for x in b.lines))
         elif b.kind == "numbers":
-            out.append("\n".join(f"{n}. {x}" for n, x in enumerate(b.lines, 1)))
+            out.append("\n".join(f"{n}. {x}" for n, x in enumerate(b.lines, b.start)))
         elif b.kind == "table":
             out.append(
                 "\n".join(
