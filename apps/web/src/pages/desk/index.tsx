@@ -360,7 +360,7 @@ function Pinned({ pins }: { pins: Pin[] }) {
                   <IconTile icon={PIN_ICON[p.kind]} tone={PIN_TONE[p.kind]} size="sm" />
                   <span className="grid min-w-0 gap-0.5">
                     <span className="truncate text-[13.5px] font-medium">{p.title}</span>
-                    <span className="truncate text-[12px] text-muted">{p.missing ? t("No longer there") : pinKindLabel(t, p.kind)}{p.sub && !p.missing ? ` · ${p.sub}` : ""}</span>
+                    <span className="truncate text-[12px] text-muted">{p.missing ? t("No longer there") : pinKindLabel(t, p.kind)}{p.sub && !p.missing ? ` · ${p.kind === "sop" ? scopeLabel(t, p.sub) : p.sub}` : ""}</span>
                   </span>
                 </button>
                 <Button size="icon-sm" variant="ghost" className="absolute top-1.5 right-1.5 size-7" title={t("Unpin")} aria-label={t("Unpin")} onClick={() => unpin.mutate(p.id)}>
@@ -391,6 +391,10 @@ function Pinned({ pins }: { pins: Pin[] }) {
       {running ? <StartRunDialog wf={running} onClose={() => setRunning(null)} /> : null}
     </Card>
   );
+}
+
+function scopeLabel(t: (s: string) => string, scope: string): string {
+  return scope === "department" ? t("Your department") : scope === "branch" ? t("Your company") : scope === "library" ? t("Library") : t("Everyone");
 }
 
 function pinKindLabel(t: (s: string) => string, k: PinKind): string {
@@ -692,7 +696,7 @@ function Procedures({ desk }: { desk: Desk }) {
         <ListCard className="rounded-none border-0">
           {p.sops.slice(0, 6).map((s) => (
             <ListRow key={s.id} onClick={() => void navigate({ href: s.url })} title={s.title}
-              meta={s.scope === "department" ? t("Your department") : s.scope === "branch" ? t("Your company") : t("Everyone")}
+              meta={scopeLabel(t, s.scope)}
               trailing={<PinButton kind="sop" refId={s.id} title={s.title} />} />
           ))}
         </ListCard>
