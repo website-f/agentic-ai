@@ -472,6 +472,42 @@ async def test_agents_search_documents_with_citations_never_held_back(client):
         assert o["guide_b"] not in ids({"hits": [h.__dict__ for h in res.hits]})
 
 
+async def test_agents_stop_searching_after_their_budget(client, monkeypatch):
+    """Found live: an agent searched 58 times in one step. Past the budget the search tools
+    tell it to conclude and ask a person, instead of searching again."""
+    from agentic.agents import runtime, search_tools
+    from agentic.agents.library_tools import _search_library
+    from agentic.agents.tools import ToolContext
+    from agentic.models import Task
+
+    monkeypatch.setattr(search_tools, "SEARCH_BUDGET", 2)
+    o = await office_docs(client)
+    async with SessionLocal() as db:
+        a = Agent(workspace_id=o["ws"], branch_id=o["a"], slug="aina", name="Aina", role="Clerk")
+        db.add(a)
+        await db.flush()
+        t = Task(
+            workspace_id=o["ws"],
+            title="Check records",
+            assignee_agent_id=a.id,
+            branch_id=o["a"],
+            created_by="test",
+            status="running",
+        )
+        db.add(t)
+        await db.commit()
+        ws = await db.get(Workspace, o["ws"])
+        ctx = ToolContext(db=db, agent=a, workspace=ws, task=t)  # type: ignore[arg-type]
+        for _ in range(2):
+            out = await search_tools._search_documents(ctx, {"query": "kelayakan advance"})
+            assert out.startswith("Document search for")
+            runtime._add(db, a, "tool", task_id=t.id, content=out, name="search_documents")
+            await db.flush()
+        stop = await search_tools._search_documents(ctx, {"query": "kelayakan advance"})
+        assert stop.startswith("Stop searching") and "ask_human" in stop
+        assert (await _search_library(ctx, {"query": "advance"})).startswith("Stop searching")
+
+
 # ---------------------------------------------------------------- suggestions
 
 

@@ -11,9 +11,14 @@ MAX_TOP_K = 8
 
 
 async def _search_library(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from .search_tools import over_budget
+
     query = str(args.get("query") or "").strip()
     if not query:
         return "Error: say what you are looking for."
+    stop = await over_budget(ctx)
+    if stop:
+        return stop
     top_k = args.get("top_k")
     k = int(top_k) if isinstance(top_k, int | float) else DEFAULT_TOP_K
     k = max(1, min(MAX_TOP_K, k))
