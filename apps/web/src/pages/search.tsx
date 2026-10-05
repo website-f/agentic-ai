@@ -6,6 +6,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Fragment, useMemo } from "react";
 
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { PinButton } from "@/components/pin-button";
 import { Marked, SearchField, TYPE_ICON, useOpenTarget } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
 import { ListCard } from "@/components/ui/card";
@@ -49,11 +50,11 @@ function HitRow({ h, more = 0 }: { h: SearchHit; more?: number }) {
   const meta = [h.company, h.folder, h.department, kind ? (kind.key === "sop" ? "SOP" : t(kind.label)) : ""].filter(Boolean);
   if (h.type !== "file" && h.subtitle && !meta.length) meta.push(h.subtitle);
   return (
-    <li>
+    <li className="relative">
       <button
         type="button"
         onClick={() => open(h.url, h.type, h.branch_id)}
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/70 focus-visible:bg-surface-2/70 focus-visible:outline-none"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3.5 pr-12 pl-4 text-left transition-colors hover:bg-surface-2/70 focus-visible:bg-surface-2/70 focus-visible:outline-none"
       >
         <HitIcon h={h} />
         <span className="grid min-w-0 gap-1">
@@ -80,6 +81,7 @@ function HitRow({ h, more = 0 }: { h: SearchHit; more?: number }) {
           ) : null}
         </span>
       </button>
+      <PinButton kind={h.type} refId={h.id} title={h.title} className="absolute top-2.5 right-2.5" />
     </li>
   );
 }

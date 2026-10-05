@@ -20,6 +20,7 @@ import {
   ChatsCircleIcon,
   TreeStructureIcon,
   ClockCounterClockwiseIcon,
+  DeskIcon,
   EyeIcon,
   CpuIcon,
   ChartBarIcon,
@@ -49,6 +50,7 @@ export type AppPath =
   | "/assistants"
   | "/twin"
   | "/my-worker"
+  | "/workspace"
   | "/overview"
   | "/impact"
   | "/reports"
@@ -111,6 +113,7 @@ export const NAV: NavSection[] = [
   {
     title: msg("Home"),
     items: [
+      { to: "/workspace", label: msg("My workspace"), icon: DeskIcon, blurb: msg("Your own desk: ask or search anything, your pinned SOPs and workflows, your AI workers, the work you gave and every file it produced.") },
       { to: "/", label: msg("Command center"), icon: GaugeIcon, blurb: msg("Today at a glance: system health, organization and what to do next.") },
       { to: "/my-worker", label: msg("My AI worker"), icon: BriefcaseIcon, perm: "agents.own", blurb: msg("The AI worker you hired: what it is doing now, what waits for you, its duties and the hours it works and rests.") },
       { to: "/twin", label: msg("My twin"), icon: UserFocusIcon, perm: "agents.own", blurb: msg("Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important.") },

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
 import { ResponsiveDialog } from "@/components/ui/dialog";
@@ -137,8 +138,8 @@ function NewWorkflowDialog({ onClose, onStart }: { onClose: () => void; onStart:
 function WorkflowCard({ wf, onOpen }: { wf: Workflow; onOpen: () => void }) {
   const t = useT();
   return (
-    <Card interactive className="p-0">
-      <button type="button" onClick={onOpen} className="grid h-full w-full min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 p-4 text-left">
+    <Card interactive className="relative p-0">
+      <button type="button" onClick={onOpen} className="grid h-full w-full min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 p-4 pb-12 text-left">
         <div className="flex items-start gap-3">
           <IconTile icon={FlowArrowIcon} tone={wf.status === "active" ? "accent" : "neutral"} />
           <span className="min-w-0 flex-1">
@@ -158,6 +159,7 @@ function WorkflowCard({ wf, onOpen }: { wf: Workflow; onOpen: () => void }) {
           </div>
         ) : null}
       </button>
+      <PinButton kind="workflow" refId={wf.id} title={wf.name} className="absolute right-2.5 bottom-2.5" />
     </Card>
   );
 }

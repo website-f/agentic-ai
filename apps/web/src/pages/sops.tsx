@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -103,7 +104,10 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
             {isDraft ? t("Save draft") : sop ? t("Save new version") : t("Create SOP")}
           </Button>
           {sop ? <Button size="sm" variant="ghost" onClick={() => setDeleting(true)}><TrashIcon size={14} /> {t("Delete")}</Button> : null}
+          {sop ? <PinButton kind="sop" refId={sop.id} title={sop.title} /> : null}
         </>
+      ) : sop ? (
+        <PinButton kind="sop" refId={sop.id} title={sop.title} withLabel />
       ) : null}
     >
       <div className="grid gap-4">

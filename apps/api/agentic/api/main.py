@@ -310,3 +310,9 @@ app.include_router(intake_router.router)
 from .routers import search as search_router  # noqa: E402
 
 app.include_router(search_router.router)
+
+# P26: each person's workspace (desk).
+from .routers import desk as desk_router  # noqa: E402
+
+RAW_UPLOAD_PATHS.add("/api/desk/files")
+app.include_router(desk_router.router)

@@ -37,6 +37,15 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("home.health", "System health"), t("home.getting-started", "Getting started checklist"), t("home.shortcuts", "Shortcuts")],
   },
   {
+    id: "workspace", route: "/workspace", title: "My workspace", group: "Home",
+    states: [],
+    targets: [
+      t("desk.ask", "Ask or search"), t("desk.stats", "Your day in numbers"), t("desk.pinned", "Pinned"),
+      t("desk.work", "My work"), t("desk.files", "My workspace files"), t("desk.agents", "My AI workers"),
+      t("desk.waiting", "Waiting for you"), t("desk.procedures", "My procedures"),
+    ],
+  },
+  {
     id: "my-worker", route: "/my-worker", title: "My AI worker", group: "Home", who: "Staff",
     states: [{ key: "welcome", how: "First sign-in as staff: the Hire your AI worker steps (/welcome)" }],
     targets: [t("my-worker.status", "What it is doing now"), t("my-worker.actions", "Give a task, chat, change hours"), t("my-worker.week", "Its working week")],

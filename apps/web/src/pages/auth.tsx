@@ -140,16 +140,17 @@ export function SetupPage() {
   );
 }
 
-/** Where a person goes after signing in (P19): staff who chose "I'm staff" go to their AI
- * worker (hiring it first, if they have not yet); everyone else to where they were going. */
+/** Where a person goes after signing in (P19): staff who chose "I'm staff" go to their own
+ * workspace (P26; hiring their AI worker first, if they have not yet); everyone else to
+ * where they were going. */
 async function landing(qc: QueryClient, me: Me, path: LoginPath, next?: string): Promise<string> {
   const wanted = next && next.startsWith("/") ? next : undefined;
   if (path === "staff" && staffOnly(me.permissions)) {
     try {
       const s = await qc.fetchQuery(staffQuery);
-      return s.onboarding.done ? (wanted ?? "/my-worker") : "/welcome";
+      return s.onboarding.done ? (wanted ?? "/workspace") : "/welcome";
     } catch {
-      return wanted ?? "/my-worker";
+      return wanted ?? "/workspace";
     }
   }
   return wanted ?? "/";

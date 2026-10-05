@@ -65,6 +65,7 @@ const page = {
   twin: lazyRouteComponent(() => import("@/pages/twin"), "TwinPage"),
   welcome: lazyRouteComponent(() => import("@/pages/welcome"), "WelcomePage"),
   myWorker: lazyRouteComponent(() => import("@/pages/my-worker"), "MyWorkerPage"),
+  desk: lazyRouteComponent(() => import("@/pages/desk"), "DeskPage"),
   tutorial: lazyRouteComponent(() => import("@/pages/tutorial"), "TutorialPage"),
   impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
   guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
@@ -439,6 +440,8 @@ const welcomeRoute = createRoute({
   component: page.welcome,
 });
 const myWorkerRoute = createRoute({ getParentRoute: () => appRoute, path: "/my-worker", component: page.myWorker });
+// P26: each person's own desk.
+const deskRoute = createRoute({ getParentRoute: () => appRoute, path: "/workspace", component: page.desk });
 
 const TUTORIAL_TRACKS = ["owner", "management", "staff", "approver"] as const;
 const tutorialRoute = createRoute({
@@ -572,6 +575,7 @@ const routeTree = rootRoute.addChildren([
     packsRoute,
     twinRoute,
     myWorkerRoute,
+    deskRoute,
     tutorialRoute,
     impactRoute,
     guideRoute,

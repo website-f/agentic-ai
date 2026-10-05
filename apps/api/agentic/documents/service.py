@@ -344,7 +344,7 @@ async def create_document(
     agent_id: str | None = None,
     workflow_run_id: str | None = None,
 ) -> Document:
-    from .provenance import doc_origin, run_of
+    from .provenance import desk_owner, doc_origin, run_of
 
     ws = await db.get(Workspace, workspace_id)
     today = today_in(ws.timezone if ws else None)
@@ -367,6 +367,7 @@ async def create_document(
         created_by=created_by,
         origin=doc_origin(created_by, agent_id),
         workflow_run_id=workflow_run_id or await run_of(db, task_id),
+        owner_user_id=await desk_owner(db, created_by, task_id, agent_id),
     )
     db.add(doc)
     await db.flush()
@@ -395,10 +396,12 @@ async def create_file(
     department_id: str | None = None,
     origin: str | None = None,
     workflow_run_id: str | None = None,
+    owner_user_id: str | None = None,
 ) -> DocFile:
     """A stored file. P25: `origin` (uploaded | person | agent) follows from source and who
-    made it unless given; the workflow run comes from the task unless given."""
-    from .provenance import file_origin, run_of
+    made it unless given; the workflow run comes from the task unless given. P26: whose
+    workspace it belongs to (provenance.desk_owner) unless given."""
+    from .provenance import desk_owner, file_origin, run_of
 
     kind = sniff(data, name, mime)
     f = DocFile(
@@ -424,6 +427,7 @@ async def create_file(
         quarantined=False,
         origin=origin or file_origin(source, created_by, agent_id),
         workflow_run_id=workflow_run_id or await run_of(db, task_id),
+        owner_user_id=owner_user_id or await desk_owner(db, created_by, task_id, agent_id),
     )
     if kind == "image" and mime.startswith("image/"):
         f.mime = mime[:120]

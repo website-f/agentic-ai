@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 import { FileStatus } from "@/components/file-drop";
 import { LibraryToggle } from "@/components/library-toggle";
+import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
@@ -330,6 +331,7 @@ export function FileViewer({ id, branch, folders, canManage, canEdit, onClose, i
   const actions = (
     <div className="flex flex-wrap gap-2">
       {canSee ? <Button size="sm" variant="outline" asChild><a href={fileUrl(f.id)} download><DownloadSimpleIcon size={14} /> {t("Download")}</a></Button> : null}
+      {canSee ? <PinButton kind="file" refId={f.id} title={f.title || f.name} withLabel /> : null}
       {canSee && previewKind(f) !== "none" ? (
         <Button size="sm" variant="outline" asChild>
           <a href={previewKind(f) === "text" ? fileUrl(f.id, true) : previewUrl(f.id)} target="_blank" rel="noreferrer"><ArrowSquareOutIcon size={14} /> {lang === "ms" ? t("Open (verb)") : "Open"}</a>

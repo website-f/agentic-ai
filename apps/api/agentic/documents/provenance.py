@@ -106,6 +106,34 @@ def file_origin(source: str, created_by: str | None, agent_id: str | None) -> st
     return "agent" if is_agent(created_by, agent_id) else "person"
 
 
+async def desk_owner(
+    db: AsyncSession, created_by: str | None, task_id: str | None, agent_id: str | None
+) -> str | None:
+    """P26: whose workspace (desk) a new file or document belongs to: the person who made
+    it, else the person who gave the task it came from (the top of a chain of sub-tasks), else
+    the owner of the AI worker that made it (a twin or personal assistant). None = company
+    work nobody in particular asked for."""
+
+    async def person(actor: str | None) -> str | None:
+        if actor and actor.startswith("user:"):
+            uid = actor[5:]
+            return uid if await db.get(User, uid) is not None else None
+        return None
+
+    if uid := await person(created_by):
+        return uid
+    if task_id:
+        task = await db.get(Task, task_id)
+        root = await db.get(Task, task.root_task_id) if task and task.root_task_id else task
+        if root is not None and (uid := await person(root.created_by)):
+            return uid
+    if agent_id:
+        agent = await db.get(Agent, agent_id)
+        if agent is not None and agent.owner_user_id:
+            return agent.owner_user_id
+    return None
+
+
 async def run_of(db: AsyncSession, task_id: str | None) -> str | None:
     """The workflow run a task is one step of (None for a plain task)."""
     if not task_id:

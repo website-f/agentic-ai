@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
 import { Markdown } from "@/components/markdown";
+import { PinButton } from "@/components/pin-button";
 import { DocReviewBanner } from "@/components/provenance";
 import { Button } from "@/components/ui/button";
 import { ActionBar, Meta } from "@/components/ui/card";
@@ -363,7 +364,7 @@ export function DocumentEditor({ id }: { id: string }) {
     </>
   );
   const saveButton = !locked ? <Button size="sm" variant="outline" disabled={!dirty} loading={save.isPending} onClick={saveNow}>{t("Save")}</Button> : null;
-  const actions = <>{saveButton}{exportMenu}{statusActions}</>;
+  const actions = <>{saveButton}{exportMenu}{statusActions}<PinButton kind="document" refId={doc.id} title={doc.title} /></>;
   const checkCount = shown.checks.length;
 
   return (

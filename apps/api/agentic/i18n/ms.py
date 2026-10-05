@@ -821,6 +821,16 @@ MS: dict[str, str] = {
     "Keep a skill under {n} characters; split it if needed.": (
         "Pastikan kemahiran kurang daripada {n} aksara; pecahkan jika perlu."
     ),
+    # api/routers/desk.py (My workspace)
+    "Your workspace holds up to {n} pinned items. Unpin one first.": (
+        "Ruang kerja anda memuatkan sehingga {n} item yang disemat. Nyahsemat satu dahulu."
+    ),
+    "That is not here, or you cannot open it.": "Item itu tiada, atau anda tidak boleh membukanya.",
+    "That is not on your workspace.": "Item itu tiada dalam ruang kerja anda.",
+    "You have no AI worker yet. Hire one in My AI worker, or pick an agent.": (
+        "Anda belum ada pekerja AI. Ambil satu di Pekerja AI saya, atau pilih ejen."
+    ),
+    "Find: {what}": "Cari: {what}",
     # documents/fill.py KIT_FIELDS (the company kit's labels)
     "Legal name": "Nama berdaftar",
     "Trading name": "Nama perniagaan",

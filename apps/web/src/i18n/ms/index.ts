@@ -6,6 +6,7 @@
 import { ADMIN } from "./admin";
 import { BUILDERS } from "./builders";
 import { COMMON } from "./common";
+import { DESK } from "./desk";
 import { FILES } from "./files";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
@@ -28,5 +29,6 @@ export const MS: Record<string, string> = {
   ...BUILDERS,
   ...FILES,
   ...PROVENANCE,
+  ...DESK,
   ...SEARCH,
 };

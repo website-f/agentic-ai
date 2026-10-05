@@ -1245,6 +1245,11 @@ class DocFile(Timestamps, Base):
     # P25 provenance: who made it (uploaded | person | agent), the workflow run it came from,
     # and the document or report it is the saved copy of (one file per document and format).
     origin: Mapped[str] = mapped_column(String(10), default="uploaded", server_default="uploaded")
+    # P26: whose workspace (desk) it belongs to: the person who uploaded or made it, the person
+    # whose task produced it, or the owner of the AI worker that made it. None = company work.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
     workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
     document_id: Mapped[str | None] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL"), index=True
@@ -1356,6 +1361,10 @@ class Document(Timestamps, Base):
     origin: Mapped[str] = mapped_column(String(10), default="person", server_default="person")
     workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
     review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # P26: whose workspace it belongs to (same rule as DocFile.owner_user_id).
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
 
 
 class DocumentVersion(Base):
@@ -1665,3 +1674,29 @@ class CredentialState(Base):
     check_url: Mapped[str | None] = mapped_column(String(500))
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DeskItem(Base):
+    """P26: something a person keeps on their workspace (their desk): a pinned SOP, workflow,
+    file, document, template, wiki page, task, agent or saved search. `ref` is the item's id,
+    or the words of a saved search."""
+
+    __tablename__ = "desk_items"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('sop', 'workflow', 'file', 'document', 'template', 'page', 'task', "
+            "'agent', 'search')",
+            name="ck_desk_items_kind",
+        ),
+        UniqueConstraint("user_id", "kind", "ref", name="uq_desk_items_user_ref"),
+        Index("ix_desk_items_ws_user", "workspace_id", "user_id", "position"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dk"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    ref: Mapped[str] = mapped_column(String(300))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    position: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
