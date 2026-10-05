@@ -103,6 +103,9 @@ function KitForm({ kit }: { kit: CompanyKit }) {
               {kit.fields.filter((f) => f.group === g).map((f) =>
                 f.type === "longtext" ? (
                   <TextareaField key={f.key} label={f.label} rows={3} value={data[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className="sm:col-span-2" />
+                ) : f.key === "language" ? (
+                  <Select key={f.key} label={f.label} value={data.language || "auto"} onValueChange={(v) => set("language", v === "auto" ? "" : v)}
+                    options={[{ value: "auto", label: t("Same as the workspace") }, { value: "ms", label: "Bahasa Melayu" }, { value: "en", label: "English" }]} />
                 ) : f.key === "accent" ? (
                   <div key={f.key} className="grid gap-1.5">
                     <span className="text-[13px] font-medium">{f.label}</span>

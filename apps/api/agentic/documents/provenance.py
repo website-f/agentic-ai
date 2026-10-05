@@ -10,7 +10,8 @@ company's files, one file per document and format (PDF, Word, Excel). Exporting 
 replaces that file's contents with the latest version (the document keeps every version), so
 re-exports never pile up duplicates. People may move the file; it stays linked.
 
-Folders are named in the company's language, one root per company:
+Folders are named in the company's language (its kit's Document language, else the
+workspace's), one root per company:
 
     English: AI documents/<kind>     e.g. AI documents/Quotations
     Malay:   Dokumen AI/<kind>       e.g. Dokumen AI/Sebut harga
@@ -40,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..i18n import normalize, tr
 from ..models import (
     Agent,
+    CompanyKit,
     DocFile,
     DocTemplate,
     Document,
@@ -136,11 +138,16 @@ async def actor_name(db: AsyncSession, actor: str | None) -> str | None:
 # ---------------------------------------------------------------- the AI folder
 
 
-async def folder_lang(db: AsyncSession, workspace_id: str) -> str:
-    """The language AI folders are named in: the workspace's `language` setting, else the
-    first owner's language, else English."""
+async def folder_lang(db: AsyncSession, workspace_id: str, branch_id: str | None = None) -> str:
+    """The language AI folders are named in: the company's kit `language`, else the
+    workspace's `language` setting, else the first owner's language, else English."""
     from ..services.prefs import lang_of
 
+    if branch_id:
+        kit = await db.get(CompanyKit, branch_id)
+        kit_lang = normalize(str((kit.data or {}).get("language") or "")) if kit else None
+        if kit_lang:
+            return kit_lang
     ws = await db.get(Workspace, workspace_id)
     set_lang = normalize((ws.settings or {}).get("language")) if ws else None
     if set_lang:
@@ -169,6 +176,30 @@ async def _root(db: AsyncSession, workspace_id: str, branch_id: str | None, lang
     return ROOT.get(lang, ROOT["en"])
 
 
+async def move_ai_folder(
+    db: AsyncSession, workspace_id: str, branch_id: str | None, lang: str
+) -> int:
+    """Move a company's AI folder to `lang`'s root, renaming the built-in sub-folders
+    ("AI documents/Quotations" -> "Dokumen AI/Sebut harga"); folders named after the
+    company's own templates keep their names. Returns how many files moved."""
+    new_root = ROOT.get(lang, ROOT["en"])
+    i = 1 if new_root == ROOT["ms"] else 0
+    subs = {pair[1 - i]: pair[i] for pair in KIND_FOLDERS.values()}
+    moved = 0
+    for old_root in (r for r in ROOT.values() if r != new_root):
+        q = select(DocFile).where(
+            DocFile.workspace_id == workspace_id,
+            DocFile.origin != "uploaded",
+            DocFile.folder.like(f"{old_root}/%") | (DocFile.folder == old_root),
+        )
+        q = q.where(DocFile.branch_id == branch_id if branch_id else DocFile.branch_id.is_(None))
+        for f in (await db.scalars(q)).all():
+            first, _, rest = f.folder[len(old_root) + 1 :].partition("/")
+            f.folder = "/".join(p for p in (new_root, subs.get(first, first), rest) if p)
+            moved += 1
+    return moved
+
+
 def _part(text: str) -> str:
     return re.sub(r"[\\/\x00-\x1f]+", "-", text).strip(" .-")[:80]
 
@@ -182,7 +213,7 @@ async def ai_folder(
 ) -> str:
     """ "AI documents/Quotations" (or the Malay twin). `own_name` (a company template's
     name) is used as is, in whatever language the company wrote it."""
-    lang = await folder_lang(db, workspace_id)
+    lang = await folder_lang(db, workspace_id, branch_id)
     root = await _root(db, workspace_id, branch_id, lang)
     if own_name and _part(own_name):
         sub = _part(own_name)
@@ -256,7 +287,7 @@ async def save_export(
     `agent_id`: the agent saving it, when the document has none. Flushes, does not commit."""
     data, name, mime = await service.export(db, doc, fmt)
     rendered = await service.render(db, doc)
-    lang = await folder_lang(db, doc.workspace_id)
+    lang = await folder_lang(db, doc.workspace_id, doc.branch_id)
     f = next((x for x in await linked_files(db, doc.id) if x.mime == mime), None)
     if f is None:
         tpl = await db.get(DocTemplate, doc.template_id) if doc.template_id else None

@@ -1441,7 +1441,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         steps: [
           s("Sign in as the owner. In **Company files**, pick the company and drop a zip of its procedures: uniform and equipment requests, disciplinary steps, the salary advance rules and the tender procedure."),
           s("When the upload is ready, select the procedure files and click **Make an SOP** or **Build a workflow**. Check each draft and save it."),
-          s("Fill in **Company kit** (legal name, registration number, address, signatory) so letters and orders print on the letterhead."),
+          s("Fill in **Company kit** (legal name, registration number, address, signatory, payment terms) so letters and orders print on the letterhead. Set **Document language** to Bahasa Melayu for a Malay-speaking company: its quotations, invoices and AI folder are then in Malay."),
           s("Add a staff member with the staff role in Members, and keep their sign-in details for the demo."),
         ],
       },

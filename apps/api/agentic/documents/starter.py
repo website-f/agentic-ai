@@ -1,5 +1,9 @@
 """Starter templates every workspace gets: the documents most businesses write every week.
-People copy and change them; agents fill them. All company details come from the kit."""
+People copy and change them; agents fill them. All company details come from the kit.
+
+STARTERS_MS: the client documents again in Malay, for workspaces that work in Malay, so a
+quotation to a Malay-speaking client prints Malay labels (the line-item table, dates and the
+amount in words follow the template's language: documents/fill.py)."""
 
 from typing import Any
 
@@ -302,6 +306,162 @@ Should you need any clarification, please contact us at {{company.phone}} or {{c
 Thank you.
 
 Yours faithfully,
+{{signature}}
+""",
+    },
+]
+
+
+CLIENT_MS = [
+    _f("client_name", "Nama pelanggan", required=True),
+    _f("client_address", "Alamat pelanggan", "longtext"),
+    _f("client_contact", "Untuk perhatian", hint="Orang yang anda tulis kepadanya"),
+]
+
+STARTERS_MS: list[dict[str, Any]] = [
+    {
+        "name": "Sebut harga",
+        "kind": "quotation",
+        "prefix": "QT",
+        "description": "Harga kepada pelanggan, dengan butiran, cukai dan jumlah dalam perkataan.",
+        "fields": [
+            *CLIENT_MS,
+            _f("subject", "Perkara", required=True, hint="cth. Perkhidmatan kawalan keselamatan"),
+            _f("items", "Butiran", "items", True),
+            _f("valid_until", "Sah sehingga", "date"),
+            _f("notes", "Catatan", "longtext"),
+        ],
+        "body": """# Sebut Harga
+
+**No. sebut harga:** {{doc.number}}
+**Tarikh:** {{doc.date}}
+**Sah sehingga:** {{valid_until}}
+
+**Kepada:**
+{{client_name}}
+{{client_address}}
+U.P.: {{client_contact}}
+
+Tuan/Puan,
+
+**Perkara: {{subject}}**
+
+Terima kasih atas pertanyaan tuan/puan. Dengan hormatnya kami sertakan sebut harga seperti berikut:
+
+{{items}}
+
+**Jumlah dalam perkataan:** {{total_words}}
+
+## Terma
+- Terma bayaran: {{company.payment_terms}}
+- Harga dalam {{company.currency}}.
+- {{notes}}
+
+Kami berharap dapat berkhidmat untuk tuan/puan.
+
+Sekian, terima kasih.
+
+Yang benar,
+{{signature}}
+""",
+    },
+    {
+        "name": "Invois",
+        "kind": "invoice",
+        "prefix": "INV",
+        "description": "Bil kepada pelanggan, dengan butiran bank untuk bayaran.",
+        "fields": [
+            *CLIENT_MS,
+            _f("reference", "No. PO / rujukan tuan"),
+            _f("items", "Butiran", "items", True),
+            _f("due_date", "Tarikh akhir bayaran", "date", True),
+        ],
+        "body": """# Invois
+
+**No. invois:** {{doc.number}}
+**Tarikh:** {{doc.date}}
+**Tarikh akhir bayaran:** {{due_date}}
+**Rujukan tuan:** {{reference}}
+
+**Kepada:**
+{{client_name}}
+{{client_address}}
+U.P.: {{client_contact}}
+
+{{items}}
+
+**Jumlah dalam perkataan:** {{total_words}}
+
+## Bayaran
+Sila buat pindahan bank kepada:
+**{{company.bank_holder}}**
+{{company.bank_name}}, No. akaun {{company.bank_account}}
+
+Terma bayaran: {{company.payment_terms}}
+
+Sekian, terima kasih.
+""",
+    },
+    {
+        "name": "Surat rasmi",
+        "kind": "letter",
+        "prefix": "REF",
+        "description": "Surat rasmi dengan kepala surat syarikat.",
+        "fields": [
+            *CLIENT_MS,
+            _f("subject", "Perkara", required=True),
+            _f("body_text", "Isi surat", "longtext", True, "Mesej, dalam beberapa perenggan"),
+        ],
+        "body": """Ruj. kami: {{doc.number}}
+Tarikh: {{doc.date}}
+
+{{client_contact}}
+{{client_name}}
+{{client_address}}
+
+Tuan/Puan,
+
+**{{subject}}**
+
+{{body_text}}
+
+Sekian, terima kasih.
+
+Yang benar,
+{{signature}}
+""",
+    },
+    {
+        "name": "Pesanan penghantaran",
+        "kind": "delivery",
+        "prefix": "DO",
+        "description": "Barang yang dihantar, untuk ditandatangani pelanggan semasa terima.",
+        "fields": [
+            *CLIENT_MS,
+            _f("reference", "Rujukan PO / invois"),
+            _f("items", "Barang dihantar", "items", True),
+            _f("delivered_to", "Alamat penghantaran", "longtext"),
+        ],
+        "body": """# Pesanan Penghantaran
+
+**No. DO:** {{doc.number}}
+**Tarikh:** {{doc.date}}
+**Rujukan:** {{reference}}
+
+**Kepada:**
+{{client_name}}
+{{delivered_to}}
+U.P.: {{client_contact}}
+
+{{items}}
+
+Diterima dalam keadaan baik dan lengkap:
+
+______________________________
+Nama, tandatangan dan cop syarikat
+Tarikh:
+
+Dikeluarkan oleh:
 {{signature}}
 """,
     },

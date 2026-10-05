@@ -212,7 +212,9 @@ async def _draft_document(ctx: ToolContext, args: dict[str, Any]) -> str:
 
     tpl = None
     if args.get("template"):
-        tpl = await service.template_by_ref(ctx.db, ctx.workspace.id, str(args["template"]))
+        tpl = await service.template_by_ref(
+            ctx.db, ctx.workspace.id, str(args["template"]), ctx.agent.branch_id
+        )
         if tpl is None:
             return "Error: no such template. Use list_templates."
     body = args.get("body")

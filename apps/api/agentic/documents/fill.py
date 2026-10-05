@@ -41,6 +41,7 @@ KIT_FIELDS: list[dict[str, str]] = [
     {"key": "tax_label", "label": "Tax label", "group": "Money"},
     {"key": "tax_rate", "label": "Tax rate (%)", "group": "Money", "type": "number"},
     {"key": "payment_terms", "label": "Payment terms", "group": "Money"},
+    {"key": "language", "label": "Document language", "group": "Brand", "type": "choice"},
     {"key": "accent", "label": "Brand colour", "group": "Brand"},
     {"key": "footer_note", "label": "Footer note", "group": "Brand"},
 ]
@@ -150,12 +151,42 @@ def _words(n: int) -> str:
     return str(n)
 
 
-def amount_in_words(x: float, currency: str = "RM") -> str:
+_MS_ONES = ("Kosong Satu Dua Tiga Empat Lima Enam Tujuh Lapan Sembilan Sepuluh Sebelas").split()
+
+
+def _words_ms(n: int) -> str:
+    """Malay number words: 54000 -> Lima Puluh Empat Ribu."""
+    if n < 12:
+        return _MS_ONES[n]
+    if n < 20:
+        return _MS_ONES[n - 10] + " Belas"
+    if n < 100:
+        rest = n % 10
+        return _MS_ONES[n // 10] + " Puluh" + (" " + _MS_ONES[rest] if rest else "")
+    for size, one, name in (
+        (10**9, "Satu Bilion", "Bilion"),
+        (10**6, "Sejuta", "Juta"),
+        (1000, "Seribu", "Ribu"),
+        (100, "Seratus", "Ratus"),
+    ):
+        if n >= size:
+            head, rest = divmod(n, size)
+            text = one if head == 1 else f"{_words_ms(head)} {name}"
+            return text + (" " + _words_ms(rest) if rest else "")
+    return str(n)
+
+
+def amount_in_words(x: float, currency: str = "RM", lang: str = "en") -> str:
     whole = int(abs(x))
     cents = round((abs(x) - whole) * 100)
     if cents == 100:
         whole, cents = whole + 1, 0
     name = {"RM": "Ringgit Malaysia", "MYR": "Ringgit Malaysia"}.get(currency.upper(), currency)
+    if lang == "ms":
+        text = f"{name} {_words_ms(whole)}"
+        if cents:
+            text += f" dan Sen {_words_ms(cents)}"
+        return text + " Sahaja"
     text = f"{name} {_words(whole)}"
     if cents:
         text += f" and Cents {_words(cents)}"
@@ -265,7 +296,7 @@ def context(
         ctx["subtotal"] = f"{cur} {money(subtotal)}"
         ctx["tax"] = f"{cur} {money(tax)}"
         ctx["total"] = f"{cur} {money(totals['total'])}"
-        ctx["total_words"] = amount_in_words(totals["total"], cur)
+        ctx["total_words"] = amount_in_words(totals["total"], cur, lang)
         info.totals, info.items = totals, items
 
     blank_name, blank_company = (

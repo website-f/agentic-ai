@@ -18,6 +18,7 @@ from sqlalchemy.orm import undefer
 from ..core.fence import fence
 from ..models import (
     Agent,
+    Branch,
     CompanyKit,
     DocFile,
     DocTemplate,
@@ -37,7 +38,7 @@ from .extract import (
     understand_prompt,
 )
 from .fill import Filled, context, fill, fmt_date
-from .starter import STARTERS
+from .starter import STARTERS, STARTERS_MS
 
 log = logging.getLogger("agentic.documents")
 
@@ -107,13 +108,29 @@ async def letterhead(db: AsyncSession, branch_id: str | None) -> render_pdf.Lett
 
 
 async def ensure_starters(db: AsyncSession, workspace_id: str) -> None:
-    """Give a workspace the starter templates once (people may delete or change them)."""
+    """Give a workspace the starter templates once (people may delete or change them). A
+    workspace that works in Malay also gets the Malay client documents once (STARTERS_MS),
+    remembered in its settings so deleted ones do not come back."""
+    from .provenance import folder_lang
+
     have = await db.scalar(
         select(DocTemplate.id).where(
             DocTemplate.workspace_id == workspace_id, DocTemplate.builtin.is_(True)
         )
     )
-    if have:
+    todo = [] if have else list(STARTERS)
+    ws = await db.get(Workspace, workspace_id)
+    if ws is not None and not (ws.settings or {}).get("starters_ms"):
+        malay_company = await db.scalar(
+            select(CompanyKit.branch_id)
+            .join(Branch, Branch.id == CompanyKit.branch_id)
+            .where(Branch.workspace_id == workspace_id, CompanyKit.data["language"].astext == "ms")
+            .limit(1)
+        )
+        if malay_company or await folder_lang(db, workspace_id) == "ms":
+            todo += STARTERS_MS
+            ws.settings = {**(ws.settings or {}), "starters_ms": True}
+    if not todo:
         return
     names = set(
         (
@@ -122,7 +139,7 @@ async def ensure_starters(db: AsyncSession, workspace_id: str) -> None:
             )
         ).all()
     )
-    for s in STARTERS:
+    for s in todo:
         if s["name"] in names:
             continue
         db.add(
@@ -141,8 +158,12 @@ async def ensure_starters(db: AsyncSession, workspace_id: str) -> None:
     await db.commit()
 
 
-async def template_by_ref(db: AsyncSession, workspace_id: str, ref: str) -> DocTemplate | None:
-    """A template by id or (case-insensitive) name, for agents that name it."""
+async def template_by_ref(
+    db: AsyncSession, workspace_id: str, ref: str, branch_id: str | None = None
+) -> DocTemplate | None:
+    """A template by id or (case-insensitive) name, for agents that name it. A built-in
+    starter in the other language gives way to its twin in the company's language (an agent
+    asking for "quotation" in a Malay company gets "Sebut harga")."""
     ref = (ref or "").strip()
     if not ref:
         return None
@@ -154,9 +175,21 @@ async def template_by_ref(db: AsyncSession, workspace_id: str, ref: str) -> DocT
         await db.scalars(select(DocTemplate).where(DocTemplate.workspace_id == workspace_id))
     ).all()
     low = ref.lower()
-    return next((r for r in rows if r.name.lower() == low), None) or next(
+    found = next((r for r in rows if r.name.lower() == low), None) or next(
         (r for r in rows if low in r.name.lower()), None
     )
+    if found is None or not found.builtin or branch_id is None:
+        return found
+    from .provenance import folder_lang
+
+    names = {
+        "ms": {s["name"] for s in STARTERS_MS},
+        "en": {s["name"] for s in STARTERS},
+    }.get(await folder_lang(db, workspace_id, branch_id), set())
+    if found.name in names:
+        return found
+    twin = next((r for r in rows if r.builtin and r.kind == found.kind and r.name in names), None)
+    return twin or found
 
 
 # ---------------------------------------------------------------- documents

@@ -88,3 +88,17 @@ def test_line_items_read_in_the_letters_language():
     assert "| Bil. | Perkara | Kuantiti | Harga seunit (RM) | Jumlah (RM) |" in ms
     assert "**Jumlah besar**" in ms
     assert "| No. | Description | Qty |" in items_table(items, totals, "RM", "SST")
+
+
+def test_amounts_in_malay_words():
+    from agentic.documents.fill import amount_in_words
+
+    assert amount_in_words(54000, "RM", "ms") == "Ringgit Malaysia Lima Puluh Empat Ribu Sahaja"
+    assert amount_in_words(1250.5, "RM", "ms") == (
+        "Ringgit Malaysia Seribu Dua Ratus Lima Puluh dan Sen Lima Puluh Sahaja"
+    )
+    assert amount_in_words(2184000, "RM", "ms") == (
+        "Ringgit Malaysia Dua Juta Seratus Lapan Puluh Empat Ribu Sahaja"
+    )
+    assert amount_in_words(19, "RM", "ms") == "Ringgit Malaysia Sembilan Belas Sahaja"
+    assert amount_in_words(54000) == "Ringgit Malaysia Fifty-Four Thousand Only"

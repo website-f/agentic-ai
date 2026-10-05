@@ -71,14 +71,16 @@ def _kit_editable(principal: Principal, branch_id: str) -> bool:
 def _kit_out(b: Branch, kit: CompanyKit | None, principal: Principal) -> KitOut:
     data = dict(kit.data or {}) if kit else {}
     keys = [
-        f["key"] for f in KIT_FIELDS if f["key"] not in ("accent", "footer_note", "trading_name")
+        f["key"]
+        for f in KIT_FIELDS
+        if f["key"] not in ("accent", "footer_note", "trading_name", "language")
     ]
     return KitOut(
         branch_id=b.id,
         branch_name=b.name,
         data=data,
         logo_file_id=kit.logo_file_id if kit else None,
-        fields=KIT_FIELDS,
+        fields=[{**f, "label": tr(f["label"])} for f in KIT_FIELDS],
         filled=sum(1 for k in keys if str(data.get(k) or "").strip()),
         total=len(keys),
         can_edit=_kit_editable(principal, b.id),
@@ -140,6 +142,9 @@ def _clean_kit(raw: dict[str, Any]) -> dict[str, Any]:
         elif k == "accent":
             if re.fullmatch(r"#[0-9a-fA-F]{6}", str(v).strip()):
                 out[k] = str(v).strip()
+        elif k == "language":
+            if str(v).strip() in ("en", "ms"):
+                out[k] = str(v).strip()
         else:
             out[k] = str(v).strip()[:1500]
     custom = []
@@ -182,7 +187,13 @@ async def save_kit(
     if kit is None:
         kit = CompanyKit(branch_id=b.id, workspace_id=principal.workspace_id)
         db.add(kit)
+    was = (kit.data or {}).get("language")
     kit.data = _clean_kit(body.data)
+    if kit.data.get("language") != was:
+        # The company's AI folder follows its language.
+        await db.flush()
+        lang = await provenance.folder_lang(db, principal.workspace_id, b.id)
+        await provenance.move_ai_folder(db, principal.workspace_id, b.id, lang)
     kit.logo_file_id = body.logo_file_id
     kit.updated_by = principal.actor
     await audit.record(

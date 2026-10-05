@@ -821,6 +821,29 @@ MS: dict[str, str] = {
     "Keep a skill under {n} characters; split it if needed.": (
         "Pastikan kemahiran kurang daripada {n} aksara; pecahkan jika perlu."
     ),
+    # documents/fill.py KIT_FIELDS (the company kit's labels)
+    "Legal name": "Nama berdaftar",
+    "Trading name": "Nama perniagaan",
+    "Registration no.": "No. pendaftaran",
+    "Tax / SST no.": "No. cukai / SST",
+    "Incorporated on": "Tarikh diperbadankan",
+    "Address": "Alamat",
+    "Phone": "Telefon",
+    "Email": "E-mel",
+    "Website": "Laman web",
+    "Bank": "Bank",
+    "Account no.": "No. akaun",
+    "Account holder": "Pemegang akaun",
+    "Signatory name": "Nama penandatangan",
+    "Signatory title": "Jawatan penandatangan",
+    "Directors (one per line)": "Pengarah (satu setiap baris)",
+    "Currency": "Mata wang",
+    "Tax label": "Label cukai",
+    "Tax rate (%)": "Kadar cukai (%)",
+    "Payment terms": "Terma bayaran",
+    "Document language": "Bahasa dokumen",
+    "Brand colour": "Warna jenama",
+    "Footer note": "Nota kaki",
     # org/starter.py
     "Unknown industry. Pick one of: {names}.": "Industri tidak dikenali. Pilih salah satu: {names}.",
     # engine/gateway.py (what a person sees when no model can answer)

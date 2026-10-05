@@ -1402,7 +1402,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         steps: [
           s("Log masuk sebagai pemilik. Di **Fail syarikat**, pilih syarikat dan letakkan fail zip prosedurnya: permohonan pakaian seragam dan peralatan, langkah tatatertib, peraturan pendahuluan gaji dan prosedur tender."),
           s("Apabila muat naik siap, pilih fail prosedur itu dan klik **Jadikan SOP** atau **Bina aliran kerja**. Semak setiap draf dan simpan."),
-          s("Isi **Kit syarikat** (nama berdaftar, nombor pendaftaran, alamat, penandatangan) supaya surat dan pesanan dicetak dengan kepala surat."),
+          s("Isi **Kit syarikat** (nama berdaftar, nombor pendaftaran, alamat, penandatangan, terma bayaran) supaya surat dan pesanan dicetak dengan kepala surat. Tetapkan **Bahasa dokumen** kepada Bahasa Melayu bagi syarikat berbahasa Melayu: sebut harga, invois dan folder AI syarikat itu kemudiannya dalam bahasa Melayu."),
           s("Tambah seorang kakitangan dengan peranan kakitangan di Ahli, dan simpan butiran log masuknya untuk demo."),
         ],
       },

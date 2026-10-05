@@ -894,6 +894,7 @@ export const KNOWLEDGE: Record<string, string> = {
   "{name} kit saved.": "Kit {name} disimpan.",
   "The logo must be an image (PNG or JPG).": "Logo mesti dalam bentuk imej (PNG atau JPG).",
   "e.g. 30 days from invoice": "cth. 30 hari dari tarikh invois",
+  "Same as the workspace": "Sama seperti ruang kerja",
   "More facts": "Fakta lain",
   "Licence numbers, CIDB grade, MOF registration… Use them in templates as": "Nombor lesen, gred CIDB, pendaftaran MOF… Gunakannya dalam templat sebagai",
   "Value": "Nilai",

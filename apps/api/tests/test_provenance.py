@@ -422,3 +422,48 @@ async def test_feedback_message_mentions_the_document(client, llm, temporal):
             ).all()
         )
     assert sum("Shorter please" in (m.content or "") for m in rows) == 1
+
+
+async def test_a_malay_company_gets_malay_templates_and_folders(client, llm, temporal):
+    """The owner works in English; one company's kit says Bahasa Melayu. Its agent asking
+    for "quotation" gets the Malay starter, with Malay labels, table and amount in words,
+    and the PDF goes under Dokumen AI. The English company keeps English."""
+    o = await office(client)
+    b = o["branch"]["id"]
+    agent = await new_agent(client, o, "Aina")
+    # Made before the company chose Malay: English folder, moved when the language changes.
+    _, early = await _agent_quote(client, llm, o, agent, title="Early quotation")
+    assert early["files"][0]["folder"] == "AI documents/Quotations"
+    r = await client.put(
+        f"/api/company-kits/{b}", json={"data": {**KIT, "language": "ms"}}, headers=csrf(client)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["language"] == "ms"
+    async with SessionLocal() as db:
+        moved = await db.get(DocFile, early["files"][0]["id"])
+        assert moved is not None and moved.folder == "Dokumen AI/Sebut harga"
+    names = {t["name"] for t in (await client.get("/api/doc-templates")).json()}
+    assert {"Quotation", "Sebut harga", "Invois", "Surat rasmi", "Pesanan penghantaran"} <= names
+    _, doc = await _agent_quote(client, llm, o, agent)
+    assert doc["template_name"] == "Sebut harga"
+    assert doc["files"][0]["folder"] == "Dokumen AI/Sebut harga"
+    text = (await client.get(f"/api/documents/{doc['id']}")).json()["preview"]
+    assert "# Sebut Harga" in text and "| Bil. | Perkara |" in text
+    assert "Ringgit Malaysia Enam Ribu Sembilan Ratus Dua Belas Sahaja" in text
+
+    # An English company in the same workspace keeps the English starter and folder.
+    other = (
+        await client.post("/api/branches", json={"name": "Acme Ltd"}, headers=csrf(client))
+    ).json()
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent["id"])
+        assert a is not None
+        a.branch_id = other["id"]
+        await db.commit()
+    _, doc2 = await _agent_quote(client, llm, o, agent, title="Quotation for Acme")
+    assert doc2["template_name"] == "Quotation"
+    assert doc2["files"][0]["folder"] == "AI documents/Quotations"
+    # Removing the language keeps the Malay starters (added once), never adds them twice.
+    await client.put(f"/api/company-kits/{b}", json={"data": KIT}, headers=csrf(client))
+    names = [t["name"] for t in (await client.get("/api/doc-templates")).json()]
+    assert names.count("Sebut harga") == 1
