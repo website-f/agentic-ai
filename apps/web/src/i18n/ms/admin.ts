@@ -329,6 +329,7 @@ export const ADMIN: Record<string, string> = {
   "Engineering & construction": "Kejuruteraan & pembinaan",
   "Trading & retail": "Perdagangan & runcit",
   "Professional services": "Perkhidmatan profesional",
+  "Security & guarding services": "Perkhidmatan kawalan keselamatan",
   "Branch updated.": "Cawangan dikemas kini.",
   "{name} created. {team}": "{name} dicipta. {team}",
   "Branch created.": "Cawangan dicipta.",

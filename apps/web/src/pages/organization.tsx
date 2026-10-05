@@ -42,6 +42,7 @@ const INDUSTRY_LABELS: Record<string, string> = {
   engineering: msg("Engineering & construction"),
   trading: msg("Trading & retail"),
   professional: msg("Professional services"),
+  security: msg("Security & guarding services"),
 };
 const industryLabel = (k: string) => {
   const label = INDUSTRY_LABELS[k];

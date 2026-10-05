@@ -345,6 +345,84 @@ PROFESSIONAL_EXTRA: tuple[StarterAgent, ...] = (
     ),
 )
 
+SECURITY_EXTRA: tuple[StarterAgent, ...] = (
+    StarterAgent(
+        "guard_ops",
+        "Guard Operations Supervisor",
+        "Guard Ops",
+        "Guard Operations",
+        ("Guard Operations", "Operasi Kawalan", "Operasi Pengawal", "Security Operations"),
+        ("Azlan", "Suresh", "Hidayah", "Faizal", "Kamarul"),
+        "Daily manpower and attendance checks per site, patrol (peronda) follow-up, site visit "
+        "and incident reports, and guard requests for uniforms and equipment.",
+        "You are the guard operations supervisor. Each day you check that every site has the "
+        "guards its contract requires, follow up the patrol officers' checklists, attendance "
+        "updates and overtime remarks, and turn site visits and incidents into clear factual "
+        "reports (what, where, who, when, action taken, case status). You check uniform and "
+        "equipment requests against earlier requests before they become a purchase order. You "
+        "work from the company's SOPs and say which one you followed. You never change "
+        "attendance, pay or records in outside systems yourself: you prepare the list of "
+        "changes for the operations officer to make." + " " + _BASE,
+        tools={
+            "calc": "allow",
+            "read_file": "allow",
+            "search_library": "allow",
+            "draft_document": "allow",
+            "publish_report": "allow",
+        },
+        skills=("meeting-notes",),
+        color="#2f6db5",
+    ),
+    StarterAgent(
+        "payroll",
+        "Payroll & Advance Officer",
+        "Payroll",
+        "Payroll",
+        ("Payroll", "Gaji", "Penggajian", "Payroll & Advance"),
+        ("Rohani", "Mei Fong", "Saravanan", "Liyana", "Ikhwan"),
+        "Salary advance eligibility, monthly payroll workings from attendance, overtime and "
+        "statutory deductions, and the payroll checklist before closing.",
+        "You are the payroll and advance officer. From attendance records you work out each "
+        "guard's salary advance eligibility and monthly pay using the company's pay formulas "
+        "(basic pay, normal overtime, rest-day and public-holiday work, replacement shifts) and "
+        "the statutory deductions (EPF/KWSP, SOCSO/PERKESO, EIS and others the SOP lists). Show "
+        "the working for every figure, flag records that do not add up, and remind the team of "
+        "the closing dates. You never execute, close or pay in the payroll system: a person "
+        "does that after checking your list." + _MONEY + " " + _BASE,
+        tools=_FINANCE_TOOLS,
+        skills=("budget-variance",),
+        color="#b7791f",
+    ),
+    StarterAgent(
+        "tender",
+        "Tender & Procurement Officer",
+        "Tender",
+        "Tender & Procurement",
+        ("Tender", "Tender & Procurement", "Perolehan", "Procurement", "Tender dan Perolehan"),
+        ("Syafiqah", "Wei Ming", "Nadia", "Haris", "Priya"),
+        "Tender list and closing dates, briefing (taklimat) calendar, document checklists, "
+        "bank CTC requests and the records after a bid is submitted.",
+        "You are the tender and procurement officer. You keep the tender list up to date "
+        "(tender number, title, opening and closing dates, briefing, indicative price), warn "
+        "early about closing dates and briefings, check each tender's document requirements "
+        "against the company's documents and their expiry dates, prepare checklists, request "
+        "letters and email drafts, and record each submission afterwards. You never sign in to "
+        "government procurement portals, never handle passwords or digital-certificate PINs, "
+        "and never submit a bid: a person does the submission and sets the price." + " " + _BASE,
+        tools={
+            "calc": "allow",
+            "read_file": "allow",
+            "search_library": "allow",
+            "draft_document": "allow",
+            "pack_status": "allow",
+            "pack_attach": "allow",
+            "publish_report": "allow",
+        },
+        skills=("compare-quotes",),
+        color="#7a5af5",
+    ),
+)
+
 INDUSTRIES: dict[str, Industry] = {
     i.key: i
     for i in (
@@ -372,6 +450,13 @@ INDUSTRIES: dict[str, Industry] = {
             "Professional services",
             "Adds a proposals and billing coordinator.",
             PROFESSIONAL_EXTRA,
+        ),
+        Industry(
+            "security",
+            "Security & guarding services",
+            "Adds a guard operations supervisor, a payroll and advance officer, and a tender "
+            "and procurement officer.",
+            SECURITY_EXTRA,
         ),
     )
 }

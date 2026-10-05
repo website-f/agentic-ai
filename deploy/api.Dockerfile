@@ -58,8 +58,10 @@ TextEmbedding(sys.argv[1], cache_dir='/opt/models')" "$EMBED_MODEL" \
 COPY apps/api/pyproject.toml apps/api/uv.lock apps/api/alembic.ini ./
 COPY apps/api/alembic ./alembic
 COPY apps/api/agentic ./agentic
+# --reinstall-package: uv keys its cached build of a local project on pyproject.toml only, so a
+# change to the Python code alone would otherwise ship the previous build.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+    uv sync --frozen --no-dev --no-editable --reinstall-package agentic
 
 
 FROM python:3.12-slim-trixie AS runtime

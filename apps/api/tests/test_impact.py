@@ -31,12 +31,16 @@ async def test_catalog_lists_each_industry_and_its_team(client):
     await setup_owner(client)
     cat = (await client.get("/api/branches/starter-teams")).json()
     by = {i["key"]: i for i in cat}
-    assert set(by) == {"general", "network", "engineering", "trading", "professional"}
+    assert set(by) == {"general", "network", "engineering", "trading", "professional", "security"}
     assert len(by["general"]["agents"]) == 5
     roles = {a["role"] for a in by["network"]["agents"]}
     assert {"Network Operations (NOC) Assistant", "IT Helpdesk Officer"} <= roles
     roles = {a["role"] for a in by["engineering"]["agents"]}
     assert {"Project Coordinator", "Quantity Surveyor (QS)"} <= roles
+    roles = {a["role"] for a in by["security"]["agents"]}
+    assert {"Guard Operations Supervisor", "Payroll & Advance Officer"} <= roles
+    tender = next(a for a in by["security"]["agents"] if a["key"] == "tender")
+    assert "browser_open" not in tender["tools"]  # it never signs in to procurement portals
     fin = next(a for a in by["general"]["agents"] if a["key"] == "finance")
     assert fin["example_name"] == "Aisyah (Finance)" and "soul" not in fin
     assert fin["tools"]["finance_calc"] == "allow" and "cash-flow-forecast" in fin["skills"]

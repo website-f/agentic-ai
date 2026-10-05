@@ -25,8 +25,9 @@ def chat_note(lang: str | None) -> str:
 
 
 def task_line(lang: str | None) -> str:
-    """For the first message of a task a person created: report in their language."""
+    """For the first message of a task a person created: report in the brief's language."""
     return (
-        f"\n\nLanguage: write your final answer and any report in {_name(lang)}, the language "
-        "of the person who asked, unless the brief asks for another language."
+        "\n\nLanguage: write your final answer and any report in the language the brief is "
+        f"written in. If the brief mixes languages or is unclear, use {_name(lang)}, the "
+        "language of the person who asked. A brief may also ask for a language explicitly."
     )

@@ -347,5 +347,6 @@ async def test_first_task_message_asks_for_the_creators_language(
     assert "Bahasa Melayu" not in sent[0]["content"]  # the system prompt stays the same
     first = sent[1]["content"]
     assert first.startswith("Task: Banding pembekal")
-    assert "Language: write your final answer and any report in Bahasa Melayu" in first
+    assert "Language: write your final answer and any report in the language the brief" in first
+    assert "use Bahasa Melayu" in first  # the asker's language when the brief is unclear
     assert sum("Language: write your final" in str(m.get("content") or "") for m in sent) == 1
