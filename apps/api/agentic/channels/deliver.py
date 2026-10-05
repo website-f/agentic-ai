@@ -2,6 +2,11 @@
 
 A row has a dedupe key (approval x device), so a retry or a restart never sends twice, and a
 send that fails stays visible in the dashboard with its error.
+
+Languages (P22): a notice is written in each RECIPIENT's language (users.prefs locale), not
+the language of whoever caused it. Callers pass English as an i18n.Msg (or plain English
+whose template is in i18n/ms.py); the row stores the rendered text. Text a person or an
+agent wrote goes in as i18n.Plain and is never translated.
 """
 
 import hashlib
@@ -16,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import crypto
 from ..core.security import can
+from ..i18n import Msg, Plain, current_lang, normalize, render, tr
 from ..models import (
     ActionToken,
     Agent,
@@ -28,7 +34,7 @@ from ..models import (
     Task,
     User,
 )
-from ..services import events
+from ..services import events, prefs
 from . import telegram, webpush, whatsapp
 
 log = logging.getLogger("agentic.channels.deliver")
@@ -71,16 +77,44 @@ async def deciders(db: AsyncSession, workspace_id: str, agent: Agent | None = No
     ]
 
 
-def describe(a: Approval, agent_name: str) -> tuple[str, str]:
+def describe(a: Approval, agent_name: str) -> tuple[Msg, Msg]:
+    """Title and body of an approval notice: English Msgs, rendered per recipient."""
+    reason = Plain(a.reason) if a.reason else None  # the agent wrote it: never translated
     if a.kind == "question":
-        return f"{agent_name} has a question", a.reason or "Open it to answer."
+        title = Msg("{name} has a question", name=agent_name)
+        return title, Msg("{text}", text=reason) if reason else Msg("Open it to answer.")
     if a.kind == "budget":
-        return f"{agent_name} is over budget", a.reason or "Approve more budget to continue."
+        title = Msg("{name} is over budget", name=agent_name)
+        if reason:
+            return title, Msg("{text}", text=reason)
+        return title, Msg("Approve more budget to continue.")
     from ..agents.tools import TOOLS  # late: tools import the brain and skills
 
-    tool = TOOLS[a.tool_name].label if a.tool_name in TOOLS else a.tool_name.replace("_", " ")
-    why = f": {a.reason}" if a.reason else ""
-    return f"{agent_name} needs a decision", f"Wants to: {tool.lower()}{why}"
+    if a.tool_name in TOOLS:
+        tool: str = ToolLabel(TOOLS[a.tool_name].label)
+    else:
+        tool = a.tool_name.replace("_", " ")
+    title = Msg("{name} needs a decision", name=agent_name)
+    if reason:
+        return title, Msg("Wants to: {tool}: {why}", tool=tool, why=reason)
+    return title, Msg("Wants to: {tool}", tool=tool)
+
+
+class ToolLabel(Msg):
+    """A tool's label inside "Wants to: ...": lower case in English ("send an email"), the
+    translated label in other languages."""
+
+    def __new__(cls, label: str) -> "ToolLabel":
+        obj = str.__new__(cls, label.lower())
+        obj.template, obj.vars = label, {}
+        return obj
+
+    def render(self, lang: str | None = None) -> str:
+        lang = normalize(lang) or current_lang()
+        if lang == "en":
+            return self.template.lower()
+        label = tr(self.template, lang)
+        return label[:1].lower() + label[1:]  # "Mahu baca halaman web"
 
 
 async def _add(db: AsyncSession, d: Delivery) -> str | None:
@@ -97,8 +131,8 @@ async def _add(db: AsyncSession, d: Delivery) -> str | None:
 async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     agent = await db.get(Agent, a.agent_id)
     task = await db.get(Task, a.task_id)
-    name = agent.name if agent else "An agent"
-    title, body = describe(a, name)
+    name = agent.name if agent else Msg("An agent")
+    title_msg, body_msg = describe(a, name)
     pending = (
         await db.scalar(
             select(func.count())
@@ -110,6 +144,8 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     now = datetime.now(UTC)
     ids: list[str] = []
     for user in await deciders(db, a.workspace_id, agent):
+        lang = prefs.lang_of(user)  # the recipient's language, not the agent's or the asker's
+        title, body = render(title_msg, lang), render(body_msg, lang)
         subs = (
             await db.scalars(
                 select(PushSubscription).where(
@@ -164,11 +200,15 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
             )
         ).all()
         for link, ch in links:
-            task_line = f"\nTask: {task.title}" if task else ""
+            task_line = "\n" + tr("Task: {title}", lang, title=task.title) if task else ""
             if ch.kind == "whatsapp":
                 from ..core.config import settings
 
-                verb = "answer" if a.kind == "question" else "approve or deny"
+                link_url = f"{settings.public_url}/approve/{a.id}"
+                if a.kind == "question":
+                    open_line = tr("Open to answer: {url}", lang, url=link_url)
+                else:
+                    open_line = tr("Open to approve or deny: {url}", lang, url=link_url)
                 did = await _add(
                     db,
                     Delivery(
@@ -177,8 +217,7 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
                         target=f"{ch.id}:{link.chat_id}",
                         kind="approval",
                         payload={
-                            "text": f"*{title}*{task_line}\n\n{body}\n\nOpen to {verb}: "
-                            f"{settings.public_url}/approve/{a.id}",
+                            "text": f"*{title}*{task_line}\n\n{body}\n\n{open_line}",
                             "approval_id": a.id,
                         },
                         dedupe_key=f"approval:{a.id}:wa:{link.id}",
@@ -189,14 +228,18 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
                     ids.append(did)
                 continue
             if a.kind == "question":
-                text = f"❓ {title}{task_line}\n\n{body}\n\nReply to this message with your answer."
+                reply_line = tr("Reply to this message with your answer.", lang)
+                text = f"❓ {title}{task_line}\n\n{body}\n\n{reply_line}"
                 buttons = None
             else:
                 text = f"🔔 {title}{task_line}\n\n{body}"
                 buttons = [
                     [
-                        {"text": "✅ Approve", "callback_data": f"apv:{a.id}:approve"},
-                        {"text": "✖️ Deny", "callback_data": f"apv:{a.id}:deny"},
+                        {
+                            "text": "✅ " + tr("Approve", lang),
+                            "callback_data": f"apv:{a.id}:approve",
+                        },
+                        {"text": "✖️ " + tr("Deny", lang), "callback_data": f"apv:{a.id}:deny"},
                     ]
                 ]
             did = await _add(
@@ -218,9 +261,19 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
 
 
 async def _queue_for_user(
-    db: AsyncSession, workspace_id: str, user_id: str, title: str, body: str, url: str, dedupe: str
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+    title: str,
+    body: str,
+    url: str,
+    dedupe: str,
+    lang: str | None = None,
 ) -> list[str]:
-    """One person, every way they can be reached: each device, linked Telegram and WhatsApp."""
+    """One person, every way they can be reached: each device, linked Telegram and WhatsApp.
+    Title and body are said in the person's language."""
+    lang = lang or await prefs.language(db, user_id)
+    title, body = render(title, lang), render(body, lang)
     now = datetime.now(UTC)
     ids: list[str] = []
     for sub in (
@@ -288,7 +341,9 @@ async def notify_people(
     dedupe: str,
     perm: str = "approvals.decide",
 ) -> list[str]:
-    """A plain notice (no buttons) to everyone with `perm`: every device, Telegram, WhatsApp."""
+    """A plain notice (no buttons) to everyone with `perm`: every device, Telegram, WhatsApp.
+    `title` / `body`: English (a Msg, or text with a template in i18n/ms.py); each person
+    gets it in their own language."""
     ids: list[str] = []
     rows = (
         await db.execute(
@@ -299,7 +354,9 @@ async def notify_people(
     ).all()
     for user, role in rows:
         if can(role, perm):
-            ids += await _queue_for_user(db, workspace_id, user.id, title, body, url, dedupe)
+            ids += await _queue_for_user(
+                db, workspace_id, user.id, title, body, url, dedupe, prefs.lang_of(user)
+            )
     await db.commit()
     return ids
 
@@ -314,7 +371,8 @@ async def notify_user(
     *,
     dedupe: str,
 ) -> list[str]:
-    """A notice to one person on every channel they set up. Returns the delivery ids."""
+    """A notice to one person on every channel they set up, in their language (see
+    notify_people). Returns the delivery ids."""
     ids = await _queue_for_user(db, workspace_id, user_id, title, body, url, dedupe)
     await db.commit()
     return ids

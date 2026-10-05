@@ -3,7 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { t } from "@/i18n";
 
-import { api, ApiError, readCookie } from "./api";
+import { api, ApiError, langHeader, readCookie } from "./api";
 
 export type RecordingStatus = "uploading" | "queued" | "extracting" | "transcribing" | "writing" | "ready" | "failed";
 export type MinutesLanguage = "en" | "ms";
@@ -41,12 +41,31 @@ export interface Recording {
   audio_expires_at: string | null;
   cost_usd: number;
   can_edit: boolean;
+  /** The uploader asked for speaker labels. */
+  separate_speakers: boolean;
+  /** While separating: 10-minute windows done / planned (0/0 otherwise). */
+  speakers_done: number;
+  speakers_total: number;
+  /** Voices found (0: one voice, turned off, or separation failed). */
+  speaker_count: number;
 }
 
 export interface TranscriptParagraph {
   t: number;
   e: number;
   text: string;
+  /** Speaker label ("S1") when the voices were told apart. */
+  s?: string;
+}
+
+export interface Speaker {
+  label: string;
+  name: string;
+  seconds: number;
+  share: number;
+  suggested: string;
+  evidence: string;
+  has_clip: boolean;
 }
 
 export interface MinutesTopic {
@@ -87,6 +106,9 @@ export interface RecordingDetail extends Recording {
   document_status: "draft" | "review" | "approved" | null;
   document_version: number | null;
   published_stale: boolean;
+  speakers: Speaker[];
+  /** Speakers were (re)named after the minutes were written. */
+  speakers_stale: boolean;
 }
 
 export interface MinutesSettings {
@@ -122,6 +144,17 @@ export const minutesSettingsQuery = queryOptions({
 });
 
 export const audioUrl = (id: string) => `/api/minutes/${id}/audio`;
+export const speakerClipUrl = (id: string, label: string) => `/api/minutes/${id}/speakers/${label}/clip`;
+
+/** Speaker 1..8 take the chart palette (--series-N), then it repeats. */
+export function speakerColor(label: string): string {
+  const n = Number(label.replace(/^S/, "")) || 1;
+  return `var(--series-${((n - 1) % 8) + 1})`;
+}
+
+export function speakerNumber(label: string): string {
+  return label.replace(/^S/, "");
+}
 export const minutesExportUrl = (id: string, format: "pdf" | "docx") => `/api/minutes/${id}/export?format=${format}`;
 
 export const ACCEPT = "audio/*,video/*,.mp3,.m4a,.wav,.ogg,.oga,.opus,.webm,.mp4,.mov,.m4v,.aac,.flac,.mkv,.3gp,.amr,.wma";
@@ -136,6 +169,10 @@ export interface UploadParams {
   language: MinutesLanguage;
   branch_id?: string | null;
   department_id?: string | null;
+  /** Tell the voices apart (default on). */
+  speakers?: boolean;
+  /** How many people talk, 2-10; null = find out. */
+  speaker_count?: number | null;
 }
 
 /** Streams the file as the raw body (no multipart), reporting progress 0..1. XHR, because fetch
@@ -150,6 +187,8 @@ export function uploadRecording(
   if (params.title?.trim()) q.set("title", params.title.trim());
   if (params.branch_id) q.set("branch_id", params.branch_id);
   if (params.department_id) q.set("department_id", params.department_id);
+  q.set("speakers", params.speakers === false ? "false" : "true");
+  if (params.speakers !== false && params.speaker_count) q.set("speaker_count", String(params.speaker_count));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/minutes/upload?${q}`);
@@ -157,6 +196,7 @@ export function uploadRecording(
     xhr.setRequestHeader("content-type", "application/octet-stream");
     xhr.setRequestHeader("x-csrf-token", readCookie("agentic_csrf"));
     xhr.setRequestHeader("x-file-type", file.type || "");
+    for (const [k, v] of Object.entries(langHeader())) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);
     };
@@ -201,16 +241,17 @@ export function parseClock(text: string): number | null {
   return parts.reduce((acc, n) => acc * 60 + n, 0);
 }
 
-export type Stage = "upload" | "extract" | "transcribe" | "write" | "ready";
+export type Stage = "upload" | "extract" | "speakers" | "transcribe" | "write" | "ready";
 
 /** Where in the pipeline a recording is, for the timeline. */
-export function stageOf(r: Pick<Recording, "status">): Stage {
+export function stageOf(r: Pick<Recording, "status"> & Partial<Pick<Recording, "speakers_total">>): Stage {
   switch (r.status) {
     case "uploading":
       return "upload";
     case "queued":
-    case "extracting":
       return "extract";
+    case "extracting":
+      return r.speakers_total ? "speakers" : "extract";
     case "transcribing":
       return "transcribe";
     case "writing":

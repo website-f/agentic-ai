@@ -71,6 +71,22 @@ def _locale(sub: dict[str, Any]) -> dict[str, Any]:
     return {"language": v}
 
 
+def saved_lang(user: User | None) -> str | None:
+    """The language the person picked in the app (locale.language), if they did."""
+    saved = (((user.prefs if user else None) or {}).get("locale") or {}).get("language")
+    return saved if saved in ("en", "ms") else None
+
+
+def lang_of(user: User | None) -> str:
+    """The person's language for what the server tells them (notices, bot replies)."""
+    return saved_lang(user) or "en"
+
+
+async def language(db: AsyncSession, user_id: str | None) -> str:
+    """lang_of() by id; English for nobody."""
+    return lang_of(await db.get(User, user_id)) if user_id else "en"
+
+
 VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "tutorial": _tutorial,
     "locale": _locale,

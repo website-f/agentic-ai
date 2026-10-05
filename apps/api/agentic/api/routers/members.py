@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...core.security import SCOPED_ROLES, can, hash_password, temp_password
+from ...i18n import Msg
+from ...i18n.labels import role_label
 from ...models import Agent, AuthSession, Branch, Department, Membership, User
 from ...services import audit
 from ..deps import Principal, api_error, current_principal, require
@@ -78,9 +80,11 @@ def _check_can_touch(actor: Principal, target_role: str, new_role: str | None = 
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "forbidden",
-                "You can add and change only "
-                + ", ".join(sorted(r.replace("_", " ") for r in allowed))
-                + " members.",
+                "You can add and change only {roles} members.",
+                roles=Msg(
+                    ", ".join("{" + r + "}" for r in sorted(allowed)),
+                    **{r: role_label(r) for r in allowed},
+                ),
             )
 
 
@@ -90,7 +94,8 @@ def people_manager():
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "forbidden",
-                f"Your role ({principal.role}) cannot manage members.",
+                "Your role ({role}) cannot manage members.",
+                role=role_label(principal.role),
             )
         return principal
 
@@ -142,7 +147,10 @@ async def _placement(
         or (sc.kind == "department" and department_id != sc.department_id)
     ):
         raise api_error(
-            status.HTTP_403_FORBIDDEN, "outside_scope", f"You can only add people to {sc.label}."
+            status.HTTP_403_FORBIDDEN,
+            "outside_scope",
+            "You can only add people to {where}.",
+            where=sc.label,
         )
     return branch_id, department_id
 
@@ -231,7 +239,9 @@ async def add_member(
         db.add(user)
         await db.flush()
     elif await db.get(Membership, (principal.workspace_id, user.id)):
-        raise api_error(status.HTTP_409_CONFLICT, "already_member", f"{email} is already a member.")
+        raise api_error(
+            status.HTTP_409_CONFLICT, "already_member", "{email} is already a member.", email=email
+        )
 
     m = Membership(
         workspace_id=principal.workspace_id,

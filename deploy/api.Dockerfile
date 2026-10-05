@@ -9,6 +9,38 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /app
 
+# Meeting minutes tell speakers apart on the CPU (agentic/minutes/diarize.py, sherpa-onnx):
+# pyannote segmentation-3.0 (MIT) + 3D-Speaker CAM++ zh-en (Apache-2.0), ~34 MB, pinned to
+# the official sherpa-onnx release assets and checked by sha256. First, so neither lockfile
+# nor code edits download them again. See THIRD_PARTY_NOTICES.md.
+ARG SHERPA_RELEASES=https://github.com/k2-fsa/sherpa-onnx/releases/download
+RUN <<'PY' python -
+import hashlib, io, os, tarfile, urllib.request
+base = os.environ["SHERPA_RELEASES"]
+out = "/opt/models/speakers"
+os.makedirs(out, exist_ok=True)
+def get(url, sha):
+    data = urllib.request.urlopen(url, timeout=300).read()
+    got = hashlib.sha256(data).hexdigest()
+    if got != sha:
+        raise SystemExit(f"sha256 mismatch for {url}: {got}")
+    return data
+seg = get(f"{base}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
+          "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488")
+with tarfile.open(fileobj=io.BytesIO(seg), mode="r:bz2") as t:
+    for name, dst in (("model.onnx", "pyannote-segmentation-3.0.onnx"),
+                      ("LICENSE", "pyannote-segmentation-3.0.LICENSE")):
+        data = t.extractfile(f"sherpa-onnx-pyannote-segmentation-3-0/{name}").read()
+        open(f"{out}/{dst}", "wb").write(data)
+if hashlib.sha256(open(f"{out}/pyannote-segmentation-3.0.onnx", "rb").read()).hexdigest() != \
+        "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079":
+    raise SystemExit("segmentation model checksum mismatch")
+emb = get(f"{base}/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+          "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2")
+open(f"{out}/3dspeaker_campplus_sv_zh_en_16k-common_advanced.onnx", "wb").write(emb)
+PY
+RUN chmod -R a+rX /opt/models
+
 # Dependencies first, keyed only on the lockfile, so code edits reuse this layer.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=apps/api/uv.lock,target=uv.lock \
@@ -50,6 +82,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     AGENTIC_EMBED_CACHE=/opt/models \
+    AGENTIC_SPEAKER_MODELS=/opt/models/speakers \
     AGENTIC_VAULT_DIR=/data/vault \
     AGENTIC_MEDIA_DIR=/data/media \
     HF_HUB_OFFLINE=1 \

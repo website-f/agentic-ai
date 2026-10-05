@@ -1,5 +1,5 @@
 /** Thin fetch wrapper: same-origin cookies, JSON in and out, CSRF echo, typed errors. */
-import { t } from "@/i18n";
+import { t, useLang } from "@/i18n";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -22,11 +22,16 @@ export function readCookie(name: string): string {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
+/** The UI language, sent on every request so the server answers (errors, notices) in it. */
+export function langHeader(): Record<string, string> {
+  return { "x-lang": useLang.getState().lang };
+}
+
 export async function api<T>(path: string, method: Method = "GET", body?: unknown): Promise<T> {
-  const init: RequestInit = { method, credentials: "same-origin", headers: {} };
+  const init: RequestInit = { method, credentials: "same-origin", headers: langHeader() };
   if (method !== "GET") {
     // The API only accepts JSON for state-changing calls, and checks the CSRF echo.
-    init.headers = { "content-type": "application/json", "x-csrf-token": readCookie("agentic_csrf") };
+    init.headers = writeHeaders();
     init.body = JSON.stringify(body ?? {});
   }
 
@@ -57,7 +62,7 @@ export async function api<T>(path: string, method: Method = "GET", body?: unknow
 export async function apiWithHeaders<T>(path: string): Promise<{ data: T; headers: Headers }> {
   let res: Response;
   try {
-    res = await fetch(path, { credentials: "same-origin" });
+    res = await fetch(path, { credentials: "same-origin", headers: langHeader() });
   } catch {
     throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
   }
@@ -70,9 +75,9 @@ export async function apiWithHeaders<T>(path: string): Promise<{ data: T; header
   return { data: data as T, headers: res.headers };
 }
 
-/** Headers every state-changing request needs (JSON + CSRF echo). */
+/** Headers every state-changing request needs (JSON + CSRF echo + UI language). */
 export function writeHeaders(): Record<string, string> {
-  return { "content-type": "application/json", "x-csrf-token": readCookie("agentic_csrf") };
+  return { "content-type": "application/json", "x-csrf-token": readCookie("agentic_csrf"), ...langHeader() };
 }
 
 /** POST that answers with one JSON object per line (NDJSON); calls onEvent as each arrives. */

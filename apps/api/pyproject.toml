@@ -32,6 +32,8 @@ dependencies = [
     "fpdf2>=2.8",
     "pillow>=11",
     "lxml>=5.3",
+    "sherpa-onnx==1.13.8",
+    "sherpa-onnx-core==1.13.8",
 ]
 
 [dependency-groups]
@@ -72,7 +74,7 @@ ignore = ["S101", "B008", "ASYNC109"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-testpaths = ["tests"]
+testpaths = ["tests", "../egress/tests"]
 
 [tool.pyright]
 include = ["agentic"]

@@ -24,6 +24,8 @@ from ..core.db import SessionLocal
 from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
 from ..engine import gateway
+from ..i18n import explicit_lang
+from ..i18n import notes as lang_notes
 from ..models import (
     Agent,
     AgentMessage,
@@ -35,7 +37,7 @@ from ..models import (
     User,
     Workspace,
 )
-from ..services import events
+from ..services import events, prefs
 from ..skills import store as skills_store
 from ..teams import budget, colleague, delegation, meetings, objectives
 from . import compress, context, goals, policy, verify
@@ -858,6 +860,14 @@ async def _attached_files_note(db: AsyncSession, task: Task, tz: str) -> str:
     return f"\n\nFiles attached to this task (read them with read_file):\n{lines}"
 
 
+async def _language_line(db: AsyncSession, task: Task) -> str:
+    """P22: a task a person created is reported in their language. One line on the first
+    message only (never the system prompt, so the cached prefix stays the same)."""
+    if not (task.created_by or "").startswith("user:"):
+        return ""
+    return lang_notes.task_line(await prefs.language(db, task.created_by.removeprefix("user:")))
+
+
 async def run_task_step(task_id: str) -> StepResult:
     async with SessionLocal() as db:
         task, agent, ws = await _load(db, task_id)
@@ -868,6 +878,7 @@ async def run_task_step(task_id: str) -> StepResult:
         if not history:
             content = f"Task: {task.title}\n\n{task.brief}".strip()
             content += await objectives.why_line(db, task)  # P21: why this work matters
+            content += await _language_line(db, task)  # P22: report in the asker's language
             content += await _attached_files_note(db, task, ws.timezone)
             if task.output_schema:
                 content += "\n\n" + delegation.schema_note(task.output_schema)
@@ -1411,6 +1422,11 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     block, _, _ = await recall_block(db, agent, text, ws.timezone, exclude_session_id=session.id)
+    # P22: the person's language rides on this turn too (never the system prompt). The
+    # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
+    lang = explicit_lang() or await prefs.language(db, session.user_id)
+    note = lang_notes.chat_note(lang)
+    block = f"{block}\n\n{note}" if block else note
     ctx = ToolContext(
         db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id
     )

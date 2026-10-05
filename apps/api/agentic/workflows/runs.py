@@ -131,6 +131,7 @@ async def start(
     assign: dict[str, str],
     file_ids: list[str],
     created_by: str,
+    objective_id: str | None = None,
 ) -> WorkflowRun:
     graph = runnable(clean_graph(workflow.graph or {}))
     nodes = graph["nodes"]
@@ -176,6 +177,7 @@ async def start(
         state=state,
         status="running",
         created_by=created_by,
+        objective_id=objective_id,  # P23: the caller checked the person may link it
     )
     db.add(run)
     await db.flush()
@@ -284,7 +286,8 @@ async def _launch(db: AsyncSession, run: WorkflowRun, node: dict[str, Any]) -> d
         position=float(lowest) - 1,
         output_schema=schema,
         workflow_run_id=run.id,
-        **await objectives.run_lineage(db, run.id),  # P21: one request, one objective
+        # P21: one request, one objective (P23: the run's own, when it has one)
+        **await objectives.run_lineage(db, run.id, run.objective_id),
     )
     db.add(t)
     await db.flush()

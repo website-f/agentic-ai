@@ -1,0 +1,43 @@
+{
+ "source": "synthetic: Windows SAPI Zira (A), Windows SAPI David (B), espeak-ng ms (C); no real voices",
+ "turns": [
+  [
+   0.5,
+   5.5,
+   "A"
+  ],
+  [
+   6.267,
+   11.267,
+   "B"
+  ],
+  [
+   12.091,
+   17.091,
+   "C"
+  ],
+  [
+   17.403,
+   22.403,
+   "A"
+  ],
+  [
+   23.448,
+   28.019,
+   "C"
+  ],
+  [
+   28.492,
+   33.492,
+   "B"
+  ]
+ ],
+ "text": [
+  "Good morning everyone. Let's start the monthly management meeting. First item is the fourth quarter budget.",
+  "Thanks, Aisyah. The draft budget is twelve thousand five hundred ringgit, which is about ten percent lower than last quarter.",
+  "Selamat pagi semua. Saya Rafi dari kewangan. Saya sudah semak angka itu dan ia selaras dengan unjuran kita.",
+  "Good. Rafi, can you confirm whether that figure includes the service tax?",
+  "Ya, angka itu sudah termasuk cukai perkhidmatan enam peratus.",
+  "Then I propose we cap the budget at twelve thousand five hundred and review it again in January."
+ ]
+}

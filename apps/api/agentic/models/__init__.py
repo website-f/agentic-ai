@@ -1369,6 +1369,10 @@ class WorkflowRun(Timestamps, Base):
     temporal_id: Mapped[str | None] = mapped_column(String(120))
     created_by: Mapped[str] = mapped_column(String(80))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P23: the objective this run serves; its step tasks inherit it.
+    objective_id: Mapped[str | None] = mapped_column(
+        ForeignKey("objectives.id", ondelete="SET NULL"), index=True
+    )
 
 
 class McpServer(Timestamps, Base):
@@ -1529,8 +1533,11 @@ class MeetingRecording(Timestamps, Base):
     chunks_done: Mapped[int] = mapped_column(Integer, default=0)
     # Per chunk while transcribing: {"0": {"segments": [...], "text", "model", ...}}.
     chunk_results: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    # The stitched transcript: [{"t": start s, "e": end s, "text": ...}] paragraphs.
+    # The stitched transcript: [{"t": start s, "e": end s, "text": ..., "s": "S1"}] paragraphs
+    # ("s" = speaker label from diarization, P23; absent when speakers were not separated).
     transcript: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # P23: speaker label -> {"name": person's name or "", "seconds": talk time}.
+    speakers: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     heard_language: Mapped[str | None] = mapped_column(String(32))
     minutes: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     work: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # map-step notes

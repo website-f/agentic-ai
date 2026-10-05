@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import SessionLocal
 from ..core.ids import new_id
 from ..core.valkey import valkey
+from ..i18n import Msg
 from ..models import CalendarProposal, GoogleAccount
 from . import gmail
 
@@ -65,7 +66,9 @@ async def _api(
         r = await c.request(method, API + path, headers={"Authorization": f"Bearer {token}"}, **kw)
     if r.status_code == 403 and "insufficient" in r.text.lower():
         raise CalendarError(
-            "Google did not allow calendar access. Reconnect Google and tick the calendar box.",
+            Msg(
+                "Google did not allow calendar access. Reconnect Google and tick the calendar box."
+            ),
             403,
         )
     if r.status_code >= 400:
@@ -165,7 +168,7 @@ async def get_event(db: AsyncSession, acct: GoogleAccount, event_id: str, tz: st
     item = await _api(db, acct, "GET", f"/events/{event_id}")
     ev = parse_event(item, ZoneInfo(tz))
     if ev is None:
-        raise CalendarError("That event was cancelled already.", 410)
+        raise CalendarError(Msg("That event was cancelled already."), 410)
     return ev
 
 

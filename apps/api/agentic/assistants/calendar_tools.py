@@ -18,6 +18,7 @@ from sqlalchemy import select
 from ..agents.tools import Tool, ToolContext
 from ..core.fence import fence
 from ..core.ids import new_id
+from ..i18n import Msg
 from ..models import GoogleAccount
 from ..teams import heartbeat, when
 from . import calendar
@@ -289,12 +290,30 @@ async def _propose(
         pid=pid,
     )
     verb = {"create": "add", "update": "change", "cancel": "cancel"}[action]
+    name = ctx.agent.name
+    title = {
+        "create": Msg("{name} wants to add a calendar event", name=name),
+        "update": Msg("{name} wants to change a calendar event", name=name),
+        "cancel": Msg("{name} wants to cancel a calendar event", name=name),
+    }[action]
+    if notify:
+        confirm = {
+            "create": Msg("Confirm it to add it and update the guests."),
+            "update": Msg("Confirm it to change it and update the guests."),
+            "cancel": Msg("Confirm it to cancel it and update the guests."),
+        }[action]
+    else:
+        confirm = {
+            "create": Msg("Confirm it to add it."),
+            "update": Msg("Confirm it to change it."),
+            "cancel": Msg("Confirm it to cancel it."),
+        }[action]
     ids = await deliver.notify_user(
         ctx.db,
         ctx.workspace.id,
         acct.user_id,
-        f"{ctx.agent.name} wants to {verb} a calendar event",
-        f"{summary}\n\nConfirm it to {verb} it" + (" and update the guests." if notify else "."),
+        title,
+        Msg("{summary}\n\n{confirm}", summary=summary, confirm=confirm),
         "/assistants?tab=drafts",
         dedupe=f"calprop:{p['id']}",
     )

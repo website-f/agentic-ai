@@ -761,7 +761,8 @@ async def set_status(
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "checks_failed",
-                "Fix these first: " + " ".join(errors[:3]),
+                "Fix these first: {problems}",
+                problems=" ".join(errors[:3]),
             )
         d.approved_by, d.approved_at = principal.actor, datetime.now(UTC)
     elif d.status == "approved":

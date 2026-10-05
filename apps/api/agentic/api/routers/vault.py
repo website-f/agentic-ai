@@ -16,6 +16,7 @@ from ...agents import vault
 from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import can
+from ...i18n.labels import role_label
 from ...models import Agent, Branch, Credential
 from ...services import audit
 from ..deps import Principal, api_error, current_principal
@@ -64,7 +65,8 @@ def vault_user():
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "forbidden",
-                f"Your role ({principal.role}) cannot see saved logins.",
+                "Your role ({role}) cannot see saved logins.",
+                role=role_label(principal.role),
             )
         return principal
 

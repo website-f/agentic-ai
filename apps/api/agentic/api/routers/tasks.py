@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import decisions, dispatch, launch, runtime
 from ...agents.tools import TOOLS
 from ...core.db import get_db
+from ...i18n import render, tr
+from ...i18n.labels import task_status_label
 from ...models import (
     Agent,
     AgentMessage,
@@ -219,7 +221,8 @@ async def _assignee(db: AsyncSession, principal: Principal, agent_id: str | None
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "bad_agent",
-            f"Pick an agent from {principal.scope.label}.",
+            "Pick an agent from {where}.",
+            where=principal.scope.label,
         )
     return a
 
@@ -573,7 +576,9 @@ async def update_task(
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "bad_move",
-                f"A {t.status} task cannot be moved to {new_status} by hand.",
+                "A {status} task cannot be moved to {new_status} by hand.",
+                status=task_status_label(t.status),
+                new_status=task_status_label(new_status),
             )
         await runtime.set_task_status(
             db,
@@ -640,7 +645,7 @@ async def retry_failed(
     if body.task_ids is not None:
         found = {t.id for t in rows}
         skipped += [
-            {"id": tid, "reason": "Not a failed task you can see."}
+            {"id": tid, "reason": tr("Not a failed task you can see.")}
             for tid in dict.fromkeys(body.task_ids)
             if tid not in found
         ]
@@ -651,18 +656,20 @@ async def retry_failed(
             skipped.append({"id": t.id, "reason": stop})
             continue
         if i >= RETRY_CAP:
-            skipped.append({"id": t.id, "reason": f"Over {RETRY_CAP} per run: retry again."})
+            skipped.append(
+                {"id": t.id, "reason": tr("Over {n} per run: retry again.", n=RETRY_CAP)}
+            )
             continue
         agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
         if not principal.scope.sees_task(t, agent):
-            skipped.append({"id": t.id, "reason": "Not a failed task you can see."})
+            skipped.append({"id": t.id, "reason": tr("Not a failed task you can see.")})
             continue
         try:
             await launch.launch(db, t, principal.actor)
         except launch.LaunchError as e:
-            skipped.append({"id": t.id, "reason": e.message})
+            skipped.append({"id": t.id, "reason": render(e.message)})
             if e.code == "temporal_unavailable":  # the rest would fail the same way
-                stop = "Not tried: the worker service is not reachable."
+                stop = tr("Not tried: the worker service is not reachable.")
             continue
         retried.append(t.id)
     if retried:
@@ -714,7 +721,8 @@ async def delete_task(
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "run_active",
-                f'This is a step of the workflow run "{run.title}", which is still going.',
+                'This is a step of the workflow run "{title}", which is still going.',
+                title=run.title,
             )
     await audit.record(
         db,

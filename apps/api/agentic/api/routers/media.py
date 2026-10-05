@@ -62,7 +62,8 @@ async def transcribe(
             raise api_error(
                 status.HTTP_413_CONTENT_TOO_LARGE,
                 "recording_too_large",
-                f"Voice recordings can be up to {media.MAX_AUDIO_MB} MB.",
+                "Voice recordings can be up to {mb} MB.",
+                mb=media.MAX_AUDIO_MB,
             )
     try:
         t = await gateway.transcribe(

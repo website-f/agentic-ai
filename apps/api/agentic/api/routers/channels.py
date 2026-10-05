@@ -17,6 +17,7 @@ from ...core import crypto
 from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.security import can
+from ...i18n import tr
 from ...models import (
     ActionToken,
     Agent,
@@ -30,6 +31,7 @@ from ...models import (
     PushSubscription,
     User,
 )
+from ...services import prefs
 from ..deps import Principal, api_error, require
 from .tasks import approval_out
 
@@ -188,7 +190,7 @@ async def test_push(
             kind="test",
             payload={
                 "title": "Agentic Office",
-                "body": "Notifications work on this device.",
+                "body": tr("Notifications work on this device."),
                 "url": "/office",
                 "tag": "test",
             },
@@ -245,7 +247,9 @@ async def act(body: ActIn, db: AsyncSession = Depends(get_db)) -> dict[str, str]
         await decisions.decide(db, a, f"user:{t.user_id}", body.decision, "once", via="push")
     except decisions.DecisionError as e:
         raise api_error(e.status, e.code, e.message) from e
-    return {"status": a.status, "message": "Approved." if a.status == "approved" else "Denied."}
+    lang = prefs.lang_of(user)
+    done = tr("Approved.", lang) if a.status == "approved" else tr("Denied.", lang)
+    return {"status": a.status, "message": done}
 
 
 @router.get("/approve/{approval_id}")
@@ -357,7 +361,8 @@ async def _check_bot(token: str) -> dict[str, Any]:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "bad_token",
-            f"Telegram did not accept that token: {e}",
+            "Telegram did not accept that token: {error}",
+            error=str(e),
         ) from e
     except Exception as e:  # noqa: BLE001 - offline, DNS and the like
         raise api_error(

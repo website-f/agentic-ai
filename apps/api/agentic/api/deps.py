@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.security import PERMISSIONS, can, new_token, token_hash
+from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
+from ..i18n.labels import role_label
 from ..models import AuthSession, Membership, User
 from .scope import Scope
 
@@ -40,9 +43,39 @@ class Principal:
         return sorted(PERMISSIONS.get(self.role, frozenset()))
 
 
-def api_error(status_code: int, code: str, message: str) -> HTTPException:
-    """Errors carry a stable `code` for the client and a sentence for the person."""
-    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+def api_error(status_code: int, code: str, message: str, **vars: Any) -> HTTPException:
+    """Errors carry a stable `code` for the client and a sentence for the person.
+
+    `message` is an English template, like t() in the app: `{var}` placeholders filled from
+    `vars`. It stays English here (logs, tests); the error handler renders it in the
+    request's language when it answers. Never pass an f-string: Malay word order differs.
+    """
+    if isinstance(message, Msg):
+        text: Msg = message
+    elif vars:
+        text = Msg(message, **vars)
+    else:  # a literal, or English from elsewhere (str(e)): exact key, then known templates
+        text = lookup(message)
+    return HTTPException(status_code=status_code, detail={"code": code, "message": text})
+
+
+LANG_HEADER = "x-lang"
+
+
+def header_lang(request: Request) -> str | None:
+    """The language the app asked for (X-Lang: en | ms), if valid."""
+    return normalize(request.headers.get(LANG_HEADER))
+
+
+def _remember_lang(request: Request, user: User) -> None:
+    """No X-Lang header: answer in the person's saved language."""
+    if explicit_lang() is not None or header_lang(request):
+        return
+    saved = ((user.prefs or {}).get("locale") or {}).get("language")
+    lang = normalize(saved)
+    if lang:
+        request.state.lang = lang
+        set_lang(lang)
 
 
 def client_ip(request: Request) -> str:
@@ -116,6 +149,7 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
             "This account no longer has access to the workspace.",
         )
     user, m = row
+    _remember_lang(request, user)
     return Principal(
         user=user,
         workspace_id=session.workspace_id,
@@ -150,7 +184,8 @@ def require(permission: str):
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "forbidden",
-                f"Your role ({principal.role}) cannot do this.",
+                "Your role ({role}) cannot do this.",
+                role=role_label(principal.role),
             )
         return principal
 

@@ -19,6 +19,7 @@ from ...agents.tools import modes_for
 from ...agents.vault import for_agent as logins_for
 from ...core.db import get_db
 from ...core.ssrf import BlockedURL, guard_url
+from ...i18n.labels import agent_status_label
 from ...models import Task
 from ...services import audit, events
 from ..agent_schemas import TaskOut
@@ -116,7 +117,11 @@ async def web_task(
     agent = await get_agent(db, principal, agent_id)
     if agent.status != "active":
         raise api_error(
-            status.HTTP_409_CONFLICT, "agent_inactive", f"{agent.name} is {agent.status}."
+            status.HTTP_409_CONFLICT,
+            "agent_inactive",
+            "{name} is {status}.",
+            name=agent.name,
+            status=agent_status_label(agent.status),
         )
     url = body.url.strip()
     if "://" not in url:
@@ -137,8 +142,9 @@ async def web_task(
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "no_browser",
-                f"{agent.name} cannot use the browser yet. Ask whoever manages {agent.name} to "
+                "{name} cannot use the browser yet. Ask whoever manages {name} to "
                 "give it the browser tools (Permissions), or pick another agent.",
+                name=agent.name,
             )
         web = dict(BY_ID["web_operator"].tools)
         added = {t: web.get(t, "allow") for t in missing}
@@ -156,7 +162,9 @@ async def web_task(
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "bad_login",
-            f"{agent.name} may not use a saved login called {body.login!r}.",
+            "{name} may not use a saved login called '{login}'.",
+            name=agent.name,
+            login=body.login,
         )
 
     lowest = (

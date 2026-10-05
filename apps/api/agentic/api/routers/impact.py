@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...core.security import can
+from ...i18n.labels import role_label
 from ...models import (
     Agent,
     Approval,
@@ -315,7 +316,8 @@ async def impact(
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "forbidden",
-            f"Your role ({principal.role}) cannot see the impact report.",
+            "Your role ({role}) cannot see the impact report.",
+            role=role_label(principal.role),
         )
     out = await build(db, principal, days)
     # Busiest departments first inside each company.

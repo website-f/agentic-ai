@@ -89,7 +89,9 @@ async def create_sop(
             raise api_error(
                 status.HTTP_400_BAD_REQUEST,
                 "bad_scope",
-                f"Pick a {body.scope} from this workspace.",
+                "Pick a branch from this workspace."
+                if body.scope == "branch"
+                else "Pick a department from this workspace.",
             )
     s = SOP(
         workspace_id=principal.workspace_id,

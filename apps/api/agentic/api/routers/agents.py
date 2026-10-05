@@ -16,6 +16,8 @@ from ...agents.tools import FOLLOWS, TOOLS
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
 from ...engine import gateway
+from ...i18n import Msg
+from ...i18n.labels import agent_status_label, role_label
 from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task, User
 from ...services import audit, events
 from ...services.text import slugify
@@ -155,7 +157,9 @@ async def managed_agent(db: AsyncSession, principal: Principal, agent_id: str) -
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "forbidden",
-            f"Your role ({principal.role}) cannot change {a.name}.",
+            "Your role ({role}) cannot change {name}.",
+            role=role_label(principal.role),
+            name=a.name,
         )
     return a
 
@@ -169,7 +173,8 @@ def manage_perm():
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "forbidden",
-                f"Your role ({principal.role}) cannot add or change agents.",
+                "Your role ({role}) cannot add or change agents.",
+                role=role_label(principal.role),
             )
         return principal
 
@@ -184,17 +189,24 @@ async def refuse_second_agent(db: AsyncSession, principal: Principal) -> None:
         raise api_error(
             status.HTTP_409_CONFLICT,
             "twin_exists",
-            f"You already have your AI twin, {mine.name}. You can change it any time.",
+            "You already have your AI twin, {name}. You can change it any time.",
+            name=mine.name,
         )
     old = await twin.adoptable(db, principal.workspace_id, principal.user.id)
     if old:
-        which = old[0].name if len(old) == 1 else f"{len(old)} agents"
+        if len(old) == 1:
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "adopt_instead",
+                "You already have {name}. Make it your AI twin instead of adding another agent.",
+                name=old[0].name,
+            )
         raise api_error(
             status.HTTP_409_CONFLICT,
             "adopt_instead",
-            f"You already have {which}. Make "
-            + ("it" if len(old) == 1 else "one of them")
-            + " your AI twin instead of adding another agent.",
+            "You already have {n} agents. Make one of them your AI twin instead of adding "
+            "another agent.",
+            n=len(old),
         )
 
 
@@ -235,7 +247,8 @@ def _check_tools(tools: Mapping[str, str]) -> None:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "unknown_tool",
-            f"Unknown tools: {', '.join(sorted(unknown))}.",
+            "Unknown tools: {tools}.",
+            tools=", ".join(sorted(unknown)),
         )
 
 
@@ -334,7 +347,8 @@ async def create_agent(
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "outside_scope",
-            f"You can only place agents in {principal.scope.label}.",
+            "You can only place agents in {where}.",
+            where=principal.scope.label,
         )
     await _check_placement(
         db,
@@ -425,7 +439,7 @@ async def _guard_twin(db: AsyncSession, principal: Principal, a: Agent, changes:
     """A twin sits with its person and speaks for them: nobody moves it, and only its person
     changes who it is (managers still govern it: status, budgets, tools, SOPs, model)."""
     person = await db.get(User, a.owner_user_id) if a.owner_user_id else None
-    who = person.name if person else "its person"
+    who = person.name if person else Msg("its person")
     if (
         changes.get("branch_id", a.branch_id) != a.branch_id
         or changes.get("department_id", a.department_id) != a.department_id
@@ -433,8 +447,10 @@ async def _guard_twin(db: AsyncSession, principal: Principal, a: Agent, changes:
         raise api_error(
             status.HTTP_409_CONFLICT,
             "twin_placement",
-            f"{a.name} sits with {who}. Change {who}'s branch or department in Members; "
+            "{name} sits with {who}. Change {who}'s branch or department in Members; "
             "the twin follows when it is saved again.",
+            name=a.name,
+            who=who,
         )
     changes.pop("branch_id", None)
     changes.pop("department_id", None)
@@ -443,8 +459,10 @@ async def _guard_twin(db: AsyncSession, principal: Principal, a: Agent, changes:
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "twin_persona",
-            f"{a.name} is {who}'s AI twin: only {who} can change its name, role, persona or "
+            "{name} is {who}'s AI twin: only {who} can change its name, role, persona or "
             "colour. You can still pause it or adjust its tools, SOPs and budget.",
+            name=a.name,
+            who=who,
         )
 
 
@@ -478,7 +496,8 @@ async def update_agent(
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "outside_scope",
-            f"You can only place agents in {principal.scope.label}.",
+            "You can only place agents in {where}.",
+            where=principal.scope.label,
         )
     await _check_placement(
         db,
@@ -615,7 +634,13 @@ async def chat(
 ) -> ChatOut:
     a = await get_agent(db, principal, agent_id)
     if a.status != "active":
-        raise api_error(status.HTTP_409_CONFLICT, "agent_inactive", f"{a.name} is {a.status}.")
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "agent_inactive",
+            "{name} is {status}.",
+            name=a.name,
+            status=agent_status_label(a.status),
+        )
     if body.session_id:
         s = await db.get(ChatSession, body.session_id)
         if s is None or s.user_id != principal.user.id or s.agent_id != a.id:

@@ -7,7 +7,7 @@
 # What changes:
 #   - the browser is opt-in. Off: agents get no browser tools, so no prompt tokens for them.
 #     On: set AGENTIC_BROWSER_URL=http://browser:8600 in .env and add `--profile browser`
-#     (one Firefox, 2 agents at once, ~0.5-1 GB).
+#     (one Firefox, 2 agents at once, ~0.5-1 GB, plus its egress proxy, ~25 MB).
 #   - Temporal UI only with `--profile ops`
 #   - 4 agent steps at once instead of 16, smaller DB pools, smaller Postgres/Valkey caches
 #   - the local backup model (qwen3:0.6b, ~0.85 GB) stays: it answers when the cloud is down
@@ -52,7 +52,8 @@ services:
       AGENTIC_WORKER_MAX_ACTIVITIES: "4"
       AGENTIC_DB_POOL_SIZE: "8"  # two connections per running step
       AGENTIC_DB_MAX_OVERFLOW: "4"
-    mem_limit: 1g
+    # 1.28 GB: separating speakers in a meeting recording runs one ~300 MB helper process.
+    mem_limit: 1280m
 
   browser:
     profiles: [browser]
@@ -62,6 +63,13 @@ services:
     shm_size: 512mb
     mem_limit: 1g
     cpus: 1.5
+
+  egress:  # the browser's only way out: on and off with it
+    profiles: [browser]
+    environment:
+      EGRESS_MAX_CONNECTIONS: "256"
+    mem_limit: 64m
+    cpus: 0.25
 
   ollama:
     mem_limit: 1152m

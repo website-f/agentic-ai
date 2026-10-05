@@ -118,7 +118,8 @@ async def _check_refs(db: AsyncSession, principal: Principal, items: list[dict[s
                 raise api_error(
                     status.HTTP_400_BAD_REQUEST,
                     "bad_file",
-                    f"{it['label']}: that file is not here.",
+                    "{label}: that file is not here.",
+                    label=it["label"],
                 )
         if it.get("document_id"):
             d = await db.get(Document, it["document_id"])
@@ -126,7 +127,8 @@ async def _check_refs(db: AsyncSession, principal: Principal, items: list[dict[s
                 raise api_error(
                     status.HTTP_400_BAD_REQUEST,
                     "bad_document",
-                    f"{it['label']}: that document is not here.",
+                    "{label}: that document is not here.",
+                    label=it["label"],
                 )
 
 

@@ -6,7 +6,8 @@ delegated request cost, not only what each agent spent.
 - A task carries `objective_id` (the objective it serves) and `root_task_id` (the first task
   of its request tree; NULL means the task is its own root). Children made by delegate,
   split_work, ask_colleague, workflow steps and assistants' messages inherit both
-  (`lineage`); a schedule's runs keep the objective a person gave an earlier run.
+  (`lineage`); a schedule's runs keep the objective a person gave an earlier run. A workflow
+  run may carry its own objective (P23, `workflow_runs.objective_id`): its step tasks get it.
 - A task belongs to its own objective, or else to its root's (`_member`): cost and progress
   roll up through the request tree even for parts made before the link.
 - Budgets reuse the agent-budget pattern (teams/budget.py): the creator is told at 80 %; at
@@ -46,16 +47,47 @@ def lineage(parent: Task | None) -> dict[str, Any]:
     return {"objective_id": parent.objective_id, "root_task_id": parent.root_task_id or parent.id}
 
 
-async def run_lineage(db: AsyncSession, run_id: str) -> dict[str, Any]:
-    """A workflow run's steps form one request: rooted at its first step task, under the
-    objective that step has (a person may link it)."""
-    first = await db.scalar(
+async def _first_step(db: AsyncSession, run_id: str) -> Task | None:
+    return await db.scalar(
         select(Task)
         .where(Task.workflow_run_id == run_id)
         .order_by(Task.created_at, Task.id)
         .limit(1)
     )
-    return lineage(first)
+
+
+async def run_lineage(
+    db: AsyncSession, run_id: str, objective_id: str | None = None
+) -> dict[str, Any]:
+    """A workflow run's steps form one request, rooted at its first step task. They serve
+    the run's objective (P23: picked when the run starts, or changed on the run); a run with
+    none keeps the objective its first step has (a person may link that task)."""
+    out = lineage(await _first_step(db, run_id))
+    if objective_id:
+        out["objective_id"] = objective_id
+    return out
+
+
+async def relink_run(db: AsyncSession, run: Any, old: str | None, new: str | None) -> int:
+    """P23: a run moved to another objective. Its step tasks, and the parts they handed out,
+    that served the old objective follow it (whatever their status, so the run's progress and
+    cost move together). Returns how many moved."""
+    first = await _first_step(db, run.id)
+    if first is None:
+        return 0
+    served = Task.objective_id.is_(None) if old is None else Task.objective_id == old
+    rows = (
+        await db.scalars(
+            select(Task).where(
+                Task.workspace_id == run.workspace_id,
+                or_(Task.workflow_run_id == run.id, Task.root_task_id == first.id),
+                served,
+            )
+        )
+    ).all()
+    for t in rows:
+        t.objective_id = new
+    return len(rows)
 
 
 async def schedule_lineage(db: AsyncSession, schedule_id: str) -> dict[str, Any]:
@@ -123,16 +155,25 @@ def may_edit(
 
 
 async def linkable(
-    db: AsyncSession, workspace_id: str, scope: Any, objective_id: str, branch_id: str | None
+    db: AsyncSession,
+    workspace_id: str,
+    scope: Any,
+    objective_id: str,
+    branch_id: str | None,
+    what: str = "task",
+    branch_ids: set[str] | None = None,
 ) -> Objective | str:
-    """The objective a task may be linked to, or why not (a sentence for the person)."""
+    """The objective a task (or a workflow run) may be linked to, or why not (a sentence for
+    the person). A run for any company passes the companies its steps' agents work in as
+    `branch_ids`: each must match an objective set for one company."""
     ob = await db.get(Objective, objective_id)
     if ob is None or ob.workspace_id != workspace_id or not sees(scope, ob):
         return "Pick an objective you can see."
     if ob.status != "active":
         return f'"{ob.title}" is {ob.status}: pick an active objective.'
-    if ob.branch_id and branch_id and ob.branch_id != branch_id:
-        return f'"{ob.title}" belongs to another company than this task.'
+    others = {b for b in (branch_ids or set()) | {branch_id} if b}
+    if ob.branch_id and any(b != ob.branch_id for b in others):
+        return f'"{ob.title}" belongs to another company than this {what}.'
     return ob
 
 

@@ -39,6 +39,7 @@ Agent platforms in 2026 have a bad track record (OpenClaw: critical RCE CVEs, 1,
 - File tools are restricted to the workspace vault and upload bucket; protected paths (`.git`, `AGENTS.md`, policies) require approval.
 - No shell or code-execution tool in v1. When added, it runs in a separate sandbox service with no network by default, CPU/memory/time limits, and no access to the Docker socket.
 - MCP servers (if added) start with a scrubbed environment (no secrets inherited).
+- The agent browser (P23) has no route out of its own: its Docker network `browser` is `internal: true` and shared only with the worker (which drives it) and the egress proxy (`apps/egress`). The proxy resolves every host once, refuses the connection if any address is not public (private, loopback, link-local, CGNAT, metadata, numeric/mapped/NAT64 forms) and connects to the checked address, so redirects and sub-resources to internal addresses never leave the browser. Only ports 80/443 unless `EGRESS_ALLOW_PORTS`; exceptions only via `EGRESS_ALLOW_HOSTS` (dev: the practice portal). Denials are logged without paths or query strings: `docker compose logs egress | grep '"deny"'`. The browser's own route and frame guards stay as a second line.
 
 ## 5. Secrets
 

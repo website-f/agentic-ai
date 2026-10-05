@@ -2,12 +2,13 @@
  * Pipeline (worker): extract audio -> transcribe in parts -> write minutes -> library. */
 import {
   ArrowClockwiseIcon, BooksIcon, CheckCircleIcon, CheckIcon, CircleNotchIcon, ClockIcon, DotsThreeIcon, FileDocIcon,
-  FilePdfIcon, GearSixIcon, KanbanIcon, ListChecksIcon, MicrophoneIcon, NotePencilIcon, PlayIcon, SpeakerSlashIcon,
-  TranslateIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, WaveformIcon, XIcon, type Icon,
+  FilePdfIcon, GearSixIcon, KanbanIcon, ListChecksIcon, MicrophoneIcon, NotePencilIcon, PauseIcon, PlayIcon, SparkleIcon,
+  SpeakerSlashIcon, TranslateIcon, TrashIcon, UploadSimpleIcon, UsersThreeIcon, WarningCircleIcon, WaveformIcon, XIcon,
+  type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState, type DragEvent } from "react";
+import { useId, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
 import { parseScope, scopeOptions, ScopeSelect, WHOLE } from "@/components/library-toggle";
@@ -26,15 +27,16 @@ import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { SwitchField } from "@/components/ui/switch";
 import { locale, msg, t, useLang, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { fileSize } from "@/lib/documents";
 import {
   ACCEPT, audioUrl, clock, duration, isActive, isRecording, minutesExportUrl, minutesKeys, minutesListQuery, minutesQuery,
-  minutesSettingsQuery, stageOf, uploadRecording, type ActionItem, type MinutesLanguage, type Recording,
-  type RecordingDetail, type Stage,
+  minutesSettingsQuery, speakerClipUrl, speakerColor, speakerNumber, stageOf, uploadRecording, type ActionItem,
+  type MinutesLanguage, type Recording, type RecordingDetail, type Speaker, type Stage,
 } from "@/lib/minutes";
-import { branchesQuery, meQuery } from "@/lib/queries";
+import { branchesQuery, meQuery, membersQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 
@@ -55,8 +57,29 @@ const STATUS: Record<Recording["status"], { label: string; tone: "accent" | "ok"
 
 function statusLabel(r: Recording): string {
   if (r.status === "transcribing" && r.chunks_total) return t("Transcribing {done}/{total}", { done: Math.min(r.chunks_done + 1, r.chunks_total), total: r.chunks_total });
+  if (r.status === "extracting" && r.speakers_total) return t("Separating speakers…");
   return t(STATUS[r.status].label);
 }
+
+/** "Aisyah", or "Speaker 2" until someone names the voice. */
+function speakerName(label: string, sp?: Pick<Speaker, "name">): string {
+  return sp?.name || t("Speaker {n}", { n: speakerNumber(label) });
+}
+
+function SpeakerDot({ label, className }: { label: string; className?: string }) {
+  return <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", className)} style={{ background: speakerColor(label) }} />;
+}
+
+function SpeakerChip({ label, name }: { label: string; name: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-[12px] font-medium">
+      <SpeakerDot label={label} className="size-2" />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+const SPEAKER_COUNTS = ["auto", "2", "3", "4", "5", "6", "7", "8", "9", "10"] as const;
 
 function invalidate(qc: ReturnType<typeof useQueryClient>, id?: string) {
   qc.invalidateQueries({ queryKey: minutesKeys.list });
@@ -83,6 +106,8 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
   const scope = picked && options.some((o) => o.value === picked) ? picked : (options[0]?.value ?? WHOLE);
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState<MinutesLanguage>("en");
+  const [separate, setSeparate] = useState(true);
+  const [people, setPeople] = useState<string>("auto");
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
@@ -97,7 +122,8 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
     const controller = new AbortController();
     setJob({ name: file.name, size: file.size, progress: 0, controller });
     try {
-      const rec = await uploadRecording(file, { title, language, ...parseScope(scope, branches) }, (p) => setJob((j) => (j ? { ...j, progress: p } : j)), controller.signal);
+      const params = { title, language, speakers: separate, speaker_count: people === "auto" ? null : Number(people), ...parseScope(scope, branches) };
+      const rec = await uploadRecording(file, params, (p) => setJob((j) => (j ? { ...j, progress: p } : j)), controller.signal);
       toast.success(t("Uploaded. The minutes are being prepared; you can leave this page."));
       setTitle("");
       invalidate(qc);
@@ -133,6 +159,17 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
           <span className="text-[13px] font-medium">{t("Write the minutes in")}</span>
           <Segmented label={t("Minutes language")} value={language} onChange={setLanguage} options={LANGS.map((l) => ({ ...l, label: t(l.label) }))} className="w-fit" />
           <span className="text-[12.5px] text-muted">{t("The meeting itself can be in English, Malay or both.")}</span>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] md:items-center">
+          <SwitchField checked={separate} onCheckedChange={setSeparate} disabled={!!job} label={t("Separate speakers")}
+            hint={t("Tells the voices apart on this server, so the minutes say who said what. Nothing is sent anywhere else for this.")} />
+          {separate ? (
+            <label className="grid min-w-0 gap-1">
+              <span className="text-[12px] text-muted">{t("How many people talk")}</span>
+              <Select value={people} onValueChange={setPeople} label={t("How many people talk")} disabled={!!job} className="w-full"
+                options={SPEAKER_COUNTS.map((n) => ({ value: n, label: n === "auto" ? t("Find out (auto)") : t("{n} people", { n }) }))} />
+            </label>
+          ) : null}
         </div>
         {job ? (
           <div className="grid gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-4" role="status" aria-live="polite">
@@ -177,6 +214,7 @@ function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
 const STEPS: { key: Stage; label: string }[] = [
   { key: "upload", label: msg("Uploaded") },
   { key: "extract", label: msg("Extracting audio") },
+  { key: "speakers", label: msg("Separating speakers…") },
   { key: "transcribe", label: msg("Transcribing") },
   { key: "write", label: msg("Writing minutes") },
   { key: "ready", label: msg("Ready") },
@@ -185,29 +223,33 @@ const STEPS: { key: Stage; label: string }[] = [
 export function Timeline({ r }: { r: Recording }) {
   const t = useT();
   const failed = r.status === "failed";
+  const steps = r.separate_speakers ? STEPS : STEPS.filter((s) => s.key !== "speakers");
+  const index = (k: Stage) => steps.findIndex((s) => s.key === k);
   // A failed recording: no length yet = stopped reading the file; parts left = while hearing.
-  const at = failed ? (!r.duration_seconds ? 1 : r.chunks_total && r.chunks_done < r.chunks_total ? 2 : 3) : STEPS.findIndex((s) => s.key === stageOf(r));
+  const at = failed ? index(!r.duration_seconds ? "extract" : r.chunks_total && r.chunks_done < r.chunks_total ? "transcribe" : "write") : index(stageOf(r));
   return (
     <ol aria-label={t("Progress")} className="grid grid-cols-[minmax(0,1fr)] gap-0">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const done = i < at || r.status === "ready";
         const current = !failed && i === at && r.status !== "ready";
         const broke = failed && i === at;
         const label = s.key === "transcribe" && r.chunks_total ? t("Transcribing {done}/{total}", { done: Math.min(r.chunks_done + (current ? 1 : 0), r.chunks_total), total: r.chunks_total }) : t(s.label);
+        const bar = current && s.key === "transcribe" && r.chunks_total ? r.chunks_done / r.chunks_total : current && s.key === "speakers" && r.speakers_total ? r.speakers_done / r.speakers_total : null;
         return (
           <li key={s.key} className="relative flex min-w-0 gap-3 pb-4 last:pb-0">
-            {i < STEPS.length - 1 ? <span aria-hidden className={cn("absolute top-6 bottom-0 left-[11px] w-px", done ? "bg-ok/50" : "bg-border")} /> : null}
+            {i < steps.length - 1 ? <span aria-hidden className={cn("absolute top-6 bottom-0 left-[11px] w-px", done ? "bg-ok/50" : "bg-border")} /> : null}
             <span className={cn("relative z-[1] grid size-6 shrink-0 place-items-center rounded-full border",
               done ? "border-ok/40 bg-ok/12 text-ok" : broke ? "border-danger/40 bg-danger/10 text-danger" : current ? "border-accent/50 bg-accent-soft text-accent" : "border-border bg-surface text-muted")}>
               {done ? <CheckIcon size={12} weight="bold" /> : broke ? <XIcon size={12} weight="bold" /> : current ? <CircleNotchIcon size={13} weight="bold" className="motion-safe:animate-spin" /> : <span className="size-1.5 rounded-full bg-current opacity-50" />}
             </span>
             <span className="grid min-w-0 gap-1 pt-0.5">
               <span className={cn("text-[13.5px]", current ? "font-semibold" : broke ? "font-semibold text-danger" : done ? "font-medium" : "text-muted")}>{broke ? t("{label}: stopped here", { label }) : label}</span>
-              {current && s.key === "transcribe" && r.chunks_total ? (
+              {bar !== null ? (
                 <span className="block h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-surface-2" aria-hidden>
-                  <span className="block h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${(r.chunks_done / r.chunks_total) * 100}%` }} />
+                  <span className="block h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${bar * 100}%` }} />
                 </span>
               ) : null}
+              {current && s.key === "speakers" ? <span className="text-[12.5px] text-muted">{t("Telling the voices apart on this server. About a minute for every 10 minutes of audio.")}</span> : null}
               {current && r.stage_detail ? <span className="text-[12.5px] text-muted">{r.stage_detail}</span> : null}
             </span>
           </li>
@@ -219,7 +261,50 @@ export function Timeline({ r }: { r: Recording }) {
 
 // ---------------------------------------------------------------- minutes text
 
-function MinutesText({ r }: { r: RecordingDetail }) {
+/** "Rewrite with names": the minutes written again from the saved transcript with the speakers'
+ * names; the current minutes stay as a document version. Asks first when tasks exist. */
+function RewriteWithNames({ r, size = "sm" }: { r: RecordingDetail; size?: "sm" | "md" }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const [ask, setAsk] = useState(false);
+  const go = useMutation({
+    mutationFn: () => api<RecordingDetail>(`/api/minutes/${r.id}/rewrite`, "POST", { language: r.language }),
+    onSuccess: (d) => { qc.setQueryData(minutesKeys.one(r.id), d); invalidate(qc, r.id); toast.success(t("Writing the minutes again with the names.")); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const tasks = r.action_items.some((a) => a.task_id);
+  return (
+    <>
+      <Button size={size} loading={go.isPending} onClick={() => (tasks ? setAsk(true) : go.mutate())}><SparkleIcon size={14} /> {t("Rewrite with names")}</Button>
+      <ConfirmDialog open={ask} onOpenChange={setAsk} title={t("Rewrite the minutes with the names?")}
+        body={t("The minutes and their action items are written again. Tasks already made stay on the board; the current minutes stay as an earlier version.")}
+        confirmLabel={t("Rewrite")} onConfirm={() => go.mutate()} />
+    </>
+  );
+}
+
+function SpeakerNotes({ r, onSpeakers }: { r: RecordingDetail; onSpeakers: () => void }) {
+  const t = useT();
+  if (!r.can_edit || !r.speakers.length) return null;
+  const unnamed = r.speakers.filter((s) => !s.name).length;
+  if (r.speakers_stale) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-accent/30 bg-accent-soft/40 px-3 py-2 text-[13px]">
+        <span className="min-w-0">{t("The speaker names changed after these minutes were written.")}</span>
+        <RewriteWithNames r={r} />
+      </div>
+    );
+  }
+  if (!unnamed) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-info/30 bg-info/8 px-3 py-2 text-[13px]">
+      <span className="min-w-0">{unnamed === r.speakers.length ? t("{n} speakers found. Name them so the minutes say who said what.", { n: r.speakers.length }) : t("{n} speakers still have no name.", { n: unnamed })}</span>
+      <Button size="sm" variant="outline" onClick={onSpeakers}><UsersThreeIcon size={14} /> {t("Name speakers")}</Button>
+    </div>
+  );
+}
+
+function MinutesText({ r, onSpeakers }: { r: RecordingDetail; onSpeakers: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const [draft, setDraft] = useState<string | null>(null);
@@ -238,8 +323,11 @@ function MinutesText({ r }: { r: RecordingDetail }) {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <p className="flex items-start gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[12.5px] text-muted">
         <WarningCircleIcon size={15} className="mt-px shrink-0 text-warn" />
-        <span className="min-w-0">{t("Speaker names are as heard in the conversation: speech-to-text does not reliably tell voices apart. Check names, figures and decisions before sharing.")}</span>
+        <span className="min-w-0">{r.speakers.length
+          ? t("Speakers were told apart by their voices. Now and then a few words go to the wrong person: check names, figures and decisions before sharing.")
+          : t("Speaker names are as heard in the conversation: speech-to-text does not reliably tell voices apart. Check names, figures and decisions before sharing.")}</span>
       </p>
+      {draft === null ? <SpeakerNotes r={r} onSpeakers={onSpeakers} /> : null}
       {r.can_edit && r.published_stale && draft === null ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-info/30 bg-info/8 px-3 py-2 text-[13px]">
           <span className="min-w-0">{r.published_at ? t("Changed since it was published to the library.") : t("Not in the library yet.")}</span>
@@ -364,6 +452,115 @@ function ActionItems({ r }: { r: RecordingDetail }) {
   );
 }
 
+// ---------------------------------------------------------------- speakers
+
+function SpeakerRow({ r, s, name, onName, names, playing, onPlay }: {
+  r: RecordingDetail; s: Speaker; name: string; onName: (v: string) => void; names: string; playing: boolean; onPlay: () => void;
+}) {
+  const t = useT();
+  const pct = Math.round(s.share * 100);
+  const showSuggestion = r.can_edit && s.suggested && !name.trim();
+  return (
+    <li className="grid grid-cols-[minmax(0,1fr)] gap-3 px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)] md:items-start">
+      <div className="flex min-w-0 items-center gap-3">
+        {s.has_clip ? (
+          <button type="button" onClick={onPlay} aria-pressed={playing}
+            aria-label={playing ? t("Stop the clip of {name}", { name: speakerName(s.label, s) }) : t("Play a clip of {name}", { name: speakerName(s.label, s) })}
+            className="grid size-10 shrink-0 place-items-center rounded-full border-2 bg-surface transition-colors hover:bg-surface-2" style={{ borderColor: speakerColor(s.label) }}>
+            {playing ? <PauseIcon size={15} weight="fill" /> : <PlayIcon size={15} weight="fill" />}
+          </button>
+        ) : <span className="grid size-10 shrink-0 place-items-center"><SpeakerDot label={s.label} className="size-3.5" /></span>}
+        <div className="grid min-w-0 flex-1 gap-1.5">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate text-[14px] font-medium">{speakerName(s.label, s)}</span>
+            {s.name ? <span className="shrink-0 text-[12px] text-muted">{t("Speaker {n}", { n: speakerNumber(s.label) })}</span> : null}
+          </span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="block h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+              <span className="block h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, background: speakerColor(s.label) }} />
+            </span>
+            <span className="shrink-0 text-[12px] text-muted tabular">{t("{time} · {pct}%", { time: duration(s.seconds) || "0 s", pct })}</span>
+          </span>
+        </div>
+      </div>
+      {r.can_edit ? (
+        <div className="grid min-w-0 gap-1.5">
+          <label className="grid min-w-0 gap-1">
+            <span className="sr-only">{t("Name of {speaker}", { speaker: t("Speaker {n}", { n: speakerNumber(s.label) }) })}</span>
+            <Input value={name} onChange={(e) => onName(e.target.value)} list={names} maxLength={80} placeholder={t("Name, or pick from the list")} autoComplete="off" />
+          </label>
+          {showSuggestion ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-sm bg-accent-soft/50 px-2.5 py-1.5 text-[12.5px]">
+              <SparkleIcon size={13} className="shrink-0 text-accent" />
+              <span className="min-w-0 font-medium">{t("Suggested: {name}", { name: s.suggested })}</span>
+              <button type="button" onClick={() => onName(s.suggested)} className="ml-auto rounded-sm px-1.5 py-0.5 font-medium text-accent hover:bg-accent-soft pointer-coarse:py-1.5">{t("Use")}</button>
+              {s.evidence ? <span className="w-full min-w-0 break-words text-muted">{t("Heard: {quote}", { quote: s.evidence })}</span> : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function Speakers({ r }: { r: RecordingDetail }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const { data: members = [] } = useQuery({ ...membersQuery, retry: false });
+  const [names, setNames] = useState<Record<string, string>>(() => Object.fromEntries(r.speakers.map((s) => [s.label, s.name])));
+  const [playing, setPlaying] = useState<string | null>(null);
+  const player = useRef<HTMLAudioElement>(null);
+  const listId = useId();
+  const dirty = r.speakers.some((s) => (names[s.label] ?? "").trim() !== s.name);
+  const save = useMutation({
+    mutationFn: () => api<RecordingDetail>(`/api/minutes/${r.id}/speakers`, "PUT", { names: Object.fromEntries(r.speakers.map((s) => [s.label, (names[s.label] ?? "").trim()])) }),
+    onSuccess: (d) => { qc.setQueryData(minutesKeys.one(r.id), d); toast.success(t("Speaker names saved.")); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const choices = [...new Set([...(r.minutes?.attendees ?? []), ...members.filter((m) => m.is_active).map((m) => m.name)].filter(Boolean))];
+  const play = (label: string) => {
+    const el = player.current;
+    if (!el) return;
+    if (playing === label) {
+      el.pause();
+      setPlaying(null);
+      return;
+    }
+    el.src = speakerClipUrl(r.id, label);
+    setPlaying(label);
+    void el.play().catch(() => { setPlaying(null); toast.error(t("Could not play that clip.")); });
+  };
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      <p className="text-[13px] text-muted">
+        {r.audio_available
+          ? t("{n} voices were told apart. Play a short clip to hear who it is, then name them. Names are used in the minutes after Rewrite with names.", { n: r.speakers.length })
+          : t("{n} voices were told apart. The audio is no longer kept, so clips can't be played; you can still name them from the transcript.", { n: r.speakers.length })}
+      </p>
+      {r.speakers_stale && r.can_edit && !dirty ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-accent/30 bg-accent-soft/40 px-3 py-2 text-[13px]">
+          <span className="min-w-0">{t("The speaker names changed after these minutes were written.")}</span>
+          <RewriteWithNames r={r} />
+        </div>
+      ) : null}
+      <audio ref={player} preload="none" onEnded={() => setPlaying(null)} className="hidden" />
+      <datalist id={listId}>{choices.map((n) => <option key={n} value={n} />)}</datalist>
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+        {r.speakers.map((s) => (
+          <SpeakerRow key={s.label} r={r} s={s} name={names[s.label] ?? ""} names={listId} playing={playing === s.label}
+            onName={(v) => setNames((n) => ({ ...n, [s.label]: v }))} onPlay={() => play(s.label)} />
+        ))}
+      </ul>
+      {r.can_edit ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {dirty ? <Button variant="ghost" onClick={() => setNames(Object.fromEntries(r.speakers.map((s) => [s.label, s.name])))} disabled={save.isPending}>{t("Undo changes")}</Button> : null}
+          <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}><CheckIcon size={15} /> {t("Save names")}</Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- transcript
 
 function Transcript({ r }: { r: RecordingDetail }) {
@@ -371,8 +568,11 @@ function Transcript({ r }: { r: RecordingDetail }) {
   const player = useRef<HTMLAudioElement>(null);
   const [now, setNow] = useState(0);
   const [q, setQ] = useState("");
+  const [who, setWho] = useState("all");
+  const byLabel = new Map(r.speakers.map((s) => [s.label, s]));
+  const labelled = r.speakers.length > 0;
   const needle = q.trim().toLowerCase();
-  const shown = needle ? r.transcript.filter((p) => p.text.toLowerCase().includes(needle)) : r.transcript;
+  const shown = r.transcript.filter((p) => (!needle || p.text.toLowerCase().includes(needle)) && (who === "all" || p.s === who));
   const play = (at: number) => {
     const el = player.current;
     if (!el) return;
@@ -390,20 +590,30 @@ function Transcript({ r }: { r: RecordingDetail }) {
         <p className="flex items-center gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[12.5px] text-muted"><SpeakerSlashIcon size={15} className="shrink-0" /> {t("The audio is no longer kept; the transcript stays.")}</p>
       )}
       <SearchInput value={q} onChange={setQ} placeholder={t("Search the transcript")} label={t("Search the transcript")} />
-      <p className="text-[12.5px] text-muted">{r.audio_available ? `${t("Tap a time to hear that moment.")} ` : null}{t("No speaker labels: speech-to-text does not tell voices apart.")}</p>
+      {labelled ? (
+        <Segmented size="sm" label={t("Show who")} value={who} onChange={setWho} options={[
+          { value: "all", label: t("Everyone") },
+          ...r.speakers.map((s) => ({ value: s.label, label: speakerName(s.label, s) })),
+        ]} />
+      ) : null}
+      <p className="text-[12.5px] text-muted">{r.audio_available ? `${t("Tap a time to hear that moment.")} ` : null}{labelled ? t("Speakers are told apart by voice; name them in the Speakers tab.") : t("No speaker labels: speech-to-text does not tell voices apart.")}</p>
       {shown.length ? (
         <ol className="grid grid-cols-[minmax(0,1fr)] gap-1">
           {shown.map((p) => {
             const live = r.audio_available && now >= p.t && now < p.e;
             return (
-              <li key={p.t} className={cn("flex min-w-0 gap-3 rounded-sm px-2 py-2", live && "bg-accent-soft/60")}>
+              <li key={p.t} className={cn("flex min-w-0 gap-3 rounded-sm px-2 py-2", live && "bg-accent-soft/60")}
+                style={p.s ? { boxShadow: `inset 3px 0 0 ${speakerColor(p.s)}` } : undefined}>
                 {r.audio_available ? (
                   <button type="button" onClick={() => play(p.t)} aria-label={t("Play from {time}", { time: clock(p.t) })}
                     className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm border border-border px-2 font-mono text-[12px] text-muted tabular transition-colors hover:border-accent/50 hover:text-accent pointer-coarse:h-9">
                     <PlayIcon size={11} weight="fill" /> {clock(p.t)}
                   </button>
                 ) : <span className="w-12 shrink-0 pt-0.5 font-mono text-[12px] text-muted tabular">{clock(p.t)}</span>}
-                <p className="min-w-0 pt-1 text-[14px] leading-relaxed break-words">{p.text}</p>
+                <div className="grid min-w-0 flex-1 gap-1 pt-1">
+                  {p.s ? <span><SpeakerChip label={p.s} name={speakerName(p.s, byLabel.get(p.s))} /></span> : null}
+                  <p className="min-w-0 text-[14px] leading-relaxed break-words">{p.text}</p>
+                </div>
               </li>
             );
           })}
@@ -415,7 +625,7 @@ function Transcript({ r }: { r: RecordingDetail }) {
 
 // ---------------------------------------------------------------- the sheet
 
-type Tab = "minutes" | "actions" | "transcript";
+type Tab = "minutes" | "actions" | "transcript" | "speakers";
 
 function MinutesSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const t = useT();
@@ -503,8 +713,12 @@ function MinutesSheet({ id, onClose }: { id: string; onClose: () => void }) {
                 { value: "minutes", label: lang === "ms" ? t("Minutes (tab)") : "Minutes" },
                 { value: "actions", label: t("Action items"), count: r.action_items.length },
                 { value: "transcript", label: t("Transcript") },
+                ...(r.speakers.length ? [{ value: "speakers" as const, label: t("Speakers"), count: r.speakers.length }] : []),
               ]} />
-              {tab === "minutes" ? <MinutesText r={r} /> : tab === "actions" ? <ActionItems r={r} /> : <Transcript r={r} />}
+              {tab === "minutes" ? <MinutesText r={r} onSpeakers={() => setTab("speakers")} />
+                : tab === "actions" ? <ActionItems r={r} />
+                : tab === "speakers" && r.speakers.length ? <Speakers key={r.speakers.map((s) => s.name).join("|")} r={r} />
+                : <Transcript r={r} />}
             </>
           )}
         </div>

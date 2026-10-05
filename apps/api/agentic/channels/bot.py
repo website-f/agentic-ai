@@ -18,6 +18,7 @@ from ..agents import decisions, runtime
 from ..core.security import can
 from ..core.valkey import valkey
 from ..engine import gateway, media
+from ..i18n import Msg, current_lang, normalize, render, tr, use_lang
 from ..models import (
     Agent,
     Approval,
@@ -29,6 +30,7 @@ from ..models import (
     Membership,
     User,
 )
+from ..services import prefs
 from . import deliver, telegram, voice
 
 log = logging.getLogger("agentic.channels.bot")
@@ -36,18 +38,24 @@ log = logging.getLogger("agentic.channels.bot")
 LINK_TTL = 600
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L
 
-PRIVATE = (
+PRIVATE = Msg(
     "This bot belongs to a private office. To use it, open the dashboard: "
     "Channels > Telegram > Link my account, then send the code shown there."
 )
 
 
 async def new_link_code(channel_id: str, user_id: str) -> str:
+    """A one-time code. It remembers the app's language at the time, so the "Linked" reply
+    is in that language even for someone who never saved one."""
     code = "".join(secrets.choice(CODE_CHARS) for _ in range(8))
-    await valkey().set(
-        f"tglink:{code}", json.dumps({"channel_id": channel_id, "user_id": user_id}), ex=LINK_TTL
-    )
+    data = {"channel_id": channel_id, "user_id": user_id, "lang": current_lang()}
+    await valkey().set(f"tglink:{code}", json.dumps(data), ex=LINK_TTL)
     return code
+
+
+def link_lang(user: User, data: dict[str, Any]) -> str:
+    """The language for the "Linked to ..." reply: saved, else the code's, else English."""
+    return prefs.saved_lang(user) or normalize(data.get("lang")) or "en"
 
 
 async def _link_for(db: AsyncSession, ch: Channel, from_id: str) -> ChannelLink | None:
@@ -105,6 +113,9 @@ async def _session(db: AsyncSession, agent: Agent, user_id: str, chat_id: str) -
 async def _reply(
     db: AsyncSession, ch: Channel, chat_id: str, text: str, update_id: int, n: int = 0
 ) -> None:
+    """Send one message. A Msg is said in the language set for this update (use_lang)."""
+    if isinstance(text, Msg):
+        text = text.render()
     did = await deliver.queue_telegram(db, ch, chat_id, text, dedupe=f"tg:{ch.id}:{update_id}:{n}")
     if did:
         try:
@@ -113,7 +124,22 @@ async def _reply(
             await deliver.start([did])  # leave it to the worker's retries
 
 
+async def _lang_for(db: AsyncSession, ch: Channel, sender: dict[str, Any]) -> str:
+    """A linked person's saved language; a stranger's Telegram app language."""
+    link = await _link_for(db, ch, str(sender.get("id")))
+    if link is not None:
+        return await prefs.language(db, link.user_id)
+    return normalize(sender.get("language_code")) or "en"
+
+
 async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -> None:
+    cq = update.get("callback_query")
+    sender = (cq or {}).get("from") or (update.get("message") or {}).get("from") or {}
+    with use_lang(await _lang_for(db, ch, sender)):
+        await _handle_update(db, ch, update)
+
+
+async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -> None:
     uid = int(update.get("update_id", 0))
     if cq := update.get("callback_query"):
         await _callback(db, ch, cq)
@@ -139,7 +165,7 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
                 db,
                 ch,
                 chat_id,
-                "You are linked. Send a message to talk to your office." if linked else PRIVATE,
+                tr("You are linked. Send a message to talk to your office.") if linked else PRIVATE,
                 uid,
             )
         return
@@ -150,7 +176,7 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
         return
     role = await _role(db, ch, link.user_id)
     if role is None:
-        await _reply(db, ch, chat_id, "Your account is no longer in this workspace.", uid)
+        await _reply(db, ch, chat_id, tr("Your account is no longer in this workspace."), uid)
         return
 
     # A voice note becomes text first, then goes everywhere typed text would.
@@ -172,21 +198,16 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
     if text in ("/help", "/whoami"):
         agent = await _bound_agent(db, ch, chat)
         who = (
-            f"Messages here go to {agent.name} ({agent.role})."
+            tr("Messages here go to {name} ({role}).", name=agent.name, role=agent.role)
             if agent
-            else "No agent answers in this chat yet."
+            else tr("No agent answers in this chat yet.")
         )
-        await _reply(
-            db,
-            ch,
-            chat_id,
-            f"{who}\nApprovals arrive here with buttons. Reply to a question to answer it.",
-            uid,
-        )
+        how = tr("Approvals arrive here with buttons. Reply to a question to answer it.")
+        await _reply(db, ch, chat_id, f"{who}\n{how}", uid)
         return
 
     if not can(role, "work.write"):
-        await _reply(db, ch, chat_id, "Your role can read but not instruct agents.", uid)
+        await _reply(db, ch, chat_id, tr("Your role can read but not instruct agents."), uid)
         return
     agent = await _bound_agent(db, ch, chat)
     if agent is None:
@@ -194,16 +215,18 @@ async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -
             db,
             ch,
             chat_id,
-            "No agent answers in this chat yet. Bind one in the dashboard: Channels > Telegram.",
+            tr(
+                "No agent answers in this chat yet. Bind one in the dashboard: Channels > Telegram."
+            ),
             uid,
         )
         return
     session = await _session(db, agent, link.user_id, chat_id)
     try:
         reply = await runtime.chat_turn(db, agent, session, text)
-        answer = reply.content or "(no answer)"
+        answer = reply.content or tr("(no answer)")
     except gateway.GatewayUnavailable as e:
-        reply, answer = None, f"{agent.name} could not answer: {e}"
+        reply, answer = None, tr("{name} could not answer: {error}", name=agent.name, error=e)
     said = f'"{voice.quote(heard)}"\n\n' if heard else ""  # what was heard, to spot mistakes
     await _reply(db, ch, chat_id, f"{said}{agent.name}: {answer}", uid)
     if reply is not None and reply.message_id is not None:
@@ -221,7 +244,7 @@ async def _hear(db: AsyncSession, ch: Channel, sound: dict[str, Any]) -> tuple[s
         )
     except telegram.TelegramError as e:
         if e.status == 413:
-            return "", f"That voice note is too large (over {media.MAX_AUDIO_MB} MB)."
+            return "", voice.TOO_LARGE
         return "", voice.NO_DOWNLOAD
     except Exception:  # noqa: BLE001 - Telegram unreachable
         log.info("telegram voice download failed on %s", ch.id, exc_info=True)
@@ -235,13 +258,13 @@ async def _link(
 ) -> str:
     raw = await valkey().getdel(f"tglink:{code}")
     if not raw:
-        return "That code is wrong or expired. Make a new one in the dashboard."
+        return tr("That code is wrong or expired. Make a new one in the dashboard.")
     data = json.loads(raw)
     if data.get("channel_id") != ch.id:
-        return "That code is for a different bot."
+        return tr("That code is for a different bot.")
     user = await db.get(User, data["user_id"])
     if user is None:
-        return "That account no longer exists."
+        return tr("That account no longer exists.")
     from_id = str(sender.get("id"))
     display = (
         " ".join(x for x in (sender.get("first_name"), sender.get("last_name")) if x)
@@ -262,7 +285,12 @@ async def _link(
     else:
         link.user_id, link.chat_id = user.id, chat_id
     await db.commit()
-    return f"Linked to {user.name}. Approvals will arrive here with buttons."
+    # From now on this chat speaks the person's language.
+    return tr(
+        "Linked to {name}. Approvals will arrive here with buttons.",
+        link_lang(user, data),
+        name=user.name,
+    )
 
 
 async def _answer_question(
@@ -297,12 +325,12 @@ async def _answer_question(
     if not can(role, "approvals.decide") or not await member_sees_agent(
         db, a.workspace_id, link.user_id, a.agent_id
     ):
-        return "Your role cannot answer this agent's questions."
+        return tr("Your role cannot answer this agent's questions.")
     try:
         await decisions.decide(db, a, f"user:{link.user_id}", "answer", answer=text, via="telegram")
     except decisions.DecisionError as e:
-        return e.message
-    return "Thanks, your answer is on its way."
+        return render(e.message)
+    return tr("Thanks, your answer is on its way.")
 
 
 async def _callback(db: AsyncSession, ch: Channel, cq: dict[str, Any]) -> None:
@@ -313,30 +341,30 @@ async def _callback(db: AsyncSession, ch: Channel, cq: dict[str, Any]) -> None:
 
     async def answer(text: str) -> None:
         try:
-            await telegram.answer_callback(token, str(cq.get("id")), text)
+            await telegram.answer_callback(token, str(cq.get("id")), render(text))
         except telegram.TelegramError:
             pass
 
     parts = data.split(":")
     if len(parts) != 3 or parts[0] != "apv" or parts[2] not in ("approve", "deny"):
-        await answer("Unknown button.")
+        await answer(tr("Unknown button."))
         return
     link = await _link_for(db, ch, from_id)
     if link is None:
-        await answer("Link your account first.")
+        await answer(tr("Link your account first."))
         return
     role = await _role(db, ch, link.user_id)
     if role is None or not can(role, "approvals.decide"):
-        await answer("Your role cannot decide approvals.")
+        await answer(tr("Your role cannot decide approvals."))
         return
     a = await db.get(Approval, parts[1])
     if a is None or a.workspace_id != ch.workspace_id:
-        await answer("That approval is gone.")
+        await answer(tr("That approval is gone."))
         return
     from ..api.scope import member_sees_agent
 
     if not await member_sees_agent(db, a.workspace_id, link.user_id, a.agent_id):
-        await answer("This agent is outside your area.")
+        await answer(tr("This agent is outside your area."))
         return
     try:
         await decisions.decide(db, a, f"user:{link.user_id}", parts[2], "once", via="telegram")
@@ -344,15 +372,21 @@ async def _callback(db: AsyncSession, ch: Channel, cq: dict[str, Any]) -> None:
         await answer(e.message)
         return
     user = await db.get(User, link.user_id)
-    verdict = "✅ Approved" if a.status == "approved" else "✖️ Denied"
-    await answer(verdict.split(" ", 1)[1])
+    approved = a.status == "approved"
+    await answer(tr("Approved") if approved else tr("Denied"))
     if msg.get("message_id") and msg.get("chat"):
+        who = user.name if user else tr("someone")
+        verdict = (
+            tr("✅ Approved by {name}", name=who)
+            if approved
+            else tr("✖️ Denied by {name}", name=who)
+        )
         try:
             await telegram.edit_message(
                 token,
                 msg["chat"]["id"],
                 int(msg["message_id"]),
-                f"{msg.get('text', '')}\n\n{verdict} by {user.name if user else 'someone'}",
+                f"{msg.get('text', '')}\n\n{verdict}",
             )
         except telegram.TelegramError:
             pass

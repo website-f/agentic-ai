@@ -19,6 +19,8 @@ from ...core import crypto
 from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.security import can
+from ...i18n import tr
+from ...i18n.labels import decision_status_label
 from ...models import (
     Agent,
     Branch,
@@ -334,13 +336,14 @@ async def google_callback(
         return RedirectResponse(f"/assistants?{q}", status_code=303)
 
     if error:
-        return back("error", "Google sign-in was cancelled." if error == "access_denied" else error)
+        cancelled = error == "access_denied"
+        return back("error", tr("Google sign-in was cancelled.") if cancelled else error)
     try:
         acct = await gmail.finish(db, state, code)
     except gmail.GmailError as e:
         return back("error", str(e))
     except Exception:  # noqa: BLE001 - Google unreachable and the like
-        return back("error", "Could not reach Google. Try again.")
+        return back("error", tr("Could not reach Google. Try again."))
     return back("connected", acct.email)
 
 
@@ -572,7 +575,12 @@ async def confirm_calendar_draft(
     """The person says yes: only now does the Calendar API run (and invite the guests)."""
     p, acct = await _my_proposal(db, principal, proposal_id)
     if p["status"] != "pending":
-        raise api_error(status.HTTP_409_CONFLICT, "not_pending", f"This was already {p['status']}.")
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "not_pending",
+            "This was already {status}.",
+            status=decision_status_label(p["status"]),
+        )
     # Claim it first so a double tap cannot add the event twice.
     if not await calendar.claim(p["id"]):
         raise api_error(status.HTTP_409_CONFLICT, "not_pending", "This is being handled already.")

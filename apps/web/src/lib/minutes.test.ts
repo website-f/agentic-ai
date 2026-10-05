@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clock, duration, isActive, isRecording, parseClock, stageOf } from "./minutes";
+import { clock, duration, isActive, isRecording, parseClock, speakerColor, speakerNumber, stageOf } from "./minutes";
 
 describe("meeting minutes helpers", () => {
   it("formats transcript times and lengths", () => {
@@ -32,5 +32,14 @@ describe("meeting minutes helpers", () => {
     expect(stageOf({ status: "ready" })).toBe("ready");
     expect(isActive("writing")).toBe(true);
     expect(isActive("failed")).toBe(false);
+    expect(stageOf({ status: "extracting", speakers_total: 0 })).toBe("extract");
+    expect(stageOf({ status: "extracting", speakers_total: 6 })).toBe("speakers");
+  });
+
+  it("gives each speaker a palette colour", () => {
+    expect(speakerColor("S1")).toBe("var(--series-1)");
+    expect(speakerColor("S8")).toBe("var(--series-8)");
+    expect(speakerColor("S9")).toBe("var(--series-1)");
+    expect(speakerNumber("S3")).toBe("3");
   });
 });

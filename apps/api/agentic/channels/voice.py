@@ -5,19 +5,23 @@ quotes what was heard, so a mis-heard word is easy to spot."""
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..engine import client, gateway, media
+from ..i18n import Msg, lookup
 
 MAX_BYTES = client.MAX_AUDIO_BYTES
 
-NOT_SET_UP = (
+# Msg: English here, the person's language when the bot sends it (deliver renders it).
+NOT_SET_UP = Msg(
     "Voice notes are not set up here yet: an admin can add a speech-to-text model in "
     "AI Engine > Model groups > Speech to text. Please type your message for now."
 )
-NOT_HEARD = "I could not make out that voice note right now. Please try again or type it."
-NO_WORDS = "I could not hear any words in that voice note."
-NO_DOWNLOAD = "I could not download that voice note. Please send it again or type it."
-TOO_LONG = (
-    f"That voice note is too long. Please keep it under {media.MAX_AUDIO_SECONDS // 60} minutes."
+NOT_HEARD = Msg("I could not make out that voice note right now. Please try again or type it.")
+NO_WORDS = Msg("I could not hear any words in that voice note.")
+NO_DOWNLOAD = Msg("I could not download that voice note. Please send it again or type it.")
+TOO_LONG = Msg(
+    "That voice note is too long. Please keep it under {n} minutes.",
+    n=media.MAX_AUDIO_SECONDS // 60,
 )
+TOO_LARGE = Msg("That voice note is too large (over {mb} MB).", mb=media.MAX_AUDIO_MB)
 
 
 async def hear(
@@ -41,7 +45,7 @@ async def hear(
             agent_id=agent_id,
         )
     except gateway.MediaRejected as e:
-        return "", str(e)
+        return "", lookup(str(e))
     except gateway.NotConfigured:
         return "", NOT_SET_UP
     except gateway.GatewayUnavailable:

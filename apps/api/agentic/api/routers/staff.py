@@ -31,6 +31,8 @@ from ...agents import dispatch, hire, launch, twin, work_hours
 from ...brain.store import Author
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
+from ...i18n import Msg, current_lang, lookup, tr
+from ...i18n.labels import agent_status_label, role_label
 from ...models import (
     Agent,
     Approval,
@@ -68,7 +70,8 @@ def staff_perm():
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "not_staff",
-                f"This is for staff. Your role ({principal.role}) adds agents from Agents.",
+                "This is for staff. Your role ({role}) adds agents from Agents.",
+                role=role_label(principal.role),
             )
         return principal
 
@@ -263,8 +266,16 @@ async def read_when(
     except schedules.ScheduleError as e:
         return {"ok": False, "question": str(e)}
     if w.once:
-        return {"ok": False, "question": "Duties repeat. For a one-off, give it a task instead."}
-    return {"ok": True, "cron": w.cron, "summary": w.summary, "first": w.first.isoformat()}
+        return {
+            "ok": False,
+            "question": tr("Duties repeat. For a one-off, give it a task instead."),
+        }
+    return {
+        "ok": True,
+        "cron": w.cron,
+        "summary": when.summary_in(w.summary, current_lang()),
+        "first": w.first.isoformat(),
+    }
 
 
 class DutyIn(BaseModel):
@@ -275,16 +286,25 @@ class DutyIn(BaseModel):
 
 
 def _parse_duty(d: DutyIn, tz: str, n: int | None = None) -> when.When:
-    label = f"Duty {n} ({d.title.strip()[:40]})" if n else d.title.strip()[:60]
+    label = (
+        Msg("Duty {n} ({title})", n=n, title=d.title.strip()[:40]) if n else d.title.strip()[:60]
+    )
     try:
         w = when.parse(d.when, tz)
     except (when.Unclear, schedules.ScheduleError) as e:
-        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_when", f"{label}: {e}") from e
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "bad_when",
+            "{label}: {problem}",
+            label=label,
+            problem=lookup(str(e)),
+        ) from e
     if w.once:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "bad_when",
-            f"{label}: duties repeat. For a one-off, give it a task instead.",
+            "{label}: duties repeat. For a one-off, give it a task instead.",
+            label=label,
         )
     return w
 
@@ -340,7 +360,7 @@ async def add_duty(
     s = await _add_duty(db, principal, a, body, w, tz)
     await db.commit()
     warning = await _sync(s)
-    return {"id": s.id, "summary": w.summary, "warning": warning}
+    return {"id": s.id, "summary": when.summary_in(w.summary, current_lang()), "warning": warning}
 
 
 class WorkflowsIn(BaseModel):
@@ -356,7 +376,9 @@ async def _set_workflows(
     ).all()
     known = {w.id for w in rows}
     if bad := [i for i in ids if i not in known]:
-        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_workflow", f"Unknown workflow: {bad[0]}.")
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "bad_workflow", "Unknown workflow: {name}.", name=bad[0]
+        )
     want = set(ids)
     changed: list[str] = []
     for w in rows:
@@ -465,7 +487,13 @@ async def hire_worker(
     ws = await _ws(db, principal)
     a = await _my_twin(db, principal)
     if a.status != "active":
-        raise api_error(status.HTTP_409_CONFLICT, "agent_inactive", f"{a.name} is {a.status}.")
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "agent_inactive",
+            "{name} is {status}.",
+            name=a.name,
+            status=agent_status_label(a.status),
+        )
     hours = await clean_hours(db, ws.id, body.work_hours) if body.work_hours else a.work_hours
     tz = (hours or {}).get("tz") or ws.timezone
     bp = None
@@ -529,7 +557,9 @@ async def hire_worker(
         try:
             later = await launch.launch(db, t, principal.actor)
         except launch.LaunchError as e:
-            warnings.append(f"First task saved but not started: {e.message}")
+            warnings.append(
+                tr("First task saved but not started: {problem}", problem=lookup(e.message))
+            )
             later = None
         await db.refresh(t)
         first = {
@@ -543,7 +573,10 @@ async def hire_worker(
     await events.publish(ws.id, "agent.upsert", {"agent_id": a.id, "name": a.name})
     return {
         "twin": await agent_out(db, a, None, principal),
-        "duties": [{"id": s.id, "title": s.title, "summary": w.summary} for s, w in made],
+        "duties": [
+            {"id": s.id, "title": s.title, "summary": when.summary_in(w.summary, current_lang())}
+            for s, w in made
+        ],
         "first_task": first,
         "warnings": warnings,
     }

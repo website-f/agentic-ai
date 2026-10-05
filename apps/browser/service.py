@@ -1,8 +1,9 @@
 """The browser service: a real Camoufox (Firefox) that agents drive, one context per task.
 
-Only the worker can reach it (its own Docker network, token checked). Every request the
-page makes passes a guard that refuses non-public addresses, so a hostile page cannot use
-the browser to reach anything internal. A session may also carry an allow-list of hosts
+Only the worker can reach it (its own Docker network, token checked). That network is
+internal: the only way out is the egress proxy (apps/egress, BROWSER_PROXY), which refuses
+non-public addresses for every connection, redirect hops included. Every request the page
+makes also passes a guard here that refuses non-public addresses (defence in depth). A session may also carry an allow-list of hosts
 (a "Browse for me" task stays on its site): pages elsewhere are refused with a clear error.
 
 Pages are reduced to an accessibility-style tree (snapshot.py) whose element refs (e17, f1e3
@@ -82,6 +83,20 @@ WEDGE_WINDOW = 120
 # Dev only: extra host names allowed although they are private (the practice portal on the
 # browser network). Empty in production.
 ALLOW_HOSTS = {h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()}
+# The egress proxy (apps/egress), e.g. http://egress:3128. The browser's network is internal,
+# so every request leaves through it; it resolves each host itself, refuses non-public
+# addresses (redirect hops included) and connects to the address it checked. Empty = direct.
+PROXY = os.environ.get("BROWSER_PROXY", "").strip()
+# Firefox must never go around the proxy: not for localhost (Firefox's default bypass, which
+# would reach this service's own port), not as a fallback when the proxy fails.
+PROXY_PREFS: dict[str, Any] = {
+    "network.proxy.allow_hijacking_localhost": True,
+    "network.proxy.no_proxies_on": "",
+    "network.proxy.failover_direct": False,
+    "network.dns.disablePrefetch": True,
+    "network.predictor.enabled": False,
+    "network.prefetch-next": False,
+}
 
 
 BOLD_ROWS_JS = """() => {
@@ -159,7 +174,10 @@ async def host_ok(host: str | None) -> bool:
         infos = await asyncio.get_running_loop().getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
         ok = bool(infos) and all(_ip_ok(str(i[4][0])) for i in infos)
     except OSError:
-        ok = False
+        # Behind the egress proxy the browser's internal network has no outside DNS, so a
+        # public name does not resolve here: the proxy resolves it, checks and pins it.
+        # Names that do resolve here (our own containers) are still judged above.
+        ok = bool(PROXY)
     _dns[host] = (time.time() + 60, ok)
     return ok
 
@@ -207,8 +225,17 @@ class Slot:
             if self.browser is None:
                 from camoufox.async_api import AsyncCamoufox
 
+                # block_webrtc: media.peerconnection.enabled=false, so no WebRTC (UDP/STUN)
+                # traffic, which would not go through the proxy.
+                extra: dict[str, Any] = {}
+                if PROXY:
+                    extra = {"proxy": {"server": PROXY}, "firefox_user_prefs": dict(PROXY_PREFS)}
                 self.manager = AsyncCamoufox(
-                    headless=True, humanize=HUMANIZE, block_webrtc=True, i_know_what_im_doing=True
+                    headless=True,
+                    humanize=HUMANIZE,
+                    block_webrtc=True,
+                    i_know_what_im_doing=True,
+                    **extra,
                 )
                 self.browser = await self.manager.__aenter__()
         return self.browser
@@ -426,8 +453,8 @@ async def _snapshot_nodes(page: Any, *, full: bool = False, scope: str | None = 
 async def _guard_frames(s: Session) -> None:
     """Routes only see the first URL of a redirect chain, so a page can be redirected to a
     non-public address (or off the allowed hosts). Such a page or frame is blanked before
-    anything of it is read or shown. The request itself has been made by then: egress rules
-    on the browser's network (no private ranges) are the full fix."""
+    anything of it is read or shown. The request itself is stopped by the egress proxy,
+    which checks every hop; this is the second line for a browser run without one."""
     page = s.page
     for fr in list(page.frames):
         u = fr.url

@@ -439,7 +439,8 @@ async def delete_page(
         raise api_error(
             status.HTTP_409_CONFLICT,
             "protected_page",
-            f"{path} is part of the vault and cannot be deleted.",
+            "{path} is part of the vault and cannot be deleted.",
+            path=path,
         )
     ws = await _ws(db, principal)
     if not await store.delete_page(db, ws, path, _author(principal)):

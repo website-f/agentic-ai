@@ -51,7 +51,8 @@ def _industry(raw: str | None) -> str:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "bad_industry",
-            f"Pick an industry: {', '.join(starter.INDUSTRIES)}.",
+            "Pick an industry: {names}.",
+            names=", ".join(starter.INDUSTRIES),
         )
     return key
 
@@ -265,7 +266,9 @@ async def create_department(
         raise api_error(
             status.HTTP_409_CONFLICT,
             "department_exists",
-            f"{b.name} already has a department called {name}.",
+            "{branch} already has a department called {name}.",
+            branch=b.name,
+            name=name,
         ) from e
     return _dept_out(d)
 

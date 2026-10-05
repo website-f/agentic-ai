@@ -126,6 +126,9 @@ export interface RunSummary {
   done: number;
   total: number;
   needs_you: number;
+  /** P23: the objective the run serves (its step tasks count toward it). */
+  objective_id: string | null;
+  objective_title: string | null;
 }
 
 export interface Run extends RunSummary {
@@ -135,7 +138,16 @@ export interface Run extends RunSummary {
   files: { id: string; name: string }[];
 }
 
-export const runKeys = { all: ["workflow-runs"] as const, one: (id: string) => ["workflow-runs", id] as const };
+export const runKeys = {
+  all: ["workflow-runs"] as const,
+  one: (id: string) => ["workflow-runs", id] as const,
+  /** The runs that serve one objective (the objective sheet). */
+  objective: (id: string) => ["workflow-runs", "objective", id] as const,
+};
+
+/** Link a run to an objective (or unlink it with null); its step tasks move with it. */
+export const setRunObjective = (runId: string, objective_id: string | null) =>
+  api<Run>(`/api/workflow-runs/${runId}`, "PATCH", { objective_id });
 
 export const runsQuery = (workflowId?: string) =>
   queryOptions({

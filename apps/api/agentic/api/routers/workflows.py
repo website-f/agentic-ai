@@ -225,7 +225,8 @@ async def delete_workflow(
         raise api_error(
             status.HTTP_409_CONFLICT,
             "runs_active",
-            f"{active} run(s) of this workflow are still going. Cancel or finish them first.",
+            "{n} run(s) of this workflow are still going. Cancel or finish them first.",
+            n=active,
         )
     runs = await db.execute(
         delete(WorkflowRun).where(

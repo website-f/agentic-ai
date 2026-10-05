@@ -87,7 +87,8 @@ def _check_tools(tools: Mapping[str, str]) -> None:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "unknown_tool",
-            f"Unknown tools: {', '.join(sorted(unknown))}.",
+            "Unknown tools: {tools}.",
+            tools=", ".join(sorted(unknown)),
         )
     bad = {m for m in tools.values() if m not in ("allow", "ask", "deny")}
     if bad:

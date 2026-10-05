@@ -7,6 +7,8 @@
 # What changes from the local stack:
 #   - only `web` is published, on 127.0.0.1:${AGENTIC_PORT}; Caddy is the only way in
 #   - Postgres, Valkey, Temporal and the api publish nothing; the data network is internal
+#   - the browser network is internal in every stack (docker-compose.yml): the browser's
+#     only way out is the egress proxy, which refuses non-public addresses
 #   - Temporal UI stays on 127.0.0.1:8502 for an SSH tunnel / Tailscale, never public
 #   - production mode: the api refuses to start without real secrets and Secure cookies
 #   - every secret is required (`:?`), so a missing value stops the deploy, not the app
@@ -69,7 +71,7 @@ services:
     environment:
       WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:?set AGENTIC_WAHA_API_KEY in .env}
 
-  practice-portal:  # profile demo: only the browser reaches it
+  practice-portal:  # profile demo: only the egress proxy (for the browser) reaches it
     ports: !override []
 
   sandbox:

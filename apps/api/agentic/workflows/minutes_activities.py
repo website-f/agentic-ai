@@ -14,8 +14,14 @@ def _beat() -> None:
 
 @activity.defn
 async def minutes_prepare(rec_id: str) -> dict[str, Any]:
+    """Extract the audio, then (when asked) separate the speakers window by window. Done
+    windows are stored, so a retry carries on where it stopped; a separation problem only
+    costs the speaker labels, never the minutes."""
     async with SessionLocal() as db:
-        return await service.prepare(db, rec_id, _beat)
+        info = await service.prepare(db, rec_id, _beat)
+        if info.get("windows"):
+            await service.separate_speakers(db, rec_id, _beat)
+        return info
 
 
 @activity.defn

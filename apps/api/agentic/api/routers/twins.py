@@ -22,6 +22,7 @@ from ...brain.store import Author
 from ...core import threats
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
+from ...i18n.labels import role_label
 from ...models import Agent, Workspace
 from ...services import audit, events
 from ...services.text import slugify
@@ -92,7 +93,8 @@ def own_perm():
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "no_twin_role",
-                f"AI twins are for staff. Your role ({principal.role}) adds agents from Agents.",
+                "AI twins are for staff. Your role ({role}) adds agents from Agents.",
+                role=role_label(principal.role),
             )
         return principal
 
@@ -346,7 +348,8 @@ async def adopt_twin(
         raise api_error(
             status.HTTP_409_CONFLICT,
             "twin_exists",
-            f"You already have your AI twin, {mine.name}. You can change it any time.",
+            "You already have your AI twin, {name}. You can change it any time.",
+            name=mine.name,
         )
     a = next((x for x in await twin.adoptable(db, ws_id, user.id) if x.id == body.agent_id), None)
     if a is None:
@@ -431,7 +434,8 @@ async def teach_twin(
             raise api_error(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "memory_full",
-                f"{mine.name}'s memory is full. Remove or merge a few entries first.",
+                "{name}'s memory is full. Remove or merge a few entries first.",
+                name=mine.name,
             ) from e
         mem = await core_memory.read(db, mine)
     return {

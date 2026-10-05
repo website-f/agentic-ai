@@ -226,7 +226,8 @@ async def create_provider(
         raise api_error(
             status.HTTP_409_CONFLICT,
             "provider_exists",
-            f"A provider called {body.name} already exists.",
+            "A provider called {name} already exists.",
+            name=body.name,
         ) from e
     await db.refresh(p)
     # Groq / OpenAI bring speech and picture models: fill those groups while still empty.

@@ -1,4 +1,4 @@
-"""Meeting minutes from a recording: prepare -> hear each chunk -> write.
+"""Meeting minutes from a recording: prepare (+ separate speakers) -> hear each chunk -> write.
 
 Durable end to end: a worker restart resumes at the chunk it was on (finished chunks are
 stored on the recording). When every speech model is resting (Groq's audio-seconds-per-hour
@@ -54,12 +54,13 @@ class MeetingMinutesWorkflow:
             return "failed"
 
     async def _run(self, rec_id: str) -> str:
-        self.stage = "extracting the audio"
+        self.stage = "extracting the audio and separating the speakers"
         info = await workflow.execute_activity(
             minutes_prepare,
             rec_id,
-            # ffmpeg reads a 4-hour video in a few minutes; it heartbeats every 10 s.
-            start_to_close_timeout=timedelta(minutes=45),
+            # ffmpeg reads a 4-hour video in a few minutes; telling the speakers apart takes
+            # 1-3 minutes per 10 minutes of audio on one core. Both heartbeat every 10 s.
+            start_to_close_timeout=timedelta(minutes=150),
             heartbeat_timeout=timedelta(minutes=2),
             retry_policy=RetryPolicy(maximum_attempts=2, initial_interval=timedelta(seconds=15)),
         )

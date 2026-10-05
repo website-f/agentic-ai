@@ -6,8 +6,13 @@ the recording's clock, the overlap between chunks is kept once (by the segment's
 Whisper's habit of repeating a line over silence ("Terima kasih.", "Thank you.") is dropped.
 Segments are then joined into paragraphs of about half a minute: readable, and each one a
 click target that plays that moment.
+
+When the voices were told apart (diarize.py), each segment takes the speaker heard during
+it; a segment spanning a change of speaker is cut at the word nearest the change, and every
+paragraph belongs to one speaker ("s": "S1"). Without speaker turns nothing changes.
 """
 
+import bisect
 import re
 from typing import Any
 
@@ -61,6 +66,7 @@ def segments(chunks: list[Chunk], results: dict[str, dict[str, Any]]) -> list[di
 
 
 def paragraphs(segs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Segments joined into paragraphs; a new speaker always starts a new paragraph."""
     out: list[dict[str, Any]] = []
     cur: dict[str, Any] | None = None
     for s in segs:
@@ -68,8 +74,10 @@ def paragraphs(segs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             cur = dict(s)
             continue
         span = cur["e"] - cur["t"]
-        if span >= PARAGRAPH_MAX_SECONDS or (
-            span >= PARAGRAPH_SECONDS and _END.search(cur["text"])
+        if (
+            cur.get("s") != s.get("s")
+            or span >= PARAGRAPH_MAX_SECONDS
+            or (span >= PARAGRAPH_SECONDS and _END.search(cur["text"]))
         ):
             out.append(cur)
             cur = dict(s)
@@ -81,13 +89,191 @@ def paragraphs(segs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def stitch(chunks: list[Chunk], results: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    return paragraphs(segments(chunks, results))
+def stitch(
+    chunks: list[Chunk],
+    results: dict[str, dict[str, Any]],
+    turns: list[list[Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """The transcript; with speaker turns (diarize.link) every paragraph gets its "s"."""
+    segs = segments(chunks, results)
+    if turns:
+        segs = label(segs, turns)
+    return paragraphs(segs)
 
 
-def as_text(paras: list[dict[str, Any]]) -> str:
-    """What the minutes writer reads: one paragraph per line with its [m:ss]."""
-    return "\n".join(f"[{fmt_time(p['t'])}] {p['text']}" for p in paras)
+# ---------------------------------------------------------------- speakers
+
+SPLIT_MIN_SECONDS = 1.0  # a voice must talk this long inside a segment to get its own piece
+LONG_SEGMENT = 30.0  # longer: a model gave no segment times; sentences are spread over speech
+NEAREST_SECONDS = 3.0  # a segment no turn covers takes the nearest voice this close
+_SENTENCE = re.compile(r"(?<=[.!?…])\s+")
+
+
+class _Turns:
+    """Speaker turns [[start, end, label], ...] with a lookup by time."""
+
+    def __init__(self, turns: list[list[Any]]) -> None:
+        self.turns = sorted(
+            ((float(a), float(b), str(s)) for a, b, s in turns if float(b) > float(a)),
+            key=lambda x: x[0],
+        )
+        self.starts = [t[0] for t in self.turns]
+        self.longest = max((b - a for a, b, _ in self.turns), default=0.0)
+
+    def within(self, a: float, b: float) -> list[tuple[float, float, str]]:
+        """Turns overlapping [a, b), clipped to it, in time order."""
+        lo = bisect.bisect_left(self.starts, a - self.longest)
+        hi = bisect.bisect_left(self.starts, b)
+        return [(max(a, ta), min(b, tb), s) for ta, tb, s in self.turns[lo:hi] if tb > a]
+
+    def nearest(self, a: float, b: float) -> str | None:
+        best, label_ = NEAREST_SECONDS, None
+        i = bisect.bisect_left(self.starts, a)
+        for ta, tb, s in self.turns[max(0, i - 3) : i + 3]:
+            gap = max(ta - b, a - tb, 0.0)
+            if gap <= best:
+                best, label_ = gap, s
+        return label_
+
+
+def _runs(a: float, b: float, turns: _Turns) -> list[list[Any]]:
+    """Who talks inside [a, b): consecutive same-voice stretches merged, blips dropped."""
+    runs: list[list[Any]] = []
+    for ta, tb, s in turns.within(a, b):
+        if runs and runs[-1][2] == s:
+            runs[-1][1] = max(runs[-1][1], tb)
+        else:
+            runs.append([ta, tb, s])
+    if len(runs) > 1:
+        runs = [r for r in runs if r[1] - r[0] >= SPLIT_MIN_SECONDS] or [
+            max(runs, key=lambda r: r[1] - r[0])
+        ]
+        merged: list[list[Any]] = []
+        for r in runs:
+            if merged and merged[-1][2] == r[2]:
+                merged[-1][1] = max(merged[-1][1], r[1])
+            else:
+                merged.append(list(r))
+        runs = merged
+    return runs
+
+
+def _cut_points(text: str, shares: list[float]) -> list[int]:
+    """Character positions that cut `text` into pieces of about these shares, on word
+    boundaries, preferring the end of a sentence near the target."""
+    bounds = [m.end() for m in re.finditer(r"\S+(?=\s|$)", text)][:-1]
+    sentence_ends = [p for p in bounds if _END.search(text[:p])]
+    cuts: list[int] = []
+    total, acc = len(text), 0.0
+    for share in shares[:-1]:
+        acc += share
+        target = acc * total
+        near = [p for p in sentence_ends if abs(p - target) <= 0.2 * total]
+        pool = [p for p in (near or bounds) if not cuts or p > cuts[-1]]
+        if not pool:
+            break
+        cuts.append(min(pool, key=lambda p: abs(p - target)))
+    return cuts
+
+
+def _split(
+    seg: dict[str, Any], turns: _Turns, previous: str | None, cut: bool = True
+) -> list[dict[str, Any]]:
+    a, b, text = float(seg["t"]), float(seg["e"]), str(seg["text"])
+    runs = _runs(a, b, turns)
+    if not runs:
+        who = turns.nearest(a, b) or previous
+        return [{**seg, "s": who} if who else dict(seg)]
+    if not cut or len(runs) == 1 or len(text.split()) < 4:
+        talk: dict[str, float] = {}
+        for ra, rb, s in runs:
+            talk[s] = talk.get(s, 0.0) + rb - ra
+        return [{**seg, "s": max(talk, key=lambda k: talk[k])}]
+    spoken = sum(r[1] - r[0] for r in runs) or 1.0
+    cuts = _cut_points(text, [(r[1] - r[0]) / spoken for r in runs])
+    edges = [0, *cuts, len(text)]
+    out: list[dict[str, Any]] = []
+    for k in range(len(edges) - 1):
+        piece = text[edges[k] : edges[k + 1]].strip()
+        if not piece:
+            continue
+        r = runs[min(k, len(runs) - 1)]
+        start = a if k == 0 else r[0]
+        end = b if k == len(edges) - 2 else runs[min(k + 1, len(runs) - 1)][0]
+        if out and out[-1]["s"] == r[2]:
+            out[-1]["text"] += f" {piece}"
+            out[-1]["e"] = round(max(end, start), 2)
+            continue
+        out.append({"t": round(start, 2), "e": round(max(end, start), 2), "text": piece, "s": r[2]})
+    return out or [{**seg, "s": runs[0][2]}]
+
+
+def _spread(seg: dict[str, Any], turns: _Turns) -> list[dict[str, Any]]:
+    """A long block with no inner times (a model that gives no segments): its sentences laid
+    over the stretches where someone is talking, in proportion to their length."""
+    a, b = float(seg["t"]), float(seg["e"])
+    speech: list[list[float]] = []
+    for ta, tb, _ in turns.within(a, b):
+        if speech and ta <= speech[-1][1]:
+            speech[-1][1] = max(speech[-1][1], tb)
+        else:
+            speech.append([ta, tb])
+    sentences = [x for x in _SENTENCE.split(str(seg["text"])) if x.strip()]
+    total = sum(e - s for s, e in speech)
+    if len(sentences) < 2 or total <= 0:
+        return [seg]
+
+    def clock(pos: float) -> float:
+        for s, e in speech:
+            if pos <= e - s:
+                return s + pos
+            pos -= e - s
+        return speech[-1][1]
+
+    chars = sum(len(x) for x in sentences) or 1
+    out, done = [], 0
+    for x in sentences:
+        t0 = clock(done / chars * total)
+        done += len(x)
+        out.append({"t": round(t0, 2), "e": round(clock(done / chars * total), 2), "text": x})
+    return out
+
+
+def label(segs: list[dict[str, Any]], turns: list[list[Any]]) -> list[dict[str, Any]]:
+    """Each segment gets the speaker heard during it ("s"); one that clearly spans a change
+    of speaker is cut at the word (or sentence end) nearest the change."""
+    tt = _Turns(turns)
+    if not tt.turns:
+        return segs
+    out: list[dict[str, Any]] = []
+    for seg in segs:
+        spread = seg["e"] - seg["t"] > LONG_SEGMENT
+        pieces = _spread(seg, tt) if spread else [seg]
+        for p in pieces:
+            # Spread sentences have estimated times: each goes whole to its main voice.
+            out.extend(_split(p, tt, out[-1].get("s") if out else None, cut=not spread))
+    return out
+
+
+def speaker_name(label_: str, speakers: dict[str, Any], language: str = "en") -> str:
+    """A speaker as the minutes call them: the person's name, or "Speaker 2" until named."""
+    name = str((speakers.get(label_) or {}).get("name") or "").strip()
+    if name:
+        return name
+    n = label_[1:] if label_[:1] == "S" else label_
+    return f"Penutur {n}" if language == "ms" else f"Speaker {n}"
+
+
+def as_text(
+    paras: list[dict[str, Any]], speakers: dict[str, Any] | None = None, language: str = "en"
+) -> str:
+    """What the minutes writer reads: one paragraph per line with its [m:ss] and, when the
+    voices were told apart, who is speaking."""
+    lines = []
+    for p in paras:
+        who = f"{speaker_name(p['s'], speakers or {}, language)}: " if p.get("s") else ""
+        lines.append(f"[{fmt_time(p['t'])}] {who}{p['text']}")
+    return "\n".join(lines)
 
 
 def split_text(text: str, limit: int) -> list[str]:

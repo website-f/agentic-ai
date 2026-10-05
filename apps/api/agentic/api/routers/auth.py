@@ -103,7 +103,8 @@ async def login(
         raise api_error(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "too_many_attempts",
-            f"Too many failed sign-ins. Try again in {minutes} min.",
+            "Too many failed sign-ins. Try again in {minutes} min.",
+            minutes=minutes,
         )
 
     user = await db.scalar(select(User).where(User.email == email))

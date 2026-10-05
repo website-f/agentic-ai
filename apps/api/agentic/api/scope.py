@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, and_, or_, select, true
 
 from ..core.security import SCOPED_ROLES
+from ..i18n import Msg
 from ..models import Agent, Approval, Task
 
 
@@ -55,12 +56,15 @@ class Scope:
 
     @property
     def label(self) -> str:
-        return {
-            "all": "the whole workspace",
-            "branch": "your branch",
-            "department": "your department",
-            "own": "your own agents",
-        }[self.kind]
+        """For sentences ("Pick an agent from {where}."): English, translated with them."""
+        return Msg(
+            {
+                "all": "the whole workspace",
+                "branch": "your branch",
+                "department": "your department",
+                "own": "your own agents",
+            }[self.kind]
+        )
 
     # ------------------------------------------------------------ agents
 

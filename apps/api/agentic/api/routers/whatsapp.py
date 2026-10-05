@@ -19,6 +19,7 @@ from ...core.config import settings
 from ...core.db import SessionLocal, get_db
 from ...core.ids import new_id
 from ...core.security import can
+from ...i18n import tr
 from ...models import Channel, ChannelLink
 from ..deps import Principal, api_error, require
 
@@ -286,7 +287,11 @@ async def whatsapp_test(
     if link is None:
         raise api_error(status.HTTP_400_BAD_REQUEST, "not_linked", "Link your WhatsApp first.")
     did = await deliver.queue_whatsapp(
-        db, ch, link.chat_id, f"✅ Test from {settings.public_url}: WhatsApp works.", kind="test"
+        db,
+        ch,
+        link.chat_id,
+        "✅ " + tr("Test from {url}: WhatsApp works.", url=settings.public_url),
+        kind="test",
     )
     state = "pending"
     if did:

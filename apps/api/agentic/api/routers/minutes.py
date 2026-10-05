@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select, true
@@ -96,6 +96,20 @@ class RecordingOut(BaseModel):
     audio_expires_at: datetime | None
     cost_usd: float
     can_edit: bool
+    separate_speakers: bool  # the uploader asked for speaker labels
+    speakers_done: int  # while separating: 10-minute windows done / planned
+    speakers_total: int
+    speaker_count: int  # voices found (0: one voice, turned off, or separation failed)
+
+
+class SpeakerOut(BaseModel):
+    label: str  # "S1"
+    name: str  # "" until a person names the voice
+    seconds: float  # talk time
+    share: float  # of all talk, 0..1
+    suggested: str  # a name the meeting itself suggests, for the person to confirm
+    evidence: str
+    has_clip: bool  # a short clip of this voice can be played
 
 
 class RecordingDetail(RecordingOut):
@@ -107,6 +121,8 @@ class RecordingDetail(RecordingOut):
     document_status: str | None
     document_version: int | None
     published_stale: bool  # the minutes changed after the last publish
+    speakers: list[SpeakerOut]
+    speakers_stale: bool  # speakers were (re)named after the minutes were written
 
 
 # ---------------------------------------------------------------- scope
@@ -189,16 +205,18 @@ async def check_scope(
         return branch_id, department_id
     if sc.kind == "department" and sc.department_id:
         ok = department_id == sc.department_id
-        where = "your department"
+        where = "department"
     else:
         ok = branch_id is not None and branch_id == sc.branch_id
         ok = ok and (sc.kind == "branch" or department_id is None)
-        where = "your company"
+        where = "company"
     if not ok:
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "out_of_scope",
-            f"You can file meeting minutes for {where} only.",
+            "You can file meeting minutes for your department only."
+            if where == "department"
+            else "You can file meeting minutes for your company only.",
         )
     return branch_id, department_id
 
@@ -248,6 +266,7 @@ async def recording_out(
     names = names or await Names.load(db, principal.workspace_id)
     m = rec.minutes or {}
     items = m.get("action_items") or []
+    done, total = service.speakers_progress(rec)
     return {
         "id": rec.id,
         "title": rec.title or service.default_title(rec.original_name),
@@ -278,7 +297,31 @@ async def recording_out(
         "audio_expires_at": rec.audio_expires_at if rec.audio_file else None,
         "cost_usd": round(rec.cost_usd or 0, 4),
         "can_edit": can_edit(principal, rec),
+        "separate_speakers": service.speaker_options(rec)["on"],
+        "speakers_done": done,
+        "speakers_total": total,
+        "speaker_count": len(rec.speakers or {}) if service.speaker_labels(rec) else 0,
     }
+
+
+def _speakers(rec: MeetingRecording) -> list[SpeakerOut]:
+    if not service.speaker_labels(rec):
+        return []
+    sp = rec.speakers or {}
+    total = sum(float((v or {}).get("seconds") or 0) for v in sp.values()) or 1.0
+    clips = _audio_ok(rec) and rec.audio_purged_at is None
+    return [
+        SpeakerOut(
+            label=k,
+            name=str(v.get("name") or ""),
+            seconds=round(float(v.get("seconds") or 0), 1),
+            share=round(float(v.get("seconds") or 0) / total, 4),
+            suggested=str(v.get("suggested") or ""),
+            evidence=str(v.get("evidence") or ""),
+            has_clip=clips and bool(v.get("clip")),
+        )
+        for k, v in sp.items()
+    ]
 
 
 async def detail(db: AsyncSession, principal: Principal, rec: MeetingRecording) -> RecordingDetail:
@@ -296,6 +339,8 @@ async def detail(db: AsyncSession, principal: Principal, rec: MeetingRecording) 
         document_status=doc.status if doc else None,
         document_version=doc.version if doc else None,
         published_stale=stale or bool(doc and not rec.published_at),
+        speakers=_speakers(rec),
+        speakers_stale=service.names_stale(rec),
     )
 
 
@@ -362,6 +407,8 @@ async def upload(
     language: Literal["en", "ms"] = "en",
     branch_id: str | None = None,
     department_id: str | None = None,
+    speakers: bool = True,  # tell the voices apart (on the server's CPU)
+    speaker_count: int | None = Query(default=None, ge=2, le=10),  # None: find out
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> RecordingOut:
@@ -422,7 +469,8 @@ async def upload(
         created_by=principal.actor,
         chunk_results={},
         transcript=[],
-        work={},
+        speakers={},
+        work={"diarize": {"on": speakers, "count": speaker_count or 0}},
     )
     db.add(rec)
     await audit.record(
@@ -431,7 +479,12 @@ async def upload(
         principal.actor,
         "minutes.uploaded",
         target=rec.id,
-        after={"name": rec.original_name, "size": size, "language": language},
+        after={
+            "name": rec.original_name,
+            "size": size,
+            "language": language,
+            "speakers": speakers,
+        },
     )
     await db.commit()
     await service.launch(db, rec)
@@ -443,8 +496,12 @@ def _too_big() -> Exception:
     return api_error(
         status.HTTP_413_CONTENT_TOO_LARGE,
         "file_too_large",
-        f"Recordings can be up to {settings.minutes_max_mb // 1024 or settings.minutes_max_mb} "
-        f"{'GB' if settings.minutes_max_mb >= 1024 else 'MB'}.",
+        "Recordings can be up to {size}.",
+        size=(
+            f"{settings.minutes_max_mb // 1024} GB"
+            if settings.minutes_max_mb >= 1024
+            else f"{settings.minutes_max_mb} MB"
+        ),
     )
 
 
@@ -612,10 +669,89 @@ async def rewrite(
     if not rec.transcript:
         raise api_error(status.HTTP_409_CONFLICT, "no_transcript", "There is no transcript yet.")
     rec.language = body.language
-    rec.minutes, rec.work = None, {}
+    rec.minutes, rec.work = None, service.keep_options(rec)
     flag_modified(rec, "work")
     await service.launch(db, rec)
     return await detail(db, principal, rec)
+
+
+# ---------------------------------------------------------------- speakers
+
+
+class SpeakersIn(BaseModel):
+    # "S1" -> the person's name ("" = not named yet). Labels not given keep their name.
+    names: dict[str, str] = Field(max_length=20)
+
+
+@router.put("/{rec_id}/speakers")
+async def name_speakers(
+    rec_id: str,
+    body: SpeakersIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> RecordingDetail:
+    """Name the voices. The minutes keep the old names until "Rewrite with names"."""
+    rec = await _editable(db, principal, rec_id)
+    if not service.speaker_labels(rec):
+        raise api_error(
+            status.HTTP_409_CONFLICT, "no_speakers", "This recording has no separate speakers."
+        )
+    unknown = set(body.names) - set(rec.speakers or {})
+    if unknown:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "no_such_speaker",
+            "There is no speaker {label} in this recording.",
+            label=sorted(unknown)[0],
+        )
+    if any(len(v) > 80 for v in body.names.values()):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "name_too_long", "Names can be up to 80 characters."
+        )
+    before = service.current_names(rec)
+    service.rename_speakers(rec, body.names)
+    after = service.current_names(rec)
+    if after != before:
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "minutes.speakers_named",
+            target=rec.id,
+            before=before,
+            after=after,
+        )
+    await db.commit()
+    return await detail(db, principal, rec)
+
+
+@router.get("/{rec_id}/speakers/{label}/clip")
+async def speaker_clip(
+    rec_id: str,
+    label: str = Path(pattern=r"^S\d{1,2}$"),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """About ten seconds of one voice, so a person can tell who it is. Gone with the audio."""
+    rec = await _get(db, principal, rec_id)
+    if label not in (rec.speakers or {}):
+        raise api_error(status.HTTP_404_NOT_FOUND, "no_such_speaker", "That speaker is not here.")
+    if not _audio_ok(rec) or rec.audio_purged_at is not None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "audio_gone", "The audio is no longer kept.")
+    try:
+        data = await service.speaker_clip(rec, label)
+    except audio.FFmpegError as e:
+        log.warning("speaker clip %s/%s: %s", rec.id, label, e)
+        data = None
+    if not data:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "no_clip", "There is no clear stretch of this voice."
+        )
+    return Response(
+        content=data,
+        media_type=audio.AUDIO_MIME,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/{rec_id}/audio")
@@ -788,7 +924,10 @@ async def _agent(db: AsyncSession, principal: Principal, agent_id: str | None) -
     a = await db.get(Agent, agent_id)
     if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
         raise api_error(
-            status.HTTP_400_BAD_REQUEST, "bad_agent", f"Pick an agent from {principal.scope.label}."
+            status.HTTP_400_BAD_REQUEST,
+            "bad_agent",
+            "Pick an agent from {scope}.",
+            scope=principal.scope.label,
         )
     return a
 

@@ -3,7 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { msg, t } from "@/i18n";
 
-import { api, ApiError, readCookie } from "./api";
+import { api, ApiError, langHeader, readCookie } from "./api";
 
 export const docKeys = {
   files: ["files"] as const,
@@ -90,6 +90,7 @@ export async function uploadFile(file: File, params: { branch_id?: string | null
         "content-type": "application/octet-stream",
         "x-csrf-token": readCookie("agentic_csrf"),
         "x-file-type": file.type || "",
+        ...langHeader(),
       },
       body: file,
     });

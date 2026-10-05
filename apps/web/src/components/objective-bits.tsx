@@ -1,5 +1,5 @@
 /** P21 objectives on tasks: the picker (new-task dialog, task sheet), the chip on board cards,
- * and the task sheet's "For objective / this request cost" panel. */
+ * the task sheet's "For objective / this request cost" panel, and (P23) a workflow run's link. */
 import { CoinsIcon, PencilSimpleIcon, TargetIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -15,6 +15,7 @@ import { api, errorMessage } from "@/lib/api";
 import { objectiveKeys, objectivesQuery, pickerOptions, rm, STATUS, type RequestCost, type TaskObjective } from "@/lib/objectives";
 import { cn } from "@/lib/utils";
 import { workKeys } from "@/lib/work";
+import { runKeys, setRunObjective } from "@/lib/workflows";
 
 const NONE = "__none";
 
@@ -75,6 +76,64 @@ export function ObjectiveChip({ title, className }: { title: string; className?:
     <span title={t("For objective: {title}", { title })} className={cn("inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border px-1.5 py-px text-[11px] text-muted", className)}>
       <TargetIcon size={11} weight="bold" className="shrink-0 text-accent" aria-hidden />
       <span className="truncate">{title}</span>
+    </span>
+  );
+}
+
+/** P23: a workflow run's objective in the run's header: a chip (opens the objective) with
+ * Change, or "Link to an objective" when it has none. Changing it moves the run's step tasks. */
+export function RunObjectiveLink({
+  runId,
+  branchId,
+  objective,
+  canWrite,
+}: {
+  runId: string;
+  branchId: string | null | undefined;
+  objective: { id: string; title: string } | null;
+  canWrite: boolean;
+}) {
+  const t = useT();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const link = useMutation({
+    mutationFn: (objective_id: string | null) => setRunObjective(runId, objective_id),
+    onSuccess: (run, id) => {
+      qc.setQueryData(runKeys.one(runId), run);
+      qc.invalidateQueries({ queryKey: runKeys.all });
+      qc.invalidateQueries({ queryKey: workKeys.tasks });
+      qc.invalidateQueries({ queryKey: objectiveKeys.all });
+      setEditing(false);
+      toast.success(id ? t("The run and its steps now count toward the objective.") : t("Unlinked from the objective."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const { data: active = [] } = useQuery({ ...objectivesQuery("active"), enabled: canWrite });
+  const canLink = canWrite && pickerOptions(active, branchId).length > 0;
+  if (!objective && !canLink) return null;
+
+  if (editing) {
+    return (
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+        <div className="min-w-0 flex-1 sm:w-72 sm:flex-none">
+          <ObjectivePicker bare value={objective?.id ?? null} currentLabel={objective?.title} branchId={branchId} onChange={(id) => link.mutate(id)} />
+        </div>
+        <Button size="sm" variant="outline" className="pointer-coarse:min-h-9" disabled={link.isPending} onClick={() => setEditing(false)}>{t("Done")}</Button>
+      </div>
+    );
+  }
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+      {objective ? (
+        <Link to="/objectives" search={{ o: objective.id }} className="inline-flex min-h-9 max-w-full min-w-0 items-center hover:[&>span]:border-accent/50">
+          <ObjectiveChip title={objective.title} className="py-0.5 text-[12px]" />
+        </Link>
+      ) : null}
+      {canWrite ? (
+        <Button size="sm" variant="ghost" className="h-8 shrink-0 px-2 pointer-coarse:min-h-9" onClick={() => setEditing(true)} aria-label={objective ? t("Change objective") : t("Link to an objective")}>
+          {objective ? <><PencilSimpleIcon size={13} /> {t("Change")}</> : <><TargetIcon size={13} /> {t("Link to an objective")}</>}
+        </Button>
+      ) : null}
     </span>
   );
 }

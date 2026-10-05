@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from ..agents.tools import Tool, ToolContext
 from ..core.fence import fence
 from ..core.valkey import valkey
+from ..i18n import Msg, Plain
 from ..models import Agent, EmailDraft, GoogleAccount, Membership, Task, User
 from ..teams import objectives
 from . import gmail, insights
@@ -136,15 +137,16 @@ async def _notify(ctx: ToolContext, args: dict[str, Any]) -> str:
     if count > NOTIFY_PER_HOUR:
         return "Error: too many notifications this hour. Batch them into one message."
     owner = await ctx.db.get(User, a.owner_user_id)
-    via = f"{a.name}" + (
-        f" for {owner.name}" if owner and owner.id != target.id and a.private else ""
-    )
+    if owner and owner.id != target.id and a.private:
+        title = Msg("Message from {agent} for {owner}", agent=a.name, owner=owner.name)
+    else:
+        title = Msg("Message from {agent}", agent=a.name)
     ids = await deliver.notify_user(
         ctx.db,
         ctx.workspace.id,
         target.id,
-        f"Message from {via}",
-        message[:1500],
+        title,
+        Plain(message[:1500]),  # the agent wrote it (in the person's language already)
         f"/tasks?task={ctx.task.id}" if ctx.task else "/assistants",
         dedupe=f"notify:{a.id}:{ctx.task.id if ctx.task else 'chat'}:{count}:{target.id}",
     )
@@ -333,8 +335,13 @@ async def _save_draft(
         ctx.db,
         ctx.workspace.id,
         acct.user_id,
-        f"{ctx.agent.name} drafted an email",
-        f"To {to}: {subject}\n\n{body[:300]}{'…' if len(body) > 300 else ''}\n\nApprove to send it.",
+        Msg("{name} drafted an email", name=ctx.agent.name),
+        Msg(
+            "To {to}: {subject}\n\n{preview}\n\nApprove to send it.",
+            to=to,
+            subject=subject,
+            preview=body[:300] + ("…" if len(body) > 300 else ""),
+        ),
         "/assistants?tab=drafts",
         dedupe=f"draft:{row.id}",
     )

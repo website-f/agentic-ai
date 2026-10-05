@@ -1,8 +1,10 @@
 """The meeting-minutes pipeline and what happens around it.
 
-The worker runs three steps (workflows/minutes_workflows.py), each safe to run again:
+The worker runs these steps (workflows/minutes_workflows.py), each safe to run again:
 1. prepare: ffprobe + ffmpeg keep a small mono audio copy, the original is deleted,
    the chunk plan is made.
+1b. diarize_window (once per 10 minutes, when "Separate speakers" is on): who spoke when,
+   on the CPU (diarize.py). Any failure here only costs the speaker labels.
 2. transcribe_chunk (once per chunk): the "transcribe" group hears up to 9.5 minutes.
    When every speech model is resting (Groq's audio-seconds-per-hour limit, a 429), the step
    says how long to wait and the workflow sleeps; nothing is lost.
@@ -19,6 +21,7 @@ import hashlib
 import logging
 import math
 import re
+import secrets
 import shutil
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -44,7 +47,7 @@ from ..models import (
     Workspace,
 )
 from ..services import events
-from . import audio, transcript, writer
+from . import audio, diarize, transcript, writer
 
 log = logging.getLogger("agentic.minutes")
 
@@ -189,10 +192,287 @@ async def prepare(db: AsyncSession, rec_id: str, beat: audio.Beat | None = None)
     chunks = audio.plan_chunks(rec.duration_seconds)
     rec.chunks_total = len(chunks)
     rec.chunks_done = sum(1 for c in chunks if str(c.index) in (rec.chunk_results or {}))
+    windows = speaker_windows(rec)
+    # While the voices are separated the recording stays "extracting" (an audio step); the
+    # progress is in work["diar"] (see speakers_progress).
+    rec.status, rec.stage_detail = ("extracting" if windows else "transcribing"), ""
+    await db.commit()
+    await notify(rec)
+    return {"chunks": len(chunks), "windows": len(windows)}
+
+
+# ---------------------------------------------------------------- step 1b: who spoke when
+
+
+def speaker_options(rec: MeetingRecording) -> dict[str, Any]:
+    """What the uploader chose: {"on": bool, "count": 0 (auto) or 2-10}."""
+    opts = (rec.work or {}).get("diarize") or {}
+    # On unless the uploader turned it off (recordings an agent starts get it too).
+    return {"on": bool(opts.get("on", True)), "count": int(opts.get("count") or 0)}
+
+
+def keep_options(rec: MeetingRecording) -> dict[str, Any]:
+    """The work scratch emptied, the uploader's choices kept."""
+    opts = (rec.work or {}).get("diarize")
+    return {"diarize": opts} if opts else {}
+
+
+def _diar(rec: MeetingRecording) -> dict[str, Any]:
+    return dict((rec.work or {}).get("diar") or {})
+
+
+def _set_diar(rec: MeetingRecording, diar: dict[str, Any]) -> None:
+    rec.work = {**(rec.work or {}), "diar": diar}
+    flag_modified(rec, "work")
+
+
+def speaker_windows(rec: MeetingRecording) -> list[tuple[float, float]]:
+    """The windows still to separate (all of them: done ones return at once). Empty when the
+    uploader turned it off, it already failed, the transcript exists, or this server has no
+    speaker models."""
+    if rec.transcript or not speaker_options(rec)["on"] or _diar(rec).get("failed"):
+        return []
+    if not diarize.available():
+        log.info("speaker models are not installed; minutes %s without speaker labels", rec.id)
+        _set_diar(rec, {**_diar(rec), "failed": "speaker models are not installed"})
+        return []
+    plan = diarize.plan_windows(rec.duration_seconds or 0)
+    _set_diar(rec, {**_diar(rec), "total": len(plan)})
+    return plan
+
+
+def speakers_progress(rec: MeetingRecording) -> tuple[int, int]:
+    """(windows done, windows planned) while the voices are being separated, else (0, 0)."""
+    d = (rec.work or {}).get("diar") or {}
+    if rec.status != "extracting" or d.get("failed") or not d.get("total"):
+        return 0, 0
+    return len(d.get("w") or {}), int(d["total"])
+
+
+async def _speakers_finished(db: AsyncSession, rec: MeetingRecording) -> None:
     rec.status, rec.stage_detail = "transcribing", ""
     await db.commit()
     await notify(rec)
-    return {"chunks": len(chunks)}
+
+
+async def diarize_window(
+    db: AsyncSession, rec_id: str, index: int, beat: audio.Beat | None = None
+) -> dict[str, Any]:
+    """Separate the voices in one window. {"done"} | {"skip"} (separation stopped: the
+    minutes carry on without labels) | {"failed"} (the recording failed elsewhere)."""
+    rec = await db.get(MeetingRecording, rec_id)
+    if rec is None or rec.status == "failed":
+        return {"failed": True}
+    diar = _diar(rec)
+    plan = diarize.plan_windows(rec.duration_seconds or 0)
+    done = dict(diar.get("w") or {})
+    if diar.get("failed") or rec.transcript:
+        if rec.status == "extracting":
+            await _speakers_finished(db, rec)
+        return {"skip": True}
+    if index >= len(plan) or str(index) in done:
+        if len(done) >= len(plan) and rec.status == "extracting":
+            await _speakers_finished(db, rec)
+        return {"done": True}
+    where = audio.folder(rec.workspace_id, rec.id)
+    start, length = plan[index]
+    try:
+        if not rec.audio_file or not (where / rec.audio_file).exists():
+            raise diarize.SpeakerError("the audio is no longer on the server")
+        count = speaker_options(rec)["count"] if len(plan) == 1 else 0
+        result = await diarize.run_window(where / rec.audio_file, start, length, count, beat)
+    except Exception as e:  # noqa: BLE001 - any failure only costs the speaker labels
+        log.warning("speaker separation stopped for %s at window %s: %s", rec.id, index, e)
+        _set_diar(rec, {**diar, "failed": str(e)[:300] or e.__class__.__name__})
+        await _speakers_finished(db, rec)
+        return {"skip": True}
+    done[str(index)] = {"start": start, **result}
+    _set_diar(rec, {**diar, "w": done, "total": len(plan)})
+    if len(done) >= len(plan):
+        await _speakers_finished(db, rec)
+    else:
+        await db.commit()
+        await notify(rec)
+    return {"done": True}
+
+
+async def separate_speakers(
+    db: AsyncSession, rec_id: str, beat: audio.Beat | None = None
+) -> dict[str, Any]:
+    """Every window in turn (the prepare activity runs this right after extracting, so a
+    retry continues at the first window not yet done)."""
+    rec = await db.get(MeetingRecording, rec_id)
+    if rec is None:
+        return {"failed": True}
+    total = len(diarize.plan_windows(rec.duration_seconds or 0))
+    for i in range(total):
+        r = await diarize_window(db, rec_id, i, beat)
+        if not r.get("done"):
+            return r
+        if beat:
+            beat()
+    return {"done": True}
+
+
+def speaker_turns(rec: MeetingRecording) -> list[list[Any]]:
+    """Who spoke when across the meeting, once every window is separated; [] otherwise."""
+    d = _diar(rec)
+    if d.get("failed") or not d.get("total"):
+        return []
+    w = d.get("w") or {}
+    if len(w) < int(d["total"]):
+        return []
+    windows = [(float(w[k].get("start") or 0), w[k]) for k in sorted(w, key=int)]
+    try:
+        return diarize.link(windows, speaker_options(rec)["count"])
+    except Exception:  # noqa: BLE001 - bad stored data only costs the labels
+        log.warning("could not link speakers for %s", rec.id, exc_info=True)
+        return []
+
+
+def speakers_from(turns: list[list[Any]], paras: list[dict[str, Any]]) -> dict[str, Any]:
+    """The speakers column: talk time and a clip to recognise each voice, for the voices that
+    said something the transcript heard."""
+    heard = {p["s"] for p in paras if p.get("s")}
+    talk = diarize.talk_time(turns)
+    out: dict[str, Any] = {}
+    for lbl in sorted(heard, key=lambda x: int(x[1:]) if x[1:].isdigit() else 99):
+        out[lbl] = {"name": "", "seconds": talk.get(lbl, 0.0)}
+        if clip := diarize.clip_for(turns, lbl):
+            out[lbl]["clip"] = clip
+    return out
+
+
+def unlabel(paras: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The transcript as it would be without speaker separation (one voice was heard)."""
+    segs = [{k: v for k, v in p.items() if k != "s"} for p in paras]
+    return transcript.paragraphs(segs)
+
+
+def speaker_labels(rec: MeetingRecording) -> bool:
+    return bool(rec.speakers) and any(p.get("s") for p in rec.transcript or [])
+
+
+async def _people(db: AsyncSession, rec: MeetingRecording) -> list[str]:
+    return [
+        n
+        for n in await db.scalars(
+            select(User.name)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.workspace_id == rec.workspace_id)
+        )
+        if n
+    ]
+
+
+NAME_LINES_CHARS = 14_000
+
+
+def _name_evidence(rec: MeetingRecording, people: list[str]) -> str:
+    """The lines that can name a voice: the opening (introductions), and every line that
+    says a name with the lines around it. Capped so a long meeting stays one small call."""
+    paras = rec.transcript or []
+    lines = [f"[{transcript.fmt_time(p['t'])}] {p.get('s') or '?'}: {p['text']}" for p in paras]
+    if sum(len(x) + 1 for x in lines) <= NAME_LINES_CHARS:
+        return "\n".join(lines)
+    firsts = {n.split()[0].casefold() for n in people if n.split()}
+    cue = re.compile(r"\b(saya|nama|terima kasih|thanks?|thank you|i'm|i am|my name)\b", re.I)
+    keep: set[int] = set(range(min(12, len(lines))))
+    for i, p in enumerate(paras):
+        words = {w.casefold() for w in re.findall(r"[A-Za-z']+", p["text"])}
+        if cue.search(p["text"]) or words & firsts:
+            keep.update({i - 1, i, i + 1})
+    out, size = [], 0
+    for i in sorted(k for k in keep if 0 <= k < len(lines)):
+        if size + len(lines[i]) > NAME_LINES_CHARS:
+            break
+        out.append(lines[i])
+        size += len(lines[i]) + 1
+    return "\n".join(out)
+
+
+async def suggest_names(db: AsyncSession, rec: MeetingRecording, vocab: str) -> None:
+    """Offer a name for each voice (the person confirms in the Speakers panel): voices that
+    introduce themselves, then the smart model reading who addresses whom. Never fails the
+    minutes."""
+    if not rec.speakers:
+        return
+    people = await _people(db, rec)
+    found = writer.introductions(rec.transcript or [], people)
+    labels = set(rec.speakers) - set(found)
+    if labels:
+        try:
+            r = await gateway.chat(
+                db,
+                rec.workspace_id,
+                "smart",
+                [
+                    {"role": "system", "content": writer.names_system(vocab)},
+                    {"role": "user", "content": writer.names_prompt(_name_evidence(rec, people))},
+                ],
+                task="minutes.speakers",
+                max_tokens=800,
+                temperature=0.0,
+                json_mode=True,
+                accept=lambda raw: writer.loads(raw) is not None,
+                agent_id=rec.agent_id,
+                task_id=rec.task_id,
+            )
+            rec.cost_usd = round((rec.cost_usd or 0) + (r.cost_usd or 0), 6)
+            heard = " ".join(p["text"] for p in rec.transcript or [])
+            taken = {v["name"].casefold() for v in found.values()}
+            for lbl, v in writer.parse_names(r.content, labels, heard).items():
+                if v["name"].casefold() not in taken:
+                    found[lbl] = v
+                    taken.add(v["name"].casefold())
+        except Exception:  # noqa: BLE001 - suggestions are a nicety
+            log.info("no speaker name suggestions for %s", rec.id, exc_info=True)
+    if found:
+        sp = {k: dict(v) for k, v in rec.speakers.items()}
+        for lbl, v in found.items():
+            if lbl in sp:
+                sp[lbl]["suggested"] = v["name"]
+                sp[lbl]["evidence"] = v.get("evidence", "")
+        rec.speakers = sp
+        flag_modified(rec, "speakers")
+
+
+def current_names(rec: MeetingRecording) -> dict[str, str]:
+    return {k: str((v or {}).get("name") or "") for k, v in (rec.speakers or {}).items()}
+
+
+def names_stale(rec: MeetingRecording) -> bool:
+    """The speakers were named (or renamed) after the minutes were written."""
+    if not speaker_labels(rec) or not rec.minutes:
+        return False
+    return (rec.minutes.get("speaker_names") or {}) != current_names(rec)
+
+
+def rename_speakers(rec: MeetingRecording, names: dict[str, str]) -> None:
+    sp = {k: dict(v) for k, v in (rec.speakers or {}).items()}
+    for lbl, name in names.items():
+        if lbl in sp:
+            sp[lbl]["name"] = " ".join(str(name or "").split())[:80]
+    rec.speakers = sp
+    flag_modified(rec, "speakers")
+
+
+async def speaker_clip(rec: MeetingRecording, label: str) -> bytes | None:
+    """About ten seconds of one voice, cut from the kept audio; None when the audio is gone
+    or the voice has no clear stretch."""
+    clip = ((rec.speakers or {}).get(label) or {}).get("clip")
+    if not clip or not rec.audio_file or rec.audio_purged_at is not None:
+        return None
+    where = audio.folder(rec.workspace_id, rec.id)
+    src = where / rec.audio_file
+    if not src.exists():
+        return None
+    tmp = where / f"clip-{_safe_label(label)}-{secrets.token_hex(4)}.mp3"
+    return await audio.cut(src, tmp, float(clip[0]), float(clip[1]))
+
+
+def _safe_label(label: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", label)[:8] or "x"
 
 
 # ---------------------------------------------------------------- step 2: hear one chunk
@@ -269,6 +549,8 @@ async def transcribe_chunk(
     rec = await db.get(MeetingRecording, rec_id)
     if rec is None or rec.status == "failed":
         return {"failed": True}
+    if rec.status == "extracting":  # hearing has begun: the speaker step is over
+        rec.status = "transcribing"
     results = dict(rec.chunk_results or {})
     if str(index) in results:
         return {"done": True}
@@ -376,7 +658,8 @@ async def _today(db: AsyncSession, rec: MeetingRecording) -> date:
 async def compose(db: AsyncSession, rec: MeetingRecording, beat: audio.Beat | None) -> dict:
     """Transcript text -> minutes JSON, one pass or map-reduce. Map notes are kept on the
     recording, so a retry continues where it stopped."""
-    text = transcript.as_text(rec.transcript or [])
+    who = speaker_labels(rec)
+    text = transcript.as_text(rec.transcript or [], rec.speakers if who else None, rec.language)
     name, dur = rec.original_name or "recording", audio.fmt_duration(rec.duration_seconds)
     today = await _today(db, rec)
     vocab = await vocabulary(db, rec)
@@ -384,8 +667,10 @@ async def compose(db: AsyncSession, rec: MeetingRecording, beat: audio.Beat | No
         return await _ask(
             db,
             rec,
-            writer.system_prompt(rec.language, vocab),
-            writer.one_pass_prompt(text, name=name, duration=dur, date_hint=f"{today:%d %b %Y}"),
+            writer.system_prompt(rec.language, vocab, speakers=who),
+            writer.one_pass_prompt(
+                text, name=name, duration=dur, date_hint=f"{today:%d %b %Y}", speakers=who
+            ),
             task="minutes.write",
             notes=False,
         )
@@ -401,7 +686,7 @@ async def compose(db: AsyncSession, rec: MeetingRecording, beat: audio.Beat | No
         notes[str(i)] = await _ask(
             db,
             rec,
-            writer.map_system(rec.language, vocab),
+            writer.map_system(rec.language, vocab, speakers=who),
             writer.map_prompt(part, i, len(parts)),
             task="minutes.notes",
             notes=True,
@@ -418,7 +703,7 @@ async def compose(db: AsyncSession, rec: MeetingRecording, beat: audio.Beat | No
     return await _ask(
         db,
         rec,
-        writer.reduce_system(rec.language, vocab),
+        writer.reduce_system(rec.language, vocab, speakers=who),
         writer.reduce_prompt(ordered, name=name, duration=dur),
         task="minutes.write",
         notes=False,
@@ -431,10 +716,18 @@ async def write(db: AsyncSession, rec_id: str, beat: audio.Beat | None = None) -
         return {"failed": True}
     if rec.status == "ready":
         return {"done": True}
-    if not rec.transcript:
+    fresh = not rec.transcript
+    if fresh:
         chunks = audio.plan_chunks(rec.duration_seconds or 0)
-        rec.transcript = transcript.stitch(chunks, rec.chunk_results or {})
+        turns = speaker_turns(rec)
+        rec.transcript = transcript.stitch(chunks, rec.chunk_results or {}, turns)
+        rec.speakers = speakers_from(turns, rec.transcript) if turns else {}
+        if len(rec.speakers) < 2:  # one voice said everything: minutes as without labels
+            rec.speakers = {}
+            if turns:
+                rec.transcript = unlabel(rec.transcript)
         flag_modified(rec, "transcript")
+        flag_modified(rec, "speakers")
     if not rec.transcript:
         return await fail(
             db,
@@ -445,12 +738,18 @@ async def write(db: AsyncSession, rec_id: str, beat: audio.Beat | None = None) -
     rec.status, rec.stage_detail = "writing", ""
     await db.commit()
     await notify(rec)
+    if fresh and rec.speakers:
+        await suggest_names(db, rec, await vocabulary(db, rec))
+        await db.commit()
     try:
         minutes = await compose(db, rec, beat)
     except gateway.NotConfigured as e:
         return await fail(db, rec, str(e))
     if not rec.title.strip() or rec.title == default_title(rec.original_name):
         rec.title = (minutes.get("title") or rec.title or "Meeting")[:200]
+    who = speaker_labels(rec)
+    if who:
+        minutes = with_speakers(minutes, rec)
     rec.minutes = minutes
     flag_modified(rec, "minutes")
     today = await _today(db, rec)
@@ -459,12 +758,13 @@ async def write(db: AsyncSession, rec_id: str, beat: audio.Beat | None = None) -
         language=rec.language,
         recording=recording_label(rec),
         date_fallback=f"{today:%d %b %Y}",
+        speakers=who,
     )
     await save_document(db, rec, md, rec.created_by, note="minutes written from the recording")
     now = datetime.now(UTC)
     rec.status, rec.stage_detail, rec.error = "ready", "", None
     rec.finished_at = now
-    rec.chunk_results, rec.work = {}, {}
+    rec.chunk_results, rec.work = {}, keep_options(rec)
     days = audio_days(await db.get(Workspace, rec.workspace_id))
     if days == 0 and rec.audio_file:
         audio.remove_file(audio.folder(rec.workspace_id, rec.id) / rec.audio_file)
@@ -475,6 +775,20 @@ async def write(db: AsyncSession, rec_id: str, beat: audio.Beat | None = None) -
     await publish_library(db, rec)  # every finished minutes is searchable by agents
     await notify(rec)
     return {"done": True}
+
+
+def with_speakers(minutes: dict[str, Any], rec: MeetingRecording) -> dict[str, Any]:
+    """Named speakers are attendees; the names used are kept so a rename shows the minutes
+    are out of date ("Rewrite with names")."""
+    names = current_names(rec)
+    label = re.compile(r"^(speaker|penutur)\s*\d+$", re.I)
+    people = [p for p in minutes.get("attendees") or [] if not label.match(p.strip())]
+    have = {p.casefold() for p in people}
+    for n in names.values():
+        if n and n.casefold() not in have and not any(n.casefold() in p for p in have):
+            people.append(n)
+            have.add(n.casefold())
+    return {**minutes, "attendees": people, "speaker_names": names}
 
 
 def default_title(name: str) -> str:

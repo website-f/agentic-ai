@@ -185,7 +185,8 @@ async def upload(
             raise api_error(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 "file_too_large",
-                f"Files can be up to {service.MAX_FILE_BYTES // (1024 * 1024)} MB.",
+                "Files can be up to {mb} MB.",
+                mb=service.MAX_FILE_BYTES // (1024 * 1024),
             )
     if not data:
         raise api_error(status.HTTP_400_BAD_REQUEST, "empty_file", "That file is empty.")

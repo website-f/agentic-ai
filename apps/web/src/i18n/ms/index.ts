@@ -7,6 +7,8 @@ import { ADMIN } from "./admin";
 import { COMMON } from "./common";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
+import { MINUTES } from "./minutes";
+import { RUNS } from "./runs";
 import { SHELL } from "./shell";
 import { WORK } from "./work";
 
@@ -17,4 +19,6 @@ export const MS: Record<string, string> = {
   ...KNOWLEDGE,
   ...ADMIN,
   ...GUIDE,
+  ...MINUTES,
+  ...RUNS,
 };

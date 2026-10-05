@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core import crypto
 from ..core.config import settings
 from ..core.valkey import valkey
+from ..i18n import Msg
 from ..models import GoogleAccount, Integration
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -83,7 +84,7 @@ async def app_credentials(db: AsyncSession, workspace_id: str) -> tuple[str, str
 async def auth_url(db: AsyncSession, workspace_id: str, user_id: str) -> str:
     creds = await app_credentials(db, workspace_id)
     if creds is None:
-        raise GmailError("Google sign-in is not set up yet (Channels > Gmail).")
+        raise GmailError(Msg("Google sign-in is not set up yet (Channels > Gmail)."))
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
     challenge = (
@@ -113,11 +114,11 @@ async def finish(db: AsyncSession, state: str, code: str) -> GoogleAccount:
     """The callback: trade the code for tokens and remember the mailbox."""
     raw = await valkey().getdel(f"gauth:{state}")
     if not raw:
-        raise GmailError("That sign-in link expired. Start again from the dashboard.")
+        raise GmailError(Msg("That sign-in link expired. Start again from the dashboard."))
     st = json.loads(raw)
     creds = await app_credentials(db, st["ws"])
     if creds is None:
-        raise GmailError("Google sign-in is not set up.")
+        raise GmailError(Msg("Google sign-in is not set up."))
     async with _client() as c:
         r = await c.post(
             TOKEN_URL,
@@ -133,17 +134,23 @@ async def finish(db: AsyncSession, state: str, code: str) -> GoogleAccount:
     tok = r.json() if r.content else {}
     if r.status_code >= 400 or not tok.get("access_token"):
         raise GmailError(
-            "Google refused the sign-in: "
-            f"{tok.get('error_description') or tok.get('error') or r.status_code}"
+            Msg(
+                "Google refused the sign-in: {why}",
+                why=tok.get("error_description") or tok.get("error") or r.status_code,
+            )
         )
     if not tok.get("refresh_token"):
         raise GmailError(
-            "Google gave no refresh token. Remove the app's access in your Google account "
-            "and connect again."
+            Msg(
+                "Google gave no refresh token. Remove the app's access in your Google account "
+                "and connect again."
+            )
         )
     granted = tok.get("scope", "")
     if "gmail.readonly" not in granted:
-        raise GmailError("Gmail access was not granted. Tick the Gmail boxes on Google's screen.")
+        raise GmailError(
+            Msg("Gmail access was not granted. Tick the Gmail boxes on Google's screen.")
+        )
     profile = await _api(tok["access_token"], "GET", "/profile")
     acct = await db.scalar(
         select(GoogleAccount).where(
@@ -171,7 +178,7 @@ async def access_token(db: AsyncSession, acct: GoogleAccount) -> str:
         return cached.decode() if isinstance(cached, bytes) else str(cached)
     creds = await app_credentials(db, acct.workspace_id)
     if creds is None:
-        raise GmailError("Google sign-in is not set up.")
+        raise GmailError(Msg("Google sign-in is not set up."))
     async with _client() as c:
         r = await c.post(
             TOKEN_URL,
@@ -189,7 +196,9 @@ async def access_token(db: AsyncSession, acct: GoogleAccount) -> str:
             f"Google: {tok.get('error_description') or tok.get('error') or r.status_code}"[:300]
         )
         await db.commit()
-        raise GmailError(f"Gmail needs reconnecting ({acct.last_error}).", r.status_code)
+        raise GmailError(
+            Msg("Gmail needs reconnecting ({why}).", why=acct.last_error or ""), r.status_code
+        )
     await valkey().set(
         f"gtok:{acct.id}", tok["access_token"], ex=max(60, int(tok.get("expires_in", 3600)) - 120)
     )

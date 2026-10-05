@@ -16,6 +16,7 @@ from sqlalchemy.orm import aliased
 
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
+from ...i18n import Msg
 from ...models import Branch, Department, Objective, Task, User, Workspace
 from ...services import audit, events
 from ...teams import objectives as obj
@@ -121,13 +122,13 @@ async def _get(db: AsyncSession, p: Principal, objective_id: str) -> Objective:
 def _edit_check(p: Principal, branch_id: str | None, department_id: str | None) -> None:
     if not obj.may_edit(p.scope, _perms(p), branch_id, department_id):
         where = {
-            "branch": "your company",
-            "department": "your department",
+            "branch": Msg("your company"),
+            "department": Msg("your department"),
         }.get(p.scope.kind, "")
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "forbidden",
-            f"You can manage objectives for {where} only."
+            Msg("You can manage objectives for {where} only.", where=where)
             if where and "team.manage" in _perms(p)
             else "Only owners, admins and managers set objectives.",
         )
@@ -169,7 +170,8 @@ async def _parent_check(
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "bad_parent",
-            f'"{parent.title}" belongs to another company.',
+            '"{title}" belongs to another company.',
+            title=parent.title,
         )
     depth, cur, seen = 1, parent, set()
     while cur is not None:
@@ -188,7 +190,8 @@ async def _parent_check(
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "too_deep",
-            f"Objectives nest at most {obj.MAX_DEPTH} levels deep.",
+            "Objectives nest at most {n} levels deep.",
+            n=obj.MAX_DEPTH,
         )
 
 

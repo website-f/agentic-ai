@@ -14,7 +14,8 @@ from .. import __version__
 from ..brain import embed
 from ..core.db import engine
 from ..core.valkey import close_valkey
-from .deps import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
+from ..i18n import Msg, current_lang, normalize, render, reset_lang, set_lang, tr
+from .deps import CSRF_COOKIE, CSRF_HEADER, LANG_HEADER, SESSION_COOKIE
 from .routers import (
     agents,
     ai_engine,
@@ -104,15 +105,41 @@ async def csrf_guard(request: Request, call_next):
             and ctype.startswith("application/octet-stream")
         )
         if not ctype.startswith("application/json") and not raw_ok:
-            return _error(415, "json_required", "Send requests as application/json.")
+            return _error(415, "json_required", tr("Send requests as application/json."))
         # Signed webhooks (WhatsApp) never use the session cookie, so CSRF does not apply.
         exempt = path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX)
         if not exempt and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
             header = request.headers.get(CSRF_HEADER, "")
             if not cookie or not hmac.compare_digest(cookie, header):
-                return _error(403, "csrf_failed", "Reload the page and try again.")
+                return _error(403, "csrf_failed", tr("Reload the page and try again."))
     return await call_next(request)
+
+
+class LanguageMiddleware:
+    """P22: the language this request is answered in. X-Lang (the app's language) wins;
+    without it, current_principal falls back to the person's saved preference; else English.
+    Kept in a contextvar (deep code calls i18n.current_lang()) and on request.state."""
+
+    def __init__(self, app_) -> None:
+        self.app = app_
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        raw = dict(scope.get("headers") or []).get(LANG_HEADER.encode(), b"")
+        lang = normalize(raw.decode("latin-1"))
+        scope.setdefault("state", {})["lang"] = lang
+        token = set_lang(lang)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_lang(token)
+
+
+def request_lang(request: Request) -> str:
+    return normalize(getattr(request.state, "lang", None)) or current_lang()
 
 
 @app.middleware("http")
@@ -133,27 +160,80 @@ def _error(status_code: int, code: str, message: str, fields: dict | None = None
 
 
 @app.exception_handler(HTTPException)
-async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
+async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
     detail: Any = exc.detail  # starlette types it as str; ours carries a dict
+    lang = request_lang(request)
     if isinstance(detail, dict) and "code" in detail:
-        return _error(exc.status_code, str(detail["code"]), str(detail.get("message", "")))
-    return _error(exc.status_code, "http_error", str(exc.detail))
+        message = render(detail.get("message", ""), lang)
+        return _error(exc.status_code, str(detail["code"]), message)
+    return _error(exc.status_code, "http_error", render(str(exc.detail), lang))
+
+
+# Pydantic's own messages, by error type; ctx values fill the {vars}.
+PYDANTIC_MESSAGES: dict[str, str] = {
+    "missing": "Field required",
+    "string_too_short": "Should have at least {min_length} characters",
+    "string_too_long": "Should have at most {max_length} characters",
+    "too_short": "Should have at least {min_length} items",
+    "too_long": "Should have at most {max_length} items",
+    "greater_than": "Should be greater than {gt}",
+    "greater_than_equal": "Should be {ge} or more",
+    "less_than": "Should be less than {lt}",
+    "less_than_equal": "Should be {le} or less",
+    "int_parsing": "Should be a whole number",
+    "int_type": "Should be a whole number",
+    "float_parsing": "Should be a number",
+    "float_type": "Should be a number",
+    "bool_parsing": "Should be true or false",
+    "bool_type": "Should be true or false",
+    "string_type": "Should be text",
+    "list_type": "Should be a list",
+    "dict_type": "Should be an object",
+    "enum": "Should be one of: {expected}",
+    "literal_error": "Should be one of: {expected}",
+    "extra_forbidden": "Not a known field",
+    "json_invalid": "Not valid JSON",
+    "url_parsing": "Not a valid web address",
+    "datetime_parsing": "Not a valid date and time",
+    "datetime_from_date_parsing": "Not a valid date and time",
+    "date_parsing": "Not a valid date",
+    "uuid_parsing": "Not a valid id",
+}
+
+
+def _field_message(err: dict[str, Any], lang: str) -> str:
+    """One field's problem in the request's language. Our validators raise ValueError with
+    a Msg (or plain English with a known template); pydantic's own go by error type."""
+    ctx = err.get("ctx") or {}
+    cause = ctx.get("error")
+    if isinstance(cause, BaseException) and cause.args and isinstance(cause.args[0], str):
+        return render(cause.args[0], lang)
+    template = PYDANTIC_MESSAGES.get(str(err.get("type", "")))
+    if template is not None and lang != "en":
+        values = {k: v for k, v in ctx.items() if isinstance(v, (str, int, float))}
+        return Msg(template, **values).render(lang)
+    msg = str(err.get("msg", "Invalid value")).removeprefix("Value error, ")
+    return render(msg, lang)
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    lang = request_lang(request)
     fields: dict[str, str] = {}
     for err in exc.errors():
         loc = [str(p) for p in err.get("loc", []) if p not in ("body", "query", "path")]
-        msg = str(err.get("msg", "Invalid value")).removeprefix("Value error, ")
-        fields[".".join(loc) or "_"] = msg
-    return _error(422, "validation_failed", "Some fields need fixing.", fields)
+        fields[".".join(loc) or "_"] = _field_message(err, lang)
+    return _error(422, "validation_failed", tr("Some fields need fixing.", lang), fields)
 
 
 @app.exception_handler(Exception)
-async def unhandled(_: Request, exc: Exception) -> JSONResponse:
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     log.exception("unhandled error", exc_info=exc)
-    return _error(500, "server_error", "Something failed on the server. Check the api logs.")
+    return _error(
+        500,
+        "server_error",
+        tr("Something failed on the server. Check the api logs.", request_lang(request)),
+    )
 
 
 for r in (
@@ -198,6 +278,9 @@ for r in (
     impact.router,
 ):
     app.include_router(r)
+
+# Outermost, so even the CSRF and JSON checks answer in the person's language.
+app.add_middleware(LanguageMiddleware)
 
 # Meeting minutes from a recording: the upload streams raw bytes like /api/files.
 from .routers import minutes as minutes_router  # noqa: E402

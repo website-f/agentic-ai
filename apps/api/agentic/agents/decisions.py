@@ -5,12 +5,16 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..i18n import Msg
+from ..i18n.labels import decision_status_label
 from ..models import Approval, Task
 from ..services import audit, events
 from . import dispatch
 
 
 class DecisionError(Exception):
+    """`message` is a Msg: English in logs, the person's language when shown."""
+
     def __init__(self, status: int, code: str, message: str):
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
@@ -26,18 +30,22 @@ async def decide(
     via: str = "dashboard",
 ) -> Approval:
     if a.status != "pending":
-        raise DecisionError(409, "already_decided", f"This was already {a.status}.")
+        raise DecisionError(
+            409,
+            "already_decided",
+            Msg("This was already {status}.", status=decision_status_label(a.status)),
+        )
     answer = (answer or "").strip() or None
     if a.kind == "question":
         if decision == "deny":
             a.status, a.answer = "denied", answer
         elif not answer:
-            raise DecisionError(422, "answer_required", "Type an answer.")
+            raise DecisionError(422, "answer_required", Msg("Type an answer."))
         else:
             a.status, a.answer = "answered", answer
     else:
         if decision not in ("approve", "deny"):
-            raise DecisionError(422, "bad_decision", "Approve or deny this request.")
+            raise DecisionError(422, "bad_decision", Msg("Approve or deny this request."))
         a.status = "approved" if decision == "approve" else "denied"
         a.scope = (scope or "once") if decision == "approve" else None
         a.answer = answer
@@ -69,7 +77,10 @@ async def decide(
             raise DecisionError(
                 503,
                 "temporal_unavailable",
-                "Temporal is not reachable, so the decision was not sent. Try again in a moment.",
+                Msg(
+                    "Temporal is not reachable, so the decision was not sent. "
+                    "Try again in a moment."
+                ),
             ) from e
     await events.publish(
         a.workspace_id,

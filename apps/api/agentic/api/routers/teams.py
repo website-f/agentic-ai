@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch
 from ...core.db import get_db
+from ...i18n import render
 from ...models import (
     Agent,
     AgentPing,
@@ -655,7 +656,7 @@ async def list_pings(
             "agent_name": a.name,
             "agent_color": a.color,
             "kind": p.kind,
-            "message": p.message,
+            "message": render(p.message),  # stored in English; said in the reader's language
             "created_at": p.created_at,
             "resolved_at": p.resolved_at,
         }

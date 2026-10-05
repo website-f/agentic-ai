@@ -12,6 +12,7 @@ import { ApprovalCard } from "@/components/approval-card";
 import { FilePicker } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
 import { Markdown } from "@/components/markdown";
+import { ObjectivePicker, RunObjectiveLink } from "@/components/objective-bits";
 import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta } from "@/components/ui/card";
@@ -55,6 +56,7 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
   const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Record<string, string>>({});
+  const [objective, setObjective] = useState<string | null>(null);
   const branchId = branch === ANY ? null : branch;
   const { data: plan } = useQuery({
     queryKey: ["workflow-assignments", wf.id, branchId],
@@ -71,7 +73,7 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
   const missing = needs.filter((n) => !assign[n.node_id]);
   const start = useMutation({
     mutationFn: () => api<Run>(`/api/workflows/${wf.id}/runs`, "POST", {
-      title, input: job, branch_id: branchId, file_ids: files.map((f) => f.id),
+      title, input: job, branch_id: branchId, file_ids: files.map((f) => f.id), objective_id: objective,
       assign: Object.fromEntries(needs.map((n) => [n.node_id, assign[n.node_id]]).filter(([, v]) => v)),
     }),
     onSuccess: (run) => {
@@ -101,6 +103,8 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
           <TextareaField label={t("What's the job?")} rows={4} value={job} onChange={(e) => setJob(e.target.value)}
             placeholder={t("e.g. Syarikat Bina Jaya emailed asking for daily office cleaning at 3 sites in Shah Alam from January. Contact: Encik Rahim, 012-345 6789.")}
             hint={t("Every step's agent sees this, plus what the steps before it produced.")} />
+          <ObjectivePicker value={objective} onChange={setObjective} branchId={branchId}
+            hint={t("Each step's agent sees why the job matters, and the whole run's cost counts toward the objective.")} />
           <div className="flex flex-wrap items-center gap-2">
             {files.map((f) => (
               <span key={f.id} className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border py-0.5 pr-1 pl-2.5 text-[12.5px]">
@@ -318,6 +322,10 @@ export function RunView({ id }: { id: string }) {
               <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
                 <Meta items={[run.name, run.branch_name, t("started {ago}", { ago: timeAgo(run.created_at).toLowerCase() })]} />
               </span>
+            </div>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center">
+              <RunObjectiveLink runId={run.id} branchId={run.branch_id} canWrite={!!me?.permissions.includes("work.write")}
+                objective={run.objective_id ? { id: run.objective_id, title: run.objective_title ?? "" } : null} />
             </div>
           </div>
         </div>

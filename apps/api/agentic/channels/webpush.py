@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core import crypto
 from ..core.config import settings
 from ..engine import client as http
+from ..i18n import Msg
 from ..models import InstanceSecret, PushSubscription
 
 # Push services browsers use today. Anything else is refused.
@@ -55,7 +56,7 @@ def check_endpoint(endpoint: str) -> None:
     extra = {h.strip().lower() for h in settings.push_hosts_allowed.split(",") if h.strip()}
     known = any(host == h or host.endswith("." + h) for h in PUSH_HOSTS) or host in extra
     if parts.scheme != "https" or not known:
-        raise BadSubscription("That is not a known browser push service.")
+        raise BadSubscription(Msg("That is not a known browser push service."))
 
 
 @dataclass

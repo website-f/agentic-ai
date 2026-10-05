@@ -275,9 +275,11 @@ services:
     tmpfs: ["/tmp:size=16m"]
 
   browser:
-    # A real browser (Camoufox) that agents drive. Its own network, shared only with the
-    # worker (which listens on nothing), so a hostile page has nothing internal to reach;
-    # every page request also passes a public-address guard inside the service.
+    # A real browser (Camoufox) that agents drive. Its own INTERNAL network (no route out),
+    # shared only with the worker (which listens on nothing) and the egress proxy, its only
+    # way out. The proxy checks every connection, redirect hops included, so a hostile page
+    # cannot make the browser reach anything internal; the service's own public-address
+    # guard stays as a second line.
     build:
       context: .
       dockerfile: deploy/browser.Dockerfile
@@ -292,6 +294,9 @@ services:
       BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-false}
       # Agents per Firefox process: 3+ working at once in one process stall (measured).
       BROWSER_PER_PROCESS: ${BROWSER_PER_PROCESS:-2}
+      BROWSER_PROXY: http://egress:3128
+    depends_on:
+      egress: { condition: service_healthy }
     shm_size: 2gb  # Firefox, up to 3 processes
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/healthz', timeout=3)"]
@@ -313,6 +318,36 @@ services:
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
       - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
     <<: *logging
+
+  egress:
+    # The browser's only way out (apps/egress): an HTTP + CONNECT proxy that resolves every
+    # host itself, refuses any that resolves to a non-public address (loopback, private,
+    # link-local/metadata, CGNAT, our containers), then connects to the address it checked
+    # (no second lookup: DNS rebinding lands on the checked address). Ports 80/443 only.
+    # Sits on the internal browser network and on egress-out, which only it uses.
+    build:
+      context: .
+      dockerfile: deploy/egress.Dockerfile
+    image: agentic-egress:dev
+    restart: unless-stopped
+    environment:
+      # Host names allowed although private: dev's practice portal (`practice-portal`, any
+      # port, or `practice-portal:8080`). Defaults to BROWSER_ALLOW_HOSTS. Empty in production.
+      EGRESS_ALLOW_HOSTS: ${EGRESS_ALLOW_HOSTS:-${BROWSER_ALLOW_HOSTS:-}}
+      EGRESS_ALLOW_PORTS: ${EGRESS_ALLOW_PORTS:-80,443}
+      EGRESS_MAX_CONNECTIONS: ${EGRESS_MAX_CONNECTIONS:-512}
+      EGRESS_LOG_ALLOWED: ${EGRESS_LOG_ALLOWED:-false}  # denials are always logged
+    healthcheck:
+      test: ["CMD", "python", "/app/egress.py", "--health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    mem_limit: 128m  # ~25 MB idle, ~30 MB with 6 agents browsing (measured)
+    cpus: 0.5
+    pids_limit: 64
+    networks: [browser, egress-out]
+    <<: [*app-hardening, *logging]
 
   ollama:
     # The local backup brain (P14): one small model (qwen3:0.6b, ~0.8 GB RAM loaded) for free
@@ -418,7 +453,8 @@ services:
 
   practice-portal:
     # A fake supplier portal (login + inbox, demo data) for testing agents end to end
-    # (P9). Profile demo only; reachable by the browser at http://practice-portal:8080.
+    # (P9). Profile demo only; the browser reaches it at http://practice-portal:8080 through
+    # the egress proxy (allowed by BROWSER_ALLOW_HOSTS / EGRESS_ALLOW_HOSTS in .env).
     image: agentic-py:dev
     profiles: [demo]
     restart: unless-stopped
@@ -428,7 +464,7 @@ services:
       - ./deploy/demo:/demo:ro
     ports:
       - "127.0.0.1:8509:8080"
-    networks: [browser]
+    networks: [egress-out]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     read_only: true
@@ -650,7 +686,9 @@ services:
 networks:
   data: {}
   edge: {}
-  browser: {}  # browser <-> worker only; has internet egress for the browser
+  browser:
+    internal: true  # browser <-> worker + egress proxy only; NO route out except the proxy
+  egress-out: {}  # the egress proxy's way out (and dev's practice portal); nothing else
   sandbox:
     internal: true  # code sandbox <-> worker only; NO internet
   llm: {}  # api/worker <-> ollama; egress only so ollama-pull can fetch the model

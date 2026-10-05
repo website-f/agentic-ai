@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch
 from ...core.db import get_db
 from ...core.security import can
+from ...i18n import Msg
 from ...knowledge import indexer
 from ...knowledge import search as library
 from ...models import SOP, Branch, Department, DocFile
@@ -215,18 +216,19 @@ async def _check_scope(
         return branch_id, department_id
     if sc.kind == "branch":
         ok = branch_id is not None and branch_id == sc.branch_id
-        where = "your company"
+        where = Msg("your company")
     elif sc.department_id:
         ok = branch_id == sc.branch_id and department_id == sc.department_id
-        where = "your department"
+        where = Msg("your department")
     else:
         ok = branch_id is not None and branch_id == sc.branch_id and department_id is None
-        where = "your company"
+        where = Msg("your company")
     if not ok:
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "out_of_scope",
-            f"You can add guidelines for {where} only.",
+            "You can add guidelines for {where} only.",
+            where=where,
         )
     return branch_id, department_id
 

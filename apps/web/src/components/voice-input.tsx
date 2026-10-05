@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { t as tr, useT } from "@/i18n";
-import { ApiError, errorMessage, readCookie } from "@/lib/api";
+import { ApiError, errorMessage, langHeader, readCookie } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { groupsQuery } from "@/pages/ai-engine/data";
 
@@ -27,6 +27,7 @@ async function transcribe(blob: Blob, seconds: number): Promise<string> {
         "content-type": "application/octet-stream",
         "x-csrf-token": readCookie("agentic_csrf"),
         "x-file-type": blob.type || "audio/webm",
+        ...langHeader(),
       },
       body: blob,
     });

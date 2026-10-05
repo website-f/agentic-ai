@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch, runtime
 from ...core.db import get_db
 from ...core.security import can
-from ...models import Agent, Branch, DocFile, Task, Workflow, WorkflowRun
-from ...services import audit
+from ...models import Agent, Branch, DocFile, Objective, Task, Workflow, WorkflowRun
+from ...services import audit, events
+from ...teams import objectives
 from ...workflows import runs
 from ...workflows.procedure import clean_graph, wait_text
 from .. import paging
@@ -65,6 +66,9 @@ class RunSummary(BaseModel):
     done: int
     total: int
     needs_you: int
+    # P23: the objective the run serves (its step tasks count toward it)
+    objective_id: str | None = None
+    objective_title: str | None = None
 
 
 class RunOut(RunSummary):
@@ -85,6 +89,7 @@ def _counts(run: WorkflowRun) -> tuple[int, int, int]:
 
 async def _summary(db: AsyncSession, run: WorkflowRun) -> dict[str, Any]:
     b = await db.get(Branch, run.branch_id) if run.branch_id else None
+    ob = await db.get(Objective, run.objective_id) if run.objective_id else None
     done, total, needs = _counts(run)
     return {
         "id": run.id,
@@ -102,6 +107,8 @@ async def _summary(db: AsyncSession, run: WorkflowRun) -> dict[str, Any]:
         "done": done,
         "total": total,
         "needs_you": needs,
+        "objective_id": ob.id if ob else None,
+        "objective_title": ob.title if ob else None,
     }
 
 
@@ -236,6 +243,39 @@ class RunIn(BaseModel):
     branch_id: str | None = None
     assign: dict[str, str] = Field(default_factory=dict)
     file_ids: list[str] = Field(default_factory=list, max_length=20)
+    objective_id: str | None = Field(default=None, max_length=40)  # P23
+
+
+async def _run_objective(
+    db: AsyncSession,
+    principal: Principal,
+    objective_id: str | None,
+    branch_id: str | None,
+    assign: dict[str, str],
+) -> str | None:
+    """P23: an objective the person may link this run to, by the rules for a task (active,
+    one they see, for every company or the run's). A run for any company checks the companies
+    of the agents that do its steps."""
+    if not objective_id:
+        return None
+    agent_ids = {a for a in assign.values() if a}
+    branches = (
+        set((await db.scalars(select(Agent.branch_id).where(Agent.id.in_(agent_ids)))).all())
+        if agent_ids and not branch_id
+        else set()
+    )
+    ob = await objectives.linkable(
+        db,
+        principal.workspace_id,
+        principal.scope,
+        objective_id,
+        branch_id,
+        what="run",
+        branch_ids={b for b in branches if b},
+    )
+    if isinstance(ob, str):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_objective", ob)
+    return ob.id
 
 
 @router.post("/workflows/{workflow_id}/runs", status_code=status.HTTP_201_CREATED)
@@ -260,12 +300,15 @@ async def start_run(
             raise api_error(status.HTTP_400_BAD_REQUEST, "bad_agent", "Pick agents you can see.")
         if a.status != "active":
             raise api_error(
-                status.HTTP_400_BAD_REQUEST, "agent_inactive", f"{a.name} is not active."
+                status.HTTP_400_BAD_REQUEST, "agent_inactive", "{name} is not active.", name=a.name
             )
     for fid in body.file_ids:
         f = await db.get(DocFile, fid)
         if f is None or f.workspace_id != principal.workspace_id:
             raise api_error(status.HTTP_400_BAD_REQUEST, "bad_file", "Pick files you can see.")
+    objective_id = await _run_objective(
+        db, principal, body.objective_id, body.branch_id, body.assign
+    )
     try:
         run = await runs.start(
             db,
@@ -277,6 +320,7 @@ async def start_run(
             assign=body.assign,
             file_ids=list(dict.fromkeys(body.file_ids)),
             created_by=principal.actor,
+            objective_id=objective_id,
         )
     except runs.RunError as e:
         raise api_error(status.HTTP_400_BAD_REQUEST, "cannot_run", str(e)) from e
@@ -286,7 +330,7 @@ async def start_run(
         principal.actor,
         "workflow.run_started",
         target=run.id,
-        after={"workflow": wf.id, "title": run.title},
+        after={"workflow": wf.id, "title": run.title, "objective_id": objective_id},
     )
     await db.commit()
     await _drive(db, run)
@@ -301,6 +345,7 @@ async def start_run(
 async def list_runs(
     response: Response,
     workflow_id: str | None = None,
+    objective_id: str | None = Query(default=None, max_length=40),
     status_: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
@@ -308,10 +353,12 @@ async def list_runs(
     db: AsyncSession = Depends(get_db),
 ) -> list[RunSummary]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count); `status`
-    takes one status or a comma list."""
+    takes one status or a comma list; `objective_id` keeps the runs that serve it."""
     q = select(WorkflowRun).where(WorkflowRun.workspace_id == principal.workspace_id)
     if workflow_id:
         q = q.where(WorkflowRun.workflow_id == workflow_id)
+    if objective_id:
+        q = q.where(WorkflowRun.objective_id == objective_id)
     if status_:
         q = q.where(WorkflowRun.status.in_(status_.split(",")))
     rows = await paging.paginate(
@@ -332,6 +379,57 @@ async def read_run(
     db: AsyncSession = Depends(get_db),
 ) -> RunOut:
     return await run_out(db, await _get(db, principal, run_id))
+
+
+class RunUpdateIn(BaseModel):
+    objective_id: str | None = Field(default=None, max_length=40)
+
+
+@router.patch("/workflow-runs/{run_id}")
+async def update_run(
+    run_id: str,
+    body: RunUpdateIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> RunOut:
+    """P23: link the run to an objective (or unlink it with null). Its step tasks, and the
+    parts they handed out, that served the old objective move with it; steps that start
+    later get the new one."""
+    run = await _get(db, principal, run_id)
+    changes = body.model_dump(exclude_unset=True)
+    if "objective_id" in changes and changes["objective_id"] != run.objective_id:
+        old = run.objective_id
+        new = await _run_objective(
+            db, principal, changes["objective_id"], run.branch_id, run.assign or {}
+        )
+        if old is None and new is not None:
+            # A run linked for the first time: its steps may already serve the objective the
+            # first step was given by hand; those move too.
+            first = await objectives.run_lineage(db, run.id)
+            old = first.get("objective_id")
+        run.objective_id = new
+        moved = await objectives.relink_run(db, run, old, new)
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "workflow.run_objective",
+            target=run.id,
+            before={"objective_id": old},
+            after={"objective_id": new, "tasks_moved": moved},
+        )
+        await db.commit()
+        await events.publish(
+            principal.workspace_id,
+            "workflow_run.updated",
+            {"run_id": run.id, "status": run.status},
+        )
+        for oid in {old, new} - {None}:
+            await events.publish(
+                principal.workspace_id, "objective.updated", {"objective_id": oid, "change": "run"}
+            )
+    await db.refresh(run)
+    return await run_out(db, run)
 
 
 class DecideIn(BaseModel):

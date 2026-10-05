@@ -18,6 +18,7 @@ import socket
 from typing import Any
 from urllib.parse import urlparse
 
+from ..i18n import Msg
 from .config import settings
 
 
@@ -46,12 +47,12 @@ async def guard_url(url: str) -> str | None:
     when there is nothing to pin (an IP literal, or a host allowed to be private)."""
     u = urlparse(url)
     if u.scheme not in ("http", "https"):
-        raise BlockedURL("Use an http:// or https:// address.")
+        raise BlockedURL(Msg("Use an http:// or https:// address."))
     if u.username or u.password:
-        raise BlockedURL("Put the key in the key field, not in the URL.")
+        raise BlockedURL(Msg("Put the key in the key field, not in the URL."))
     host = (u.hostname or "").lower()
     if not host:
-        raise BlockedURL("That address has no host name.")
+        raise BlockedURL(Msg("That address has no host name."))
     if host in _allowed_hosts():
         return None
     try:
@@ -60,18 +61,24 @@ async def guard_url(url: str) -> str | None:
         pass
     else:
         if not _public(host):
-            raise BlockedURL(f"{host} is a private address, which is not allowed.")
+            raise BlockedURL(Msg("{host} is a private address, which is not allowed.", host=host))
         return None
     port = u.port or (443 if u.scheme == "https" else 80)
     try:
         ips = await _resolve(host, port)
     except socket.gaierror as e:
-        raise BlockedURL(f"Could not find {host}. Check the address.") from e
+        raise BlockedURL(Msg("Could not find {host}. Check the address.", host=host)) from e
     for ip in ips:
         if not _public(ip):
-            raise BlockedURL(f"{host} points to a private address ({ip}), which is not allowed.")
+            raise BlockedURL(
+                Msg(
+                    "{host} points to a private address ({ip}), which is not allowed.",
+                    host=host,
+                    ip=ip,
+                )
+            )
     if not ips:
-        raise BlockedURL(f"Could not find {host}. Check the address.")
+        raise BlockedURL(Msg("Could not find {host}. Check the address.", host=host))
     return ips[0]
 
 

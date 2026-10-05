@@ -5,6 +5,7 @@ import {
   CheckCircleIcon,
   CoinsIcon,
   FlagIcon,
+  FlowArrowIcon,
   KanbanIcon,
   PencilSimpleIcon,
   PlusIcon,
@@ -59,6 +60,7 @@ import { branchesQuery, meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { STATUS_INFO, type Task } from "@/lib/work";
+import { RUN_STATUS, runKeys, type RunSummary } from "@/lib/workflows";
 
 type Filter = ObjectiveStatus | "all";
 const EVERY = "__every";
@@ -418,6 +420,35 @@ function TaskList({ objectiveId }: { objectiveId: string }) {
   );
 }
 
+/** P23: workflow runs started for this objective (shown only when there are some). */
+function RunList({ objectiveId }: { objectiveId: string }) {
+  const t = useT();
+  const list = usePagedList<RunSummary>(runKeys.objective(objectiveId), "/api/workflow-runs", { objective_id: objectiveId }, { pageSize: 10 });
+  if (!list.items.length) return null;
+  return (
+    <section className="grid min-w-0 gap-2.5">
+      <h3 className="flex items-center gap-2 text-[13px] font-semibold"><FlowArrowIcon size={15} weight="duotone" className="text-muted" /> {t("Workflow runs")} <span className="font-normal text-muted tabular">({list.total ?? list.items.length})</span></h3>
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
+        {list.items.map((r) => {
+          const s = RUN_STATUS[r.status];
+          return (
+            <li key={r.id}>
+              <Link to="/workflows" search={{ run: r.id }} className="flex min-h-12 min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-surface-2/60">
+                <span className="min-w-0 flex-1">
+                  <span className="line-clamp-2 text-[13px] font-medium break-words">{r.title}</span>
+                  <span className="block truncate text-[12px] text-muted">{r.name} · {t("{done}/{total} steps", { done: r.done, total: r.total })} · {timeAgo(r.created_at)}</span>
+                </span>
+                <Pill tone={s.tone} className="shrink-0">{t(s.label)}</Pill>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <LoadMore shown={list.items.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} noun={t("runs")} />
+    </section>
+  );
+}
+
 function ObjectiveSheet({ id, onClose, onOpen, onEdit }: { id: string; onClose: () => void; onOpen: (id: string) => void; onEdit: (o: Objective) => void }) {
   const t = useT();
   const qc = useQueryClient();
@@ -539,6 +570,7 @@ function ObjectiveSheet({ id, onClose, onOpen, onEdit }: { id: string; onClose: 
             <h3 className="flex items-center gap-2 text-[13px] font-semibold"><KanbanIcon size={15} weight="duotone" className="text-muted" /> {t("Work")} <span className="font-normal text-muted">{t("(tasks and their parts)")}</span></h3>
             <TaskList objectiveId={o.id} />
           </section>
+          <RunList objectiveId={o.id} />
         </div>
       )}
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={t("Delete this objective?")} danger confirmLabel={t("Delete")}
