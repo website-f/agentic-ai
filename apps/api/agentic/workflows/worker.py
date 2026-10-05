@@ -48,6 +48,14 @@ from .hours_activities import deferred_start
 from .hours_workflows import DeferredStartWorkflow
 from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
+from .minutes_activities import (
+    minutes_fail,
+    minutes_prepare,
+    minutes_purge,
+    minutes_transcribe,
+    minutes_write,
+)
+from .minutes_workflows import MeetingMinutesWorkflow, MinutesPurgeWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
 from .skill_workflows import SkillEvalWorkflow
 from .system import PingWorkflow, ProviderHealthWorkflow
@@ -84,6 +92,8 @@ WORKFLOWS = [
     WorkflowRunWorkflow,
     KnowledgeIndexWorkflow,
     DeferredStartWorkflow,
+    MeetingMinutesWorkflow,
+    MinutesPurgeWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -116,6 +126,11 @@ ACTIVITIES = [
     workflow_run_tick,
     knowledge_index,
     deferred_start,
+    minutes_prepare,
+    minutes_transcribe,
+    minutes_write,
+    minutes_fail,
+    minutes_purge,
 ]
 
 
@@ -127,6 +142,8 @@ async def ensure_schedules(client: Client) -> None:
         ("brain-dream", DreamTickWorkflow.run, timedelta(hours=1)),
         # P7: agents with heartbeat on pick up queued work during work hours.
         ("agent-heartbeat", HeartbeatWorkflow.run, timedelta(hours=1)),
+        # Meeting recordings: delete audio past its retention days and abandoned uploads.
+        ("minutes-purge", MinutesPurgeWorkflow.run, timedelta(hours=24)),
     ]
     for schedule_id, run, every in jobs:
         try:

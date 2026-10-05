@@ -10,6 +10,7 @@ import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { api, errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
 import { docKeys, templatesQuery, type DocDetail, type DocTemplate, type FieldValue } from "@/lib/documents";
 import { branchesQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,9 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
   const [request, setRequest] = useState("");
   const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
-  const company = branch || branches[0]?.id || "";
+  // A document belongs to one company: the header's (or the last one picked), unless changed here.
+  const { one } = useCompanies();
+  const company = branch || one?.id || branches[0]?.id || "";
   const tpl = start.kind === "template" ? templates.find((t) => t.id === start.id) : undefined;
 
   const create = useMutation({

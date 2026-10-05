@@ -107,6 +107,13 @@ class Settings(BaseSettings):
     tavily_key: str = ""
     web_search_enabled: bool = True
 
+    # Meeting minutes from a recording: big uploads stream to this folder (a volume shared by
+    # api and worker, never Postgres). The original is deleted once its audio is extracted;
+    # the small compressed audio is kept for the workspace's retention days, then purged.
+    media_dir: str = "./data/media"
+    minutes_max_mb: int = Field(default=1024, ge=1, le=10_240)
+    minutes_max_hours: float = Field(default=4.0, gt=0, le=12)
+
     @property
     def is_dev(self) -> bool:
         return self.env == "dev"

@@ -32,7 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
 import { overviewQuery, usdShort, type BranchStats, type Issue, type Overview, type Summary } from "@/lib/office-data";
-import { useBranch } from "@/lib/stores";
+import { useCompanies } from "@/lib/company";
 import { cn, timeAgo } from "@/lib/utils";
 
 const RANGES = [1, 7, 30, 90] as const;
@@ -232,7 +232,8 @@ function value(b: BranchStats, k: SortKey): number | string {
 
 function BranchTable({ o }: { o: Overview }) {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "tasks_created", desc: true });
-  const setBranch = useBranch((s) => s.setBranchId);
+  // Opening one company's office keeps the header on "All companies" if that is where it is.
+  const { pickOne: setBranch } = useCompanies();
   const navigate = useNavigate();
   const colors = branchColors(o.branches);
   const rows = [...o.branches].sort((a, b) => {

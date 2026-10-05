@@ -20,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
 import {
   docKeys, documentsQuery, fileUrl, itemsIn, packQuery, packsQuery, STATUS_LABEL, templatesQuery,
   type DocDetail, type DocTemplate, type DraftItem, type Pack, type PackItem,
@@ -89,7 +90,9 @@ function NewPackDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [branch, setBranch] = useState("");
   const [description, setDescription] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
-  const company = branch || branches[0]?.id || "";
+  // A new pack belongs to one company: the header's (or the last one picked), unless changed here.
+  const { one } = useCompanies();
+  const company = branch || one?.id || branches[0]?.id || "";
   const draft = useMutation({
     mutationFn: () => api<{ items: DraftItem[] }>("/api/packs/draft-checklist", "POST", { description: description || title }),
     onSuccess: (r) => { setItems(r.items); toast.success(`${r.items.length} items proposed — edit them before creating.`); },

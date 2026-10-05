@@ -1,7 +1,8 @@
 import {
-  ArrowsInIcon,
   BroadcastIcon,
   BuildingsIcon,
+  CornersOutIcon,
+  CrosshairSimpleIcon,
   KanbanIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
@@ -22,9 +23,9 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
-import { branchesQuery, meQuery } from "@/lib/queries";
+import { useCompanies } from "@/lib/company";
+import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
-import { useBranch } from "@/lib/stores";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, tasksQuery, workKeys, type Task } from "@/lib/work";
 import { createOffice, type Office } from "@/office/engine";
@@ -152,9 +153,9 @@ export function OfficePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
-  const { data: branches = [], isLoading: loadingBranches } = useQuery(branchesQuery);
-  const { branchId, setBranchId } = useBranch();
-  const branch = branches.find((b) => b.id === branchId) ?? branches[0];
+  // One office at a time: under "All companies" the floor opens the last company picked here
+  // (or the first) and the tabs switch it without leaving "All" for the rest of the app.
+  const { branches, isLoading: loadingBranches, isAll, one: branch, pickOne } = useCompanies();
   const search = useSearch({ strict: false }) as OfficeSearch;
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -167,7 +168,13 @@ export function OfficePage() {
   const office = useRef<Office | null>(null);
   const dark = useDarkTheme();
   const [banner, setBanner] = useState<{ id: number; text: string } | null>(null);
-  const openAgent = (id: string | undefined) => navigate({ to: "/office", search: { ...search, agent: id }, replace: true });
+  const [following, setFollowing] = useState<string | null>(null);
+  // The follow button keeps working after the agent's panel is closed: it follows the last one opened.
+  const [lastAgent, setLastAgent] = useState<string | null>(search.agent ?? null);
+  const openAgent = (id: string | undefined) => {
+    if (id) setLastAgent(id);
+    return navigate({ to: "/office", search: { ...search, agent: id }, replace: true });
+  };
 
   const assign = useMutation({
     mutationFn: async ({ taskId, agentId }: { taskId: string; agentId: string }) => {
@@ -194,6 +201,7 @@ export function OfficePage() {
     const o = createOffice(canvas.current, {
       onAgentTap: (id) => openAgent(id),
       onTaskDrop: (taskId, agentId) => assign.mutate({ taskId, agentId }),
+      onFollowChange: setFollowing,
     });
     o.setTheme(document.documentElement.dataset.theme === "dark");
     o.select(search.agent ?? null);
@@ -207,6 +215,7 @@ export function OfficePage() {
     return () => {
       o.destroy();
       office.current = null;
+      setFollowing(null);
     };
     // openAgent/assign are stable enough for the engine's lifetime; remounting would reset the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,6 +245,8 @@ export function OfficePage() {
   }, [banner]);
 
   const selected = snap?.agents.find((a) => a.id === search.agent) ?? null;
+  const followTarget = search.agent ?? (lastAgent && snap?.agents.some((a) => a.id === lastAgent) ? lastAgent : null);
+  const followName = snap?.agents.find((a) => a.id === followTarget)?.name ?? null;
   const waiting = snap?.agents.reduce((n, a) => n + a.pending_approvals, 0) ?? 0;
   const deptName = useMemo(() => new Map(snap?.departments.map((d) => [d.id, d.name]) ?? []), [snap]);
 
@@ -256,7 +267,7 @@ export function OfficePage() {
         <h1 className="mr-2 text-[17px] font-semibold max-sm:sr-only">Office</h1>
         <nav data-guide="office.branch" aria-label="Companies" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {branches.map((b) => (
-            <button key={b.id} onClick={() => setBranchId(b.id)} aria-current={b.id === branch.id ? "page" : undefined}
+            <button key={b.id} onClick={() => pickOne(b.id)} title={isAll ? `Open ${b.name}'s office (the rest of the app stays on All companies)` : undefined} aria-current={b.id === branch.id ? "page" : undefined}
               className={cn("flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-[13px] transition-colors", b.id === branch.id ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
               <span aria-hidden className="size-2 rounded-full" style={{ background: b.color }} />{b.name}
             </button>
@@ -286,7 +297,10 @@ export function OfficePage() {
       ) : (
         <div className="flex min-h-0 flex-1">
           <div data-guide="office.floor" className="relative min-h-0 min-w-0 flex-1">
-            <canvas ref={canvas} className="absolute inset-0 size-full touch-none select-none" aria-label={`Pixel office of ${snap.branch.name}. ${snap.agents.length} agents. The list view shows the same information as a table.`} role="img" />
+            {/* Pan: drag, one finger, middle mouse or Space + drag. Zoom: wheel, pinch, double tap, + / - / 0, Shift+1 fits. */}
+            <canvas ref={canvas} tabIndex={0} role="application" aria-roledescription="pixel office"
+              className="absolute inset-0 block size-full cursor-grab touch-none outline-none select-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-inset [-webkit-touch-callout:none]"
+              aria-label={`Pixel office of ${snap.branch.name}. ${snap.agents.length} agents. Drag to move around, scroll or pinch to zoom. The list view shows the same information as a table.`} />
             {banner ? (
               <div role="status" key={banner.id} className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
                 <span className="flex items-center gap-2 rounded-full bg-info px-4 py-1.5 text-[13px] font-medium text-white shadow-[var(--shadow-pop)] motion-safe:animate-[sheet-in_300ms_ease-out]">
@@ -295,9 +309,18 @@ export function OfficePage() {
               </div>
             ) : null}
             <div className="absolute top-3 right-3 flex flex-col gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface/95 p-1 shadow-[var(--shadow-soft)] backdrop-blur-sm">
-              <Button size="icon-sm" variant="ghost" aria-label="Zoom in" onClick={() => office.current?.zoom(1)}><MagnifyingGlassPlusIcon size={17} /></Button>
-              <Button size="icon-sm" variant="ghost" aria-label="Zoom out" onClick={() => office.current?.zoom(-1)}><MagnifyingGlassMinusIcon size={17} /></Button>
-              <Button size="icon-sm" variant="ghost" aria-label="Fit the office" onClick={() => office.current?.fit()}><ArrowsInIcon size={17} /></Button>
+              <Button size="icon-sm" variant="ghost" aria-label="Zoom in" title="Zoom in (+)" onClick={() => office.current?.zoom(1)}><MagnifyingGlassPlusIcon size={17} /></Button>
+              <Button size="icon-sm" variant="ghost" aria-label="Zoom out" title="Zoom out (-)" onClick={() => office.current?.zoom(-1)}><MagnifyingGlassMinusIcon size={17} /></Button>
+              <Button size="icon-sm" variant="ghost" aria-label="Fit the office" title="Fit the office (Shift+1)" onClick={() => { office.current?.follow(null); setFollowing(null); office.current?.fit(); }}><CornersOutIcon size={17} /></Button>
+              <Button size="icon-sm" variant="ghost" aria-pressed={!!following} disabled={!followTarget}
+                aria-label={following ? "Stop following" : "Follow the selected agent"}
+                title={following ? "Stop following" : followName ? `Follow ${followName}` : "Pick an agent to follow"}
+                className={cn(following && "bg-accent-soft text-accent hover:text-accent")}
+                onClick={() => {
+                  const next = following ? null : followTarget;
+                  office.current?.follow(next);
+                  setFollowing(next);
+                }}><CrosshairSimpleIcon size={17} weight={following ? "bold" : "regular"} /></Button>
             </div>
             {!snap.agents.length ? (
               <div className="absolute inset-x-4 bottom-20 mx-auto max-w-sm rounded-[var(--radius-md)] border border-border bg-surface/95 p-4 text-center shadow-[var(--shadow-soft)]">
@@ -309,7 +332,7 @@ export function OfficePage() {
             {/* Roster: tap to fly the camera there. */}
             <nav aria-label="People in the office" className="absolute inset-x-0 bottom-0 flex gap-1.5 overflow-x-auto border-t border-border bg-surface/95 px-3 py-2 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {snap.agents.map((a) => (
-                <button key={a.id} onClick={() => { office.current?.focus(a.id); openAgent(a.id); }}
+                <button key={a.id} onClick={() => { if (following) { office.current?.follow(a.id); setFollowing(a.id); } else office.current?.focus(a.id); openAgent(a.id); }}
                   className={cn("flex h-9 shrink-0 items-center gap-2 rounded-full border bg-surface pr-3 pl-1.5 text-[12.5px] transition-colors", a.id === search.agent ? "border-accent bg-accent-soft/60" : "border-border hover:bg-surface-2")}>
                   <AgentAvatar name={a.name} color={a.color} size="xs" working={a.state === "working"} />
                   <span className="font-medium">{a.name}</span>

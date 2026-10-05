@@ -204,7 +204,11 @@ services:
     ports: ["127.0.0.1:${API_PORT:-8501}:8501"]
     # The brain vault: one git repo per workspace. Set AGENTIC_VAULT_DIR in .env to a host
     # folder (e.g. ./data/vault) to open it directly in Obsidian on this PC.
-    volumes: ["${AGENTIC_VAULT_DIR:-vault}:/data/vault"]
+    # Media: meeting recordings stream here (up to ~1 GB each, deleted once their audio is
+    # extracted); shared with the worker. AGENTIC_MEDIA_DIR may point at a bigger disk.
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/readyz', timeout=3)"]
       interval: 10s
@@ -229,7 +233,9 @@ services:
       AGENTIC_WORKER_MAX_ACTIVITIES: ${AGENTIC_WORKER_MAX_ACTIVITIES:-16}
       AGENTIC_DB_POOL_SIZE: ${AGENTIC_WORKER_DB_POOL:-24}
       AGENTIC_DB_MAX_OVERFLOW: "16"
-    volumes: ["${AGENTIC_VAULT_DIR:-vault}:/data/vault"]
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
     depends_on:
       api: { condition: service_healthy }   # api runs the migrations first
       temporal: { condition: service_healthy }
@@ -653,6 +659,7 @@ volumes:
   pgdata: {}
   valkeydata: {}
   vault: {}
+  media: {}  # meeting recordings (minutes); not backed up: originals are transient
   backupwork: {}
   rustfsdata: {}
   clickhousedata: {}

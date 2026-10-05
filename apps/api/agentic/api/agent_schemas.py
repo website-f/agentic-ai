@@ -207,6 +207,8 @@ class TaskOut(BaseModel):
     has_output_schema: bool = False
     labels: list[str] = []
     branch_id: str | None = None
+    # Board order within a column (lower first); PATCH {position} reorders.
+    position: float = 0
     goal: str | None = None
     goal_tries: int = 0
     # Lists cut brief and result short (GET /api/tasks/{id} has the full text).

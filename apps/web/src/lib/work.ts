@@ -109,6 +109,8 @@ export interface Task {
   has_output_schema: boolean;
   labels?: string[];
   branch_id?: string | null;
+  /** Board order within a column (lower first); older APIs leave it out. */
+  position?: number;
   goal?: string | null;
   goal_tries?: number;
   /** Lists cut brief and result short; the detail (taskQuery) always has the full text. */

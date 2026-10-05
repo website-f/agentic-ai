@@ -1,6 +1,8 @@
 import { setBadge, syncPush } from "@/lib/push";
 import {
+  BuildingsIcon,
   CaretUpDownIcon,
+  CheckIcon,
   DotsThreeIcon,
   KeyIcon,
   MagnifyingGlassIcon,
@@ -13,14 +15,19 @@ import {
 } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Command } from "cmdk";
+import { Popover } from "radix-ui";
 import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "vaul";
 
+import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { useLiveEvents } from "@/lib/live";
-import { branchesQuery, meQuery, systemStatusQuery } from "@/lib/queries";
+import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { useBranch, usePalette, useTheme, type ThemePref } from "@/lib/stores";
+import { useMedia } from "@/lib/use-media";
 import { useSignOut } from "@/lib/use-sign-out";
 import { cn, initials } from "@/lib/utils";
+import { agentsQuery } from "@/lib/work";
 import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
@@ -160,50 +167,157 @@ function Sidebar() {
   );
 }
 
+/** Up to three company colours, overlapped: the "All companies" mark. */
+function CompanyStack({ colors }: { colors: string[] }) {
+  return (
+    <span aria-hidden className="flex shrink-0 items-center">
+      {colors.slice(0, 3).map((c, i) => (
+        <span key={i} className={cn("size-2.5 rounded-full ring-2 ring-bg", i > 0 && "-ml-1")} style={{ background: c }} />
+      ))}
+    </span>
+  );
+}
+
+const SWITCH_ITEM =
+  "group flex min-h-10 cursor-default items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13.5px] outline-none select-none data-[selected=true]:bg-surface-2";
+
+/** Which company the app is looking at: one of them, or all of them. A searchable list (type to
+ * filter, arrow keys and Enter) with each company's colour and agent count. */
 function BranchSwitcher() {
-  const { data: branches = [] } = useQuery(branchesQuery);
-  const { branchId, setBranchId } = useBranch();
+  const { data: me } = useSuspenseQuery(meQuery);
+  const { branches, canAll, isAll, selected, select } = useCompanies();
   const navigate = useNavigate();
-  // A remembered branch that was deleted falls back to the first one.
-  const current = branches.find((b) => b.id === branchId) ?? branches[0];
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const coarse = useMedia("(pointer: coarse)");
+  // Agent counts are a nicety: fetched (or read from cache) only while the list is open.
+  const { data: agents } = useQuery({ ...agentsQuery, enabled: open });
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of agents ?? []) if (a.status !== "retired" && !a.clone_of) m.set(a.branch_id, (m.get(a.branch_id) ?? 0) + 1);
+    return m;
+  }, [agents]);
+  const total = [...counts.values()].reduce((s, n) => s + n, 0);
+  const canCreate = me.permissions.includes("org.manage");
+  const choose = (id: string) => {
+    select(id);
+    setOpen(false);
+  };
+  const [hl, setHl] = useState("");
+  const onOpenChange = (o: boolean) => {
+    setOpen(o);
+    setQ("");
+    // Start the keyboard highlight on the current choice.
+    if (o) setHl(isAll ? ALL_COMPANIES : (selected?.id ?? ""));
+  };
+  const countHint = (n: number | undefined) =>
+    agents ? <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[11px] text-muted tabular group-data-[selected=true]:bg-surface">{n ?? 0}</span> : null;
 
   return (
-    <Menu>
-      <MenuTrigger asChild>
-        <button className="flex h-9 max-w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-surface-2">
-          <span
-            aria-hidden
-            className="size-2.5 shrink-0 rounded-full"
-            style={{ background: current?.color ?? "var(--border)" }}
-          />
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
+      <Popover.Trigger asChild>
+        <button
+          data-guide="shell.company"
+          aria-label={`Company: ${isAll ? "All companies" : (selected?.name ?? "none")}. Change company`}
+          className="flex h-9 max-w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-surface-2 data-[state=open]:bg-surface-2"
+        >
+          {isAll ? (
+            <CompanyStack colors={branches.map((b) => b.color)} />
+          ) : (
+            <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: selected?.color ?? "var(--border)" }} />
+          )}
           <span className="truncate text-[13.5px] font-medium">
-            {current ? current.name : "No branches yet"}
+            {isAll ? "All companies" : selected ? selected.name : "No companies yet"}
           </span>
+          {isAll ? <span className="shrink-0 rounded-full bg-surface-2 px-1.5 text-[11px] text-muted tabular max-sm:hidden">{branches.length}</span> : null}
           <CaretUpDownIcon size={14} className="shrink-0 text-muted" />
         </button>
-      </MenuTrigger>
-      <MenuContent align="start" className="w-64">
-        <MenuLabel>Branches</MenuLabel>
-        {branches.length ? (
-          <MenuRadioGroup value={current?.id} onValueChange={setBranchId}>
-            {branches.map((b) => (
-              <MenuRadioItem key={b.id} value={b.id}>
-                <span className="flex min-w-0 items-center gap-2">
-                  <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: b.color }} />
-                  <span className="truncate">{b.name}</span>
-                </span>
-              </MenuRadioItem>
-            ))}
-          </MenuRadioGroup>
-        ) : (
-          <p className="px-2.5 py-2 text-[13px] text-muted">Each company you run becomes a branch.</p>
-        )}
-        <MenuSeparator />
-        <MenuItem icon={<PlusIcon />} onSelect={() => navigate({ to: "/organization", search: { new: 1 } })}>
-          New branch
-        </MenuItem>
-      </MenuContent>
-    </Menu>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          // Focus goes to the search box (desktop) or the list itself, so arrow keys work at once.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            const root = e.currentTarget as HTMLElement | null;
+            const input = root?.querySelector<HTMLInputElement>("input");
+            if (input && !coarse) input.focus();
+            else root?.querySelector<HTMLElement>("[cmdk-root]")?.focus();
+          }}
+          className="z-50 w-[min(calc(100vw-1.5rem),20rem)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
+        >
+          <Command label="Companies" loop tabIndex={-1} className="outline-none" value={hl} onValueChange={setHl}
+            // Plain "contains" on the names (values are ids, which would fuzzy-match anything).
+            filter={(_v, search, words) => (words ?? []).some((w) => w.toLowerCase().includes(search.trim().toLowerCase())) ? 1 : 0}>
+            {branches.length > 1 ? (
+              <div className="flex items-center gap-2 border-b border-border px-3">
+                <MagnifyingGlassIcon size={16} className="shrink-0 text-muted" aria-hidden />
+                <Command.Input
+                  value={q}
+                  onValueChange={setQ}
+                  placeholder="Find a company…"
+                  className="h-11 w-full min-w-0 bg-transparent text-[16px] outline-none placeholder:text-muted sm:text-[14px]"
+                />
+              </div>
+            ) : null}
+            <Command.List className="max-h-[min(22rem,60dvh)] overflow-y-auto overscroll-contain p-1">
+              <Command.Empty className="px-3 py-6 text-center text-[13px] text-muted">No company matches “{q}”.</Command.Empty>
+              {canAll ? (
+                <Command.Item value={ALL_COMPANIES} keywords={["All companies", "every"]} onSelect={() => choose(ALL_COMPANIES)} className={SWITCH_ITEM}>
+                  <span className="grid size-6 shrink-0 place-items-center rounded-[6px] bg-surface-2 text-muted ring-1 ring-border/60">
+                    <BuildingsIcon size={14} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">All companies</span>
+                    <span className="block truncate text-[11.5px] text-muted">Lists show every company</span>
+                  </span>
+                  {countHint(total)}
+                  <CheckIcon size={15} weight="bold" className={cn("shrink-0 text-accent", !isAll && "invisible")} aria-hidden />
+                </Command.Item>
+              ) : null}
+              {branches.length ? (
+                <Command.Group
+                  heading="Companies"
+                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted"
+                >
+                  {branches.map((b) => {
+                    const on = !isAll && selected?.id === b.id;
+                    return (
+                      <Command.Item key={b.id} value={b.id} keywords={[b.name]} onSelect={() => choose(b.id)} className={SWITCH_ITEM} aria-current={on || undefined}>
+                        <span className="grid size-6 shrink-0 place-items-center">
+                          <span aria-hidden className="size-2.5 rounded-full" style={{ background: b.color }} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{b.name}</span>
+                        {countHint(counts.get(b.id))}
+                        <CheckIcon size={15} weight="bold" className={cn("shrink-0 text-accent", !on && "invisible")} aria-hidden />
+                      </Command.Item>
+                    );
+                  })}
+                </Command.Group>
+              ) : (
+                <p className="px-2.5 py-3 text-[13px] text-muted">Each company you run gets its own office, agents and documents.</p>
+              )}
+            </Command.List>
+            {canCreate ? (
+              <div className="border-t border-border p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate({ to: "/organization", search: { new: 1 } });
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-[13.5px] hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+                >
+                  <PlusIcon size={16} className="text-muted" /> New company
+                </button>
+              </div>
+            ) : null}
+          </Command>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
@@ -457,6 +571,10 @@ function useDeviceSync() {
 
 export function AppShell() {
   const setOpen = usePalette((s) => s.setOpen);
+  const { data: me } = useSuspenseQuery(meQuery);
+  // The company switcher remembers each person's choice on this device.
+  const bindUser = useBranch((s) => s.bindUser);
+  useEffect(() => bindUser(me.user.id), [bindUser, me.user.id]);
   useLiveEvents();
   useDeviceSync();
   useEffect(() => {

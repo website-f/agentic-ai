@@ -1,0 +1,591 @@
+/** Meetings > People meetings: upload a recording of a real meeting and get minutes.
+ * Pipeline (worker): extract audio -> transcribe in parts -> write minutes -> library. */
+import {
+  ArrowClockwiseIcon, BooksIcon, CheckCircleIcon, CheckIcon, CircleNotchIcon, ClockIcon, DotsThreeIcon, FileDocIcon,
+  FilePdfIcon, GearSixIcon, KanbanIcon, ListChecksIcon, MicrophoneIcon, NotePencilIcon, PlayIcon, SpeakerSlashIcon,
+  TranslateIcon, TrashIcon, UploadSimpleIcon, WarningCircleIcon, WaveformIcon, XIcon, type Icon,
+} from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useRef, useState, type DragEvent } from "react";
+import { toast } from "sonner";
+
+import { parseScope, scopeOptions, ScopeSelect, WHOLE } from "@/components/library-toggle";
+import { Markdown } from "@/components/markdown";
+import { EmptyState, IconTile, Section, type Tone } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm";
+import { ResponsiveDialog } from "@/components/ui/dialog";
+import { Field, FormError, Input } from "@/components/ui/field";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
+import { Select } from "@/components/ui/select";
+import { SideSheet } from "@/components/ui/side-sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Stat, StatGrid } from "@/components/ui/stat";
+import { api, ApiError, errorMessage } from "@/lib/api";
+import { fileSize } from "@/lib/documents";
+import {
+  ACCEPT, audioUrl, clock, duration, isActive, isRecording, minutesExportUrl, minutesKeys, minutesListQuery, minutesQuery,
+  minutesSettingsQuery, stageOf, uploadRecording, type ActionItem, type MinutesLanguage, type Recording,
+  type RecordingDetail, type Stage,
+} from "@/lib/minutes";
+import { branchesQuery, meQuery } from "@/lib/queries";
+import { cn, timeAgo } from "@/lib/utils";
+import { agentsQuery } from "@/lib/work";
+
+const LANGS: { value: MinutesLanguage; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "ms", label: "Bahasa Melayu" },
+];
+
+const STATUS: Record<Recording["status"], { label: string; tone: "accent" | "ok" | "danger" | "info" | "neutral"; icon: Icon; tile: Tone }> = {
+  uploading: { label: "Uploading", tone: "info", icon: UploadSimpleIcon, tile: "info" },
+  queued: { label: "Queued", tone: "neutral", icon: ClockIcon, tile: "neutral" },
+  extracting: { label: "Extracting audio", tone: "info", icon: WaveformIcon, tile: "info" },
+  transcribing: { label: "Transcribing", tone: "info", icon: MicrophoneIcon, tile: "info" },
+  writing: { label: "Writing minutes", tone: "accent", icon: NotePencilIcon, tile: "accent" },
+  ready: { label: "Ready", tone: "ok", icon: CheckCircleIcon, tile: "ok" },
+  failed: { label: "Failed", tone: "danger", icon: WarningCircleIcon, tile: "danger" },
+};
+
+function statusLabel(r: Recording): string {
+  if (r.status === "transcribing" && r.chunks_total) return `Transcribing ${Math.min(r.chunks_done + 1, r.chunks_total)}/${r.chunks_total}`;
+  return STATUS[r.status].label;
+}
+
+function invalidate(qc: ReturnType<typeof useQueryClient>, id?: string) {
+  qc.invalidateQueries({ queryKey: minutesKeys.list });
+  if (id) qc.invalidateQueries({ queryKey: minutesKeys.one(id) });
+}
+
+// ---------------------------------------------------------------- upload
+
+interface Job {
+  name: string;
+  size: number;
+  progress: number;
+  controller: AbortController;
+}
+
+function UploadCard({ onUploaded }: { onUploaded: (id: string) => void }) {
+  const qc = useQueryClient();
+  const { data: me } = useQuery(meQuery);
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const { data: limits } = useQuery(minutesSettingsQuery);
+  const options = scopeOptions(me, branches);
+  const [picked, setPicked] = useState<string | null>(null);
+  const scope = picked && options.some((o) => o.value === picked) ? picked : (options[0]?.value ?? WHOLE);
+  const [title, setTitle] = useState("");
+  const [language, setLanguage] = useState<MinutesLanguage>("en");
+  const [job, setJob] = useState<Job | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const maxMb = limits?.max_upload_mb ?? 1024;
+  const maxLabel = maxMb >= 1024 ? `${Math.round(maxMb / 1024)} GB` : `${maxMb} MB`;
+
+  const start = async (file: File) => {
+    setError(null);
+    if (!isRecording(file)) return setError(`${file.name} is not an audio or video recording.`);
+    if (file.size > maxMb * 1024 * 1024) return setError(`${file.name} is ${fileSize(file.size)}; recordings can be up to ${maxLabel}.`);
+    const controller = new AbortController();
+    setJob({ name: file.name, size: file.size, progress: 0, controller });
+    try {
+      const rec = await uploadRecording(file, { title, language, ...parseScope(scope, branches) }, (p) => setJob((j) => (j ? { ...j, progress: p } : j)), controller.signal);
+      toast.success("Uploaded. The minutes are being prepared; you can leave this page.");
+      setTitle("");
+      invalidate(qc);
+      onUploaded(rec.id);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.code === "aborted")) setError(errorMessage(e));
+    } finally {
+      setJob(null);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const drop = (e: DragEvent) => {
+    e.preventDefault();
+    setOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && !job) void start(f);
+  };
+  const pct = job ? Math.round(job.progress * 100) : 0;
+
+  return (
+    <Card data-guide="minutes.upload">
+      <CardHeader icon={<IconTile icon={MicrophoneIcon} size="sm" />} title="Upload a recording"
+        description="A voice or video recording of a meeting. You get a transcript with timestamps and minutes you can edit, export and turn into tasks." />
+      <CardBody className="grid grid-cols-[minmax(0,1fr)] gap-4">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Field label="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="e.g. Monthly management meeting" disabled={!!job} />
+          <label className="grid min-w-0 gap-1.5">
+            <span className="text-[13px] font-medium">Who it is for</span>
+            <ScopeSelect value={scope} onChange={setPicked} className="w-full" />
+          </label>
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">Write the minutes in</span>
+          <Segmented label="Minutes language" value={language} onChange={setLanguage} options={LANGS} className="w-fit" />
+          <span className="text-[12.5px] text-muted">The meeting itself can be in English, Malay or both.</span>
+        </div>
+        {job ? (
+          <div className="grid gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-4" role="status" aria-live="polite">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconTile icon={UploadSimpleIcon} tone="accent" size="sm" />
+              <div className="grid min-w-0 flex-1 gap-0.5">
+                <span className="truncate text-[13.5px] font-medium">{job.name}</span>
+                <span className="text-[12.5px] text-muted tabular">{pct < 100 ? `${pct}% of ${fileSize(job.size)} · keep this tab open until it finishes` : "Uploaded. Starting…"}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => job.controller.abort()}><XIcon size={14} /> Cancel</Button>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        ) : (
+          <label
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={drop}
+            className={cn(
+              "grid cursor-pointer place-items-center gap-2 rounded-[var(--radius-md)] border border-dashed px-4 py-7 text-center transition-colors",
+              over ? "border-accent bg-accent-soft/50" : "border-border bg-surface-2/40 hover:border-accent/50 hover:bg-surface-2/70",
+            )}
+          >
+            <input ref={input} type="file" accept={ACCEPT} className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) void start(f); }} />
+            <IconTile icon={UploadSimpleIcon} tone="accent" />
+            <span className="text-[14px] font-medium">Drop a recording here, or tap to choose</span>
+            <span className="max-w-[52ch] text-[12.5px] text-muted">
+              mp3, m4a, wav, ogg, webm, mp4, mov · up to {maxLabel} and {limits?.max_hours ?? 4} hours
+            </span>
+          </label>
+        )}
+        <FormError message={error} />
+      </CardBody>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- progress
+
+const STEPS: { key: Stage; label: string }[] = [
+  { key: "upload", label: "Uploaded" },
+  { key: "extract", label: "Extracting audio" },
+  { key: "transcribe", label: "Transcribing" },
+  { key: "write", label: "Writing minutes" },
+  { key: "ready", label: "Ready" },
+];
+
+export function Timeline({ r }: { r: Recording }) {
+  const failed = r.status === "failed";
+  // A failed recording: no length yet = stopped reading the file; parts left = while hearing.
+  const at = failed ? (!r.duration_seconds ? 1 : r.chunks_total && r.chunks_done < r.chunks_total ? 2 : 3) : STEPS.findIndex((s) => s.key === stageOf(r));
+  return (
+    <ol aria-label="Progress" className="grid grid-cols-[minmax(0,1fr)] gap-0">
+      {STEPS.map((s, i) => {
+        const done = i < at || r.status === "ready";
+        const current = !failed && i === at && r.status !== "ready";
+        const broke = failed && i === at;
+        const label = s.key === "transcribe" && r.chunks_total ? `${s.label} ${Math.min(r.chunks_done + (current ? 1 : 0), r.chunks_total)}/${r.chunks_total}` : s.label;
+        return (
+          <li key={s.key} className="relative flex min-w-0 gap-3 pb-4 last:pb-0">
+            {i < STEPS.length - 1 ? <span aria-hidden className={cn("absolute top-6 bottom-0 left-[11px] w-px", done ? "bg-ok/50" : "bg-border")} /> : null}
+            <span className={cn("relative z-[1] grid size-6 shrink-0 place-items-center rounded-full border",
+              done ? "border-ok/40 bg-ok/12 text-ok" : broke ? "border-danger/40 bg-danger/10 text-danger" : current ? "border-accent/50 bg-accent-soft text-accent" : "border-border bg-surface text-muted")}>
+              {done ? <CheckIcon size={12} weight="bold" /> : broke ? <XIcon size={12} weight="bold" /> : current ? <CircleNotchIcon size={13} weight="bold" className="motion-safe:animate-spin" /> : <span className="size-1.5 rounded-full bg-current opacity-50" />}
+            </span>
+            <span className="grid min-w-0 gap-1 pt-0.5">
+              <span className={cn("text-[13.5px]", current ? "font-semibold" : broke ? "font-semibold text-danger" : done ? "font-medium" : "text-muted")}>{label}{broke ? ": stopped here" : ""}</span>
+              {current && s.key === "transcribe" && r.chunks_total ? (
+                <span className="block h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-surface-2" aria-hidden>
+                  <span className="block h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${(r.chunks_done / r.chunks_total) * 100}%` }} />
+                </span>
+              ) : null}
+              {current && r.stage_detail ? <span className="text-[12.5px] text-muted">{r.stage_detail}</span> : null}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ---------------------------------------------------------------- minutes text
+
+function MinutesText({ r }: { r: RecordingDetail }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  const locked = r.document_status === "approved";
+  const save = useMutation({
+    mutationFn: (body: string) => api<RecordingDetail>(`/api/minutes/${r.id}/markdown`, "PUT", { body }),
+    onSuccess: (d) => { qc.setQueryData(minutesKeys.one(r.id), d); setDraft(null); toast.success("Minutes saved."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const publish = useMutation({
+    mutationFn: () => api<RecordingDetail>(`/api/minutes/${r.id}/publish`, "POST"),
+    onSuccess: (d) => { qc.setQueryData(minutesKeys.one(r.id), d); invalidate(qc); toast.success("Published to the library. Agents can now search it."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      <p className="flex items-start gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[12.5px] text-muted">
+        <WarningCircleIcon size={15} className="mt-px shrink-0 text-warn" />
+        <span className="min-w-0">Speaker names are as heard in the conversation: speech-to-text does not reliably tell voices apart. Check names, figures and decisions before sharing.</span>
+      </p>
+      {r.can_edit && r.published_stale && draft === null ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-info/30 bg-info/8 px-3 py-2 text-[13px]">
+          <span className="min-w-0">{r.published_at ? "Changed since it was published to the library." : "Not in the library yet."}</span>
+          <Button size="sm" variant="outline" loading={publish.isPending} onClick={() => publish.mutate()}><BooksIcon size={14} /> Publish to library</Button>
+        </div>
+      ) : null}
+      {draft !== null ? (
+        <>
+          <label htmlFor="minutes-md" className="sr-only">Minutes (markdown)</label>
+          <textarea id="minutes-md" value={draft} onChange={(e) => setDraft(e.target.value)} rows={22} spellCheck
+            className="min-h-[50dvh] w-full rounded-sm border border-border bg-surface px-3 py-2.5 font-mono text-[13px] leading-relaxed focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
+          <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-surface pt-3 pb-1">
+            <Button variant="outline" onClick={() => setDraft(null)} disabled={save.isPending}>Cancel</Button>
+            <Button loading={save.isPending} disabled={draft === r.markdown} onClick={() => save.mutate(draft)}><CheckIcon size={15} /> Save minutes</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          {r.can_edit ? (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={locked} onClick={() => setDraft(r.markdown)}><NotePencilIcon size={14} /> Edit</Button>
+              {r.document_id ? <Button size="sm" variant="ghost" asChild><Link to="/documents" search={{ d: r.document_id }}>Open in Documents</Link></Button> : null}
+              {locked ? <span className="self-center text-[12.5px] text-muted">Approved in Documents: reopen it there to edit.</span> : null}
+            </div>
+          ) : null}
+          <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-4 sm:px-6">
+            <Markdown>{r.markdown}</Markdown>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- action items
+
+function ActionRow({ r, a }: { r: RecordingDetail; a: ActionItem }) {
+  const qc = useQueryClient();
+  const { data: agents = [] } = useQuery(agentsQuery);
+  const mine = agents.filter((x) => x.status === "active");
+  const [owner, setOwner] = useState(a.owner);
+  const [due, setDue] = useState(a.due_date);
+  const [agent, setAgent] = useState("person");
+  const done = (d: RecordingDetail) => { qc.setQueryData(minutesKeys.one(r.id), d); invalidate(qc); };
+  const edit = useMutation({
+    mutationFn: (body: { owner?: string; due_date?: string }) => api<RecordingDetail>(`/api/minutes/${r.id}/actions/${a.index}`, "PATCH", body),
+    onSuccess: done,
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const task = useMutation({
+    mutationFn: () => api<RecordingDetail>(`/api/minutes/${r.id}/actions/${a.index}/task`, "POST", {
+      agent_id: agent === "person" ? null : agent, owner, due_date: due || null,
+    }),
+    onSuccess: (d) => { done(d); toast.success("Task created."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const saveOwner = () => { if (owner.trim() !== a.owner) edit.mutate({ owner: owner.trim() }); };
+  const saveDue = (v: string) => { setDue(v); if (v !== a.due_date) edit.mutate({ due_date: v }); };
+  return (
+    <li className="grid grid-cols-[minmax(0,1fr)] gap-3 px-4 py-3.5">
+      <div className="flex min-w-0 items-start gap-3">
+        <IconTile icon={a.task_id ? CheckCircleIcon : ListChecksIcon} tone={a.task_id ? "ok" : "neutral"} size="sm" />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <p className="text-[14px] font-medium break-words">{a.what}</p>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-muted">
+            <Meta items={[a.owner ? `Named: ${a.owner}` : "No owner named", a.due ? `Said: ${a.due}` : null]} />
+          </span>
+        </div>
+        {a.task_id ? <Button size="sm" variant="ghost" asChild><Link to="/tasks" search={{ task: a.task_id }}><KanbanIcon size={14} /> Task</Link></Button> : null}
+      </div>
+      {a.task_id ? (
+        <p className="pl-11 text-[12.5px] text-muted max-sm:pl-0">Owner {a.owner_label || "not set"}{a.due_date ? ` · due ${a.due_date}` : ""}</p>
+      ) : r.can_edit ? (
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 pl-11 max-sm:pl-0 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] sm:items-end">
+          <label className="grid min-w-0 gap-1">
+            <span className="text-[12px] text-muted">Owner</span>
+            <Select value={agent} onValueChange={setAgent} label="Who does it" className="w-full" options={[
+              { value: "person", label: owner.trim() ? `${owner.trim()} (person)` : "A person" },
+              ...mine.map((x) => ({ value: x.id, label: `${x.name} (agent)` })),
+            ]} />
+          </label>
+          <label className="grid min-w-0 gap-1">
+            <span className="text-[12px] text-muted">Person's name</span>
+            <Input value={owner} onChange={(e) => setOwner(e.target.value)} onBlur={saveOwner} placeholder="As named" className="h-10" maxLength={120} />
+          </label>
+          <label className="grid min-w-0 gap-1">
+            <span className="text-[12px] text-muted">Due</span>
+            <Input type="date" value={due} onChange={(e) => saveDue(e.target.value)} className="h-10" />
+          </label>
+          <Button loading={task.isPending} onClick={() => task.mutate()}><KanbanIcon size={15} /> Create task</Button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function ActionItems({ r }: { r: RecordingDetail }) {
+  const qc = useQueryClient();
+  const open = r.action_items.filter((a) => !a.task_id).length;
+  const all = useMutation({
+    mutationFn: () => api<RecordingDetail>(`/api/minutes/${r.id}/actions/tasks`, "POST"),
+    onSuccess: (d) => { qc.setQueryData(minutesKeys.one(r.id), d); invalidate(qc); toast.success("Tasks created."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  if (!r.action_items.length) {
+    return <EmptyState icon={ListChecksIcon} title="No action items" body="Nobody was given a task in this meeting, or the minutes did not pick one up. Add them in the minutes text if needed." />;
+  }
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 text-[13px] text-muted">
+          {open ? `${open} without a task. A person's task waits in triage with their name on it; an agent's is ready to work on.` : "Every action item has a task."}
+        </p>
+        {r.can_edit && open > 1 ? <Button size="sm" loading={all.isPending} onClick={() => all.mutate()}><KanbanIcon size={14} /> Create all {open} tasks</Button> : null}
+      </div>
+      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+        {r.action_items.map((a) => <ActionRow key={`${a.index}-${a.task_id ?? ""}`} r={r} a={a} />)}
+      </ul>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- transcript
+
+function Transcript({ r }: { r: RecordingDetail }) {
+  const player = useRef<HTMLAudioElement>(null);
+  const [now, setNow] = useState(0);
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? r.transcript.filter((p) => p.text.toLowerCase().includes(needle)) : r.transcript;
+  const play = (t: number) => {
+    const el = player.current;
+    if (!el) return;
+    el.currentTime = t;
+    void el.play().catch(() => undefined);
+  };
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      {r.audio_available ? (
+        <div className="sticky top-0 z-[2] -mx-1 grid gap-1 bg-surface px-1 pb-2">
+          <audio ref={player} controls preload="metadata" src={audioUrl(r.id)} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} className="h-10 w-full" />
+          {r.audio_expires_at ? <span className="text-[12px] text-muted">Audio kept until {new Date(r.audio_expires_at).toLocaleDateString()}, then deleted. The transcript stays.</span> : null}
+        </div>
+      ) : (
+        <p className="flex items-center gap-2 rounded-sm bg-surface-2/60 px-3 py-2 text-[12.5px] text-muted"><SpeakerSlashIcon size={15} className="shrink-0" /> The audio is no longer kept; the transcript stays.</p>
+      )}
+      <SearchInput value={q} onChange={setQ} placeholder="Search the transcript" label="Search the transcript" />
+      <p className="text-[12.5px] text-muted">{r.audio_available ? "Tap a time to hear that moment." : null} No speaker labels: speech-to-text does not tell voices apart.</p>
+      {shown.length ? (
+        <ol className="grid grid-cols-[minmax(0,1fr)] gap-1">
+          {shown.map((p) => {
+            const live = r.audio_available && now >= p.t && now < p.e;
+            return (
+              <li key={p.t} className={cn("flex min-w-0 gap-3 rounded-sm px-2 py-2", live && "bg-accent-soft/60")}>
+                {r.audio_available ? (
+                  <button type="button" onClick={() => play(p.t)} aria-label={`Play from ${clock(p.t)}`}
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm border border-border px-2 font-mono text-[12px] text-muted tabular transition-colors hover:border-accent/50 hover:text-accent pointer-coarse:h-9">
+                    <PlayIcon size={11} weight="fill" /> {clock(p.t)}
+                  </button>
+                ) : <span className="w-12 shrink-0 pt-0.5 font-mono text-[12px] text-muted tabular">{clock(p.t)}</span>}
+                <p className="min-w-0 pt-1 text-[14px] leading-relaxed break-words">{p.text}</p>
+              </li>
+            );
+          })}
+        </ol>
+      ) : <p className="py-6 text-center text-[13px] text-muted">{needle ? "Nothing in the transcript matches." : "No transcript yet."}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- the sheet
+
+type Tab = "minutes" | "actions" | "transcript";
+
+function MinutesSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data: r, isLoading, error } = useQuery(minutesQuery(id));
+  const [tab, setTab] = useState<Tab>("minutes");
+  const [confirm, setConfirm] = useState<"delete" | "audio" | null>(null);
+  const act = useMutation({
+    mutationFn: (v: { path: string; body?: unknown; ok: string }) => api<RecordingDetail>(`/api/minutes/${id}${v.path}`, "POST", v.body ?? {}),
+    onSuccess: (d, v) => { qc.setQueryData(minutesKeys.one(id), d); invalidate(qc); toast.success(v.ok); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const remove = async () => {
+    try {
+      await api(`/api/minutes/${id}`, "DELETE");
+      invalidate(qc);
+      toast.success("Deleted.");
+      onClose();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  const dropAudio = async () => {
+    try {
+      const d = await api<RecordingDetail>(`/api/minutes/${id}/audio`, "DELETE");
+      qc.setQueryData(minutesKeys.one(id), d);
+      toast.success("Audio deleted. The transcript and minutes stay.");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  const ready = r?.status === "ready";
+  const other: MinutesLanguage = r?.language === "ms" ? "en" : "ms";
+
+  const actions = r ? (
+    <>
+      {ready ? (
+        <>
+          <Button size="sm" variant="outline" asChild><a href={minutesExportUrl(r.id, "pdf")}><FilePdfIcon size={14} /> PDF</a></Button>
+          <Button size="sm" variant="outline" asChild><a href={minutesExportUrl(r.id, "docx")}><FileDocIcon size={14} /> Word</a></Button>
+          {r.can_edit ? <Button size="sm" variant="outline" loading={act.isPending && act.variables?.path === "/publish"} onClick={() => act.mutate({ path: "/publish", ok: "Published to the library." })}><BooksIcon size={14} /> {r.published_at ? "Republish" : "Publish to library"}</Button> : null}
+        </>
+      ) : null}
+      {r.status === "failed" && r.can_edit ? <Button size="sm" loading={act.isPending} onClick={() => act.mutate({ path: "/retry", ok: "Trying again." })}><ArrowClockwiseIcon size={14} /> Retry</Button> : null}
+      {r.can_edit && !isActive(r.status) ? (
+        <Menu>
+          <MenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label="More"><DotsThreeIcon size={18} weight="bold" /></Button></MenuTrigger>
+          <MenuContent>
+            {r.transcript.length ? <MenuItem icon={<TranslateIcon />} onSelect={() => act.mutate({ path: "/rewrite", body: { language: other }, ok: "Writing the minutes again." })}>Rewrite in {other === "ms" ? "Bahasa Melayu" : "English"}</MenuItem> : null}
+            {r.audio_available ? <MenuItem icon={<SpeakerSlashIcon />} onSelect={() => setConfirm("audio")}>Delete the audio now</MenuItem> : null}
+            <MenuSeparator />
+            <MenuItem danger icon={<TrashIcon />} onSelect={() => setConfirm("delete")}>Delete everything</MenuItem>
+          </MenuContent>
+        </Menu>
+      ) : null}
+    </>
+  ) : undefined;
+
+  return (
+    <SideSheet open onOpenChange={(o) => !o && onClose()} size="xl" title={r?.title ?? "Meeting minutes"}
+      description={r ? (
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Pill tone={STATUS[r.status].tone} live={isActive(r.status)}>{statusLabel(r)}</Pill>
+          <Meta items={[duration(r.duration_seconds), r.scope_label, LANGS.find((l) => l.value === r.language)?.label, `by ${r.created_by_name}`, timeAgo(r.created_at)]} />
+        </span>
+      ) : undefined}
+      actions={actions}>
+      {isLoading ? <Skeleton className="h-64" /> : error || !r ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
+          {!ready ? (
+            <Card>
+              <CardBody className="grid grid-cols-[minmax(0,1fr)] gap-4">
+                <Timeline r={r} />
+                {r.status === "failed" ? <p role="alert" className="rounded-sm border border-danger/30 bg-danger/8 px-3 py-2 text-[13px] break-words text-danger">{r.error}</p> : (
+                  <p className="text-[12.5px] text-muted">An hour of talk usually takes a few minutes. You can close this and come back; it carries on in the background.</p>
+                )}
+              </CardBody>
+            </Card>
+          ) : (
+            <>
+              {r.minutes?.summary ? <p className="text-[14px] leading-relaxed break-words">{r.minutes.summary}</p> : null}
+              <Segmented label="Minutes view" value={tab} onChange={setTab} options={[
+                { value: "minutes", label: "Minutes" },
+                { value: "actions", label: "Action items", count: r.action_items.length },
+                { value: "transcript", label: "Transcript" },
+              ]} />
+              {tab === "minutes" ? <MinutesText r={r} /> : tab === "actions" ? <ActionItems r={r} /> : <Transcript r={r} />}
+            </>
+          )}
+        </div>
+      )}
+      <ConfirmDialog open={confirm === "delete"} onOpenChange={(o) => !o && setConfirm(null)} danger title="Delete these minutes?"
+        body="The recording, transcript, minutes document and the library copy are all deleted. Tasks already made stay." confirmLabel="Delete" onConfirm={remove} />
+      <ConfirmDialog open={confirm === "audio"} onOpenChange={(o) => !o && setConfirm(null)} title="Delete the audio now?"
+        body="The transcript and minutes stay, but you can no longer play moments from the meeting." confirmLabel="Delete audio" onConfirm={dropAudio} />
+    </SideSheet>
+  );
+}
+
+// ---------------------------------------------------------------- settings (admins)
+
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data } = useQuery(minutesSettingsQuery);
+  const [days, setDays] = useState<string | null>(null);
+  const value = days ?? String(data?.audio_days ?? 30);
+  const save = useMutation({
+    mutationFn: () => api("/api/minutes/settings", "PUT", { audio_days: Number(value) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: minutesKeys.settings }); toast.success("Saved."); onClose(); },
+  });
+  const n = Number(value);
+  const bad = !Number.isInteger(n) || n < 0 || n > 365;
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title="Recording settings"
+      description="The uploaded file is deleted once its audio is extracted. A small audio copy is kept so the transcript can play each moment."
+      footer={<>
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button loading={save.isPending} disabled={bad} onClick={() => save.mutate()}>Save</Button>
+      </>}>
+      <div className="grid gap-3">
+        <Field label="Keep the audio for (days)" type="number" min={0} max={365} value={value} onChange={(e) => setDays(e.target.value)}
+          hint="0 deletes it as soon as the minutes are written. Transcripts and minutes are kept." error={bad ? "Pick 0 to 365 days." : undefined} />
+        <FormError message={save.error ? errorMessage(save.error) : null} />
+      </div>
+    </ResponsiveDialog>
+  );
+}
+
+// ---------------------------------------------------------------- the tab
+
+export function PeopleMeetings({ canWrite, rec, onOpen }: { canWrite: boolean; rec?: string; onOpen: (id: string | undefined) => void }) {
+  const { data: me } = useQuery(meQuery);
+  const { data = [], isLoading, error } = useQuery(minutesListQuery);
+  const { data: limits } = useQuery(minutesSettingsQuery);
+  const [settings, setSettings] = useState(false);
+  const admin = !!me?.permissions.includes("org.manage");
+  const busy = data.filter((r) => isActive(r.status)).length;
+  const ready = data.filter((r) => r.status === "ready");
+  const openActions = ready.reduce((n, r) => n + r.open_actions, 0);
+  const decisions = ready.reduce((n, r) => n + r.decision_count, 0);
+
+  const row = (r: Recording) => (
+    <ListRow key={r.id} onClick={() => onOpen(r.id)} active={r.id === rec}
+      leading={<IconTile icon={STATUS[r.status].icon} tone={STATUS[r.status].tile} size="sm" />}
+      title={<span className="block whitespace-normal break-words">{r.title}</span>}
+      meta={<Meta items={[duration(r.duration_seconds), r.scope_label, r.created_by_name, timeAgo(r.created_at)]} />}
+      trailing={<>
+        {r.status === "ready" && r.open_actions ? <Pill tone="warn">{r.open_actions} to assign</Pill> : null}
+        <Pill tone={STATUS[r.status].tone} live={isActive(r.status)}>{statusLabel(r)}</Pill>
+      </>}>
+      {r.status === "ready" && r.summary ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-muted">{r.summary}</span> : null}
+      {r.status === "failed" && r.error ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-danger">{r.error}</span> : null}
+    </ListRow>
+  );
+
+  return (
+    <>
+      {canWrite ? <UploadCard onUploaded={(id) => onOpen(id)} /> : null}
+      {isLoading ? <Skeleton className="h-40 rounded-[var(--radius-md)]" /> : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : !data.length ? (
+        <EmptyState icon={MicrophoneIcon} title="No recorded meetings yet"
+          body="Record the meeting on a phone or laptop (or save the Zoom, Meet or Teams recording), then upload it. Minutes are saved to the library so agents can look up past decisions." />
+      ) : (
+        <>
+          <StatGrid>
+            <Stat label="Minutes ready" value={ready.length} icon={CheckCircleIcon} tone="ok" hint={`of ${data.length} recordings`} />
+            <Stat label="Processing" value={busy} icon={WaveformIcon} tone="info" hint={busy ? "Being transcribed now" : "Nothing in progress"} />
+            <Stat label="Decisions recorded" value={decisions} icon={BooksIcon} tone="accent" hint="Searchable in the library" />
+            <Stat label="Action items to assign" value={openActions} icon={ListChecksIcon} tone={openActions ? "warn" : "neutral"} hint={openActions ? "Turn them into tasks" : "All assigned"} />
+          </StatGrid>
+          <Section title="Recorded meetings"
+            description={limits ? `Audio is kept ${limits.audio_days ? `for ${limits.audio_days} days` : "only until the minutes are written"}; transcripts and minutes stay.` : undefined}
+            actions={admin ? <Button size="sm" variant="ghost" onClick={() => setSettings(true)}><GearSixIcon size={14} /> Settings</Button> : undefined}>
+            <ListCard data-guide="minutes.list">{data.map(row)}</ListCard>
+          </Section>
+        </>
+      )}
+      {rec ? <MinutesSheet key={rec} id={rec} onClose={() => onOpen(undefined)} /> : null}
+      {settings ? <SettingsDialog onClose={() => setSettings(false)} /> : null}
+    </>
+  );
+}

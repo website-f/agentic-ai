@@ -14,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
 import { docKeys, docStatsQuery, STATUS_LABEL, type DocStatus, type DocSummary } from "@/lib/documents";
 import { useDebounced, usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
@@ -29,7 +30,9 @@ export function DocumentsPage() {
   const search = useSearch({ from: "/app/documents" });
   const navigate = useNavigate({ from: "/documents" });
   const [status, setStatus] = useState<Filter>(ALL);
-  const [branch, setBranch] = useState(ALL);
+  // The Company filter starts on the header's company ("All companies": every company).
+  const { selected: headerCompany } = useCompanies();
+  const [branch, setBranch] = useState(headerCompany?.id ?? ALL);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(!!search.new);
   const { data: branches = [] } = useQuery(branchesQuery);

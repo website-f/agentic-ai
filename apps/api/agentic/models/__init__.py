@@ -1470,3 +1470,64 @@ class EmailDraft(Timestamps, Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     error: Mapped[str | None] = mapped_column(String(500))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingRecording(Timestamps, Base):
+    """A people meeting someone recorded (voice or video), turned into minutes: the upload
+    streams to the media folder, ffmpeg keeps a small mono audio copy, the transcribe group
+    hears it in chunks of up to 10 minutes, then the smart group writes the minutes. The
+    minutes are a Document (edit, versions, PDF/Word) and a library file agents search."""
+
+    __tablename__ = "meeting_recordings"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('uploading', 'queued', 'extracting', 'transcribing', 'writing', 'ready',"
+            " 'failed')",
+            name="ck_meeting_recordings_status",
+        ),
+        CheckConstraint("language IN ('en', 'ms')", name="ck_meeting_recordings_language"),
+        Index("ix_meeting_recordings_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    # Who may read the minutes (and where they land in the library): None = whole workspace.
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    title: Mapped[str] = mapped_column(String(200), default="")
+    language: Mapped[str] = mapped_column(String(8), default="en")  # the minutes' language
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    stage_detail: Mapped[str] = mapped_column(String(300), default="")
+    source: Mapped[str] = mapped_column(String(16), default="upload")  # upload | file
+    source_file_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    original_name: Mapped[str] = mapped_column(String(200), default="")
+    mime: Mapped[str] = mapped_column(String(120), default="")
+    size: Mapped[int] = mapped_column(BigInteger, default=0)
+    # File names inside <media_dir>/<workspace>/<id>/; None once deleted.
+    original_file: Mapped[str | None] = mapped_column(String(80))
+    audio_file: Mapped[str | None] = mapped_column(String(80))
+    audio_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    audio_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_seconds: Mapped[float | None] = mapped_column(Float)
+    chunks_total: Mapped[int] = mapped_column(Integer, default=0)
+    chunks_done: Mapped[int] = mapped_column(Integer, default=0)
+    # Per chunk while transcribing: {"0": {"segments": [...], "text", "model", ...}}.
+    chunk_results: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # The stitched transcript: [{"t": start s, "e": end s, "text": ...}] paragraphs.
+    transcript: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    heard_language: Mapped[str | None] = mapped_column(String(32))
+    minutes: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    work: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # map-step notes
+    document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    library_file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id", ondelete="SET NULL"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    error: Mapped[str | None] = mapped_column(String(500))
+    created_by: Mapped[str] = mapped_column(String(80))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    workflow_id: Mapped[str | None] = mapped_column(String(120))
+    runs: Mapped[int] = mapped_column(Integer, default=0)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -198,3 +198,9 @@ for r in (
     impact.router,
 ):
     app.include_router(r)
+
+# Meeting minutes from a recording: the upload streams raw bytes like /api/files.
+from .routers import minutes as minutes_router  # noqa: E402
+
+RAW_UPLOAD_PATHS.add(minutes_router.UPLOAD_PATH)
+app.include_router(minutes_router.router)

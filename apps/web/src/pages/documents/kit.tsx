@@ -14,6 +14,7 @@ import { Field, Input, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
 import { docKeys, fileUrl, kitQuery, kitsQuery, uploadFile, type CompanyKit, type CustomKitField } from "@/lib/documents";
 import { cn } from "@/lib/utils";
 import { DocSteps } from "./visuals";
@@ -182,11 +183,15 @@ export function CompanyKitPage() {
   const search = useSearch({ from: "/app/company-kit" });
   const navigate = useNavigate({ from: "/company-kit" });
   const { data: kits = [], isLoading, error } = useQuery(kitsQuery);
-  const current = search.b ?? kits[0]?.branch_id;
+  // One company at a time: without ?b= it opens the header's company (under "All companies",
+  // the last one picked), else the first.
+  const { one } = useCompanies();
+  const start = (kits.find((k) => k.branch_id === one?.id) ?? kits[0])?.branch_id;
+  const current = search.b ?? start;
   const { data: kit } = useQuery({ ...kitQuery(current ?? ""), enabled: !!current });
   useEffect(() => {
-    if (!search.b && kits[0]) navigate({ search: { b: kits[0].branch_id }, replace: true });
-  }, [kits, search.b, navigate]);
+    if (!search.b && start) navigate({ search: { b: start }, replace: true });
+  }, [start, search.b, navigate]);
 
   return (
     <Page>

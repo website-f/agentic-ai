@@ -1075,3 +1075,8 @@ TOOLS.update({t.name: t for t in PLAN_TOOLS})
 from .finance_tools import FINANCE_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in FINANCE_TOOLS})
+
+# Meeting minutes from a recording already in the office files.
+from .minutes_tools import MINUTES_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in MINUTES_TOOLS})

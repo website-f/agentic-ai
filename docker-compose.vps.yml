@@ -44,9 +44,19 @@ services:
   api:
     ports: !override []
     environment: *prod-env
+    # Meeting recordings (minutes) stream to /data/media, shared with the worker. Point
+    # AGENTIC_MEDIA_DIR at a host folder on a disk with room for a few 1 GB uploads at once
+    # (install -d -o 10001 -g 10001 data/media); originals are deleted after extraction and
+    # the small audio copies after the retention days set in the app.
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
 
   worker:
     environment: *prod-env
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
 
   web:
     ports: !override ["127.0.0.1:${AGENTIC_PORT:-8500}:8080"]

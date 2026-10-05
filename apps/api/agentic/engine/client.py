@@ -380,6 +380,23 @@ class TranscribeResult:
     seconds: float | None = None  # audio length, when the provider says
     language: str | None = None
     usage: Usage = field(default_factory=Usage)
+    # verbose_json only: [{"start": s, "end": s, "text": ...}] (meeting minutes timestamps).
+    segments: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _segments(raw: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for s in raw if isinstance(raw, list) else []:
+        if not isinstance(s, dict):
+            continue
+        try:
+            start, end = float(s.get("start") or 0), float(s.get("end") or 0)
+        except (TypeError, ValueError):
+            continue
+        text = str(s.get("text") or "").strip()
+        if text:
+            out.append({"start": start, "end": max(end, start), "text": text})
+    return out
 
 
 async def transcribe(
@@ -391,17 +408,20 @@ async def transcribe(
     mime: str,
     language: str | None = None,
     *,
+    prompt: str | None = None,
     timeout: float = 120,
 ) -> TranscribeResult:
     """OpenAI-compatible POST /audio/transcriptions (multipart). Whisper models are asked for
     verbose_json, which carries the audio length (for cost); the gpt-4o transcribe models
-    only speak json and report usage instead."""
+    only speak json and report usage instead. `prompt` gives context (earlier words, names)."""
     url = _url(base_url, "/audio/transcriptions")
 
     async def send(fmt: str) -> CallResult:
         form = {"model": model, "response_format": fmt}
         if language:
             form["language"] = language
+        if prompt:
+            form["prompt"] = prompt
         return await _request(
             "POST",
             url,
@@ -435,6 +455,7 @@ async def transcribe(
         usage=Usage(
             prompt=int(u.get("input_tokens") or 0), completion=int(u.get("output_tokens") or 0)
         ),
+        segments=_segments(d.get("segments")),
     )
 
 

@@ -32,24 +32,26 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim-trixie AS runtime
 # Document Studio needs OCR for scans and photos (Tesseract, English + Malay) and a
-# TrueType sans (Liberation) so generated PDFs print any Latin text.
+# TrueType sans (Liberation) so generated PDFs print any Latin text. Meeting minutes need
+# ffmpeg/ffprobe to pull the sound track out of a recording and cut it into chunks.
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
  && apt-get update \
  && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends tini \
-    tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa fonts-liberation \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-msa fonts-liberation ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=app:app /app /app
 COPY --from=build /opt/models /opt/models
-# The vault volume inherits this owner the first time Docker creates it.
-RUN mkdir -p /data/vault && chown app:app /data/vault
+# The vault and media volumes inherit this owner the first time Docker creates them.
+RUN mkdir -p /data/vault /data/media && chown app:app /data/vault /data/media
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     AGENTIC_EMBED_CACHE=/opt/models \
     AGENTIC_VAULT_DIR=/data/vault \
+    AGENTIC_MEDIA_DIR=/data/media \
     HF_HUB_OFFLINE=1 \
     HF_HUB_DISABLE_TELEMETRY=1
 USER app

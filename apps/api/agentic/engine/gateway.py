@@ -356,6 +356,7 @@ class Transcript:
     latency_ms: int
     cost_usd: float | None
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    segments: list[dict[str, Any]] = field(default_factory=list)  # whisper verbose_json only
 
 
 @dataclass
@@ -478,6 +479,7 @@ async def transcribe(
     task: str = "audio.transcribe",
     agent_id: str | None = None,
     task_id: str | None = None,
+    prompt: str | None = None,
 ) -> Transcript:
     """Speech to text through the "transcribe" group. `seconds` is the length when the
     caller knows it (refused over 10 minutes; also priced by it when the provider is quiet).
@@ -494,7 +496,14 @@ async def transcribe(
 
     async def attempt(p: AIProvider, key: str, model_id: str) -> _Try:
         r = await client.transcribe(
-            p.base_url, key, model_id, audio, filename, media.bare_mime(mime), language
+            p.base_url,
+            key,
+            model_id,
+            audio,
+            filename,
+            media.bare_mime(mime),
+            language,
+            prompt=prompt,
         )
         secs = r.seconds if r.seconds is not None else seconds
         return _Try(r.call, r.usage, media.transcribe_cost(model_id, secs, p.tier), r)
@@ -519,6 +528,7 @@ async def transcribe(
         latency_ms=r.call.latency_ms,
         cost_usd=float(t.cost) if t.cost is not None else None,
         attempts=attempts,
+        segments=r.segments,
     )
 
 

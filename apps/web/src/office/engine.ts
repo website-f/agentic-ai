@@ -1,6 +1,12 @@
 /** The office engine: a Canvas 2D renderer, a camera, and one small state machine per
  * agent. It is a view onto real state: agents move only because an event or snapshot from
- * the API says their state changed. The app talks to it through `createOffice`. */
+ * the API says their state changed. The app talks to it through `createOffice`.
+ *
+ * The camera is the shared infinite-canvas viewport (lib/viewport, framework-free): drag or
+ * one finger pans with momentum, wheel / pinch zooms at the pointer, double tap zooms in,
+ * Space + drag and the middle button pan, + / - / 0 / Shift+1 / arrows work when hovered.
+ * Pixel art stays crisp: smoothing is off and zoom settles on whole device pixels. */
+import { clamp, createViewport, toScreen, toWorld, type Camera } from "../lib/viewport";
 import { CHAR_H, CHAR_W, characterSheet, DIRS, FRAMES, hash, renderMap, type Frame } from "./art";
 import { buildOffice, namedRooms } from "./layout";
 import { findPath } from "./path";
@@ -9,13 +15,18 @@ import { TILE, type AgentState, type Facing, type OfficeEvent, type OfficeMap, t
 export interface OfficeHandlers {
   onAgentTap?: (agentId: string) => void;
   onTaskDrop?: (taskId: string, agentId: string) => void;
+  /** Following an agent stopped (the person panned or zoomed). */
+  onFollowChange?: (agentId: string | null) => void;
 }
 
 export interface Office {
   setData(snap: OfficeSnapshot): void;
   apply(ev: OfficeEvent): void;
   focus(agentId: string): void;
+  /** Keep the camera on an agent as it walks; null stops. */
+  follow(agentId: string | null): void;
   zoom(step: 1 | -1): void;
+  /** The whole office on screen. */
   fit(): void;
   setTheme(dark: boolean): void;
   select(agentId: string | null): void;
@@ -30,7 +41,7 @@ const BUBBLE_GAP_MS = 3000;
 const ERRAND_MS = 6000;
 const LIBRARY_TOOLS = new Set(["recall", "read_page", "write_page", "remember", "use_skill"]);
 const WORKSHOP_TOOLS = new Set(["propose_skill", "memory"]);
-const MAX_DEV_ZOOM = 8;
+const MAX_CSS_ZOOM = 6; // CSS px per art px
 
 type Icon = "think" | "alert" | "zz" | "error" | "bang" | "tick";
 
@@ -74,11 +85,11 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
   let dropHover: string | null = null;
   let hovered: string | null = null;
 
-  // Camera in device pixels: screen = (world - cam) * scale. Whole-number scale = crisp pixels.
+  // Camera in CSS px (screen = world * k + offset, the shared viewport's convention).
+  // Drawing happens in device px: scale = k * dpr, snapped to whole pixels when at rest.
   const dpr = () => Math.min(2, window.devicePixelRatio || 1);
-  let scale = 2;
-  let camX = 0;
-  let camY = 0;
+  let cam: Camera = { x: 0, y: 0, k: 1 };
+  let following: string | null = null;
   let dirty = true;
   let raf = 0;
   let last = performance.now();
@@ -87,6 +98,8 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
 
   // ---------------------------------------------------------------- sizing and camera
 
+  const cssW = () => canvas.width / dpr();
+  const cssH = () => canvas.height / dpr();
   const resize = () => {
     const r = canvas.getBoundingClientRect();
     const w = Math.max(1, Math.round(r.width * dpr()));
@@ -94,56 +107,116 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
-      clampCam();
       dirty = true;
     }
   };
   const ro = new ResizeObserver(resize);
   ro.observe(canvas);
+  // Moving the window to a screen with another pixel ratio (or browser zoom) re-sizes too.
+  let mq: MediaQueryList | null = null;
+  const onDpr = () => {
+    resize();
+    watchDpr();
+  };
+  const watchDpr = () => {
+    mq?.removeEventListener("change", onDpr);
+    mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    mq.addEventListener("change", onDpr);
+  };
+  watchDpr();
 
   const worldW = () => (map ? map.width * TILE : 1);
   const worldH = () => (map ? map.height * TILE : 1);
+  const fitK = () => Math.min(cssW() / worldW(), cssH() / worldH());
+  /** Whole device pixels per art pixel when that is at least 1: crisp, even pixels. */
+  const crisp = (k: number) => {
+    const d = dpr();
+    return k * d >= 1 ? Math.max(1, Math.round(k * d)) / d : k;
+  };
+  const centreOf = (w: Walker) => ({ x: w.x + (w.sitting ? TILE : TILE / 2), y: w.y + TILE - CHAR_H / 2 });
 
-  function clampCam() {
-    const vw = canvas.width / scale;
-    const vh = canvas.height / scale;
-    // Centre the office when it is smaller than the screen; otherwise keep it on screen.
-    camX = vw >= worldW() ? (worldW() - vw) / 2 : Math.max(0, Math.min(worldW() - vw, camX));
-    camY = vh >= worldH() ? (worldH() - vh) / 2 : Math.max(0, Math.min(worldH() - vh, camY));
-  }
+  const vp = createViewport(canvas, {
+    initial: cam,
+    limits: () => ({ min: Math.min(fitK() * 0.8, 1), max: MAX_CSS_ZOOM }),
+    onChange: (c) => {
+      cam = c;
+      dirty = true;
+    },
+    // Some of the office always stays on screen, however far it is flung.
+    clamp: (c, size) => {
+      const ww = worldW() * c.k;
+      const wh = worldH() * c.k;
+      const mx = Math.min(120, ww / 2, size.w / 2);
+      const my = Math.min(120, wh / 2, size.h / 2);
+      return { k: c.k, x: clamp(c.x, mx - ww, size.w - mx), y: clamp(c.y, my - wh, size.h - my) };
+    },
+    snapZoom: crisp,
+    contentBounds: () => (map ? { x: 0, y: 0, w: worldW(), h: worldH() } : null),
+    fitOptions: { pad: 12 },
+    onTap: ({ client, pointerType }) => {
+      const hit = agentAt(client.x, client.y, pointerType === "touch" ? 7 : 4);
+      if (hit) {
+        selected = hit;
+        dirty = true;
+        handlers.onAgentTap?.(hit);
+      }
+    },
+    onUserGesture: () => {
+      if (following) {
+        following = null;
+        handlers.onFollowChange?.(null);
+      }
+    },
+  });
 
-  function fit() {
+  function fit(animate = 0) {
     resize();
-    const fitScale = Math.floor(Math.min(canvas.width / worldW(), canvas.height / worldH()));
-    // On a phone the whole office would be tiny: start at a readable scale and let people pan.
-    scale = Math.max(Math.round(dpr()), Math.min(MAX_DEV_ZOOM, Math.max(1, fitScale)));
-    camX = 0;
-    camY = 0;
-    clampCam();
-    dirty = true;
+    const k = Math.min(MAX_CSS_ZOOM, crisp(fitK() * 0.98));
+    vp.set({ k, x: (cssW() - worldW() * k) / 2, y: (cssH() - worldH() * k) / 2 }, { animate });
   }
 
-  function zoomAt(step: 1 | -1, sx = canvas.width / 2, sy = canvas.height / 2) {
-    const next = Math.max(1, Math.min(MAX_DEV_ZOOM, scale + step));
-    if (next === scale) return;
-    const wx = camX + sx / scale;
-    const wy = camY + sy / scale;
-    scale = next;
-    camX = wx - sx / scale;
-    camY = wy - sy / scale;
-    clampCam();
-    dirty = true;
+  /** The first view: the whole office, but never so small that people cannot be told apart
+   * (on a phone it starts at a readable size and people pan). */
+  function home() {
+    resize();
+    const d = dpr();
+    const k = Math.max(Math.round(d), Math.min(8, Math.max(1, Math.floor(fitK() * d)))) / d;
+    vp.set({ k, x: (cssW() - worldW() * k) / 2, y: (cssH() - worldH() * k) / 2 });
+  }
+
+  /** Buttons step through whole-pixel zoom levels (halving below 1:1). */
+  function zoomStep(step: 1 | -1) {
+    const d = dpr();
+    const kd = cam.k * d;
+    let next: number;
+    if (step > 0) next = kd >= 1 ? Math.floor(kd + 1e-6) + 1 : Math.min(1, kd * 2);
+    else next = kd > 1 + 1e-6 ? Math.ceil(kd - 1e-6) - 1 : kd / 2;
+    vp.zoomTo(next / d, undefined, 180);
   }
 
   function focus(agentId: string) {
     const w = walkers.get(agentId);
     if (!w) return;
-    if (scale < 2 * Math.round(dpr())) scale = Math.min(MAX_DEV_ZOOM, 2 * Math.round(dpr()));
-    camX = w.x + TILE / 2 - canvas.width / scale / 2;
-    camY = w.y - canvas.height / scale / 2;
-    clampCam();
+    const d = dpr();
+    vp.centerOn(centreOf(w), { k: Math.max(cam.k, (2 * Math.round(d)) / d), animate: 320 });
     selected = agentId;
     dirty = true;
+  }
+
+  /** One frame of following: glide towards the agent (and a readable zoom). */
+  function followStep(dt: number) {
+    if (!following) return;
+    const w = walkers.get(following);
+    if (!w) return;
+    const d = dpr();
+    const kT = Math.max(cam.k, (2 * Math.round(d)) / d);
+    const p = centreOf(w);
+    const a = Math.min(1, dt * 7);
+    const k = Math.abs(kT - cam.k) < 1e-3 ? kT : cam.k + (kT - cam.k) * a;
+    const tx = cssW() / 2 - p.x * k;
+    const ty = cssH() / 2 - p.y * k;
+    if (Math.abs(tx - cam.x) < 0.3 && Math.abs(ty - cam.y) < 0.3 && k === cam.k) return;
+    vp.set({ k, x: cam.x + (tx - cam.x) * a, y: cam.y + (ty - cam.y) * a });
   }
 
   // ---------------------------------------------------------------- state -> place
@@ -272,7 +345,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
         walkers.delete(id);
       }
     }
-    if (rebuilt) fit();
+    if (rebuilt) home();
     dirty = true;
   }
 
@@ -424,14 +497,18 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     ctx.fillStyle = dark ? "#0b0f0d" : "#e9eeeb";
     ctx.fillRect(0, 0, W, H);
     if (!map || !mapCanvas) return;
-    const sx = (wx: number) => Math.round((wx - camX) * scale);
-    const sy = (wy: number) => Math.round((wy - camY) * scale);
-    ctx.drawImage(mapCanvas, sx(0), sy(0), mapCanvas.width * scale, mapCanvas.height * scale);
+    // Device px per art px, and the offset rounded to whole device px: no half-pixel blur.
+    const scale = cam.k * d;
+    const ox = Math.round(cam.x * d);
+    const oy = Math.round(cam.y * d);
+    const sx = (wx: number) => Math.round(wx * scale + ox);
+    const sy = (wy: number) => Math.round(wy * scale + oy);
+    ctx.drawImage(mapCanvas, ox, oy, Math.round(mapCanvas.width * scale), Math.round(mapCanvas.height * scale));
 
     const sorted = [...walkers.values()].sort((a, b) => a.y - b.y);
     // Selection and drop rings under the feet.
     for (const w of sorted) {
-      if (w.id !== selected && w.id !== dropHover) continue;
+      if (w.id !== selected && w.id !== dropHover && w.id !== following) continue;
       ctx.fillStyle = w.id === dropHover ? "rgba(53,196,140,0.55)" : "rgba(42,120,214,0.45)";
       ctx.beginPath();
       ctx.ellipse(sx(w.x + (w.sitting ? TILE : TILE / 2)), sy(w.y + TILE - 1), 8 * scale, 3 * scale, 0, 0, Math.PI * 2);
@@ -445,7 +522,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
       const x = sx(w.x + ox);
       const y = sy(w.y + TILE - CHAR_H);
       if (w.state === "paused") ctx.globalAlpha = 0.45;
-      ctx.drawImage(w.sheet, col * CHAR_W, row * CHAR_H, CHAR_W, CHAR_H, x, y, CHAR_W * scale, CHAR_H * scale);
+      ctx.drawImage(w.sheet, col * CHAR_W, row * CHAR_H, CHAR_W, CHAR_H, x, y, Math.round(CHAR_W * scale), Math.round(CHAR_H * scale));
       ctx.globalAlpha = 1;
     }
     if (dark) {
@@ -466,7 +543,8 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     const narrow = canvas.width / d < 640; // a phone: only part of the office is on screen
-    if (scale >= Math.round(d) || narrow) {
+    // Labels need room: zoomed far out (the whole office on a phone) they would pile up.
+    if (cam.k >= 0.99 || (narrow && cam.k >= 0.6)) {
       for (const r of namedRooms(map)) {
         const label = r.label;
         const tw = ctx.measureText(label).width + 12 * d;
@@ -484,7 +562,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
       const cx = sx(w.x + (w.sitting ? TILE : TILE / 2));
       const top = sy(w.y + TILE - CHAR_H) - 6 * d;
       // name tag
-      if (scale >= 2 * Math.round(d) || narrow || w.id === selected || w.id === hovered) {
+      if (cam.k >= 1.99 || (narrow && cam.k >= 0.95) || w.id === selected || w.id === hovered || w.id === following) {
         ctx.font = `600 ${Math.round(10 * d)}px "Geist Variable", system-ui, sans-serif`;
         const tw = ctx.measureText(w.name).width + 10 * d;
         const ny = sy(w.y + TILE) + 9 * d;
@@ -554,6 +632,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const moving = update(dt, now);
+    followStep(dt);
     // Moving: every frame. Typing, bubbles, pulses: about 8 fps. Nothing happening: no drawing.
     if (moving || dirty || (needsSlowFrames() && now - lastSlowDraw > 125)) {
       draw(now);
@@ -568,17 +647,13 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
 
   function agentAt(clientX: number, clientY: number, slack = 2): string | null {
     const r = canvas.getBoundingClientRect();
-    const px = (clientX - r.left) * dpr();
-    const py = (clientY - r.top) * dpr();
-    const wx = camX + px / scale;
-    const wy = camY + py / scale;
+    const { x: wx, y: wy } = toWorld(cam, { x: clientX - r.left, y: clientY - r.top });
     let best: string | null = null;
     let bestD = Infinity;
     for (const w of walkers.values()) {
-      const cx = w.x + (w.sitting ? TILE : TILE / 2);
-      const cy = w.y + TILE - CHAR_H / 2;
-      const dx = Math.abs(wx - cx);
-      const dy = Math.abs(wy - cy);
+      const c = centreOf(w);
+      const dx = Math.abs(wx - c.x);
+      const dy = Math.abs(wy - c.y);
       if (dx <= CHAR_W / 2 + slack && dy <= CHAR_H / 2 + slack) {
         const dd = dx * dx + dy * dy;
         if (dd < bestD) {
@@ -590,77 +665,15 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     return best;
   }
 
-  const pointers = new Map<number, { x: number; y: number }>();
-  let dragStart: { x: number; y: number; camX: number; camY: number } | null = null;
-  let dragged = false;
-  let pinchBase = 0;
-
-  const onDown = (e: PointerEvent) => {
-    canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 1) {
-      dragStart = { x: e.clientX, y: e.clientY, camX, camY };
-      dragged = false;
-    } else if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      pinchBase = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-    }
-  };
-  const onMove = (e: PointerEvent) => {
-    if (!pointers.has(e.pointerId)) {
-      // Hovering (mouse, no button): show that agent's name even when zoomed out.
-      if (e.pointerType === "mouse") {
-        const hit = agentAt(e.clientX, e.clientY, 3);
-        if (hit !== hovered) {
-          hovered = hit;
-          canvas.style.cursor = hit ? "pointer" : "";
-          dirty = true;
-        }
-      }
-      return;
-    }
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 2 && pinchBase) {
-      const [a, b] = [...pointers.values()];
-      const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-      if (d / pinchBase > 1.25 || d / pinchBase < 0.8) {
-        const r = canvas.getBoundingClientRect();
-        zoomAt(d > pinchBase ? 1 : -1, ((a!.x + b!.x) / 2 - r.left) * dpr(), ((a!.y + b!.y) / 2 - r.top) * dpr());
-        pinchBase = d;
-      }
-      dragged = true;
-      return;
-    }
-    if (!dragStart) return;
-    const dx = e.clientX - dragStart.x;
-    const dy = e.clientY - dragStart.y;
-    if (Math.abs(dx) + Math.abs(dy) > 5) dragged = true;
-    if (dragged) {
-      camX = dragStart.camX - (dx * dpr()) / scale;
-      camY = dragStart.camY - (dy * dpr()) / scale;
-      clampCam();
+  // Panning, zooming and taps are the viewport's; hovering (mouse, no button) shows a name.
+  const onHover = (e: PointerEvent) => {
+    if (e.pointerType !== "mouse" || e.buttons) return;
+    const hit = agentAt(e.clientX, e.clientY, 3);
+    if (hit !== hovered) {
+      hovered = hit;
+      canvas.style.cursor = hit ? "pointer" : "";
       dirty = true;
     }
-  };
-  const onUp = (e: PointerEvent) => {
-    pointers.delete(e.pointerId);
-    if (pointers.size < 2) pinchBase = 0;
-    if (pointers.size === 0) {
-      if (!dragged) {
-        const hit = agentAt(e.clientX, e.clientY, 4);
-        if (hit) {
-          selected = hit;
-          dirty = true;
-          handlers.onAgentTap?.(hit);
-        }
-      }
-      dragStart = null;
-    }
-  };
-  const onWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    const r = canvas.getBoundingClientRect();
-    zoomAt(e.deltaY < 0 ? 1 : -1, (e.clientX - r.left) * dpr(), (e.clientY - r.top) * dpr());
   };
   const onDragOver = (e: DragEvent) => {
     if (!e.dataTransfer?.types.includes("application/x-agentic-task")) return;
@@ -685,11 +698,7 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     e.preventDefault();
     handlers.onTaskDrop?.(taskId, hit);
   };
-  canvas.addEventListener("pointerdown", onDown);
-  canvas.addEventListener("pointermove", onMove);
-  canvas.addEventListener("pointerup", onUp);
-  canvas.addEventListener("pointercancel", onUp);
-  canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("pointermove", onHover);
   canvas.addEventListener("dragover", onDragOver);
   canvas.addEventListener("dragleave", onDragLeave);
   canvas.addEventListener("drop", onDrop);
@@ -698,8 +707,13 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     setData,
     apply,
     focus,
-    zoom: (step) => zoomAt(step),
-    fit,
+    follow(id) {
+      following = id && walkers.has(id) ? id : null;
+      if (following) selected = following;
+      dirty = true;
+    },
+    zoom: zoomStep,
+    fit: () => fit(260),
     setTheme(isDark) {
       dark = isDark;
       dirty = true;
@@ -710,20 +724,15 @@ export function createOffice(canvas: HTMLCanvasElement, handlers: OfficeHandlers
     },
     agentPosition(id) {
       const w = walkers.get(id);
-      if (!w) return null;
-      const cx = w.x + (w.sitting ? TILE : TILE / 2);
-      const cy = w.y + TILE - CHAR_H / 2;
-      return { x: ((cx - camX) * scale) / dpr(), y: ((cy - camY) * scale) / dpr() };
+      return w ? toScreen(cam, centreOf(w)) : null;
     },
     destroy() {
       destroyed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", onUp);
-      canvas.removeEventListener("pointercancel", onUp);
-      canvas.removeEventListener("wheel", onWheel);
+      vp.destroy();
+      mq?.removeEventListener("change", onDpr);
+      canvas.removeEventListener("pointermove", onHover);
       canvas.removeEventListener("dragover", onDragOver);
       canvas.removeEventListener("dragleave", onDragLeave);
       canvas.removeEventListener("drop", onDrop);

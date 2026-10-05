@@ -19,6 +19,7 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { api, errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
 import { docKeys, fileQuery, fileSize, fileStatsQuery, fileUrl, type DocFile } from "@/lib/documents";
 import type { LibraryFile } from "@/lib/library";
 import { useDebounced, usePagedList } from "@/lib/paged";
@@ -112,7 +113,9 @@ function FileSheet({ id, onClose }: { id: string; onClose: () => void }) {
 export function FilesPage() {
   const search = useSearch({ from: "/app/files" });
   const navigate = useNavigate({ from: "/files" });
-  const [branch, setBranch] = useState(ALL);
+  // The Company filter starts on the header's company ("All companies": every company).
+  const { selected: headerCompany } = useCompanies();
+  const [branch, setBranch] = useState(headerCompany?.id ?? ALL);
   const [q, setQ] = useState("");
   const [show, setShow] = useState<Show>("all");
   const { data: branches = [] } = useQuery(branchesQuery);

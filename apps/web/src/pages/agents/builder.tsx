@@ -12,7 +12,7 @@ import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
-import { useBranch } from "@/lib/stores";
+import { ALL_COMPANIES, useBranch } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { sopsQuery, templatesQuery, workKeys, type Agent, type Template, type ToolMode } from "@/lib/work";
 import { chatGroupsQuery } from "@/pages/ai-engine/data";
@@ -73,7 +73,8 @@ export function AgentBuilderPage() {
   // Staff (agents.own) make personal agents; managers may make one for themselves too.
   const ownOnly = !me.permissions.includes("agents.manage");
   const scope = me.scope && me.scope.kind !== "all" ? me.scope : null;
-  const branchId = useBranch((s) => s.branchId);
+  // Under "All companies" a new agent starts in the last single company picked.
+  const branchId = useBranch((s) => (s.branchId && s.branchId !== ALL_COMPANIES ? s.branchId : s.lastId));
   const startBranch = branches.find((b) => b.id === (scope?.branch_id ?? branchId)) ?? branches[0];
 
   const [step, setStep] = useState(0);

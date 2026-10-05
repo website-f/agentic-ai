@@ -133,6 +133,7 @@ async def task_out(
         has_output_schema=t.output_schema is not None,
         labels=list(t.labels or []),
         branch_id=t.branch_id,
+        position=float(t.position or 0),
         goal=t.goal,
         goal_tries=t.goal_tries,
         truncated=cut,

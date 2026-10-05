@@ -410,6 +410,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
   const [agentIds, setAgentIds] = useState<string[]>(existing?.agent_ids ?? []);
   const [baseline, setBaseline] = useState(() => JSON.stringify({ ...(existing ? start : { name: "", description: "", graph: { nodes: [], edges: [] } }), active: (existing?.status ?? "draft") === "active", agentIds: existing?.agent_ids ?? [] }));
   const [sel, setSel] = useState<Sel>(null);
+  const [multi, setMulti] = useState<string[]>([]);
   const [hist, setHist] = useState<Hist>({ past: [], future: [] });
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [sheet, setSheet] = useState<"palette" | "inspect" | null>(null);
@@ -495,12 +496,20 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
     change({ ...graph, nodes: graph.nodes.map((n) => (n.id === id ? { ...n, type: it.type, action: it.action, ...it.init } : n)) });
   };
   const removeSelected = useCallback(() => {
+    if (multi.length) {
+      const gone = new Set(multi);
+      remember();
+      setGraph((g) => ({ nodes: g.nodes.filter((n) => !gone.has(n.id)), edges: g.edges.filter((e) => !gone.has(e.from) && !gone.has(e.to)) }));
+      setMulti([]);
+      setSel(null);
+      return;
+    }
     if (!sel) return;
     remember();
     if (sel.kind === "node") setGraph((g) => ({ nodes: g.nodes.filter((n) => n.id !== sel.id), edges: g.edges.filter((e) => e.from !== sel.id && e.to !== sel.id) }));
     else setGraph((g) => ({ ...g, edges: g.edges.filter((e) => e.id !== sel.id) }));
     setSel(null);
-  }, [sel, remember]);
+  }, [sel, multi, remember]);
   const duplicate = useCallback(() => {
     if (sel?.kind !== "node") return;
     const n = graph.nodes.find((x) => x.id === sel.id);
@@ -550,12 +559,12 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
       else if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && sel) { e.preventDefault(); removeSelected(); }
-      else if (e.key === "Escape") { setSel(null); setQuick(null); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && (sel || multi.length)) { e.preventDefault(); removeSelected(); }
+      else if (e.key === "Escape") { setSel(null); setQuick(null); setMulti([]); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, duplicate, removeSelected, sel, trySave]);
+  }, [undo, redo, duplicate, removeSelected, sel, multi.length, trySave]);
 
   /** Keep the quick-add menu inside the board (it is 16rem wide, ~22rem tall). */
   const fitPopover = (p: Pt): Pt => {
@@ -567,7 +576,8 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
   };
   const selectedNode = sel?.kind === "node" ? graph.nodes.find((n) => n.id === sel.id) ?? null : null;
   const selectedEdge = sel?.kind === "edge" ? graph.edges.find((e) => e.id === sel.id) ?? null : null;
-  const onSelect = (s: Sel) => { setSel(s); setQuick(null); if (s && !wide) setSheet("inspect"); };
+  /** "press": a step was picked up to drag; on phones the sheet waits for a tap. */
+  const onSelect = (s: Sel, how?: "press") => { setSel(s); setQuick(null); if (s) setMulti([]); if (s && !wide && how !== "press") setSheet("inspect"); };
 
   const inspector = selectedNode ? (
     <NodeInspector key={selectedNode.id} node={selectedNode} graph={graph}
@@ -680,6 +690,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
         <div ref={board} className="relative min-w-0 flex-1 p-2 sm:p-3">
           <Canvas graph={graph} onChange={setGraph} selected={sel} onSelect={onSelect} fill className="rounded-[var(--radius-lg)]"
             onBeginChange={remember} issues={issueIds} agentNames={agentNames} fitSignal={fitSignal} empty={empty}
+            viewKey={existing?.id} multi={multi} onMulti={setMulti}
             onDropItem={(key, at) => add(key, at)}
             onQuickAdd={(from, at, screen) => setQuick({ from, at, screen: fitPopover(screen) })}
             onInsertOnEdge={(edge) => {
@@ -739,7 +750,10 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       <ResponsiveDialog open={keysOpen} onOpenChange={setKeysOpen} title="Keyboard shortcuts">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
           {[["Ctrl + S", "Save"], ["Ctrl + Z", "Undo"], ["Ctrl + Shift + Z", "Redo"], ["Ctrl + D", "Duplicate the selected step"], ["Delete", "Delete the selection"], ["Esc", "Clear the selection"],
-            ["Scroll", "Move around the board"], ["Ctrl + scroll", "Zoom"], ["Drag the board", "Pan"], ["Drag the + dot", "Connect to a step, or drop on empty space to add one"]].map(([k, v]) => (
+            ["Drag the board", "Pan (also middle mouse, or Space + drag)"], ["Scroll wheel", "Zoom at the pointer"], ["Shift + scroll", "Pan sideways"],
+            ["Trackpad", "Two fingers pan, pinch zooms"], ["+ / − / 0", "Zoom in, out, back to 100%"], ["Shift + 1", "Fit the whole workflow"], ["Arrow keys", "Pan (when nothing is selected)"],
+            ["Shift + drag", "Select several steps"], ["Drag the + dot", "Connect to a step, or drop on empty space to add one"],
+            ["Touch", "One finger pans, pinch zooms, double tap zooms in, long press picks a step up"]].map(([k, v]) => (
             <div key={k} className="contents"><dt><kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11.5px]">{k}</kbd></dt><dd className="text-muted">{v}</dd></div>
           ))}
         </dl>

@@ -352,7 +352,7 @@ export function RunView({ id }: { id: string }) {
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="grid min-w-0 gap-2 max-xl:order-2">
           <h2 className="text-[14px] font-semibold xl:sr-only">Map</h2>
-          <Canvas graph={run.graph} onChange={() => {}} readOnly selected={sel ? { kind: "node", id: sel } : null}
+          <Canvas graph={run.graph} onChange={() => {}} readOnly selected={sel ? { kind: "node", id: sel } : null} viewKey={`run:${run.id}`}
             onSelect={(x) => setSel(x?.kind === "node" ? x.id : null)} className="max-sm:h-[26rem]"
             status={Object.fromEntries(run.steps.map((s) => [s.id, s.status]))} taken={taken} />
         </div>

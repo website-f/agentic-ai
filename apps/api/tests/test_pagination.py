@@ -148,6 +148,35 @@ async def test_tasks_pages_in_board_order_without_gaps(client: httpx.AsyncClient
     assert found == [t["id"] for t in full.json() if t["title"].startswith("Task 1")]
 
 
+async def test_board_rows_carry_position_and_patch_reorders(client: httpx.AsyncClient):
+    """The board drops a card between two others by PATCHing the midpoint position."""
+    from .conftest import csrf
+
+    o = await owner(client)
+    await add(
+        *[
+            Task(
+                workspace_id=o["ws"],
+                title=f"Card {i}",
+                created_by="user:x",
+                status="triage",
+                position=Decimal(i * 10),
+                created_at=at(i),
+            )
+            for i in range(3)
+        ]
+    )
+    rows = (await client.get("/api/tasks?status=triage")).json()
+    assert [t["title"] for t in rows] == ["Card 0", "Card 1", "Card 2"]
+    assert [t["position"] for t in rows] == [0, 10, 20]
+    # Card 2 dropped between Card 0 and Card 1.
+    card2 = rows[2]["id"]
+    r = await client.patch(f"/api/tasks/{card2}", json={"position": 5}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["position"] == 5
+    after = (await client.get("/api/tasks?status=triage")).json()
+    assert [t["title"] for t in after] == ["Card 0", "Card 2", "Card 1"]
+
+
 async def test_new_rows_do_not_shift_later_pages(client: httpx.AsyncClient):
     o = await owner(client)
     await add(

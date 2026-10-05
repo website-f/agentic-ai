@@ -327,8 +327,9 @@ const monitorRoute = createRoute({
 const meetingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/meetings",
-  validateSearch: (s: Record<string, unknown>): { m?: string; new?: number; task?: string } => ({
-    m: str(s.m), new: num(s.new), task: str(s.task),
+  // tab=minutes: people meetings (recordings -> minutes); rec opens one.
+  validateSearch: (s: Record<string, unknown>): { m?: string; new?: number; task?: string; tab?: "minutes"; rec?: string } => ({
+    m: str(s.m), new: num(s.new), task: str(s.task), tab: s.tab === "minutes" ? "minutes" : undefined, rec: str(s.rec),
   }),
   component: page.meetings,
 });

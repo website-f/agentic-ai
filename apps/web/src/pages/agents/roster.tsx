@@ -13,8 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { errorMessage } from "@/lib/api";
 import { useLive } from "@/lib/live";
-import { branchesQuery, meQuery } from "@/lib/queries";
-import { useBranch } from "@/lib/stores";
+import { useCompanies } from "@/lib/company";
+import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
 import { agentsQuery, type Agent } from "@/lib/work";
 
@@ -71,28 +71,38 @@ export function AgentsPage() {
   const staff = staffOnly(me.permissions);
   const twinHint = "Staff have one AI twin. Ask your manager for more agents.";
   const { data: agents, isLoading, error } = useQuery(agentsQuery);
-  const { data: branches = [] } = useQuery(branchesQuery);
-  const branchId = useBranch((s) => s.branchId);
-  const branch = branches.find((b) => b.id === branchId) ?? branches[0];
+  // "All companies" in the header shows every company the person may see, grouped by company.
+  const { branches: visible, isAll, selected, isLoading: loadingCompanies } = useCompanies();
+  const shown = useMemo(() => (isAll ? visible : selected ? [selected] : []), [isAll, visible, selected]);
+  const branch = shown[0];
   const { view } = useSearch({ strict: false }) as { view?: "org" };
   const navigate = useNavigate();
 
   // Staff also see colleagues' agents (view only). When the list mixes both, offer Mine / Office.
   const [whose, setWhose] = useState<"all" | "mine" | "office">("all");
-  const inBranch = useMemo(() => (agents ?? []).filter((a) => branch && a.branch_id === branch.id), [agents, branch]);
+  const inBranch = useMemo(() => {
+    const ids = new Set(shown.map((b) => b.id));
+    return (agents ?? []).filter((a) => ids.has(a.branch_id));
+  }, [agents, shown]);
   const ownCount = inBranch.filter((a) => !a.view_only).length;
   const watchCount = inBranch.length - ownCount;
   const mixed = ownCount > 0 && watchCount > 0;
   const scope = mixed ? whose : "all";
 
   const sections = useMemo(() => {
-    if (!branch) return [];
     const mine = inBranch.filter((a) => (scope === "mine" ? !a.view_only : scope === "office" ? a.view_only : true));
-    const out = branch.departments.map((d) => ({ id: d.id, name: d.name, agents: mine.filter((a) => a.department_id === d.id) }));
-    const loose = mine.filter((a) => !a.department_id);
-    if (loose.length) out.push({ id: "none", name: "No department", agents: loose });
-    return out;
-  }, [inBranch, branch, scope]);
+    return shown.flatMap((b) => {
+      const here = mine.filter((a) => a.branch_id === b.id);
+      const out = b.departments.map((d) => ({ id: d.id, name: d.name, company: b, agents: here.filter((a) => a.department_id === d.id) }));
+      const loose = here.filter((a) => !a.department_id || !b.departments.some((d) => d.id === a.department_id));
+      if (loose.length) out.push({ id: `none-${b.id}`, name: "No department", company: b, agents: loose });
+      return out;
+    });
+  }, [inBranch, shown, scope]);
+  const companies = useMemo(
+    () => shown.map((b) => ({ company: b, sections: sections.filter((s) => s.company.id === b.id) })).filter((c) => c.sections.some((s) => s.agents.length)),
+    [shown, sections],
+  );
   const total = sections.reduce((n, s) => n + s.agents.length, 0);
   const firstAgentId = sections.find((s) => s.agents.length)?.agents[0]?.id;
   const statuses = useLive((s) => s.agentStatus);
@@ -111,7 +121,8 @@ export function AgentsPage() {
     <Page>
       <PageHeader
         title="Agents"
-        description={branch ? `The staff of ${branch.name}, by department. Switch company with the branch picker above.${staff ? ` ${twinHint}` : ""}` : "Create a branch first, then add agents to its departments."}
+        description={!branch ? "Create a company first, then add agents to its departments."
+          : `${isAll ? `The staff of all ${shown.length} companies, by company and department.` : `The staff of ${branch.name}, by department.`} Switch company with the picker at the top.${staff ? ` ${twinHint}` : ""}`}
         actions={staff ? (
           <Button asChild variant="outline" title={twinHint}>
             <Link to="/twin">
@@ -126,7 +137,7 @@ export function AgentsPage() {
           </Button>
         ) : null}
       />
-      {isLoading ? (
+      {isLoading || loadingCompanies ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-40 rounded-[var(--radius-md)]" />)}</div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">Could not load agents. {errorMessage(error)}</div>
@@ -135,14 +146,14 @@ export function AgentsPage() {
       ) : total === 0 ? (
         <EmptyState
           icon={UsersThreeIcon}
-          title={`No agents at ${branch.name} yet`}
+          title={isAll ? "No agents yet" : `No agents at ${branch.name} yet`}
           body="Start from a template like Accountant or Researcher, place it in a department, and give it your SOPs."
           action={staff ? <Button asChild><Link to="/twin"><UserFocusIcon size={16} weight="bold" /> Meet your AI twin</Link></Button> : canManage ? <Button asChild><Link to="/agents/new"><PlusIcon size={16} weight="bold" /> Create first agent</Link></Button> : undefined}
         />
       ) : (
         <>
           <StatGrid>
-            <Stat label="Agents" value={total} hint={counts.watching ? `${counts.watching} you can only watch` : `In ${sections.filter((s) => s.agents.length).length} departments`} icon={UsersThreeIcon} tone="accent" />
+            <Stat label="Agents" value={total} hint={counts.watching ? `${counts.watching} you can only watch` : isAll ? `In ${companies.length} ${companies.length === 1 ? "company" : "companies"}` : `In ${sections.filter((s) => s.agents.length).length} departments`} icon={UsersThreeIcon} tone="accent" />
             <Stat label="Working now" value={counts.working} hint="On a task or in a meeting" icon={LightningIcon} tone="info" />
             <Stat label="Waiting on you" value={counts.waiting} hint={counts.waiting ? "Open Approvals to decide" : "Nothing to decide"} icon={HandIcon} tone={counts.waiting ? "warn" : "neutral"} />
             <Stat label="Paused" value={counts.paused} hint="Not taking work" icon={PauseCircleIcon} tone="neutral" />
@@ -174,23 +185,37 @@ export function AgentsPage() {
             ) : null}
           </div>
           {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={canManage} /> : (
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
-              {sections.filter((s) => s.agents.length).map((s) => (
-                <section key={s.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
-                  <h2 className="flex items-center gap-2 text-[15px] font-semibold">
-                    {s.name} <span className="rounded-full bg-surface-2 px-2 text-[12px] font-medium text-muted tabular">{s.agents.length}</span>
-                    <span aria-hidden className="h-px flex-1 bg-border" />
-                  </h2>
-                  <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {s.agents.map((a) => <AgentCard key={a.id} agent={a} guide={a.id === firstAgentId ? "agents.card" : undefined} />)}
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-10">
+              {companies.map(({ company, sections: depts }) => {
+                const H = isAll ? "h3" : "h2";
+                return (
+                  <div key={company.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
+                    {isAll ? (
+                      <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-semibold tracking-tight">
+                        <span aria-hidden className="size-3 shrink-0 rounded-full" style={{ background: company.color }} />
+                        <span className="min-w-0 break-words">{company.name}</span>
+                        <span className="shrink-0 rounded-full bg-surface-2 px-2 text-[12px] font-medium text-muted tabular">{depts.reduce((n, s) => n + s.agents.length, 0)}</span>
+                      </h2>
+                    ) : null}
+                    {depts.filter((s) => s.agents.length).map((s) => (
+                      <section key={s.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+                        <H className="flex items-center gap-2 text-[15px] font-semibold">
+                          {s.name} <span className="rounded-full bg-surface-2 px-2 text-[12px] font-medium text-muted tabular">{s.agents.length}</span>
+                          <span aria-hidden className="h-px flex-1 bg-border" />
+                        </H>
+                        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {s.agents.map((a) => <AgentCard key={a.id} agent={a} guide={a.id === firstAgentId ? "agents.card" : undefined} />)}
+                        </div>
+                      </section>
+                    ))}
+                    {depts.some((s) => !s.agents.length) ? (
+                      <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-3 text-[12.5px] text-muted">
+                        Empty departments{isAll ? ` at ${company.name}` : ""}: {depts.filter((s) => !s.agents.length).map((s) => s.name).join(", ")}.
+                      </p>
+                    ) : null}
                   </div>
-                </section>
-              ))}
-              {sections.some((s) => !s.agents.length) ? (
-                <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-3 text-[12.5px] text-muted">
-                  Empty departments: {sections.filter((s) => !s.agents.length).map((s) => s.name).join(", ")}.
-                </p>
-              ) : null}
+                );
+              })}
             </div>
           )}
         </>

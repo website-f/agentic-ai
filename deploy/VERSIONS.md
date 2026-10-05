@@ -14,7 +14,7 @@ repeatable deploys, and re-scan with Trivy whenever you move them.
 | valkey | `valkey/valkey:8.1.10-alpine` | `sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507` | runs as 999 |
 | temporal | `temporalio/auto-setup:1.29.7` | `sha256:f14912b699cf73015ad5c4fc18d522d4b014db90e794039214dfb7c022c2644f` | Last auto-setup tag. Moving to `temporalio/server` + an admin-tools schema job is still open |
 | temporal-ui | `temporalio/ui:2.54.1` | `sha256:ff0943fe532b8e33c46cd28b29e81e0ce0b6f55b9ee50a38ef1b437cc4de3fa5` | |
-| api / worker base | `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.10.7` | built | `agentic-py`, Debian 13, Python 3.12.14, OpenSSL 3.5.7, 0 critical (Trivy) |
+| api / worker base | `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.10.7` | built | `agentic-py`, Debian 13, Python 3.12.14, OpenSSL 3.5.7, 0 critical (Trivy). Meeting minutes add Debian's `ffmpeg` package (7.1, apt, about +90 MB); re-scan after the next build |
 | backup base | `postgres:17.11-alpine3.24` + restic 0.18.1 | built | `agentic-backup`, gosu removed, 0 critical |
 | web build | `node:22-alpine` | `sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32` | pnpm 10.18.0 via corepack |
 | web runtime | `nginxinc/nginx-unprivileged:1.31-alpine` | built | `agentic-web`, about 86 MB, 0 critical / 0 high |

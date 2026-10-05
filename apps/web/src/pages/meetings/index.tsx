@@ -16,6 +16,7 @@ import { FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { usePagedList } from "@/lib/paged";
@@ -24,11 +25,20 @@ import { meetingQuery, teamKeys, tokensShort, type Meeting, type MeetingOutcome,
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, taskQuery } from "@/lib/work";
 
+import { PeopleMeetings } from "./minutes";
+
 interface MeetingsSearch {
   m?: string;
   new?: number;
   task?: string;
+  tab?: "minutes";
+  rec?: string;
 }
+
+const TABS = [
+  { value: "agents" as const, label: "Agent meetings" },
+  { value: "minutes" as const, label: "People meetings" },
+];
 
 const STATUS: Record<Meeting["status"], { label: string; tone: "accent" | "ok" | "danger" | "neutral" }> = {
   running: { label: "In progress", tone: "accent" },
@@ -270,11 +280,25 @@ export function MeetingsPage() {
   };
   const decided = doneCount.total ?? past.filter((m) => m.status === "done").length;
 
+  const tabs = <Segmented label="Kind of meeting" value={search.tab === "minutes" ? "minutes" : "agents"} options={TABS} onChange={(t) => go(t === "minutes" ? { tab: "minutes" } : {})} className="w-fit" />;
+
+  if (search.tab === "minutes") {
+    return (
+      <Page>
+        <PageHeader title="Meetings"
+          description="Upload a recording of a real meeting (voice or video): you get a timestamped transcript, minutes in English or Bahasa Melayu, and action items you can turn into tasks. Finished minutes go into the library so agents can look up past decisions." />
+        {tabs}
+        <PeopleMeetings canWrite={canWrite} rec={search.rec} onOpen={(rec) => go({ tab: "minutes", rec })} />
+      </Page>
+    );
+  }
+
   return (
     <Page>
       <PageHeader title="Meetings"
         description="Agents talk a decision through for a few rounds and come back with one summary: the decision, why, what else they weighed and who disagreed. Meetings recommend; they never approve anything."
         actions={canWrite ? <Button data-guide="meetings.new" onClick={() => go({ new: 1 })}><PlusIcon size={16} weight="bold" /> New meeting</Button> : null} />
+      {tabs}
       {isLoading ? <Skeleton className="h-48 rounded-[var(--radius-md)]" /> : error || !meetings ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : !meetings.length ? (
         <EmptyState icon={UsersThreeIcon} title="No meetings yet"
           body="Agents call one with the consult tool when a task needs several views. You can also start one yourself, on its own or for a task."
