@@ -93,10 +93,12 @@ async def memory_answer(
 
 
 async def find_agent(
-    db: AsyncSession, ws_id: str, ref: str, exclude: str | None = None
+    db: AsyncSession, ws_id: str, ref: str, exclude: str | set[str] | None = None
 ) -> Agent | None:
     """A colleague by name, or else by the expertise asked for ("software engineer",
-    "finance"): the active agent whose role or department matches best."""
+    "finance"): the active agent whose role or department matches best (never one in
+    `exclude`)."""
+    skip = {exclude} if isinstance(exclude, str) else set(exclude or ())
     from ..models import Department
     from .delegation import _find_agent
 
@@ -120,13 +122,27 @@ async def find_agent(
             )
         )
     ).all():
-        if a.id == exclude:
+        if a.id in skip:
             continue
         hay = f"{a.role} {depts.get(a.department_id or '', '')} {a.template or ''}".lower()
         score = sum(1 for w in words if w in hay or w.rstrip("s") in hay)
         if score and (best is None or score > best[0]):
             best = (score, a)
     return best[1] if best else None
+
+
+async def waiting_up_the_chain(db: AsyncSession, task: Task) -> set[str]:
+    """The agents on this task and every task above it: whoever asked the question this task
+    answers, and so on up. Asking any of them back makes a circle."""
+    out: set[str] = set()
+    t: Task | None = task
+    for _ in range(MAX_DEPTH + 3):
+        if t is None:
+            break
+        if t.assignee_agent_id:
+            out.add(t.assignee_agent_id)
+        t = await db.get(Task, t.parent_task_id) if t.parent_task_id else None
+    return out
 
 
 async def plan(
@@ -148,7 +164,8 @@ async def plan(
         question = str(args.get("question", "")).strip()
         if len(question) < 5:
             raise ColleagueError("Write the question in full.")
-        who = await find_agent(db, task.workspace_id, str(args.get("agent", "")), agent.id)
+        waiting = await waiting_up_the_chain(db, task)
+        who = await find_agent(db, task.workspace_id, str(args.get("agent", "")), waiting)
         if who is None:
             raise ColleagueError(
                 f"No active colleague called or working as {args.get('agent')!r}. "
@@ -157,6 +174,12 @@ async def plan(
         helping = args.get("kind") == "help"
         if who.id == agent.id:
             raise ColleagueError("That is you. Use recall or read_page instead.")
+        if who.id in waiting:
+            raise ColleagueError(
+                f"{who.name} is already waiting on this chain of questions, so asking them "
+                "back goes in a circle. Answer with what you know, say plainly what you "
+                "could not confirm, or ask a person."
+            )
         asked = (
             await db.scalar(
                 select(func.count())

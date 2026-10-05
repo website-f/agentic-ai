@@ -96,6 +96,29 @@ async def test_ask_colleague_limits(client, llm, temporal):
     assert not any(n.startswith("browser_") for n in offered)  # hidden unless given
 
 
+async def test_questions_never_go_round_in_a_circle(client, llm, temporal):
+    """Wira asks Rafi; Rafi may ask someone new, but not Wira (who is waiting on Rafi), not
+    even by expertise. The circle is refused and Rafi answers with what it knows."""
+    o = await office(client)
+    wira = await new_agent(client, o, "Wira", "Operations")
+    await new_agent(client, o, "Rafi", "Research")
+    t = await new_task(client, wira, "Check the guard's earlier records")
+    llm.call("ask_colleague", agent="Rafi", question="Any earlier warnings for this guard?")
+    r = await runtime.run_task_step(t["id"])
+    child_id = r.children[0]["task_id"]
+    llm.call("ask_colleague", agent="Wira", question="Any earlier warnings for this guard?")
+    llm.call("ask_colleague", agent="operations", question="Any earlier warnings for him?")
+    llm.say("None on record that I can see; not confirmed in the operations system.")
+    c = await runtime.run_task_step(child_id)
+    assert c.state == "done"
+    errors = [m.content for m in await messages(child_id) if m.role == "tool"]
+    assert "already waiting on this chain" in errors[0]
+    assert "No active colleague" in errors[1]  # the only Operations agent is Wira
+    async with SessionLocal() as db:
+        kids = (await db.scalars(select(Task).where(Task.parent_task_id == child_id))).all()
+        assert kids == []
+
+
 async def test_find_sop_searches_procedures_the_agent_may_follow(client, llm, temporal):
     o = await office(client)
     a = await new_agent(client, o, "Wira", "Operations")
