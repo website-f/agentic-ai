@@ -188,6 +188,10 @@ class Scope:
         job runs, broadcasts) only the workspace roles."""
         if type_ in KNOWLEDGE_EVENTS:
             return True
+        if type_ in BRANCH_EVENTS:  # P24: a company's uploads reach the people of it
+            return self.everything or (
+                self.branch_id is not None and data.get("branch_id") == self.branch_id
+            )
         aid = data.get("agent_id") or data.get("assignee_agent_id")
         if aid:
             return aid in agent_ids or (type_ in WATCH_EVENTS and aid in watched)
@@ -201,6 +205,8 @@ class Scope:
 
 # What watching an agent shows: that it is working and on what step, not its tasks' contents.
 WATCH_EVENTS = frozenset({"agent.status", "agent.thinking", "agent.activity", "agent.upsert"})
+
+BRANCH_EVENTS = frozenset({"intake.updated"})
 
 KNOWLEDGE_EVENTS = frozenset(
     {"brain.page", "brain.dream", "skill.proposal", "skill.updated", "skill.used"}

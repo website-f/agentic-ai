@@ -195,11 +195,15 @@ export function LibraryPage() {
     <Page>
       <PageHeader title={t("Library")}
         description={t("The office's guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.")}
-        actions={data?.can_reindex ? (
-          <Button variant="outline" loading={reindex.isPending} onClick={() => reindex.mutate()}>
-            <ArrowClockwiseIcon size={16} /> {t("Index again")}
-          </Button>
-        ) : null} />
+        actions={<>
+          {/* P24: a company's whole document set (zips, folders) goes in through Company files. */}
+          <Button variant="ghost" asChild><Link to="/files">{t("Upload company documents →")}</Link></Button>
+          {data?.can_reindex ? (
+            <Button variant="outline" loading={reindex.isPending} onClick={() => reindex.mutate()}>
+              <ArrowClockwiseIcon size={16} /> {t("Index again")}
+            </Button>
+          ) : null}
+        </>} />
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {data?.can_edit ? <AddGuidelines /> : null}

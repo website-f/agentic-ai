@@ -90,9 +90,13 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("company-kit.fields", "Fakta syarikat"), t("company-kit.save", "Simpan")],
   },
   {
-    id: "files", route: "/files", title: "Fail", group: "Documents",
-    states: [{ key: "sheet", how: "Klik fail: apa yang dibaca daripadanya" }],
-    targets: [t("files.upload", "Muat naik"), t("files.list", "Fail"), t("files.library", "Guna sebagai garis panduan")],
+    id: "files", route: "/files", title: "Fail syarikat", group: "Documents",
+    states: [{ key: "sheet", how: "Klik fail: pratonton dan apa yang dibaca daripadanya" }],
+    targets: [
+      t("files.company", "Pilih syarikat"), t("files.upload", "Muat naik fail, folder atau zip"), t("files.report", "Laporan muat naik"),
+      t("files.tree", "Folder"), t("files.filters", "Carian dan penapis"), t("files.list", "Fail"),
+      t("files.download-folder", "Muat turun folder"), t("files.download-all", "Muat turun semuanya"), t("files.library", "Guna sebagai garis panduan"),
+    ],
   },
   {
     id: "templates", route: "/templates", title: "Templat", group: "Documents", states: [],

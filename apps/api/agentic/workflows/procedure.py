@@ -249,7 +249,9 @@ def compile_text(name: str, graph: dict[str, Any]) -> str:
 
 
 _ACTION_KEYS = ", ".join(k for k in ACTIONS if k not in DECISION_ACTIONS)
-DRAFT_SYSTEM = (
+# The graph's shape and node types; DRAFT_SYSTEM adds the style for drafting from a short
+# description, intake/builders.py the rules for drafting from a company's documents.
+DRAFT_SHAPE = (
     "You design office procedures as a graph that AI agents and people carry out together. "
     'Return ONLY JSON: {"nodes":[{"id","type","title","body","role","action"}],'
     '"edges":[{"from","to","label"}]}. '
@@ -259,7 +261,10 @@ DRAFT_SYSTEM = (
     f"For a step, action is one of: {_ACTION_KEYS}. "
     "For an approval by a person use type decision with action approval and edges labelled "
     "approved / rejected. Give exactly one start node and at least one end node. Ids short "
-    "(n1, n2...). title: a few words. body: ONE short sentence (15 words max) saying what "
+    "(n1, n2...). "
+)
+DRAFT_SYSTEM = DRAFT_SHAPE + (
+    "title: a few words. body: ONE short sentence (15 words max) saying what "
     "the step produces. role: the department or job that does it, or empty. Every decision's "
     "outgoing edges carry short labels (yes / no). Steps that can happen at the same time may "
     "branch from one node. 6 to 18 nodes. No prose."
@@ -268,6 +273,55 @@ DRAFT_SYSTEM = (
 
 def draft_prompt(description: str) -> str:
     return f"Design a procedure for this job:\n\n{description.strip()}"
+
+
+def loads_lenient(text: str) -> dict[str, Any] | None:
+    """Parse a drafted graph's JSON; if it was cut off mid-stream, recover the complete
+    prefix. Code fences around the JSON are ignored."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.rsplit("```", 1)[0].strip()
+    try:
+        v = json.loads(text)
+        return v if isinstance(v, dict) else None
+    except ValueError:
+        pass
+    for end in range(len(text), 1, -1):  # trim back to the last point that parses
+        if text[end - 1] in "}]":
+            for close in ("", "}", "]}", "}]}"):
+                try:
+                    v = json.loads(text[:end] + close)
+                except ValueError:
+                    continue
+                return v if isinstance(v, dict) else None
+    return None
+
+
+def tidy_draft(graph: dict[str, Any]) -> dict[str, Any]:
+    """What every drafted graph needs before people see it (in place, returned):
+    only a decision's branches carry labels (models like to write "next" on every arrow),
+    and a reply cut off before its connections gets its steps linked in order."""
+    deciders = {n["id"] for n in graph["nodes"] if n["type"] == "decision"}
+    for e in graph["edges"]:
+        if e["from"] not in deciders:
+            e["label"] = ""
+    if not graph["edges"] and len(graph["nodes"]) > 1:
+        flow = [n for n in graph["nodes"] if n["type"] != "note"]
+        graph["edges"] = [
+            {"id": f"e{i}", "from": a["id"], "to": b["id"], "label": ""}
+            for i, (a, b) in enumerate(zip(flow, flow[1:], strict=False), 1)
+        ]
+    return graph
+
+
+def lay_out_draft(graph: dict[str, Any]) -> dict[str, Any]:
+    """Top to bottom like a flowchart; notes keep their places."""
+    notes = [n for n in graph["nodes"] if n["type"] == "note"]
+    flow = layout(
+        {"nodes": [n for n in graph["nodes"] if n["type"] != "note"], "edges": graph["edges"]}
+    )
+    return {"nodes": flow["nodes"] + notes, "edges": graph["edges"]}
 
 
 DEFAULT_IMPROVE = "make it complete and robust for real office use"

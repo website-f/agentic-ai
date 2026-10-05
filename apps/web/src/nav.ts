@@ -141,7 +141,7 @@ export const NAV: NavSection[] = [
     title: msg("Documents"),
     items: [
       { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
-      { to: "/files", label: msg("Files"), icon: FolderOpenIcon, blurb: msg("Certificates, statements, letters and photos the office keeps. Each one is read once (scans too) and summarised for agents.") },
+      { to: "/files", label: msg("Company files"), icon: FolderOpenIcon, blurb: msg("One place per company for all its documents. Drop a folder or a zip: it is kept in folders, read, sorted, and the how-to documents go to the library.") },
       { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },
       { to: "/documents", label: msg("Documents"), icon: FilesIcon, blurb: msg("Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.") },
       { to: "/packs", label: msg("Packs"), icon: PackageIcon, blurb: msg("Submission packs: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.") },

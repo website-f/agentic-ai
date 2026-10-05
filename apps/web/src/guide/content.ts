@@ -601,26 +601,65 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   files: {
-    purpose: "Certificates, statements, letters and photos the office keeps. Each one is read once (scans too) and summarised for agents.",
+    purpose: "Company files: one place per company for all its documents. Drop a whole folder or zip and its folders are kept, every file is read and sorted, and how-to documents go to the library for agents.",
     can: [
-      "Upload PDFs, Word, Excel, CSV and photos, up to 20 MB each.",
-      "See what was read from a file: a summary, key facts such as **Valid until**, and the full text agents read.",
-      "Spot files that are expired or expire within 60 days.",
-      "Move a file to a company, download, open or delete it.",
-      "Turn on **Use as a guideline (library)** so agents search it and cite the page.",
+      "Pick the company under **Company**, then drop files, whole folders or a .zip on the upload area.",
+      "Follow each upload as it is unpacked, read and sorted, then read its report: what was found, what went to the library and what was held back.",
+      "Browse the company's folders, search, filter by kind or department, or group the list **By kind** or **By department**.",
+      "Open a file to see a preview, its summary, kind, department and folder, and change any of them.",
+      "Download one file, a folder, everything for the company, or just the files you ticked, as a zip.",
+      "Turn a procedure into an SOP or a workflow with **Make an SOP** or **Build a workflow**.",
+      "Managers: **Release** a held-back file after checking it, or **Hold back** one yourself.",
     ],
     spots: {
-      "files.upload": "Drop files here, or choose them.",
-      "files.list": "Your files, with what was read from them and expiry warnings.",
+      "files.company": "The company these documents belong to. Uploads and downloads are for this company only.",
+      "files.upload": "Drop files, a whole folder or a zip here, or choose them.",
+      "files.report": "One upload: its progress, then its report with flagged files and AI suggestions.",
+      "files.tree": "The company's folders, with file counts and held-back files.",
+      "files.filters": "Search, and filter by department or kind.",
+      "files.list": "The files in the folder, with kind, department, status and library.",
+      "files.download-folder": "Download the folder you are in as a zip.",
+      "files.download-all": "Download every file this company has as a zip.",
       "files.library": "Make a file a guideline agents search and cite.",
     },
     howto: [
       {
-        title: "Upload a file",
+        title: "Company documents: where to upload",
         steps: [
-          s("Drop the file on the upload area, or click **Choose files**.", "files.upload"),
-          s("It shows **Reading…** while it is read. Scans are read too."),
-          s("Click the file to see what was read from it.", "files.list"),
+          s("Open **Company files** (under Documents) and pick the company under **Company**.", "files.company"),
+          s("What to upload: SOPs, guides, checklists, flowcharts, forms, templates, certificates and contracts. A whole zip of the company's documents is fine."),
+          s("Drop the zip, the files or a whole folder on the upload area, or click **Choose files** or **Choose a folder**.", "files.upload"),
+          s("Wait while it shows **Unpacking**, **Reading** and **Sorting**. You can leave the page; the work carries on."),
+          s("When it shows **Ready**, read the report: files by kind and department, how many went to the library, and what was held back.", "files.report"),
+        ],
+      },
+      {
+        title: "What happens to an upload by itself",
+        steps: [
+          s("Folders are kept as they were, so a file in TENDER/CARTA ALIR stays in that folder.", "files.tree"),
+          s("Every file is read (scans too), given a kind such as SOP, form or certificate, and matched to a department."),
+          s("How-to documents such as SOPs, guides and checklists go to the library, so agents search them and cite the page."),
+          s("Files with passwords or staff ID numbers are **Held back**: kept and downloadable, but agents cannot read them until a manager checks them and clicks **Release**."),
+        ],
+      },
+      {
+        title: "View or download a file, a folder or everything",
+        state: "sheet",
+        steps: [
+          s("Pick a folder on the left, or tap **Folders** on a phone.", "files.tree"),
+          s("Click a file to open it: a preview, what it is and where it sits. **Download** gives you the original.", "files.list"),
+          s("Click **Download folder** to get the folder you are in as a zip.", "files.download-folder"),
+          s("Click **Download everything** to get all of the company's files.", "files.download-all"),
+          s("To download a few, tick them and click **Download zip**."),
+        ],
+      },
+      {
+        title: "Turn a procedure into an SOP or a workflow",
+        state: "sheet",
+        steps: [
+          s("Open the document, or tick several that belong together."),
+          s("Click **Make an SOP** for written steps agents follow, or **Build a workflow** to run the job step by step."),
+          s("Check the draft before you save it. The upload report also lists **AI suggestions** you can start from."),
         ],
       },
       {
@@ -634,11 +673,12 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       },
     ],
     tips: [
+      "A held-back file never reaches agents until a manager releases it. The report says why in plain words and never shows the secret itself.",
       "Deleting a file shows it as missing in any pack that uses it.",
-      "Use the **Expiring or expired** tile to renew certificates in time.",
+      "Certificates show **Valid until**, so you can renew them in time.",
     ],
-    who: EVERYONE,
-    related: ["library", "packs", "documents"],
+    who: "Everyone can browse and download. Uploading and changing files needs a role that can create work; releasing held-back files needs a manager.",
+    related: ["library", "sops", "workflows", "packs"],
   },
 
   templates: {

@@ -51,6 +51,9 @@ export interface Workflow {
   created_at: string;
   steps: number;
   procedure: string;
+  /** P24: the uploaded documents an AI-built workflow was drafted from. */
+  source_file_ids?: string[];
+  source_files?: { id: string; name: string }[];
 }
 
 export const workflowKeys = { all: ["workflows"] as const };

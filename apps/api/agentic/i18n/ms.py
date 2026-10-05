@@ -340,6 +340,33 @@ MS: dict[str, str] = {
     "Files can be up to {mb} MB.": "Fail boleh sehingga {mb} MB.",
     "That file is empty.": "Fail itu kosong.",
     "Only uploads are re-read.": "Hanya fail yang dimuat naik boleh dibaca semula.",
+    # P24 company documents (routers/files.py, company_files.py, intake.py)
+    "That folder name is not valid.": "Nama folder itu tidak sah.",
+    "This file is held back for review: it contains passwords or personal data. Ask someone who manages files to release it.": (
+        "Fail ini ditahan untuk disemak: ia mengandungi kata laluan atau data peribadi. "
+        "Minta orang yang mengurus fail untuk melepaskannya."
+    ),
+    "Pick one of: {kinds}.": "Pilih salah satu: {kinds}.",
+    "Pick a department of this file's company.": "Pilih jabatan dalam syarikat fail ini.",
+    "There are no files here to download.": "Tiada fail di sini untuk dimuat turun.",
+    "That is {size} MB of files; one download can hold up to 1 GB. Download one folder at a time.": (
+        "Jumlah fail itu {size} MB; satu muat turun boleh memuatkan sehingga 1 GB. "
+        "Muat turun satu folder pada satu masa."
+    ),
+    "Only people who manage files can release a held-back file.": (
+        "Hanya orang yang mengurus fail boleh melepaskan fail yang ditahan."
+    ),
+    "This file is not held back.": "Fail ini tidak ditahan.",
+    "That upload is not here.": "Muat naik itu tiada di sini.",
+    "You can add documents to your company only.": (
+        "Anda hanya boleh menambah dokumen ke syarikat anda."
+    ),
+    "Pick a department of that company.": "Pilih jabatan dalam syarikat itu.",
+    "One upload can be up to {mb} MB. Split the zip into smaller ones.": (
+        "Satu muat naik boleh sehingga {mb} MB. Pecahkan zip itu kepada beberapa yang lebih kecil."
+    ),
+    "That zip file cannot be opened.": "Fail zip itu tidak boleh dibuka.",
+    "Company documents": "Dokumen syarikat",
     "That pack is not here.": "Pek itu tiada di sini.",
     "{label}: that file is not here.": "{label}: fail itu tiada di sini.",
     "{label}: that document is not here.": "{label}: dokumen itu tiada di sini.",
@@ -970,6 +997,26 @@ MS: dict[str, str] = {
     "Write the answer first.": "Tulis jawapan dahulu.",
     "That step is not waiting.": "Langkah itu tidak sedang menunggu.",
     "Only a failed step can be retried.": "Hanya langkah yang gagal boleh dicuba semula.",
+    # SOPs and workflows drafted from documents (P24: intake/builders.py, routers/builders.py)
+    "Pick at least one document.": "Pilih sekurang-kurangnya satu dokumen.",
+    "Pick documents from one workspace.": "Pilih dokumen daripada satu ruang kerja.",
+    "None of these documents can be used yet: they are still being read, could not be read, or are held for review.": "Belum ada dokumen ini yang boleh digunakan: masih dibaca, tidak dapat dibaca, atau ditahan untuk semakan.",
+    "Pick a department of this company.": "Pilih jabatan syarikat ini.",
+    "Pick a company from this workspace.": "Pilih syarikat daripada ruang kerja ini.",
+    "The model did not return a usable workflow. Try again.": "Model tidak memberi aliran kerja yang boleh digunakan. Cuba lagi.",
+    "Reading part {i} of {n}": "Membaca bahagian {i} daripada {n}",
+    "Putting the parts together": "Menggabungkan semua bahagian",
+    "Writing the SOP": "Menulis SOP",
+    "Drafting the workflow": "Menyediakan draf aliran kerja",
+    "Waiting to start": "Menunggu untuk bermula",
+    "The build failed on the server. Try again.": "Binaan gagal di pelayan. Cuba lagi.",
+    'These documents do not seem to describe "{focus}". Check the name, or pick other documents.': 'Dokumen ini nampaknya tidak menerangkan "{focus}". Semak nama itu, atau pilih dokumen lain.',
+    "{name} is held for review because it may hold passwords or personal data. Release it first.": "{name} ditahan untuk semakan kerana mungkin mengandungi kata laluan atau data peribadi. Lepaskan dahulu.",
+    "{name} is still being read. Try again in a minute.": "{name} masih dibaca. Cuba lagi sekejap lagi.",
+    "{name} could not be read, so it cannot be used.": "{name} tidak dapat dibaca, jadi tidak boleh digunakan.",
+    "That build is not here.": "Binaan itu tiada di sini.",
+    "That suggestion is not here.": "Cadangan itu tiada di sini.",
+    "This suggestion is built already. Delete the draft instead.": "Cadangan ini sudah dibina. Padamkan drafnya jika tidak diperlukan.",
     # Meeting minutes (routers/minutes.py)
     "You can file meeting minutes for your department only.": "Anda hanya boleh memfailkan minit mesyuarat untuk jabatan anda.",
     "You can file meeting minutes for your company only.": "Anda hanya boleh memfailkan minit mesyuarat untuk syarikat anda.",

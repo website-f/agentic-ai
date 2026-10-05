@@ -152,7 +152,9 @@ function WorkflowCard({ wf, onOpen }: { wf: Workflow; onOpen: () => void }) {
         {wf.agent_ids.length || wf.source === "analyst" ? (
           <div className="flex flex-wrap gap-1.5">
             {wf.agent_ids.length ? <Pill tone="accent">{wf.agent_ids.length === 1 ? t("1 agent follows") : t("{n} agents follow", { n: wf.agent_ids.length })}</Pill> : null}
-            {wf.source === "analyst" ? <Pill tone="info">{t("AI-drafted")}</Pill> : null}
+            {wf.source_file_ids?.length ? (
+              <Pill tone="info" title={wf.source_files?.map((f) => f.name).join(", ")}>{t("Built from documents")}</Pill>
+            ) : wf.source === "analyst" ? <Pill tone="info">{t("AI-drafted")}</Pill> : null}
           </div>
         ) : null}
       </button>

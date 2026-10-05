@@ -40,6 +40,8 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
         )
         if f is None or f.workspace_id != ctx.workspace.id:
             return f"Error: no such file {fid!r} for you."
+        if f.quarantined:  # P24: held back for review (passwords or personal data)
+            return f"Error: file {fid!r} is held back for review; a person must release it."
         files_in.append({"name": f.name, "b64": base64.b64encode(bytes(f.data)).decode()})
 
     payload = {"code": code, "files": files_in, "stdin": str(args.get("stdin") or "")}

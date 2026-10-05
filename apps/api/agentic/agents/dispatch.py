@@ -242,3 +242,33 @@ async def start_library_index(kind: str, target_id: str) -> None:
         id=f"library-{kind}-{target_id}-{datetime.now(UTC):%Y%m%d%H%M%S%f}",
         task_queue=settings.temporal_task_queue,
     )
+
+
+async def start_intake(batch_id: str) -> None:
+    """Read, scan and sort an upload of company documents on the worker (P24). A batch
+    already being read is poked, so it picks up the files just added."""
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from ..workflows.intake_workflows import IntakeWorkflow
+
+    client = await temporal_client()
+    workflow_id = f"intake-{batch_id}"
+    try:
+        await client.start_workflow(
+            IntakeWorkflow.run, batch_id, id=workflow_id, task_queue=settings.temporal_task_queue
+        )
+    except WorkflowAlreadyStartedError:
+        await client.get_workflow_handle(workflow_id).signal(IntakeWorkflow.poke)
+
+
+async def start_build(job_id: str) -> None:
+    """Build a draft SOP or workflow from long documents on the worker (P24)."""
+    from ..workflows.builder_workflows import BuildFromDocsWorkflow
+
+    client = await temporal_client()
+    await client.start_workflow(
+        BuildFromDocsWorkflow.run,
+        job_id,
+        id=f"build-{job_id}",
+        task_queue=settings.temporal_task_queue,
+    )

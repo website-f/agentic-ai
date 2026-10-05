@@ -348,7 +348,12 @@ async def find_sops(db: AsyncSession, agent: Agent, query: str, limit: int = 3) 
         by_sop.setdefault(h.source_id, []).append(h)
     if by_sop:
         found = {
-            s.id: s for s in (await db.scalars(select(SOP).where(SOP.id.in_(list(by_sop))))).all()
+            s.id: s
+            for s in (
+                await db.scalars(
+                    select(SOP).where(SOP.id.in_(list(by_sop)), SOP.status == "active")
+                )
+            ).all()
         }
         parts = []
         for sid, hs in list(by_sop.items())[:limit]:
@@ -373,7 +378,9 @@ async def find_sops(db: AsyncSession, agent: Agent, query: str, limit: int = 3) 
         (SOP.scope == "department") & (SOP.scope_id == agent.department_id),
     )
     rows = (
-        await db.scalars(select(SOP).where(SOP.workspace_id == agent.workspace_id, scope))
+        await db.scalars(
+            select(SOP).where(SOP.workspace_id == agent.workspace_id, SOP.status == "active", scope)
+        )
     ).all()
     scored = []
     for s in rows:

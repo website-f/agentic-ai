@@ -1318,3 +1318,8 @@ TOOLS.update({t.name: t for t in TASK_TOOLS})
 from .research_tools import RESEARCH_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in RESEARCH_TOOLS})
+
+# P24: what documents the agent's company has (folders, kinds, files; held-back ones counted).
+from .company_tools import COMPANY_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in COMPANY_TOOLS})

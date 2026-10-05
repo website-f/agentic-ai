@@ -292,6 +292,10 @@ class SOP(Timestamps, Base):
     body: Mapped[str] = mapped_column(Text, default="")
     version: Mapped[int] = mapped_column(Integer, default=1)
     updated_by: Mapped[str | None] = mapped_column(String(80))
+    # P24: "draft" SOPs (written by AI from an uploaded document) wait for a person and are
+    # never shown to agents; only "active" ones are.
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    source_file_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
 
 class Agent(Timestamps, Base):
@@ -1176,6 +1180,8 @@ class Workflow(Timestamps, Base):
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | analyst
     agent_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)  # agents that follow it
     created_by: Mapped[str] = mapped_column(String(80))
+    # P24: the uploaded documents an AI-built workflow was drafted from.
+    source_file_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
 
 # ---------------------------------------------------------------- Document Studio (P10)
@@ -1225,6 +1231,43 @@ class DocFile(Timestamps, Base):
         ForeignKey("departments.id", ondelete="SET NULL")
     )
     indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P24 company documents: the folder it sits in ("TENDER HQ/CARTA ALIR"), the
+    # upload (zip or batch) it came from and its path inside that upload.
+    folder: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    batch_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    source_path: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    # What a scan found: {"credentials": [...kinds], "personal_ids": n, "reviewed_by": ...}.
+    # A quarantined file is kept and downloadable by managers, but never indexed, shown to
+    # agents or put in the library until a person releases it.
+    sensitive: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    quarantined: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
+class IntakeBatch(Timestamps, Base):
+    """P24: one upload of company documents (a zip, or several files at once). Files are
+    unpacked into folders, read, sorted by kind and department, scanned for secrets and
+    personal data, and the AI suggests SOPs and workflows from the how-to documents."""
+
+    __tablename__ = "intake_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('unpacking', 'reading', 'sorting', 'ready', 'failed')",
+            name="ck_intake_batches_status",
+        ),
+        Index("ix_intake_batches_ws_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ib"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(16), default="unpacking")
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    # Counts by kind and department, flagged files, skipped entries, AI suggestions.
+    report: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    error: Mapped[str | None] = mapped_column(String(500))
+    created_by: Mapped[str] = mapped_column(String(80))
 
 
 class CompanyKit(Timestamps, Base):

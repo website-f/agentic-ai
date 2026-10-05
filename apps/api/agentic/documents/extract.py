@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -28,6 +29,8 @@ OCR_TIMEOUT = 90
 
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+MAX_SLIDE_XML = 5 * 1024 * 1024
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif")
 TEXT_EXT = (".txt", ".md", ".json", ".xml", ".html", ".htm", ".log")
 
@@ -54,6 +57,8 @@ def sniff(data: bytes, name: str, mime: str = "") -> str:
             return "docx"
         if b"xl/" in data[:2000]:
             return "xlsx"
+        if low.endswith(".pptx") or "presentationml" in mime or b"ppt/" in data[:2000]:
+            return "pptx"
         return "other"
     if data[:8] == b"\x89PNG\r\n\x1a\n" or data[:3] == b"\xff\xd8\xff" or low.endswith(IMAGE_EXT):
         return "image"
@@ -70,6 +75,7 @@ MIME = {
     "pdf": "application/pdf",
     "docx": DOCX,
     "xlsx": XLSX,
+    "pptx": PPTX,
     "csv": "text/csv",
     "text": "text/plain",
 }
@@ -145,31 +151,68 @@ def _table_md(rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+# PDFium is not thread-safe, and files are read in worker threads (several uploads at once):
+# only one thread may use it at a time, or two big PDFs can deadlock the worker. OCR, the slow
+# part, runs outside the lock on the pages already rendered.
+_PDFIUM = threading.Lock()
+# A page whose pictures cover this share of it is OCR'd even when it also has typed text.
+PICTURE_PAGE_SHARE = 0.2
+
+
+def _picture_share(pdfium: Any, page: Any) -> float:
+    """How much of the page its image objects cover (0..1), best effort."""
+    try:
+        width, height = page.get_size()
+        area = 0.0
+        for obj in page.get_objects(filter=[pdfium.raw.FPDF_PAGEOBJ_IMAGE], max_depth=2):
+            left, bottom, right, top = obj.get_bounds()
+            area += max(0.0, right - left) * max(0.0, top - bottom)
+        return min(1.0, area / (width * height)) if width and height else 0.0
+    except Exception:  # noqa: BLE001 - an odd page only loses the extra OCR
+        return 0.0
+
+
 def _pdf(data: bytes) -> Extracted:
     import pypdfium2 as pdfium
 
-    doc = pdfium.PdfDocument(data)
-    try:
-        total = len(doc)
-        parts: list[str] = []
-        ocr_used = 0
-        for i in range(min(total, MAX_PDF_PAGES)):
-            page = doc[i]
-            text = page.get_textpage().get_text_range().strip()
-            if len(text) < 25 and ocr_used < MAX_OCR_PAGES and ocr_available():
-                img = page.render(scale=2.2).to_pil()  # type: ignore[arg-type]
-                text = ocr_image(img) or text
-                ocr_used += 1
-            parts.append(f"[page {i + 1}]\n{text}")
-        note = ""
-        if total > MAX_PDF_PAGES:
-            note = f"Read the first {MAX_PDF_PAGES} of {total} pages."
-        joined = "\n\n".join(parts)
-        if len(re.sub(r"\[page \d+\]|\s", "", joined)) < 20 and not ocr_available():
-            note = "This looks like a scan, and OCR is not installed here, so no text was read."
-        return Extracted(joined, total, ocr_used > 0, note)
-    finally:
-        doc.close()
+    texts: list[str] = []
+    scans: dict[int, Any] = {}  # page index -> rendered image to OCR
+    pictures: set[int] = set()  # pages with text AND a large picture (a scanned sample)
+    with _PDFIUM:
+        doc = pdfium.PdfDocument(data)
+        try:
+            total = len(doc)
+            want_ocr = ocr_available()
+            for i in range(min(total, MAX_PDF_PAGES)):
+                page = doc[i]
+                text = page.get_textpage().get_text_range().strip()
+                if want_ocr and len(scans) < MAX_OCR_PAGES:
+                    if len(text) < 25:
+                        scans[i] = page.render(scale=2.2).to_pil()  # type: ignore[arg-type]
+                    elif _picture_share(pdfium, page) >= PICTURE_PAGE_SHARE:
+                        # A typed page around a pasted scan (a sample letter, a form, a
+                        # screenshot): read the picture too, or what it shows (names, IC
+                        # numbers) is invisible to the search and the sensitive-data scan.
+                        scans[i] = page.render(scale=2.2).to_pil()  # type: ignore[arg-type]
+                        pictures.add(i)
+                texts.append(text)
+        finally:
+            doc.close()
+    for i, img in scans.items():
+        read = ocr_image(img)
+        if i in pictures:
+            if read:
+                texts[i] = f"{texts[i]}\n\n[picture on this page]\n{read}"
+        else:
+            texts[i] = read or texts[i]
+    parts = [f"[page {i + 1}]\n{t}" for i, t in enumerate(texts)]
+    note = ""
+    if total > MAX_PDF_PAGES:
+        note = f"Read the first {MAX_PDF_PAGES} of {total} pages."
+    joined = "\n\n".join(parts)
+    if len(re.sub(r"\[page \d+\]|\s", "", joined)) < 20 and not ocr_available():
+        note = "This looks like a scan, and OCR is not installed here, so no text was read."
+    return Extracted(joined, total, bool(scans), note)
 
 
 def _docx(data: bytes) -> Extracted:
@@ -212,6 +255,35 @@ def _xlsx(data: bytes) -> Extracted:
     return Extracted("\n\n".join(out), len(wb.sheetnames), False)
 
 
+_SLIDE = re.compile(r"ppt/slides/slide(\d+)\.xml$")
+_PARA = re.compile(r"<a:p[ >].*?</a:p>", re.S)
+_RUN = re.compile(r"<a:t>([^<]*)</a:t>")
+
+
+def _pptx(data: bytes) -> Extracted:
+    """Slide text, one [page N] per slide (P24). Read with plain patterns, not an XML
+    parser, so a hostile file cannot expand entities."""
+    import html
+    import zipfile
+
+    out: list[str] = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        slides = sorted(
+            (int(m.group(1)), i)
+            for i in z.infolist()
+            if (m := _SLIDE.search(i.filename)) and i.file_size <= MAX_SLIDE_XML
+        )
+        for n, info in slides[:MAX_PDF_PAGES]:
+            xml = z.read(info).decode("utf-8", errors="replace")
+            lines = []
+            for para in _PARA.findall(xml):
+                text = "".join(html.unescape(t) for t in _RUN.findall(para)).strip()
+                if text:
+                    lines.append(text)
+            out.append(f"[page {n}]\n" + "\n".join(lines))
+    return Extracted("\n\n".join(out), len(slides), False)
+
+
 def _csv(data: bytes) -> Extracted:
     text = data.decode("utf-8-sig", errors="replace")
     rows = list(csv.reader(io.StringIO(text)))[:MAX_ROWS]
@@ -235,6 +307,8 @@ def extract(data: bytes, name: str, mime: str = "") -> Extracted:
         out = _docx(data)
     elif kind == "xlsx":
         out = _xlsx(data)
+    elif kind == "pptx":
+        out = _pptx(data)
     elif kind == "csv":
         out = _csv(data)
     elif kind == "image":
@@ -291,6 +365,9 @@ def parse_understanding(raw: str) -> dict[str, Any]:
         "summary": str(data.get("summary") or "")[:1000],
         "fields": {str(k)[:60]: str(v)[:300] for k, v in list(fields.items())[:12]},
         "expires_on": None,
+        # P24 intake asks for these too (intake/sort.py HINT); "" when not asked.
+        "category": str(data.get("category") or "")[:40],
+        "department": str(data.get("department") or "")[:120],
     }
     exp = str(data.get("expires_on") or "").strip()[:10]
     try:

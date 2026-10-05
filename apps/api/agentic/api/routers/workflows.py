@@ -3,7 +3,6 @@ analyst agent drafts the graph. Attaching a workflow to agents layers its compil
 into their prompt, like an SOP — guidance they follow, not an automation that runs by itself.
 """
 
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...engine import gateway
+from ...intake.builders import file_names
 from ...models import Agent, Workflow, WorkflowRun
 from ...services import audit, events
 from ...workflows.procedure import (
@@ -20,30 +20,15 @@ from ...workflows.procedure import (
     clean_graph,
     compile_text,
     draft_prompt,
-    layout,
+    lay_out_draft,
+    loads_lenient,
     revise_prompt,
+    tidy_draft,
 )
 from ..deps import Principal, api_error, require
 from .agents import manage_perm
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
-
-
-def _loads_lenient(text: str) -> dict[str, Any] | None:
-    """Parse the draft JSON; if it was cut off mid-stream, recover the complete prefix."""
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except ValueError:
-        pass
-    for end in range(len(text), 1, -1):  # trim back to the last point that parses
-        if text[end - 1] in "}]":
-            for close in ("", "}", "]}", "}]}"):
-                try:
-                    return json.loads(text[:end] + close)
-                except ValueError:
-                    continue
-    return None
 
 
 class WorkflowIn(BaseModel):
@@ -68,10 +53,15 @@ class WorkflowOut(BaseModel):
     created_at: Any
     steps: int
     procedure: str
+    # P24: the uploaded documents an AI-built workflow was drafted from, with their names
+    # (a removed file drops out of source_files).
+    source_file_ids: list[str] = Field(default_factory=list)
+    source_files: list[dict[str, str]] = Field(default_factory=list)
 
 
-def _out(wf: Workflow) -> WorkflowOut:
+def _out(wf: Workflow, names: dict[str, str] | None = None) -> WorkflowOut:
     graph = clean_graph(wf.graph or {})
+    ids = list(wf.source_file_ids or [])
     return WorkflowOut(
         id=wf.id,
         name=wf.name,
@@ -85,7 +75,14 @@ def _out(wf: Workflow) -> WorkflowOut:
         created_at=wf.created_at,
         steps=len(graph["nodes"]),
         procedure=compile_text(wf.name, graph),
+        source_file_ids=ids,
+        source_files=[{"id": i, "name": names[i]} for i in ids if names and i in names],
     )
+
+
+async def out(db: AsyncSession, wf: Workflow) -> WorkflowOut:
+    """One workflow with the names of its source documents."""
+    return _out(wf, await file_names(db, wf.workspace_id, list(wf.source_file_ids or [])))
 
 
 async def _get(db: AsyncSession, ws: str, workflow_id: str) -> Workflow:
@@ -123,7 +120,10 @@ async def list_workflows(
             .order_by(Workflow.name)
         )
     ).all()
-    return [_out(wf) for wf in rows]
+    names = await file_names(
+        db, principal.workspace_id, [i for wf in rows for i in (wf.source_file_ids or [])]
+    )
+    return [_out(wf, names) for wf in rows]
 
 
 @router.get("/{workflow_id}")
@@ -132,7 +132,7 @@ async def read_workflow(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowOut:
-    return _out(await _get(db, principal.workspace_id, workflow_id))
+    return await out(db, await _get(db, principal.workspace_id, workflow_id))
 
 
 async def _name_taken(db: AsyncSession, ws: str, name: str, exclude: str = "") -> bool:
@@ -172,7 +172,7 @@ async def create_workflow(
     )
     await db.commit()
     await db.refresh(wf)
-    return _out(wf)
+    return await out(db, wf)
 
 
 @router.patch("/{workflow_id}")
@@ -204,7 +204,7 @@ async def update_workflow(
     await db.refresh(wf)
     for aid in wf.agent_ids:
         await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": aid, "name": ""})
-    return _out(wf)
+    return await out(db, wf)
 
 
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -287,7 +287,7 @@ async def draft_workflow(
         )
     except gateway.GatewayUnavailable as e:
         raise api_error(status.HTTP_502_BAD_GATEWAY, "no_model_available", str(e)) from e
-    raw = _loads_lenient(r.content or "")
+    raw = loads_lenient(r.content or "")
     if raw is None:
         raise api_error(
             status.HTTP_502_BAD_GATEWAY,
@@ -299,19 +299,9 @@ async def draft_workflow(
         raise api_error(
             status.HTTP_502_BAD_GATEWAY, "empty_draft", "The draft had no steps. Try rephrasing."
         )
-    # Only a decision's branches carry labels; models like to write "next" on every arrow.
-    deciders = {n["id"] for n in graph["nodes"] if n["type"] == "decision"}
-    for e in graph["edges"]:
-        if e["from"] not in deciders:
-            e["label"] = ""
-    if not graph["edges"] and len(graph["nodes"]) > 1:
-        # A reply cut off before its connections: link the steps in order so the draft is
-        # usable; people fix the branches on the board.
-        flow = [n for n in graph["nodes"] if n["type"] != "note"]
-        graph["edges"] = [
-            {"id": f"e{i}", "from": a["id"], "to": b["id"], "label": ""}
-            for i, (a, b) in enumerate(zip(flow, flow[1:], strict=False), 1)
-        ]
+    # Labels only on decisions; a reply cut off before its connections is linked in order
+    # so the draft is usable (people fix the branches on the board).
+    tidy_draft(graph)
     if improving:  # keep what people set on steps the model kept (agents, review, places)
         old = {n["id"]: n for n in clean_graph(body.graph)["nodes"]}
         for n in graph["nodes"]:
@@ -322,8 +312,4 @@ async def draft_workflow(
         keep = [n for n in old.values() if n["type"] == "note"]
         graph["nodes"] += [n for n in keep if n["id"] not in {m["id"] for m in graph["nodes"]}]
     # Lay it out top to bottom so it reads like a flowchart before the person edits it.
-    notes = [n for n in graph["nodes"] if n["type"] == "note"]
-    flow = layout(
-        {"nodes": [n for n in graph["nodes"] if n["type"] != "note"], "edges": graph["edges"]}
-    )
-    return DraftOut(graph={"nodes": flow["nodes"] + notes, "edges": graph["edges"]})
+    return DraftOut(graph=lay_out_draft(graph))

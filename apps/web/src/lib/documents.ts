@@ -44,6 +44,24 @@ export interface DocFile {
   created_at: string;
   text?: string | null;
   text_length?: number | null;
+  // P24 company documents (optional until every server has them).
+  /** The folder it sits in, e.g. "TENDER HQ/CARTA ALIR"; "" at the top. */
+  folder?: string;
+  /** Its path inside the zip or folder it was uploaded in. */
+  source_path?: string;
+  batch_id?: string | null;
+  /** What the scan found (kinds of secret only, never the values). */
+  sensitive?: FileSensitive | null;
+  /** Held back: kept, but agents never read it until a manager releases it. */
+  quarantined?: boolean;
+}
+
+export interface FileSensitive {
+  credentials?: string[];
+  personal_ids?: number;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  reason?: string | null;
 }
 
 export const MAX_UPLOAD_MB = 20;

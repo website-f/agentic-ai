@@ -1,4 +1,9 @@
-"""SOPs: the written procedures agents follow. Versioned on every edit."""
+"""SOPs: the written procedures agents follow. Versioned on every edit.
+
+P24: an SOP the AI wrote from uploaded documents starts as a "draft". Agents never see a
+draft (prompt, find_sop, library search); a person with org.manage approves it by setting
+status to "active" (audited as sop.approved).
+"""
 
 import logging
 
@@ -7,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
+from ...intake.builders import file_names
 from ...knowledge import indexer
 from ...models import SOP, Agent, Branch, Department
 from ...services import audit
@@ -32,7 +38,10 @@ async def _label(db: AsyncSession, s: SOP) -> str:
     return s.scope
 
 
-async def _out(db: AsyncSession, s: SOP) -> SOPOut:
+async def _out(db: AsyncSession, s: SOP, names: dict[str, str] | None = None) -> SOPOut:
+    ids = list(s.source_file_ids or [])
+    if names is None:
+        names = await file_names(db, s.workspace_id, ids)
     return SOPOut(
         id=s.id,
         scope=s.scope,
@@ -43,7 +52,14 @@ async def _out(db: AsyncSession, s: SOP) -> SOPOut:
         version=s.version,
         updated_by=s.updated_by,
         updated_at=s.updated_at,
+        status=s.status,
+        source_file_ids=ids,
+        source_files=[{"id": i, "name": names[i]} for i in ids if i in names],
     )
+
+
+async def sop_out(db: AsyncSession, s: SOP) -> SOPOut:
+    return await _out(db, s)
 
 
 async def _index(db: AsyncSession, sop_id: str) -> None:
@@ -73,7 +89,10 @@ async def list_sops(
             .order_by(SOP.scope, SOP.title)
         )
     ).all()
-    return [await _out(db, s) for s in rows]
+    names = await file_names(
+        db, principal.workspace_id, [i for s in rows for i in (s.source_file_ids or [])]
+    )
+    return [await _out(db, s, names) for s in rows]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -100,6 +119,7 @@ async def create_sop(
         title=body.title.strip(),
         body=body.body,
         updated_by=principal.actor,
+        status=body.status,
     )
     db.add(s)
     await db.flush()
@@ -109,7 +129,7 @@ async def create_sop(
         principal.actor,
         "sop.created",
         target=s.id,
-        after={"title": s.title, "scope": s.scope},
+        after={"title": s.title, "scope": s.scope, "status": s.status},
     )
     await db.commit()
     await _index(db, s.id)
@@ -125,13 +145,26 @@ async def update_sop(
     db: AsyncSession = Depends(get_db),
 ) -> SOPOut:
     s = await _get(db, principal.workspace_id, sop_id)
-    before = {"title": s.title, "version": s.version}
+    before = {"title": s.title, "version": s.version, "status": s.status}
     if body.title is not None:
         s.title = body.title.strip()
     if body.body is not None and body.body != s.body:
         s.body = body.body
         s.version += 1
     s.updated_by = principal.actor
+    after = {"title": s.title, "version": s.version, "status": s.status}
+    if body.status is not None and body.status != s.status:
+        s.status = after["status"] = body.status
+        # Approving an AI draft is its own audit entry: from now on agents follow it.
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "sop.approved" if body.status == "active" else "sop.unpublished",
+            target=s.id,
+            before={"status": before["status"]},
+            after={"status": s.status, "title": s.title, "version": s.version},
+        )
     await audit.record(
         db,
         principal.workspace_id,
@@ -139,7 +172,7 @@ async def update_sop(
         "sop.updated",
         target=s.id,
         before=before,
-        after={"title": s.title, "version": s.version},
+        after=after,
     )
     await db.commit()
     await _index(db, s.id)

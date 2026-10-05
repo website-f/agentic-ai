@@ -47,6 +47,12 @@ async def _doc(ctx: ToolContext, doc_id: str) -> Document | None:
     return d
 
 
+HELD_BACK = (
+    "Error: {name} is held back for review: it contains passwords or personal data. A "
+    "person who manages files must release it before agents can read it."
+)
+
+
 def _checks_text(r: service.Rendered) -> str:
     if not r.checks:
         return "Checks: all clear."
@@ -80,11 +86,20 @@ async def _list_files(ctx: ToolContext, args: dict[str, Any]) -> str:
             )
         )
     rows = (await ctx.db.scalars(q.order_by(DocFile.created_at.desc()).limit(30))).all()
+    held = sum(1 for f in rows if f.quarantined)  # P24: listed as a count, never by name
+    rows = [f for f in rows if not f.quarantined]
+    note = (
+        f"\n{held} file(s) held back for review (contain passwords or personal data)."
+        if held
+        else ""
+    )
     if not rows:
-        return "No files found." + (" Try a broader query." if text else "")
+        return "No files found." + (" Try a broader query." if text else "") + note
     today = service.today_in(ctx.workspace.timezone)
-    return "Files (use read_file with the id):\n" + "\n".join(
-        service.file_line(f, today) for f in rows
+    return (
+        "Files (use read_file with the id):\n"
+        + "\n".join(service.file_line(f, today) for f in rows)
+        + note
     )
 
 
@@ -105,6 +120,8 @@ async def _read_file(ctx: ToolContext, args: dict[str, Any]) -> str:
     f = await _file(ctx, str(args.get("file_id") or ""))
     if f is None:
         return "Error: no such file for you. Use list_files to see the ids."
+    if f.quarantined:
+        return HELD_BACK.format(name="This file")
     if f.status == "reading":
         return f"{f.name} is still being read. Try again in a minute."
     text = await ctx.db.scalar(select(DocFile.text).where(DocFile.id == f.id)) or ""
@@ -340,6 +357,8 @@ async def _view_image(ctx: ToolContext, args: dict[str, Any]) -> str:
     f = await _file(ctx, str(args.get("file_id") or ""))
     if f is None:
         return "Error: no such file for you. Use list_files to see the ids."
+    if f.quarantined:
+        return HELD_BACK.format(name="This file")
     if not f.mime.startswith("image/"):
         return f"Error: {f.name} is not an image. Use read_file for documents."
     full = await ctx.db.scalar(

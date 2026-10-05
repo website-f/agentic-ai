@@ -406,7 +406,9 @@ async def auto_sops(db: AsyncSession, workspace_id: str, home: Home) -> list[dic
         scopes.append(("department", home.department.id, home.department.name))
     out: list[dict[str, str]] = []
     for scope, scope_id, label in scopes:
-        q = select(SOP).where(SOP.workspace_id == workspace_id, SOP.scope == scope)
+        q = select(SOP).where(
+            SOP.workspace_id == workspace_id, SOP.scope == scope, SOP.status == "active"
+        )
         q = q.where(SOP.scope_id.is_(None) if scope_id is None else SOP.scope_id == scope_id)
         for s in (await db.scalars(q.order_by(SOP.title).limit(20))).all():
             out.append({"id": s.id, "title": s.title, "scope": scope, "scope_label": label})

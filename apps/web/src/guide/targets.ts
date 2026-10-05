@@ -102,9 +102,13 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("company-kit.fields", "Company facts"), t("company-kit.save", "Save")],
   },
   {
-    id: "files", route: "/files", title: "Files", group: "Documents",
-    states: [{ key: "sheet", how: "Click a file: what was read from it" }],
-    targets: [t("files.upload", "Upload"), t("files.list", "Files"), t("files.library", "Use as a guideline")],
+    id: "files", route: "/files", title: "Company files", group: "Documents",
+    states: [{ key: "sheet", how: "Click a file: its preview and what was read from it" }],
+    targets: [
+      t("files.company", "Pick the company"), t("files.upload", "Upload files, folders or a zip"), t("files.report", "Upload report"),
+      t("files.tree", "Folders"), t("files.filters", "Search and filters"), t("files.list", "Files"),
+      t("files.download-folder", "Download a folder"), t("files.download-all", "Download everything"), t("files.library", "Use as a guideline"),
+    ],
   },
   {
     id: "templates", route: "/templates", title: "Templates", group: "Documents", states: [],

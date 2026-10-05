@@ -562,26 +562,65 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   files: {
-    purpose: "Sijil, penyata, surat dan foto yang disimpan oleh pejabat. Setiap fail dibaca sekali (termasuk imbasan) dan diringkaskan untuk ejen.",
+    purpose: "Fail syarikat: satu tempat bagi setiap syarikat untuk semua dokumennya. Lepaskan seluruh folder atau zip dan foldernya dikekalkan, setiap fail dibaca dan diisih, dan dokumen cara kerja masuk ke perpustakaan untuk ejen.",
     can: [
-      "Muat naik PDF, Word, Excel, CSV dan foto, sehingga 20 MB setiap satu.",
-      "Lihat apa yang dibaca daripada fail: ringkasan, fakta utama seperti **Sah sehingga**, dan teks penuh yang dibaca ejen.",
-      "Kenal pasti fail yang sudah tamat tempoh atau akan tamat dalam 60 hari.",
-      "Pindahkan fail ke sebuah syarikat, muat turun, buka atau padam.",
-      "Hidupkan **Guna sebagai garis panduan (perpustakaan)** supaya ejen mencarinya dan memetik halamannya.",
+      "Pilih syarikat di **Syarikat**, kemudian lepaskan fail, seluruh folder atau .zip di ruang muat naik.",
+      "Ikuti setiap muat naik semasa ia dibuka, dibaca dan diisih, kemudian baca laporannya: apa yang ditemui, apa yang masuk perpustakaan dan apa yang ditahan.",
+      "Semak imbas folder syarikat, cari, tapis ikut jenis atau jabatan, atau kumpulkan senarai **Ikut jenis** atau **Ikut jabatan**.",
+      "Buka fail untuk melihat pratonton, ringkasan, jenis, jabatan dan foldernya, dan ubah mana-mana yang perlu.",
+      "Muat turun satu fail, satu folder, semua fail syarikat, atau fail yang anda tandakan sahaja, sebagai zip.",
+      "Jadikan prosedur sebagai SOP atau aliran kerja dengan **Jadikan SOP** atau **Bina aliran kerja**.",
+      "Pengurus: **Lepaskan** fail yang ditahan selepas menyemaknya, atau **Tahan** sendiri mana-mana fail.",
     ],
     spots: {
-      "files.upload": "Lepaskan fail di sini, atau pilih fail.",
-      "files.list": "Fail anda, dengan apa yang dibaca daripadanya dan amaran tamat tempoh.",
+      "files.company": "Syarikat yang memiliki dokumen ini. Muat naik dan muat turun untuk syarikat ini sahaja.",
+      "files.upload": "Lepaskan fail, seluruh folder atau zip di sini, atau pilih sendiri.",
+      "files.report": "Satu muat naik: kemajuannya, kemudian laporannya dengan fail yang ditanda dan cadangan AI.",
+      "files.tree": "Folder syarikat, dengan bilangan fail dan fail yang ditahan.",
+      "files.filters": "Cari, dan tapis ikut jabatan atau jenis.",
+      "files.list": "Fail dalam folder itu, dengan jenis, jabatan, status dan perpustakaan.",
+      "files.download-folder": "Muat turun folder semasa sebagai zip.",
+      "files.download-all": "Muat turun semua fail syarikat ini sebagai zip.",
       "files.library": "Jadikan fail sebagai garis panduan yang dicari dan dipetik oleh ejen.",
     },
     howto: [
       {
-        title: "Muat naik fail",
+        title: "Dokumen syarikat: di mana hendak muat naik",
         steps: [
-          s("Lepaskan fail di ruang muat naik, atau klik **Pilih fail**.", "files.upload"),
-          s("Status fail menunjukkan **Sedang dibaca…** semasa ia diproses. Imbasan juga boleh dibaca."),
-          s("Klik fail untuk melihat apa yang dibaca daripadanya.", "files.list"),
+          s("Buka **Fail syarikat** (di bawah Dokumen) dan pilih syarikat di **Syarikat**.", "files.company"),
+          s("Apa yang perlu dimuat naik: SOP, panduan, senarai semak, carta alir, borang, templat, sijil dan kontrak. Satu zip penuh dokumen syarikat pun boleh."),
+          s("Lepaskan zip, fail atau seluruh folder di ruang muat naik, atau klik **Pilih fail** atau **Pilih folder**.", "files.upload"),
+          s("Tunggu semasa ia menunjukkan **Membuka**, **Membaca** dan **Mengisih**. Anda boleh tinggalkan halaman ini; kerja itu tetap berjalan."),
+          s("Apabila ia menunjukkan **Sedia**, baca laporannya: fail ikut jenis dan jabatan, berapa yang masuk perpustakaan, dan apa yang ditahan.", "files.report"),
+        ],
+      },
+      {
+        title: "Apa yang berlaku pada muat naik dengan sendirinya",
+        steps: [
+          s("Folder dikekalkan seperti asal, jadi fail dalam TENDER/CARTA ALIR kekal dalam folder itu.", "files.tree"),
+          s("Setiap fail dibaca (termasuk imbasan), diberi jenis seperti SOP, borang atau sijil, dan dipadankan dengan jabatan."),
+          s("Dokumen cara kerja seperti SOP, panduan dan senarai semak masuk ke perpustakaan, supaya ejen mencarinya dan memetik halamannya."),
+          s("Fail yang ada kata laluan atau nombor IC kakitangan akan **Ditahan**: disimpan dan boleh dimuat turun, tetapi ejen tidak boleh membacanya sehingga pengurus menyemaknya dan klik **Lepaskan**."),
+        ],
+      },
+      {
+        title: "Lihat atau muat turun satu fail, satu folder atau semuanya",
+        state: "sheet",
+        steps: [
+          s("Pilih folder di sebelah kiri, atau ketik **Folder** pada telefon.", "files.tree"),
+          s("Klik fail untuk membukanya: pratonton, apa fail itu dan di mana letaknya. **Muat turun** memberi anda fail asal.", "files.list"),
+          s("Klik **Muat turun folder** untuk mendapatkan folder semasa sebagai zip.", "files.download-folder"),
+          s("Klik **Muat turun semuanya** untuk mendapatkan semua fail syarikat.", "files.download-all"),
+          s("Untuk memuat turun beberapa fail, tandakan fail itu dan klik **Muat turun zip**."),
+        ],
+      },
+      {
+        title: "Jadikan prosedur sebagai SOP atau aliran kerja",
+        state: "sheet",
+        steps: [
+          s("Buka dokumen itu, atau tandakan beberapa dokumen yang berkaitan."),
+          s("Klik **Jadikan SOP** untuk langkah bertulis yang diikut ejen, atau **Bina aliran kerja** untuk menjalankan kerja itu langkah demi langkah."),
+          s("Semak draf sebelum menyimpannya. Laporan muat naik juga menyenaraikan **Cadangan AI** yang boleh anda jadikan titik mula."),
         ],
       },
       {
@@ -595,11 +634,12 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       },
     ],
     tips: [
+      "Fail yang ditahan tidak sampai kepada ejen sehingga pengurus melepaskannya. Laporan menerangkan sebabnya dengan mudah dan tidak sekali-kali menunjukkan rahsia itu.",
       "Jika fail dipadam, pek yang menggunakannya akan menunjukkan fail itu sebagai hilang.",
-      "Guna jubin **Hampir atau sudah tamat tempoh** untuk memperbaharui sijil tepat pada masanya.",
+      "Sijil menunjukkan **Sah sehingga**, supaya anda boleh memperbaharuinya tepat pada masanya.",
     ],
-    who: EVERYONE,
-    related: ["library", "packs", "documents"],
+    who: "Semua boleh menyemak imbas dan memuat turun. Memuat naik dan mengubah fail memerlukan peranan yang boleh mencipta kerja; melepaskan fail yang ditahan memerlukan pengurus.",
+    related: ["library", "sops", "workflows", "packs"],
   },
 
   templates: {

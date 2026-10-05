@@ -125,11 +125,15 @@ class SOPIn(BaseModel):
     scope_id: str | None = None
     title: str = Field(min_length=1, max_length=160)
     body: str = Field(default="", max_length=40_000)
+    # P24: SOPs people write are active at once; AI-written ones start as drafts.
+    status: Literal["active", "draft"] = "active"
 
 
 class SOPUpdateIn(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     body: str | None = Field(default=None, max_length=40_000)
+    # draft -> active approves an AI-written SOP (agents follow it from then on).
+    status: Literal["active", "draft"] | None = None
 
 
 class SOPOut(BaseModel):
@@ -142,6 +146,11 @@ class SOPOut(BaseModel):
     version: int
     updated_by: str | None
     updated_at: datetime
+    # P24: "draft" SOPs are never shown to agents; source files are the documents an
+    # AI-written SOP came from ({"id", "name"}; a removed file drops out).
+    status: str = "active"
+    source_file_ids: list[str] = Field(default_factory=list)
+    source_files: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ChatIn(BaseModel):

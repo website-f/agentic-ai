@@ -648,6 +648,12 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
             <span className={cn("inline-flex shrink-0 items-center gap-1", active ? "text-ok" : "")}><span className={cn("size-1.5 rounded-full", active ? "bg-ok" : "bg-border")} />{active ? t("Active") : t("Draft")}</span>
             <span>·</span>
             <span className={cn("truncate", dirty && "text-warn")}>{dirty ? t("Unsaved changes") : existing ? t("All saved") : t("Not saved yet")}</span>
+            {existing?.source_files?.length ? (
+              <>
+                <span className="hidden sm:inline">·</span>
+                <span className="hidden truncate text-info sm:inline" title={t("Built from: {names}", { names: existing.source_files.map((f) => f.name).join(", ") })}>{t("Built from documents")}</span>
+              </>
+            ) : null}
           </div>
         </div>
 

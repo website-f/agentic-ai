@@ -106,9 +106,10 @@ async def index_file(db: AsyncSession, file_id: str) -> int:
         await remove(db, "file", file_id)
         await db.commit()
         return 0
-    if not f.library or f.status != "ready":
+    if not f.library or f.status != "ready" or f.quarantined:
+        # P24: a quarantined file (passwords, staff IC numbers) is never searchable.
         await remove(db, "file", file_id)
-        if not f.library:
+        if not f.library or f.quarantined:
             f.indexed_at = None
         await db.commit()
         return 0
@@ -140,10 +141,11 @@ async def sop_scope(db: AsyncSession, s: SOP) -> tuple[str | None, str | None]:
 
 
 async def index_sop(db: AsyncSession, sop_id: str) -> int:
-    """(Re)build an SOP's passages, or drop them when it is gone. Commits."""
+    """(Re)build an SOP's passages, or drop them when it is gone or a draft (P24: agents
+    never find a draft SOP). Commits."""
     await _lock(db, "sop", sop_id)
     s = await db.get(SOP, sop_id)
-    if s is None:
+    if s is None or s.status != "active":
         await remove(db, "sop", sop_id)
         await db.commit()
         return 0
@@ -174,7 +176,13 @@ async def reindex_workspace(db: AsyncSession, workspace_id: str) -> dict[str, in
             )
         ).all()
     )
-    sop_ids = list((await db.scalars(select(SOP.id).where(SOP.workspace_id == workspace_id))).all())
+    sop_ids = list(
+        (
+            await db.scalars(
+                select(SOP.id).where(SOP.workspace_id == workspace_id, SOP.status == "active")
+            )
+        ).all()
+    )
     stale = select(KnowledgeChunk.source_kind, KnowledgeChunk.source_id).where(
         KnowledgeChunk.workspace_id == workspace_id
     )

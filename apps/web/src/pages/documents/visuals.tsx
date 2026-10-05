@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import {
-  CaretRightIcon, EnvelopeSimpleIcon, FileCsvIcon, FileDocIcon, FileIcon, FilePdfIcon, FileTextIcon, FileXlsIcon, IdentificationBadgeIcon,
+  BookOpenTextIcon, CaretRightIcon, CertificateIcon, ChartBarIcon, ClipboardTextIcon, CoinsIcon, FlowArrowIcon, HandshakeIcon, ListChecksIcon,
+  NotePencilIcon, ScalesIcon, StackIcon, EnvelopeSimpleIcon, FileCsvIcon, FileDocIcon, FileIcon, FilePdfIcon, FileTextIcon, FileXlsIcon, IdentificationBadgeIcon,
   ImageIcon, InvoiceIcon, NotebookIcon, PresentationChartIcon, ReceiptIcon, TruckIcon, type Icon,
 } from "@phosphor-icons/react";
 
@@ -18,6 +19,18 @@ const KIND: Record<string, { icon: Icon; tone: Tone }> = {
   minutes: { icon: NotebookIcon, tone: "pink" },
   profile: { icon: IdentificationBadgeIcon, tone: "ok" },
   delivery: { icon: TruckIcon, tone: "warn" },
+  // P24 company documents: the kinds an upload is sorted into.
+  sop: { icon: ClipboardTextIcon, tone: "accent" },
+  guide: { icon: BookOpenTextIcon, tone: "info" },
+  checklist: { icon: ListChecksIcon, tone: "ok" },
+  flowchart: { icon: FlowArrowIcon, tone: "violet" },
+  form: { icon: NotePencilIcon, tone: "orange" },
+  template: { icon: StackIcon, tone: "neutral" },
+  policy: { icon: ScalesIcon, tone: "info" },
+  contract: { icon: HandshakeIcon, tone: "pink" },
+  certificate: { icon: CertificateIcon, tone: "warn" },
+  report: { icon: ChartBarIcon, tone: "ok" },
+  financial: { icon: CoinsIcon, tone: "orange" },
 };
 
 export function kindVisual(kind: string | null | undefined): { icon: Icon; tone: Tone } {

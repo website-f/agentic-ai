@@ -61,6 +61,7 @@ async def database():
 
 
 TABLES = (
+    "intake_batches",
     "task_blockers",
     "objectives",
     "credential_states",

@@ -1,6 +1,6 @@
-import { BookBookmarkIcon, BuildingsIcon, FileTextIcon, GlobeHemisphereEastIcon, PlusIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { BookBookmarkIcon, BuildingsIcon, CheckCircleIcon, FileTextIcon, GlobeHemisphereEastIcon, PencilSimpleIcon, PlusIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Field, FormError } from "@/components/ui/field";
+import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -73,6 +74,16 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
     },
   });
   const needsTarget = !sop && (scope === "branch" || scope === "department") && !scopeId;
+  // P24: an AI-written draft waits for a person; approving saves any edits too.
+  const isDraft = sop?.status === "draft";
+  const approve = useMutation({
+    mutationFn: () => api<SOP>(`/api/sops/${sop!.id}`, "PATCH", { title, body, status: "active" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: workKeys.sops });
+      toast.success(tr("Approved. Agents in scope follow it from their next step."));
+      onOpenChange(false);
+    },
+  });
 
   return (
     <SideSheet
@@ -82,14 +93,32 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
       description={sop ? `${sop.scope_label} · ${t("version {n}", { n: sop.version })} · ${t("updated {when}", { when: timeAgo(sop.updated_at).toLowerCase() })}` : t("Agents read SOPs before every step, so they follow them without being reminded.")}
       actions={canManage ? (
         <>
-          <Button size="sm" loading={save.isPending} disabled={!title.trim() || needsTarget} onClick={() => save.mutate()}>
-            {sop ? t("Save new version") : t("Create SOP")}
+          {isDraft ? (
+            <>
+              <Button size="sm" loading={approve.isPending} disabled={!title.trim()} onClick={() => approve.mutate()}><CheckCircleIcon size={15} /> {t("Approve")}</Button>
+              {view === "preview" ? <Button size="sm" variant="outline" onClick={() => setView("write")}><PencilSimpleIcon size={14} /> {t("Edit before approving")}</Button> : null}
+            </>
+          ) : null}
+          <Button size="sm" variant={isDraft ? "outline" : "primary"} loading={save.isPending} disabled={!title.trim() || needsTarget} onClick={() => save.mutate()}>
+            {isDraft ? t("Save draft") : sop ? t("Save new version") : t("Create SOP")}
           </Button>
           {sop ? <Button size="sm" variant="ghost" onClick={() => setDeleting(true)}><TrashIcon size={14} /> {t("Delete")}</Button> : null}
         </>
       ) : null}
     >
       <div className="grid gap-4">
+        {isDraft ? (
+          <div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-warn/40 bg-warn/8 px-3 py-2.5 text-[12.5px]">
+            <Pill tone="warn">{t("Draft")}</Pill>
+            <span className="min-w-0">{t("Written by AI from your documents. Agents don't see it until someone approves it. Check the steps, amounts and deadlines against the source first.")}</span>
+          </div>
+        ) : null}
+        {sop?.source_files?.length ? (
+          <p className="flex min-w-0 items-start gap-1.5 text-[12.5px] text-muted">
+            <FileTextIcon size={14} className="mt-0.5 shrink-0" />
+            <span className="min-w-0 break-words">{t("Built from: {names}", { names: sop.source_files.map((f) => f.name).join(", ") })}</span>
+          </p>
+        ) : null}
         <Field label={t("Title")} value={title} disabled={!canManage} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. Month-end close")} />
         {!sop ? (
           <>
@@ -130,7 +159,7 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
           )}
           <p className="text-[12px] text-muted">{t("Markdown: ## headings, - lists, 1. steps, **bold**, tables.")}</p>
         </div>
-        <FormError message={save.error ? errorMessage(save.error) : null} />
+        <FormError message={save.error ? errorMessage(save.error) : approve.error ? errorMessage(approve.error) : null} />
       </div>
       {sop ? (
         <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={t("Delete {name}?", { name: sop.title })} danger confirmLabel={t("Delete SOP")}
@@ -158,28 +187,33 @@ export function SopsPage() {
   const search = useSearch({ strict: false }) as { sop?: string };
   const navigate = useNavigate();
   const [creating, setCreating] = useState(0);
-  const [filter, setFilter] = useState<Scope | "all">("all");
+  const [filter, setFilter] = useState<Scope | "all" | "draft">("all");
   const [q, setQ] = useState("");
   const openSop = sops?.find((s) => s.id === search.sop) ?? null;
 
   const groups = useMemo(() => {
     const order: Scope[] = ["workspace", "branch", "department", "library"];
     const needle = q.trim().toLowerCase();
-    return order.filter((scope) => filter === "all" || filter === scope).map((scope) => ({
+    return order.filter((scope) => filter === "all" || filter === "draft" || filter === scope).map((scope) => ({
       scope,
       label: SCOPES.find((s) => s.value === scope)!.label,
       hint: SCOPES.find((s) => s.value === scope)!.hint,
-      items: (sops ?? []).filter((s) => s.scope === scope && (!needle || s.title.toLowerCase().includes(needle) || s.scope_label.toLowerCase().includes(needle))),
+      items: (sops ?? []).filter((s) => s.scope === scope && (filter !== "draft" || s.status === "draft") && (!needle || s.title.toLowerCase().includes(needle) || s.scope_label.toLowerCase().includes(needle))),
     })).filter((g) => g.items.length);
   }, [sops, filter, q]);
   const count = (scope: Scope) => (sops ?? []).filter((s) => s.scope === scope).length;
+  const drafts = (sops ?? []).filter((s) => s.status === "draft").length;
 
   return (
     <Page>
       <PageHeader
         title={t("SOPs")}
         description={t("Written procedures your agents follow. Company and department SOPs apply automatically; library SOPs are attached to specific agents.")}
-        actions={canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New SOP")}</Button> : null}
+        actions={<>
+          {/* P24: turn a company's uploaded procedures into SOPs from Company files. */}
+          <Button variant="ghost" asChild><Link to="/files">{t("Upload company documents →")}</Link></Button>
+          {canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New SOP")}</Button> : null}
+        </>}
       />
       {isLoading ? (
         <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
@@ -193,8 +227,12 @@ export function SopsPage() {
       ) : (
         <>
           <Toolbar>
-            <Segmented<Scope | "all"> label={t("Who follows it")} value={filter} onChange={setFilter}
-              options={[{ value: "all", label: t("All"), count: sops.length }, ...SCOPES.map((sc) => ({ value: sc.value, label: t(sc.label), count: count(sc.value) }))]} />
+            <Segmented<Scope | "all" | "draft"> label={t("Who follows it")} value={filter} onChange={setFilter}
+              options={[
+                { value: "all", label: t("All"), count: sops.length },
+                ...SCOPES.map((sc) => ({ value: sc.value, label: t(sc.label), count: count(sc.value) })),
+                ...(drafts ? [{ value: "draft" as const, label: t("Drafts"), count: drafts }] : []),
+              ]} />
             <SearchInput value={q} onChange={setQ} placeholder={t("Search SOPs")} className="sm:ml-auto sm:max-w-72" />
           </Toolbar>
           {!groups.length ? (
@@ -214,6 +252,7 @@ export function SopsPage() {
                         <ListRow key={s.id} onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} active={s.id === search.sop}
                           leading={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
                           title={<span className="block whitespace-normal break-words">{s.title}</span>}
+                          trailing={s.status === "draft" ? <Pill tone="warn">{t("Draft")}</Pill> : undefined}
                           meta={<Meta items={[s.scope_label, <span key="v" className="tabular">v{s.version}</span>, t("updated {when}", { when: timeAgo(s.updated_at).toLowerCase() })]} />} />
                       ))}
                     </ListCard>

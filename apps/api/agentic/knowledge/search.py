@@ -26,7 +26,7 @@ from ..brain.search import terms
 from ..core import threats
 from ..core.config import settings
 from ..core.fence import fence
-from ..models import Agent, KnowledgeChunk
+from ..models import Agent, DocFile, KnowledgeChunk
 
 RRF_K = 60
 POOL = 40
@@ -81,6 +81,15 @@ def sees(r: Reader, branch_id: str | None, department_id: str | None) -> bool:
     if branch_id is not None and branch_id != r.branch_id:
         return False
     return r.all_departments or department_id is None or department_id == r.department_id
+
+
+def _not_held_back(workspace_id: str) -> Any:
+    """P24: passages of a quarantined file never come back (the indexer drops them too;
+    this covers a quarantine that lands between the two)."""
+    held = select(DocFile.id).where(
+        DocFile.workspace_id == workspace_id, DocFile.quarantined.is_(True)
+    )
+    return ~and_(KnowledgeChunk.source_kind == "file", KnowledgeChunk.source_id.in_(held))
 
 
 @dataclass
@@ -144,7 +153,7 @@ async def search(
     words = terms(query)
     if not embedded:
         qvec = await embed.embed_one(query) if query.strip() else None
-    scope = scope_where(reader)
+    scope = and_(scope_where(reader), _not_held_back(reader.workspace_id))
     if kinds:
         scope = and_(scope, KnowledgeChunk.source_kind.in_(kinds))
     kw: list[int] = []

@@ -19,6 +19,7 @@ from sqlalchemy.orm import undefer
 
 from ...agents import dispatch
 from ...core.db import SessionLocal, get_db
+from ...core.security import can
 from ...documents import service
 from ...models import Branch, CompanyKit, DocFile, Task
 from ...services import audit
@@ -60,6 +61,27 @@ class FileOut(BaseModel):
     library: bool = False
     department_id: str | None = None
     indexed_at: datetime | None = None
+    # P24 company documents: where it sits, the upload it came from, what the scan found.
+    folder: str = ""
+    source_path: str = ""
+    batch_id: str | None = None
+    sensitive: dict[str, Any] = Field(default_factory=dict)
+    quarantined: bool = False
+
+
+def may_manage(principal: Principal) -> bool:
+    """P24: who may release held-back files and open them (as with the vault and org)."""
+    return can(principal.role, "org.manage") or can(principal.role, "vault.manage")
+
+
+def clean_folder(raw: str | None) -> str:
+    """ "/A//B/ " -> "A/B"; refuses "..". At most 300 characters."""
+    from ...intake.unpack import join_folder
+
+    parts = (raw or "").replace("\\", "/").split("/")
+    if any(p.strip() == ".." for p in parts):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_folder", "That folder name is not valid.")
+    return join_folder(raw or "")
 
 
 async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileOut:
@@ -94,6 +116,11 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         library=f.library,
         department_id=f.department_id,
         indexed_at=f.indexed_at,
+        folder=f.folder or "",
+        source_path=f.source_path or "",
+        batch_id=f.batch_id,
+        sensitive=f.sensitive or {},
+        quarantined=f.quarantined,
     )
 
 
@@ -279,18 +306,43 @@ async def list_files(
     q: str = Query(default="", max_length=120),
     source: str | None = Query(default=None, pattern="^(upload|generated)$"),
     expiring: bool = False,
+    folder: str | None = Query(default=None, max_length=300),
+    recursive: bool = False,
+    batch_id: str | None = Query(default=None, max_length=40),
+    kind: str | None = Query(default=None, max_length=40),
+    department_id: str | None = Query(default=None, max_length=40),  # "none" = no department
     limit: int = Query(default=200, ge=1, le=500),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[FileOut]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count). `expiring`
-    keeps files that expired or expire within EXPIRING_DAYS."""
+    keeps files that expired or expire within EXPIRING_DAYS. P24: `folder` (exact; with
+    `recursive` everything under it too; "" = the top) and `batch_id` (one upload)."""
     query = _filtered(principal, branch_id, task_id, q)
     if source:
         query = query.where(DocFile.source == source)
     if expiring:
         query = query.where(_expiring())
+    if folder is not None:
+        path = clean_folder(folder)
+        if recursive and path:
+            like = path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(
+                or_(DocFile.folder == path, DocFile.folder.like(f"{like}/%", escape="\\"))
+            )
+        elif not recursive:
+            query = query.where(DocFile.folder == path)
+    if batch_id:
+        query = query.where(DocFile.batch_id == batch_id)
+    if kind:
+        query = query.where(DocFile.kind == kind)
+    if department_id is not None:
+        query = query.where(
+            DocFile.department_id.is_(None)
+            if department_id in ("", "none")
+            else DocFile.department_id == department_id
+        )
     rows = await paging.paginate(
         db,
         query,
@@ -308,7 +360,19 @@ async def read_file(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> FileOut:
-    return await file_out(db, await get_file(db, principal, file_id, library_ok=True), text=True)
+    f = await get_file(db, principal, file_id, library_ok=True)
+    # P24: a held-back file's text (passwords, IC numbers) is for the people who review it.
+    return await file_out(db, f, text=not f.quarantined or may_manage(principal))
+
+
+def check_held_back(principal: Principal, f: DocFile) -> None:
+    if f.quarantined and not may_manage(principal):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "file_held_back",
+            "This file is held back for review: it contains passwords or personal data. "
+            "Ask someone who manages files to release it.",
+        )
 
 
 @router.get("/{file_id}/download")
@@ -319,6 +383,7 @@ async def download(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     f = await get_file(db, principal, file_id, library_ok=True)
+    check_held_back(principal, f)
     data = await db.scalar(select(DocFile.data).where(DocFile.id == f.id))
     show = inline and f.mime in INLINE_SAFE
     mime = f.mime if show else (f.mime if f.mime in INLINE_SAFE else "application/octet-stream")
@@ -341,6 +406,10 @@ class FileUpdateIn(BaseModel):
     branch_id: str | None = None
     task_id: str | None = None
     clear_task: bool = False
+    # P24: where it sits and how it is sorted (kind is one of intake.sort.KINDS).
+    folder: str | None = Field(default=None, max_length=300)
+    kind: str | None = Field(default=None, max_length=40)
+    department_id: str | None = None
 
 
 @router.patch("/{file_id}")
@@ -350,10 +419,23 @@ async def update_file(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> FileOut:
+    from ...intake.sort import KINDS
+
     f = await get_file(db, principal, file_id)
-    before = (f.name, f.branch_id)
+    before = (f.name, f.branch_id, f.department_id)
     if body.name:
         f.name = body.name.strip()
+    if body.folder is not None:
+        f.folder = clean_folder(body.folder)
+    if body.kind is not None:
+        if body.kind not in KINDS:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "bad_kind",
+                "Pick one of: {kinds}.",
+                kinds=", ".join(KINDS),
+            )
+        f.kind = body.kind
     if "branch_id" in body.model_fields_set:
         await check_branch(db, principal, body.branch_id)
         f.branch_id = body.branch_id
@@ -365,13 +447,25 @@ async def update_file(
             d = await db.get(Department, f.department_id)
             if d is None or d.branch_id != body.branch_id:
                 f.department_id = None
+    if "department_id" in body.model_fields_set:
+        if body.department_id is not None:
+            from ...models import Department
+
+            d = await db.get(Department, body.department_id)
+            if d is None or d.workspace_id != principal.workspace_id or d.branch_id != f.branch_id:
+                raise api_error(
+                    status.HTTP_400_BAD_REQUEST,
+                    "bad_department",
+                    "Pick a department of this file's company.",
+                )
+        f.department_id = body.department_id
     if body.task_id:
         await check_task(db, principal, body.task_id)
         f.task_id = body.task_id
     elif body.clear_task:
         f.task_id = None
     await db.commit()
-    if f.library and (f.name, f.branch_id) != before:  # P18: passages carry title and scope
+    if f.library and (f.name, f.branch_id, f.department_id) != before:  # P18: title + scope
         from .library import start_index
 
         await start_index("file", f.id)

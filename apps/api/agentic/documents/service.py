@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
@@ -350,6 +351,10 @@ async def create_file(
     agent_id: str | None = None,
     source: str = "upload",
     status: str = "reading",
+    folder: str = "",
+    source_path: str = "",
+    batch_id: str | None = None,
+    department_id: str | None = None,
 ) -> DocFile:
     kind = sniff(data, name, mime)
     f = DocFile(
@@ -367,6 +372,12 @@ async def create_file(
         source=source,
         created_by=created_by,
         fields={},
+        folder=folder,
+        source_path=source_path[:500],
+        batch_id=batch_id,
+        department_id=department_id,
+        sensitive={},
+        quarantined=False,
     )
     if kind == "image" and mime.startswith("image/"):
         f.mime = mime[:120]
@@ -375,8 +386,9 @@ async def create_file(
     return f
 
 
-async def understand(db: AsyncSession, f: DocFile, text: str) -> dict[str, Any]:
-    """The cheap model's one-time reading of a file (empty when no model is available)."""
+async def understand(db: AsyncSession, f: DocFile, text: str, hint: str = "") -> dict[str, Any]:
+    """The cheap model's one-time reading of a file (empty when no model is available).
+    `hint` asks for more keys in the same call (P24 intake: category and department)."""
     from ..engine import gateway
 
     if len(text.strip()) < 30:
@@ -388,7 +400,7 @@ async def understand(db: AsyncSession, f: DocFile, text: str) -> dict[str, Any]:
             f.workspace_id,
             gateway.cheap_groups(prompt),
             [
-                {"role": "system", "content": UNDERSTAND_SYSTEM},
+                {"role": "system", "content": UNDERSTAND_SYSTEM + hint},
                 {"role": "user", "content": prompt},
             ],
             task="file.understand",
@@ -411,21 +423,42 @@ EXPIRY_WORDS = re.compile(
 )
 
 
-async def process_file(db: AsyncSession, file_id: str) -> str:
-    """Read a stored upload: text (+ OCR), then the summary. Returns the final status."""
+AfterRead = Callable[[AsyncSession, DocFile, dict[str, Any]], Awaitable[None]]
+
+
+async def process_file(
+    db: AsyncSession, file_id: str, *, hint: str = "", after: AfterRead | None = None
+) -> str:
+    """Read a stored upload: text (+ OCR), a scan for secrets and personal data (P24), then
+    the summary. Returns the final status. `hint` extends the summary call; `after` runs
+    before the file is marked ready (intake sorts it there), with what the model said."""
+    from ..intake import scan
+
     f = await db.scalar(select(DocFile).where(DocFile.id == file_id).options(undefer(DocFile.data)))
     if f is None:
         return "missing"
+    if after is None and f.batch_id:  # P24: a re-read intake file is sorted the same way
+        from ..intake.pipeline import Sorter
+
+        sorter = await Sorter.load(db, f.branch_id)
+        hint, after = hint or sorter.hint(), sorter.apply
     try:
         out = await asyncio.to_thread(extract, bytes(f.data), f.name, f.mime)
     except Exception as e:  # noqa: BLE001 - a broken file is reported, never crashes the worker
         log.warning("could not read %s: %s", f.id, e)
         f.status, f.error = "failed", f"Could not read this file ({e.__class__.__name__})."[:300]
+        if after is not None:
+            await after(db, f, {})
         await db.commit()
         return f.status
     f.text, f.pages, f.ocr = out.text, out.pages, out.ocr
     f.error = out.note or None
-    info = await understand(db, f, out.text)
+    model_text = out.text
+    if f.source == "upload":  # P24: secrets never reach the model, agents or the library
+        found = scan.scan(out.text)
+        scan.apply(f, found)
+        model_text = scan.mask(out.text, found)
+    info = await understand(db, f, model_text, hint)
     if info:
         f.kind, f.title, f.summary = info["kind"], info["title"], info["summary"]
         f.fields = info["fields"]
@@ -434,9 +467,17 @@ async def process_file(db: AsyncSession, file_id: str) -> str:
         f.expires_on = info["expires_on"] if EXPIRY_WORDS.search(out.text) else None
     elif not f.title:
         f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
+    if after is not None:
+        await after(db, f, info)
     f.status = "ready"
     await db.commit()
-    if f.library:  # P18: a library file becomes searchable passages once it is read
+    if f.quarantined:  # P24: held back files are never searchable
+        from ..knowledge import indexer
+
+        await indexer.remove(db, "file", f.id)
+        f.indexed_at = None
+        await db.commit()
+    elif f.library:  # P18: a library file becomes searchable passages once it is read
         from ..knowledge import indexer
 
         try:
@@ -461,6 +502,8 @@ def file_line(f: DocFile, today: date | None = None) -> str:
         bits.append(when)
     if f.status != "ready":
         bits.append(f"status: {f.status}")
+    if f.quarantined:
+        bits.append("held back for review (passwords or personal data)")
     line = " — ".join(bits)
     if f.summary:
         line += f"\n   {f.summary}"

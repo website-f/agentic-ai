@@ -83,6 +83,10 @@ export interface SOP {
   version: number;
   updated_by: string | null;
   updated_at: string;
+  /** P24: "draft" = written by AI from documents, waiting for a person; agents never see it. */
+  status?: "active" | "draft";
+  source_file_ids?: string[];
+  source_files?: { id: string; name: string }[];
 }
 
 export interface Task {

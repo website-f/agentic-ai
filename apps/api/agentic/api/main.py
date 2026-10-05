@@ -26,6 +26,7 @@ from .routers import (
     brain,
     broadcasts,
     channels,
+    company_files,
     documents,
     events_stream,
     files,
@@ -260,6 +261,7 @@ for r in (
     vault.router,
     web_tasks.router,
     workflows.router,
+    company_files.router,  # P24: before files, so /api/files/tree is not read as a file id
     files.router,
     documents.router,
     packs.router,
@@ -292,3 +294,14 @@ app.include_router(minutes_router.router)
 from .routers import objectives as objectives_router  # noqa: E402
 
 app.include_router(objectives_router.router)
+
+# P24: the AI drafts SOPs and workflows from company documents (and builds suggestions).
+from .routers import builders as builders_router  # noqa: E402
+
+app.include_router(builders_router.router)
+
+# P24: company documents intake (zip / many files / one file); raw bytes like /api/files.
+from .routers import intake as intake_router  # noqa: E402
+
+RAW_UPLOAD_PATHS.add(intake_router.UPLOAD_PATH)
+app.include_router(intake_router.router)

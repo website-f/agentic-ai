@@ -4,7 +4,9 @@
  * term for the same thing everywhere (see ./glossary.ts).
  */
 import { ADMIN } from "./admin";
+import { BUILDERS } from "./builders";
 import { COMMON } from "./common";
+import { FILES } from "./files";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
 import { MINUTES } from "./minutes";
@@ -21,4 +23,6 @@ export const MS: Record<string, string> = {
   ...GUIDE,
   ...MINUTES,
   ...RUNS,
+  ...BUILDERS,
+  ...FILES,
 };

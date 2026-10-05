@@ -68,6 +68,9 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "incident.updated": [teamKeys.incidents],
   "agent.ping": [teamKeys.pings, teamKeys.budgets],
   "file.ready": [["files"]],
+  // P24 company documents: an upload moved on (unpacked, read, sorted, ready). Its files,
+  // the folder tree and the upload report all refresh.
+  "intake.updated": [["intake"], ["files"]],
   "document.updated": [["documents"]],
   "workflow_run.updated": [["workflow-runs"]],
   "objective.updated": [objectiveKeys.all, workKeys.tasks],

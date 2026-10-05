@@ -39,6 +39,8 @@ from .brain_activities import (
     brain_learn_task,
 )
 from .brain_workflows import DreamTickWorkflow, DreamWorkflow, LearnFromChatWorkflow
+from .builder_activities import builder_run
+from .builder_workflows import BuildFromDocsWorkflow
 from .channel_activities import deliver_one
 from .channel_workflows import DeliverWorkflow
 from .document_activities import file_extract, workflow_run_tick
@@ -46,6 +48,8 @@ from .document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from .engine_activities import check_all_providers
 from .hours_activities import deferred_start
 from .hours_workflows import DeferredStartWorkflow
+from .intake_activities import intake_fail, intake_finish, intake_pending, intake_read
+from .intake_workflows import IntakeWorkflow
 from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
 from .minutes_activities import (
@@ -97,6 +101,8 @@ WORKFLOWS = [
     MeetingMinutesWorkflow,
     MinutesPurgeWorkflow,
     LivenessReconcileWorkflow,
+    BuildFromDocsWorkflow,
+    IntakeWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -135,6 +141,11 @@ ACTIVITIES = [
     minutes_fail,
     minutes_purge,
     liveness_reconcile,
+    builder_run,
+    intake_pending,
+    intake_read,
+    intake_finish,
+    intake_fail,
 ]
 
 

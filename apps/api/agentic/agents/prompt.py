@@ -49,13 +49,19 @@ class PromptPart:
 
 
 async def applicable_sops(db: AsyncSession, agent: Agent) -> list[SOP]:
+    """The active SOPs this agent follows. Drafts (P24, AI-written and waiting for a person)
+    never reach an agent."""
     conds = [SOP.scope == "workspace", (SOP.scope == "branch") & (SOP.scope_id == agent.branch_id)]
     if agent.department_id:
         conds.append((SOP.scope == "department") & (SOP.scope_id == agent.department_id))
     if agent.sop_ids:
         conds.append(SOP.id.in_(agent.sop_ids))
     rows = (
-        await db.scalars(select(SOP).where(SOP.workspace_id == agent.workspace_id, or_(*conds)))
+        await db.scalars(
+            select(SOP).where(
+                SOP.workspace_id == agent.workspace_id, SOP.status == "active", or_(*conds)
+            )
+        )
     ).all()
     order = {"workspace": 0, "branch": 1, "department": 2, "library": 3}
     return sorted(rows, key=lambda s: (order.get(s.scope, 9), s.title.lower()))

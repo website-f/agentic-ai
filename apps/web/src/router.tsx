@@ -378,7 +378,7 @@ const companyKitRoute = createRoute({
 const filesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/files",
-  validateSearch: (s: Record<string, unknown>): { f?: string } => ({ f: str(s.f) }),
+  validateSearch: (s: Record<string, unknown>): { f?: string; folder?: string } => ({ f: str(s.f), folder: str(s.folder) }),
   component: page.files,
 });
 const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: "/templates", component: page.templates });
