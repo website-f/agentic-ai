@@ -75,3 +75,16 @@ def test_blank_signatory_reads_in_the_letters_language():
     assert "[[Nama penandatangan]]" in ms.markdown and "[[Nama syarikat]]" in ms.markdown
     en = fill("Dear Sir,\n\nYours faithfully,\n{{signature}}\n", {}, [], {}, {}, date(2026, 10, 5))
     assert "[[Signatory name]]" in en.markdown
+
+
+def test_line_items_read_in_the_letters_language():
+    from agentic.documents.fill import items_table
+
+    items = [
+        {"description": "Kasut kawad", "qty": 1, "unit": "pasang", "unit_price": 0, "amount": 0}
+    ]
+    totals = {"subtotal": 0.0, "tax": 0.0, "total": 0.0}
+    ms = items_table(items, totals, "RM", "SST", "ms")
+    assert "| Bil. | Perkara | Kuantiti | Harga seunit (RM) | Jumlah (RM) |" in ms
+    assert "**Jumlah besar**" in ms
+    assert "| No. | Description | Qty |" in items_table(items, totals, "RM", "SST")

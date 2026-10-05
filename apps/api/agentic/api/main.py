@@ -305,3 +305,8 @@ from .routers import intake as intake_router  # noqa: E402
 
 RAW_UPLOAD_PATHS.add(intake_router.UPLOAD_PATH)
 app.include_router(intake_router.router)
+
+# P25: search inside every document (files page by page, SOPs, documents), with suggestions.
+from .routers import search as search_router  # noqa: E402
+
+app.include_router(search_router.router)

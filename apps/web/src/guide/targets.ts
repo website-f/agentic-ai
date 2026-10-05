@@ -108,6 +108,7 @@ export const GUIDE_PAGES: GuidePage[] = [
       t("files.company", "Pick the company"), t("files.upload", "Upload files, folders or a zip"), t("files.report", "Upload report"),
       t("files.tree", "Folders"), t("files.filters", "Search and filters"), t("files.list", "Files"),
       t("files.download-folder", "Download a folder"), t("files.download-all", "Download everything"), t("files.library", "Use as a guideline"),
+      t("shell.search", "Search inside every document"),
     ],
   },
   {
@@ -203,6 +204,11 @@ export const GUIDE_PAGES: GuidePage[] = [
   {
     id: "tutorial", route: "/tutorial", title: "Tutorial", group: "Help", states: [],
     targets: [t("tutorial.tracks", "Your role's track"), t("tutorial.next", "Next up")],
+  },
+  {
+    // P25: a script for showing a client a day with AI agents (no screenshots of its own).
+    id: "demo-day", route: "/tutorial", title: "Demo: a working day with AI agents", group: "Help", states: [],
+    targets: [],
   },
 ];
 

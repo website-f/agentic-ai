@@ -82,9 +82,10 @@ def to_openai(m: AgentMessage) -> dict[str, Any]:
     d: dict[str, Any] = {"role": m.role, "content": m.content}
     if m.role == "assistant" and m.tool_calls:
         d["tool_calls"] = m.tool_calls
-    if m.role == "assistant" and (m.meta or {}).get("reasoning_content"):
+    reasoning = (m.meta or {}).get("reasoning_content")
+    if m.role == "assistant" and reasoning:
         # The engine sends it back only to models that need it (engine/client.py).
-        d["reasoning_content"] = m.meta["reasoning_content"]
+        d["reasoning_content"] = reasoning
     if m.role == "tool":
         d["tool_call_id"] = m.tool_call_id
         if m.name:

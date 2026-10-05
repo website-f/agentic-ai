@@ -42,6 +42,7 @@ OUTSIDE_CONTENT = frozenset(
         "tool_call",
         "calendar_agenda",
         "search_library",
+        "search_documents",
         "company_documents",
         "browser_open",
         "browser_read",

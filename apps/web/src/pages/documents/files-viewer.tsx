@@ -5,6 +5,7 @@ import {
   LockSimpleOpenIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, ShieldWarningIcon, TrashIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -85,7 +86,7 @@ function ZoomImage({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-function Preview({ f, tall, canSee }: { f: CompanyFile; tall: boolean; canSee: boolean }) {
+function Preview({ f, tall, canSee, page }: { f: CompanyFile; tall: boolean; canSee: boolean; page?: number }) {
   const t = useT();
   const kind = previewKind(f);
   const frame = cn("w-full overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface-2/40", tall ? "h-[78dvh]" : "h-[46dvh] sm:h-[52dvh]");
@@ -98,7 +99,10 @@ function Preview({ f, tall, canSee }: { f: CompanyFile; tall: boolean; canSee: b
     );
   }
   if (f.status === "reading" && kind === "office") return <Skeleton className={frame} />;
-  if (kind === "pdf" || kind === "office") return <iframe src={previewUrl(f.id)} title={f.title || f.name} className={cn(frame, "bg-white")} />;
+  // P25: a search hit opens a PDF at its page (#page=N; Office previews are a text PDF with
+  // other page breaks, so they open at the top).
+  const at = kind === "pdf" && page && page > 0 ? `#page=${page}` : "";
+  if (kind === "pdf" || kind === "office") return <iframe key={at} src={previewUrl(f.id) + at} title={f.title || f.name} className={cn(frame, "bg-white")} />;
   if (kind === "image") return <div className={frame}><ZoomImage src={previewUrl(f.id)} alt={f.title || f.name} /></div>;
   if (kind === "text") {
     return (
@@ -243,6 +247,19 @@ function ReasonForm({ confirm, onConfirm, onDone }: { confirm: string; onConfirm
   );
 }
 
+/** P25: `page` in the address (a search hit) is for the file it came with. Read it once, then
+ * drop it from the address so the next file opened from the list starts at its top. */
+function useSearchPage(id: string): number | undefined {
+  const search = useSearch({ strict: false }) as { f?: string; page?: number };
+  const navigate = useNavigate();
+  const [held, setHeld] = useState<{ id: string; page: number } | null>(null);
+  if (search.page && search.f === id && (held?.id !== id || held.page !== search.page)) setHeld({ id, page: search.page });
+  useEffect(() => {
+    if (search.page) void navigate({ to: ".", search: ((s: Record<string, unknown>) => ({ ...s, page: undefined })) as never, replace: true });
+  }, [search.page, navigate]);
+  return held && held.id === id ? held.page : undefined;
+}
+
 /** The open file. `inline` renders it as a pane (wide desktops); otherwise the caller wraps
  * it in a side sheet. */
 export function FileViewer({ id, branch, folders, canManage, canEdit, onClose, inline }: {
@@ -260,6 +277,7 @@ export function FileViewer({ id, branch, folders, canManage, canEdit, onClose, i
   const { data, error } = useQuery(fileQuery(id));
   const f = data as CompanyFile | undefined;
   const [tall, setTall] = useState(false);
+  const page = useSearchPage(id);
   const [moving, setMoving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [hold, setHold] = useState<"release" | "hold" | null>(null);
@@ -360,7 +378,8 @@ export function FileViewer({ id, branch, folders, canManage, canEdit, onClose, i
             </Button>
           ) : null}
         </div>
-        <Preview f={f} tall={tall} canSee={canSee} />
+        {page && previewKind(f) === "pdf" && canSee ? <p className="text-[12px] text-muted">{t("Opened at page {n}, where your search found it.", { n: page })}</p> : null}
+        <Preview f={f} tall={tall} canSee={canSee} page={page} />
         {previewKind(f) === "office" && canSee ? <p className="text-[12px] text-muted">{t("Office files are shown as a PDF. Download gives you the original.")}</p> : null}
       </section>
 

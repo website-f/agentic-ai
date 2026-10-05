@@ -197,20 +197,24 @@ async def list_members(
             .order_by(Membership.created_at)
         )
     ).all()
-    agents = dict(
-        (
-            await db.execute(
-                select(Agent.owner_user_id, func.count())
-                .where(
-                    Agent.workspace_id == principal.workspace_id,
-                    Agent.owner_user_id.is_not(None),
-                    Agent.status != "retired",
-                    Agent.clone_of.is_(None),
+    agents: dict[str, int] = {
+        uid: n
+        for uid, n in (
+            (
+                await db.execute(
+                    select(Agent.owner_user_id, func.count())
+                    .where(
+                        Agent.workspace_id == principal.workspace_id,
+                        Agent.owner_user_id.is_not(None),
+                        Agent.status != "retired",
+                        Agent.clone_of.is_(None),
+                    )
+                    .group_by(Agent.owner_user_id)
                 )
-                .group_by(Agent.owner_user_id)
-            )
-        ).all()
-    )
+            ).all()
+        )
+        if uid
+    }
     names = await _names(db, principal.workspace_id)
     return [_out(m, names, agents) for m in rows if _member_in_scope(principal, m)]
 

@@ -1006,9 +1006,7 @@ def test_department_named_for_the_topic_wins_a_tie():
         sort.Dept("d_tender", "Tender & Procurement"),
     ]
     assert (
-        sort.department_of(
-            depts, "4_TATACARA SELEPAS PENGHANTARAN TENDER.pdf", "TENDER HQ", ""
-        )
+        sort.department_of(depts, "4_TATACARA SELEPAS PENGHANTARAN TENDER.pdf", "TENDER HQ", "")
         == "d_tender"
     )
     assert sort.department_of(depts, "Brosur jualan.pdf", "MARKETING", "") == "d_sales"

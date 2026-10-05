@@ -44,7 +44,7 @@ def _scoped(q: Any, principal: Principal) -> Any:
     if cond is None:
         return q
     visible = select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
-    parts = [Report.agent_id.in_(visible)]
+    parts: list[Any] = [Report.agent_id.in_(visible)]
     if sc.kind == "branch" and sc.branch_id:
         parts.append(Report.branch_id == sc.branch_id)
     return q.where(or_(*parts))

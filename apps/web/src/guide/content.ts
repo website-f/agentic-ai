@@ -671,6 +671,16 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("Pick **Who it is for**. Agents in that scope now search it and cite the page they used."),
         ],
       },
+      {
+        title: "Search inside every document",
+        steps: [
+          s("Click the search box at the top of any page, or press **/**, and start typing. On a phone, tap the magnifier.", "shell.search"),
+          s("Pick a suggestion: a word from your own documents, a title, a heading, or one of your recent searches. The ↑ ↓ and Enter keys work too."),
+          s("Press Enter for **Search all documents**: every file page by page, SOPs, documents, templates and wiki pages, with the matching words marked."),
+          s("Put words in quotes for an exact phrase, like \"load system calculation\". Amounts and dates work as people write them: RM700, RM 700.00, 16hb. Reference numbers, like a PO or tender number, complete as you type."),
+          s("Click a result: a file opens in Company files at the page that matched. You only find what you may open, and never a held-back file."),
+        ],
+      },
     ],
     tips: [
       "A held-back file never reaches agents until a manager releases it. The report says why in plain words and never shows the secret itself.",
@@ -1414,6 +1424,122 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     who: EVERYONE,
     related: ["home"],
   },
+  // ------------------------------------------------------------------ Help: client demo
+  "demo-day": {
+    purpose: "A script for showing a client one working day with AI agents: a staff member hires their AI worker, agents run the company's own procedures, and a person approves what the AI made. Use your company's procedures; each step says what to click and what to point out.",
+    can: [
+      "Run the whole demo in about half an hour with one owner account and one staff account.",
+      "Search inside every uploaded file, word by word, with suggestions as you type: a phrase, an amount like RM700 or a reference number.",
+      "Show four workflows built from the company's uploaded procedures, each ending in a document a person reviews.",
+      "Show where risky steps stop and wait in **Approvals**: sending outside, signing, payments and portal submissions.",
+      "Finish in **Documents** and **Company files** filtered to **Made by AI**, so the client sees everything the AI made in one place.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Before the demo: set up the company",
+        steps: [
+          s("Sign in as the owner. In **Company files**, pick the company and drop a zip of its procedures: uniform and equipment requests, disciplinary steps, the salary advance rules and the tender procedure."),
+          s("When the upload is ready, select the procedure files and click **Make an SOP** or **Build a workflow**. Check each draft and save it."),
+          s("Fill in **Company kit** (legal name, registration number, address, signatory) so letters and orders print on the letterhead."),
+          s("Add a staff member with the staff role in Members, and keep their sign-in details for the demo."),
+        ],
+      },
+      {
+        title: "1. A staff member hires their AI worker",
+        steps: [
+          s("Sign in as the staff member. The hiring steps open by themselves; if not, click **Start hiring** on **My AI worker**."),
+          s("Give the worker a name and a job title, for example HR assistant at your security company, and tick what it must ask about first."),
+          s("Under **Its job**, add a duty it does every day, such as checking new leave requests each morning."),
+          s("Under **Working hours**, pick **Office week**. Work given after hours waits for its next shift."),
+          s("Read the offer letter and click **Hire**."),
+        ],
+      },
+      {
+        title: "2. Give it a task based on an SOP",
+        steps: [
+          s("On **My AI worker**, click **Give a task**."),
+          s("Write the request and name the SOP to follow, for example: prepare a quotation for guarding two schools for 12 months, with the company's rates, following the quotation SOP."),
+          s("Open the task in **Tasks** and show the timeline: the SOP it read, the files it opened and what it is doing now."),
+          s("The quotation is made from the company's template, on its letterhead. It is saved in **Documents**, and its PDF in **Company files** under AI documents, marked **Made by AI**."),
+          s("When it finishes, the result waits for review. Click **Accept**, or **Send back** with a note to show the agent fixing its own work."),
+        ],
+      },
+      {
+        title: "2b. Search anything inside the company's documents",
+        steps: [
+          s("Click the search box at the top of any page, or press **/**."),
+          s("Type the first letters of a word, for example kelay. Suggestions appear as you type: whole words from the documents, file titles and headings inside the files."),
+          s("Search an amount such as RM700, a reference number such as a tender or PO number, or a phrase in quotes. Results show the page of the PDF where it was found."),
+          s("Click a result: the file opens at that page with the words highlighted. Filter by company, kind, department or **Made or uploaded**."),
+          s("Point out that agents search the same way and quote the file and page they used. Staff only find what their company and role may open."),
+        ],
+      },
+      {
+        title: "3a. A uniform or equipment request, ending in a purchase order",
+        steps: [
+          s("Open **Workflows**, pick the uniform request workflow built from the company's procedure and click **Run**."),
+          s("Type the request (who needs what, sizes and quantities) and click **Start**."),
+          s("The run stops where the procedure needs a person: the manager's decision before any order is made. Show it under **Needs you**, then approve."),
+          s("The agents check the request against the procedure and draft the purchase order from the company's template. Its PDF goes into the company's files under AI documents."),
+          s("When the goods arrive, a person records what was received and the run closes."),
+        ],
+      },
+      {
+        title: "3b. A disciplinary case, ending in a warning letter",
+        steps: [
+          s("Run the disciplinary workflow with the case details: the staff member, what happened, the dates and any earlier warnings."),
+          s("The agent follows the company's disciplinary steps, reads the records it was given and drafts the warning letter in the company's language."),
+          s("Point out that the letter waits for a person. Nobody signs or sends it until someone approves it."),
+        ],
+      },
+      {
+        title: "3c. The monthly salary advance",
+        steps: [
+          s("Run the salary advance workflow with the month and the attendance for the first half of the month."),
+          s("The agent works out how much each person may get under the company's rules, such as days worked and the advance limit, and shows the calculation in a report."),
+          s("A person keys the approved amounts into the payroll system. The agent never makes a payment itself."),
+          s("The run waits for that person to confirm it is done before it closes."),
+        ],
+      },
+      {
+        title: "3d. A tender, from the notice to the submission checklist",
+        steps: [
+          s("Run the tender workflow with the tender notice: upload the notice or paste its details."),
+          s("The agents read the notice, note the closing date and any compulsory briefing, and tell the team what to prepare."),
+          s("They draft the briefing notice and the letter asking the bank for a certified true copy (CTC) of the bank statement."),
+          s("Submitting on the tender portal is always done by an authorised officer. The run waits for them to confirm it was submitted."),
+        ],
+      },
+      {
+        title: "4. Where approvals appear and how a person approves",
+        steps: [
+          s("Anything risky stops and asks first: an email or WhatsApp to someone outside the company, signing, payments and portal submissions."),
+          s("The request shows in **Approvals**, and as a phone notification when channels are set up, with the agent, the action and its reason."),
+          s("Click **Approve once** to let it go ahead this one time, or **Deny** with a reason the agent reads."),
+          s("Every decision is kept in **History** and in the activity log, with who decided and when."),
+        ],
+      },
+      {
+        title: "5. Find what the AI made and review it",
+        steps: [
+          s("On the home page, a card shows how many documents AI made this week and how many wait for review. Click **Review now**."),
+          s("In **Documents**, open **Review what AI made**. Each row shows the agent, the task or workflow it came from, and **Approve**, **Send back** and **Open**."),
+          s("Send one back with a note and show the agent revising it. It comes back to the same list when it is done."),
+          s("In **Company files**, choose **Made by AI** and pick an agent. The purchase order, the warning letter, the salary report and the tender letters are all there, each with its task and review status."),
+          s("Switch the filter to **Uploaded** to show the company's own files, the procedures and forms the agents worked from."),
+        ],
+      },
+    ],
+    tips: [
+      "Use made-up staff names and figures in a demo. Never show a real employee's case or salary.",
+      "Run each workflow once before the meeting so you know how long it takes with your AI provider.",
+      "AI folders follow the company's language: AI documents in English, Dokumen AI in Malay. A new version of a document replaces its file; Documents keeps every version.",
+    ],
+    who: "Owners and managers who show the system to a client. The first two parts need a staff account.",
+    related: ["my-worker", "tasks", "workflows", "approvals", "documents", "files"],
+  },
+
 };
 
 /** Captions for the recorded flows (GUIDE_FLOWS in targets.ts). */

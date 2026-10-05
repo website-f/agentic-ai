@@ -309,7 +309,10 @@ async def create_document(
     created_by: str,
     task_id: str | None = None,
     agent_id: str | None = None,
+    workflow_run_id: str | None = None,
 ) -> Document:
+    from .provenance import doc_origin, run_of
+
     ws = await db.get(Workspace, workspace_id)
     today = today_in(ws.timezone if ws else None)
     prefix = template.prefix if template else ""
@@ -329,6 +332,8 @@ async def create_document(
         status="draft",
         version=1,
         created_by=created_by,
+        origin=doc_origin(created_by, agent_id),
+        workflow_run_id=workflow_run_id or await run_of(db, task_id),
     )
     db.add(doc)
     await db.flush()
@@ -355,7 +360,13 @@ async def create_file(
     source_path: str = "",
     batch_id: str | None = None,
     department_id: str | None = None,
+    origin: str | None = None,
+    workflow_run_id: str | None = None,
 ) -> DocFile:
+    """A stored file. P25: `origin` (uploaded | person | agent) follows from source and who
+    made it unless given; the workflow run comes from the task unless given."""
+    from .provenance import file_origin, run_of
+
     kind = sniff(data, name, mime)
     f = DocFile(
         workspace_id=workspace_id,
@@ -378,6 +389,8 @@ async def create_file(
         department_id=department_id,
         sensitive={},
         quarantined=False,
+        origin=origin or file_origin(source, created_by, agent_id),
+        workflow_run_id=workflow_run_id or await run_of(db, task_id),
     )
     if kind == "image" and mime.startswith("image/"):
         f.mime = mime[:120]
@@ -485,6 +498,10 @@ async def process_file(
         except Exception:  # noqa: BLE001 - the file is read; indexing can be redone
             await db.rollback()
             log.warning("could not index library file %s", f.id, exc_info=True)
+    # P25: document search (every file, page by page; held-back files are dropped).
+    from ..search import index as search_index
+
+    await search_index.try_index(db, "file", f.id)
     return f.status
 
 

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
 import { Markdown } from "@/components/markdown";
+import { DocReviewBanner } from "@/components/provenance";
 import { Button } from "@/components/ui/button";
 import { ActionBar, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -395,6 +396,8 @@ export function DocumentEditor({ id }: { id: string }) {
           </div>
         </div>
       </div>
+
+      <DocReviewBanner doc={doc} canWrite={!!me?.permissions.includes("work.write")} />
 
       {locked ? <p className="flex items-center gap-2 rounded-sm bg-ok/10 px-3 py-2 text-[13px] text-ok"><SealCheckIcon size={16} weight="fill" /> {t("Approved — locked. Reopen it to make changes.")}</p> : null}
 

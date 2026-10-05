@@ -3,6 +3,7 @@ import {
   BuildingsIcon,
   CaretUpDownIcon,
   CheckIcon,
+  CommandIcon,
   DotsThreeIcon,
   KeyIcon,
   MagnifyingGlassIcon,
@@ -34,6 +35,7 @@ import { agentsQuery } from "@/lib/work";
 import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
+import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
 import { Button } from "./ui/button";
 import {
@@ -401,7 +403,11 @@ function useApprovalCount() {
 /** Things waiting for a person, per nav item: decisions and skill proposals. */
 function useWaiting(): Partial<Record<string, number>> {
   const { data } = useQuery(systemStatusQuery);
-  return { "/approvals": data?.counts.approvals_pending ?? 0, "/skills": data?.counts.skill_proposals_pending ?? 0 };
+  return {
+    "/approvals": data?.counts.approvals_pending ?? 0,
+    "/skills": data?.counts.skill_proposals_pending ?? 0,
+    "/documents": data?.counts.documents_review ?? 0, // P25: what AI made, waiting for review
+  };
 }
 
 function Badge({ count, className }: { count: number; className?: string }) {
@@ -429,16 +435,17 @@ function Header() {
       <div className="min-w-0 flex-1">
         <BranchSwitcher />
       </div>
-      <button
+      {/* P25: search inside every document; the command palette stays on Ctrl K. */}
+      <HeaderSearch />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="hidden md:inline-flex"
+        aria-label={t("Jump to a page or run an action…")}
+        title={IS_MAC ? "⌘K" : "Ctrl K"}
         onClick={() => setOpen(true)}
-        className="hidden h-9 w-64 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-[13px] text-muted hover:bg-surface-2 lg:flex"
       >
-        <MagnifyingGlassIcon size={16} />
-        <span className="flex-1 truncate text-left">{t("Search or jump to…")}</span>
-        <kbd className="rounded border border-border px-1.5 font-mono text-[11px]">{IS_MAC ? "⌘K" : "Ctrl K"}</kbd>
-      </button>
-      <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label={t("Search")} onClick={() => setOpen(true)}>
-        <MagnifyingGlassIcon size={18} />
+        <CommandIcon size={18} />
       </Button>
       <Button
         variant="ghost"

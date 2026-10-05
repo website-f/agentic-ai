@@ -21,7 +21,7 @@ from ...agents import dispatch
 from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...documents import service
-from ...models import Branch, CompanyKit, DocFile, Task
+from ...models import Agent, Branch, CompanyKit, DocFile, Document, Task, WorkflowRun
 from ...services import audit
 from .. import paging
 from ..deps import Principal, api_error, require
@@ -67,6 +67,17 @@ class FileOut(BaseModel):
     batch_id: str | None = None
     sensitive: dict[str, Any] = Field(default_factory=dict)
     quarantined: bool = False
+    # P25 provenance: uploaded | person | agent, the agent, task and workflow run it came
+    # from, the document or report it is the saved copy of, and that document's review.
+    origin: str = "uploaded"
+    agent_name: str | None = None
+    agent_color: str | None = None
+    task_title: str | None = None
+    workflow_run_id: str | None = None
+    workflow_run_title: str | None = None
+    document_id: str | None = None
+    report_id: str | None = None
+    review_status: str | None = None
 
 
 def may_manage(principal: Principal) -> bool:
@@ -85,10 +96,29 @@ def clean_folder(raw: str | None) -> str:
 
 
 async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileOut:
+    from ...documents.provenance import review_status
+
     b = await db.get(Branch, f.branch_id) if f.branch_id else None
     body = None
     if text:
         body = await db.scalar(select(DocFile.text).where(DocFile.id == f.id)) or ""
+    a = await db.get(Agent, f.agent_id) if f.agent_id else None
+    task_title = (
+        await db.scalar(select(Task.title).where(Task.id == f.task_id)) if f.task_id else None
+    )
+    run_title = (
+        await db.scalar(select(WorkflowRun.title).where(WorkflowRun.id == f.workflow_run_id))
+        if f.workflow_run_id
+        else None
+    )
+    review = None
+    if f.document_id:
+        row = (
+            await db.execute(
+                select(Document.status, Document.review).where(Document.id == f.document_id)
+            )
+        ).first()
+        review = review_status(row[0], row[1]) if row else None
     return FileOut(
         id=f.id,
         name=f.name,
@@ -121,6 +151,15 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         batch_id=f.batch_id,
         sensitive=f.sensitive or {},
         quarantined=f.quarantined,
+        origin=f.origin or "uploaded",
+        agent_name=a.name if a else None,
+        agent_color=a.color if a else None,
+        task_title=task_title,
+        workflow_run_id=f.workflow_run_id,
+        workflow_run_title=run_title,
+        document_id=f.document_id,
+        report_id=f.report_id,
+        review_status=review,
     )
 
 
@@ -285,16 +324,25 @@ async def file_stats(
                 func.count().filter(DocFile.source == "generated"),
                 func.count().filter(_expiring()),
                 func.count().filter(DocFile.status == "reading"),
+                func.count().filter(DocFile.origin == "agent"),
+                func.count().filter(DocFile.origin == "person"),
+                func.count().filter(DocFile.origin == "uploaded"),
             )
         )
     ).one()
-    total, upload, generated, expiring, reading = (int(n or 0) for n in row)
+    total, upload, generated, expiring, reading, agent, person, uploaded = (
+        int(n or 0) for n in row
+    )
     return {
         "total": total,
         "upload": upload,
         "generated": generated,
         "expiring": expiring,
         "reading": reading,
+        # P25: by who made them
+        "agent": agent,
+        "person": person,
+        "uploaded": uploaded,
     }
 
 
@@ -311,6 +359,9 @@ async def list_files(
     batch_id: str | None = Query(default=None, max_length=40),
     kind: str | None = Query(default=None, max_length=40),
     department_id: str | None = Query(default=None, max_length=40),  # "none" = no department
+    origin: str | None = Query(default=None, pattern="^(uploaded|person|agent)$"),
+    agent_id: str | None = Query(default=None, max_length=40),
+    workflow_run_id: str | None = Query(default=None, max_length=40),
     limit: int = Query(default=200, ge=1, le=500),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
@@ -318,10 +369,21 @@ async def list_files(
 ) -> list[FileOut]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count). `expiring`
     keeps files that expired or expire within EXPIRING_DAYS. P24: `folder` (exact; with
-    `recursive` everything under it too; "" = the top) and `batch_id` (one upload)."""
+    `recursive` everything under it too; "" = the top) and `batch_id` (one upload). P25:
+    `origin` (uploaded, made by a person, made by an agent), `agent_id` (that agent and the
+    helpers it copied itself into) and `workflow_run_id`."""
     query = _filtered(principal, branch_id, task_id, q)
     if source:
         query = query.where(DocFile.source == source)
+    if origin:
+        query = query.where(DocFile.origin == origin)
+    if agent_id:
+        helpers = select(Agent.id).where(
+            Agent.workspace_id == principal.workspace_id, Agent.clone_of == agent_id
+        )
+        query = query.where(or_(DocFile.agent_id == agent_id, DocFile.agent_id.in_(helpers)))
+    if workflow_run_id:
+        query = query.where(DocFile.workflow_run_id == workflow_run_id)
     if expiring:
         query = query.where(_expiring())
     if folder is not None:

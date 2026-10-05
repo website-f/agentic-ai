@@ -4,13 +4,14 @@ office as drafts; people approve documents and submit packs themselves."""
 
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import or_, select
 
 from ..core.fence import fence
 from ..documents import packs as pack_svc
-from ..documents import service
+from ..documents import provenance, service
 from ..documents.fill import CORE_KIT, KIT_FIELDS
 from ..models import DocFile, DocTemplate, Document, Pack
 from .tools import Tool, ToolContext
@@ -234,6 +235,7 @@ async def _draft_document(ctx: ToolContext, args: dict[str, Any]) -> str:
         prior.values = {**(prior.values or {}), **values}
         if body is not None:
             prior.body = str(body)
+        _mark_revised(prior)
         doc = prior
     else:
         doc = await service.create_document(
@@ -250,6 +252,8 @@ async def _draft_document(ctx: ToolContext, args: dict[str, Any]) -> str:
         )
     doc.status = "review" if args.get("ready_for_review", True) else "draft"
     await ctx.db.commit()
+    saved = await provenance.refresh_files(ctx.db, doc, ensure_pdf=True)  # P25: AI folder
+    await ctx.db.commit()
     r = await service.render(ctx.db, doc)
     await events.publish(
         ctx.workspace.id, "document.updated", {"document_id": doc.id, "agent_id": ctx.agent.id}
@@ -258,7 +262,29 @@ async def _draft_document(ctx: ToolContext, args: dict[str, Any]) -> str:
         f"Document {'updated' if prior else 'drafted'}: {doc.title!r} [{doc.id}]"
         + (f" number {doc.number}" if doc.number else "")
         + f", status {doc.status}.\n{_checks_text(r)}\n"
-        "Fix any errors with revise_document. People approve and export it."
+        + _saved_text(saved)
+        + "Fix any errors with revise_document. A person reviews and approves it."
+    )
+
+
+def _mark_revised(d: Document) -> None:
+    """P25: work a person sent back goes back to them for review once the agent revises it."""
+    review = dict(d.review or {})
+    if review.get("state") == "sent_back":
+        review["state"] = "revised"
+        review["revised_at"] = datetime.now(UTC).isoformat()
+        d.review = review
+        if d.status == "draft":
+            d.status = "review"
+
+
+def _saved_text(saved: list[DocFile]) -> str:
+    if not saved:
+        return ""
+    return (
+        "Saved in the company's files: "
+        + ", ".join(f"[{f.id}] {f.folder}/{f.name}" for f in saved)
+        + " (refer to the file id to attach or send it).\n"
     )
 
 
@@ -275,9 +301,37 @@ async def _revise_document(ctx: ToolContext, args: dict[str, Any]) -> str:
         d.body = str(args["body"])
     if args.get("title"):
         d.title = str(args["title"])[:200]
+    _mark_revised(d)
+    await ctx.db.commit()
+    saved = await provenance.refresh_files(ctx.db, d, ensure_pdf=d.origin == "agent")
     await ctx.db.commit()
     r = await service.render(ctx.db, d)
-    return f"Revised {d.title!r} (version {d.version}).\n{_checks_text(r)}"
+    return (
+        f"Revised {d.title!r} (version {d.version}), status {d.status}.\n{_checks_text(r)}\n"
+        + _saved_text(saved)
+    ).strip()
+
+
+async def _export_document(ctx: ToolContext, args: dict[str, Any]) -> str:
+    """P25: save a document as PDF, Word or Excel in the company's files (the AI folder)."""
+    d = await _doc(ctx, str(args.get("document_id") or ""))
+    if d is None:
+        return "Error: no such document for you."
+    fmt = str(args.get("format") or "pdf").lower().strip(". ")
+    fmt = {"word": "docx", "doc": "docx", "excel": "xlsx", "xls": "xlsx"}.get(fmt, fmt)
+    if fmt not in service.EXPORT_MIME:
+        return "Error: format must be pdf, docx or xlsx."
+    try:
+        f = await provenance.save_export(ctx.db, d, fmt, agent_id=ctx.agent.id)
+    except Exception as e:  # noqa: BLE001 - a rendering problem is reported to the agent
+        await ctx.db.rollback()
+        return f"Error: could not export it ({e.__class__.__name__}). Check the document."
+    await ctx.db.commit()
+    waiting = "" if d.status == "approved" else " It is not approved yet: a person reviews it."
+    return (
+        f"Saved {f.name} [{f.id}] in the company's files, folder {f.folder}. Exporting again "
+        f"replaces it with the latest version. Refer to the file id to attach or send it.{waiting}"
+    )
 
 
 async def _check_document(ctx: ToolContext, args: dict[str, Any]) -> str:
@@ -628,7 +682,10 @@ DOC_TOOLS: list[Tool] = [
         "Create a document for people to review: from a template (give its name and the field "
         "values) or free-form (give body as markdown; write [[What is needed]] where a fact is "
         "missing instead of inventing it). Company details fill in automatically. Returns the "
-        "checks to fix. Drafting again with the same title revises it.",
+        "checks to fix. Drafting again with the same title revises it. Use the company's own "
+        "template for this kind of document when list_templates has one; a generic letter only "
+        "when none fits. If the document already exists, revise it (revise_document) instead of "
+        "drafting a second one: never leave a duplicate or a copy marked cancelled.",
         {
             "type": "object",
             "properties": {
@@ -663,6 +720,24 @@ DOC_TOOLS: list[Tool] = [
         "low",
         "allow",
         _revise_document,
+    ),
+    Tool(
+        "export_document",
+        "Export a document",
+        "Save a document as a PDF, Word (docx) or Excel (xlsx) file in the company's files "
+        "(folder AI documents), to attach to an email or a pack. Returns the file id. Drafting "
+        "already keeps a PDF there; exporting again replaces the file with the latest version.",
+        {
+            "type": "object",
+            "properties": {
+                "document_id": _ID,
+                "format": {"type": "string", "enum": ["pdf", "docx", "xlsx"]},
+            },
+            "required": ["document_id"],
+        },
+        "low",
+        "allow",
+        _export_document,
     ),
     Tool(
         "check_document",

@@ -70,6 +70,7 @@ const page = {
   guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
   present: lazyRouteComponent(() => import("@/pages/present"), "PresentPage"),
   objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
+  search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -378,14 +379,18 @@ const companyKitRoute = createRoute({
 const filesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/files",
-  validateSearch: (s: Record<string, unknown>): { f?: string; folder?: string } => ({ f: str(s.f), folder: str(s.folder) }),
+  // P25: page = open a PDF at that page (a search hit).
+  validateSearch: (s: Record<string, unknown>): { f?: string; folder?: string; origin?: "agent" | "uploaded" | "person"; page?: number } => ({
+    f: str(s.f), folder: str(s.folder), origin: s.origin === "agent" || s.origin === "uploaded" || s.origin === "person" ? s.origin : undefined,
+    page: num(s.page),
+  }),
   component: page.files,
 });
 const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: "/templates", component: page.templates });
 const documentsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/documents",
-  validateSearch: (s: Record<string, unknown>): { d?: string; new?: number } => ({ d: str(s.d), new: num(s.new) }),
+  validateSearch: (s: Record<string, unknown>): { d?: string; new?: number; view?: "review" } => ({ d: str(s.d), new: num(s.new), view: s.view === "review" ? "review" : undefined }),
   component: page.documents,
 });
 const packsRoute = createRoute({
@@ -473,6 +478,23 @@ const guidePageRoute = createRoute({
 });
 
 // P21: company objectives; o opens one, new=1 opens the create form.
+// P25: search inside every document.
+const SEARCH_TYPES = ["file", "sop", "document", "template", "page"] as const;
+const searchRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/search",
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { q?: string; type?: (typeof SEARCH_TYPES)[number]; kind?: string; dept?: string; source?: "upload" | "agent" | "person" } => ({
+    q: str(s.q),
+    type: SEARCH_TYPES.find((x) => x === s.type),
+    kind: str(s.kind),
+    dept: str(s.dept),
+    source: s.source === "upload" || s.source === "agent" || s.source === "person" ? s.source : undefined,
+  }),
+  component: page.search,
+});
+
 const objectivesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/objectives",
@@ -555,6 +577,7 @@ const routeTree = rootRoute.addChildren([
     guideRoute,
     guidePageRoute,
     objectivesRoute,
+    searchRoute,
   ]),
 ]);
 

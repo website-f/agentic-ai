@@ -1196,6 +1196,7 @@ class DocFile(Timestamps, Base):
     __tablename__ = "files"
     __table_args__ = (
         CheckConstraint("status IN ('reading', 'ready', 'failed')", name="ck_files_status"),
+        CheckConstraint("origin IN ('uploaded', 'person', 'agent')", name="ck_files_origin"),
         Index("ix_files_ws_created", "workspace_id", "created_at"),
     )
 
@@ -1241,6 +1242,16 @@ class DocFile(Timestamps, Base):
     # agents or put in the library until a person releases it.
     sensitive: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     quarantined: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P25 provenance: who made it (uploaded | person | agent), the workflow run it came from,
+    # and the document or report it is the saved copy of (one file per document and format).
+    origin: Mapped[str] = mapped_column(String(10), default="uploaded", server_default="uploaded")
+    workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), index=True
+    )
+    report_id: Mapped[str | None] = mapped_column(
+        ForeignKey("reports.id", ondelete="SET NULL"), index=True
+    )
 
 
 class IntakeBatch(Timestamps, Base):
@@ -1315,6 +1326,7 @@ class Document(Timestamps, Base):
     __tablename__ = "documents"
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'review', 'approved')", name="ck_documents_status"),
+        CheckConstraint("origin IN ('person', 'agent')", name="ck_documents_origin"),
         Index("ix_documents_ws_updated", "workspace_id", "updated_at"),
     )
 
@@ -1338,6 +1350,12 @@ class Document(Timestamps, Base):
     created_by: Mapped[str] = mapped_column(String(80))
     approved_by: Mapped[str | None] = mapped_column(String(80))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P25 provenance: person | agent, the workflow run it came from, and the last review
+    # decision on agent-made work: {"state": approved | sent_back | revised, "note", "by",
+    # "at", "task_id" (the revision task when sent back)}.
+    origin: Mapped[str] = mapped_column(String(10), default="person", server_default="person")
+    workflow_run_id: Mapped[str | None] = mapped_column(String(40), index=True)
+    review: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class DocumentVersion(Base):

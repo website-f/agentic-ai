@@ -96,6 +96,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
       t("files.company", "Pilih syarikat"), t("files.upload", "Muat naik fail, folder atau zip"), t("files.report", "Laporan muat naik"),
       t("files.tree", "Folder"), t("files.filters", "Carian dan penapis"), t("files.list", "Fail"),
       t("files.download-folder", "Muat turun folder"), t("files.download-all", "Muat turun semuanya"), t("files.library", "Guna sebagai garis panduan"),
+      t("shell.search", "Cari dalam setiap dokumen"),
     ],
   },
   {
@@ -191,6 +192,10 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   {
     id: "tutorial", route: "/tutorial", title: "Tutorial", group: "Help", states: [],
     targets: [t("tutorial.tracks", "Laluan peranan anda"), t("tutorial.next", "Seterusnya")],
+  },
+  {
+    id: "demo-day", route: "/tutorial", title: "Demo: sehari bekerja bersama ejen AI", group: "Help", states: [],
+    targets: [],
   },
 ];
 

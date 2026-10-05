@@ -143,6 +143,15 @@ async def sop_scope(db: AsyncSession, s: SOP) -> tuple[str | None, str | None]:
 async def index_sop(db: AsyncSession, sop_id: str) -> int:
     """(Re)build an SOP's passages, or drop them when it is gone or a draft (P24: agents
     never find a draft SOP). Commits."""
+    n = await _index_sop(db, sop_id)
+    # P25: document search keeps drafts too (only people who manage SOPs find them).
+    from ..search import index as search_index
+
+    await search_index.try_index(db, "sop", sop_id)
+    return n
+
+
+async def _index_sop(db: AsyncSession, sop_id: str) -> int:
     await _lock(db, "sop", sop_id)
     s = await db.get(SOP, sop_id)
     if s is None or s.status != "active":

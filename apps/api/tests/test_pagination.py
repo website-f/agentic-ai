@@ -435,6 +435,10 @@ async def test_documents_pages_fix_filter_and_stats(client: httpx.AsyncClient):
         "approved": 0,
         "fix": 4,
         "fix_complete": True,
+        # P25: who made them
+        "agent": 0,
+        "person": 9,
+        "ai_waiting": 0,
     }
     notes, _ = await walk(client, "/api/documents?q=note", 2)
     assert len(notes) == 5
@@ -461,7 +465,17 @@ async def test_files_expiring_filter_and_stats(client: httpx.AsyncClient):
         ]
     )
     stats = (await client.get("/api/files/stats")).json()
-    assert stats == {"total": 8, "upload": 7, "generated": 1, "expiring": 4, "reading": 0}
+    assert stats == {
+        "total": 8,
+        "upload": 7,
+        "generated": 1,
+        "expiring": 4,
+        "reading": 0,
+        # P25: by who made them (rows written straight to the table keep the default)
+        "agent": 0,
+        "person": 0,
+        "uploaded": 8,
+    }
     soon, _ = await walk(client, "/api/files?expiring=true", 3)
     assert len(soon) == 4
     assert (await client.get("/api/files/stats?q=cert-1")).json()["total"] == 1

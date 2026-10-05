@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import undefer
 
 from ..core.config import settings
+from ..documents import provenance
 from ..documents import service as doc_service
 from ..models import DocFile
 from .tools import ToolContext
@@ -59,11 +60,16 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
     data = r.json()
 
     saved = []
+    folder = ""
     for out in data.get("files") or []:
         try:
             blob = base64.b64decode(out["b64"])
         except (ValueError, KeyError):
             continue
+        if not folder:  # P25: what agents make lands in the company's AI folder
+            folder = await provenance.ai_folder(
+                ctx.db, ctx.workspace.id, ctx.agent.branch_id, "file"
+            )
         f = await doc_service.create_file(
             ctx.db,
             workspace_id=ctx.workspace.id,
@@ -72,8 +78,10 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
             created_by=f"agent:{ctx.agent.id}",
             branch_id=ctx.agent.branch_id,
             task_id=ctx.task.id if ctx.task else None,
+            agent_id=ctx.agent.id,
             source="generated",
             status="ready",
+            folder=folder,
         )
         f.summary = "Produced by run_python."
         saved.append(f)

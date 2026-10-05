@@ -8,6 +8,7 @@ tool asks a person first by default."""
 import re
 from typing import Any
 
+from ..documents import provenance
 from ..documents import service as doc_service
 from ..engine import gateway, media
 from .tools import Tool, ToolContext
@@ -51,6 +52,7 @@ async def _generate_image(ctx: ToolContext, args: dict[str, Any]) -> str:
         agent_id=ctx.agent.id,
         source="generated",
         status="ready",
+        folder=await provenance.ai_folder(ctx.db, ctx.workspace.id, ctx.agent.branch_id, "picture"),
     )
     f.kind = "Picture"
     f.title = prompt[:200]

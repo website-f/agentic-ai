@@ -28,6 +28,7 @@ import {
   HourglassMediumIcon,
   MoonStarsIcon,
   ShieldCheckIcon,
+  FileTextIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -37,6 +38,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
+import { TaskDocuments } from "@/components/provenance";
 import { TaskObjectivePanel } from "@/components/objective-bits";
 import { TaskPlan } from "@/components/task-plan";
 import { Button } from "@/components/ui/button";
@@ -318,6 +320,8 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3.5"><Markdown>{task.result}</Markdown></div>
             </SheetSection>
           ) : null}
+          <TaskDocuments taskId={task.id} icon={<FileTextIcon size={15} weight="duotone" className="text-muted" />}
+            title={(n) => <>{t("Documents made in this task")} <span className="font-normal text-muted tabular">{n}</span></>} />
           {data.children.length ? (
             <SheetSection icon={TreeStructureIcon} title={t("Handed out")} note={t("{done} of {total} done", { done: childrenDone, total: data.children.length })}>
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label={t("Sub-tasks done")} aria-valuemin={0} aria-valuemax={data.children.length} aria-valuenow={childrenDone}>

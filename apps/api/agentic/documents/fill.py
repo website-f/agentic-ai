@@ -190,19 +190,26 @@ def _qty(q: float) -> str:
     return str(int(q)) if float(q).is_integer() else f"{q:g}"
 
 
-def items_table(items: list[dict[str, Any]], totals: dict[str, float], cur: str, tax: str) -> str:
-    head = (
-        f"| No. | Description | Qty | Unit price ({cur}) | Amount ({cur}) |\n|---|---|---|---|---|"
-    )
+_ITEM_HEADS = {
+    "en": ("No.", "Description", "Qty", "Unit price", "Amount", "Subtotal", "Total"),
+    "ms": ("Bil.", "Perkara", "Kuantiti", "Harga seunit", "Jumlah", "Jumlah kecil", "Jumlah besar"),
+}
+
+
+def items_table(
+    items: list[dict[str, Any]], totals: dict[str, float], cur: str, tax: str, lang: str = "en"
+) -> str:
+    no, desc, qty, price, amount, sub, total = _ITEM_HEADS.get(lang, _ITEM_HEADS["en"])
+    head = f"| {no} | {desc} | {qty} | {price} ({cur}) | {amount} ({cur}) |\n|---|---|---|---|---|"
     rows = [
         f"| {i} | {it['description']} | {_qty(it['qty'])}{(' ' + it['unit']) if it['unit'] else ''}"
         f" | {money(it['unit_price'])} | {money(it['amount'])} |"
         for i, it in enumerate(items, 1)
     ]
-    rows.append(f"|  |  |  | **Subtotal** | **{money(totals['subtotal'])}** |")
+    rows.append(f"|  |  |  | **{sub}** | **{money(totals['subtotal'])}** |")
     if totals.get("tax"):
         rows.append(f"|  |  |  | {tax} | {money(totals['tax'])} |")
-    rows.append(f"|  |  |  | **Total** | **{money(totals['total'])}** |")
+    rows.append(f"|  |  |  | **{total}** | **{money(totals['total'])}** |")
     return "\n".join([head, *rows])
 
 
@@ -252,7 +259,7 @@ def context(
         tax = round(subtotal * rate / 100, 2)
         totals = {"subtotal": subtotal, "tax": tax, "total": round(subtotal + tax, 2)}
         label = f"{kit.get('tax_label') or 'Tax'} {rate:g}%"
-        ctx["items"] = items_table(items, totals, cur, label)
+        ctx["items"] = items_table(items, totals, cur, label, lang)
         if item_key != "items":
             ctx[item_key] = ctx["items"]
         ctx["subtotal"] = f"{cur} {money(subtotal)}"

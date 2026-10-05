@@ -632,6 +632,16 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Pilih **Untuk siapa**. Ejen dalam skop itu kini mencarinya dan memetik halaman yang digunakan."),
         ],
       },
+      {
+        title: "Cari dalam setiap dokumen",
+        steps: [
+          s("Klik kotak carian di bahagian atas mana-mana halaman, atau tekan **/**, dan mula menaip. Di telefon, ketik ikon kanta pembesar.", "shell.search"),
+          s("Pilih cadangan: perkataan daripada dokumen anda sendiri, tajuk, tajuk bahagian, atau carian terkini anda. Kekunci ↑ ↓ dan Enter juga boleh digunakan."),
+          s("Tekan Enter untuk **Cari dalam semua dokumen**: setiap fail halaman demi halaman, SOP, dokumen, templat dan halaman wiki, dengan perkataan yang sepadan ditanda."),
+          s("Letak perkataan dalam tanda petik untuk frasa yang tepat, seperti \"load system calculation\". Amaun dan tarikh boleh ditaip seperti biasa: RM700, RM 700.00, 16hb. Nombor rujukan, seperti nombor PO atau tender, dilengkapkan semasa anda menaip."),
+          s("Klik hasil carian: fail dibuka dalam Fail syarikat pada halaman yang sepadan. Anda hanya jumpa apa yang anda boleh buka, dan tidak sekali-kali fail yang ditahan."),
+        ],
+      },
     ],
     tips: [
       "Fail yang ditahan tidak sampai kepada ejen sehingga pengurus melepaskannya. Laporan menerangkan sebabnya dengan mudah dan tidak sekali-kali menunjukkan rahsia itu.",
@@ -1375,6 +1385,122 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     who: EVERYONE,
     related: ["home"],
   },
+  // ------------------------------------------------------------------ Help: demo pelanggan
+  "demo-day": {
+    purpose: "Skrip untuk menunjukkan kepada pelanggan satu hari bekerja bersama ejen AI: kakitangan mengambil pekerja AI mereka, ejen menjalankan prosedur syarikat sendiri, dan seseorang meluluskan hasil kerja AI. Gunakan prosedur syarikat anda; setiap langkah menyatakan apa yang perlu diklik dan apa yang perlu ditunjukkan.",
+    can: [
+      "Jalankan keseluruhan demo dalam kira-kira setengah jam dengan satu akaun pemilik dan satu akaun kakitangan.",
+      "Cari dalam setiap fail yang dimuat naik, perkataan demi perkataan, dengan cadangan semasa menaip: frasa, amaun seperti RM700 atau nombor rujukan.",
+      "Tunjukkan empat aliran kerja yang dibina daripada prosedur syarikat yang dimuat naik, setiap satu berakhir dengan dokumen yang disemak oleh seseorang.",
+      "Tunjukkan langkah berisiko yang berhenti dan menunggu di **Kelulusan**: menghantar ke luar, menandatangani, pembayaran dan penghantaran di portal.",
+      "Akhiri di **Dokumen** dan **Fail syarikat** yang ditapis kepada **Dibuat oleh AI**, supaya pelanggan nampak semua hasil AI di satu tempat.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Sebelum demo: sediakan syarikat",
+        steps: [
+          s("Log masuk sebagai pemilik. Di **Fail syarikat**, pilih syarikat dan letakkan fail zip prosedurnya: permohonan pakaian seragam dan peralatan, langkah tatatertib, peraturan pendahuluan gaji dan prosedur tender."),
+          s("Apabila muat naik siap, pilih fail prosedur itu dan klik **Jadikan SOP** atau **Bina aliran kerja**. Semak setiap draf dan simpan."),
+          s("Isi **Kit syarikat** (nama berdaftar, nombor pendaftaran, alamat, penandatangan) supaya surat dan pesanan dicetak dengan kepala surat."),
+          s("Tambah seorang kakitangan dengan peranan kakitangan di Ahli, dan simpan butiran log masuknya untuk demo."),
+        ],
+      },
+      {
+        title: "1. Kakitangan mengambil pekerja AI mereka",
+        steps: [
+          s("Log masuk sebagai kakitangan itu. Langkah pengambilan terbuka dengan sendiri; jika tidak, klik **Mulakan** di **Pekerja AI saya**."),
+          s("Beri pekerja itu nama dan jawatan, contohnya pembantu HR di syarikat keselamatan anda, dan tandakan perkara yang mesti ia tanya dahulu."),
+          s("Di bawah **Kerjanya**, tambah tugas harian, contohnya menyemak permohonan cuti baharu setiap pagi."),
+          s("Di bawah **Waktu bekerja**, pilih **Minggu pejabat**. Kerja yang diberi selepas waktu kerja akan menunggu syif seterusnya."),
+          s("Baca surat tawaran dan klik **Ambil bekerja**."),
+        ],
+      },
+      {
+        title: "2. Beri tugasan berdasarkan SOP",
+        steps: [
+          s("Di **Pekerja AI saya**, klik **Beri tugasan**."),
+          s("Tulis permintaan dan sebut SOP yang perlu diikuti, contohnya: sediakan sebut harga kawalan keselamatan dua sekolah untuk 12 bulan, dengan kadar syarikat, ikut SOP sebut harga."),
+          s("Buka tugasan itu di **Tugasan** dan tunjukkan garis masanya: SOP yang dibaca, fail yang dibuka dan apa yang sedang dibuat."),
+          s("Sebut harga itu dibuat daripada templat syarikat, dengan kepala suratnya. Ia disimpan di **Dokumen**, dan PDFnya di **Fail syarikat** di bawah Dokumen AI, bertanda **Dibuat oleh AI**."),
+          s("Apabila siap, hasilnya menunggu semakan. Klik **Terima**, atau **Hantar semula** dengan nota untuk menunjukkan ejen membetulkan kerjanya sendiri."),
+        ],
+      },
+      {
+        title: "2b. Cari apa sahaja dalam dokumen syarikat",
+        steps: [
+          s("Klik kotak carian di bahagian atas mana-mana halaman, atau tekan **/**."),
+          s("Taip huruf awal sesuatu perkataan, contohnya kelay. Cadangan muncul semasa anda menaip: perkataan penuh daripada dokumen, tajuk fail dan tajuk dalam fail."),
+          s("Cari amaun seperti RM700, nombor rujukan seperti nombor tender atau PO, atau frasa dalam tanda petik. Hasil menunjukkan halaman PDF tempat ia dijumpai."),
+          s("Klik satu hasil: fail dibuka pada halaman itu dengan perkataan diserlahkan. Tapis mengikut syarikat, jenis, jabatan atau **Dibuat atau dimuat naik**."),
+          s("Tunjukkan bahawa ejen mencari dengan cara yang sama dan menyebut fail serta halaman yang digunakan. Kakitangan hanya menjumpai apa yang syarikat dan peranan mereka boleh buka."),
+        ],
+      },
+      {
+        title: "3a. Permohonan pakaian seragam atau peralatan, berakhir dengan pesanan belian",
+        steps: [
+          s("Buka **Aliran kerja**, pilih aliran kerja permohonan pakaian seragam yang dibina daripada prosedur syarikat dan klik **Jalankan**."),
+          s("Taip permohonan itu (siapa perlukan apa, saiz dan kuantiti) dan klik **Mula**."),
+          s("Larian berhenti di tempat prosedur memerlukan seseorang: keputusan pengurus sebelum sebarang pesanan dibuat. Tunjukkan di bawah **Perlukan anda**, kemudian luluskan."),
+          s("Ejen menyemak permohonan berpandukan prosedur dan menyediakan draf pesanan belian daripada templat syarikat. PDFnya masuk ke fail syarikat di bawah Dokumen AI."),
+          s("Apabila barang sampai, seseorang merekodkan apa yang diterima dan larian ditutup."),
+        ],
+      },
+      {
+        title: "3b. Kes tatatertib, berakhir dengan surat amaran",
+        steps: [
+          s("Jalankan aliran kerja tatatertib dengan butiran kes: kakitangan terlibat, apa yang berlaku, tarikh dan amaran sebelum ini jika ada."),
+          s("Ejen mengikut langkah tatatertib syarikat, membaca rekod yang diberi dan menyediakan draf surat amaran dalam bahasa syarikat."),
+          s("Tekankan bahawa surat itu menunggu seseorang. Tiada siapa menandatangani atau menghantarnya sehingga ia diluluskan."),
+        ],
+      },
+      {
+        title: "3c. Pendahuluan gaji bulanan",
+        steps: [
+          s("Jalankan aliran kerja pendahuluan gaji dengan bulan berkenaan dan kehadiran separuh bulan pertama."),
+          s("Ejen mengira berapa yang boleh diterima setiap orang mengikut peraturan syarikat, seperti hari bekerja dan had pendahuluan, dan menunjukkan pengiraannya dalam laporan."),
+          s("Seseorang memasukkan jumlah yang diluluskan ke dalam sistem gaji. Ejen tidak pernah membuat bayaran sendiri."),
+          s("Larian menunggu orang itu mengesahkan kerja itu selesai sebelum ia ditutup."),
+        ],
+      },
+      {
+        title: "3d. Tender, daripada notis hingga senarai semak penyerahan",
+        steps: [
+          s("Jalankan aliran kerja tender dengan notis tender: muat naik notis itu atau tampal butirannya."),
+          s("Ejen membaca notis, mencatat tarikh tutup dan taklimat wajib jika ada, dan memberitahu pasukan apa yang perlu disediakan."),
+          s("Mereka menyediakan draf makluman taklimat dan surat kepada bank untuk meminta salinan diakui sah (CTC) penyata bank."),
+          s("Penyerahan di portal tender sentiasa dibuat oleh pegawai yang diberi kuasa. Larian menunggu mereka mengesahkan ia sudah diserahkan."),
+        ],
+      },
+      {
+        title: "4. Di mana kelulusan muncul dan cara meluluskannya",
+        steps: [
+          s("Apa-apa yang berisiko akan berhenti dan bertanya dahulu: e-mel atau WhatsApp kepada orang luar syarikat, menandatangani, pembayaran dan penghantaran di portal."),
+          s("Permintaan itu muncul di **Kelulusan**, dan sebagai pemberitahuan telefon jika saluran sudah disediakan, bersama nama ejen, tindakannya dan sebabnya."),
+          s("Klik **Luluskan sekali** untuk membenarkannya kali ini sahaja, atau **Tolak** dengan sebab yang akan dibaca oleh ejen."),
+          s("Setiap keputusan disimpan dalam **Sejarah** dan log aktiviti, bersama siapa yang memutuskan dan bila."),
+        ],
+      },
+      {
+        title: "5. Cari hasil kerja AI dan semak",
+        steps: [
+          s("Di halaman utama, satu kad menunjukkan berapa dokumen yang disediakan AI minggu ini dan berapa yang menunggu semakan. Klik **Semak sekarang**."),
+          s("Di **Dokumen**, buka **Semak hasil AI**. Setiap baris menunjukkan ejen, tugasan atau aliran kerja asalnya, serta **Luluskan**, **Hantar semula** dan **Buka**."),
+          s("Hantar semula satu dokumen dengan nota dan tunjukkan ejen membetulkannya. Ia kembali ke senarai yang sama apabila siap."),
+          s("Di **Fail syarikat**, pilih **Dibuat oleh AI** dan pilih ejen. Pesanan belian, surat amaran, laporan gaji dan surat tender semuanya ada di situ, masing-masing dengan tugasan dan status semakannya."),
+          s("Tukar penapis kepada **Dimuat naik** untuk menunjukkan fail syarikat sendiri, iaitu prosedur dan borang yang dirujuk oleh ejen."),
+        ],
+      },
+    ],
+    tips: [
+      "Gunakan nama kakitangan dan angka rekaan dalam demo. Jangan sekali-kali tunjukkan kes atau gaji pekerja sebenar.",
+      "Jalankan setiap aliran kerja sekali sebelum mesyuarat supaya anda tahu berapa lama ia ambil dengan penyedia AI anda.",
+      "Folder AI mengikut bahasa syarikat: AI documents dalam bahasa Inggeris, Dokumen AI dalam bahasa Melayu. Versi baharu sesuatu dokumen menggantikan failnya; Dokumen menyimpan setiap versi.",
+    ],
+    who: "Pemilik dan pengurus yang menunjukkan sistem ini kepada pelanggan. Dua bahagian pertama memerlukan akaun kakitangan.",
+    related: ["my-worker", "tasks", "workflows", "approvals", "documents", "files"],
+  },
+
 };
 
 /** Captions for the recorded flows, in Malay. */

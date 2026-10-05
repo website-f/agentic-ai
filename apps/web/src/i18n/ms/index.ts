@@ -10,7 +10,9 @@ import { FILES } from "./files";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
 import { MINUTES } from "./minutes";
+import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
+import { SEARCH } from "./search";
 import { SHELL } from "./shell";
 import { WORK } from "./work";
 
@@ -25,4 +27,6 @@ export const MS: Record<string, string> = {
   ...RUNS,
   ...BUILDERS,
   ...FILES,
+  ...PROVENANCE,
+  ...SEARCH,
 };

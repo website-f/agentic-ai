@@ -7,11 +7,12 @@ import {
 } from "@phosphor-icons/react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { FileStatus } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
+import { FileProvenanceCard, MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
@@ -25,17 +26,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
-import { docKeys, fileSize } from "@/lib/documents";
+import { docKeys, fileQuery, fileSize, fileStatsQuery } from "@/lib/documents";
 import {
   archiveUrl, buildTree, deleteFile, fileTreeQuery, folderChain, folderName, intakeKeys, KINDS, kindKey, kindLabel, notThere,
   type CompanyFile, type FolderNode, type IntakeBatch, type KindKey,
 } from "@/lib/intake";
 import { libraryKeys, setLibrary } from "@/lib/library";
 import { usePagedList, useDebounced } from "@/lib/paged";
+import { fileOrigin, type FileOrigin, type FileProvenance } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
+import { agentsQuery } from "@/lib/work";
 
 import { BuildFromDocs } from "@/components/doc-builders";
 import { BatchCard, IntakeDrop, type ShowFilter } from "./files-upload";
@@ -45,6 +48,9 @@ import { DocSteps, FileTile, KindTile } from "./visuals";
 type View = "folder" | "kind" | "department";
 const ANY = "__any";
 const NO_DEPT = "__none";
+/** P25: who made it. */
+type OriginFilter = FileOrigin | typeof ANY;
+type ProvFile = CompanyFile & FileProvenance;
 
 // ---------------------------------------------------------------- folder tree
 
@@ -180,8 +186,15 @@ function FileRow({ f, branch, picked, onPick, onOpen, active, showFolder }: {
             {showFolder && f.folder ? <span className="inline-flex min-w-0 items-center gap-1">· <FolderSimpleIcon size={12} className="shrink-0" /><span className="truncate">{f.folder}</span></span> : null}
           </span>
           {f.title && f.title !== f.name ? <span className="truncate text-[12px] text-muted/80">{f.name}</span> : null}
+          {fileOrigin(f as ProvFile) === "agent" ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-[12px]">
+              <MadeBy origin="agent" agentName={(f as ProvFile).agent_name} agentColor={(f as ProvFile).agent_color} size="sm" />
+              <WorkLinks taskId={f.task_id} taskTitle={(f as ProvFile).task_title} runId={(f as ProvFile).workflow_run_id} runTitle={(f as ProvFile).workflow_run_title} />
+            </span>
+          ) : null}
         </span>
         <span className="flex flex-wrap items-center gap-1.5 max-sm:col-start-2">
+          <ReviewPill status={(f as ProvFile).review_status} />
           <FileStatus f={f} />
           {f.status === "ready" && !f.expires_on && !f.quarantined ? <Pill tone="ok">{t("Ready")}</Pill> : null}
           {f.expires_on && !f.expired && f.status === "ready" ? <Pill>{t("Valid until {date}", { date: f.expires_on })}</Pill> : null}
@@ -212,6 +225,24 @@ function FolderRow({ node, onPick }: { node: FolderNode; onPick: () => void }) {
   );
 }
 
+/** The open file in a side sheet, with who made it on top. The viewer renders as a pane
+ * inside it; its own header is hidden because the sheet has one. */
+function FileSheet({ id, onClose, children }: { id: string; onClose: () => void; children: ReactNode }) {
+  const t = useT();
+  const { data } = useQuery(fileQuery(id));
+  const f = data as ProvFile | undefined;
+  return (
+    <SideSheet open onOpenChange={(o) => !o && onClose()} size="lg"
+      title={f ? <span className="min-w-0 break-words">{f.title || f.name}</span> : t("File")}
+      description={f ? [kindLabel(f.kind), fileSize(f.size)].filter(Boolean).join(" · ") : undefined}>
+      <div className="grid min-w-0 gap-4">
+        <FileProvenanceCard fileId={id} />
+        <div className="min-w-0 [&>div>div:first-child]:hidden">{children}</div>
+      </div>
+    </SideSheet>
+  );
+}
+
 // ---------------------------------------------------------------- the hub for one company
 
 function CompanyHub({ branch }: { branch: Branch }) {
@@ -228,6 +259,8 @@ function CompanyHub({ branch }: { branch: Branch }) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<KindKey | typeof ANY>(ANY);
   const [dept, setDept] = useState<string>(ANY);
+  const [origin, setOrigin] = useState<OriginFilter>(search.origin ?? ANY);
+  const [agent, setAgent] = useState<string>(ANY);
   const [view, setView] = useState<View>("folder");
   const [batch, setBatch] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
@@ -276,7 +309,10 @@ function CompanyHub({ branch }: { branch: Branch }) {
 
   // Files.
   const needle = useDebounced(q.trim());
-  const filtering = !!needle || kind !== ANY || dept !== ANY || !!batch;
+  const filtering = !!needle || kind !== ANY || dept !== ANY || !!batch || origin !== ANY || agent !== ANY;
+  const { data: stats } = useQuery(fileStatsQuery({ branch_id: branch.id }));
+  const { data: allAgents = [] } = useQuery(agentsQuery);
+  const agents = allAgents.filter((a) => a.branch_id === branch.id && !a.clone_of);
   const recursive = view !== "folder" || filtering;
   const list = usePagedList<CompanyFile>(docKeys.files, "/api/files", {
     branch_id: branch.id,
@@ -287,6 +323,8 @@ function CompanyHub({ branch }: { branch: Branch }) {
     kind: kind === ANY ? undefined : kind,
     department_id: dept === ANY ? undefined : dept === NO_DEPT ? "none" : dept,
     batch_id: batch ?? undefined,
+    origin: origin === ANY ? undefined : origin,
+    agent_id: agent === ANY ? undefined : agent,
   }, { poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
   // The server filters; this also keeps the list right on a server that ignores a filter.
   const files = list.items.filter((f) => {
@@ -295,6 +333,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
     if (dept !== ANY && dept !== NO_DEPT && f.department_id !== dept) return false;
     if (!recursive && tree?.folders.length && (f.folder ?? "") !== folder) return false;
     if (batch && f.batch_id && f.batch_id !== batch) return false;
+    if (origin !== ANY && fileOrigin(f as ProvFile) !== origin) return false;
     return true;
   });
 
@@ -319,7 +358,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
     go({ folder: undefined });
     document.getElementById("company-files-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  const clearFilters = () => { setQ(""); setKind(ANY); setDept(ANY); setBatch(null); };
+  const clearFilters = () => { setQ(""); setKind(ANY); setDept(ANY); setBatch(null); setOrigin(ANY); setAgent(ANY); };
 
   const pick = (f: CompanyFile, on: boolean) => setPicked((m) => {
     const n = new Map(m);
@@ -374,9 +413,20 @@ function CompanyHub({ branch }: { branch: Branch }) {
   };
 
   const paneOpen = wide && inPane && !!search.f;
+  // P25: who made the file shows above the viewer, in the pane and in the sheet alike.
   const viewer = search.f ? (
-    <FileViewer id={search.f} branch={branch} folders={folderPaths} canManage={canManage} canEdit={canEdit}
-      onClose={() => openFile(undefined)} inline={wide && inPane} />
+    paneOpen ? (
+      <div className="grid gap-3">
+        <FileProvenanceCard fileId={search.f} />
+        <FileViewer id={search.f} branch={branch} folders={folderPaths} canManage={canManage} canEdit={canEdit}
+          onClose={() => openFile(undefined)} inline />
+      </div>
+    ) : (
+      <FileSheet id={search.f} onClose={() => openFile(undefined)}>
+        <FileViewer id={search.f} branch={branch} folders={folderPaths} canManage={canManage} canEdit={canEdit}
+          onClose={() => openFile(undefined)} inline />
+      </FileSheet>
+    )
   ) : null;
 
   const subfolders = view === "folder" && !filtering ? here.children : [];
@@ -419,6 +469,21 @@ function CompanyHub({ branch }: { branch: Branch }) {
             <Select value={dept} onValueChange={setDept} label={t("Department")} className="sm:w-56"
               options={[{ value: ANY, label: t("Every department") }, ...branch.departments.map((d) => ({ value: d.id, label: d.name })), { value: NO_DEPT, label: t("No department") }]} />
           </Toolbar>
+          <div data-guide="files.origin" className="flex min-w-0 flex-wrap items-center gap-2">
+            <Segmented<OriginFilter> label={t("Made by")} value={origin} size="sm"
+              onChange={(v) => { setOrigin(v); if (v !== "agent" && v !== ANY) setAgent(ANY); }}
+              options={[
+                { value: ANY, label: t("All"), ...(stats ? { count: stats.total } : {}) },
+                { value: "agent", label: t("Made by AI"), ...(stats?.agent !== undefined ? { count: stats.agent } : {}) },
+                { value: "uploaded", label: t("Uploaded"), ...(stats?.uploaded !== undefined ? { count: stats.uploaded } : {}) },
+                { value: "person", label: t("Made by people"), ...(stats?.person !== undefined ? { count: stats.person } : {}) },
+              ]} />
+            {agents.length ? (
+              <Select value={agent} label={t("Agent")} className="sm:w-52"
+                onValueChange={(v) => { setAgent(v); if (v !== ANY) setOrigin("agent"); }}
+                options={[{ value: ANY, label: t("Any agent") }, ...agents.map((a) => ({ value: a.id, label: a.name }))]} />
+            ) : null}
+          </div>
           <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-1.5 sm:w-auto sm:flex-wrap" role="group" aria-label={t("Kind")}>
               {[{ key: ANY, label: t("All kinds") }, ...KINDS.map((k) => ({ key: k.key, label: k.key === "sop" ? "SOP" : t(k.label) }))].map((k) => {

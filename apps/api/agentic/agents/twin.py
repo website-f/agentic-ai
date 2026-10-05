@@ -84,6 +84,7 @@ HELPS: tuple[Help, ...] = (
             "draft_document": "allow",
             "revise_document": "allow",
             "check_document": "allow",
+            "export_document": "allow",
             "company_kit": "allow",
         },
     ),

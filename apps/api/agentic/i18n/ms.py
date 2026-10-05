@@ -1039,4 +1039,16 @@ MS: dict[str, str] = {
     "That action item is not here.": "Tindakan itu tiada di sini.",
     "Use a date like 2026-10-31.": "Gunakan tarikh seperti 2026-10-31.",
     "Pick an agent from {scope}.": "Pilih ejen daripada {scope}.",
+    # P25 provenance and review of what agents make (documents/provenance, routers/documents)
+    "{title}, made by {agent} (AI agent). Version {version}.": "{title}, disediakan oleh {agent} (ejen AI). Versi {version}.",
+    "{title}, saved from Documents. Version {version}.": "{title}, disimpan daripada Dokumen. Versi {version}.",
+    "This document is approved.": "Dokumen ini sudah diluluskan.",
+    "No agent made this document. Edit it yourself instead.": "Dokumen ini bukan disediakan oleh ejen. Sunting sendiri.",
+    "{name} is not active, so it cannot revise this. Edit it yourself instead.": "{name} tidak aktif, jadi tidak boleh membetulkan dokumen ini. Sunting sendiri.",
+    "{name} is still working on this task. Send it back when the task finishes.": "{name} masih membuat tugasan ini. Hantar semula selepas tugasan selesai.",
+    "Revise: {title}": "Betulkan: {title}",
+    "This was sent back already. Wait for {name} to revise it.": "Dokumen ini sudah dihantar semula. Tunggu {name} membetulkannya.",
+    "Export a document": "Eksport dokumen",
+    # P25 document search (search_tools.py)
+    "Search documents": "Cari dokumen",
 }

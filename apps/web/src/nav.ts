@@ -7,6 +7,7 @@ import {
   PresentationIcon,
   BlueprintIcon,
   FlowArrowIcon,
+  FileMagnifyingGlassIcon,
   FileTextIcon,
   FilesIcon,
   FolderOpenIcon,
@@ -53,6 +54,7 @@ export type AppPath =
   | "/reports"
   | "/company-kit"
   | "/files"
+  | "/search"
   | "/templates"
   | "/documents"
   | "/packs"
@@ -140,6 +142,8 @@ export const NAV: NavSection[] = [
     // prepare documents, then compile submission packs.
     title: msg("Documents"),
     items: [
+      // P25: find anything inside every document, before the step-by-step flow below.
+      { to: "/search", label: msg("Search documents"), icon: FileMagnifyingGlassIcon, blurb: msg("Search inside every document: a phrase on page 23 of a handbook, an amount, a form or a job title. Opens the file at the page.") },
       { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
       { to: "/files", label: msg("Company files"), icon: FolderOpenIcon, blurb: msg("One place per company for all its documents. Drop a folder or a zip: it is kept in folders, read, sorted, and the how-to documents go to the library.") },
       { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },

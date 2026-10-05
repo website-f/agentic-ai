@@ -74,7 +74,11 @@ export const filesQuery = (params: Record<string, string> = {}) =>
     refetchInterval: (q) => (q.state.data?.some((f) => f.status === "reading") ? 2500 : false),
   });
 
-export interface FileStats { total: number; upload: number; generated: number; expiring: number; reading: number }
+export interface FileStats {
+  total: number; upload: number; generated: number; expiring: number; reading: number;
+  /** P25: by who made them (optional until every server sends them). */
+  agent?: number; person?: number; uploaded?: number;
+}
 
 /** Counts behind the Files tiles and tabs, for the same company and search as the list. */
 export const fileStatsQuery = (params: Record<string, string> = {}) =>
@@ -279,7 +283,11 @@ export const documentsQuery = (params: Record<string, string> = {}) =>
     queryKey: [...docKeys.documents, params],
     queryFn: () => api<DocSummary[]>(`/api/documents?${new URLSearchParams(params)}`),
   });
-export interface DocStats { total: number; draft: number; review: number; approved: number; fix: number; fix_complete: boolean }
+export interface DocStats {
+  total: number; draft: number; review: number; approved: number; fix: number; fix_complete: boolean;
+  /** P25: made by agents / by people, and what agents made that waits for a person. */
+  agent?: number; person?: number; ai_waiting?: number;
+}
 
 /** Counts behind the Documents tiles and tabs, for the same company and search as the list. */
 export const docStatsQuery = (params: Record<string, string> = {}) =>

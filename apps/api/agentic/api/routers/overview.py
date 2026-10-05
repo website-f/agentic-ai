@@ -7,7 +7,7 @@ tokens), is cached for 15 minutes, and never sees task contents.
 
 import hashlib
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -217,7 +217,7 @@ async def build(db: AsyncSession, principal: Principal, days: int) -> dict[str, 
         if a is not None and a.branch_id in stats:
             stats[a.branch_id]["approvals_pending"] += int(n)
     office = {"calls": 0, "tokens": 0, "usd": 0.0}
-    agent_usd: Counter[str] = Counter()
+    agent_usd: dict[str, float] = defaultdict(float)
     for aid, n, tok, usd, cached in calls:
         a = by_id.get(aid or "")
         if a is None:

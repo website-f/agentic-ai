@@ -109,6 +109,12 @@ async def readyz(response: Response, db: AsyncSession = Depends(get_db)) -> dict
     return {"ok": ok, "checks": [c.model_dump() for c in checks]}
 
 
+async def _documents_review(db: AsyncSession, principal: Principal) -> int:
+    from .documents import review_waiting
+
+    return await review_waiting(db, principal)
+
+
 @router.get("/api/system/status")
 async def system_status(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
@@ -164,6 +170,8 @@ async def system_status(
             .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending")
         )
         or 0,
+        # P25: documents agents made that wait for this person (scoped like Documents).
+        "documents_review": await _documents_review(db, principal),
     }
     return SystemStatusOut(
         ok=all(c.ok for c in components), version=__version__, components=components, counts=counts

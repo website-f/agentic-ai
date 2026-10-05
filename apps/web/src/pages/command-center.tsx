@@ -17,6 +17,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { IconTile, Page, PageHeader } from "@/components/page";
+import { AiWorkCard } from "@/components/provenance";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -244,6 +245,8 @@ export function CommandCenterPage() {
           onClick={() => navigate({ to: "/tasks" })}
         />
       </StatGrid>
+
+      <AiWorkCard />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 empty:hidden lg:grid-cols-2 lg:[&>*:only-child]:col-span-2">
         <PingsCard canWrite={me.permissions.includes("work.write")} />

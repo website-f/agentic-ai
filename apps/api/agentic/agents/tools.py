@@ -940,6 +940,9 @@ async def _publish_report(ctx: ToolContext, args: dict[str, Any]) -> str:
         r, created = await save_report(ctx.db, ctx.agent, ctx.task, args)
     except ValueError as e:
         return f"Error: {e}"
+    from ..documents import provenance
+
+    saved = await provenance.save_report(ctx.db, r)  # P25: a PDF copy in AI documents/Reports
     if created:
         await events.publish(
             ctx.workspace.id,
@@ -947,9 +950,10 @@ async def _publish_report(ctx: ToolContext, args: dict[str, Any]) -> str:
             {"report_id": r.id, "agent_id": ctx.agent.id, "title": r.title},
         )
     rows = sum(len(t.get("rows") or []) for t in r.tables)
+    where = f" A PDF copy is in the company's files: [{saved.id}] {saved.folder}." if saved else ""
     return (
-        f"Report saved for the owner: {r.title!r} ({len(r.tables)} table(s), {rows} row(s)). "
-        "Finish with a short answer that points to it."
+        f"Report saved for the owner: {r.title!r} ({len(r.tables)} table(s), {rows} row(s))."
+        f"{where} Finish with a short answer that points to it."
     )
 
 
@@ -1170,6 +1174,8 @@ FOLLOWS = {
     # research_gather reads pages too: an agent set to ask (or deny) before web_fetch gets the
     # same answer here instead of a side door.
     "research_gather": "web_fetch",
+    # P25: document search reads the same office documents as the library.
+    "search_documents": "search_library",
 }
 
 BROWSER_TOOLS = tuple(n for n in TOOLS if n.startswith("browser_"))
@@ -1323,3 +1329,8 @@ TOOLS.update({t.name: t for t in RESEARCH_TOOLS})
 from .company_tools import COMPANY_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in COMPANY_TOOLS})
+
+# P25: search inside every company document (pages, amounts, phrases), cited like the library.
+from .search_tools import SEARCH_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in SEARCH_TOOLS})

@@ -6,7 +6,7 @@ keeps the previous version. Approved documents are locked until someone reopens 
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -16,11 +16,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agents import launch, runtime
 from ...core.db import get_db
 from ...core.security import can
-from ...documents import docx_template, service
+from ...documents import docx_template, provenance, service
 from ...documents.fill import KIT_FIELDS, KIT_KEYS, clean_fields, detect_fields
 from ...engine import gateway
+from ...i18n import tr
 from ...models import (
     Agent,
     Branch,
@@ -29,6 +31,8 @@ from ...models import (
     DocTemplate,
     Document,
     DocumentVersion,
+    Task,
+    WorkflowRun,
 )
 from ...services import audit, events
 from .. import paging
@@ -431,6 +435,21 @@ class DocOut(BaseModel):
     approved_at: datetime | None
     errors: int
     warnings: int
+    # P25 provenance and review: who made it, from which task or workflow run, where its
+    # saved copies are, and where the review stands (draft | waiting | sent_back | approved).
+    origin: str = "person"
+    created_by_name: str | None = None
+    agent_color: str | None = None
+    task_title: str | None = None
+    workflow_run_id: str | None = None
+    workflow_run_title: str | None = None
+    review_status: str = "draft"
+    review_note: str | None = None
+    reviewed_by: str | None = None
+    reviewed_by_name: str | None = None
+    reviewed_at: str | None = None
+    revision_task_id: str | None = None
+    files: list[dict[str, str]] = Field(default_factory=list)
 
 
 class DocDetailOut(DocOut):
@@ -465,7 +484,39 @@ async def _base(db: AsyncSession, d: Document, found: list[dict[str, str]]) -> d
     b = await db.get(Branch, d.branch_id) if d.branch_id else None
     t = await db.get(DocTemplate, d.template_id) if d.template_id else None
     a = await db.get(Agent, d.agent_id) if d.agent_id else None
+    review = d.review or {}
+    task_title = (
+        await db.scalar(select(Task.title).where(Task.id == d.task_id)) if d.task_id else None
+    )
+    run_title = (
+        await db.scalar(select(WorkflowRun.title).where(WorkflowRun.id == d.workflow_run_id))
+        if d.workflow_run_id
+        else None
+    )
+    saved = (
+        await db.execute(
+            select(DocFile.id, DocFile.name, DocFile.mime, DocFile.folder)
+            .where(DocFile.document_id == d.id)
+            .order_by(DocFile.created_at)
+        )
+    ).all()
     return {
+        "origin": d.origin,
+        "created_by_name": await provenance.actor_name(db, d.created_by),
+        "agent_color": a.color if a else None,
+        "task_title": task_title,
+        "workflow_run_id": d.workflow_run_id,
+        "workflow_run_title": run_title,
+        "review_status": provenance.review_status(d.status, d.review),
+        "review_note": review.get("note") or None,
+        "reviewed_by": review.get("by"),
+        "reviewed_by_name": await provenance.actor_name(db, review.get("by")),
+        "reviewed_at": review.get("at"),
+        "revision_task_id": review.get("task_id"),
+        "files": [
+            {"id": r[0], "name": r[1], "format": provenance.FORMAT_OF.get(r[2], ""), "folder": r[3]}
+            for r in saved
+        ],
         "id": d.id,
         "title": d.title,
         "kind": d.kind,
@@ -508,20 +559,48 @@ DOC_ORDER: paging.Order = ((Document.updated_at, True), (Document.id, True))
 FIX_SCAN = 300  # documents checked per call when looking for the ones that fail a check
 
 
+def agent_and_helpers(workspace_id: str, agent_id: str) -> Any:
+    """An agent and the helpers it copied itself into (their work is its work)."""
+    helpers = select(Agent.id).where(Agent.workspace_id == workspace_id, Agent.clone_of == agent_id)
+    return or_(Document.agent_id == agent_id, Document.agent_id.in_(helpers))
+
+
 def _doc_query(
     principal: Principal,
     status_: str | None,
     branch_id: str | None,
     task_id: str | None,
     q: str,
+    origin: str | None = None,
+    agent_id: str | None = None,
+    review: str | None = None,
 ) -> Any:
     query = select(Document).where(Document.workspace_id == principal.workspace_id)
     if status_:
         query = query.where(Document.status == status_)
     if branch_id:
         query = query.where(Document.branch_id == branch_id)
-    if task_id:
-        query = query.where(Document.task_id == task_id)
+    if task_id:  # made in that task, or being revised in it (P25)
+        query = query.where(
+            or_(Document.task_id == task_id, Document.review["task_id"].astext == task_id)
+        )
+    if origin:
+        query = query.where(Document.origin == origin)
+    if agent_id:
+        query = query.where(agent_and_helpers(principal.workspace_id, agent_id))
+    if review == "waiting":
+        query = query.where(Document.status == "review")
+    elif review == "approved":
+        query = query.where(Document.status == "approved")
+    elif review == "sent_back":
+        query = query.where(
+            Document.status == "draft", Document.review["state"].astext == "sent_back"
+        )
+    elif review == "draft":
+        query = query.where(
+            Document.status == "draft",
+            or_(Document.review.is_(None), Document.review["state"].astext != "sent_back"),
+        )
     if q.strip():
         like = f"%{q.strip()}%"
         query = query.where(or_(Document.title.ilike(like), Document.number.ilike(like)))
@@ -565,6 +644,9 @@ async def list_documents(
     task_id: str | None = None,
     q: str = Query(default="", max_length=120),
     fix: bool = False,
+    origin: str | None = Query(default=None, pattern="^(person|agent)$"),
+    agent_id: str | None = Query(default=None, max_length=40),
+    review: str | None = Query(default=None, pattern="^(draft|waiting|sent_back|approved)$"),
     limit: int = Query(default=300, ge=1, le=300),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
@@ -572,8 +654,9 @@ async def list_documents(
 ) -> list[DocOut]:
     """Most recently changed first. Pages with `limit` + `cursor` (X-Next-Cursor,
     X-Total-Count); filters and search apply to every page. `fix` keeps only documents that
-    fail a check (pages can be short; follow X-Next-Cursor until it stops)."""
-    query = _doc_query(principal, status_, branch_id, task_id, q)
+    fail a check (pages can be short; follow X-Next-Cursor until it stops). P25: `origin`
+    (made by a person or an agent), `agent_id` (that agent and its helpers), `review`."""
+    query = _doc_query(principal, status_, branch_id, task_id, q, origin, agent_id, review)
     if fix:
         found, nxt = await _failing(db, query, cursor, limit)
         if nxt:
@@ -593,16 +676,26 @@ async def list_documents(
 async def document_stats(
     branch_id: str | None = None,
     q: str = Query(default="", max_length=120),
+    origin: str | None = Query(default=None, pattern="^(person|agent)$"),
+    agent_id: str | None = Query(default=None, max_length=40),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Counts behind the Documents tiles and tabs for the same company and search as the
     list. `fix` counts failing documents among the latest FIX_SCAN (`fix_complete` says
-    whether that covered them all)."""
-    query = _doc_query(principal, None, branch_id, None, q)
+    whether that covered them all). P25: `agent` / `person` count by who made them (before
+    the origin filter), `ai_waiting` what agents made that waits for a person."""
+    base = _doc_query(principal, None, branch_id, None, q, None, agent_id)
+    query = _doc_query(principal, None, branch_id, None, q, origin, agent_id)
     grouped = query.with_only_columns(Document.status, func.count()).group_by(Document.status)
     rows: list[Any] = list((await db.execute(grouped)).all())
     by_status: dict[str, int] = {r[0]: int(r[1]) for r in rows}
+    who = base.with_only_columns(
+        func.count().filter(Document.origin == "agent"),
+        func.count().filter(Document.origin == "person"),
+        func.count().filter(Document.origin == "agent", Document.status == "review"),
+    )
+    agent_n, person_n, ai_waiting = (int(n or 0) for n in (await db.execute(who)).one())
     found, more = await _failing(db, query, None, FIX_SCAN)
     return {
         "total": sum(by_status.values()),
@@ -611,6 +704,85 @@ async def document_stats(
         "approved": by_status.get("approved", 0),
         "fix": len(found),
         "fix_complete": more is None,
+        "agent": agent_n,
+        "person": person_n,
+        "ai_waiting": ai_waiting,
+    }
+
+
+# ---------------------------------------------------------------- P25 review of AI work
+
+
+def review_queue_query(principal: Principal, branch_id: str | None = None) -> Any:
+    """What agents made that waits for a person, as this person may see it."""
+    return _doc_query(principal, "review", branch_id, None, "", "agent")
+
+
+async def review_waiting(db: AsyncSession, principal: Principal) -> int:
+    """The nav badge: agent-made documents waiting for this person (scoped)."""
+    q = review_queue_query(principal).with_only_columns(func.count())
+    return int(await db.scalar(q) or 0)
+
+
+@router.get("/documents/review-queue")
+async def review_queue(
+    response: Response,
+    branch_id: str | None = None,
+    agent_id: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=100, ge=1, le=300),
+    cursor: str | None = Query(default=None, max_length=400),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[DocOut]:
+    """Documents agents made that wait for a person (status review), most recent first.
+    Pages like the list; scoped like it."""
+    query = review_queue_query(principal, branch_id)
+    if agent_id:
+        query = query.where(agent_and_helpers(principal.workspace_id, agent_id))
+    rows = await paging.paginate(
+        db, query, DOC_ORDER, limit=limit, cursor=cursor, response=response
+    )
+    out = []
+    for d in rows:
+        r = await service.render(db, d)
+        out.append(DocOut(**await _base(db, d, r.checks)))
+    return out
+
+
+@router.get("/documents/review-queue/count")
+async def review_queue_count(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """For the home card and the nav badge: `waiting` (agent-made documents waiting for a
+    person), `made_week` (documents agents made in the last 7 days), `files_week` (other
+    files agents made in the last 7 days: reports, spreadsheets, pictures), `sent_back`
+    (sent back and not revised yet). Scoped like the lists."""
+    from .files import _filtered
+
+    week = datetime.now(UTC) - timedelta(days=7)
+    docs = _doc_query(principal, None, None, None, "", "agent").with_only_columns(
+        func.count().filter(Document.status == "review"),
+        func.count().filter(Document.created_at >= week),
+        func.count().filter(
+            Document.status == "draft", Document.review["state"].astext == "sent_back"
+        ),
+    )
+    waiting, made, sent_back = (int(n or 0) for n in (await db.execute(docs)).one())
+    files = (
+        _filtered(principal, None, None, "")
+        .where(
+            DocFile.origin == "agent",
+            DocFile.document_id.is_(None),
+            DocFile.created_at >= week,
+        )
+        .with_only_columns(func.count())
+    )
+    return {
+        "waiting": waiting,
+        "made_week": made,
+        "files_week": int(await db.scalar(files) or 0),
+        "sent_back": sent_back,
     }
 
 
@@ -704,6 +876,16 @@ async def update_document(
         if body.values is not None:
             d.values = body.values
         d.updated_at = datetime.now(UTC)
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "document.edited",
+            target=d.id,
+            after={"version": d.version, "origin": d.origin},
+            note=body.note or None,
+        )
+        await provenance.refresh_files(db, d)  # P25: its saved copies show the edit
         await db.commit()
         await db.refresh(d)
         await events.publish(
@@ -765,6 +947,7 @@ async def set_status(
                 problems=" ".join(errors[:3]),
             )
         d.approved_by, d.approved_at = principal.actor, datetime.now(UTC)
+        d.review = _decision(d, "approved", principal.actor, "")
     elif d.status == "approved":
         d.approved_by, d.approved_at = None, None
     before = d.status
@@ -777,6 +960,225 @@ async def set_status(
         target=d.id,
         before={"status": before},
         after={"status": d.status},
+    )
+    await db.commit()
+    await db.refresh(d)
+    await events.publish(
+        principal.workspace_id, "document.updated", {"document_id": d.id, "agent_id": d.agent_id}
+    )
+    return await doc_detail(db, d)
+
+
+def _decision(d: Document, state: str, actor: str, note: str, **extra: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "state": state,
+        "note": note.strip()[:1000],
+        "by": actor,
+        "at": datetime.now(UTC).isoformat(),
+    }
+    prior = d.review or {}
+    if prior.get("note") and state != "sent_back":
+        out["last_note"] = prior["note"]
+    out.update(extra)
+    return out
+
+
+class ApproveIn(BaseModel):
+    note: str = Field(default="", max_length=1000)
+
+
+@router.post("/documents/{doc_id}/approve")
+async def approve_document(
+    doc_id: str,
+    body: ApproveIn,
+    principal: Principal = Depends(require("approvals.decide")),
+    db: AsyncSession = Depends(get_db),
+) -> DocDetailOut:
+    """P25: a person approves a document (most often one an agent made): it is locked, and
+    the decision is kept on it and in the audit log."""
+    d = await _get(db, principal, doc_id)
+    if d.status == "approved":
+        raise api_error(status.HTTP_409_CONFLICT, "already_approved", "This document is approved.")
+    r = await service.render(db, d)
+    errors = [c["text"] for c in r.checks if c["level"] == "error"]
+    if errors:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "checks_failed",
+            "Fix these first: {problems}",
+            problems=" ".join(errors[:3]),
+        )
+    before = d.status
+    d.status = "approved"
+    d.approved_by, d.approved_at = principal.actor, datetime.now(UTC)
+    d.review = _decision(d, "approved", principal.actor, body.note)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "document.approved",
+        target=d.id,
+        before={"status": before},
+        after={"status": "approved", "origin": d.origin, "agent": d.agent_id},
+        note=body.note.strip() or None,
+    )
+    await db.commit()
+    await db.refresh(d)
+    await events.publish(
+        principal.workspace_id, "document.updated", {"document_id": d.id, "agent_id": d.agent_id}
+    )
+    return await doc_detail(db, d)
+
+
+class SendBackIn(BaseModel):
+    note: str = Field(min_length=3, max_length=1000)
+
+
+def _feedback(d: Document, note: str) -> str:
+    """What the agent is told (model-facing, so English)."""
+    return (
+        f"The document {d.title!r} [{d.id}] was sent back by a person. Their note: {note}\n"
+        f"Revise it with revise_document (document_id {d.id}), run check_document, then "
+        "finish with one or two lines on what you changed."
+    )
+
+
+async def _revision_task(
+    db: AsyncSession, principal: Principal, d: Document, agent: Agent, note: str
+) -> Task:
+    """A small task for the agent to revise a document outside its original task."""
+    lowest = (
+        await db.scalar(
+            select(func.min(Task.position)).where(Task.workspace_id == principal.workspace_id)
+        )
+        or 0
+    )
+    origin_task = await db.get(Task, d.task_id) if d.task_id else None
+    t = Task(
+        workspace_id=principal.workspace_id,
+        title=tr("Revise: {title}", title=d.title)[:200],
+        brief=_feedback(d, note),
+        priority="normal",
+        assignee_agent_id=agent.id,
+        branch_id=d.branch_id or agent.branch_id,
+        requires_review=True,
+        labels=["revision"],
+        created_by=principal.actor,
+        source="revision",
+        status="ready",
+        position=float(lowest) - 1,
+        objective_id=origin_task.objective_id if origin_task else None,
+    )
+    db.add(t)
+    await db.flush()
+    t.root_task_id = t.id
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "task.created",
+        target=t.id,
+        after={"title": t.title, "assignee": agent.id, "document": d.id},
+    )
+    await db.commit()
+    await runtime.task_event(db, t, "created", principal.actor, "sent a document back")
+    await events.publish(
+        principal.workspace_id, "task.created", {"task_id": t.id, "agent_id": agent.id}
+    )
+    return t
+
+
+@router.post("/documents/{doc_id}/send-back")
+async def send_back_document(
+    doc_id: str,
+    body: SendBackIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> DocDetailOut:
+    """P25: return an agent's document with a note. When the work it came from is waiting
+    for review (or finished, outside a workflow), it goes back through that task's send-back
+    (the agent continues the same conversation); otherwise the agent gets a small revision
+    task. The document turns back into a draft until the agent revises it."""
+    from .tasks import _stop_reviews  # the same stop a task's own send-back makes
+
+    d = await _get(db, principal, doc_id)
+    _locked(d)
+    agent = await db.get(Agent, d.agent_id) if d.agent_id else None
+    if d.origin != "agent" or agent is None:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "not_from_agent",
+            "No agent made this document. Edit it yourself instead.",
+        )
+    if agent.status != "active":
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "agent_inactive",
+            "{name} is not active, so it cannot revise this. Edit it yourself instead.",
+            name=agent.name,
+        )
+    if d.status == "draft" and (d.review or {}).get("state") == "sent_back":
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "already_sent_back",
+            "This was sent back already. Wait for {name} to revise it.",
+            name=agent.name,
+        )
+    note = body.note.strip()
+    task = await db.get(Task, d.task_id) if d.task_id else None
+    same_agent = (
+        task is not None
+        and task.assignee_agent_id is not None
+        and task.assignee_agent_id in (agent.id, agent.clone_of)
+    )
+    if same_agent and task is not None and task.status in launch.RUNNING + ("ready", "triage"):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "agent_still_working",
+            "{name} is still working on this task. Send it back when the task finishes.",
+            name=agent.name,
+        )
+    reuse = (
+        same_agent
+        and task is not None
+        and (
+            task.status == "review"
+            or (task.status in ("done", "failed") and not task.workflow_run_id)
+        )
+    )
+    before = d.status
+    started = True
+    if reuse and task is not None:
+        worker = await db.get(Agent, task.assignee_agent_id) or agent
+        await _stop_reviews(db, task)
+        task.review_round = 0
+        d.status = "draft"
+        d.review = _decision(d, "sent_back", principal.actor, note, task_id=task.id)
+        await db.commit()
+        try:
+            await launch.send_back(db, task, worker, _feedback(d, note), principal.actor)
+        except launch.LaunchError:
+            started = False
+        revision = task
+    else:
+        revision = await _revision_task(db, principal, d, agent, note)
+        d.status = "draft"
+        d.review = _decision(d, "sent_back", principal.actor, note, task_id=revision.id)
+        await db.commit()
+        try:
+            await launch.launch(db, revision, principal.actor)
+        except launch.LaunchError:
+            started = False
+    d.review = {**(d.review or {}), "started": started}
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "document.sent_back",
+        target=d.id,
+        before={"status": before},
+        after={"status": "draft", "task": revision.id, "agent": agent.id, "new_task": not reuse},
+        note=note,
     )
     await db.commit()
     await db.refresh(d)
@@ -859,6 +1261,15 @@ async def restore(
         raise api_error(status.HTTP_404_NOT_FOUND, "version_not_found", "That version is not kept.")
     await service.snapshot(db, d, principal.actor, f"before restoring version {v.version}")
     d.title, d.body, d.values = v.title, v.body, v.values
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "document.restored",
+        target=d.id,
+        after={"version": v.version},
+    )
+    await provenance.refresh_files(db, d)
     await db.commit()
     await db.refresh(d)
     return await doc_detail(db, d)
