@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+import random
 import secrets
 import socket
 import time
@@ -90,13 +91,39 @@ WAIT_MAX = 30
 # Camoufox's humanized cursor deadlocks once 3+ contexts click at the same time (helpers
 # working in parallel), so it is off unless asked for.
 HUMANIZE = os.environ.get("BROWSER_HUMANIZE", "false").lower() in ("1", "true", "yes")
+# Gentle pacing: keep to a human speed on the site so a portal does not see a burst of
+# machine-speed requests from one session (every click on a server-form portal like
+# ePerolehan is a POST). A minimum gap between server-touching actions, plus a cap per
+# minute. Read-only looks at the already-loaded page are never paced. All tunable per env.
+PACE_MIN = float(os.environ.get("BROWSER_PACE_MIN", "2.5"))  # seconds between server actions
+PACE_JITTER = float(os.environ.get("BROWSER_PACE_JITTER", "1.5"))  # extra 0..this, random
+PACE_WINDOW = 60.0
+PACE_MAX = int(os.environ.get("BROWSER_PACE_MAX_PER_MIN", "20"))  # server actions per minute
+# Actions that make the site's server work (a click, a form post, a navigation). Observing
+# the already-loaded page (snapshot, find, look, read, wait, scroll) is not one of these.
+SERVER_ACTIONS = frozenset(
+    {
+        "goto",
+        "verify",
+        "click",
+        "type",
+        "select",
+        "check",
+        "press",
+        "login_submit",
+        "upload",
+        "back",
+    }
+)
 # Self-healing: this many timeouts in one browser process within WEDGE_WINDOW seconds means
 # it is stuck; it is restarted and its agents' next step opens a fresh session.
 WEDGE_TIMEOUTS = 4
 WEDGE_WINDOW = 120
 # Dev only: extra host names allowed although they are private (the practice portal on the
 # browser network). Empty in production.
-ALLOW_HOSTS = {h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()}
+ALLOW_HOSTS = {
+    h.strip().lower() for h in os.environ.get("BROWSER_ALLOW_HOSTS", "").split(",") if h.strip()
+}
 # The egress proxy (apps/egress), e.g. http://egress:3128. The browser's network is internal,
 # so every request leaves through it; it resolves each host itself, refuses non-public
 # addresses (redirect hops included) and connects to the address it checked. Empty = direct.
@@ -278,7 +305,9 @@ class Slot:
 
 
 class Session:
-    def __init__(self, sid: str, owner: dict[str, Any], slot: Slot, allowed: list[str] | None) -> None:
+    def __init__(
+        self, sid: str, owner: dict[str, Any], slot: Slot, allowed: list[str] | None
+    ) -> None:
         self.id, self.owner, self.slot = sid, owner, slot
         self.context: Any = None
         self.page: Any = None
@@ -295,6 +324,25 @@ class Session:
         self.new_downloads: list[str] = []
         self.download_notes: list[str] = []
         self.pending: set[asyncio.Task[None]] = set()
+        self.last_server = 0.0  # when this session last made the site's server work
+        self.act_times: list[float] = []  # recent server-action times, for the per-minute cap
+
+
+async def _pace(s: "Session", action: str) -> None:
+    """Hold to a human pace: wait out the gap since this session's last server-touching
+    action (with jitter), and never exceed PACE_MAX of them a minute. Read-only observation
+    of the loaded page is not paced, so the agent still reads and thinks at full speed."""
+    if action not in SERVER_ACTIONS:
+        return
+    now = time.time()
+    wait = (s.last_server + PACE_MIN + random.uniform(0, PACE_JITTER)) - now
+    s.act_times = [t for t in s.act_times if now - t < PACE_WINDOW]
+    if len(s.act_times) >= PACE_MAX:  # over the per-minute cap: wait for the window to roll
+        wait = max(wait, PACE_WINDOW - (now - s.act_times[0]) + 0.1)
+    if wait > 0:
+        await asyncio.sleep(min(wait, PACE_WINDOW))
+    s.last_server = time.time()
+    s.act_times.append(s.last_server)
 
 
 def _kept_bytes(sess: "Session") -> int:
@@ -480,7 +528,12 @@ async def _close(sid: str) -> None:
 
 async def _restart_slot(slot: Slot) -> None:
     """Close the stuck browser's sessions and the browser; agents reopen on their next step."""
-    log.warning("browser %d looks stuck (%d timeouts in %ds): restarting it", slot.n, WEDGE_TIMEOUTS, WEDGE_WINDOW)
+    log.warning(
+        "browser %d looks stuck (%d timeouts in %ds): restarting it",
+        slot.n,
+        WEDGE_TIMEOUTS,
+        WEDGE_WINDOW,
+    )
     for sid in list(slot.sessions):
         await _close(sid)
     await slot.stop()
@@ -622,10 +675,14 @@ async def _locate(page: Any, ref: str) -> Any | None:
 def _gone(ref: str | None) -> str:
     if not ref:
         return "Give the element's ref from the page view (for example e12)."
-    return f"There is no element {ref} on the page now (it changed). Use the refs in the view below."
+    return (
+        f"There is no element {ref} on the page now (it changed). Use the refs in the view below."
+    )
 
 
-async def _snapshot_nodes(page: Any, *, full: bool = False, scope: str | None = None) -> dict[str, Any]:
+async def _snapshot_nodes(
+    page: Any, *, full: bool = False, scope: str | None = None
+) -> dict[str, Any]:
     raw = await page.evaluate(SNAPSHOT_JS, {"full": full, "scope": scope})
     if not isinstance(raw, dict):
         return {"nodes": [], "doc": "", "auth_form": None}
@@ -700,7 +757,9 @@ async def _observe(
     if d.mode == "full":
         obs["snapshot"] = rendered.text() + ("\n" + footer(rendered) if rendered.omitted else "")
         if raw.get("truncated"):
-            obs["snapshot"] += "\n(a very long page: only its first part was read; use browser_find)"
+            obs["snapshot"] += (
+                "\n(a very long page: only its first part was read; use browser_find)"
+            )
         obs["text"] = flat[: (READ_CHARS if read else TEXT_CHARS)]
         obs["text_rest"] = uncovered_text(text, [line for _, line in rendered.lines])
         # Table rows in bold usually mean unread or new; the plain text loses that.
@@ -743,15 +802,25 @@ async def healthz() -> dict[str, Any]:
 def _clean_state(raw: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
-    cookies = [c for c in raw.get("cookies") or [] if isinstance(c, dict) and c.get("name") and c.get("domain")]
-    origins = [o for o in raw.get("origins") or [] if isinstance(o, dict) and str(o.get("origin", "")).startswith("http")]
+    cookies = [
+        c
+        for c in raw.get("cookies") or []
+        if isinstance(c, dict) and c.get("name") and c.get("domain")
+    ]
+    origins = [
+        o
+        for o in raw.get("origins") or []
+        if isinstance(o, dict) and str(o.get("origin", "")).startswith("http")
+    ]
     if not cookies and not origins:
         return None
     return {"cookies": cookies[:300], "origins": origins[:20]}
 
 
 @app.post("/sessions")
-async def open_session(body: Open, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+async def open_session(
+    body: Open, x_browser_token: str | None = Header(default=None)
+) -> dict[str, Any]:
     _auth(x_browser_token)
     for sess in state["sessions"].values():
         if sess.owner["task_id"] == body.task_id:
@@ -773,7 +842,9 @@ async def open_session(body: Open, x_browser_token: str | None = Header(default=
     sid = "bs_" + secrets.token_hex(8)
     slot.sessions.add(sid)  # reserve the place before the (slow) launch
     restore = _clean_state(body.storage_state)
-    sess = Session(sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts)
+    sess = Session(
+        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts
+    )
     try:
         browser = await slot.get()
         kwargs: dict[str, Any] = {"viewport": VIEWPORT, "accept_downloads": True}
@@ -815,7 +886,9 @@ def _cookie_for(domain: str, hosts: list[str]) -> bool:
 
 
 @app.post("/sessions/{sid}/state")
-async def export_state(sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+async def export_state(
+    sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)
+) -> dict[str, Any]:
     """The context's cookies and local storage for these hosts only (a saved login's)."""
     _auth(x_browser_token)
     s = state["sessions"].get(sid)
@@ -823,8 +896,12 @@ async def export_state(sid: str, body: StateIn, x_browser_token: str | None = He
         raise HTTPException(404, "no such session")
     async with s.lock:
         raw = await s.context.storage_state()
-    cookies = [c for c in raw.get("cookies") or [] if _cookie_for(str(c.get("domain", "")), body.hosts)]
-    origins = [o for o in raw.get("origins") or [] if host_matches(str(o.get("origin", "")), body.hosts)]
+    cookies = [
+        c for c in raw.get("cookies") or [] if _cookie_for(str(c.get("domain", "")), body.hosts)
+    ]
+    origins = [
+        o for o in raw.get("origins") or [] if host_matches(str(o.get("origin", "")), body.hosts)
+    ]
     out = {"cookies": cookies, "origins": origins}
     if len(json.dumps(out)) > STATE_BYTES:
         out = {"cookies": cookies, "origins": []}
@@ -832,7 +909,9 @@ async def export_state(sid: str, body: StateIn, x_browser_token: str | None = He
 
 
 @app.post("/sessions/{sid}/forget")
-async def forget_state(sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)) -> dict[str, bool]:
+async def forget_state(
+    sid: str, body: StateIn, x_browser_token: str | None = Header(default=None)
+) -> dict[str, bool]:
     """Drop a restored session that no longer works: its cookies, and the site's storage."""
     _auth(x_browser_token)
     s = state["sessions"].get(sid)
@@ -840,10 +919,14 @@ async def forget_state(sid: str, body: StateIn, x_browser_token: str | None = He
         raise HTTPException(404, "no such session")
     async with s.lock:
         for h in body.hosts:
-            await s.context.clear_cookies(domain=re.compile(r"^\.?(.*\.)?" + re.escape(h.lower()) + "$"))
+            await s.context.clear_cookies(
+                domain=re.compile(r"^\.?(.*\.)?" + re.escape(h.lower()) + "$")
+            )
         if host_matches(s.page.url, body.hosts):
             try:
-                await s.page.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }")
+                await s.page.evaluate(
+                    "() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"
+                )
             except Exception:  # noqa: BLE001
                 pass
     return {"ok": True}
@@ -854,7 +937,9 @@ async def _do_snapshot(s: Session, body: Act) -> dict[str, Any]:
     page = s.page
     if not body.full and not body.scope:
         return await _observe(s, since=None, force_full=True, marks=body.marks)
-    raw = await _snapshot_nodes(page, full=body.full, scope=parse_ref(body.scope) if body.scope else None)
+    raw = await _snapshot_nodes(
+        page, full=body.full, scope=parse_ref(body.scope) if body.scope else None
+    )
     if raw.get("error"):
         obs = await _observe(s, since=body.since, marks=body.marks)
         obs["error"] = str(raw["error"]) + ". Use a ref from the view below."
@@ -899,7 +984,9 @@ async def _do_wait(s: Session, body: Act) -> str | None:
     ms = int(max(0.5, min(float(body.timeout or 10), WAIT_MAX)) * 1000)
     try:
         if body.text:
-            await page.wait_for_function(WAIT_TEXT_JS, arg=body.text.strip().lower(), timeout=ms, polling=250)
+            await page.wait_for_function(
+                WAIT_TEXT_JS, arg=body.text.strip().lower(), timeout=ms, polling=250
+            )
         elif body.url:
             needle = body.url.strip()
             await page.wait_for_url(lambda u: needle in u, timeout=ms)
@@ -920,13 +1007,16 @@ async def _do_wait(s: Session, body: Act) -> str | None:
 
 
 @app.post("/sessions/{sid}/act")
-async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+async def act(
+    sid: str, body: Act, x_browser_token: str | None = Header(default=None)
+) -> dict[str, Any]:
     _auth(x_browser_token)
     s = state["sessions"].get(sid)
     if s is None:
         raise HTTPException(404, "no such session (it may have closed after being idle)")
     async with s.lock:
         s.last = time.time()
+        await _pace(s, body.action)
         page = s.page
         point = None
         note = None
@@ -946,8 +1036,13 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 # Is a restored session still signed in? Load its check page: it must stay on
                 # the login's hosts and show no sign-in or one-time-code form.
                 u = urlparse(body.url or "")
-                if u.scheme not in ("http", "https") or not host_matches(body.url or "", body.hosts):
-                    return {"error": "The check page is not on this login's site.", "verified": False}
+                if u.scheme not in ("http", "https") or not host_matches(
+                    body.url or "", body.hosts
+                ):
+                    return {
+                        "error": "The check page is not on this login's site.",
+                        "verified": False,
+                    }
                 if s.allowed and not host_matches(body.url or "", s.allowed):
                     return {"error": blocked_text(body.url or "", s.allowed), "verified": False}
                 await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
@@ -1000,8 +1095,12 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
                 if body.action == "click":
                     if info["submit"] and not body.allow_submit:
-                        what = "changes external data" if info.get("transaction") else "sends the form"
-                        return {"error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."}
+                        what = (
+                            "changes external data" if info.get("transaction") else "sends the form"
+                        )
+                        return {
+                            "error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."
+                        }
                     await _press(page, loc)
                 elif body.action == "type":
                     if body.secret:
@@ -1015,7 +1114,9 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     await loc.fill(body.text or "", timeout=10_000)
                     if body.key == "Enter":
                         if not body.allow_submit:
-                            return {"error": "SUBMIT_NEEDS_APPROVAL: Enter would send the form. Use browser_submit."}
+                            return {
+                                "error": "SUBMIT_NEEDS_APPROVAL: Enter would send the form. Use browser_submit."
+                            }
                         await loc.press("Enter")
                 elif body.action == "select":
                     try:
@@ -1023,14 +1124,18 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     except Exception:  # noqa: BLE001 - try the value instead of the label
                         await loc.select_option(value=body.text or "", timeout=5000)
                 else:
-                    await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
+                    await loc.set_checked(
+                        bool(body.text not in ("false", "off", "0")), timeout=5000
+                    )
                 try:
                     await page.wait_for_load_state("networkidle", timeout=4000)
                 except Exception:  # noqa: BLE001
                     pass
             elif body.action == "upload":
                 if not body.allow_submit:
-                    return {"error": "SUBMIT_NEEDS_APPROVAL: uploading sends a file. Use browser_upload."}
+                    return {
+                        "error": "SUBMIT_NEEDS_APPROVAL: uploading sends a file. Use browser_upload."
+                    }
                 err, point = await _do_upload(s, body)
                 if err:
                     obs = await _observe(s, since=body.since)
@@ -1045,7 +1150,9 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 return obs
             elif body.action == "press":
                 if body.key == "Enter" and not body.allow_submit:
-                    return {"error": "SUBMIT_NEEDS_APPROVAL: Enter may send a form. Use browser_submit."}
+                    return {
+                        "error": "SUBMIT_NEEDS_APPROVAL: Enter may send a form. Use browser_submit."
+                    }
                 await page.keyboard.press(body.key or "Tab")
             elif body.action == "scroll":
                 await page.mouse.wheel(0, body.dy)
@@ -1064,7 +1171,9 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
             if "Timeout" in e.__class__.__name__:
                 await _note_timeout(s)
                 if sid not in state["sessions"]:  # the browser was just restarted
-                    return {"error": f"{err}. The browser was stuck and has been restarted: open the page again."}
+                    return {
+                        "error": f"{err}. The browser was stuck and has been restarted: open the page again."
+                    }
             if s.blocked and s.allowed:
                 err = blocked_text(s.blocked, s.allowed)
                 s.blocked = None
@@ -1077,7 +1186,9 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
         if body.action in ("click", "upload", "press", "goto", "login_submit", "type"):
             settled = await _settle(s)
             note = " ".join(x for x in (note, settled) if x) or None
-        obs = await _observe(s, point, read=body.action == "read", since=body.since, marks=body.marks)
+        obs = await _observe(
+            s, point, read=body.action == "read", since=body.since, marks=body.marks
+        )
         if note:
             obs["error" if body.action == "wait" else "note"] = note
         if s.new_downloads:
@@ -1103,7 +1214,9 @@ async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float
         if not data or len(data) > UPLOAD_MAX:
             return f"{f.get('name')}: empty or bigger than {UPLOAD_MAX // (1024 * 1024)} MB.", None
         name = re.sub(r"[\\/\x00-\x1f]", "_", str(f.get("name") or "file"))[:200]
-        files.append({"name": name, "mimeType": f.get("mime") or "application/octet-stream", "buffer": data})
+        files.append(
+            {"name": name, "mimeType": f.get("mime") or "application/octet-stream", "buffer": data}
+        )
     if not files:
         return "Give the files to upload.", None
     ref = _target(body)
@@ -1130,7 +1243,10 @@ async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float
             )
             field = near.as_element()
             if field is None:
-                return "No file field there: give the ref of the file field or of its choose-file button.", point
+                return (
+                    "No file field there: give the ref of the file field or of its choose-file button.",
+                    point,
+                )
             await field.set_input_files(files, timeout=15_000)
     try:
         await page.wait_for_load_state("networkidle", timeout=6000)
@@ -1149,7 +1265,9 @@ async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float
 
 
 @app.post("/sessions/{sid}/hold")
-async def hold(sid: str, body: HoldIn, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+async def hold(
+    sid: str, body: HoldIn, x_browser_token: str | None = Header(default=None)
+) -> dict[str, Any]:
     """Keep the session while a person decides (0 releases it): at most HOLD_MAX seconds."""
     _auth(x_browser_token)
     s = state["sessions"].get(sid)
@@ -1161,7 +1279,9 @@ async def hold(sid: str, body: HoldIn, x_browser_token: str | None = Header(defa
 
 
 @app.get("/sessions/{sid}/downloads/{did}")
-async def take_download(sid: str, did: str, x_browser_token: str | None = Header(default=None)) -> Response:
+async def take_download(
+    sid: str, did: str, x_browser_token: str | None = Header(default=None)
+) -> Response:
     """Hand a kept download to the worker, once (it is dropped from the session)."""
     _auth(x_browser_token)
     s = state["sessions"].get(sid)

@@ -294,6 +294,12 @@ services:
       BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-false}
       # Agents per Firefox process: 3+ working at once in one process stall (measured).
       BROWSER_PER_PROCESS: ${BROWSER_PER_PROCESS:-2}
+      # Gentle pacing on the site: a human gap between server-touching actions (clicks, form
+      # posts, navigations) and a per-minute cap, so a portal does not see machine-speed
+      # bursts. Reading the loaded page is never paced. Dial these up on a watched network.
+      BROWSER_PACE_MIN: ${BROWSER_PACE_MIN:-2.5}
+      BROWSER_PACE_JITTER: ${BROWSER_PACE_JITTER:-1.5}
+      BROWSER_PACE_MAX_PER_MIN: ${BROWSER_PACE_MAX_PER_MIN:-20}
       BROWSER_PROXY: http://egress:3128
     depends_on:
       egress: { condition: service_healthy }

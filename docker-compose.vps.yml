@@ -66,6 +66,11 @@ services:
   browser:
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
+      # A datacenter IP is watched harder than a home/office line, so pace it gentler here
+      # (a wider gap, fewer actions per minute). Override in .env if a portal is still strict.
+      BROWSER_PACE_MIN: ${BROWSER_PACE_MIN:-4}
+      BROWSER_PACE_JITTER: ${BROWSER_PACE_JITTER:-3}
+      BROWSER_PACE_MAX_PER_MIN: ${BROWSER_PACE_MAX_PER_MIN:-12}
 
   waha:
     environment:
