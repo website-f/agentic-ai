@@ -256,10 +256,13 @@ def clean_labels(labels: list[str]) -> list[str]:
 
 
 async def _attach_files(db: AsyncSession, principal: Principal, t: Task, ids: list[str]) -> None:
-    """Hand files to a task (P10): the agent sees them in its brief and can read them."""
+    """Hand files to a task (P10): the agent sees them in its brief and can read them. A file
+    another task made or fetched stays with that task (its "By task" files stay whole); this
+    task's brief names it instead."""
     from ...documents import service as doc_service
     from ...models import DocFile
 
+    borrowed: list[str] = []
     for fid in dict.fromkeys(ids):
         f = await db.scalar(
             doc_service.scoped(
@@ -272,9 +275,18 @@ async def _attach_files(db: AsyncSession, principal: Principal, t: Task, ids: li
         )
         if f is None:
             raise api_error(status.HTTP_400_BAD_REQUEST, "bad_file", "Pick files you can see.")
+        if f.task_id and f.task_id != t.id:
+            borrowed.append(f"- [{f.id}] {f.name}")
+            continue
         f.task_id = t.id
         if f.branch_id is None:
             f.branch_id = t.branch_id
+    if borrowed and not all(line in (t.brief or "") for line in borrowed):
+        t.brief = (
+            (t.brief or "").rstrip()
+            + "\n\nFiles for this task (from other work; read them with read_file):\n"
+            + "\n".join(line for line in borrowed if line not in (t.brief or ""))
+        )
 
 
 async def start(db: AsyncSession, t: Task, actor: str) -> None:

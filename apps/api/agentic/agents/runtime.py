@@ -105,6 +105,18 @@ async def _history(
     return list((await db.scalars(q.order_by(AgentMessage.id))).all())
 
 
+def pg_safe(value: Any) -> Any:
+    """Text Postgres can store: NUL (0x00) is refused in text and JSON, and web pages, PDFs
+    and tools sometimes carry one. Strings in lists and dicts are cleaned too."""
+    if isinstance(value, str):
+        return value.replace("\x00", "") if "\x00" in value else value
+    if isinstance(value, list):
+        return [pg_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {k: pg_safe(v) for k, v in value.items()}
+    return value
+
+
 def _add(
     db: AsyncSession,
     agent: Agent,
@@ -124,11 +136,11 @@ def _add(
         task_id=task_id,
         session_id=session_id,
         role=role,
-        content=content,
-        tool_calls=tool_calls,
+        content=pg_safe(content),
+        tool_calls=pg_safe(tool_calls),
         tool_call_id=tool_call_id,
         name=name,
-        meta=meta,
+        meta=pg_safe(meta),
         created_at=_now(),
     )
     db.add(m)
@@ -322,7 +334,9 @@ def _parse_args(raw: Any) -> tuple[dict[str, Any] | None, str | None]:
 
 async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
     try:
-        return await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=TOOL_TIMEOUT)
+        return pg_safe(
+            await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=TOOL_TIMEOUT)
+        )
     except TimeoutError:
         return f"Error: {TOOLS[name].label} took longer than {TOOL_TIMEOUT} s."
     except Exception as e:  # noqa: BLE001 - a broken tool must not kill the task

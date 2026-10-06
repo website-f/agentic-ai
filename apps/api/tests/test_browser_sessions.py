@@ -510,6 +510,8 @@ def test_tender_brief_requires_evidence_documents_and_approval():
     assert "Final tender submission and digital signing always require" in brief
     assert "Tender reference: QT123" in brief
     assert "Cetak Tawaran" in brief and "QT24560 - SUTERA SUMMARY" in brief  # the result
+    # products: researched, compared, recommended, confirmed by a person before filling
+    assert "Product recommendation" in brief and "confirm the products before" in brief
 
 
 @pytest.fixture

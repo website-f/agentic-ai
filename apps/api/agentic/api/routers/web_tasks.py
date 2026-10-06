@@ -112,28 +112,39 @@ def brief_for(body: WebTaskIn) -> str:
             "4. Keep an evidence manifest of every portal field and required attachment, with "
             "each value's source (tender document, company document, portal, person, public "
             "web), as a working note at wiki/tenders/<tender-reference>.md, not as a document.",
-            "5. Fill the portal the way the company's own submissions read: Maklum Balas Ya where "
-            "the company complies, and in Catatan the specific brand, model and specification "
-            "that meets each requirement, taken from the person's facts or company documents. "
-            "Never invent the company's experience, staff, certifications, equipment, price, "
-            "bank facts or declarations: a missing fact is left empty and reported as "
-            "[[REQUIRES HUMAN INPUT]].",
-            "6. Make documents only when the portal asks for an attachment you can honestly "
+            "5. PRODUCTS. For every item and specification line, find what the company can "
+            "offer: first its past submissions (search_library and company_documents for "
+            "'SUMMARY' and past tenders: the brands, models and wording it used before), then "
+            "the public web (manufacturer datasheets, Malaysian distributors, the regulator's "
+            "register, e.g. MDA for medical devices). Shortlist 2 to 3 products that meet "
+            "every line, compare them in a table (each requirement: meets / does not / unknown, "
+            "with the source URL), and recommend the best one with your reasons. Save it with "
+            "publish_research (title 'Product recommendation - <tender reference>'). Then ask "
+            "a person (ask_human) to confirm the products before you fill anything. A "
+            "registration or certificate number you could not verify from a source is "
+            "[[REQUIRES HUMAN INPUT]], never a guess.",
+            "6. Only after the person confirms, fill the portal the way the company's own "
+            "submissions read: Maklum Balas Ya where it complies, and in Catatan the confirmed "
+            "brand, model and the specification that meets that line (one line per "
+            "requirement, as in its past summaries). Never invent the company's experience, "
+            "staff, certifications, equipment, price, bank facts or declarations: a missing "
+            "fact is left empty and reported.",
+            "7. Make documents only when the portal asks for an attachment you can honestly "
             "prepare (for example a Cadangan Teknikal or a compliance statement) or when the "
             "instructions ask for one: draft_document, check_document, fix it, then upload it "
-            "with browser_upload. Use public web research (publish_research, cited) only when "
-            "the instructions ask for it. No other reports or drafts: they bury the result.",
-            "7. Saving, registering, uploading, declaring, signing or submitting is a "
+            "with browser_upload. No other reports or drafts beyond the product recommendation: "
+            "they bury the result.",
+            "8. Saving, registering, uploading, declaring, signing or submitting is a "
             "transaction: use browser_submit (or browser_upload) and wait for a person's "
             "approval. Final tender submission and digital signing always require a separate "
             "explicit approval: never press the final submit (Serah/Submit), never tick the "
             "declarations, never enter a security answer or certificate PIN.",
-            "8. THE RESULT is the portal's own summary: at the last step before submission press "
+            "9. THE RESULT is the portal's own summary: at the last step before submission press "
             "the offer printout (for ePerolehan: Cetak Tawaran). The PDF it downloads is saved by "
             "itself (if it only shows a page, keep it with browser_save_page). Name it the "
             "company's way with rename_file: 'QT<last 5 digits> - <COMPANY SHORT NAME> "
             "SUMMARY' (for example 'QT24560 - SUTERA SUMMARY').",
-            "9. Then ask a person (ask_human) to approve the final submission, naming the "
+            "10. Then ask a person (ask_human) to approve the final submission, naming the "
             "summary file first, and finish with publish_report: the summary file id at the "
             "top, then a short table of what was filled and what still needs a person (prices, "
             "certificates, declarations, final submission and signing).",

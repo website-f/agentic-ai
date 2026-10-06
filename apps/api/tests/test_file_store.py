@@ -91,3 +91,12 @@ async def test_files_grouped_by_task_with_sub_tasks_rolled_up(client):
     assert [f["name"] for f in lib] == ["Guide to tenders.pdf"]
     stats = (await client.get("/api/files/stats")).json()
     assert stats["download"] == 1 and stats["library"] == 1 and stats["in_tasks"] == 4
+
+
+def test_text_with_nul_bytes_is_made_storable():
+    from agentic.agents.runtime import pg_safe
+
+    nul = chr(0)
+    assert pg_safe(f"page{nul}text") == "pagetext"
+    assert pg_safe({"a": [f"x{nul}"], "n": 1}) == {"a": ["x"], "n": 1}
+    assert pg_safe(None) is None

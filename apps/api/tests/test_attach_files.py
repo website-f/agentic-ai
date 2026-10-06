@@ -174,3 +174,26 @@ async def test_files_on_an_answer_reach_later_steps(client, llm, temporal, drive
         ctx = ToolContext(db=db, agent=agent, workspace=ws, task=None)
         assert await doc_tools._file(ctx, po["id"]) is None  # outside the run: still closed
         assert (await db.get(DocFile, po["id"])).task_id is None  # not moved to one step
+
+
+async def test_a_file_from_other_work_stays_with_it(client, llm, temporal, inline_reading):
+    """Giving a new task a file another task made or fetched keeps it with that task (its
+    By-task files stay whole); the new task's brief names it so the agent can read it."""
+    o = await office(client)
+    qs = await new_agent(client, o, "Rashid", "Finance")
+    tender = await new_task(client, qs, "Prepare the tender")
+    research = await new_task(client, qs, "Recommend a product")
+    f = (await upload(client, "Spesifikasi.pdf", b"Spec text")).json()
+    assert (await attach(client, tender["id"], [f["id"]])).status_code == 200
+    r = await attach(client, research["id"], [f["id"]])
+    assert r.status_code == 200, r.text
+    async with SessionLocal() as db:
+        kept = await db.get(DocFile, f["id"])
+        t = await db.get(Task, research["id"])
+        assert kept is not None and t is not None
+        assert kept.task_id == tender["id"]  # still the tender's
+        assert f"[{f['id']}] Spesifikasi.pdf" in t.brief
+    await attach(client, research["id"], [f["id"]])  # again: named once
+    async with SessionLocal() as db:
+        t = await db.get(Task, research["id"])
+        assert t is not None and t.brief.count(f["id"]) == 1
