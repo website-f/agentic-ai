@@ -491,12 +491,15 @@ function MyWork({ work }: { work: DeskWork[] }) {
 
 // ---------------------------------------------------------------- my files
 
+const FEW = 8;
+
 function MyFiles({ desk }: { desk: Desk }) {
   const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<"files" | "agent" | "uploaded" | "documents">("files");
+  const [all, setAll] = useState(false);
   const upload = useMutation({
     mutationFn: async (files: File[]) => {
       for (const f of files) await uploadToDesk(f);
@@ -508,7 +511,8 @@ function MyFiles({ desk }: { desk: Desk }) {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const files = desk.files.filter((f) => tab === "files" || (tab === "agent" ? f.origin === "agent" : f.origin === "uploaded"));
+  const matching = desk.files.filter((f) => tab === "files" || (tab === "agent" ? f.origin === "agent" : f.origin === "uploaded"));
+  const files = all ? matching : matching.slice(0, FEW);
   return (
     <Card data-guide="desk.files">
       <CardHeader
@@ -536,7 +540,7 @@ function MyFiles({ desk }: { desk: Desk }) {
       {tab === "documents" ? (
         desk.documents.length ? (
           <ListCard className="rounded-none border-0">
-            {desk.documents.map((d) => (
+            {(all ? desk.documents : desk.documents.slice(0, FEW)).map((d) => (
               <ListRow key={d.id} onClick={() => void navigate({ href: d.url })}
                 leading={<IconTile icon={FileTextIcon} size="sm" tone="neutral" />}
                 title={d.title}
@@ -565,6 +569,14 @@ function MyFiles({ desk }: { desk: Desk }) {
                 </>
               } />
           ))}
+          <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[12.5px]">
+            {matching.length > FEW ? (
+              <button type="button" onClick={() => setAll((v) => !v)} className="font-medium text-accent hover:underline">
+                {all ? t("Show fewer") : t("Show all ({n})", { n: matching.length })}
+              </button>
+            ) : <span />}
+            <Link to="/files" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">{t("Company files")} <ArrowRightIcon size={13} /></Link>
+          </li>
         </ListCard>
       ) : (
         <CardBody><p className="text-[13px] text-muted">{t("Nothing here yet. Upload your own files, or ask your AI worker: what it makes lands here.")}</p></CardBody>
@@ -602,10 +614,17 @@ function MyAgents({ desk }: { desk: Desk }) {
             </div>
           ))
         ) : (
-          <div className="grid gap-2 text-[13px] text-muted">
-            <p>{t("You have no AI worker of your own yet. One works for you, follows your procedures and keeps what it makes in your workspace.")}</p>
-            <div><Button size="sm" asChild><Link to="/my-worker">{t("Hire my AI worker")}</Link></Button></div>
-          </div>
+          desk.person.role === "staff" ? (
+            <div className="grid gap-2 text-[13px] text-muted">
+              <p>{t("You have no AI worker of your own yet. One works for you, follows your procedures and keeps what it makes in your workspace.")}</p>
+              <div><Button size="sm" asChild><Link to="/my-worker">{t("Hire my AI worker")}</Link></Button></div>
+            </div>
+          ) : (
+            <div className="grid gap-2 text-[13px] text-muted">
+              <p>{t("Ask any company agent from the box above, or create your own private assistant that works only for you. Everything they make for you lands here.")}</p>
+              {desk.can_ask ? <div><Button size="sm" asChild><Link to="/assistants">{t("Create my assistant")}</Link></Button></div> : null}
+            </div>
+          )
         )}
       </CardBody>
     </Card>

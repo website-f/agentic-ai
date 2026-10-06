@@ -85,6 +85,11 @@ export const DESK: Record<string, string> = {
   "No SOPs for your job yet.": "Belum ada SOP untuk kerja anda.",
   "All SOPs": "Semua SOP",
   "Recent searches": "Carian terkini",
+  "Ask any company agent from the box above, or create your own private assistant that works only for you. Everything they make for you lands here.":
+    "Minta mana-mana ejen syarikat melalui kotak di atas, atau cipta pembantu peribadi yang bekerja untuk anda sahaja. Semua yang mereka buat untuk anda masuk ke sini.",
+  "Create my assistant": "Cipta pembantu saya",
+  "Show fewer": "Tunjuk kurang",
+  "Show all ({n})": "Tunjuk semua ({n})",
   // components/pin-button.tsx
   "Taken off your workspace.": "Dikeluarkan dari meja kerja anda.",
   "Pinned to your workspace.": "Disemat ke meja kerja anda.",
