@@ -205,7 +205,8 @@ export function DocumentEditor({ id }: { id: string }) {
   const [fillFiles, setFillFiles] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [pane, setPane] = useState<"edit" | "preview">("edit");
+  // Edit or read: one at a time, full width. Approved and in-review documents open to read.
+  const [chosenPane, setPane] = useState<"edit" | "preview" | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const loaded = useRef<string>("");
 
@@ -232,6 +233,7 @@ export function DocumentEditor({ id }: { id: string }) {
   }, [body, values, dirty, id]);
 
   const locked = doc?.status === "approved";
+  const pane = chosenPane ?? (doc && doc.status !== "draft" ? "preview" : "edit");
   const canApprove = !!me?.permissions.includes("approvals.decide");
   const shown = live ?? doc;
 
@@ -402,14 +404,14 @@ export function DocumentEditor({ id }: { id: string }) {
 
       {locked ? <p className="flex items-center gap-2 rounded-sm bg-ok/10 px-3 py-2 text-[13px] text-ok"><SealCheckIcon size={16} weight="fill" /> {t("Approved — locked. Reopen it to make changes.")}</p> : null}
 
-      <Segmented<"edit" | "preview"> label={t("Pane")} value={pane} onChange={setPane} className="w-full xl:hidden [&>button]:flex-1 [&>button]:justify-center"
+      <Segmented<"edit" | "preview"> label={t("Pane")} value={pane} onChange={setPane} className="w-full sm:w-80 [&>button]:flex-1 [&>button]:justify-center"
         options={[
           { value: "edit", label: t("Edit") },
           { value: "preview", label: t("Preview"), ...(checkCount ? { count: checkCount } : {}) },
         ]} />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div className={cn("grid min-w-0 content-start gap-3", pane !== "edit" && "max-xl:hidden")}>
+      <div className="grid min-w-0 gap-4">
+        <div className={cn("grid min-w-0 content-start gap-3", pane !== "edit" && "hidden")}>
           <Tabs.Root value={tab} onValueChange={setTab}>
             <Tabs.List aria-label={t("Edit")} className="mb-3 flex gap-1 overflow-x-auto border-b border-border">
               {tabs.map((tb) => (
@@ -509,7 +511,7 @@ export function DocumentEditor({ id }: { id: string }) {
           </Tabs.Root>
         </div>
 
-        <div className={cn("grid min-w-0 content-start gap-3 xl:sticky xl:top-20", pane !== "preview" && "max-xl:hidden")}>
+        <div className={cn("mx-auto grid w-full max-w-[64rem] min-w-0 content-start gap-3", pane !== "preview" && "hidden")}>
           <Checks checks={shown.checks} review={review} reviewing={aiReview.isPending} onReview={() => aiReview.mutate()} />
           <Paper doc={doc} preview={shown.preview} />
         </div>

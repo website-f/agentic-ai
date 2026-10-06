@@ -186,11 +186,11 @@
   .paper .md th { background: #f1f4f2; color: #191919; }
   .paper .md blockquote { border-left-color: #d0d0d0; color: #555; }
   .paper .md hr { border-top-color: #dcdcdc; }
-  /* Full-width table on paper; on phones it scrolls sideways in place instead of crushing columns. */
-  .paper .md table { display: table; }
+  /* A table on paper fills the page; one wider than the page scrolls sideways inside it at any
+     width instead of spilling out or crushing its columns. Long words wrap in their cell. */
+  .paper .md table { display: block; width: max-content; min-width: 100%; max-width: 100%; overflow-x: auto; }
+  .paper .md td, .paper .md th { min-width: 4.5rem; overflow-wrap: anywhere; }
   @media (max-width: 639px) {
-    .paper .md table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
-    .paper .md td, .paper .md th { min-width: 4.5rem; }
     .paper .md td:nth-child(2), .paper .md th:nth-child(2) { min-width: 11rem; }
   }
   /* A gap the document still needs: [[Client name]] renders as an amber chip. */

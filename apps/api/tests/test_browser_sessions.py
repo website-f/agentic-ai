@@ -509,6 +509,7 @@ def test_tender_brief_requires_evidence_documents_and_approval():
     assert "[[REQUIRES HUMAN INPUT]]" in brief
     assert "Final tender submission and digital signing always require" in brief
     assert "Tender reference: QT123" in brief
+    assert "Cetak Tawaran" in brief and "QT24560 - SUTERA SUMMARY" in brief  # the result
 
 
 @pytest.fixture
@@ -631,3 +632,29 @@ async def test_a_downloaded_zip_is_unpacked_into_readable_files(client, browser,
     assert all(f.folder == "Web downloads/portal.fake/NGeP-QT-Documents" for f in inner)
     assert all(f.source == "download" and f.origin == "uploaded" for f in inner)
     assert len(reading) == 3  # each one is read (text, secrets scan)
+
+
+async def test_rename_file_only_for_own_or_task_files(client, browser, reading):
+    from agentic.agents.doc_tools import _rename_file
+
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        assert agent is not None
+        where = (agent.workspace_id, agent.branch_id)
+        mine, theirs = _file(where, "NGeP-QT-Supplier-Proposal-Report.pdf"), _file(where, "x.pdf")
+        mine.task_id = t
+        db.add_all([mine, theirs])
+        await db.commit()
+        ctx = ToolContext(
+            db=db,
+            agent=agent,
+            workspace=await db.get(Workspace, agent.workspace_id),
+            task=await db.get(Task, t),
+        )
+        out = await _rename_file(ctx, {"file_id": mine.id, "name": "QT27691 - SUTERA SUMMARY"})
+        assert "to 'QT27691 - SUTERA SUMMARY.pdf'" in out
+        assert mine.name == "QT27691 - SUTERA SUMMARY.pdf"
+        out = await _rename_file(ctx, {"file_id": theirs.id, "name": "Mine now"})
+        assert out.startswith("Error: you may rename only files you made")

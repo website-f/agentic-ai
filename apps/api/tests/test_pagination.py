@@ -475,6 +475,10 @@ async def test_files_expiring_filter_and_stats(client: httpx.AsyncClient):
         "agent": 0,
         "person": 0,
         "uploaded": 8,
+        # the file store's views
+        "download": 0,
+        "library": 0,
+        "in_tasks": 0,
     }
     soon, _ = await walk(client, "/api/files?expiring=true", 3)
     assert len(soon) == 4

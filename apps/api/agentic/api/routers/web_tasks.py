@@ -64,6 +64,7 @@ TENDER = INTERACT + (
     "export_document",
     "check_document",
     "publish_research",
+    "rename_file",
     "write_page",
     "publish_report",
 )
@@ -105,47 +106,37 @@ def brief_for(body: WebTaskIn) -> str:
             "security answer, OTP, certificate secret or login ID into notes or documents.",
             "3. On the portal, open the tender, check eligibility and download every tender "
             "document it offers. Downloads are saved to the company's files by themselves "
-            "(folder Web downloads/<site>); read them with read_file. A button that sends a "
-            "form needs browser_submit and a person's approval, even when it only searches or "
-            "downloads: say exactly that in why.",
-            "4. Extract every portal field and required attachment into an evidence manifest. "
-            "For each value record its source: tender document, company document, portal, "
-            "person, or public web source.",
-            "5. Research only missing GENERAL TECHNICAL CONTENT on the public web. Prefer the "
-            "buyer, Malaysian government, regulator, manufacturer and recognised standards "
-            "bodies. Read the useful pages and keep their titles, URLs and access date. Web "
-            "research may support methodology and standards; it must never be used to invent "
-            "this company's experience, staff, certifications, equipment, price, bank facts "
-            "or declarations.",
-            "6. Store reusable, cited research with publish_research. This saves PDF and Word "
-            "copies in AI Documents and indexes the PDF in this company's Library. Also save "
-            "a concise working note at wiki/tenders/<tender-reference>-research.md. Keep "
-            "observations separate from recommendations and include source URLs.",
-            "7. Create these review documents with draft_document, which saves PDFs under AI "
-            "documents: (a) Tender portal field manifest, showing value/source/status for every "
-            "field; (b) Cadangan Teknikal, with scope, methodology, work plan, deliverables, "
-            "quality, safety, risk and compliance matrix; (c) Tender submission readiness "
-            "report, listing attachments, missing facts and portal actions. Export Cadangan "
-            "Teknikal as DOCX too. Mark every unsupported factual value exactly [[REQUIRES "
-            "HUMAN INPUT]] instead of guessing.",
-            "8. Run check_document on every draft and fix drafting errors. A missing human fact "
-            "is a blocker to report, not a value to fabricate.",
-            "9. Only then fill portal fields whose manifest status is VERIFIED. You may draft "
-            "inside the portal, but do not fill a missing or generated company fact. Attach "
-            "documents with browser_upload (file_ids from company files; a person approves "
-            "each upload); never upload a document the request does not allow.",
-            "10. Saving, registering, uploading, declaring, signing or submitting is a "
+            "(folder Web downloads/<site>, a zip unpacked into its documents); read them with "
+            "read_file. A button that sends a form needs browser_submit and a person's "
+            "approval, even when it only searches or downloads: say exactly that in why.",
+            "4. Keep an evidence manifest of every portal field and required attachment, with "
+            "each value's source (tender document, company document, portal, person, public "
+            "web), as a working note at wiki/tenders/<tender-reference>.md, not as a document.",
+            "5. Fill the portal the way the company's own submissions read: Maklum Balas Ya where "
+            "the company complies, and in Catatan the specific brand, model and specification "
+            "that meets each requirement, taken from the person's facts or company documents. "
+            "Never invent the company's experience, staff, certifications, equipment, price, "
+            "bank facts or declarations: a missing fact is left empty and reported as "
+            "[[REQUIRES HUMAN INPUT]].",
+            "6. Make documents only when the portal asks for an attachment you can honestly "
+            "prepare (for example a Cadangan Teknikal or a compliance statement) or when the "
+            "instructions ask for one: draft_document, check_document, fix it, then upload it "
+            "with browser_upload. Use public web research (publish_research, cited) only when "
+            "the instructions ask for it. No other reports or drafts: they bury the result.",
+            "7. Saving, registering, uploading, declaring, signing or submitting is a "
             "transaction: use browser_submit (or browser_upload) and wait for a person's "
             "approval. Final tender submission and digital signing always require a separate "
             "explicit approval: never press the final submit (Serah/Submit), never tick the "
             "declarations, never enter a security answer or certificate PIN.",
-            "11. At the last step before submission, open the offer printout the portal gives "
-            "(for ePerolehan: Cetak Tawaran) and keep it as a PDF: the file it downloads is "
-            "saved by itself; if it only shows a page, save that with browser_save_page. Then "
-            "stop and ask a person (ask_human) to approve the final submission.",
-            "12. Finish with publish_report, including links/file IDs for all created and "
-            "downloaded documents and the offer PDF, a field-by-field filled/not-filled table, "
-            "sources used, and every approval still needed.",
+            "8. THE RESULT is the portal's own summary: at the last step before submission press "
+            "the offer printout (for ePerolehan: Cetak Tawaran). The PDF it downloads is saved by "
+            "itself (if it only shows a page, keep it with browser_save_page). Name it the "
+            "company's way with rename_file: 'QT<last 5 digits> - <COMPANY SHORT NAME> "
+            "SUMMARY' (for example 'QT24560 - SUTERA SUMMARY').",
+            "9. Then ask a person (ask_human) to approve the final submission, naming the "
+            "summary file first, and finish with publish_report: the summary file id at the "
+            "top, then a short table of what was filled and what still needs a person (prices, "
+            "certificates, declarations, final submission and signing).",
         ]
         if body.values.strip():
             lines += [

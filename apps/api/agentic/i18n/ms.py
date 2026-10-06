@@ -663,6 +663,7 @@ MS: dict[str, str] = {
     "Publish a report": "Terbitkan laporan",
     "List the company's files": "Senaraikan fail syarikat",
     "Read a file": "Baca fail",
+    "Rename a file": "Namakan semula fail",
     "Look at an image": "Lihat gambar",
     "Company details": "Butiran syarikat",
     "List document templates": "Senaraikan templat dokumen",
