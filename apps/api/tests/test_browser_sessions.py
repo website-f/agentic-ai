@@ -512,6 +512,8 @@ def test_tender_brief_requires_evidence_documents_and_approval():
     assert "Cetak Tawaran" in brief and "QT24560 - SUTERA SUMMARY" in brief  # the result
     # products: researched, compared, recommended, confirmed by a person before filling
     assert "Product recommendation" in brief and "confirm the products before" in brief
+    # a rerun skips what is done and says so
+    assert "RERUN" in brief and "done before / done now / skipped" in brief
 
 
 @pytest.fixture
@@ -660,3 +662,17 @@ async def test_rename_file_only_for_own_or_task_files(client, browser, reading):
         assert mine.name == "QT27691 - SUTERA SUMMARY.pdf"
         out = await _rename_file(ctx, {"file_id": theirs.id, "name": "Mine now"})
         assert out.startswith("Error: you may rename only files you made")
+
+
+async def test_find_understands_role_as_key_and_arg_mistakes_do_not_stop_the_task(client, browser):
+    from agentic.agents.runtime import _browser_tool_error
+
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    await run("browser_open", a["id"], t, url=f"{PORTAL}/inbox")
+    await run("browser_find", a["id"], t, link="Log Masuk")
+    f = [b for m, p, b in browser.calls if p.endswith("/act")][-1]
+    assert f["action"] == "find" and f["role"] == "link" and f["name"] == "Log Masuk"
+    assert not _browser_tool_error("Error: give a role (button, link, textbox...)")
+    assert _browser_tool_error("Error: TimeoutError: Locator.click: Timeout 10000ms exceeded.")
+    assert not _browser_tool_error("Error: SUBMIT_NEEDS_APPROVAL: this control sends the form.")

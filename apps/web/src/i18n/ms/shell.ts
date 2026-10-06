@@ -164,6 +164,11 @@ export const SHELL: Record<string, string> = {
   "Researches, drafts the technical proposal and fills only verified values. Submission waits for approval.":
     "Membuat kajian, mendraf cadangan teknikal dan mengisi nilai yang disahkan sahaja. Penghantaran menunggu kelulusan.",
   "Known tender facts": "Fakta tender yang diketahui",
+  "Tender reference": "Rujukan tender",
+  "Your company's SOPs are followed automatically: the ask below is enough.":
+    "SOP syarikat anda diikuti secara automatik: permintaan di bawah sudah memadai.",
+  "Prepare tender {ref} on ePerolehan up to, but not including, final submission, following our ePerolehan tender SOP. If any of it was done before, skip what is already done and tell me what you skipped.":
+    "Sediakan tender {ref} di ePerolehan sehingga sebelum penghantaran akhir, mengikut SOP tender ePerolehan kita. Jika sebahagiannya sudah dibuat sebelum ini, langkau yang sudah siap dan beritahu saya apa yang dilangkau.",
   "One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455": "Satu setiap baris, cth.\nNama syarikat: Qbot Studio Sdn Bhd\nTelefon: +60 3-2710 4455",
   "It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them.": "Ia guna nilai ini sahaja dan bertanya jika ada yang kurang. Biarkan kosong jika SOP atau rakan sekerjanya sudah tahu.",
   "Sign in with": "Log masuk dengan",

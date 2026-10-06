@@ -100,7 +100,12 @@ def brief_for(body: WebTaskIn) -> str:
             "",
             "TENDER PREPARATION MODE — follow these stages in order:",
             "1. Verify the signed-in company and tender reference. Stop and ask a person if "
-            "either differs from the request.",
+            "either differs from the request. This may be a RERUN: before each stage check "
+            "whether it is already done (the proposal is open with a No. Cadangan, the tender "
+            "documents are in the company's files, a product recommendation exists and was "
+            "confirmed, fields already hold the right values, attachments are uploaded, the "
+            "summary is saved). Skip what is done and correct only what is wrong. Never upload "
+            "a file a second time or create a second proposal.",
             "2. Read the company's tender procedures and submission documents with "
             "company_documents, search_library and read_file. Never copy a password, PIN, "
             "security answer, OTP, certificate secret or login ID into notes or documents.",
@@ -112,7 +117,10 @@ def brief_for(body: WebTaskIn) -> str:
             "4. Keep an evidence manifest of every portal field and required attachment, with "
             "each value's source (tender document, company document, portal, person, public "
             "web), as a working note at wiki/tenders/<tender-reference>.md, not as a document.",
-            "5. PRODUCTS. For every item and specification line, find what the company can "
+            "5. PRODUCTS. If a 'Product recommendation - <tender reference>' already exists in "
+            "the company's documents, reuse it (and ask the person to confirm it if nobody has "
+            "yet) instead of researching again. Otherwise, for every item and specification "
+            "line, find what the company can "
             "offer: first its past submissions (search_library and company_documents for "
             "'SUMMARY' and past tenders: the brands, models and wording it used before), then "
             "the public web (manufacturer datasheets, Malaysian distributors, the regulator's "
@@ -146,8 +154,9 @@ def brief_for(body: WebTaskIn) -> str:
             "SUMMARY' (for example 'QT24560 - SUTERA SUMMARY').",
             "10. Then ask a person (ask_human) to approve the final submission, naming the "
             "summary file first, and finish with publish_report: the summary file id at the "
-            "top, then a short table of what was filled and what still needs a person (prices, "
-            "certificates, declarations, final submission and signing).",
+            "top, then a table with one row per stage marked done before / done now / skipped "
+            "/ needs a person, then what still needs a person (prices, certificates, "
+            "declarations, final submission and signing).",
         ]
         if body.values.strip():
             lines += [

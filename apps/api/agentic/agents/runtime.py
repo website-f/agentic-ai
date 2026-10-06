@@ -334,9 +334,7 @@ def _parse_args(raw: Any) -> tuple[dict[str, Any] | None, str | None]:
 
 async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
     try:
-        return pg_safe(
-            await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=TOOL_TIMEOUT)
-        )
+        return pg_safe(await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=TOOL_TIMEOUT))
     except TimeoutError:
         return f"Error: {TOOLS[name].label} took longer than {TOOL_TIMEOUT} s."
     except Exception as e:  # noqa: BLE001 - a broken tool must not kill the task
@@ -375,8 +373,14 @@ async def _help_hint_once(db: AsyncSession, task: Task, agent: Agent) -> bool:
 
 
 def _browser_tool_error(text: str) -> bool:
-    """Whether a browser result is a real failure, rather than an approval hint."""
-    return text.lstrip().startswith("Error:") and "SUBMIT_NEEDS_APPROVAL:" not in text
+    """Whether a browser result is a real failure, rather than an approval hint or a call
+    the model got wrong ("Error: give a ref..."), which it fixes on its next try."""
+    t = text.lstrip()
+    return (
+        t.startswith("Error:")
+        and "SUBMIT_NEEDS_APPROVAL:" not in t
+        and not t.startswith("Error: give ")
+    )
 
 
 def _browser_error_streak(history: list[AgentMessage]) -> int:

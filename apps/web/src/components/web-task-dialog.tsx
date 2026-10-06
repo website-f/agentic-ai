@@ -30,6 +30,8 @@ function Choice({ value, title, body, icon: Icon }: { value: string; title: stri
   );
 }
 
+const EPEROLEHAN = "https://www.eperolehan.gov.my/";
+
 export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   agent: Pick<Agent, "id" | "name" | "tools" | "can_manage">;
   open: boolean;
@@ -44,6 +46,12 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   const [values, setValues] = useState("");
   const [login, setLogin] = useState(NONE);
   const [output, setOutput] = useState<"answer" | "report">("answer");
+  const [tenderRef, setTenderRef] = useState("");
+  // Tender mode: the company's tender SOP is in every agent's instructions already, so a
+  // one-line ask is enough; it follows the tender reference until the person edits it.
+  const tenderAsk = (ref: string) =>
+    t("Prepare tender {ref} on ePerolehan up to, but not including, final submission, following our ePerolehan tender SOP. If any of it was done before, skip what is already done and tell me what you skipped.",
+      { ref: ref.trim() || "QT…" });
   const logins = useQuery({
     queryKey: ["agent-logins", agent.id],
     queryFn: () => api<{ name: string; hosts: string[] }[]>(`/api/agents/${agent.id}/logins`),
@@ -76,11 +84,29 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
         <Button disabled={!ready} loading={start.isPending} onClick={() => start.mutate()}><BrowserIcon size={15} /> {t("Start")}</Button></>}>
       <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (ready) start.mutate(); }}>
         <Field label={t("Link")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("https://… or portal.example.com/page")} autoFocus error={fields.url} />
-        <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "read" | "interact" | "tender")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-3">
+        <RadioGroup.Root value={mode} onValueChange={(v) => {
+          const next = v as "read" | "interact" | "tender";
+          setMode(next);
+          if (next === "tender") {
+            if (!url.trim()) setUrl(EPEROLEHAN);
+            if (!instructions.trim()) setInstructions(tenderAsk(tenderRef));
+            const ep = (logins.data ?? []).find((l) => l.hosts.some((h) => h.includes("eperolehan")));
+            if (ep && login === NONE) setLogin(ep.name);
+          }
+        }} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-3">
           <Choice value="read" icon={MagnifyingGlassIcon} title={t("Find information")} body={t("Reads the page (and the pages it links to). Fills in nothing.")} />
           <Choice value="interact" icon={CursorClickIcon} title={t("Interact and fill in")} body={t("Clicks, types and fills forms. Sending a form waits for your approval.")} />
           <Choice value="tender" icon={FileTextIcon} title={t("Prepare a tender")} body={t("Researches, drafts the technical proposal and fills only verified values. Submission waits for approval.")} />
         </RadioGroup.Root>
+        {mode === "tender" ? (
+          <Field label={t("Tender reference")} value={tenderRef} placeholder="QT2600000000XXXXX"
+            hint={t("Your company's SOPs are followed automatically: the ask below is enough.")}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (instructions === tenderAsk(tenderRef)) setInstructions(tenderAsk(next));
+              setTenderRef(next);
+            }} />
+        ) : null}
         <TextareaField label={mode === "read" ? t("What do you want to know?") : t("What should it do?")} value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3}
           placeholder={mode === "read"
             ? t("e.g. List every invitation to quote: reference, agency, item, value and closing date.")
