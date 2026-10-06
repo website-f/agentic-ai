@@ -44,6 +44,18 @@ def test_rounds_open_close_wrap_and_show_late():
     assert state(missed(WRAPS, date(2026, 10, 6)), date(2026, 10, 6), None) == "late"
 
 
+def test_a_round_that_closed_before_the_form_existed_is_not_late():
+    from datetime import datetime
+
+    from agentic.forms.store import shown_round
+    from agentic.models import Form
+
+    f = Form(schedule=WRAPS, created_at=datetime(2026, 10, 5, 9, 0))
+    assert shown_round(f, date(2026, 10, 6), set())[0] == "2026-10"  # not September's round
+    f.created_at = datetime(2026, 9, 1, 9, 0)
+    assert shown_round(f, date(2026, 10, 6), set())[0] == "2026-09"  # still owed, so late
+
+
 def test_ready_made_forms_read_and_fill_in_both_languages():
     for s in STARTERS:
         for lang in ("en", "ms"):

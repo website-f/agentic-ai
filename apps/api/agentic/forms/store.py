@@ -23,7 +23,9 @@ def shown_round(f: Form, today: date, handed: set[str]) -> tuple[str, Window | N
     """The round to show a person: one they missed in the last days and never handed in,
     else the open or next one; (period, window)."""
     late = missed(f.schedule, today)
-    if late is not None and late.period not in handed:
+    # A round that closed before the form was added was never asked of anyone.
+    added = f.created_at.date() if f.created_at else None
+    if late is not None and late.period not in handed and (added is None or added <= late.due):
         return late.period, late
     w = window(f.schedule, today)
     return (w.period if w else "anytime"), w
