@@ -22,8 +22,8 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowClockwiseIcon, CaretRightIcon, KanbanIcon, PlusIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
-import { useMutation, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
+import { ArrowClockwiseIcon, CaretRightIcon, EyeIcon, KanbanIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -39,17 +39,19 @@ import { Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
+import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
+import { pinsQuery } from "@/lib/desk";
 import { editPaged, useDebounced, usePagedList, type PagedList } from "@/lib/paged";
 import { keys, meQuery } from "@/lib/queries";
 import type { Branch } from "@/lib/types";
 import { useFillHeight } from "@/lib/use-fill-height";
 import { useIsPhone } from "@/lib/use-media";
 import { cn, shortAge, timeAgo } from "@/lib/utils";
-import { PRIORITY_INFO, STATUS_INFO, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
+import { PRIORITY_INFO, STATUS_INFO, VISIBILITY, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { ReviewRoundPill, waitingPath, WaitingChip, type TaskX } from "./accountable";
 import { NewTaskDialog } from "./new-task";
@@ -156,17 +158,24 @@ function CompanyTag({ company }: { company: Branch }) {
 function CardContent({ task, company }: { task: Task; company?: Branch }) {
   const t = useT();
   const urgent = task.priority === "high" || task.priority === "urgent";
+  const { data: pins = [] } = useQuery(pinsQuery);
+  const pinned = pins.some((p) => p.kind === "task" && p.ref === task.id);
+  const shared = task.visibility && task.visibility !== "private" ? VISIBILITY.find((v) => v.value === task.visibility) : undefined;
   return (
     <>
-      <p className="line-clamp-3 text-[13.5px] leading-snug font-medium break-words">{task.title}</p>
+      <p className="line-clamp-3 text-[13.5px] leading-snug font-medium break-words">
+        {pinned ? <PushPinIcon size={13} weight="fill" className="mr-1 inline-block align-[-1px] text-accent" aria-label={t("On my workspace")} /> : null}
+        {task.title}
+      </p>
       {waitingPath(task) ? (
         <WaitingChip task={task} />
       ) : task.status === "failed" && task.error ? (
         <p className="line-clamp-2 rounded-[6px] bg-danger/8 px-2 py-1 text-[12px] break-words text-danger">{task.error}</p>
       ) : null}
-      {task.labels?.length || urgent || task.pending_approvals || company || (task as TaskX).review_round || task.objective_title ? (
+      {task.labels?.length || urgent || task.pending_approvals || company || (task as TaskX).review_round || task.objective_title || shared ? (
         <span className="flex min-w-0 flex-wrap gap-1">
           {company ? <CompanyTag company={company} /> : null}
+          {shared ? <Pill tone="info" title={t(shared.hint)}><EyeIcon size={11} weight="bold" /> {t(shared.label)}</Pill> : null}
           {task.objective_title ? <ObjectiveChip title={task.objective_title} /> : null}
           <ReviewRoundPill task={task} />
           {task.pending_approvals ? <Pill tone="warn"><SealCheckIcon size={11} weight="fill" /> {task.pending_approvals}</Pill> : null}
@@ -255,8 +264,9 @@ function LiftedCard({ task, company, reduce }: { task: Task; company?: Branch; r
  * loads 50 cards at a time as you scroll it while the short working columns stay complete. */
 const BOARD_KEY: QueryKey = [...workKeys.tasks, "board"];
 type BoardStatus = "triage" | "ready" | "running" | "blocked" | "review" | "done";
-const useColumn = (status: string, q: string, branch: string | undefined, enabled = true) =>
-  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q, branch_id: branch }, { enabled });
+type Who = "all" | "mine" | "pinned";
+const useColumn = (status: string, q: string, branch: string | undefined, who: Who, enabled = true) =>
+  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q, branch_id: branch, who: who === "all" ? undefined : who }, { enabled });
 
 interface ColumnProps {
   status: TaskStatus;
@@ -407,6 +417,24 @@ export function TasksPage() {
   const [target, setTarget] = useState<Target | null>(null);
   const [overStatus, setOverStatus] = useState<TaskStatus | null>(null);
   const [q, setQ] = useState("");
+  // Whose cards: everything you may see, the work you gave or your own AI does, or the cards
+  // you pinned to your workspace. Remembered on this device.
+  const [who, setWhoState] = useState<Who>(() => {
+    try {
+      const v = localStorage.getItem("agentic.tasks.who");
+      return v === "mine" || v === "pinned" ? v : "all";
+    } catch {
+      return "all";
+    }
+  });
+  const setWho = (v: Who) => {
+    setWhoState(v);
+    try {
+      localStorage.setItem("agentic.tasks.who", v);
+    } catch {
+      // private mode: lasts until reload
+    }
+  };
   const [picked, setPicked] = useState<TaskStatus | null>(null);
   const [retrying, setRetrying] = useState(false);
   const board = useRef<HTMLDivElement>(null);
@@ -440,15 +468,15 @@ export function TasksPage() {
   // Search runs on the server (title, brief, agent, label), so every page of every column is
   // filtered and the counts are the true counts.
   const needle = useDebounced(q.trim());
-  const triage = useColumn("triage", needle, branchFilter, companiesReady);
-  const ready = useColumn("ready", needle, branchFilter, companiesReady);
-  const running = useColumn("running", needle, branchFilter, companiesReady);
-  const blocked = useColumn("blocked", needle, branchFilter, companiesReady);
-  const review = useColumn("review", needle, branchFilter, companiesReady);
-  const done = useColumn("done", needle, branchFilter, companiesReady);
+  const triage = useColumn("triage", needle, branchFilter, who, companiesReady);
+  const ready = useColumn("ready", needle, branchFilter, who, companiesReady);
+  const running = useColumn("running", needle, branchFilter, who, companiesReady);
+  const blocked = useColumn("blocked", needle, branchFilter, who, companiesReady);
+  const review = useColumn("review", needle, branchFilter, who, companiesReady);
+  const done = useColumn("done", needle, branchFilter, who, companiesReady);
   const cols: Record<BoardStatus, PagedList<Task>> = { triage, ready, running, blocked, review, done };
-  const closedList = useColumn("failed,cancelled", needle, branchFilter, companiesReady);
-  const failedList = useColumn("failed", needle, branchFilter, companiesReady && canWrite);
+  const closedList = useColumn("failed,cancelled", needle, branchFilter, who, companiesReady);
+  const failedList = useColumn("failed", needle, branchFilter, who, companiesReady && canWrite);
   const counts = new Map<TaskStatus, number>(Object.entries(cols).map(([s, l]) => [s as TaskStatus, l.total ?? l.items.length]));
   const lists = [...Object.values(cols), closedList];
   const isLoading = companiesLoading || lists.some((l) => l.isLoading);
@@ -461,7 +489,7 @@ export function TasksPage() {
   // The API sends board positions: cards can be re-ordered and dropped into a chosen slot.
   const sortable = Object.values(cols).some((l) => l.items.some((t) => typeof t.position === "number"));
 
-  const showBoard = !isLoading && !error && (anyTasks || !!needle);
+  const showBoard = !isLoading && !error && (anyTasks || !!needle || who !== "all");
   useFillHeight(board, { min: phone ? 272 : 384, gap: phone ? 12 : 20, enabled: showBoard });
 
   /** Relaunch every failed task shown (the API takes up to 50 per call and says what it skipped). */
@@ -707,7 +735,7 @@ export function TasksPage() {
         <BoardSkeleton />
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !anyTasks && !needle ? (
+      ) : !anyTasks && !needle && who === "all" ? (
         <EmptyState icon={KanbanIcon} title={branchFilter && selected ? t("No tasks at {name} yet", { name: selected.name }) : t("No tasks yet")} body={t("Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review.")}
           action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
       ) : (
@@ -726,13 +754,19 @@ export function TasksPage() {
         >
           <Toolbar className="xl:max-w-2xl">
             <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
-              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Filter by title, agent or label")} />
+              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Search cards by title, agent or label")} />
               {canWrite && phone ? (
                 <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={() => setCreating((n) => n + 1)}>
                   <PlusIcon size={18} weight="bold" />
                 </Button>
               ) : null}
             </div>
+            <Segmented size="sm" guide="tasks.who" label={t("Whose cards")} value={who} onChange={setWho}
+              options={[
+                { value: "all", label: t("All") },
+                { value: "mine", label: t("Mine") },
+                { value: "pinned", label: t("Pinned") },
+              ]} />
             {branchFilter && selected ? (
               <button type="button" onClick={() => select(ALL_COMPANIES)} title={t("Show every company's tasks")}
                 className="inline-flex h-10 max-w-full min-w-0 shrink-0 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-[12.5px] text-muted hover:border-accent/40 hover:text-fg pointer-coarse:h-11">
@@ -765,7 +799,7 @@ export function TasksPage() {
             {COLUMNS.map((c) => {
               const drop = target && target.status === c.status && target.status !== dragFrom && canMove(dragFrom, c.status) && target.index >= 0 ? target.index : null;
               return (
-                <Column key={c.status} status={c.status} hint={c.hint} empty={needle ? msg("No match in this column.") : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
+                <Column key={c.status} status={c.status} hint={c.hint} empty={needle || who !== "all" ? msg("No match in this column.") : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
                   canWrite={canWrite} dragFrom={dragFrom} hovered={overStatus === c.status} drop={drop} sortable={sortable} companyOf={companyOf} guideFirst={c.status === firstBusy} />
               );
             })}

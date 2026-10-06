@@ -42,8 +42,8 @@ export function ResponsiveDialog({
             className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] max-w-[100vw] flex-col rounded-t-[var(--radius-lg)] border-t border-border bg-surface outline-none"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
-            <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-border" />
-            <div className="min-w-0 px-5 pt-3 pb-2 break-words">
+            <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-border" />
+            <div className="min-w-0 shrink-0 px-5 pt-3 pb-2 break-words">
               <Drawer.Title className="text-base font-semibold">{title}</Drawer.Title>
               {description ? (
                 <Drawer.Description className="mt-1 text-[13px] text-muted">

@@ -53,5 +53,7 @@ export function Stat({
 }
 
 export function StatGrid({ children, className, guide }: { children: ReactNode; className?: string; /** data-guide id for the Guide's screenshots. */ guide?: string }) {
-  return <div data-guide={guide} className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>{children}</div>;
+  // min-w-0: a long hint (line-clamped, so its min-content is the whole line in WebKit) must not
+  // stretch the grid, and with it the page, past a phone's width.
+  return <div data-guide={guide} className={cn("grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4", className)}>{children}</div>;
 }

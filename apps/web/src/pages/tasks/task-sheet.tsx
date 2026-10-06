@@ -29,6 +29,7 @@ import {
   MoonStarsIcon,
   ShieldCheckIcon,
   FileTextIcon,
+  EyeIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -44,13 +45,15 @@ import { TaskPlan } from "@/components/task-plan";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
+import { PinButton } from "@/components/pin-button";
+import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
-import { PRIORITY_INFO, STATUS_INFO, taskQuery, workKeys, type Task, type TaskEvent } from "@/lib/work";
+import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
 
 import { BlockersPanel, canWait, QuietBadge, ReviewRoundPill, ReviewTrail, statusLabel, waitingPath, type AccountableDetail, type TaskX } from "./accountable";
 
@@ -229,6 +232,30 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
   );
 }
 
+/** P26: who else may look at this task (managers and owners). */
+function ShareControl({ task }: { task: Task }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: (v: Visibility) => api<Task>(`/api/tasks/${task.id}`, "PATCH", { visibility: v }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: workKeys.tasks });
+      void qc.invalidateQueries({ queryKey: taskQuery(task.id).queryKey });
+      toast.success(t("Saved."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[var(--radius-md)] border border-border px-3.5 py-2.5">
+      <EyeIcon size={16} className="shrink-0 text-muted" />
+      <span className="text-[13px] font-medium">{t("Who can see it")}</span>
+      <Select size="sm" value={task.visibility ?? "private"} onValueChange={(v) => save.mutate(v as Visibility)} label={t("Who can see it")}
+        disabled={save.isPending} className="min-w-0 flex-1 sm:max-w-64"
+        options={VISIBILITY.map((o) => ({ value: o.value, label: t(o.label), hint: t(o.hint) }))} />
+    </div>
+  );
+}
+
 export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
@@ -236,7 +263,8 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   const task = data?.task as TaskX | undefined;
   const acc: AccountableDetail = (data ?? {}) as AccountableDetail;
   const path = task ? waitingPath(task) : null;
-  const canWrite = me.permissions.includes("work.write");
+  // A task shared with you to look at (P26) is read only, whatever your role.
+  const canWrite = me.permissions.includes("work.write") && !data?.read_only;
   const pending = data?.approvals.filter((a) => a.status === "pending") ?? [];
   const childrenDone = data?.children.filter((c) => c.status === "done" || c.status === "review").length ?? 0;
   // "Part of {title}": the title is styled, so the sentence is split around it (Malay keeps the order).
@@ -260,7 +288,12 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           {task.labels?.map((l) => <Pill key={l}>{l}</Pill>)}
         </span>
       ) : undefined}
-      actions={task ? <Actions task={task} canWrite={me.permissions.includes("work.write")} onDeleted={onClose} /> : undefined}
+      actions={task ? (
+        <>
+          <PinButton kind="task" refId={task.id} title={task.title} withLabel />
+          {data?.read_only ? null : <Actions task={task} canWrite={me.permissions.includes("work.write")} onDeleted={onClose} />}
+        </>
+      ) : undefined}
     >
       {isLoading ? (
         <div className="grid gap-3">
@@ -270,6 +303,14 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
         </div>
       ) : error || !data || !task ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+          {data.read_only ? (
+            <p className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-info/30 bg-info/8 px-3.5 py-3 text-[13px] text-info">
+              <EyeIcon size={17} weight="duotone" className="mt-px shrink-0" />
+              <span className="min-w-0">{t("Shared with you to look at. You can follow it and pin it to your workspace, but not change it.")}</span>
+            </p>
+          ) : canShareTasks(me.permissions) ? (
+            <ShareControl task={task} />
+          ) : null}
           {pending.length ? (
             <SheetSection icon={SealWarningIcon} title={t("Waiting on you")} note={pending.length > 1 ? t("{n} decisions", { n: pending.length }) : undefined} tone="warn">
               {pending.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={me.permissions.includes("approvals.decide")} showTask={false} />)}

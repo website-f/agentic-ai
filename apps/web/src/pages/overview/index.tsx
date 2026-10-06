@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 import { toast } from "sonner";
 
+import { HomeTabs } from "@/components/home-tabs";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
@@ -403,6 +404,7 @@ export function OverviewPage() {
           />
         }
       />
+      <HomeTabs />
       {isLoading ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
           <StatGrid className={KPI_GRID}>

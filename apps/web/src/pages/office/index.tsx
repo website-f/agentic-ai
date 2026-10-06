@@ -119,7 +119,7 @@ function ListView({ snap, watchOnly, onOpen }: { snap: OfficeSnapshot; watchOnly
         ))}
       </ListCard>
       <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface max-md:hidden">
-        <table className="w-full text-left text-[13px]">
+        <table className="w-full min-w-[44rem] text-left text-[13px]">
           <thead className="border-b border-border bg-surface-2/50 text-[12px] text-muted">
             <tr>
               <th className="px-4 py-2 font-medium">{t("Agent")}</th>

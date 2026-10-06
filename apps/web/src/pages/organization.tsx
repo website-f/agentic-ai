@@ -271,7 +271,7 @@ function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: b
           <h2 className="text-[15px] font-semibold break-words">{branch.name}</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
             <span>{branch.departments.length === 1 ? t("1 department") : t("{n} departments", { n: branch.departments.length })}</span>
-            {industryOf(branch) ? <Pill tone="accent">{industryLabel(industryOf(branch))}</Pill> : null}
+            {industryOf(branch) ? <Pill tone="accent" className="max-w-full"><span className="truncate">{industryLabel(industryOf(branch))}</span></Pill> : null}
             {branch.isolated ? (
               <Pill tone="info">
                 <LockSimpleIcon size={12} weight="bold" /> {t("Private knowledge")}
@@ -385,7 +385,7 @@ export function OrganizationPage() {
           {t("Could not load branches.")} {errorMessage(error)}
         </div>
       ) : branches && branches.length ? (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
           <StatGrid className="lg:grid-cols-3">
             <Stat label={lang === "ms" ? t("Branches (companies)") : t("Branches")} value={branches.length} icon={BuildingsIcon} hint={t("One per company")} />
             <Stat label={t("Departments")} value={branches.reduce((n, b) => n + b.departments.length, 0)} icon={TreeStructureIcon} tone="info" hint={t("Across every branch")} />

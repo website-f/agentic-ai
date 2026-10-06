@@ -106,6 +106,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Answer what waits for you: your AI's questions and approvals, and its work to review.",
     ],
     spots: {
+      "desk.tabs": "Five tabs: **Overview**, **My work**, **My files**, **Workflows & SOPs** and **AI workers**.",
       "desk.ask": "Type a word, amount or reference number. **Search** shows matches here; **Ask** gives it to your AI worker.",
       "desk.stats": "What waits for you, what is in progress, what finished this week and how much is in your workspace.",
       "desk.pinned": "Your shortcuts. Workflows have **Run**, files have **Download**.",
@@ -139,6 +140,15 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("Press the pin next to any SOP, workflow, file, document or search result, here or on its own page."),
           s("It appears under **Pinned**. Click it to open it.", "desk.pinned"),
           s("For a workflow, click **Run**, fill in the job and start it. You can also run one from **My procedures**.", "desk.procedures"),
+        ],
+      },
+      {
+        title: "Choose which AI follows a workflow, and when it works",
+        steps: [
+          s("Open the **Workflows & SOPs** tab and pick a workflow on the left.", "desk.tabs"),
+          s("Read its steps, then under **Who follows it, and when they work** switch on the agents that should do this job this way. Each shows its working hours.", "desk.procedures"),
+          s("Click **Run it now** to start a job through it. Work given outside an agent's hours waits for its next shift."),
+          s("On the **AI workers** tab, each worker shows when it works and the workflows it follows.", "desk.agents"),
         ],
       },
       {
@@ -481,6 +491,15 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "tasks.search": "Filter by title, agent or label.",
     },
     howto: [
+      {
+        title: "Find your own cards, pin them, and share a task",
+        steps: [
+          s("Type in the search box to find cards by title, agent or label.", "tasks.search"),
+          s("Choose **Mine** for the work you gave or your own AI does, or **Pinned** for the cards you pinned to your workspace."),
+          s("Open a card and press **Pin to my workspace**: it stays on your workspace for one-click access."),
+          s("Managers and owners: under **Who can see it**, share the task with its department, the whole company or everyone. Others can look at it but not change it."),
+        ],
+      },
       {
         title: "Give a task",
         state: "new",

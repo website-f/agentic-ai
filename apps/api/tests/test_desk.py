@@ -320,3 +320,102 @@ async def test_my_workspace_files_are_mine(client, llm, temporal):
     finally:
         await staff.aclose()
         await other.aclose()
+
+
+async def test_choose_who_follows_a_workflow_from_the_desk(client, llm, temporal):
+    o = await office(client)
+    staff, twin = await _staff_with_twin(client, o)
+    _, flows, _ = await _procedures(o, twin["id"])
+    company = await new_agent(client, o, "Nadia")
+    try:
+        d = (await staff.get("/api/desk")).json()
+        assert [a["id"] for a in d["assignable"]] == [twin["id"]]  # staff: their own AI only
+        audit = next(w for w in d["procedures"]["workflows"] if w["id"] == flows["other"])
+        assert audit["followers"] == [] and audit["followed"] is False
+        r = await staff.post(
+            f"/api/desk/workflows/{flows['other']}/follow",
+            json={"agent_id": twin["id"]},
+            headers=csrf(staff),
+        )
+        assert r.status_code == 200 and twin["id"] in r.json()["agent_ids"]
+        audit = next(
+            w
+            for w in (await staff.get("/api/desk")).json()["procedures"]["workflows"]
+            if w["id"] == flows["other"]
+        )
+        assert audit["followed"] and audit["followers"][0]["mine"]
+        assert audit["followers"][0]["can_change"]
+        # Staff cannot hand workflows to a company agent; the owner can.
+        r = await staff.post(
+            f"/api/desk/workflows/{flows['other']}/follow",
+            json={"agent_id": company["id"]},
+            headers=csrf(staff),
+        )
+        assert r.status_code == 403
+        owner_desk = (await client.get("/api/desk")).json()
+        assert company["id"] in [a["id"] for a in owner_desk["assignable"]]
+        assert twin["id"] not in [a["id"] for a in owner_desk["assignable"]]
+        r = await client.post(
+            f"/api/desk/workflows/{flows['other']}/follow",
+            json={"agent_id": company["id"]},
+            headers=csrf(client),
+        )
+        assert r.status_code == 200 and company["id"] in r.json()["agent_ids"]
+        # And stop following.
+        r = await staff.post(
+            f"/api/desk/workflows/{flows['other']}/follow",
+            json={"agent_id": twin["id"], "follow": False},
+            headers=csrf(staff),
+        )
+        assert twin["id"] not in r.json()["agent_ids"]
+        mine = next(
+            w
+            for w in (await staff.get("/api/desk")).json()["procedures"]["workflows"]
+            if w["id"] == flows["mine"]
+        )
+        assert mine["step_list"] == [] and mine["steps"] == 0  # only a start node
+    finally:
+        await staff.aclose()
+
+
+async def test_task_board_mine_and_pinned(client, llm, temporal):
+    o = await office(client)
+    staff, twin = await _staff_with_twin(client, o)
+    company = await new_agent(client, o, "Nadia")
+    try:
+        mine = (
+            await staff.post(
+                "/api/tasks",
+                json={"title": "Check claims", "assignee_agent_id": twin["id"]},
+                headers=csrf(staff),
+            )
+        ).json()
+        other = (
+            await client.post(
+                "/api/tasks",
+                json={"title": "Company work", "assignee_agent_id": company["id"]},
+                headers=csrf(client),
+            )
+        ).json()
+        everything = {t["id"] for t in (await client.get("/api/tasks")).json()}
+        assert {mine["id"], other["id"]} <= everything
+        owner_mine = {
+            t["id"] for t in (await client.get("/api/tasks", params={"who": "mine"})).json()
+        }
+        assert other["id"] in owner_mine and mine["id"] not in owner_mine
+        staff_mine = {
+            t["id"] for t in (await staff.get("/api/tasks", params={"who": "mine"})).json()
+        }
+        assert staff_mine == {mine["id"]}
+        assert (await client.get("/api/tasks", params={"who": "pinned"})).json() == []
+        r = await client.post(
+            "/api/desk/items", json={"kind": "task", "ref": other["id"]}, headers=csrf(client)
+        )
+        assert r.status_code == 201
+        pinned = [
+            t["id"] for t in (await client.get("/api/tasks", params={"who": "pinned"})).json()
+        ]
+        assert pinned == [other["id"]]
+        assert (await client.get("/api/tasks", params={"who": "nobody"})).status_code == 422
+    finally:
+        await staff.aclose()

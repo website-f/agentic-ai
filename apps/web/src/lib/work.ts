@@ -89,9 +89,23 @@ export interface SOP {
   source_files?: { id: string; name: string }[];
 }
 
+/** P26: who else may look at a task (read only), chosen by managers and owners. */
+export type Visibility = "private" | "department" | "company" | "everyone";
+
+export const VISIBILITY: { value: Visibility; label: string; hint: string }[] = [
+  { value: "private", label: msg("Only the people involved"), hint: msg("You, its agent's owner and their managers.") },
+  { value: "department", label: msg("Its department"), hint: msg("Everyone in the department of the agent doing it.") },
+  { value: "company", label: msg("The whole company"), hint: msg("Everyone in this task's company.") },
+  { value: "everyone", label: msg("Everyone"), hint: msg("Every person in the workspace.") },
+];
+
+/** May choose who else sees a task. */
+export const canShareTasks = (perms: string[]) => ["agents.manage", "team.manage", "org.manage"].some((p) => perms.includes(p));
+
 export interface Task {
   id: string;
   title: string;
+  visibility?: Visibility;
   brief: string;
   status: TaskStatus;
   priority: Priority;
@@ -182,6 +196,8 @@ export interface TranscriptItem {
 
 export interface TaskDetail {
   task: Task;
+  /** P26: shown because it was shared with you: look only. */
+  read_only?: boolean;
   events: TaskEvent[];
   approvals: Approval[];
   transcript: TranscriptItem[];

@@ -318,9 +318,9 @@ export function SearchField({ variant = "header", initial = "", autoFocus }: { v
           collisionPadding={12}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onInteractOutside={(e) => { if (e.target instanceof Node && input.current?.parentElement?.contains(e.target)) e.preventDefault(); }}
-          className="z-50 w-[max(var(--radix-popover-trigger-width),min(calc(100vw-1.5rem),32rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
+          className="z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[max(var(--radix-popover-trigger-width),min(calc(100vw-1.5rem),32rem))] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] outline-none data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
         >
-          <div className="max-h-[min(26rem,60dvh)] overflow-y-auto overscroll-contain">
+          <div className="max-h-[min(26rem,60dvh)] min-h-0 overflow-y-auto overscroll-contain">
             <RowList rows={box.rows} active={box.active} setActive={box.setActive} listId={listId} empty={<Hint />} />
           </div>
           <Footer hasRecent={box.hasRecent} onClear={() => void box.clear()} onPalette={() => { setOpen(false); setPalette(true); }} />

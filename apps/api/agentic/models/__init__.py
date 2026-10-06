@@ -393,6 +393,10 @@ class Task(Timestamps, Base):
     )
     created_by: Mapped[str] = mapped_column(String(80))
     source: Mapped[str] = mapped_column(String(24), default="manual")  # manual|broadcast|chat
+    # P26: who else may look at it (read only), set by a manager or owner: private (only the
+    # people who already see it), department (the assignee's department), company (its
+    # branch) or everyone in the workspace.
+    visibility: Mapped[str] = mapped_column(String(12), default="private", server_default="private")
     requires_review: Mapped[bool] = mapped_column(Boolean, default=True)
     result: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

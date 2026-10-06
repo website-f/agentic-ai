@@ -831,6 +831,12 @@ MS: dict[str, str] = {
         "Anda belum ada pekerja AI. Ambil satu di Pekerja AI saya, atau pilih ejen."
     ),
     "Find: {what}": "Cari: {what}",
+    "Only managers and owners choose who else may see a task.": (
+        "Hanya pengurus dan pemilik boleh memilih siapa lagi yang boleh melihat tugasan."
+    ),
+    "You can only choose for your own AI workers or the agents you manage.": (
+        "Anda hanya boleh memilih untuk pekerja AI anda sendiri atau ejen yang anda urus."
+    ),
     # documents/fill.py KIT_FIELDS (the company kit's labels)
     "Legal name": "Nama berdaftar",
     "Trading name": "Nama perniagaan",

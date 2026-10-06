@@ -1288,7 +1288,7 @@ function DeliveryLedger() {
             ))}
           </ul>
           <div className="overflow-x-auto max-md:hidden">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full min-w-[40rem] text-left text-[13px]">
               <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
                 <tr><th className="px-5 py-2 font-medium">{t("What")}</th><th className="px-4 py-2 font-medium">{t("Where")}</th><th className="px-4 py-2 font-medium">{t("State")}</th><th className="px-4 py-2 font-medium">{t("When")}</th><th /></tr>
               </thead>

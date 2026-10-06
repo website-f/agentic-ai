@@ -16,6 +16,7 @@ import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { HomeTabs } from "@/components/home-tabs";
 import { IconTile, Page, PageHeader } from "@/components/page";
 import { AiWorkCard } from "@/components/provenance";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -206,6 +207,7 @@ export function CommandCenterPage() {
         description={t("{workspace}. Here is how the office is doing.", { workspace: me.workspace.name })}
         actions={<div className="flex items-center">{statusPill}</div>}
       />
+      <HomeTabs />
 
       <TutorialBanner />
 

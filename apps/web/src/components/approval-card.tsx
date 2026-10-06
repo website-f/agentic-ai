@@ -179,7 +179,9 @@ export function ApprovalCard({
             {options.length ? (
               <div className="flex flex-wrap gap-2" role="group" aria-label={t("Quick answers")}>
                 {options.map((o) => (
-                  <Button key={o} type="button" size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "answer", answer: o })}>
+                  <Button key={o} type="button" size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "answer", answer: o })}
+                    // A long answer wraps inside the card instead of pushing the page sideways.
+                    className="h-auto min-h-8 max-w-full shrink py-1.5 text-left whitespace-normal [overflow-wrap:anywhere]">
                     {o}
                   </Button>
                 ))}

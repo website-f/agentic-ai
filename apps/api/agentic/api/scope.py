@@ -15,6 +15,11 @@ Two more rules (P16):
 Every list is filtered in SQL with `agent_where` / `task_where`; every single-row read and
 write checks `sees_agent` / `sees_task` / `manages_agent`, and answers 404 when the row is
 outside the scope (so a scoped user cannot probe what exists elsewhere).
+
+Shared tasks (P26): a manager or owner may let more people *look at* a task they give
+(`visibility`: department, company, everyone). That widens only the task board and the task
+itself, read only (`shared_task_where` / `shares_task`); it never lets anyone change the
+task, see its agent's transcript or approvals, or reach its files.
 """
 
 from dataclasses import dataclass
@@ -168,6 +173,35 @@ class Scope:
         if agent is not None and self.sees_agent(agent):
             return True
         return self.kind == "branch" and bool(self.branch_id) and t.branch_id == self.branch_id
+
+    def shared_task_where(self) -> ColumnElement[bool] | None:
+        """Tasks shared with this person to look at (beyond what `task_where` gives)."""
+        if self.everything:
+            return None
+        parts: list[ColumnElement[bool]] = [Task.visibility == "everyone"]
+        if self.branch_id:
+            parts.append(and_(Task.visibility == "company", Task.branch_id == self.branch_id))
+        if self.department_id:
+            dept = select(Agent.id).where(Agent.department_id == self.department_id)
+            parts.append(and_(Task.visibility == "department", Task.assignee_agent_id.in_(dept)))
+        return and_(Task.assignee_agent_id.not_in(self._others_private_ids()), or_(*parts))
+
+    def shares_task(self, t: Task, agent: Agent | None) -> bool:
+        """May look at this task (read only) because it was shared with them."""
+        if agent is not None and agent.private and agent.owner_user_id != self.user_id:
+            return False
+        v = getattr(t, "visibility", "private")
+        if v == "everyone":
+            return True
+        if v == "company":
+            return bool(self.branch_id) and t.branch_id == self.branch_id
+        if v == "department":
+            return (
+                bool(self.department_id)
+                and agent is not None
+                and (agent.department_id == self.department_id)
+            )
+        return False
 
     def approval_where(self) -> ColumnElement[bool] | None:
         if self.everything:

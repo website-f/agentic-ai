@@ -441,7 +441,15 @@ const welcomeRoute = createRoute({
 });
 const myWorkerRoute = createRoute({ getParentRoute: () => appRoute, path: "/my-worker", component: page.myWorker });
 // P26: each person's own desk.
-const deskRoute = createRoute({ getParentRoute: () => appRoute, path: "/workspace", component: page.desk });
+const DESK_TABS = ["overview", "work", "files", "procedures", "agents"] as const;
+const deskRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/workspace",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof DESK_TABS)[number] } => ({
+    tab: DESK_TABS.includes(s.tab as (typeof DESK_TABS)[number]) ? (s.tab as (typeof DESK_TABS)[number]) : undefined,
+  }),
+  component: page.desk,
+});
 
 const TUTORIAL_TRACKS = ["owner", "management", "staff", "approver"] as const;
 const tutorialRoute = createRoute({

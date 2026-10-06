@@ -183,6 +183,8 @@ class TaskIn(BaseModel):
     # stages ({stages, max_rounds}; {"stages": []} switches the inherited ones off).
     blocked_by: list[str] = Field(default_factory=list, max_length=20)
     review_policy: dict[str, Any] | None = None
+    # P26: who else may look at it (managers and owners only; default private).
+    visibility: Literal["private", "department", "company", "everyone"] = "private"
 
 
 class TaskUpdateIn(BaseModel):
@@ -194,6 +196,8 @@ class TaskUpdateIn(BaseModel):
     position: float | None = None
     labels: list[str] | None = Field(default=None, max_length=8)
     objective_id: str | None = Field(default=None, max_length=40)  # P21: null unlinks
+    # P26: who else may look at it (managers and owners only).
+    visibility: Literal["private", "department", "company", "everyone"] | None = None
 
 
 class TaskOut(BaseModel):
@@ -245,6 +249,8 @@ class TaskOut(BaseModel):
     restartable: bool = False
     review_round: int = 0
     quiet_minutes: int | None = None
+    # P26: who else may look at it.
+    visibility: str = "private"
 
 
 class TaskEventOut(BaseModel):
@@ -293,6 +299,8 @@ class DecisionIn(BaseModel):
 
 class TaskDetailOut(BaseModel):
     task: TaskOut
+    # P26: shown because it was shared with this person: look only, no transcript or approvals.
+    read_only: bool = False
     events: list[TaskEventOut]
     approvals: list[ApprovalOut]
     transcript: list[dict[str, Any]]

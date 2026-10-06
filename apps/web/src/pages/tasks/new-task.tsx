@@ -1,5 +1,5 @@
 import { FileIcon, FlowArrowIcon, HourglassMediumIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -15,7 +15,8 @@ import { SwitchField } from "@/components/ui/switch";
 import { useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
-import { agentsQuery, workKeys, type Priority, type Task } from "@/lib/work";
+import { meQuery } from "@/lib/queries";
+import { agentsQuery, canShareTasks, VISIBILITY, workKeys, type Priority, type Task, type Visibility } from "@/lib/work";
 import { runKeys, workflowsQuery, type Run } from "@/lib/workflows";
 
 import { TaskPicker, type TaskRef } from "./accountable";
@@ -49,6 +50,9 @@ export function NewTaskDialog({
   // A link like ?agent=<a watched agent> falls back to triage instead of a task the API refuses.
   const agent = agents.find((a) => a.id === picked)?.view_only ? "none" : picked;
   const [priority, setPriority] = useState<Priority>("normal");
+  const { data: me } = useSuspenseQuery(meQuery);
+  const canShare = canShareTasks(me.permissions);
+  const [visibility, setVisibility] = useState<Visibility>("private");
   const [review, setReview] = useState(true);
   const [startNow, setStartNow] = useState(true);
   const [labels, setLabels] = useState("");
@@ -96,6 +100,7 @@ export function NewTaskDialog({
       file_ids: files.map((f) => f.id), workflow_id: flow === NO_FLOW ? null : flow,
       blocked_by: after.map((a) => a.id),
       objective_id: objective,
+      ...(canShare ? { visibility } : {}),
     }),
     onSuccess: (task) => {
       qc.invalidateQueries({ queryKey: workKeys.tasks });
@@ -144,6 +149,14 @@ export function NewTaskDialog({
               options={[{ value: "low", label: t("Low") }, { value: "normal", label: t("Normal") }, { value: "high", label: t("High") }, { value: "urgent", label: t("Urgent") }]} />
           </div>
         </div>
+        {canShare ? (
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">{t("Who can see it")}</span>
+            <Select value={visibility} onValueChange={(v) => setVisibility(v as Visibility)} label={t("Who can see it")}
+              options={VISIBILITY.map((o) => ({ value: o.value, label: t(o.label), hint: t(o.hint) }))} />
+            <span className="text-[12px] text-muted">{t("Others may look at it, read only. Only managers and owners can change this.")}</span>
+          </div>
+        ) : null}
         <div className="grid min-w-0 gap-1.5">
           <span className="text-[13px] font-medium">{t("Files for the agent")} {files.length ? <span className="font-normal text-muted">({files.length})</span> : null}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-sm border border-dashed border-border bg-surface-2/40 p-2">

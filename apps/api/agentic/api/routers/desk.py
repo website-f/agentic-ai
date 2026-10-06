@@ -19,6 +19,7 @@ their workspace.
 - PUT    /api/desk/items/order     reorder the pins
 - POST   /api/desk/ask             give a question or a job to one of their AI workers
 - POST   /api/desk/files           upload a file into their workspace
+- POST   /api/desk/workflows/{id}/follow  have one of their agents follow a workflow
 """
 
 from datetime import UTC, datetime, timedelta
@@ -123,6 +124,8 @@ def _agent_card(a: Agent, current: Task | None, open_count: int) -> dict[str, An
         "private": bool(a.private),
         "current_task": {"id": current.id, "title": current.title} if current else None,
         "open_tasks": open_count,
+        "work_hours": a.work_hours,
+        "department_id": a.department_id,
     }
 
 
@@ -196,6 +199,8 @@ async def _resolve(
             }
     if ids := by.get("task"):
         cond = principal.scope.task_where()
+        if cond is not None and (shared := principal.scope.shared_task_where()) is not None:
+            cond = or_(cond, shared)  # a task shared to look at may be pinned too
         q = select(Task).where(Task.workspace_id == ws, Task.id.in_(ids))
         for t in (await db.scalars(q.where(cond) if cond is not None else q)).all():
             info[("task", t.id)] = {"title": t.title, "sub": t.status, "status": t.status}
@@ -340,11 +345,59 @@ async def reorder(
 # ---------------------------------------------------------------- the desk
 
 
+async def assignable(db: AsyncSession, principal: Principal) -> list[Agent]:
+    """Agents this person may hand workflows to: their own AI workers, and for people who
+    manage agents, the company agents in their scope (never someone else's personal one)."""
+    own = await my_agents(db, principal)
+    out = list(own)
+    if "agents.manage" in principal.permissions:
+        seen = {a.id for a in own}
+        rows = await db.scalars(
+            select(Agent)
+            .where(
+                Agent.workspace_id == principal.workspace_id,
+                Agent.status == "active",
+                Agent.clone_of.is_(None),
+                Agent.owner_user_id.is_(None),
+                principal.scope.agent_where(),
+            )
+            .order_by(Agent.name)
+            .limit(200)
+        )
+        out += [a for a in rows.all() if a.id not in seen]
+    return out
+
+
+def _steps(w: Workflow) -> list[dict[str, str]]:
+    """The workflow's steps in order (no start, end or notes), for a quick read."""
+    graph = w.graph or {}
+    nodes = {n.get("id"): n for n in graph.get("nodes") or []}
+    nxt: dict[str, list[str]] = {}
+    for e in graph.get("edges") or []:
+        nxt.setdefault(str(e.get("from")), []).append(str(e.get("to")))
+    start = next((i for i, n in nodes.items() if n.get("type") == "start"), None)
+    order: list[str] = []
+    queue = [start] if start else list(nodes)
+    while queue:
+        cur = queue.pop(0)
+        if cur in order or cur not in nodes:
+            continue
+        order.append(cur)
+        queue += nxt.get(cur, [])
+    order += [i for i in nodes if i not in order]
+    return [
+        {"title": str(nodes[i].get("title") or ""), "type": str(nodes[i].get("type") or "step")}
+        for i in order
+        if nodes[i].get("type") not in ("start", "end", "note")
+    ]
+
+
 async def _procedures(
     db: AsyncSession, principal: Principal, agent_ids: list[str]
 ) -> dict[str, Any]:
     """The SOPs for this person's job (their department's first, then their company's, then
-    everyone's) and the workflows they can run (the ones their AI workers follow first)."""
+    everyone's) and the workflows they can run (the ones their AI workers follow first),
+    each with its steps, who follows it and when they work."""
     ws = principal.workspace_id
     dept, branch = principal.department_id, principal.branch_id
     cond = for_person(principal).sops()
@@ -356,14 +409,36 @@ async def _procedures(
     whens.append((SOP.scope == "workspace", 2))
     rank = case(*whens, else_=3)
     sop_q = select(SOP).where(SOP.workspace_id == ws, SOP.status == "active", cond)
-    sops = (await db.scalars(sop_q.order_by(rank, SOP.title).limit(12))).all()
+    sops = (await db.scalars(sop_q.order_by(rank, SOP.title).limit(60))).all()
     sop_total = await db.scalar(sop_q.with_only_columns(func.count()).order_by(None))
     wf_q = select(Workflow).where(Workflow.workspace_id == ws, Workflow.status == "active")
     if branch and not principal.scope.everything:
         wf_q = wf_q.where(or_(Workflow.branch_id.is_(None), Workflow.branch_id == branch))
-    flows = list((await db.scalars(wf_q.order_by(Workflow.name))).all())
+    flows = list((await db.scalars(wf_q.order_by(Workflow.name).limit(100))).all())
     mine = set(agent_ids)
     flows.sort(key=lambda w: (not (mine & set(w.agent_ids or [])), w.name.lower()))
+    follower_ids = {i for w in flows for i in (w.agent_ids or [])}
+    followers = {
+        a.id: a
+        for a in (
+            await db.scalars(
+                select(Agent).where(Agent.id.in_(follower_ids), Agent.status != "retired")
+            )
+        ).all()
+    }
+    can = {a.id for a in await assignable(db, principal)}
+
+    def person(a: Agent) -> dict[str, Any]:
+        return {
+            "id": a.id,
+            "name": a.name,
+            "color": a.color,
+            "role": a.role,
+            "work_hours": a.work_hours,
+            "mine": a.id in mine,
+            "can_change": a.id in can,
+        }
+
     return {
         "sops": [
             {"id": s.id, "title": s.title, "scope": s.scope, "url": url_of("sop", s.id)}
@@ -376,13 +451,64 @@ async def _procedures(
                 "name": w.name,
                 "description": w.description,
                 "followed": bool(mine & set(w.agent_ids or [])),
-                "steps": len((w.graph or {}).get("nodes") or []),
+                "steps": len(_steps(w)),
+                "step_list": _steps(w)[:12],
+                "followers": [
+                    person(followers[i])
+                    for i in (w.agent_ids or [])
+                    if i in followers and principal.scope.sees_agent(followers[i])
+                ],
                 "url": url_of("workflow", w.id),
             }
-            for w in flows[:12]
+            for w in flows
         ],
         "workflow_total": len(flows),
     }
+
+
+class FollowIn(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=40)
+    follow: bool = True
+
+
+@router.post("/workflows/{workflow_id}/follow")
+async def follow_workflow(
+    workflow_id: str,
+    body: FollowIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Have one of the agents this person looks after follow a workflow as its way of doing
+    that job (or stop). Staff choose for their own AI worker; managers for their agents."""
+    w = await db.get(Workflow, workflow_id)
+    if w is None or w.workspace_id != principal.workspace_id:
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That workflow is not here.")
+    agent = await db.get(Agent, body.agent_id)
+    if agent is None or agent.id not in {a.id for a in await assignable(db, principal)}:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "cannot_assign",
+            "You can only choose for your own AI workers or the agents you manage.",
+        )
+    ids = list(w.agent_ids or [])
+    if body.follow and agent.id not in ids:
+        ids.append(agent.id)
+    elif not body.follow and agent.id in ids:
+        ids.remove(agent.id)
+    if ids != list(w.agent_ids or []):
+        w.agent_ids = ids
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "workflow.updated",
+            target=w.id,
+            after={"agent": agent.id, "follows": body.follow},
+            note="who follows it, from My workspace",
+        )
+        await db.commit()
+        await events.publish(principal.workspace_id, "agent.upsert", {"agent_id": agent.id})
+    return {"workflow_id": w.id, "agent_ids": ids}
 
 
 async def _work(
@@ -634,6 +760,17 @@ async def desk(
         },
         "can_ask": "work.write" in principal.permissions,
         "agents": cards,
+        "assignable": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "color": a.color,
+                "role": a.role,
+                "work_hours": a.work_hours,
+                "mine": a.id in agent_ids,
+            }
+            for a in await assignable(db, principal)
+        ],
         "pins": await _resolve(db, principal, list(pins)),
         "procedures": await _procedures(db, principal, agent_ids),
         "work": await _work(db, principal, agent_ids),

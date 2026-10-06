@@ -25,6 +25,7 @@ import {
   SealCheckIcon,
   SparkleIcon,
   SpinnerGapIcon,
+  SquaresFourIcon,
   StackIcon,
   UserFocusIcon,
   WarningIcon,
@@ -32,12 +33,12 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { PageTabs } from "@/components/page-tabs";
 import { PinButton } from "@/components/pin-button";
 import { MadeBy, ReviewPill } from "@/components/provenance";
 import { Marked, TYPE_ICON, typeLabel, useOpenTarget } from "@/components/search-box";
@@ -68,6 +69,9 @@ import { searchKeys, suggestQuery, useDebounced, type SearchResult } from "@/lib
 import { cn, timeAgo } from "@/lib/utils";
 import type { Workflow } from "@/lib/workflows";
 import { StartRunDialog } from "@/pages/workflows/run";
+
+import { AgentsTab } from "./agents";
+import { WorkflowsTab } from "./workflows";
 
 const PIN_ICON: Record<PinKind, Icon> = {
   sop: FileTextIcon,
@@ -117,8 +121,15 @@ export function DeskPage() {
   return <DeskView desk={data} />;
 }
 
+export type DeskTab = "overview" | "work" | "files" | "procedures" | "agents";
+export const DESK_TABS: DeskTab[] = ["overview", "work", "files", "procedures", "agents"];
+
 function DeskView({ desk }: { desk: Desk }) {
   const t = useT();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { tab?: DeskTab };
+  const tab: DeskTab = search.tab && DESK_TABS.includes(search.tab) ? search.tab : "overview";
+  const go = (next: DeskTab) => void navigate({ to: "/workspace", search: next === "overview" ? {} : { tab: next }, replace: true });
   const waiting = desk.waiting.approvals.length + desk.waiting.reviews.length + desk.waiting.documents.length;
   const open = desk.work.filter((w) => workGroup(w.status) === "open").length;
   const done = desk.work.filter((w) => workGroup(w.status) === "done").length;
@@ -131,26 +142,47 @@ function DeskView({ desk }: { desk: Desk }) {
         eyebrow={where || t("Home")}
         description={t("Your desk: what you pinned, the procedures for your job, your AI workers, the work you gave and everything it produced. Ask here and your AI worker finds it for you.")}
       />
-      {desk.can_ask ? <AskPanel /> : null}
-      <StatGrid guide="desk.stats">
-        <Stat label={t("Waiting for you")} value={waiting} icon={SealCheckIcon} tone={waiting ? "warn" : "ok"} hint={waiting ? t("Approvals, answers and reviews") : t("Nothing right now")} />
-        <Stat label={t("In progress")} value={open} icon={HourglassIcon} tone="info" hint={t("Work you gave or your AI does")} />
-        <Stat label={t("Done this week")} value={done} icon={CheckCircleIcon} tone="ok" />
-        <Stat label={t("In my workspace")} value={desk.file_counts.total + desk.document_total} icon={FilesIcon} tone="accent" hint={t("{n} pinned", { n: desk.pins.length })} />
-      </StatGrid>
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_23rem]">
-        <div className="grid min-w-0 content-start gap-5">
-          <Pinned pins={desk.pins} />
-          <MyWork work={desk.work} />
-          <MyFiles desk={desk} />
-        </div>
-        <div className="grid min-w-0 content-start gap-5">
-          <MyAgents desk={desk} />
-          <Waiting desk={desk} />
-          <Procedures desk={desk} />
-          {desk.recent_searches.length ? <Recent items={desk.recent_searches} /> : null}
-        </div>
-      </div>
+      <PageTabs
+        label={t("My workspace")}
+        guide="desk.tabs"
+        value={tab}
+        onChange={go}
+        tabs={[
+          { value: "overview", label: t("Overview"), icon: SquaresFourIcon, count: waiting, attention: true },
+          { value: "work", label: t("My work"), icon: KanbanIcon, count: open + desk.waiting.reviews.length },
+          { value: "files", label: t("My files"), icon: FilesIcon, count: desk.file_counts.total + desk.document_total },
+          { value: "procedures", label: t("Workflows & SOPs"), icon: FlowArrowIcon, count: desk.procedures.workflow_total },
+          { value: "agents", label: t("AI workers"), icon: UserFocusIcon, count: desk.agents.length },
+        ]}
+      />
+      {tab === "overview" ? (
+        <>
+          {desk.can_ask ? <AskPanel /> : null}
+          <StatGrid guide="desk.stats">
+            <Stat label={t("Waiting for you")} value={waiting} icon={SealCheckIcon} tone={waiting ? "warn" : "ok"} hint={waiting ? t("Approvals, answers and reviews") : t("Nothing right now")} onClick={() => go("work")} />
+            <Stat label={t("In progress")} value={open} icon={HourglassIcon} tone="info" hint={t("Work you gave or your AI does")} onClick={() => go("work")} />
+            <Stat label={t("Done this week")} value={done} icon={CheckCircleIcon} tone="ok" onClick={() => go("work")} />
+            <Stat label={t("In my workspace")} value={desk.file_counts.total + desk.document_total} icon={FilesIcon} tone="accent" hint={t("{n} pinned", { n: desk.pins.length })} onClick={() => go("files")} />
+          </StatGrid>
+          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_23rem]">
+            <div className="grid min-w-0 content-start gap-5">
+              <Pinned pins={desk.pins} />
+            </div>
+            <div className="grid min-w-0 content-start gap-5">
+              <Waiting desk={desk} />
+              {desk.recent_searches.length ? <Recent items={desk.recent_searches} /> : null}
+            </div>
+          </div>
+        </>
+      ) : tab === "work" ? (
+        <MyWork work={desk.work} />
+      ) : tab === "files" ? (
+        <MyFiles desk={desk} />
+      ) : tab === "procedures" ? (
+        <WorkflowsTab desk={desk} />
+      ) : (
+        <AgentsTab desk={desk} onWorkflows={() => go("procedures")} />
+      )}
     </Page>
   );
 }
@@ -587,50 +619,6 @@ function MyFiles({ desk }: { desk: Desk }) {
 
 // ---------------------------------------------------------------- right column
 
-function MyAgents({ desk }: { desk: Desk }) {
-  const t = useT();
-  return (
-    <Card data-guide="desk.agents">
-      <CardHeader title={t("My AI workers")} icon={<IconTile icon={UserFocusIcon} size="sm" tone="ok" />} />
-      <CardBody className="grid gap-3">
-        {desk.agents.length ? (
-          desk.agents.map((a) => (
-            <div key={a.id} className="grid gap-2.5 rounded-[var(--radius-sm)] border border-border p-3">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <AgentAvatar name={a.name} color={a.color} working={!!a.current_task} />
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-medium">{a.name}</p>
-                  <p className="truncate text-[12px] text-muted">{a.is_twin ? t("Your AI worker") : t("Your assistant")} · {a.role}</p>
-                </div>
-              </div>
-              <p className="text-[12.5px] text-muted">
-                {a.current_task ? t("Working on: {title}", { title: a.current_task.title }) : a.open_tasks ? t("{n} open tasks", { n: a.open_tasks }) : t("Free for work")}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" asChild><Link to="/tasks" search={{ new: 1, agent: a.id }}><KanbanIcon size={14} /> {t("Give a task")}</Link></Button>
-                <Button size="sm" variant="ghost" asChild><Link to="/chat" search={{ agent: a.id }}>{t("Chat")}</Link></Button>
-                {a.is_twin ? <Button size="sm" variant="ghost" asChild><Link to="/my-worker">{t("Its day")}</Link></Button> : null}
-              </div>
-            </div>
-          ))
-        ) : (
-          desk.person.role === "staff" ? (
-            <div className="grid gap-2 text-[13px] text-muted">
-              <p>{t("You have no AI worker of your own yet. One works for you, follows your procedures and keeps what it makes in your workspace.")}</p>
-              <div><Button size="sm" asChild><Link to="/my-worker">{t("Hire my AI worker")}</Link></Button></div>
-            </div>
-          ) : (
-            <div className="grid gap-2 text-[13px] text-muted">
-              <p>{t("Ask any company agent from the box above, or create your own private assistant that works only for you. Everything they make for you lands here.")}</p>
-              {desk.can_ask ? <div><Button size="sm" asChild><Link to="/assistants">{t("Create my assistant")}</Link></Button></div> : null}
-            </div>
-          )
-        )}
-      </CardBody>
-    </Card>
-  );
-}
-
 function Waiting({ desk }: { desk: Desk }) {
   const t = useT();
   const w = desk.waiting;
@@ -669,65 +657,6 @@ function Waiting({ desk }: { desk: Desk }) {
       ) : (
         <CardBody><p className="text-[13px] text-muted">{t("Nothing waits for you. Your AI asks here before anything important.")}</p></CardBody>
       )}
-    </Card>
-  );
-}
-
-function Procedures({ desk }: { desk: Desk }) {
-  const t = useT();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<"workflows" | "sops">(desk.procedures.workflows.length ? "workflows" : "sops");
-  const [running, setRunning] = useState<Workflow | null>(null);
-  const run = useMutation({
-    mutationFn: (id: string) => api<Workflow>(`/api/workflows/${id}`),
-    onSuccess: setRunning,
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  const p = desk.procedures;
-  return (
-    <Card data-guide="desk.procedures">
-      <CardHeader title={t("My procedures")} description={t("The SOPs and workflows for your job. Run a workflow again in one click.")} icon={<IconTile icon={FlowArrowIcon} size="sm" tone="violet" />} />
-      <div className="border-b border-border px-4 py-2.5">
-        <Segmented size="sm" label={t("Show")} value={tab} onChange={setTab}
-          options={[
-            { value: "workflows", label: t("Workflows"), count: p.workflow_total },
-            { value: "sops", label: "SOP", count: p.sop_total },
-          ]} />
-      </div>
-      {tab === "workflows" ? (
-        p.workflows.length ? (
-          <ListCard className="rounded-none border-0">
-            {p.workflows.slice(0, 6).map((w) => (
-              <ListRow key={w.id} title={w.name}
-                meta={w.followed ? `${t("Your AI follows it")} · ${t("{n} steps", { n: w.steps })}` : t("{n} steps", { n: w.steps })}
-                trailing={
-                  <>
-                    <PinButton kind="workflow" refId={w.id} title={w.name} />
-                    <Button size="sm" variant="outline" loading={run.isPending && run.variables === w.id} onClick={() => run.mutate(w.id)}><PlayIcon size={13} /> {t("Run")}</Button>
-                  </>
-                } />
-            ))}
-          </ListCard>
-        ) : (
-          <CardBody><p className="text-[13px] text-muted">{t("No active workflows for your company yet.")}</p></CardBody>
-        )
-      ) : p.sops.length ? (
-        <ListCard className="rounded-none border-0">
-          {p.sops.slice(0, 6).map((s) => (
-            <ListRow key={s.id} onClick={() => void navigate({ href: s.url })} title={s.title}
-              meta={scopeLabel(t, s.scope)}
-              trailing={<PinButton kind="sop" refId={s.id} title={s.title} />} />
-          ))}
-        </ListCard>
-      ) : (
-        <CardBody><p className="text-[13px] text-muted">{t("No SOPs for your job yet.")}</p></CardBody>
-      )}
-      <div className="flex justify-end px-4 py-2.5">
-        <Link to={tab === "sops" ? "/sops" : "/workflows"} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:underline">
-          {tab === "sops" ? t("All SOPs") : t("All workflows")} <ArrowRightIcon size={13} />
-        </Link>
-      </div>
-      {running ? <StartRunDialog wf={running} onClose={() => setRunning(null)} /> : null}
     </Card>
   );
 }

@@ -40,7 +40,7 @@ export const GUIDE_PAGES: GuidePage[] = [
     id: "workspace", route: "/workspace", title: "My workspace", group: "Home",
     states: [],
     targets: [
-      t("desk.ask", "Ask or search"), t("desk.stats", "Your day in numbers"), t("desk.pinned", "Pinned"),
+      t("desk.tabs", "The workspace tabs"), t("desk.ask", "Ask or search"), t("desk.stats", "Your day in numbers"), t("desk.pinned", "Pinned"),
       t("desk.work", "My work"), t("desk.files", "My workspace files"), t("desk.agents", "My AI workers"),
       t("desk.waiting", "Waiting for you"), t("desk.procedures", "My procedures"),
     ],

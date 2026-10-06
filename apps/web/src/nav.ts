@@ -98,101 +98,112 @@ export interface NavItem {
   blurb: string;
   /** Permission needed to see it in navigation (any of them, when a list). */
   perm?: string | string[];
+  /** Other addresses that count as this entry (a page's second tab). */
+  also?: AppPath[];
+  /** Reached from another entry (a tab of it): known to page headers, not listed. */
+  hidden?: boolean;
+  /** A shorter name for the phone's bottom bar. */
+  short?: string;
 }
 
 export interface NavSection {
   title: string;
+  /** One plain sentence: what this group is for, for people new to the app. */
+  hint: string;
   items: NavItem[];
+  /** Open in the sidebar at first: for everyone, only for people who manage, or folded. */
+  open: "all" | "managers" | "none";
 }
 
-// Titles, labels and blurbs are English keys (msg); render them with t().
-// Grouped as a top-to-bottom flow: start at Home, look in on the Office and its agents,
-// give and track Work, watch them Collaborate, back them with Knowledge, wire up Operations,
-// and Admin at the bottom. Each group is one step of running the office.
+// Titles, labels, hints and blurbs are English keys (msg); render them with t().
+// Grouped for people, not for the system: your own desk and the office today, the work
+// itself, the company's documents, the AI team, how the company works (procedures and
+// know-how), and one-time setup folded away at the bottom.
 export const NAV: NavSection[] = [
   {
     title: msg("Home"),
+    hint: msg("Your own desk, and the whole office at a glance."),
+    open: "all",
     items: [
-      { to: "/workspace", label: msg("My workspace"), icon: DeskIcon, blurb: msg("Your own desk: ask or search anything, your pinned SOPs and workflows, your AI workers, the work you gave and every file it produced.") },
-      { to: "/", label: msg("Command center"), icon: GaugeIcon, blurb: msg("Today at a glance: system health, organization and what to do next.") },
+      { to: "/workspace", label: msg("My workspace"), short: msg("My desk"), icon: DeskIcon, blurb: msg("Your own desk: ask or search anything, your pinned SOPs and workflows, your AI workers, the work you gave and every file it produced.") },
+      { to: "/", label: msg("Command center"), icon: GaugeIcon, also: ["/overview"], blurb: msg("Today at a glance: system health, organization and what to do next.") },
+      { to: "/overview", label: msg("Company overview"), icon: ChartBarIcon, hidden: true, blurb: msg("Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing.") },
       { to: "/my-worker", label: msg("My AI worker"), icon: BriefcaseIcon, perm: "agents.own", blurb: msg("The AI worker you hired: what it is doing now, what waits for you, its duties and the hours it works and rests.") },
-      { to: "/twin", label: msg("My twin"), icon: UserFocusIcon, perm: "agents.own", blurb: msg("Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important.") },
       { to: "/assistants", label: msg("My assistants"), icon: SparkleIcon, perm: "work.write", blurb: msg("Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp.") },
-      { to: "/overview", label: msg("Company overview"), icon: ChartBarIcon, blurb: msg("Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing.") },
       { to: "/impact", label: msg("Impact"), icon: ChartLineUpIcon, perm: ["org.manage", "team.manage"], blurb: msg("What the AI team measurably did per company and department, the time it freed against what it cost, and what it can do next.") },
     ],
   },
   {
-    title: msg("Office"),
-    items: [
-      { to: "/office", label: msg("Office floor"), icon: BuildingsIcon, blurb: msg("A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you.") },
-      { to: "/monitor", label: msg("Monitor"), icon: EyeIcon, blurb: msg("Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen.") },
-      { to: "/agents", label: msg("Agents"), icon: UsersThreeIcon, blurb: msg("Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom.") },
-    ],
-  },
-  {
     title: msg("Work"),
+    hint: msg("Give work, follow it, and answer what the agents ask you."),
+    open: "all",
     items: [
       { to: "/tasks", label: msg("Tasks"), icon: KanbanIcon, blurb: msg("A board of everything your agents are working on, from triage to done. Drag a card between columns to move it along.") },
-      { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
       { to: "/approvals", label: msg("Approvals"), icon: SealCheckIcon, blurb: msg("Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification.") },
-      { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
       { to: "/chat", label: msg("Chat"), icon: ChatsCircleIcon, blurb: msg("Talk to any agent directly, by typing or with your voice, and pick up past conversations.") },
+      { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
+      { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
     ],
   },
   {
-    // Step by step: set up the company once, give the office its files, keep templates,
-    // prepare documents, then compile submission packs.
     title: msg("Documents"),
+    hint: msg("Find, prepare and keep the company's files, letters, quotations and forms."),
+    open: "managers",
     items: [
-      // P25: find anything inside every document, before the step-by-step flow below.
       { to: "/search", label: msg("Search documents"), icon: FileMagnifyingGlassIcon, blurb: msg("Search inside every document: a phrase on page 23 of a handbook, an amount, a form or a job title. Opens the file at the page.") },
-      { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
       { to: "/files", label: msg("Company files"), icon: FolderOpenIcon, blurb: msg("One place per company for all its documents. Drop a folder or a zip: it is kept in folders, read, sorted, and the how-to documents go to the library.") },
-      { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },
       { to: "/documents", label: msg("Documents"), icon: FilesIcon, blurb: msg("Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.") },
+      { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },
       { to: "/packs", label: msg("Packs"), icon: PackageIcon, blurb: msg("Submission packs: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.") },
+      { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
     ],
   },
   {
-    title: msg("Collaboration"),
+    title: msg("AI team"),
+    hint: msg("Who your AI agents are, watching them work, and letting them meet."),
+    open: "managers",
     items: [
+      { to: "/agents", label: msg("Agents"), icon: UsersThreeIcon, blurb: msg("Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom.") },
+      { to: "/twin", label: msg("My twin"), icon: UserFocusIcon, perm: "agents.own", blurb: msg("Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important.") },
+      { to: "/office", label: msg("Office floor"), icon: BuildingsIcon, blurb: msg("A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you.") },
+      { to: "/monitor", label: msg("Monitor"), icon: EyeIcon, blurb: msg("Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen.") },
       { to: "/meetings", label: msg("Meetings"), icon: UsersIcon, blurb: msg("Watch agents discuss a decision with each other, interject, and read the outcome they agree on.") },
       { to: "/broadcasts", label: msg("Broadcasts"), icon: BroadcastIcon, blurb: msg("Message everyone, a branch, a department or picked agents, and see who acknowledged it.") },
     ],
   },
   {
-    title: msg("Knowledge"),
+    title: msg("How we work"),
+    hint: msg("The procedures and know-how your agents follow: SOPs, workflows, guidelines and what they learned."),
+    open: "managers",
     items: [
       { to: "/sops", label: msg("SOPs"), icon: FileTextIcon, blurb: msg("Written procedures agents follow: for every company, one company, one department, or attached to specific agents.") },
+      { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
       { to: "/library", label: msg("Library"), icon: BooksIcon, blurb: msg("Guidelines, manuals and policies people upload. Agents search them when the work needs it and cite the page.") },
       { to: "/brain", label: msg("Brain"), icon: BrainIcon, blurb: msg("What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian.") },
       { to: "/skills", label: msg("Skills"), icon: LightningIcon, blurb: msg("Procedures agents have learned. Review what they propose before it becomes part of how they work.") },
       { to: "/learning", label: msg("Learning"), icon: GraduationCapIcon, blurb: msg("What your agents learned, how each change was tested, what went live by itself, and what learning cost.") },
       { to: "/blueprints", label: msg("Blueprints"), icon: BlueprintIcon, perm: ["agents.manage", "agents.own"], blurb: msg("Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists.") },
-      { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
     ],
   },
   {
-    title: msg("Operations"),
-    items: [
-      { to: "/schedules", label: msg("Schedules"), icon: CalendarCheckIcon, blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
-      { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },
-      { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
-      { to: "/mcp-servers", label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect external tool servers (MCP) — a tracker, CRM, or a company's own server. Agents reach them through a search-and-call bridge, every call approved.") },
-      { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
-    ],
-  },
-  {
-    title: msg("Admin"),
+    title: msg("Setup"),
+    hint: msg("One-time setup and records: companies, people, AI models, channels and logins. Usually the admin's job."),
+    open: "none",
     items: [
       { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, blurb: msg("Branches (one per company) and the departments inside them.") },
-      { to: "/activity", label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
+      { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
+      { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
+      { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },
+      { to: "/schedules", label: msg("Schedules"), icon: CalendarCheckIcon, blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
+      { to: "/mcp-servers", label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect external tool servers (MCP) — a tracker, CRM, or a company's own server. Agents reach them through a search-and-call bridge, every call approved.") },
+      { to: "/activity", label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
     ],
   },
   {
     title: msg("Help"),
+    hint: msg("Learn the app: a tutorial for your role, the full guide and a ready-made presentation."),
+    open: "all",
     items: [
       { to: "/tutorial", label: msg("Tutorial"), icon: BookOpenTextIcon, blurb: msg("Learn the whole system for your role, step by step: from your first agent to giving tasks and seeing results.") },
       { to: "/guide", label: msg("Guide"), icon: BookBookmarkIcon, blurb: msg("The user guide: every page explained with annotated screenshots, how-to steps and short videos.") },
@@ -207,4 +218,4 @@ export const ALL_NAV: NavItem[] = NAV.flatMap((s) => s.items);
 /** The Help group: pinned at the foot of the sidebar and at the top of the phone More sheet. */
 export const HELP_SECTION = "Help";
 
-export const TAB_BAR: AppPath[] = ["/office", "/tasks", "/approvals", "/chat"];
+export const TAB_BAR: AppPath[] = ["/workspace", "/tasks", "/approvals", "/chat"];

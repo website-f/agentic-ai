@@ -131,11 +131,13 @@ function ModelPicker({
         <Popover.Content
           align="start"
           sideOffset={6}
-          className="z-50 w-[min(92vw,22rem)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
+          collisionPadding={8}
+          // Fits the room left on screen; the model list scrolls inside it.
+          className="z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[min(92vw,22rem)] flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-pop)] data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]"
         >
-          <Command label={t("Pick a model")} loop>
-            <Command.Input autoFocus placeholder={t("Search models")} className="h-10 w-full border-b border-border bg-transparent px-3 text-[13.5px] outline-none placeholder:text-muted" />
-            <Command.List className="max-h-72 overflow-y-auto p-1">
+          <Command label={t("Pick a model")} loop className="flex min-h-0 flex-col">
+            <Command.Input autoFocus placeholder={t("Search models")} className="h-10 w-full shrink-0 border-b border-border bg-transparent px-3 text-[13.5px] outline-none placeholder:text-muted" />
+            <Command.List className="max-h-72 min-h-0 overflow-y-auto overscroll-contain p-1">
               <Command.Empty className="px-3 py-5 text-center text-[13px] text-muted">
                 {models.length ? t("No model matches.") : t("No models listed yet. Test a provider first.")}
               </Command.Empty>

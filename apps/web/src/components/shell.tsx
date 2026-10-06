@@ -1,6 +1,7 @@
 import { setBadge, syncPush } from "@/lib/push";
 import {
   BuildingsIcon,
+  CaretDownIcon,
   CaretUpDownIcon,
   CheckIcon,
   CommandIcon,
@@ -32,7 +33,7 @@ import { useSignOut } from "@/lib/use-sign-out";
 import { ROLE_INFO } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
-import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem } from "@/nav";
+import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem, type NavSection } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
 import { HeaderSearch } from "./search-box";
@@ -57,17 +58,52 @@ function useVisibleNav() {
     () =>
       NAV.map((s) => ({
         ...s,
-        items: s.items.filter((i) => !i.perm || [i.perm].flat().some((p) => me.permissions.includes(p))),
+        items: s.items.filter((i) => !i.hidden && (!i.perm || [i.perm].flat().some((p) => me.permissions.includes(p)))),
       })).filter((s) => s.items.length),
     [me.permissions],
   );
 }
 
+/** Which sidebar groups are open: each person's own choice (kept on this device), else the
+ * group's default (everyday groups open; the AI team and how-we-work groups open for people
+ * who manage; setup folded). The group of the page you are on is always open. */
+const OPEN_KEY = "agentic.nav.open";
+
+function readOpen(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(OPEN_KEY) ?? "{}") as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+function useOpenGroups() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const manages = ["agents.manage", "org.manage", "team.manage"].some((p) => me.permissions.includes(p));
+  const [chosen, setChosen] = useState<Record<string, boolean>>(readOpen);
+  const isOpen = (s: NavSection) => chosen[s.title] ?? (s.open === "all" || (s.open === "managers" && manages));
+  const toggle = (s: NavSection) => {
+    const next = { ...chosen, [s.title]: !isOpen(s) };
+    setChosen(next);
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+    } catch {
+      // private mode: the choice lasts until the page reloads
+    }
+  };
+  return { isOpen, toggle };
+}
+
 /** Tutorial, Guide and Present: never permission-gated, always reachable. */
 const HELP_ITEMS: NavItem[] = NAV.find((s) => s.title === HELP_SECTION)?.items ?? [];
 
-function isActive(pathname: string, to: string) {
+function matches(pathname: string, to: string) {
   return to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function isActive(pathname: string, to: string) {
+  const item = ALL_NAV.find((n) => n.to === to);
+  return matches(pathname, to) || !!item?.also?.some((a) => matches(pathname, a));
 }
 
 function PhaseTag({ phase }: { phase: string }) {
@@ -115,6 +151,7 @@ function HelpFooter({ pathname }: { pathname: string }) {
 function Sidebar() {
   const t = useT();
   const sections = useVisibleNav().filter((s) => s.title !== HELP_SECTION);
+  const groups = useOpenGroups();
   const waiting = useWaiting();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
@@ -127,47 +164,64 @@ function Sidebar() {
           <Wordmark className="hidden xl:flex" />
         </Link>
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label={t("Main")}>
-        {sections.map((section) => (
-          <div key={section.title} className="mt-4 first:mt-1">
-            <p className="hidden px-2.5 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
-              {t(section.title)}
-            </p>
-            <ul className="grid gap-0.5">
-              {section.items.map((item) => {
-                const active = isActive(pathname, item.to);
-                const IconCmp = item.icon;
-                return (
-                  <li key={item.to}>
-                    <Link
-                      to={item.to}
-                      title={t(item.label)}
-                      className={cn(
-                        "relative flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-colors",
-                        "justify-center xl:justify-start",
-                        active
-                          ? "bg-accent-soft font-medium text-accent before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-accent"
-                          : "text-muted hover:bg-surface-2 hover:text-fg",
-                      )}
-                    >
-                      <span className="relative">
-                        <IconCmp size={19} weight={active ? "fill" : "regular"} />
-                        {waiting[item.to] ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn xl:hidden" /> : null}
-                      </span>
-                      <span className="hidden xl:inline">{t(item.label)}</span>
-                      <Badge count={waiting[item.to] ?? 0} className="ml-auto hidden xl:grid" />
-                      {item.phase ? (
-                        <span className="hidden xl:contents">
-                          <PhaseTag phase={item.phase} />
+      <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4" aria-label={t("Main")}>
+        {sections.map((section) => {
+          const here = section.items.some((i) => isActive(pathname, i.to));
+          const open = here || groups.isOpen(section);
+          const waitingHere = section.items.reduce((n, i) => n + (waiting[i.to] ?? 0), 0);
+          return (
+            <div key={section.title} className="mt-3 border-t border-border/60 pt-2 first:mt-1 first:border-0 first:pt-0 xl:border-0 xl:pt-0">
+              <button
+                type="button"
+                onClick={() => groups.toggle(section)}
+                aria-expanded={open}
+                disabled={here}
+                title={t(section.hint)}
+                className="hidden w-full items-center gap-1.5 rounded-sm px-2.5 py-1 text-left text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase transition-colors hover:text-fg disabled:cursor-default disabled:hover:text-muted/80 xl:flex"
+              >
+                <span className="min-w-0 flex-1 truncate">{t(section.title)}</span>
+                {!open && waitingHere ? <Badge count={waitingHere} className="normal-case" /> : null}
+                {here ? null : <CaretDownIcon size={11} weight="bold" className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />}
+              </button>
+              {open ? (
+                <p className="hidden px-2.5 pb-1.5 text-[11.5px] leading-snug text-muted xl:block">{t(section.hint)}</p>
+              ) : null}
+              <ul className={cn("grid gap-0.5", !open && "xl:hidden")}>
+                {section.items.map((item) => {
+                  const active = isActive(pathname, item.to);
+                  const IconCmp = item.icon;
+                  return (
+                    <li key={item.to}>
+                      <Link
+                        to={item.to}
+                        title={`${t(item.label)}: ${t(item.blurb)}`}
+                        className={cn(
+                          "relative flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-colors",
+                          "justify-center xl:justify-start",
+                          active
+                            ? "bg-accent-soft font-medium text-accent before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-accent"
+                            : "text-muted hover:bg-surface-2 hover:text-fg",
+                        )}
+                      >
+                        <span className="relative">
+                          <IconCmp size={19} weight={active ? "fill" : "regular"} />
+                          {waiting[item.to] ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn xl:hidden" /> : null}
                         </span>
-                      ) : null}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+                        <span className="hidden truncate xl:inline">{t(item.label)}</span>
+                        <Badge count={waiting[item.to] ?? 0} className="ml-auto hidden xl:grid" />
+                        {item.phase ? (
+                          <span className="hidden xl:contents">
+                            <PhaseTag phase={item.phase} />
+                          </span>
+                        ) : null}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
       <HelpFooter pathname={pathname} />
     </aside>
@@ -476,7 +530,7 @@ function TabLink({ item, active, badge = 0 }: { item: NavItem; active: boolean; 
         <IconCmp size={22} weight={active ? "fill" : "regular"} />
         <Badge count={badge} className="absolute -top-1.5 -right-2.5" />
       </span>
-      {t(item.label)}
+      <span className="max-w-full truncate px-0.5">{t(item.short ?? item.label)}</span>
     </Link>
   );
 }
@@ -554,7 +608,8 @@ function MobileTabBar() {
             </div>
             {moreSections.map((s) => (
               <div key={s.title} className="mb-3">
-                <p className="mb-1.5 px-1 text-[12px] font-medium text-muted">{t(s.title)}</p>
+                <p className="px-1 text-[12.5px] font-semibold">{t(s.title)}</p>
+                <p className="mb-2 px-1 text-[12px] leading-snug text-muted">{t(s.hint)}</p>
                 <div className="grid grid-cols-3 gap-2">
                   {s.items.map((item) => {
                     const IconCmp = item.icon;

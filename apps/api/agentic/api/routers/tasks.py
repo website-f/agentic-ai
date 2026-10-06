@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -147,6 +147,7 @@ async def task_out(
         truncated=cut,
         objective_id=t.objective_id,
         root_task_id=t.root_task_id or t.id,
+        visibility=t.visibility or "private",
     )
     if fill:
         await fill_accountable(db, [t], [out])
@@ -211,6 +212,23 @@ async def _task(db: AsyncSession, principal: Principal, task_id: str) -> Task:
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "task_not_found", "That task is not here.")
     return t
+
+
+SHARERS = ("agents.manage", "team.manage", "org.manage")
+
+
+def _check_share(principal: Principal, visibility: str | None) -> None:
+    """P26: only managers and owners decide who else may look at a task."""
+    if (
+        visibility
+        and visibility != "private"
+        and not any(p in principal.permissions for p in SHARERS)
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "cannot_share",
+            "Only managers and owners choose who else may see a task.",
+        )
 
 
 async def _assignee(db: AsyncSession, principal: Principal, agent_id: str | None) -> Agent | None:
@@ -279,23 +297,49 @@ async def list_tasks(
     cursor: str | None = Query(default=None, max_length=400),
     q_: str = Query(default="", alias="q", max_length=120),
     full: bool = False,
+    who: str | None = Query(default=None, pattern="^(mine|pinned)$"),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskOut]:
     """The board, in board order (position, then newest). Rows carry brief and result cut to
     LIST_TEXT characters (`truncated` says so) unless `full`; GET /tasks/{id} has the full
     text. More rows than `limit`: `X-Next-Cursor` holds the token for the next page (pass it
-    as `cursor`); `X-Next-Before` keeps the older id form (pass it as `before`)."""
+    as `cursor`); `X-Next-Before` keeps the older id form (pass it as `before`). P26 `who`:
+    mine (tasks the person gave or their own AI workers do, with their sub-tasks) or pinned
+    (the cards pinned to their workspace)."""
     q = select(Task).where(Task.workspace_id == principal.workspace_id)
     cond = principal.scope.task_where()
     if cond is not None:
-        q = q.where(cond)
+        shared = principal.scope.shared_task_where()
+        q = q.where(or_(cond, shared) if shared is not None else cond)
     if status_:
         q = q.where(Task.status.in_(status_.split(",")))
     if agent_id:
         q = q.where(Task.assignee_agent_id == agent_id)
     if branch_id:
         q = q.where(Task.branch_id == branch_id)
+    if who == "mine":
+        own = select(Agent.id).where(
+            Agent.workspace_id == principal.workspace_id,
+            Agent.owner_user_id == principal.user.id,
+        )
+        given = select(Task.id).where(
+            Task.workspace_id == principal.workspace_id, Task.created_by == principal.actor
+        )
+        q = q.where(
+            or_(
+                Task.created_by == principal.actor,
+                Task.assignee_agent_id.in_(own),
+                Task.root_task_id.in_(given),
+            )
+        )
+    elif who == "pinned":
+        from ...models import DeskItem
+
+        pinned = select(DeskItem.ref).where(
+            DeskItem.user_id == principal.user.id, DeskItem.kind == "task"
+        )
+        q = q.where(Task.id.in_(pinned))
     if q_.strip():
         like = f"%{q_.strip()}%"
         named = select(Agent.id).where(
@@ -377,6 +421,7 @@ async def create_task(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
+    _check_share(principal, body.visibility)
     agent = await _assignee(db, principal, body.assignee_agent_id)
     brief, labels = body.brief, list(body.labels)
     if body.workflow_id:
@@ -405,6 +450,7 @@ async def create_task(
         status="ready" if agent else "triage",
         position=float(lowest) - 1,
         objective_id=objective_id,
+        visibility=body.visibility,
     )
     db.add(t)
     await db.flush()
@@ -437,13 +483,63 @@ async def create_task(
     return await task_out(db, t)
 
 
+async def _shared_detail(db: AsyncSession, t: Task) -> TaskDetailOut:
+    """P26: what someone a task was shared with may see: the task and its timeline, not the
+    agent's transcript or approvals (they can hold what the files it read said)."""
+    evs = (
+        await db.scalars(
+            select(TaskEvent)
+            .where(TaskEvent.task_id == t.id, TaskEvent.kind.in_(SHARED_EVENTS))
+            .order_by(TaskEvent.id)
+        )
+    ).all()
+    names = await _names(db, {e.actor for e in evs})
+    return TaskDetailOut(
+        task=await task_out(db, t),
+        events=[
+            TaskEventOut(
+                id=e.id,
+                ts=e.ts,
+                kind=e.kind,
+                actor=e.actor,
+                actor_name=names.get(e.actor),
+                text=e.text,
+                data={},
+            )
+            for e in evs
+        ],
+        approvals=[],
+        transcript=[],
+        read_only=True,
+    )
+
+
+# What a shared viewer sees of the timeline: who did what to the task, not tool calls.
+SHARED_EVENTS = ("created", "status", "run", "progress", "plan", "feedback", "cancel")
+
+
 @router.get("/tasks/{task_id}")
 async def task_detail(
     task_id: str,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskDetailOut:
-    t = await _task(db, principal, task_id)
+    try:
+        t = await _task(db, principal, task_id)
+    except HTTPException:
+        shared = await db.get(Task, task_id)
+        agent = (
+            await db.get(Agent, shared.assignee_agent_id)
+            if shared and shared.assignee_agent_id
+            else None
+        )
+        if (
+            shared is None
+            or shared.workspace_id != principal.workspace_id
+            or not principal.scope.shares_task(shared, agent)
+        ):
+            raise
+        return await _shared_detail(db, shared)
     evs = (
         await db.scalars(select(TaskEvent).where(TaskEvent.task_id == t.id).order_by(TaskEvent.id))
     ).all()
@@ -553,6 +649,9 @@ async def update_task(
 ) -> TaskOut:
     t = await _task(db, principal, task_id)
     changes = body.model_dump(exclude_unset=True)
+    if changes.get("visibility"):
+        _check_share(principal, "shared" if changes["visibility"] != t.visibility else None)
+        t.visibility = changes["visibility"]
     if changes.get("labels") is not None:
         t.labels = clean_labels(changes["labels"])
     if "assignee_agent_id" in changes:

@@ -67,6 +67,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Jawab apa yang menunggu anda: soalan dan permintaan kelulusan AI anda, serta hasil kerja untuk disemak.",
     ],
     spots: {
+      "desk.tabs": "Lima tab: **Ringkasan**, **Kerja saya**, **Fail saya**, **Aliran kerja & SOP** dan **Pekerja AI**.",
       "desk.ask": "Taip perkataan, amaun atau nombor rujukan. **Cari** menunjukkan padanan di sini; **Minta** menyerahkannya kepada pekerja AI anda.",
       "desk.stats": "Apa yang menunggu anda, apa yang sedang berjalan, apa yang siap minggu ini dan berapa banyak dalam meja kerja anda.",
       "desk.pinned": "Pintasan anda. Aliran kerja ada **Jalankan**, fail ada **Muat turun**.",
@@ -100,6 +101,15 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Tekan pin di sebelah mana-mana SOP, aliran kerja, fail, dokumen atau hasil carian, di sini atau di halamannya sendiri."),
           s("Ia muncul di bawah **Disemat**. Klik untuk membukanya.", "desk.pinned"),
           s("Bagi aliran kerja, klik **Jalankan**, isi butiran kerja dan mulakan. Anda juga boleh menjalankannya dari **Prosedur saya**.", "desk.procedures"),
+        ],
+      },
+      {
+        title: "Pilih AI yang mengikut aliran kerja, dan bila ia bekerja",
+        steps: [
+          s("Buka tab **Aliran kerja & SOP** dan pilih aliran kerja di sebelah kiri.", "desk.tabs"),
+          s("Baca langkahnya, kemudian di bawah **Siapa yang mengikutinya, dan bila mereka bekerja** hidupkan ejen yang patut melakukan kerja ini dengan cara ini. Setiap satu menunjukkan waktu kerjanya.", "desk.procedures"),
+          s("Klik **Jalankan sekarang** untuk memulakan kerja melaluinya. Kerja yang diberi di luar waktu ejen menunggu syif seterusnya."),
+          s("Di tab **Pekerja AI**, setiap pekerja menunjukkan bila ia bekerja dan aliran kerja yang diikutinya.", "desk.agents"),
         ],
       },
       {
@@ -442,6 +452,15 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "tasks.search": "Tapis ikut tajuk, ejen atau label.",
     },
     howto: [
+      {
+        title: "Cari kad anda, semat, dan kongsi tugasan",
+        steps: [
+          s("Taip dalam kotak carian untuk mencari kad ikut tajuk, ejen atau label.", "tasks.search"),
+          s("Pilih **Milik saya** untuk kerja yang anda beri atau dibuat oleh AI anda, atau **Disemat** untuk kad yang anda semat ke meja kerja."),
+          s("Buka kad dan tekan **Semat ke meja kerja saya**: ia kekal di meja kerja anda untuk dibuka dengan satu klik."),
+          s("Pengurus dan pemilik: di bawah **Siapa boleh lihat**, kongsi tugasan dengan jabatannya, seluruh syarikat atau semua orang. Orang lain boleh melihatnya tetapi tidak boleh mengubahnya."),
+        ],
+      },
       {
         title: "Beri tugasan",
         state: "new",

@@ -17,8 +17,11 @@ export function MenuContent({
       <DropdownMenu.Content
         align={align}
         sideOffset={6}
+        collisionPadding={8}
         className={cn(
-          "z-50 min-w-48 rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-pop)]",
+          // A long menu scrolls inside the room left on screen instead of running off the edge.
+          "z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[var(--radix-dropdown-menu-content-available-width)] min-w-48",
+          "overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-pop)]",
           "data-[state=open]:animate-[menu-in_140ms_cubic-bezier(0.16,1,0.3,1)]",
           className,
         )}

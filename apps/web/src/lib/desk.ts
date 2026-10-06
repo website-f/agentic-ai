@@ -7,6 +7,7 @@ import { t } from "@/i18n";
 import { ApiError, api, langHeader, readCookie } from "./api";
 import { MAX_UPLOAD_MB, type DocFile } from "./documents";
 import type { ReviewStatus } from "./provenance";
+import type { WorkHours } from "./staff";
 
 export type PinKind = "sop" | "workflow" | "file" | "document" | "template" | "page" | "task" | "agent" | "search";
 
@@ -32,6 +33,30 @@ export interface DeskAgent {
   private: boolean;
   current_task: { id: string; title: string } | null;
   open_tasks: number;
+  work_hours?: WorkHours | null;
+  department_id?: string | null;
+}
+
+/** An agent this person may hand workflows to, or one that follows a workflow. */
+export interface DeskPerson {
+  id: string;
+  name: string;
+  color: string;
+  role: string;
+  work_hours: WorkHours | null;
+  mine: boolean;
+  can_change?: boolean;
+}
+
+export interface DeskWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  followed: boolean;
+  steps: number;
+  step_list: { title: string; type: string }[];
+  followers: DeskPerson[];
+  url: string;
 }
 
 export interface DeskWork {
@@ -83,11 +108,12 @@ export interface Desk {
   person: { name: string; role: string; company: string | null; department: string | null };
   can_ask: boolean;
   agents: DeskAgent[];
+  assignable: DeskPerson[];
   pins: Pin[];
   procedures: {
     sops: { id: string; title: string; scope: string; url: string }[];
     sop_total: number;
-    workflows: { id: string; name: string; description: string; followed: boolean; steps: number; url: string }[];
+    workflows: DeskWorkflow[];
     workflow_total: number;
   };
   work: DeskWork[];
@@ -141,6 +167,8 @@ export const askTargetsQuery = queryOptions({
 export const pinItem = (kind: PinKind, ref: string, title = "") => api<Pin>("/api/desk/items", "POST", { kind, ref, title });
 export const unpinItem = (id: string) => api<void>(`/api/desk/items/${id}`, "DELETE");
 export const reorderPins = (ids: string[]) => api<void>("/api/desk/items/order", "PUT", { ids });
+export const followWorkflow = (workflowId: string, agentId: string, follow: boolean) =>
+  api<{ workflow_id: string; agent_ids: string[] }>(`/api/desk/workflows/${workflowId}/follow`, "POST", { agent_id: agentId, follow });
 export const askDesk = (body: { text: string; agent_id?: string | null; make: "answer" | "document"; file_ids?: string[] }) =>
   api<AskOut>("/api/desk/ask", "POST", body);
 
