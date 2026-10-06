@@ -584,3 +584,61 @@ def test_idle_tunnel_is_closed():
                 s.close()
 
     asyncio.run(main())
+
+
+def test_upstream_routes_listed_hosts_and_leaves_the_rest_direct():
+    """Hosts in EGRESS_UPSTREAM_HOSTS tunnel through the trusted upstream (so they exit its
+    IP); the egress does not resolve or dial the site itself. Other hosts stay direct."""
+
+    async def main():
+        seen: list[bytes] = []
+
+        async def up_handle(r, w):
+            head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), 5)
+            seen.append(head)
+            w.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            await w.drain()
+            while True:
+                data = await r.read(4096)
+                if not data:
+                    break
+                w.write(b"ECHO:" + data)
+                await w.drain()
+            w.close()
+
+        upserver = await asyncio.start_server(up_handle, "127.0.0.1", 0)
+        upport = upserver.sockets[0].getsockname()[1]
+        opened: list[tuple[str, int]] = []
+
+        async def opener(ip, port):
+            opened.append((ip, port))
+            return await asyncio.open_connection(ip, port)
+
+        proxy = eg.Proxy(
+            eg.Policy(),
+            resolver=fake_dns({"www.eperolehan.gov.my": ["203.0.113.9"]}),
+            opener=opener,
+            out=io.StringIO(),
+            upstream=("127.0.0.1", upport),
+            upstream_hosts=("eperolehan.gov.my",),
+        )
+        pserver = await asyncio.start_server(proxy.handle, "127.0.0.1", 0)
+        pport = pserver.sockets[0].getsockname()[1]
+        try:
+            req = (
+                b"CONNECT www.eperolehan.gov.my:443 HTTP/1.1\r\n"
+                b"Host: www.eperolehan.gov.my:443\r\n\r\n"
+            )
+            out = await ask(pport, req, b"hi")
+            assert out.startswith(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            assert b"ECHO:hi" in out
+            assert opened == [("127.0.0.1", upport)]  # dialed the upstream, not the site's IP
+            assert seen and seen[0].startswith(b"CONNECT www.eperolehan.gov.my:443 ")
+            assert proxy.via_upstream("www.eperolehan.gov.my")  # host and its subdomains
+            assert proxy.via_upstream("eperolehan.gov.my")
+            assert not proxy.via_upstream("other.test")
+        finally:
+            upserver.close()
+            pserver.close()
+
+    asyncio.run(main())

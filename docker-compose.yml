@@ -343,6 +343,11 @@ services:
       # port, or `practice-portal:8080`). Defaults to BROWSER_ALLOW_HOSTS. Empty in production.
       EGRESS_ALLOW_HOSTS: ${EGRESS_ALLOW_HOSTS:-${BROWSER_ALLOW_HOSTS:-}}
       EGRESS_ALLOW_PORTS: ${EGRESS_ALLOW_PORTS:-80,443}
+      # Route specific hosts out through a trusted upstream proxy (e.g. our own egress on a
+      # home/office line over a private tunnel), so they exit that line's IP instead of this
+      # host's. Empty = off. See docs/EPEROLEHAN-EXIT-IP.md.
+      EGRESS_UPSTREAM: ${EGRESS_UPSTREAM:-}
+      EGRESS_UPSTREAM_HOSTS: ${EGRESS_UPSTREAM_HOSTS:-}
       EGRESS_MAX_CONNECTIONS: ${EGRESS_MAX_CONNECTIONS:-512}
       EGRESS_LOG_ALLOWED: ${EGRESS_LOG_ALLOWED:-false}  # denials are always logged
     healthcheck:

@@ -18,6 +18,15 @@ Settings (environment):
   EGRESS_ALLOW_PORTS      ports any public host may use (default 80,443)
   EGRESS_ALLOW_HOSTS      host names allowed although private, e.g. the dev practice portal:
                           `practice-portal` (any port) or `practice-portal:8080` (that port)
+  EGRESS_UPSTREAM         optional host:port of a TRUSTED upstream CONNECT proxy (e.g. our
+                          own egress on a home/office line, reached over a private tunnel).
+                          When set, the hosts in EGRESS_UPSTREAM_HOSTS leave through it
+                          instead of directly, so they exit from that line's IP. Everything
+                          else still goes out directly with the full address checks. The
+                          upstream must itself be a trusted egress: this path forwards to it
+                          and lets it do the resolving and public-address check.
+  EGRESS_UPSTREAM_HOSTS   comma list of host suffixes routed through EGRESS_UPSTREAM, e.g.
+                          `eperolehan.gov.my,mda.gov.my` (matches the host and its subdomains)
   EGRESS_MAX_CONNECTIONS  connections at once (default 512); more get 503
   EGRESS_CONNECT_TIMEOUT  seconds to connect upstream (default 10)
   EGRESS_DNS_TIMEOUT      seconds to resolve (default 5)
@@ -347,9 +356,15 @@ class Proxy:
         dns_timeout: float = 5.0,
         idle_timeout: float = 300.0,
         log_allowed: bool = False,
+        upstream: tuple[str, int] | None = None,
+        upstream_hosts: tuple[str, ...] = (),
         out=None,
     ) -> None:
         self.policy, self.resolver, self.opener = policy, resolver, opener
+        self.upstream = upstream
+        self.upstream_hosts = tuple(
+            h.lower().strip().rstrip(".") for h in upstream_hosts if h.strip()
+        )
         self.max_connections = max_connections
         self.connect_timeout, self.dns_timeout, self.idle_timeout = (
             connect_timeout,
@@ -363,6 +378,12 @@ class Proxy:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Proxy":
+        up = env.get("EGRESS_UPSTREAM", "").strip()
+        upstream: tuple[str, int] | None = None
+        if up:
+            uhost, _, uport = up.rpartition(":")
+            upstream = (uhost or up, int(uport) if uport.isdigit() else 3128)
+        uhosts = tuple(h for h in env.get("EGRESS_UPSTREAM_HOSTS", "").split(",") if h.strip())
         return cls(
             Policy.from_env(env),
             max_connections=int(env.get("EGRESS_MAX_CONNECTIONS", "512")),
@@ -370,7 +391,37 @@ class Proxy:
             dns_timeout=float(env.get("EGRESS_DNS_TIMEOUT", "5")),
             idle_timeout=float(env.get("EGRESS_IDLE_TIMEOUT", "300")),
             log_allowed=env.get("EGRESS_LOG_ALLOWED", "false").lower() in ("1", "true", "yes"),
+            upstream=upstream,
+            upstream_hosts=uhosts,
         )
+
+    def via_upstream(self, host: str) -> bool:
+        """Whether this host (or a subdomain) leaves through the trusted upstream proxy."""
+        if not self.upstream:
+            return False
+        h = host.lower().strip().rstrip(".")
+        return any(h == s or h.endswith("." + s) for s in self.upstream_hosts)
+
+    async def _connect_upstream(
+        self, host: str, port: int
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        """CONNECT host:port through the trusted upstream proxy; it does the real egress."""
+        assert self.upstream is not None
+        ur, uw = await asyncio.wait_for(self.opener(*self.upstream), self.connect_timeout)
+        try:
+            uw.write(
+                f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode("latin-1")
+            )
+            await uw.drain()
+            raw = await asyncio.wait_for(ur.readuntil(b"\r\n\r\n"), self.connect_timeout)
+        except (TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError) as e:
+            await self._close(uw)
+            raise Denied("upstream proxy did not answer", status=502) from e
+        status_line = raw.split(b"\r\n", 1)[0].split(b" ")
+        if len(status_line) < 2 or not status_line[1].startswith(b"2"):
+            await self._close(uw)
+            raise Denied("upstream proxy refused", status=502)
+        return ur, uw
 
     # -------------------------------------------------------- logging
 
@@ -488,6 +539,20 @@ class Proxy:
             method, target, _version = parts
             if method == "CONNECT":
                 host, port = split_authority(target, None)
+                canon, _lit = normalize_host(host)
+                if self.via_upstream(canon):
+                    # A listed host: hand it to the trusted upstream, which does the egress and
+                    # the public-address check. Keep the port allow-list here.
+                    if not (
+                        port in self.policy.allow_ports or self.policy.host_allowed(canon, port)
+                    ):
+                        raise Denied(f"port {port} not allowed")
+                    ur, uw = await self._connect_upstream(canon, port)
+                    self._allowed(client, method, canon, port, "upstream")
+                    cw.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    await cw.drain()
+                    await self._splice(cr, cw, ur, uw)
+                    return
                 host, ips = await decide(host, port, self.policy, self.resolver, self.dns_timeout)
                 ur, uw, ip = await self._connect(ips, port)
                 self._allowed(client, method, host, port, ip)
@@ -660,6 +725,8 @@ async def serve(env: Mapping[str, str] = os.environ) -> None:
         listen=f"{host}:{port}",
         allow_ports=sorted(proxy.policy.allow_ports),
         allow_hosts=sorted(proxy.policy.allow_hosts),
+        upstream=f"{proxy.upstream[0]}:{proxy.upstream[1]}" if proxy.upstream else None,
+        upstream_hosts=sorted(proxy.upstream_hosts),
         max_connections=proxy.max_connections,
     )
     async with server:
