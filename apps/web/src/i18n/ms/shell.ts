@@ -160,6 +160,10 @@ export const SHELL: Record<string, string> = {
   "e.g. List every invitation to quote: reference, agency, item, value and closing date.": "cth. Senaraikan setiap pelawaan sebut harga: rujukan, agensi, item, nilai dan tarikh tutup.",
   "e.g. Update our company profile and save it.": "cth. Kemas kini profil syarikat kami dan simpan.",
   "Values to fill in": "Nilai untuk diisi",
+  "Prepare a tender": "Sediakan tender",
+  "Researches, drafts the technical proposal and fills only verified values. Submission waits for approval.":
+    "Membuat kajian, mendraf cadangan teknikal dan mengisi nilai yang disahkan sahaja. Penghantaran menunggu kelulusan.",
+  "Known tender facts": "Fakta tender yang diketahui",
   "One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455": "Satu setiap baris, cth.\nNama syarikat: Qbot Studio Sdn Bhd\nTelefon: +60 3-2710 4455",
   "It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them.": "Ia guna nilai ini sahaja dan bertanya jika ada yang kurang. Biarkan kosong jika SOP atau rakan sekerjanya sudah tahu.",
   "Sign in with": "Log masuk dengan",

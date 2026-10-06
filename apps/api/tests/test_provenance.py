@@ -6,7 +6,7 @@ re-export). People filter by who made it, review it from a queue, approve it or 
 (the agent revises it in its task, or in a small new task), and every decision is audited.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from agentic.agents import runtime
 from agentic.core.db import SessionLocal
@@ -399,6 +399,49 @@ async def test_run_python_outputs_are_labelled(client, llm, temporal, monkeypatc
     assert len(rows) == 1 and rows[0]["folder"] == "AI documents/Other files"
     count = (await client.get("/api/documents/review-queue/count")).json()
     assert count["files_week"] == 1
+
+
+async def test_publish_research_saves_ai_document_and_company_library(client):
+    from agentic.agents.doc_tools import _publish_research
+    from agentic.agents.tools import ToolContext
+    from agentic.models import Agent, KnowledgeChunk, Workspace
+
+    o = await office(client)
+    agent = await new_agent(client, o, "Tender Researcher")
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent["id"])
+        assert a is not None
+        ws = await db.get(Workspace, a.workspace_id)
+        assert ws is not None
+        out = await _publish_research(
+            ToolContext(db=db, agent=a, workspace=ws, task=None),
+            {
+                "title": "QT123 technical research",
+                "body": "## Method\n\nUse a documented preventive-maintenance schedule.",
+                "sources": [
+                    {"title": "Official guide", "url": "https://example.gov.my/guide"}
+                ],
+            },
+        )
+        assert "searchable in this company's Library" in out
+        f = await db.scalar(
+            select(DocFile).where(DocFile.agent_id == a.id, DocFile.library.is_(True))
+        )
+        assert f is not None and f.branch_id == a.branch_id and f.origin == "agent"
+        assert f.folder.startswith("AI documents/")
+        chunks = await db.scalar(
+            select(func.count()).select_from(KnowledgeChunk).where(KnowledgeChunk.source_id == f.id)
+        )
+        assert chunks and chunks > 0
+        blocked = await _publish_research(
+            ToolContext(db=db, agent=a, workspace=ws, task=None),
+            {
+                "title": "Unsafe note",
+                "body": "Login ID: tender-admin\nPassword: hunter2-secure",
+                "sources": [{"title": "Guide", "url": "https://example.gov.my/guide"}],
+            },
+        )
+        assert blocked.startswith("Error: the research appears to contain a credential")
 
 
 async def test_feedback_message_mentions_the_document(client, llm, temporal):

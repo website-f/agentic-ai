@@ -411,6 +411,8 @@ async def _act(
         return {"error": f"The browser service did not answer ({e.__class__.__name__})."}
     if action != "read":
         obs.pop("html", None)
+    if obs.get("downloads"):
+        obs["saved"] = await _collect(ctx, sid, obs.pop("downloads"), str(obs.get("url") or ""))
     seq = await store_frame(sid, obs.pop("frame")) if obs.get("frame") else None
     if obs.get("url"):
         await valkey().set(f"browser:url:{sid}", str(obs["url"]), ex=SESSION_TTL)
@@ -442,7 +444,123 @@ async def _out(obs: dict[str, Any], full: bool = False) -> str:
     if obs.get("error") and not obs.get("url"):
         return f"Error: {obs['error']}"
     head = f"Error: {obs['error']}\n" if obs.get("error") else ""
+    if obs.get("note"):
+        head += f"Note: {obs['note']}\n"
+    if obs.get("saved"):
+        head += "\n".join(obs["saved"]) + "\n"
     return head + view(obs, full)
+
+
+# ---------------------------------------------------------------- files from and to the site
+
+
+def _download_folder(url: str) -> str:
+    from .vault import host_of
+
+    return f"Web downloads/{host_of(url) or 'web'}"[:200]
+
+
+async def _store(ctx: Any, name: str, data: bytes, url: str, mime: str = "") -> Any:
+    """Keep a file the site gave us in the agent's company files and start reading it. It is
+    outside content (origin uploaded, scanned for secrets), never something the AI made."""
+    from ..documents import service as doc_service
+    from . import dispatch
+
+    f = await doc_service.create_file(
+        ctx.db,
+        workspace_id=ctx.workspace.id,
+        name=name,
+        data=data,
+        mime=mime,
+        created_by=f"agent:{ctx.agent.id}",
+        branch_id=ctx.agent.branch_id,
+        task_id=ctx.task.id if ctx.task else None,
+        agent_id=ctx.agent.id,
+        source="download",
+        folder=_download_folder(url),
+        source_path=url[:500],
+        origin="uploaded",
+    )
+    await ctx.db.commit()
+    try:
+        await dispatch.start_file_extract(f.id)
+    except Exception:  # noqa: BLE001 - read it here when the queue is down
+        from ..core.db import SessionLocal
+
+        log.warning("worker unavailable; reading %s inline", f.id, exc_info=True)
+        async with SessionLocal() as db:
+            await doc_service.process_file(db, f.id)
+    return f
+
+
+async def _collect(ctx: Any, sid: str, items: list[dict[str, Any]], url: str) -> list[str]:
+    """Move the files an action downloaded from the browser into the company's files."""
+    lines: list[str] = []
+    for item in items[:10]:
+        try:
+            async with _client(timeout=60) as c:
+                r = await c.get(f"/sessions/{sid}/downloads/{item['id']}")
+            r.raise_for_status()
+            name = base64.b64decode(r.headers.get("x-file-name", "")).decode() or "download"
+            source = r.headers.get("x-file-url") or url
+            f = await _store(ctx, name, r.content, source)
+        except Exception as e:  # noqa: BLE001 - one lost file must not lose the action
+            log.warning("could not keep download %s", item, exc_info=True)
+            lines.append(
+                f"Downloaded {item.get('name')!r} but could not keep it ({e.__class__.__name__})."
+            )
+            continue
+        lines.append(
+            f"Downloaded and saved to company files: [{f.id}] {f.name} ({f.size // 1024:,} KB, "
+            f"folder {f.folder}). Read it with read_file in a minute (it is being read now)."
+        )
+        lines += await _unzip(ctx, name, r.content, source)
+    return lines
+
+
+UNZIP_FILES = 40
+
+
+async def _unzip(ctx: Any, name: str, data: bytes, url: str) -> list[str]:
+    """A zip of documents (a portal's "download all"): keep each document as its own file
+    so it can be read, through intake's checks (unsafe paths, zip bombs, nesting, limits)."""
+    from ..intake import unpack
+
+    if not unpack.is_zip(data, name):
+        return []
+    kept: list[str] = []
+    skipped = 0
+    try:
+        for e in unpack.entries(data, name, _download_folder(url)):
+            if isinstance(e, unpack.Report):
+                skipped += len(e.skipped)
+                continue
+            if len(kept) >= UNZIP_FILES:
+                skipped += 1
+                continue
+            f = await _store(ctx, e.name, e.data, url)
+            f.folder = e.folder[:300] or f.folder
+            f.source_path = f"{url} > {e.path}"[:500]
+            await ctx.db.commit()
+            kept.append(f"[{f.id}] {f.name}")
+    except unpack.UnpackError:
+        return ["It is not a readable zip, so its documents could not be taken out."]
+    if not kept:
+        return ["The zip held no documents that could be kept."]
+    more = f" ({skipped} skipped: system files, unsafe or over the limits)" if skipped else ""
+    return [f"Unzipped into separate files{more}: " + ", ".join(kept)]
+
+
+async def hold(task_id: str, seconds: int) -> None:
+    """Keep the task's browser while a person decides on an approval (0 lets it go)."""
+    sid = await _task_sid(task_id)
+    if not sid:
+        return
+    try:
+        async with _client(timeout=10) as c:
+            await c.post(f"/sessions/{sid}/hold", json={"seconds": seconds})
+    except httpx.HTTPError:  # the session reopens signed in anyway (saved sessions, P21)
+        log.info("could not hold browser session %s", sid)
 
 
 # ---------------------------------------------------------------- saved sessions (P21)
@@ -958,6 +1076,109 @@ async def browser_submit(ctx: Any, args: dict[str, Any]) -> str:
     t = _target(args)
     return await _out(
         await _act(ctx, "click", allow_submit=True, label=f"submit ({_label(t)})", **t)
+    )
+
+
+UPLOAD_FILES = 3
+UPLOAD_BYTES = 20 * 1024 * 1024
+
+
+async def upload_files(ctx: Any, ids: Any) -> tuple[list[Any], str | None]:
+    """The company files an upload names, with their bytes; or an error for the agent."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import undefer
+
+    from ..models import DocFile
+    from .doc_tools import _file
+
+    if isinstance(ids, str):
+        ids = [ids]
+    if not isinstance(ids, list) or not ids:
+        return [], "Give file_ids: the company files to upload (list_files shows them)."
+    out = []
+    for raw in ids[:UPLOAD_FILES]:
+        f = await _file(ctx, str(raw))
+        if f is None:
+            return [], f"No file {raw!r} for you. Use list_files or company_documents for ids."
+        if f.quarantined:
+            return [], f"{f.name} is held back (it may hold a secret); a person must release it."
+        f = await ctx.db.scalar(
+            select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.data))
+        )
+        if not f.data or f.size > UPLOAD_BYTES:
+            return [], f"{f.name} is empty or bigger than {UPLOAD_BYTES // (1024 * 1024)} MB."
+        out.append(f)
+    return out, None
+
+
+async def browser_upload(ctx: Any, args: dict[str, Any]) -> str:
+    """Upload company files into the page's file field (a person approved it first)."""
+    from ..services import audit
+
+    files, err = await upload_files(ctx, args.get("file_ids"))
+    if err:
+        return f"Error: {err}"
+    t = _target(args)
+    if not t:
+        return "Error: give ref, the file field or its choose-file button."
+    then = ref_arg(args.get("then_ref"))
+    payload = [
+        {"name": f.name, "mime": f.mime, "b64": base64.b64encode(bytes(f.data)).decode()}
+        for f in files
+    ]
+    obs = await _act(
+        ctx,
+        "upload",
+        allow_submit=True,
+        files=payload,
+        then_ref=then,
+        label=f"upload {', '.join(f.name for f in files)}",
+        **t,
+    )
+    del payload
+    if not obs.get("error"):
+        await audit.record(
+            ctx.db,
+            ctx.workspace.id,
+            f"agent:{ctx.agent.id}",
+            "browser.uploaded",
+            target=ctx.task.id if ctx.task else None,
+            after={"files": [f.id for f in files], "page": obs.get("url")},
+        )
+        await ctx.db.commit()
+        head = f"Uploaded {', '.join(repr(f.name) for f in files)}. Check the page shows them.\n"
+        return head + await _out(obs)
+    return await _out(obs)
+
+
+def _pdf_from_png(png: bytes) -> bytes:
+    """A long page screenshot as an A4-shaped multi-page PDF."""
+    import io
+
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    w, h = img.size
+    page_h = max(1, int(w * 297 / 210))
+    pages = [img.crop((0, top, w, min(h, top + page_h))) for top in range(0, h, page_h)][:40]
+    buf = io.BytesIO()
+    pages[0].save(buf, format="PDF", save_all=True, append_images=pages[1:], resolution=110)
+    return buf.getvalue()
+
+
+async def browser_save_page(ctx: Any, args: dict[str, Any]) -> str:
+    """Save what the page shows now as a PDF in the company's files (e.g. an offer printout)."""
+    obs = await _act(ctx, "capture", label="save the page as a PDF")
+    png = obs.pop("capture_b64", None)
+    if not png:
+        return await _out(obs) if obs.get("url") else f"Error: {obs.get('error') or 'no page'}"
+    pdf = await asyncio.to_thread(_pdf_from_png, base64.b64decode(png))
+    title = str(args.get("name") or obs.get("title") or "page").strip()
+    name = re.sub(r"[^\w .()-]+", " ", title).strip()[:150] or "page"
+    f = await _store(ctx, f"{name}.pdf", pdf, str(obs.get("url") or ""), "application/pdf")
+    return (
+        f"Saved the page as a PDF in company files: [{f.id}] {f.name} ({f.size // 1024:,} KB, "
+        f"folder {f.folder}).\n" + await _out(obs)
     )
 
 

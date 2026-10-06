@@ -660,7 +660,9 @@ SNAPSHOT_JS = r"""(opts) => {
       const name = nameOf(el, role);
       const st = stateOf(el, role);
       const ty = (el.getAttribute('type') || '').toLowerCase();
-      const submit = (tag === 'BUTTON' && (ty === '' || ty === 'submit') && !!el.form)
+      const transaction = /\b(save|simpan|submit|hantar|serah|sign|tanda\s*tangan|tandatangan|declare|declaration|perakuan|akuan|register|daftar|upload|muat\s*naik|delete|remove|hapus|bayar|pay|confirm|sah|approve|lulus|selesai|finish|sediakan|kemaskini|batal|withdraw|tarik\s*balik)\b/i.test(
+        [name, el.value, el.getAttribute('aria-label'), el.title, el.name, el.id].filter(Boolean).join(' '));
+      const submit = transaction || (tag === 'BUTTON' && (ty === '' || ty === 'submit') && !!el.form)
         || (tag === 'INPUT' && (ty === 'submit' || ty === 'image'));
       if (interactive && !sized && !(tag === 'INPUT' && (ty === 'checkbox' || ty === 'radio'))) {
         // zero-size control: not something a person can use

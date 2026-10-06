@@ -10,18 +10,48 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import undefer
 
 from agentic.agents import browser_tools, vault
 from agentic.agents.tools import TOOLS, ToolContext, mode_of, modes_for
 from agentic.api.routers.web_tasks import WebTaskIn, brief_for
 from agentic.core import crypto
 from agentic.core.db import SessionLocal
-from agentic.models import Agent, AuditLog, Credential, CredentialState, Event, Task, Workspace
+from agentic.models import (
+    Agent,
+    AuditLog,
+    Credential,
+    CredentialState,
+    DocFile,
+    Event,
+    Task,
+    Workspace,
+)
 
 from .conftest import csrf
 from .test_agents import new_agent, office, temporal  # noqa: F401
 
 JPEG = base64.b64encode(b"\xff\xd8\xff\xe0fake\xff\xd9").decode()
+PDF = b"%PDF-1.4 fake tender document"
+
+
+def _zip() -> bytes:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("01_Kenyataan_Tawaran.pdf", PDF)
+        z.writestr("05_Spesifikasi.pdf", PDF)
+        z.writestr("../escape.pdf", PDF)  # an unsafe path is skipped, never written
+    return buf.getvalue()
+
+
+ZIP = _zip()
+PNG = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQ"
+    "AAAABJRU5ErkJggg=="
+)
 PORTAL = "https://portal.fake"
 LOGIN_TREE = (
     '- textbox "User ID" [e5]\n- textbox "Password" [e6] password\n'
@@ -71,6 +101,23 @@ class FakeBrowser:
                 200, json={"id": sid, "restored": bool(body.get("storage_state"))}
             )
         sid = path.split("/")[2] if path.startswith("/sessions/") else ""
+        if path.endswith("/downloads/dl_zip"):
+            return httpx.Response(
+                200,
+                content=ZIP,
+                headers={"x-file-name": base64.b64encode(b"NGeP-QT-Documents.zip").decode()},
+            )
+        if "/downloads/" in path:
+            return httpx.Response(
+                200,
+                content=PDF,
+                headers={
+                    "x-file-name": base64.b64encode(b"Spesifikasi QT1.pdf").decode(),
+                    "x-file-url": f"{PORTAL}/doc/1",
+                },
+            )
+        if path.endswith("/hold"):
+            return httpx.Response(200, json={"ok": True})
         if request.method == "DELETE":
             return httpx.Response(200, json={"ok": True})
         if path.endswith("/frame"):
@@ -95,6 +142,26 @@ class FakeBrowser:
             return httpx.Response(200, json=o)
         if action == "goto":
             return httpx.Response(200, json=self.obs(sid, body["url"]))
+        if action == "click" and body.get("ref") == "e50":  # Muat Turun
+            return httpx.Response(
+                200,
+                json={
+                    **self.obs(sid, f"{PORTAL}/tender"),
+                    "downloads": [{"id": "dl_1", "name": "Spesifikasi QT1.pdf", "size": 9}],
+                },
+            )
+        if action == "click" and body.get("ref") == "e51":  # Muat Turun Semua (a zip)
+            return httpx.Response(
+                200,
+                json={
+                    **self.obs(sid, f"{PORTAL}/tender"),
+                    "downloads": [{"id": "dl_zip", "name": "NGeP-QT-Documents.zip", "size": 9}],
+                },
+            )
+        if action == "capture":
+            return httpx.Response(
+                200, json={**self.obs(sid, f"{PORTAL}/offer"), "capture_b64": PNG}
+            )
         if action == "click" and body.get("ref") == "e99":
             return httpx.Response(
                 200,
@@ -426,3 +493,141 @@ async def test_new_read_tools_follow_browser_open(client):
         assert TOOLS[name].risk == "low"
     assert "ref" in TOOLS["browser_click"].parameters["properties"]
     assert TOOLS["browser_submit"].risk == "high"
+
+
+def test_tender_brief_requires_evidence_documents_and_approval():
+    body = WebTaskIn(
+        url="https://www.eperolehan.gov.my/",
+        instructions="Prepare QT123 for Sutera",
+        mode="tender",
+        values="Tender reference: QT123",
+        login="eperolehan",
+    )
+    brief = brief_for(body)
+    assert "TENDER PREPARATION MODE" in brief
+    assert "Cadangan Teknikal" in brief
+    assert "[[REQUIRES HUMAN INPUT]]" in brief
+    assert "Final tender submission and digital signing always require" in brief
+    assert "Tender reference: QT123" in brief
+
+
+@pytest.fixture
+def reading(monkeypatch):
+    """Files handed to the worker for reading (no Temporal in tests)."""
+    from agentic.agents import dispatch
+
+    started: list[str] = []
+
+    async def start_file_extract(file_id: str) -> None:
+        started.append(file_id)
+
+    monkeypatch.setattr(dispatch, "start_file_extract", start_file_extract)
+    return started
+
+
+def _file(where: tuple[str, str | None], name: str, *, quarantined: bool = False) -> DocFile:
+    return DocFile(
+        workspace_id=where[0],
+        branch_id=where[1],
+        name=name,
+        mime="application/pdf",
+        size=len(PDF),
+        sha256="x",
+        data=PDF,
+        status="ready",
+        text="",
+        source="generated",
+        created_by="user:x",
+        fields={},
+        sensitive={},
+        quarantined=quarantined,
+        origin="agent",
+    )
+
+
+async def test_downloads_are_kept_as_outside_files_of_the_company(client, browser, reading):
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    await run("browser_open", a["id"], t, url=f"{PORTAL}/tender")
+    out = await run("browser_click", a["id"], t, ref="e50")
+    assert "Downloaded and saved to company files: [fl_" in out and "Spesifikasi QT1.pdf" in out
+    async with SessionLocal() as db:
+        f = await db.scalar(select(DocFile).where(DocFile.task_id == t))
+        agent = await db.get(Agent, a["id"])
+        assert f is not None and agent is not None
+        assert f.source == "download" and f.origin == "uploaded"  # not something the AI made
+        assert f.folder == "Web downloads/portal.fake" and f.branch_id == agent.branch_id
+        assert f.source_path == f"{PORTAL}/doc/1"
+    assert reading == [f.id]  # read (text, secrets scan, summary) like an upload
+
+
+async def test_upload_always_asks_and_sends_the_company_file(client, browser, reading):
+    from agentic.agents import policy
+
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        assert agent is not None
+        assert modes_for(agent)["browser_upload"] == "ask"  # the web operator template
+        assert modes_for(agent)["browser_save_page"] == "allow"
+        where = (agent.workspace_id, agent.branch_id)
+        agent.tools = {**(agent.tools or {}), "browser_upload": "allow"}
+        agent.autonomy = "auto"
+        d = await policy.evaluate(agent, "browser_upload", {"ref": "e3", "file_ids": ["x"]})
+        assert d.effect == "ask"  # whatever the agent's settings say
+        await db.rollback()
+        f, held = (
+            _file(where, "Cadangan Teknikal.pdf"),
+            _file(where, "secret.pdf", quarantined=True),
+        )
+        db.add_all([f, held])
+        await db.commit()
+        fid, hid = f.id, held.id
+    await run("browser_open", a["id"], t, url=f"{PORTAL}/tender")
+    out = await run(
+        "browser_upload", a["id"], t, ref="e3", file_ids=[fid], then_ref="e8", why="lampiran"
+    )
+    up = [b for m, p, b in browser.calls if p.endswith("/act")][-1]
+    assert up["action"] == "upload" and up["allow_submit"] is True and up["then_ref"] == "e8"
+    assert base64.b64decode(up["files"][0]["b64"]) == PDF
+    assert up["files"][0]["name"] == "Cadangan Teknikal.pdf"
+    assert out.startswith("Uploaded 'Cadangan Teknikal.pdf'")
+    assert "browser.uploaded" in await audits(t)
+    out = await run("browser_upload", a["id"], t, ref="e3", file_ids=[hid], why="x")
+    assert out.startswith("Error: secret.pdf is held back")
+    out = await run("browser_upload", a["id"], t, ref="e3", file_ids=["fl_nope"], why="x")
+    assert out.startswith("Error: No file")
+
+
+async def test_save_page_as_pdf_and_hold_for_approval(client, browser, reading):
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    await run("browser_open", a["id"], t, url=f"{PORTAL}/offer")
+    out = await run("browser_save_page", a["id"], t, name="Cetak Tawaran QT1")
+    assert "Saved the page as a PDF in company files: [fl_" in out
+    async with SessionLocal() as db:
+        f = await db.scalar(
+            select(DocFile).where(DocFile.task_id == t).options(undefer(DocFile.data))
+        )
+        assert f is not None and f.name == "Cetak Tawaran QT1.pdf"
+        assert bytes(f.data).startswith(b"%PDF") and f.source == "download"
+    await browser_tools.hold(t, 7200)
+    h = [b for m, p, b in browser.calls if p.endswith("/hold")]
+    assert h and h[-1] == {"seconds": 7200}
+
+
+async def test_a_downloaded_zip_is_unpacked_into_readable_files(client, browser, reading):
+    a, _ = await setup(client)
+    t = await make_task(a["id"])
+    await run("browser_open", a["id"], t, url=f"{PORTAL}/tender")
+    out = await run("browser_click", a["id"], t, ref="e51")
+    assert "NGeP-QT-Documents.zip" in out and "Unzipped into separate files (1 skipped" in out
+    async with SessionLocal() as db:
+        files = (await db.scalars(select(DocFile).where(DocFile.task_id == t))).all()
+    names = sorted(f.name for f in files)
+    assert names == ["01_Kenyataan_Tawaran.pdf", "05_Spesifikasi.pdf", "NGeP-QT-Documents.zip"]
+    inner = [f for f in files if f.name.endswith(".pdf")]
+    assert all(f.folder == "Web downloads/portal.fake/NGeP-QT-Documents" for f in inner)
+    assert all(f.source == "download" and f.origin == "uploaded" for f in inner)
+    assert len(reading) == 3  # each one is read (text, secrets scan)

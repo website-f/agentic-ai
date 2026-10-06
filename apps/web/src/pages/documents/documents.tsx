@@ -200,7 +200,7 @@ function DocRow({ d, onOpen }: { d: ReviewedDoc; onOpen: () => void }) {
 }
 
 /** One document an agent made, waiting for a person: what, who, from where, and the decision. */
-function QueueRow({ d, canApprove, canWrite, onOpen }: { d: ReviewedDoc; canApprove: boolean; canWrite: boolean; onOpen: () => void }) {
+export function QueueRow({ d, canApprove, canWrite, onOpen }: { d: ReviewedDoc; canApprove: boolean; canWrite: boolean; onOpen: () => void }) {
   const t = useT();
   return (
     <ListRow leading={<KindTile kind={d.kind} />}

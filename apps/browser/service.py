@@ -13,7 +13,15 @@ changed since the model's last view is sent (a delta), the whole tree on a navig
 big change. Every action returns a JPEG frame for the live monitor.
 
 Form submits are refused unless the call says allow_submit (the agent's browser_submit
-tool, which always needs a person's approval).
+tool, which always needs a person's approval). Controls whose label says they change data
+(save, simpan, upload, perakuan, serah, selesai, sediakan ...) count as submits whatever
+their tag, links included.
+
+Downloads (a click that downloads a file, a PDF a tab opens) are kept in the session until
+the worker collects them into the company's files. A new tab becomes the page the agent
+works on, and closing it (back on a tab with no history) returns to the one before. Files
+are uploaded only with allow_submit (the agent's browser_upload, always approved by a
+person). While an approval waits, the worker holds the session so the idle reaper keeps it.
 
 Saved logins (P9) arrive as `secret` typing: the service types them only when the page is
 on one of the login's hosts, marks the field, and never returns a secret or password
@@ -67,6 +75,12 @@ MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "6"))
 # get their own processes, at most this many sessions each.
 PER_PROCESS = max(1, int(os.environ.get("BROWSER_PER_PROCESS", "2")))
 IDLE_SECONDS = int(os.environ.get("BROWSER_IDLE_SECONDS", "600"))
+# A session held for an approval outlives IDLE_SECONDS, up to this long.
+HOLD_MAX = int(os.environ.get("BROWSER_HOLD_MAX", "7200"))
+DOWNLOAD_MAX = 25 * 1024 * 1024  # one downloaded file
+DOWNLOADS_MAX = 80 * 1024 * 1024  # all files a session keeps until the worker collects them
+DOWNLOAD_WAIT = 25  # seconds an action waits for the downloads it started
+UPLOAD_MAX = 20 * 1024 * 1024  # one uploaded file
 VIEWPORT = {"width": 1280, "height": 800}
 TEXT_CHARS = 2500
 READ_CHARS = 12_000
@@ -96,6 +110,13 @@ PROXY_PREFS: dict[str, Any] = {
     "network.dns.disablePrefetch": True,
     "network.predictor.enabled": False,
     "network.prefetch-next": False,
+}
+# A PDF downloads (and is kept) instead of opening in Firefox's own viewer, which shows the
+# agent nothing it can read or save.
+DOWNLOAD_PREFS: dict[str, Any] = {
+    "pdfjs.disabled": True,
+    "browser.download.open_pdf_attachments_inline": False,
+    "browser.download.always_ask_before_handling_new_types": False,
 }
 
 
@@ -130,10 +151,14 @@ WAIT_TEXT_JS = """(needle) => {
   return false;
 }"""
 
-SUBMIT_JS = (
-    "(el) => ({submit: (el.tagName === 'BUTTON' && (!el.type || el.type === 'submit') && !!el.form)"
-    " || (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'image'))})"
-)
+SUBMIT_JS = r"""(el) => {
+  const label = [el.innerText, el.value, el.getAttribute('aria-label'), el.title, el.name, el.id]
+    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  const transaction = /\b(save|simpan|submit|hantar|serah|sign|tanda\s*tangan|tandatangan|declare|declaration|perakuan|akuan|register|daftar|upload|muat\s*naik|delete|remove|hapus|bayar|pay|confirm|sah|approve|lulus|selesai|finish|sediakan|kemaskini|batal|withdraw|tarik\s*balik)\b/i.test(label);
+  const submit = (el.tagName === 'BUTTON' && (!el.type || el.type === 'submit') && !!el.form)
+    || (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'image'));
+  return {submit: submit || transaction, transaction, label};
+}"""
 
 
 def blocked_text(url: str, allowed: list[str]) -> str:
@@ -227,9 +252,12 @@ class Slot:
 
                 # block_webrtc: media.peerconnection.enabled=false, so no WebRTC (UDP/STUN)
                 # traffic, which would not go through the proxy.
-                extra: dict[str, Any] = {}
+                extra: dict[str, Any] = {"firefox_user_prefs": dict(DOWNLOAD_PREFS)}
                 if PROXY:
-                    extra = {"proxy": {"server": PROXY}, "firefox_user_prefs": dict(PROXY_PREFS)}
+                    extra = {
+                        "proxy": {"server": PROXY},
+                        "firefox_user_prefs": {**PROXY_PREFS, **DOWNLOAD_PREFS},
+                    }
                 self.manager = AsyncCamoufox(
                     headless=True,
                     humanize=HUMANIZE,
@@ -260,6 +288,152 @@ class Session:
         self.history = History()
         self.last = time.time()
         self.lock = asyncio.Lock()
+        self.hold_until = 0.0  # an approval is waiting: the reaper keeps the session
+        self.pages: list[Any] = []  # open tabs, oldest first; self.page is the one in use
+        self.opened: list[Any] = []  # tabs opened since the last action
+        self.downloads: dict[str, dict[str, Any]] = {}  # kept until the worker collects them
+        self.new_downloads: list[str] = []
+        self.download_notes: list[str] = []
+        self.pending: set[asyncio.Task[None]] = set()
+
+
+def _kept_bytes(sess: "Session") -> int:
+    return sum(len(d["data"]) for d in sess.downloads.values())
+
+
+async def _take_download(sess: Session, download: Any) -> None:
+    """Keep a finished download in the session (until the worker collects it)."""
+    name = re.sub(r"[\\/\x00-\x1f]", "_", str(download.suggested_filename or "download"))[:200]
+    try:
+        path = await download.path()
+        data = await asyncio.to_thread(lambda: open(path, "rb").read()) if path else b""  # noqa: ASYNC230
+    except Exception as e:  # noqa: BLE001 - a failed download is reported, not raised
+        sess.download_notes.append(f"{name}: the download failed ({e.__class__.__name__}).")
+        return
+    if not data:
+        sess.download_notes.append(f"{name}: the download was empty.")
+    elif len(data) > DOWNLOAD_MAX or _kept_bytes(sess) + len(data) > DOWNLOADS_MAX:
+        sess.download_notes.append(f"{name}: too big to keep ({len(data) // 1024:,} KB).")
+    else:
+        did = "dl_" + secrets.token_hex(6)
+        sess.downloads[did] = {"name": name, "data": data, "url": str(download.url or "")}
+        sess.new_downloads.append(did)
+
+
+def _on_page(sess: Session, page: Any) -> None:
+    """Every tab in the context: watch its downloads; a tab the site opens becomes current."""
+    sess.pages.append(page)
+    if sess.page is not None:
+        sess.opened.append(page)
+
+    def on_download(d: Any) -> None:
+        t = asyncio.create_task(_take_download(sess, d))
+        sess.pending.add(t)
+        t.add_done_callback(sess.pending.discard)
+
+    def on_close(p: Any) -> None:
+        if p in sess.pages:
+            sess.pages.remove(p)
+        if p in sess.opened:
+            sess.opened.remove(p)
+        if sess.page is p and sess.pages:
+            sess.page = sess.pages[-1]
+
+    page.on("download", on_download)
+    page.on("close", on_close)
+
+
+PAGE_FETCH_JS = """async (url) => {
+  const r = await fetch(url, {credentials: 'include'});
+  if (!r.ok) return null;
+  const b = new Uint8Array(await r.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(s);
+}"""
+
+
+async def _looks_pdf(page: Any) -> bool:
+    if urlparse(page.url).path.lower().endswith(".pdf"):
+        return True
+    try:
+        return await page.evaluate("() => document.contentType") == "application/pdf"
+    except Exception:  # noqa: BLE001 - a page that is going away
+        return False
+
+
+async def _grab_pdf(s: Session, page: Any) -> bool:
+    """Firefox showed a PDF instead of downloading it: fetch it again with the tab's cookies
+    (inside the page, so through the same proxy and guard) and keep it as a download."""
+    if not await host_ok(urlparse(page.url).hostname):
+        return False
+    body = b""
+    try:
+        b64 = await page.evaluate(PAGE_FETCH_JS, page.url)
+        body = base64.b64decode(b64) if b64 else b""
+    except Exception:  # noqa: BLE001 - try the context's own request next
+        log.info("in-page fetch of %s failed", page.url, exc_info=True)
+    if body[:5] != b"%PDF-":
+        try:
+            r = await s.context.request.get(page.url, timeout=30_000)
+            body = await r.body() if r.ok else b""
+        except Exception:  # noqa: BLE001
+            log.info("could not fetch the PDF %s", page.url, exc_info=True)
+            return False
+    if body[:5] != b"%PDF-" or len(body) > DOWNLOAD_MAX:
+        return False
+    did = "dl_" + secrets.token_hex(6)
+    name = os.path.basename(urlparse(page.url).path) or "document.pdf"
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    s.downloads[did] = {"name": name[:200], "data": body, "url": page.url}
+    s.new_downloads.append(did)
+    return True
+
+
+async def _settle(s: Session) -> str | None:
+    """After an action: wait for the downloads it started, and move to a tab it opened.
+    Returns a note for the agent, or None."""
+    notes: list[str] = []
+    deadline = time.time() + DOWNLOAD_WAIT
+    if s.opened:  # a tab that turns into a download needs a moment to start it
+        await asyncio.sleep(1.5)
+    while s.pending and time.time() < deadline:
+        await asyncio.wait(set(s.pending), timeout=max(0.1, deadline - time.time()))
+    if s.pending:
+        notes.append("A download is still running; it will be listed after your next action.")
+    for page in list(s.opened):
+        s.opened.remove(page)
+        if page.is_closed():
+            continue
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=8000)
+        except Exception:  # noqa: BLE001 - use whatever is there
+            pass
+        if page.url in ("", "about:blank") and s.new_downloads:
+            await page.close()  # the tab only delivered a download
+            continue
+        if await _looks_pdf(page) and await _grab_pdf(s, page):
+            await page.close()  # the PDF is kept; stay where the agent was
+            continue
+        s.page = page
+        notes.append(
+            f"The site opened a new tab ({page.url}); you are on it now. browser_back on a "
+            "tab with no history closes it and returns to the previous tab."
+        )
+    page = s.page
+    if page is not None and not page.is_closed() and await _looks_pdf(page):
+        if await _grab_pdf(s, page):
+            try:  # back to the page that led here, when there is one
+                if await page.go_back(timeout=15_000) is None and len(s.pages) > 1:
+                    await page.close()
+                    s.page = s.pages[-1]
+            except Exception:  # noqa: BLE001 - stay on the PDF
+                pass
+    if s.download_notes:
+        notes += s.download_notes
+        s.download_notes = []
+    return " ".join(notes) or None
 
 
 state: dict[str, Any] = {"slots": [], "sessions": {}, "restarts": 0}
@@ -286,7 +460,7 @@ async def _reaper() -> None:
         await asyncio.sleep(30)
         now = time.time()
         for sid, sess in list(state["sessions"].items()):
-            if now - sess.last > IDLE_SECONDS:
+            if now - sess.last > IDLE_SECONDS and now > sess.hold_until:
                 await _close(sid)
 
 
@@ -372,6 +546,14 @@ class Act(BaseModel):
     name: str = Field(default="", max_length=200)  # find: words in the accessible name
     timeout: float = 10  # wait, seconds (at most WAIT_MAX)
     state: str = "visible"  # wait for a ref: visible | hidden
+    # upload: [{name, mime, b64}], put into the file field `ref` (or the chooser it opens);
+    # then_ref is the button that sends them, pressed under the same approval.
+    files: list[dict[str, str]] | None = Field(default=None, max_length=5)
+    then_ref: str | None = Field(default=None, max_length=24)
+
+
+class HoldIn(BaseModel):
+    seconds: int = Field(ge=0, le=86_400)
 
 
 class StateIn(BaseModel):
@@ -578,7 +760,11 @@ async def open_session(body: Open, x_browser_token: str | None = Header(default=
     slot = _slot_for_new()
     if slot is None:
         # Full: free the longest-idle session, but never one used in the last minute.
-        idle = [x for x in state["sessions"].values() if time.time() - x.last > 60]
+        idle = [
+            x
+            for x in state["sessions"].values()
+            if time.time() - x.last > 60 and time.time() > x.hold_until
+        ]
         if not idle:
             raise HTTPException(503, "All browsers are busy. Try again in a minute.")
         await _close(min(idle, key=lambda x: x.last).id)
@@ -590,7 +776,7 @@ async def open_session(body: Open, x_browser_token: str | None = Header(default=
     sess = Session(sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts)
     try:
         browser = await slot.get()
-        kwargs: dict[str, Any] = {"viewport": VIEWPORT, "accept_downloads": False}
+        kwargs: dict[str, Any] = {"viewport": VIEWPORT, "accept_downloads": True}
         if restore:
             kwargs["storage_state"] = restore
         try:
@@ -600,13 +786,17 @@ async def open_session(body: Open, x_browser_token: str | None = Header(default=
                 raise
             log.warning("saved session for %s could not be loaded; starting clean", sid)
             restore = None
-            sess.context = await browser.new_context(viewport=VIEWPORT, accept_downloads=False)
+            sess.context = await browser.new_context(viewport=VIEWPORT, accept_downloads=True)
 
         async def route(r: Any) -> None:
             await _route(r, sess)
 
         await sess.context.route("**/*", route)
+        sess.context.on("page", lambda p: _on_page(sess, p))
         sess.page = await sess.context.new_page()
+        if sess.page not in sess.pages:
+            _on_page(sess, sess.page)
+        sess.opened.clear()
     except Exception:
         slot.sessions.discard(sid)
         raise
@@ -747,7 +937,11 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     return {"error": "That address is not allowed (only public http/https sites)."}
                 if s.allowed and not host_matches(body.url or "", s.allowed):
                     return {"error": blocked_text(body.url or "", s.allowed)}
-                await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+                try:
+                    await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+                except Exception as e:  # noqa: BLE001 - a link to a file downloads it instead
+                    if "Download is starting" not in str(e):
+                        raise
             elif body.action == "verify":
                 # Is a restored session still signed in? Load its check page: it must stay on
                 # the login's hosts and show no sign-in or one-time-code form.
@@ -806,7 +1000,8 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
                 if body.action == "click":
                     if info["submit"] and not body.allow_submit:
-                        return {"error": "SUBMIT_NEEDS_APPROVAL: this button sends the form. Use browser_submit."}
+                        what = "changes external data" if info.get("transaction") else "sends the form"
+                        return {"error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."}
                     await _press(page, loc)
                 elif body.action == "type":
                     if body.secret:
@@ -833,6 +1028,21 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                     await page.wait_for_load_state("networkidle", timeout=4000)
                 except Exception:  # noqa: BLE001
                     pass
+            elif body.action == "upload":
+                if not body.allow_submit:
+                    return {"error": "SUBMIT_NEEDS_APPROVAL: uploading sends a file. Use browser_upload."}
+                err, point = await _do_upload(s, body)
+                if err:
+                    obs = await _observe(s, since=body.since)
+                    obs["error"] = err
+                    return obs
+            elif body.action == "capture":
+                # The whole page as an image (Firefox cannot print to PDF); the worker turns it
+                # into a PDF. A print or offer view is usually one long page.
+                png = await page.screenshot(type="png", full_page=True, timeout=30_000)
+                obs = await _observe(s, since=body.since)
+                obs["capture_b64"] = base64.b64encode(png).decode()
+                return obs
             elif body.action == "press":
                 if body.key == "Enter" and not body.allow_submit:
                     return {"error": "SUBMIT_NEEDS_APPROVAL: Enter may send a form. Use browser_submit."}
@@ -841,7 +1051,12 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 await page.mouse.wheel(0, body.dy)
                 await asyncio.sleep(0.4)
             elif body.action == "back":
-                await page.go_back(timeout=15_000)
+                went = await page.go_back(timeout=15_000)
+                if went is None and len(s.pages) > 1:
+                    # A tab the site opened, with nothing to go back to: close it.
+                    await page.close()
+                    s.page = s.pages[-1]
+                    note = "Closed that tab; back on the previous one."
             elif body.action != "read":
                 return {"error": f"unknown action {body.action}"}
         except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
@@ -859,10 +1074,110 @@ async def act(sid: str, body: Act, x_browser_token: str | None = Header(default=
                 return {"error": err}
             obs["error"] = err
             return obs
+        if body.action in ("click", "upload", "press", "goto", "login_submit", "type"):
+            settled = await _settle(s)
+            note = " ".join(x for x in (note, settled) if x) or None
         obs = await _observe(s, point, read=body.action == "read", since=body.since, marks=body.marks)
         if note:
-            obs["error"] = note
+            obs["error" if body.action == "wait" else "note"] = note
+        if s.new_downloads:
+            obs["downloads"] = [
+                {"id": d, "name": s.downloads[d]["name"], "size": len(s.downloads[d]["data"])}
+                for d in s.new_downloads
+                if d in s.downloads
+            ]
+            s.new_downloads = []
         return obs
+
+
+async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float] | None]:
+    """Put the files into a file field: the field itself, the chooser a button opens, or the
+    file field next to that button. Then press then_ref (the send button), if given."""
+    page = s.page
+    files = []
+    for f in body.files or []:
+        try:
+            data = base64.b64decode(f.get("b64", ""), validate=True)
+        except ValueError:
+            return "A file was not valid base64.", None
+        if not data or len(data) > UPLOAD_MAX:
+            return f"{f.get('name')}: empty or bigger than {UPLOAD_MAX // (1024 * 1024)} MB.", None
+        name = re.sub(r"[\\/\x00-\x1f]", "_", str(f.get("name") or "file"))[:200]
+        files.append({"name": name, "mimeType": f.get("mime") or "application/octet-stream", "buffer": data})
+    if not files:
+        return "Give the files to upload.", None
+    ref = _target(body)
+    loc = await _locate(page, ref) if ref else None
+    if loc is None:
+        return _gone(ref), None
+    box = await loc.bounding_box()
+    point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2} if box else None
+    if await loc.evaluate("(el) => el.tagName === 'INPUT' && el.type === 'file'"):
+        await loc.set_input_files(files, timeout=15_000)
+    else:
+        try:
+            async with page.expect_file_chooser(timeout=8000) as chooser:
+                await loc.click(timeout=10_000)
+            await (await chooser.value).set_files(files, timeout=15_000)
+        except Exception as e:  # noqa: BLE001 - a styled button: the file field next to it
+            if "Timeout" not in e.__class__.__name__:
+                raise
+            near = await loc.evaluate_handle(
+                "(el) => { for (let n = el, i = 0; n && i < 6; n = n.parentElement, i++) {"
+                " const f = n.querySelector && n.querySelector('input[type=file]'); if (f) return f; }"
+                " const all = document.querySelectorAll('input[type=file]');"
+                " return all.length === 1 ? all[0] : null; }"
+            )
+            field = near.as_element()
+            if field is None:
+                return "No file field there: give the ref of the file field or of its choose-file button.", point
+            await field.set_input_files(files, timeout=15_000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=6000)
+    except Exception:  # noqa: BLE001
+        pass
+    if body.then_ref:
+        then = await _locate(page, parse_ref(body.then_ref) or "")
+        if then is None:
+            return "The files are chosen, but the send button " + _gone(body.then_ref), point
+        await _press(page, then)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:  # noqa: BLE001
+            pass
+    return None, point
+
+
+@app.post("/sessions/{sid}/hold")
+async def hold(sid: str, body: HoldIn, x_browser_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Keep the session while a person decides (0 releases it): at most HOLD_MAX seconds."""
+    _auth(x_browser_token)
+    s = state["sessions"].get(sid)
+    if s is None:
+        raise HTTPException(404, "no such session")
+    s.hold_until = time.time() + min(body.seconds, HOLD_MAX) if body.seconds else 0.0
+    s.last = time.time()
+    return {"ok": True, "until": s.hold_until}
+
+
+@app.get("/sessions/{sid}/downloads/{did}")
+async def take_download(sid: str, did: str, x_browser_token: str | None = Header(default=None)) -> Response:
+    """Hand a kept download to the worker, once (it is dropped from the session)."""
+    _auth(x_browser_token)
+    s = state["sessions"].get(sid)
+    if s is None:
+        raise HTTPException(404, "no such session")
+    d = s.downloads.pop(did, None)
+    if d is None:
+        raise HTTPException(404, "no such download")
+    return Response(
+        d["data"],
+        media_type="application/octet-stream",
+        headers={
+            "x-file-name": base64.b64encode(d["name"].encode()).decode(),
+            "x-file-url": d["url"][:500].encode("ascii", "ignore").decode(),
+        },
+    )
 
 
 @app.get("/sessions/{sid}/frame")

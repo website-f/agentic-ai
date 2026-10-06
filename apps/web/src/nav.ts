@@ -119,8 +119,8 @@ export interface NavSection {
 
 // Titles, labels, hints and blurbs are English keys (msg); render them with t().
 // Grouped for people, not for the system: your own desk and the office today, the work
-// itself, the company's documents, the AI team, how the company works (procedures and
-// know-how), and one-time setup folded away at the bottom.
+// itself, every file in one place (the file store), making documents, the AI team, the
+// knowledge agents follow (procedures and know-how), and one-time setup folded away.
 export const NAV: NavSection[] = [
   {
     title: msg("Home"),
@@ -149,15 +149,22 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    title: msg("Documents"),
-    hint: msg("Find, prepare and keep the company's files, letters, quotations and forms."),
+    title: msg("Files"),
+    hint: msg("Every file in one place: what agents made or downloaded, what waits for your review, and each task's files together."),
+    open: "all",
+    items: [
+      { to: "/files", label: msg("Files"), icon: FolderOpenIcon, blurb: msg("Every file of the company in one place: what waits for your review, each task with all its files, what AI made, what agents downloaded from websites, uploads, the library and the folders.") },
+      { to: "/search", label: msg("Search inside files"), icon: FileMagnifyingGlassIcon, blurb: msg("Search inside every document: a phrase on page 23 of a handbook, an amount, a form or a job title. Opens the file at the page.") },
+    ],
+  },
+  {
+    title: msg("Make documents"),
+    hint: msg("Prepare letters, quotations, proposals and submission packs from templates and the company's facts."),
     open: "managers",
     items: [
-      { to: "/search", label: msg("Search documents"), icon: FileMagnifyingGlassIcon, blurb: msg("Search inside every document: a phrase on page 23 of a handbook, an amount, a form or a job title. Opens the file at the page.") },
-      { to: "/files", label: msg("Company files"), icon: FolderOpenIcon, blurb: msg("One place per company for all its documents. Drop a folder or a zip: it is kept in folders, read, sorted, and the how-to documents go to the library.") },
       { to: "/documents", label: msg("Documents"), icon: FilesIcon, blurb: msg("Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.") },
-      { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },
       { to: "/packs", label: msg("Packs"), icon: PackageIcon, blurb: msg("Submission packs: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.") },
+      { to: "/templates", label: msg("Templates"), icon: StackIcon, blurb: msg("Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} agents and people fill.") },
       { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
     ],
   },
@@ -175,8 +182,8 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    title: msg("How we work"),
-    hint: msg("The procedures and know-how your agents follow: SOPs, workflows, guidelines and what they learned."),
+    title: msg("Knowledge"),
+    hint: msg("What your agents follow and know: SOPs, workflows, the library of guidelines, the brain and the skills they learned."),
     open: "managers",
     items: [
       { to: "/sops", label: msg("SOPs"), icon: FileTextIcon, blurb: msg("Written procedures agents follow: for every company, one company, one department, or attached to specific agents.") },

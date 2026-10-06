@@ -35,7 +35,8 @@ export interface DocFile {
   expires_on: string | null;
   expired: boolean;
   error: string | null;
-  source: "upload" | "generated";
+  /** download: fetched from a website by an agent (P28 file store). */
+  source: "upload" | "generated" | "download";
   branch_id: string | null;
   branch_name: string | null;
   task_id: string | null;
@@ -78,6 +79,8 @@ export interface FileStats {
   total: number; upload: number; generated: number; expiring: number; reading: number;
   /** P25: by who made them (optional until every server sends them). */
   agent?: number; person?: number; uploaded?: number;
+  /** The file store's views: fetched from websites, in the library, from tasks. */
+  download?: number; library?: number; in_tasks?: number;
 }
 
 /** Counts behind the Files tiles and tabs, for the same company and search as the list. */
@@ -364,3 +367,15 @@ export const itemsIn = (items: PackItem[]): DraftItem[] =>
     id: i.id, label: i.label, hint: i.hint, required: i.required, file_id: i.file_id,
     document_id: i.document_id, status: i.status, note: i.note, auto: i.auto,
   }));
+
+/** The website a downloaded file came from ("eperolehan.gov.my"), from its source path
+ * ("https://site/page" or, for a file out of a zip, "https://site/page > inner/name.pdf"). */
+export function siteOf(sourcePath?: string | null): string {
+  const first = sourcePath?.split(" > ")[0];
+  if (!first) return "";
+  try {
+    return new URL(first).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}

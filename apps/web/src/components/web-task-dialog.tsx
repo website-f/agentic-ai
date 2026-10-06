@@ -1,5 +1,5 @@
 /** "Browse for me": give a browser agent a link and say what you want, read or fill in. */
-import { BrowserIcon, CursorClickIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { BrowserIcon, CursorClickIcon, FileTextIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RadioGroup } from "radix-ui";
 import { useState } from "react";
@@ -40,7 +40,7 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [mode, setMode] = useState<"read" | "interact">("read");
+  const [mode, setMode] = useState<"read" | "interact" | "tender">("read");
   const [values, setValues] = useState("");
   const [login, setLogin] = useState(NONE);
   const [output, setOutput] = useState<"answer" | "report">("answer");
@@ -52,7 +52,8 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
   const hasBrowser = BROWSER_TOOLS.every((k) => (agent.tools ?? {})[k] && agent.tools[k] !== "deny");
   const start = useMutation({
     mutationFn: () => api<Task>(`/api/agents/${agent.id}/web-task`, "POST", {
-      url, instructions, mode, values: mode === "interact" ? values : "", output,
+      url, instructions, mode, values: mode === "read" ? "" : values,
+      output: mode === "tender" ? "report" : output,
       login: login === NONE ? null : login,
     }),
     onSuccess: (task) => {
@@ -75,28 +76,29 @@ export function WebTaskDialog({ agent, open, onOpenChange, onStarted }: {
         <Button disabled={!ready} loading={start.isPending} onClick={() => start.mutate()}><BrowserIcon size={15} /> {t("Start")}</Button></>}>
       <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (ready) start.mutate(); }}>
         <Field label={t("Link")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("https://… or portal.example.com/page")} autoFocus error={fields.url} />
-        <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "read" | "interact")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-2">
+        <RadioGroup.Root value={mode} onValueChange={(v) => setMode(v as "read" | "interact" | "tender")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-3">
           <Choice value="read" icon={MagnifyingGlassIcon} title={t("Find information")} body={t("Reads the page (and the pages it links to). Fills in nothing.")} />
           <Choice value="interact" icon={CursorClickIcon} title={t("Interact and fill in")} body={t("Clicks, types and fills forms. Sending a form waits for your approval.")} />
+          <Choice value="tender" icon={FileTextIcon} title={t("Prepare a tender")} body={t("Researches, drafts the technical proposal and fills only verified values. Submission waits for approval.")} />
         </RadioGroup.Root>
         <TextareaField label={mode === "read" ? t("What do you want to know?") : t("What should it do?")} value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3}
           placeholder={mode === "read"
             ? t("e.g. List every invitation to quote: reference, agency, item, value and closing date.")
             : t("e.g. Update our company profile and save it.")} error={fields.instructions} />
-        {mode === "interact" ? (
-          <TextareaField label={t("Values to fill in")} value={values} onChange={(e) => setValues(e.target.value)} rows={4}
+        {mode !== "read" ? (
+          <TextareaField label={mode === "tender" ? t("Known tender facts") : t("Values to fill in")} value={values} onChange={(e) => setValues(e.target.value)} rows={4}
             placeholder={t("One per line, e.g.\nCompany name: Qbot Studio Sdn Bhd\nTelephone: +60 3-2710 4455")}
             hint={t("It uses exactly these and asks you for anything missing. Leave empty if its SOPs or a colleague know them.")} />
         ) : null}
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
-          <div className="grid gap-1.5">
+          <div className={cn("grid gap-1.5", mode === "tender" && "opacity-60")}>
             <span className="text-[13px] font-medium">{t("Sign in with")}</span>
             <Select value={login} onValueChange={setLogin} label={t("Saved login")}
               options={[{ value: NONE, label: t("No login needed") }, ...(logins.data ?? []).map((l) => ({ value: l.name, label: l.name, hint: l.hosts.join(", ") }))]} />
           </div>
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">{t("Answer as")}</span>
-            <Select value={output} onValueChange={(v) => setOutput(v as "answer" | "report")} label={t("Answer as")}
+            <Select value={mode === "tender" ? "report" : output} onValueChange={(v) => setOutput(v as "answer" | "report")} label={t("Answer as")}
               options={[{ value: "answer", label: t("A short answer") }, { value: "report", label: t("A report with a table") }]} />
           </div>
         </div>

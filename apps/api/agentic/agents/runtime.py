@@ -549,10 +549,15 @@ async def _resolve_calls(
         if decision.effect == "ask":
             reason = str(args.get("why") or args.get("reason") or "")
             shown = args
-            if name == "browser_submit":
+            if name in ("browser_submit", "browser_upload"):
                 from . import browser_tools  # late: browser_tools imports this module
 
                 shown = {**args, **(await browser_tools.form_preview(task.id))}
+                if name == "browser_upload":
+                    files, _ = await browser_tools.upload_files(ctx, args.get("file_ids"))
+                    shown["files"] = [f"[{f.id}] {f.name} ({f.size // 1024:,} KB)" for f in files]
+                # The page must still be there when the person says yes.
+                await browser_tools.hold(task.id, 7200)
             return _waiting(
                 await _create_approval(
                     db,

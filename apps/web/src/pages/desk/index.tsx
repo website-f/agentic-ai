@@ -609,7 +609,7 @@ function MyFiles({ desk }: { desk: Desk }) {
                 {all ? t("Show fewer") : t("Show all ({n})", { n: matching.length })}
               </button>
             ) : <span />}
-            <Link to="/files" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">{t("Company files")} <ArrowRightIcon size={13} /></Link>
+            <Link to="/files" className="inline-flex items-center gap-1 font-medium text-accent hover:underline">{t("Files")} <ArrowRightIcon size={13} /></Link>
           </li>
         </ListCard>
       ) : (

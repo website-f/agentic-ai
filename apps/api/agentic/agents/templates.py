@@ -39,6 +39,8 @@ _WEB = {
     "browser_wait": "allow",
     "browser_login": "allow",
     "browser_submit": "ask",
+    "browser_upload": "ask",
+    "browser_save_page": "allow",
     "browser_close": "allow",
     "web_fetch": "allow",
     "split_work": "allow",

@@ -16,7 +16,9 @@ RUN apt-get update \
 
 USER app
 # The browser binary lives in the app user's cache, baked in so it never downloads at run.
-RUN python -m camoufox fetch
+# Camoufox checks its profile folder exists before launch (the root file system is read-only
+# at run time; compose mounts a tmpfs over it).
+RUN python -m camoufox fetch && mkdir -p /home/app/.camoufox
 COPY --chown=app:app apps/browser/service.py apps/browser/snapshot.py /app/
 WORKDIR /app
 EXPOSE 8600

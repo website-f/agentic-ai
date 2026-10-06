@@ -28,7 +28,7 @@ const ANY = "__any";
 type Search = { q?: string; type?: HitType; kind?: string; dept?: string; source?: "upload" | "agent" | "person" };
 
 const GROUP_TITLE: Record<HitType, string> = {
-  file: "Company files",
+  file: "Files",
   sop: "SOPs",
   document: "Documents",
   template: "Templates",
@@ -238,7 +238,7 @@ export function SearchPage() {
         </div>
       )}
       <p className={cn("text-[12px] text-muted", !q && "hidden")}>
-        {t("Results open where you can read them: a file opens at its page in Company files.")}
+        {t("Results open where you can read them: a file opens at its page in Files.")}
       </p>
     </Page>
   );

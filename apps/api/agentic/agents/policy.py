@@ -20,7 +20,7 @@ from .tools import GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
 # Outward actions a person signs off every time, whatever an agent's settings say.
-ALWAYS_ASK = frozenset({"browser_submit"})
+ALWAYS_ASK = frozenset({"browser_submit", "browser_upload"})
 # Tools whose approver is the person asking: when someone who could approve the agent's
 # requests asks for it directly in chat ("every Monday 9am send me the report"), that request
 # is the approval. Anywhere else (a task, an email the agent read) a person approves it,

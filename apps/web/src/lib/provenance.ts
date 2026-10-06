@@ -42,7 +42,7 @@ export interface FileProvenance {
   document_id?: string | null;
   report_id?: string | null;
   review_status?: ReviewStatus | null;
-  source?: "upload" | "generated";
+  source?: "upload" | "generated" | "download";
 }
 
 export type ReviewedDoc = DocSummary & DocProvenance;

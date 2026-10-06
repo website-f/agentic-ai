@@ -1,0 +1,403 @@
+/** The file store: every file of the company in one place, by how people look for it. What
+ * waits for a person's review, each piece of work with everything it made, downloaded or was
+ * given, the newest files, what AI made, what agents fetched from websites, uploads, the
+ * library, and the folders. Any file opens in the same viewer from any view. */
+import {
+  ArrowRightIcon, BooksIcon, ClockIcon, CloudArrowUpIcon, DownloadSimpleIcon, FolderOpenIcon, GlobeIcon,
+  ListChecksIcon, RobotIcon, SealCheckIcon, TreeStructureIcon, type Icon,
+} from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
+
+import { FileStatus } from "@/components/file-drop";
+import { LoadMore } from "@/components/load-more";
+import { EmptyState } from "@/components/page";
+import { FileProvenanceCard, MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
+import { AgentAvatar } from "@/components/agent-avatar";
+import { Button } from "@/components/ui/button";
+import { Card, ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
+import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
+import { SideSheet } from "@/components/ui/side-sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { locale, msg, useT } from "@/i18n";
+import { api, errorMessage } from "@/lib/api";
+import { useCompanies } from "@/lib/company";
+import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
+import { docKeys, fileQuery, fileSize, fileUrl, siteOf, type FileStats } from "@/lib/documents";
+import { kindKey, kindLabel, type CompanyFile } from "@/lib/intake";
+import { useDebounced, usePagedList } from "@/lib/paged";
+import { fileOrigin, provKeys, type FileProvenance, type ReviewedDoc } from "@/lib/provenance";
+import { meQuery } from "@/lib/queries";
+import { hasAny } from "@/lib/types";
+import { cn, timeAgo } from "@/lib/utils";
+
+import { QueueRow } from "./documents";
+import { FileViewer } from "./files-viewer";
+import { FileTile, KindTile } from "./visuals";
+
+
+type StoreFile = CompanyFile & FileProvenance;
+
+const VIEWS: Record<StoreView, { label: string; hint: string; icon: Icon }> = {
+  review: { label: msg("Needs review"), hint: msg("Documents AI made that wait for a person to approve or send back."), icon: SealCheckIcon },
+  tasks: { label: msg("By task"), hint: msg("Each piece of work with everything it made, downloaded or was given, its helpers' too."), icon: ListChecksIcon },
+  recent: { label: msg("Recent"), hint: msg("The newest files of every kind, whoever added them."), icon: ClockIcon },
+  agents: { label: msg("Made by AI"), hint: msg("Documents, reports and files your agents produced."), icon: RobotIcon },
+  downloads: { label: msg("From websites"), hint: msg("Files agents downloaded from websites and portals, such as tender documents."), icon: GlobeIcon },
+  uploaded: { label: msg("Uploaded"), hint: msg("Files people uploaded or attached to work."), icon: CloudArrowUpIcon },
+  library: { label: msg("In the library"), hint: msg("Guidelines and manuals agents search and cite."), icon: BooksIcon },
+  folders: { label: msg("All folders"), hint: msg("Every file in its folder, with uploads of whole folders and zips."), icon: TreeStructureIcon },
+};
+
+// ---------------------------------------------------------------- the list of views
+
+export function StoreNav({ view, onPick, stats, waiting }: {
+  view: StoreView;
+  onPick: (v: StoreView) => void;
+  stats?: FileStats;
+  waiting: number;
+}) {
+  const t = useT();
+  const count: Partial<Record<StoreView, number | undefined>> = {
+    review: waiting,
+    tasks: stats?.in_tasks,
+    recent: stats?.total,
+    agents: stats?.agent,
+    downloads: stats?.download,
+    uploaded: stats?.upload,
+    library: stats?.library,
+  };
+  return (
+    <>
+      {/* Phone and tablet: a row of chips that scrolls sideways. */}
+      <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+        <div className="flex w-max gap-1.5" role="tablist" aria-label={t("Views")}>
+          {STORE_VIEWS.map((v) => {
+            const on = v === view;
+            const V = VIEWS[v];
+            return (
+              <button key={v} type="button" role="tab" aria-selected={on} onClick={() => onPick(v)}
+                ref={on ? (el) => el?.scrollIntoView({ inline: "center", block: "nearest" }) : undefined}
+                className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium whitespace-nowrap transition-colors",
+                  on ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface text-muted hover:text-fg")}>
+                <V.icon size={15} weight={on ? "fill" : "regular"} />{t(V.label)}
+                {count[v] ? <span className={cn("tabular", v === "review" ? "rounded-full bg-accent px-1.5 text-[11px] text-white" : "text-[12px] text-muted")}>{count[v]?.toLocaleString(locale())}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {/* Desktop: a list down the side. */}
+      <nav aria-label={t("Views")} data-guide="files.views" className="hidden lg:grid lg:content-start lg:gap-0.5">
+        {STORE_VIEWS.map((v) => {
+          const on = v === view;
+          const V = VIEWS[v];
+          return (
+            <button key={v} type="button" onClick={() => onPick(v)} aria-current={on ? "page" : undefined} title={t(V.hint)}
+              className={cn("flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-left text-[13.5px] transition-colors",
+                on ? "bg-accent-soft font-semibold text-accent" : "text-fg hover:bg-surface-2",
+                v === "folders" && "mt-2 border-t border-border pt-3")}>
+              <V.icon size={17} weight={on ? "fill" : "duotone"} className={cn("shrink-0", !on && "text-muted")} />
+              <span className="min-w-0 flex-1 truncate">{t(V.label)}</span>
+              {count[v] ? (
+                <span className={cn("tabular", v === "review" ? "rounded-full bg-accent px-1.5 text-[11.5px] font-semibold text-white" : "text-[12px] text-muted")}>
+                  {count[v]?.toLocaleString(locale())}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
+    </>
+  );
+}
+
+export function viewHint(v: StoreView): string {
+  return VIEWS[v].hint;
+}
+
+export function viewLabel(v: StoreView): string {
+  return VIEWS[v].label;
+}
+
+// ---------------------------------------------------------------- one file
+
+
+/** Where a file came from, in a few words: an agent made it, fetched it, or a person added it. */
+function FromWhere({ f }: { f: StoreFile }) {
+  const t = useT();
+  if (f.source === "download") {
+    const host = siteOf(f.source_path);
+    return (
+      <Pill tone="info" className="max-w-full min-w-0 px-2" title={f.source_path || undefined}>
+        <GlobeIcon size={12} weight="bold" />
+        <span className="truncate">{host ? t("Downloaded from {site}", { site: host }) : t("Downloaded from a website")}</span>
+      </Pill>
+    );
+  }
+  return <MadeBy origin={fileOrigin(f)} agentName={f.agent_name} agentColor={f.agent_color} size="sm" />;
+}
+
+export function StoreRow({ f, onOpen, showCompany, showTask = true, active }: {
+  f: StoreFile;
+  onOpen: () => void;
+  showCompany?: boolean;
+  showTask?: boolean;
+  active?: boolean;
+}) {
+  const t = useT();
+  const kk = kindKey(f.kind);
+  return (
+    <ListRow onClick={onOpen} active={active}
+      leading={kk === "other" ? <FileTile mime={f.mime} name={f.name} /> : <KindTile kind={kk} />}
+      title={f.title || f.name}
+      meta={<Meta items={[
+        kindLabel(f.kind),
+        f.pages ? (f.pages > 1 ? t("{n} pages", { n: f.pages }) : t("1 page")) : null,
+        fileSize(f.size),
+        showCompany ? f.branch_name : null,
+        timeAgo(f.created_at),
+      ]} />}
+      trailing={<>
+        <ReviewPill status={f.review_status} />
+        <FileStatus f={f} />
+        {f.library ? <Pill tone="accent">{t("In library")}</Pill> : null}
+        <a href={fileUrl(f.id)} download onClick={(e) => e.stopPropagation()} aria-label={t("Download {name}", { name: f.name })}
+          className="grid size-8 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg pointer-coarse:size-10">
+          <DownloadSimpleIcon size={16} />
+        </a>
+      </>}>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 pt-1 text-[12px]">
+        <FromWhere f={f} />
+        {showTask ? <WorkLinks taskId={f.task_id} taskTitle={f.task_title} runId={f.workflow_run_id} runTitle={f.workflow_run_title} /> : null}
+        {f.folder ? <span className="inline-flex min-w-0 items-center gap-1 text-muted"><FolderOpenIcon size={12} className="shrink-0" /><span className="truncate">{f.folder}</span></span> : null}
+      </span>
+    </ListRow>
+  );
+}
+
+/** Any file, opened from any view, in a side sheet: who made it, then the file itself. */
+export function StoreFileSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  const t = useT();
+  const co = useCompanies();
+  const { data: me } = useQuery(meQuery);
+  const { data } = useQuery(fileQuery(id));
+  const f = data as StoreFile | undefined;
+  const branch = co.branches.find((b) => b.id === f?.branch_id) ?? null;
+  return (
+    <SideSheet open onOpenChange={(o) => !o && onClose()} size="lg"
+      title={f ? <span className="min-w-0 break-words">{f.title || f.name}</span> : t("File")}
+      description={f ? [kindLabel(f.kind), fileSize(f.size), f.branch_name].filter(Boolean).join(" · ") : undefined}>
+      <div className="grid min-w-0 gap-4">
+        <FileProvenanceCard fileId={id} />
+        <div className="min-w-0 [&>div>div:first-child]:hidden">
+          <FileViewer id={id} branch={branch} folders={[]} onClose={onClose} inline
+            canEdit={!!me && hasAny(me, "work.write")} canManage={!!me && hasAny(me, "org.manage", "vault.manage")} />
+        </div>
+      </div>
+    </SideSheet>
+  );
+}
+
+// ---------------------------------------------------------------- flat views
+
+const FLAT: Partial<Record<StoreView, Record<string, string>>> = {
+  recent: {},
+  agents: { origin: "agent" },
+  downloads: { source: "download" },
+  uploaded: { source: "upload" },
+  library: { library: "true" },
+};
+
+function FlatView({ view, branchId, onOpen, openId }: { view: StoreView; branchId: string | null; onOpen: (id: string) => void; openId?: string }) {
+  const t = useT();
+  const [q, setQ] = useState("");
+  const needle = useDebounced(q.trim());
+  const list = usePagedList<StoreFile>(docKeys.files, "/api/files", {
+    ...FLAT[view],
+    branch_id: branchId ?? undefined,
+    q: needle || undefined,
+  }, { pageSize: 50, poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
+  return (
+    <div className="grid min-w-0 content-start gap-3">
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder={t("Search names, titles and kinds")} />
+        <Button size="sm" variant="ghost" asChild>
+          <Link to="/search" search={needle ? { q: needle } : {}}>{t("Search inside documents")} <ArrowRightIcon size={13} /></Link>
+        </Button>
+      </Toolbar>
+      {list.isLoading ? <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[76px]" />)}</div>
+        : list.error ? <p role="alert" className="text-danger">{errorMessage(list.error)}</p>
+        : !list.items.length ? (
+          <EmptyState icon={VIEWS[view].icon} title={needle ? t("No files match") : t("Nothing here yet")} body={t(VIEWS[view].hint)} />
+        ) : (
+          <ListCard>
+            {list.items.map((f) => <StoreRow key={f.id} f={f} onOpen={() => onOpen(f.id)} showCompany={!branchId} active={openId === f.id} />)}
+          </ListCard>
+        )}
+      {list.items.length ? <LoadMore noun="files" shown={list.items.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- by task
+
+interface TaskFiles {
+  task_id: string;
+  title: string;
+  status: string;
+  agent_name: string | null;
+  agent_color: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  latest: string;
+  count: number;
+  files: StoreFile[];
+}
+
+type Bucket = "review" | "made" | "downloaded" | "given";
+const BUCKETS: { key: Bucket; label: string }[] = [
+  { key: "review", label: msg("Waiting for your review") },
+  { key: "made", label: msg("Made by AI") },
+  { key: "downloaded", label: msg("Downloaded from websites") },
+  { key: "given", label: msg("Given by people") },
+];
+
+function bucketOf(f: StoreFile): Bucket {
+  if (f.review_status === "waiting") return "review";
+  if (f.source === "download") return "downloaded";
+  if (fileOrigin(f) === "agent") return "made";
+  return "given";
+}
+
+const STATUS_TONE: Record<string, "neutral" | "info" | "ok" | "warn" | "danger"> = {
+  done: "ok", review: "info", running: "info", ready: "neutral", blocked: "warn", failed: "danger", cancelled: "neutral", triage: "neutral",
+};
+const STATUS_LABEL: Record<string, string> = {
+  done: msg("Done"), review: msg("In review"), running: msg("Working"), ready: msg("Queued"), blocked: msg("Waiting for you"), failed: msg("Failed"), cancelled: msg("Cancelled"), triage: msg("Triage"),
+};
+
+function TaskCard({ g, onOpen, openId, full, showCompany }: { g: TaskFiles; onOpen: (id: string) => void; openId?: string; full: boolean; showCompany: boolean }) {
+  const t = useT();
+  const navigate = useNavigate({ from: "/files" });
+  const by = new Map<Bucket, StoreFile[]>();
+  for (const f of g.files) by.set(bucketOf(f), [...(by.get(bucketOf(f)) ?? []), f]);
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3">
+        {g.agent_name ? <AgentAvatar name={g.agent_name} color={g.agent_color ?? "var(--accent)"} size="sm" /> : <ListChecksIcon size={22} weight="duotone" className="text-muted" />}
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <Link to="/tasks" search={{ task: g.task_id }} className="min-w-0 text-[14.5px] font-semibold break-words hover:text-accent">
+            {g.title || t("Open the task")}
+          </Link>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-muted">
+            <Meta items={[
+              g.agent_name,
+              showCompany ? g.branch_name : null,
+              g.count === 1 ? t("1 file") : t("{n} files", { n: g.count }),
+              t("latest {when}", { when: timeAgo(g.latest) }),
+            ]} />
+          </span>
+        </div>
+        {g.status ? <Pill tone={STATUS_TONE[g.status] ?? "neutral"}>{t(STATUS_LABEL[g.status] ?? g.status)}</Pill> : null}
+      </div>
+      {BUCKETS.filter((b) => by.get(b.key)?.length).map((b) => (
+        <section key={b.key} aria-label={t(b.label)}>
+          <h3 className={cn("bg-surface-2/50 px-4 py-1.5 text-[12px] font-semibold", b.key === "review" ? "text-accent" : "text-muted")}>
+            {t(b.label)} <span className="font-normal tabular">{by.get(b.key)?.length}</span>
+          </h3>
+          <ListCard className="rounded-none border-0 border-b">
+            {by.get(b.key)?.map((f) => <StoreRow key={f.id} f={f} onOpen={() => onOpen(f.id)} showTask={false} active={openId === f.id} />)}
+          </ListCard>
+        </section>
+      ))}
+      {!full && g.count > g.files.length ? (
+        <div className="px-4 py-2.5">
+          <Button size="sm" variant="ghost" onClick={() => navigate({ search: (s) => ({ ...s, view: "tasks", task: g.task_id }) })}>
+            {t("Show all {n} files", { n: g.count })} <ArrowRightIcon size={13} />
+          </Button>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function TasksView({ branchId, taskId, onOpen, openId }: { branchId: string | null; taskId?: string; onOpen: (id: string) => void; openId?: string }) {
+  const t = useT();
+  const navigate = useNavigate({ from: "/files" });
+  const [q, setQ] = useState("");
+  const needle = useDebounced(q.trim());
+  const params = new URLSearchParams();
+  if (branchId) params.set("branch_id", branchId);
+  if (taskId) params.set("task_id", taskId);
+  if (needle) params.set("q", needle);
+  params.set("limit", "15");
+  const groups = useQuery({
+    queryKey: [...docKeys.files, "by-task", params.toString()],
+    queryFn: () => api<TaskFiles[]>(`/api/files/by-task?${params}`),
+    refetchInterval: (q) => (q.state.data?.some((g) => g.files.some((f) => f.status === "reading")) ? 2500 : false),
+  });
+  return (
+    <div className="grid min-w-0 content-start gap-3">
+      {taskId ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => navigate({ search: (s) => ({ ...s, task: undefined }) })}>{t("All tasks")}</Button>
+          <span className="text-[13px] text-muted">{t("Every file of this task and its helpers.")}</span>
+        </div>
+      ) : (
+        <Toolbar>
+          <SearchInput value={q} onChange={setQ} placeholder={t("Find a file in any task")} />
+        </Toolbar>
+      )}
+      {groups.isLoading ? <div className="grid gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
+        : groups.error ? <p role="alert" className="text-danger">{errorMessage(groups.error)}</p>
+        : !groups.data?.length ? (
+          <EmptyState icon={ListChecksIcon} title={needle ? t("No files match") : t("No work with files yet")}
+            body={t("When an agent makes, downloads or is given a file for a task, the task shows here with all of them together.")} />
+        ) : groups.data.map((g) => <TaskCard key={g.task_id} g={g} onOpen={onOpen} openId={openId} full={!!taskId} showCompany={!branchId} />)}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- needs review
+
+function ReviewView({ branchId }: { branchId: string | null }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const { data: me } = useQuery(meQuery);
+  const queue = usePagedList<ReviewedDoc>(provKeys.queue, "/api/documents/review-queue", { branch_id: branchId ?? undefined }, { pageSize: 30 });
+  return (
+    <div className="grid min-w-0 content-start gap-3">
+      {queue.isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[76px]" />)}</div>
+        : queue.error ? <p role="alert" className="text-danger">{errorMessage(queue.error)}</p>
+        : !queue.items.length ? (
+          <EmptyState icon={SealCheckIcon} title={t("Nothing waits for your review")}
+            body={t("Documents agents write (proposals, letters, reports) come here first. Approve them, or send them back with a note and the agent revises.")} />
+        ) : (
+          <ListCard>
+            {queue.items.map((d) => (
+              <QueueRow key={d.id} d={d} canApprove={!!me && hasAny(me, "approvals.decide")} canWrite={!!me && hasAny(me, "work.write")}
+                onOpen={() => void navigate({ to: "/documents", search: { d: d.id } })} />
+            ))}
+          </ListCard>
+        )}
+      {queue.items.length ? <LoadMore noun="documents" shown={queue.items.length} total={queue.total} hasMore={queue.hasMore} loading={queue.isFetchingMore} onLoad={queue.loadMore} /> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- one view
+
+export function StoreViewBody({ view, branchId, taskId, onOpen, openId }: {
+  view: Exclude<StoreView, "folders">;
+  branchId: string | null;
+  taskId?: string;
+  onOpen: (id: string) => void;
+  openId?: string;
+}): ReactNode {
+  if (view === "review") return <ReviewView branchId={branchId} />;
+  if (view === "tasks") return <TasksView branchId={branchId} taskId={taskId} onOpen={onOpen} openId={openId} />;
+  return <FlatView key={view} view={view} branchId={branchId} onOpen={onOpen} openId={openId} />;
+}

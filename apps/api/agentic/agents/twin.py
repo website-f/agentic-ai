@@ -70,6 +70,8 @@ _BROWSER = {
     "browser_wait": "allow",
     "browser_login": "allow",
     "browser_submit": "ask",
+    "browser_upload": "ask",
+    "browser_save_page": "allow",
     "browser_close": "allow",
     "web_fetch": "allow",
 }
@@ -168,7 +170,7 @@ ASKS: tuple[Ask, ...] = (
         "submit",
         "Sending forms",
         "A form is only sent when you say so.",
-        ("browser_submit",),
+        ("browser_submit", "browser_upload"),
         locked=True,
     ),
     Ask("code", "Running code", "You see the code first.", ("run_python",), locked=True),

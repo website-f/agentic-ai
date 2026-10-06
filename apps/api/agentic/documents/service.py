@@ -504,7 +504,9 @@ async def process_file(
     f.text, f.pages, f.ocr = out.text, out.pages, out.ocr
     f.error = out.note or None
     model_text = out.text
-    if f.source == "upload":  # P24: secrets never reach the model, agents or the library
+    # P24: secrets never reach the model, agents or the library (a site's download is as
+    # untrusted as a person's upload).
+    if f.source in ("upload", "download"):
         found = scan.scan(out.text)
         scan.apply(f, found)
         model_text = scan.mask(out.text, found)

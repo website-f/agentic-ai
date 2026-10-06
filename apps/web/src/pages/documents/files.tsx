@@ -1,9 +1,12 @@
-/** Company files (P24): one place per company for all its documents. Upload anything (files,
- * folders, zips), see each upload sorted with a report, browse the folders, open and download
- * any file, a folder or everything, and turn procedures into SOPs and workflows. */
+/** Files (P24, the file store since P28): every file in one place. The views (file-store.tsx)
+ * show what waits for review, each task's files together, recent files, what AI made, what
+ * agents downloaded, uploads and the library; "All folders" is the company browser here:
+ * upload anything (files, folders, zips), see each upload sorted with a report, browse the
+ * folders, open and download any file, a folder or everything, and turn procedures into SOPs
+ * and workflows. */
 import {
   BooksIcon, BuildingsIcon, CaretRightIcon, CheckIcon, DownloadSimpleIcon, FolderIcon, FolderOpenIcon, FolderSimpleIcon,
-  ShieldWarningIcon, TrashIcon, TreeStructureIcon, XIcon,
+  ShieldWarningIcon, TrashIcon, TreeStructureIcon, UploadSimpleIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -33,7 +36,8 @@ import {
 } from "@/lib/intake";
 import { libraryKeys, setLibrary } from "@/lib/library";
 import { usePagedList, useDebounced } from "@/lib/paged";
-import { fileOrigin, type FileOrigin, type FileProvenance } from "@/lib/provenance";
+import { type StoreView } from "@/lib/file-store";
+import { fileOrigin, reviewCountQuery, type FileOrigin, type FileProvenance } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { useMedia } from "@/lib/use-media";
@@ -43,7 +47,8 @@ import { agentsQuery } from "@/lib/work";
 import { BuildFromDocs } from "@/components/doc-builders";
 import { BatchCard, IntakeDrop, type ShowFilter } from "./files-upload";
 import { FileViewer, MoveDialog, moveMany } from "./files-viewer";
-import { DocSteps, FileTile, KindTile } from "./visuals";
+import { StoreFileSheet, StoreNav, StoreViewBody, viewHint, viewLabel } from "./file-store";
+import { FileTile, KindTile } from "./visuals";
 
 type View = "folder" | "kind" | "department";
 const ANY = "__any";
@@ -648,32 +653,60 @@ function CompanyPicker({ branches, onPick }: { branches: Branch[]; onPick: (id: 
 export function FilesPage() {
   const t = useT();
   const co = useCompanies();
+  const search = useSearch({ from: "/app/files" });
+  const navigate = useNavigate({ from: "/files" });
   const branch = co.isAll ? null : co.selected;
   const options = [...(co.canAll ? [{ value: ALL_COMPANIES, label: t("All companies") }] : []), ...co.branches.map((b) => ({ value: b.id, label: b.name }))];
+  // Old links (a folder, "made by") open the folders; anything else starts with the work.
+  const view: StoreView = search.view ?? (search.folder || search.origin ? "folders" : "tasks");
+  const pick = (v: StoreView) => navigate({ search: (s) => ({ ...s, view: v, task: undefined, folder: undefined, origin: undefined }) });
+  const open = (id?: string) => navigate({ search: (s) => ({ ...s, f: id, page: undefined }) });
+  const { data: stats } = useQuery(fileStatsQuery(branch ? { branch_id: branch.id } : {}));
+  const { data: review } = useQuery(reviewCountQuery);
 
   return (
     <Page wide>
-      <PageHeader title={t("Company files")}
-        description={t("One place per company for all its documents. Drop a whole folder or zip: it is kept in its folders, read, sorted, and the how-to documents go to the library for agents.")}
-        actions={branch ? (
-          <Button variant="outline" asChild>
-            <a href={archiveUrl({ branch_id: branch.id })} download data-guide="files.download-all"><DownloadSimpleIcon size={16} /> {t("Download everything")}</a>
-          </Button>
-        ) : null} />
-      <DocSteps current="/files" />
+      <PageHeader title={t("Files")}
+        description={t("Every file of the company in one place: what agents made or downloaded, what waits for your review, each task's files together, uploads, the library and the folders.")}
+        actions={<>
+          <Button variant="outline" onClick={() => pick("folders")}><UploadSimpleIcon size={16} /> {t("Upload files")}</Button>
+          {branch ? (
+            <Button variant="ghost" asChild>
+              <a href={archiveUrl({ branch_id: branch.id })} download data-guide="files.download-all"><DownloadSimpleIcon size={16} /> {t("Download everything")}</a>
+            </Button>
+          ) : null}
+        </>} />
       <div data-guide="files.company" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
         <BuildingsIcon size={20} weight="duotone" className="shrink-0 text-accent" />
         <span className="text-[13.5px] font-medium">{t("Company")}</span>
         <Select value={branch?.id ?? ALL_COMPANIES} onValueChange={co.select} label={t("Company")} className="min-w-0 flex-1 sm:max-w-xs"
           options={options} placeholder={t("Pick a company")} />
-        {branch ? <span className="text-[12.5px] text-muted max-sm:w-full">{t("Uploads and downloads here are for {company} only.", { company: branch.name })}</span> : null}
+        <span className="text-[12.5px] text-muted max-sm:w-full">
+          {branch ? t("Showing {company} only.", { company: branch.name }) : t("Showing every company you work in.")}
+        </span>
       </div>
       {co.isLoading && !co.branches.length ? <Skeleton className="h-48" />
         : !co.branches.length ? (
           <EmptyState icon={BuildingsIcon} title={t("No companies yet")} body={t("Add a company in Organization first. Each company keeps its own documents.")} />
-        ) : branch ? <CompanyHub key={branch.id} branch={branch} />
-        : <CompanyPicker branches={co.branches} onPick={co.select} />}
+        ) : (
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
+            <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+              <StoreNav view={view} onPick={pick} stats={stats} waiting={review?.waiting ?? 0} />
+            </div>
+            <div className="grid min-w-0 content-start gap-4">
+              <div className="min-w-0">
+                <h2 className="text-[16px] font-semibold">{t(viewLabel(view))}</h2>
+                <p className="text-[13px] text-muted">{t(viewHint(view))}</p>
+              </div>
+              {view === "folders" ? (
+                branch ? <CompanyHub key={branch.id} branch={branch} /> : <CompanyPicker branches={co.branches} onPick={co.select} />
+              ) : (
+                <StoreViewBody view={view} branchId={branch?.id ?? null} taskId={search.task} onOpen={open} openId={search.f} />
+              )}
+            </div>
+          </div>
+        )}
+      {view !== "folders" && search.f ? <StoreFileSheet id={search.f} onClose={() => open(undefined)} /> : null}
     </Page>
   );
 }
-

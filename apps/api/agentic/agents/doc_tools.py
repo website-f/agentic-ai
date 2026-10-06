@@ -355,6 +355,75 @@ async def _check_document(ctx: ToolContext, args: dict[str, Any]) -> str:
     return out
 
 
+async def _publish_research(ctx: ToolContext, args: dict[str, Any]) -> str:
+    """Save cited, reusable research as a review document and branch-scoped library source."""
+    from ..intake import scan as sensitive_scan
+    from ..knowledge import indexer
+
+    title = str(args.get("title") or "").strip()[:200]
+    body = str(args.get("body") or "").strip()
+    raw_sources = args.get("sources")
+    sources = raw_sources if isinstance(raw_sources, list) else []
+    clean_sources: list[tuple[str, str]] = []
+    for item in sources[:30]:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("title") or item.get("url") or "Source").strip()[:200]
+        url = str(item.get("url") or "").strip()
+        if url.startswith(("https://", "http://")):
+            clean_sources.append((label, url))
+    if not title or not body:
+        return "Error: give the research a title and body."
+    if not clean_sources:
+        return "Error: cited research needs at least one public source URL."
+    source_text = "\n".join(f"- [{label}]({url})" for label, url in clean_sources)
+    markdown = f"{body}\n\n## Sources\n\n{source_text}\n"
+    found = sensitive_scan.scan(markdown)
+    if found.credentials:
+        return (
+            "Error: the research appears to contain a credential, login ID, PIN, OTP or "
+            "security answer. Remove the secret value before saving it to the library."
+        )
+
+    prior = None
+    if ctx.task is not None:
+        prior = await ctx.db.scalar(
+            select(Document).where(Document.task_id == ctx.task.id, Document.title == title)
+        )
+    if prior is not None:
+        if prior.status == "approved":
+            return f"Error: {prior.title!r} is approved and locked."
+        await service.snapshot(ctx.db, prior, f"agent:{ctx.agent.id}", "research updated")
+        prior.body = markdown
+        _mark_revised(prior)
+        doc = prior
+    else:
+        doc = await service.create_document(
+            ctx.db,
+            workspace_id=ctx.workspace.id,
+            branch_id=ctx.agent.branch_id,
+            template=None,
+            title=title,
+            values={},
+            body=markdown,
+            created_by=f"agent:{ctx.agent.id}",
+            task_id=ctx.task.id if ctx.task else None,
+            agent_id=ctx.agent.id,
+        )
+    doc.status = "review"
+    pdf = await provenance.save_export(ctx.db, doc, "pdf", agent_id=ctx.agent.id)
+    word = await provenance.save_export(ctx.db, doc, "docx", agent_id=ctx.agent.id)
+    pdf.library = True
+    pdf.summary = f"Cited tender research for reuse: {title}"[:1000]
+    await ctx.db.commit()
+    passages = await indexer.index_file(ctx.db, pdf.id)
+    return (
+        f"Published research {title!r} [{doc.id}] for review. Saved PDF [{pdf.id}] and Word "
+        f"[{word.id}] in {pdf.folder}; the PDF is searchable in this company's Library "
+        f"({passages} passage(s))."
+    )
+
+
 # ---------------------------------------------------------------- packs
 
 
@@ -762,6 +831,36 @@ DOC_TOOLS: list[Tool] = [
         "low",
         "allow",
         _check_document,
+    ),
+    Tool(
+        "publish_research",
+        "Publish cited research",
+        "Save reusable public-web research as a review document in AI Documents (PDF and "
+        "Word) and as a searchable Library source for this company. Include source titles "
+        "and URLs. Use it for researched tender methodology, standards and technical "
+        "guidance, never for invented company claims, prices, credentials or secrets.",
+        {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "body": {"type": "string", "description": "Markdown findings and guidance"},
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "url": {"type": "string"},
+                        },
+                        "required": ["title", "url"],
+                    },
+                },
+            },
+            "required": ["title", "body", "sources"],
+        },
+        "low",
+        "allow",
+        _publish_research,
     ),
     Tool(
         "pack_status",

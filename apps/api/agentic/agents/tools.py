@@ -418,6 +418,11 @@ async def _agent_path(ctx: ToolContext, raw: str, *, writing: bool) -> str:
     if writing:
         if not rel.startswith(AGENT_WRITABLE):
             raise PathError("Agents write knowledge pages under wiki/ (or raw/ for sources).")
+        # Tender research can contain company-specific strategy, requirements and draft
+        # responses. Keep it with the agent's company even when the workspace otherwise
+        # shares general knowledge between non-isolated branches.
+        if rel.startswith("wiki/tenders/") and slug is None and own is not None:
+            return f"branches/{own.slug}/{path}"
         if own is not None and own.isolated and slug is None:
             return f"branches/{own.slug}/{path}"
     if slug is not None and (own is None or slug != own.slug):
@@ -1145,6 +1150,32 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
         "deny",
     ),
     (
+        "browser_upload",
+        "Upload a file",
+        "Upload company files (file_ids, up to 3) into the page: ref is the file field or its "
+        "choose-file button, then_ref the button that sends them (e.g. Muat Naik), pressed "
+        "under the same approval. A person approves every upload. Say what it is for in why.",
+        {
+            "ref": _REF,
+            "file_ids": {"type": "array", "items": {"type": "string"}},
+            "then_ref": {"type": "string", "description": "The send/upload button's ref"},
+            "why": {"type": "string"},
+        },
+        ["ref", "file_ids", "why"],
+        "high",
+        "deny",
+    ),
+    (
+        "browser_save_page",
+        "Save the page as PDF",
+        "Save what the page shows now (the whole page) as a PDF in the company's files, e.g. "
+        "an offer printout or a confirmation. Files the site downloads are saved by themselves.",
+        {"name": {"type": "string", "description": "The PDF's name"}},
+        [],
+        "low",
+        "deny",
+    ),
+    (
         "browser_close",
         "Close the browser",
         "Close your browser when the web part is done.",
@@ -1171,6 +1202,7 @@ FOLLOWS = {
     "browser_snapshot": "browser_open",
     "browser_find": "browser_open",
     "browser_wait": "browser_open",
+    "browser_save_page": "browser_open",
     # research_gather reads pages too: an agent set to ask (or deny) before web_fetch gets the
     # same answer here instead of a side door.
     "research_gather": "web_fetch",

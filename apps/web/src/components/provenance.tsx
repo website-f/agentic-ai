@@ -3,7 +3,7 @@
  * made. Shared by Company files, Documents, the task sheet and the home page. */
 import {
   ArrowCounterClockwiseIcon, ArrowRightIcon, ArrowSquareOutIcon, CloudArrowUpIcon, FilePdfIcon, FlowArrowIcon,
-  ListChecksIcon, RobotIcon, SealCheckIcon, SparkleIcon, UserIcon,
+  GlobeIcon, ListChecksIcon, RobotIcon, SealCheckIcon, SparkleIcon, UserIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -19,7 +19,7 @@ import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { docKeys, fileQuery, type DocFile, type DocSummary } from "@/lib/documents";
+import { docKeys, fileQuery, siteOf, type DocFile, type DocSummary } from "@/lib/documents";
 import {
   approveDocument, docOrigin, fileOrigin, REVIEW_LABEL, reviewCountQuery, sendBackDocument,
   type DocProvenance, type FileProvenance, type ReviewedDoc, type ReviewStatus,
@@ -94,14 +94,22 @@ export function FileProvenanceCard({ fileId }: { fileId: string }) {
   const f = data as (DocFile & FileProvenance) | undefined;
   if (!f) return null;
   const origin = fileOrigin(f);
-  const what = origin === "agent"
-    ? (f.agent_name ? t("Made by {name}, an AI agent.", { name: f.agent_name }) : t("Made by an AI agent."))
-    : origin === "person" ? t("Made in the office by a person (for example a compiled pack).") : t("Uploaded by a person.");
+  // A file an agent fetched from a website: outside content, not something AI wrote.
+  const fetched = f.source === "download";
+  const site = fetched ? siteOf(f.source_path) : "";
+  const what = fetched
+    ? (f.agent_name
+      ? t("{name} downloaded it from {site}.", { name: f.agent_name, site: site || t("a website") })
+      : t("An agent downloaded it from {site}.", { site: site || t("a website") }))
+    : origin === "agent"
+      ? (f.agent_name ? t("Made by {name}, an AI agent.", { name: f.agent_name }) : t("Made by an AI agent."))
+      : origin === "person" ? t("Made in the office by a person (for example a compiled pack).") : t("Uploaded by a person.");
   return (
     <section data-guide="files.provenance" aria-label={t("Where it came from")}
       className={cn("grid gap-2 rounded-[var(--radius-md)] border p-3", origin === "agent" ? "border-accent/30 bg-accent-soft/35" : "border-border bg-surface-2/30")}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <MadeBy origin={origin} agentName={f.agent_name} agentColor={f.agent_color} />
+        {fetched ? <Pill tone="info"><GlobeIcon size={12} weight="bold" /> {t("Downloaded")}</Pill>
+          : <MadeBy origin={origin} agentName={f.agent_name} agentColor={f.agent_color} />}
         <ReviewPill status={f.review_status} />
         <span className="text-[12.5px] text-muted">{what}</span>
       </div>
@@ -265,14 +273,25 @@ export function TaskDocuments({ taskId, title, icon }: { taskId: string; title: 
     queryKey: [...docKeys.files, { task_id: taskId, source: "generated" }],
     queryFn: () => api<(DocFile & FileProvenance)[]>(`/api/files?${new URLSearchParams({ task_id: taskId, source: "generated", limit: "50" })}`),
   });
+  // What its agent fetched from websites (tender documents, an offer printout).
+  const fetched = useQuery({
+    queryKey: [...docKeys.files, { task_id: taskId, source: "download" }],
+    queryFn: () => api<(DocFile & FileProvenance)[]>(`/api/files?${new URLSearchParams({ task_id: taskId, source: "download", limit: "50" })}`),
+  });
   // A document's own saved copies are listed under it, not again as files.
   const loose = (files.data ?? []).filter((f) => !f.document_id);
+  const downloads = fetched.data ?? [];
   const n = (docs.data?.length ?? 0) + loose.length;
   if (docs.isLoading || files.isLoading) return <Skeleton className="h-14 rounded-[var(--radius-md)]" />;
-  if (!n) return null;
+  if (!n && !downloads.length) return null;
   return (
     <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5" data-guide="tasks.documents">
-      <h3 className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-semibold">{icon}{title(n)}</h3>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h3 className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-semibold">{icon}{title(n)}</h3>
+        <Link to="/files" search={{ view: "tasks", task: taskId }} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:underline">
+          {t("Every file of this task")} <ArrowRightIcon size={13} />
+        </Link>
+      </div>
       <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
         {(docs.data ?? []).map((d) => {
           const pdf = d.files?.find((f) => f.format === "pdf");
@@ -286,7 +305,7 @@ export function TaskDocuments({ taskId, title, icon }: { taskId: string; title: 
               </span>
               <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
                 <MadeBy origin={docOrigin(d)} agentName={d.agent_name} agentColor={d.agent_color} size="sm" />
-                {pdf ? <Link to="/files" search={{ f: pdf.id }} className="inline-flex items-center gap-1 text-accent hover:underline"><FilePdfIcon size={13} /> {t("PDF in Company files")}</Link> : null}
+                {pdf ? <Link to="/files" search={{ f: pdf.id }} className="inline-flex items-center gap-1 text-accent hover:underline"><FilePdfIcon size={13} /> {t("PDF in Files")}</Link> : null}
                 <span>{t("updated {when}", { when: timeAgo(d.updated_at) })}</span>
               </span>
             </li>
@@ -299,6 +318,19 @@ export function TaskDocuments({ taskId, title, icon }: { taskId: string; title: 
           </li>
         ))}
       </ul>
+      {downloads.length ? (
+        <>
+          <h4 className="flex items-center gap-1.5 pt-1 text-[12.5px] font-semibold text-muted"><GlobeIcon size={14} /> {t("Downloaded from websites")} <span className="font-normal tabular">{downloads.length}</span></h4>
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-2">
+            {downloads.map((f) => (
+              <li key={f.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border px-3.5 py-2.5">
+                <Link to="/files" search={{ f: f.id, view: "tasks", task: taskId }} className="min-w-0 text-[13px] font-medium break-words text-fg hover:text-accent">{f.title || f.name}</Link>
+                <span className="text-[12px] text-muted">{timeAgo(f.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }

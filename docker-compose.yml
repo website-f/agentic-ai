@@ -316,7 +316,9 @@ services:
       - "/home/app/.cache/camoufox/fontconfig:size=16m,uid=10001,gid=10001"
       - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
-      - "/home/app/Downloads:size=8m,uid=10001,gid=10001"
+      - "/home/app/.camoufox:size=64m,uid=10001,gid=10001"
+      # Files a page downloads (tender documents, offer printouts) until the worker takes them.
+      - "/home/app/Downloads:size=128m,uid=10001,gid=10001"
     <<: *logging
 
   egress:

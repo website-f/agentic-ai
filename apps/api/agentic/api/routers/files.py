@@ -7,7 +7,7 @@ file once — text, OCR for scans, a short summary — so agents never re-read t
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -347,10 +347,13 @@ async def file_stats(
                 func.count().filter(DocFile.origin == "agent"),
                 func.count().filter(DocFile.origin == "person"),
                 func.count().filter(DocFile.origin == "uploaded"),
+                func.count().filter(DocFile.source == "download"),
+                func.count().filter(DocFile.library.is_(True)),
+                func.count().filter(DocFile.task_id.is_not(None)),
             )
         )
     ).one()
-    total, upload, generated, expiring, reading, agent, person, uploaded = (
+    total, upload, generated, expiring, reading, agent, person, uploaded, download, lib, tasks = (
         int(n or 0) for n in row
     )
     return {
@@ -363,7 +366,94 @@ async def file_stats(
         "agent": agent,
         "person": person,
         "uploaded": uploaded,
+        # the file store's views: fetched from websites, in the library, from tasks
+        "download": download,
+        "library": lib,
+        "in_tasks": tasks,
     }
+
+
+class TaskFilesOut(BaseModel):
+    """One piece of work and every file it produced, fetched or was given (its helpers'
+    sub-tasks included), for the file store's "By task" view."""
+
+    task_id: str
+    title: str
+    status: str
+    agent_name: str | None
+    agent_color: str | None
+    branch_id: str | None
+    branch_name: str | None
+    latest: datetime
+    count: int
+    files: list[FileOut]
+
+
+TASK_FILES_SCAN = 800  # newest files looked at to build the groups
+TASK_FILES_SHOWN = 30  # files listed per task (the count says how many there are)
+
+
+@router.get("/by-task")
+async def files_by_task(
+    branch_id: str | None = None,
+    task_id: str | None = Query(default=None, max_length=40),
+    q: str = Query(default="", max_length=120),
+    limit: int = Query(default=12, ge=1, le=50),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[TaskFilesOut]:
+    """Recent work with its files, newest first: what an agent made, downloaded or was given
+    for a task, together, with a sub-task's files (helpers, delegated parts) under the task
+    it belongs to. `task_id` gives that one task (and its sub-tasks) with all its files."""
+    query = (
+        _filtered(principal, branch_id, None, q)
+        .where(DocFile.task_id.is_not(None))
+        .order_by(DocFile.created_at.desc(), DocFile.id.desc())
+        .limit(TASK_FILES_SCAN)
+    )
+    rows = cast(list[DocFile], list((await db.scalars(query)).all()))
+    tasks: dict[str, Task | None] = {}
+
+    async def task(tid: str) -> Task | None:
+        if tid not in tasks:
+            tasks[tid] = await db.get(Task, tid)
+        return tasks[tid]
+
+    async def root_of(tid: str) -> str:
+        t, hops = await task(tid), 0
+        while t is not None and t.parent_task_id and hops < 8:
+            parent = await task(t.parent_task_id)
+            if parent is None or parent.workspace_id != principal.workspace_id:
+                break
+            t, hops = parent, hops + 1
+        return t.id if t is not None else tid
+
+    groups: dict[str, list[DocFile]] = {}
+    for f in rows:
+        groups.setdefault(await root_of(f.task_id or ""), []).append(f)
+    if task_id:
+        groups = {k: v for k, v in groups.items() if k == task_id}
+    out: list[TaskFilesOut] = []
+    for root, files in list(groups.items())[:limit]:
+        t = await task(root)
+        a = await db.get(Agent, t.assignee_agent_id) if t and t.assignee_agent_id else None
+        b = await db.get(Branch, t.branch_id) if t and t.branch_id else None
+        shown = files if task_id else files[:TASK_FILES_SHOWN]
+        out.append(
+            TaskFilesOut(
+                task_id=root,
+                title=t.title if t else "",
+                status=t.status if t else "",
+                agent_name=a.name if a else None,
+                agent_color=a.color if a else None,
+                branch_id=t.branch_id if t else None,
+                branch_name=b.name if b else None,
+                latest=files[0].created_at,
+                count=len(files),
+                files=[await file_out(db, f) for f in shown],
+            )
+        )
+    return out
 
 
 @router.get("")
@@ -372,7 +462,7 @@ async def list_files(
     branch_id: str | None = None,
     task_id: str | None = None,
     q: str = Query(default="", max_length=120),
-    source: str | None = Query(default=None, pattern="^(upload|generated)$"),
+    source: str | None = Query(default=None, pattern="^(upload|generated|download)$"),
     expiring: bool = False,
     folder: str | None = Query(default=None, max_length=300),
     recursive: bool = False,
@@ -382,6 +472,7 @@ async def list_files(
     origin: str | None = Query(default=None, pattern="^(uploaded|person|agent)$"),
     agent_id: str | None = Query(default=None, max_length=40),
     workflow_run_id: str | None = Query(default=None, max_length=40),
+    library: bool | None = None,
     limit: int = Query(default=200, ge=1, le=500),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
@@ -391,7 +482,8 @@ async def list_files(
     keeps files that expired or expire within EXPIRING_DAYS. P24: `folder` (exact; with
     `recursive` everything under it too; "" = the top) and `batch_id` (one upload). P25:
     `origin` (uploaded, made by a person, made by an agent), `agent_id` (that agent and the
-    helpers it copied itself into) and `workflow_run_id`."""
+    helpers it copied itself into) and `workflow_run_id`. `source=download`: files agents
+    fetched from websites; `library`: in (or not in) the knowledge library."""
     query = _filtered(principal, branch_id, task_id, q)
     if source:
         query = query.where(DocFile.source == source)
@@ -404,6 +496,8 @@ async def list_files(
         query = query.where(or_(DocFile.agent_id == agent_id, DocFile.agent_id.in_(helpers)))
     if workflow_run_id:
         query = query.where(DocFile.workflow_run_id == workflow_run_id)
+    if library is not None:
+        query = query.where(DocFile.library.is_(library))
     if expiring:
         query = query.where(_expiring())
     if folder is not None:

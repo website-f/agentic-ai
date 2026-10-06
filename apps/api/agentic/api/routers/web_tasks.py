@@ -48,11 +48,31 @@ INTERACT = READ + (
     "browser_submit",
 )
 
+TENDER = INTERACT + (
+    "browser_upload",
+    "browser_save_page",
+    "web_search",
+    "web_fetch",
+    "research_gather",
+    "search_library",
+    "search_documents",
+    "company_documents",
+    "read_file",
+    "company_kit",
+    "draft_document",
+    "revise_document",
+    "export_document",
+    "check_document",
+    "publish_research",
+    "write_page",
+    "publish_report",
+)
+
 
 class WebTaskIn(BaseModel):
     url: str = Field(min_length=4, max_length=2000)
     instructions: str = Field(min_length=3, max_length=4000)
-    mode: Literal["read", "interact"] = "read"
+    mode: Literal["read", "interact", "tender"] = "read"
     values: str = Field(default="", max_length=6000)  # what to type into the form
     login: str | None = Field(default=None, max_length=80)  # a saved login's name
     output: Literal["answer", "report"] = "answer"
@@ -74,7 +94,66 @@ def brief_for(body: WebTaskIn) -> str:
             f"If the site asks you to sign in, use the saved login '{body.login}' "
             "(browser_login with submit_element).",
         ]
-    if body.mode == "interact":
+    if body.mode == "tender":
+        lines += [
+            "",
+            "TENDER PREPARATION MODE — follow these stages in order:",
+            "1. Verify the signed-in company and tender reference. Stop and ask a person if "
+            "either differs from the request.",
+            "2. Read the company's tender procedures and submission documents with "
+            "company_documents, search_library and read_file. Never copy a password, PIN, "
+            "security answer, OTP, certificate secret or login ID into notes or documents.",
+            "3. On the portal, open the tender, check eligibility and download every tender "
+            "document it offers. Downloads are saved to the company's files by themselves "
+            "(folder Web downloads/<site>); read them with read_file. A button that sends a "
+            "form needs browser_submit and a person's approval, even when it only searches or "
+            "downloads: say exactly that in why.",
+            "4. Extract every portal field and required attachment into an evidence manifest. "
+            "For each value record its source: tender document, company document, portal, "
+            "person, or public web source.",
+            "5. Research only missing GENERAL TECHNICAL CONTENT on the public web. Prefer the "
+            "buyer, Malaysian government, regulator, manufacturer and recognised standards "
+            "bodies. Read the useful pages and keep their titles, URLs and access date. Web "
+            "research may support methodology and standards; it must never be used to invent "
+            "this company's experience, staff, certifications, equipment, price, bank facts "
+            "or declarations.",
+            "6. Store reusable, cited research with publish_research. This saves PDF and Word "
+            "copies in AI Documents and indexes the PDF in this company's Library. Also save "
+            "a concise working note at wiki/tenders/<tender-reference>-research.md. Keep "
+            "observations separate from recommendations and include source URLs.",
+            "7. Create these review documents with draft_document, which saves PDFs under AI "
+            "documents: (a) Tender portal field manifest, showing value/source/status for every "
+            "field; (b) Cadangan Teknikal, with scope, methodology, work plan, deliverables, "
+            "quality, safety, risk and compliance matrix; (c) Tender submission readiness "
+            "report, listing attachments, missing facts and portal actions. Export Cadangan "
+            "Teknikal as DOCX too. Mark every unsupported factual value exactly [[REQUIRES "
+            "HUMAN INPUT]] instead of guessing.",
+            "8. Run check_document on every draft and fix drafting errors. A missing human fact "
+            "is a blocker to report, not a value to fabricate.",
+            "9. Only then fill portal fields whose manifest status is VERIFIED. You may draft "
+            "inside the portal, but do not fill a missing or generated company fact. Attach "
+            "documents with browser_upload (file_ids from company files; a person approves "
+            "each upload); never upload a document the request does not allow.",
+            "10. Saving, registering, uploading, declaring, signing or submitting is a "
+            "transaction: use browser_submit (or browser_upload) and wait for a person's "
+            "approval. Final tender submission and digital signing always require a separate "
+            "explicit approval: never press the final submit (Serah/Submit), never tick the "
+            "declarations, never enter a security answer or certificate PIN.",
+            "11. At the last step before submission, open the offer printout the portal gives "
+            "(for ePerolehan: Cetak Tawaran) and keep it as a PDF: the file it downloads is "
+            "saved by itself; if it only shows a page, save that with browser_save_page. Then "
+            "stop and ask a person (ask_human) to approve the final submission.",
+            "12. Finish with publish_report, including links/file IDs for all created and "
+            "downloaded documents and the offer PDF, a field-by-field filled/not-filled table, "
+            "sources used, and every approval still needed.",
+        ]
+        if body.values.strip():
+            lines += [
+                "",
+                "Person-provided tender facts (treat as evidence, but cross-check where possible):",
+                body.values.strip(),
+            ]
+    elif body.mode == "interact":
         lines += [
             "",
             "You may click, type and fill in forms on this site to do it. Fill all the fields "
@@ -133,11 +212,20 @@ async def web_task(
     body.url = url
 
     # The agent needs the browser for this. Give it, if this person may change the agent.
-    needed = INTERACT if body.mode == "interact" else READ
+    needed = TENDER if body.mode == "tender" else INTERACT if body.mode == "interact" else READ
     needed = needed + (("browser_login",) if body.login else ())
     modes = modes_for(agent)
-    missing = [t for t in needed if modes.get(t) == "deny"]
-    if missing:
+    if body.mode == "tender":
+        gated = ("browser_submit", "browser_upload")  # always a person's approval anyway
+        desired = {
+            **{t: "allow" for t in needed if t not in gated},
+            **{t: "ask" for t in gated},
+        }
+    else:
+        web = dict(BY_ID["web_operator"].tools)
+        desired = {t: web.get(t, "allow") for t in needed if modes.get(t) == "deny"}
+    changes = {t: mode for t, mode in desired.items() if modes.get(t) != mode}
+    if changes:
         if not can_manage(principal, agent):
             raise api_error(
                 status.HTTP_409_CONFLICT,
@@ -146,16 +234,16 @@ async def web_task(
                 "give it the browser tools (Permissions), or pick another agent.",
                 name=agent.name,
             )
-        web = dict(BY_ID["web_operator"].tools)
-        added = {t: web.get(t, "allow") for t in missing}
-        agent.tools = {**(agent.tools or {}), **added}
+        # Tender mode is an explicit request for public research and internal drafts.
+        # External transactions remain approval-gated by browser_submit.
+        agent.tools = {**(agent.tools or {}), **changes}
         await audit.record(
             db,
             principal.workspace_id,
             principal.actor,
             "agent.updated",
             target=agent.id,
-            after={"tools": added},
+            after={"tools": changes},
             note="browser tools given for a web task",
         )
     if body.login and body.login not in {c.name for c in await logins_for(db, agent)}:
@@ -185,7 +273,7 @@ async def web_task(
         created_by=principal.actor,
         status="ready",
         position=float(lowest) - 1,
-        labels=clean_labels(["web", *body.labels]),
+        labels=clean_labels(["web", *(["tender"] if body.mode == "tender" else []), *body.labels]),
     )
     db.add(t)
     await db.flush()

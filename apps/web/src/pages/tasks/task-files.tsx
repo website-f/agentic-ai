@@ -14,7 +14,7 @@ import { workKeys } from "@/lib/work";
 export function TaskFiles({ taskId, canWrite }: { taskId: string; canWrite: boolean }) {
   const t = useT();
   const qc = useQueryClient();
-  const { data: files = [] } = useQuery(filesQuery({ task_id: taskId, origin: "uploaded" }));
+  const { data: files = [] } = useQuery(filesQuery({ task_id: taskId, source: "upload" }));
   const attach = useMutation({
     mutationFn: (ids: string[]) => api<DocFile[]>(`/api/tasks/${taskId}/files`, "POST", { file_ids: ids }),
     onSuccess: (done) => {

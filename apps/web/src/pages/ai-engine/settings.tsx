@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Section } from "@/components/page";
@@ -15,17 +15,16 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
   const t = useT();
   const queryClient = useQueryClient();
   const settings = useQuery(aiSettingsQuery);
-  const [value, setValue] = useState("");
-
-  useEffect(() => {
-    if (settings.data) setValue(String(settings.data.max_task_model_calls));
-  }, [settings.data]);
+  // What the person typed; until they type, the saved value shows.
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? (settings.data ? String(settings.data.max_task_model_calls) : "");
 
   const save = useMutation({
     mutationFn: (maxTaskModelCalls: number) =>
       api("/api/ai/settings", "PATCH", { max_task_model_calls: maxTaskModelCalls }),
     onSuccess: (data) => {
       queryClient.setQueryData(aiKeys.settings, data);
+      setDraft(null);
       toast.success(t("AI Engine settings saved."));
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -54,7 +53,7 @@ export function SettingsTab({ canManage }: { canManage: boolean }) {
               step={1}
               value={value}
               disabled={!canManage}
-              onChange={(event) => setValue(event.target.value)}
+              onChange={(event) => setDraft(event.target.value)}
               hint={t("Default: 30. Allowed range: 1–{max}.", { max: hardMax })}
             />
             <div className="text-[13px] leading-relaxed text-muted">

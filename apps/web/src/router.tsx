@@ -10,6 +10,7 @@ import {
   useRouter,
   type ParsedLocation,
 } from "@tanstack/react-router";
+import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
 
 import { AppShell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -382,9 +383,14 @@ const filesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/files",
   // P25: page = open a PDF at that page (a search hit).
-  validateSearch: (s: Record<string, unknown>): { f?: string; folder?: string; origin?: "agent" | "uploaded" | "person"; page?: number } => ({
+  // The file store: view = which list (see STORE_VIEWS), task = one task's files.
+  validateSearch: (s: Record<string, unknown>): {
+    f?: string; folder?: string; origin?: "agent" | "uploaded" | "person"; page?: number; view?: StoreView; task?: string;
+  } => ({
     f: str(s.f), folder: str(s.folder), origin: s.origin === "agent" || s.origin === "uploaded" || s.origin === "person" ? s.origin : undefined,
     page: num(s.page),
+    view: (STORE_VIEWS as readonly unknown[]).includes(s.view) ? (s.view as StoreView) : undefined,
+    task: str(s.task),
   }),
   component: page.files,
 });

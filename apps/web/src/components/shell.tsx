@@ -461,6 +461,7 @@ function useWaiting(): Partial<Record<string, number>> {
     "/approvals": data?.counts.approvals_pending ?? 0,
     "/skills": data?.counts.skill_proposals_pending ?? 0,
     "/documents": data?.counts.documents_review ?? 0, // P25: what AI made, waiting for review
+    "/files": data?.counts.documents_review ?? 0, // the file store's "Needs review" view
   };
 }
 
