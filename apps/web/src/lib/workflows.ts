@@ -111,6 +111,8 @@ export interface RunStep {
   action: string;
   until: string | null;
   wait: string;
+  /** Files a person attached to their answer (an input step). */
+  files?: { id: string; name: string }[];
 }
 
 export interface RunSummary {

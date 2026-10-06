@@ -219,24 +219,30 @@ async def list_members(
     return [_out(m, names, agents) for m in rows if _member_in_scope(principal, m)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-async def add_member(
-    body: MemberCreateIn,
-    principal: Principal = Depends(people_manager()),
-    db: AsyncSession = Depends(get_db),
-) -> MemberCreateOut:
-    _check_can_touch(principal, body.role, body.role)
-    branch_id, department_id = await _placement(
-        db, principal, body.role, body.branch_id, body.department_id
-    )
-    email = body.email.lower()
+async def add_one(
+    db: AsyncSession,
+    principal: Principal,
+    *,
+    email: str,
+    name: str,
+    role: str,
+    branch_id: str | None,
+    department_id: str | None,
+    via: str | None = None,
+) -> tuple[Membership, str | None]:
+    """Add one person: the role and place rules, a new account with a one-time password
+    (None when they already have an account), and the audit row. One path for the form and
+    the Excel import (`via="import"`); the caller commits."""
+    _check_can_touch(principal, role, role)
+    branch_id, department_id = await _placement(db, principal, role, branch_id, department_id)
+    email = email.lower()
     user = await db.scalar(select(User).where(User.email == email))
     password: str | None = None
     if user is None:
         password = temp_password()
         user = User(
             email=email,
-            name=body.name.strip(),
+            name=name.strip(),
             password_hash=hash_password(password),
             must_change_password=True,
         )
@@ -250,23 +256,35 @@ async def add_member(
     m = Membership(
         workspace_id=principal.workspace_id,
         user_id=user.id,
-        role=body.role,
+        role=role,
         branch_id=branch_id,
         department_id=department_id,
     )
     db.add(m)
+    after = {"email": email, "role": role, "branch_id": branch_id, "department_id": department_id}
+    if via:
+        after["via"] = via
     await audit.record(
+        db, principal.workspace_id, principal.actor, "member.added", target=user.id, after=after
+    )
+    await db.flush()
+    return m, password
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def add_member(
+    body: MemberCreateIn,
+    principal: Principal = Depends(people_manager()),
+    db: AsyncSession = Depends(get_db),
+) -> MemberCreateOut:
+    m, password = await add_one(
         db,
-        principal.workspace_id,
-        principal.actor,
-        "member.added",
-        target=user.id,
-        after={
-            "email": email,
-            "role": body.role,
-            "branch_id": branch_id,
-            "department_id": department_id,
-        },
+        principal,
+        email=body.email,
+        name=body.name,
+        role=body.role,
+        branch_id=body.branch_id,
+        department_id=body.department_id,
     )
     await db.commit()
     await db.refresh(m)

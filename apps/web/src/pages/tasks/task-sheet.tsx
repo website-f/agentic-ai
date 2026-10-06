@@ -30,6 +30,7 @@ import {
   ShieldCheckIcon,
   FileTextIcon,
   EyeIcon,
+  PaperclipIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -55,6 +56,7 @@ import { keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
 
+import { TaskFiles } from "./task-files";
 import { BlockersPanel, canWait, QuietBadge, ReviewRoundPill, ReviewTrail, statusLabel, waitingPath, type AccountableDetail, type TaskX } from "./accountable";
 
 const EVENT_ICON: Record<string, typeof FlagIcon> = {
@@ -63,6 +65,7 @@ const EVENT_ICON: Record<string, typeof FlagIcon> = {
   delegated: TreeStructureIcon, delegation_done: TreeStructureIcon, meeting_called: UsersThreeIcon, decision: GavelIcon,
   correction: ArrowCounterClockwiseIcon, budget: CoinsIcon,
   review: ShieldCheckIcon, silent: MoonStarsIcon, reconcile: ArrowsClockwiseIcon, blockers: HourglassMediumIcon,
+  files: PaperclipIcon,
 };
 
 /** A titled block inside the sheet: small icon, heading, optional trailing note. */
@@ -363,6 +366,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           ) : null}
           <TaskDocuments taskId={task.id} icon={<FileTextIcon size={15} weight="duotone" className="text-muted" />}
             title={(n) => <>{t("Documents made in this task")} <span className="font-normal text-muted tabular">{n}</span></>} />
+          {data.read_only ? null : <TaskFiles taskId={task.id} canWrite={canWrite} />}
           {data.children.length ? (
             <SheetSection icon={TreeStructureIcon} title={t("Handed out")} note={t("{done} of {total} done", { done: childrenDone, total: data.children.length })}>
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label={t("Sub-tasks done")} aria-valuemin={0} aria-valuemax={data.children.length} aria-valuenow={childrenDone}>

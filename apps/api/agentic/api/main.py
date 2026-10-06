@@ -316,3 +316,14 @@ from .routers import desk as desk_router  # noqa: E402
 
 RAW_UPLOAD_PATHS.add("/api/desk/files")
 app.include_router(desk_router.router)
+
+# P27: company forms people fill in and hand back by a deadline.
+from .routers import forms as forms_router  # noqa: E402
+
+app.include_router(forms_router.router)
+
+# Members from an Excel or CSV sheet: the sheet arrives as raw bytes like /api/files.
+from .routers import member_import as member_import_router  # noqa: E402
+
+RAW_UPLOAD_PATHS.add(member_import_router.UPLOAD_PATH)
+app.include_router(member_import_router.router)

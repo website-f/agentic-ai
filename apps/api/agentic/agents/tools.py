@@ -1334,3 +1334,8 @@ TOOLS.update({t.name: t for t in COMPANY_TOOLS})
 from .search_tools import SEARCH_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in SEARCH_TOOLS})
+
+# P27: read and fill company forms (claims, monthly records, requests) for the person asking.
+from .form_tools import FORM_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in FORM_TOOLS})

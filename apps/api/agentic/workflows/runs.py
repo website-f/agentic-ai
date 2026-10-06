@@ -439,16 +439,34 @@ async def decide(
     await db.commit()
 
 
-async def answer(db: AsyncSession, run: WorkflowRun, node_id: str, text: str, by: str) -> None:
-    """A person gives the information an input step asks for; it becomes the step's output."""
-    await db.refresh(run, attribute_names=["state", "status"], with_for_update=True)
+async def answer(
+    db: AsyncSession,
+    run: WorkflowRun,
+    node_id: str,
+    text: str,
+    by: str,
+    files: list[DocFile] | None = None,
+) -> None:
+    """A person gives the information an input step asks for; it becomes the step's output.
+    Files they attach (the caller checked they may use them) join the run's files, so every
+    later step's brief lists them like the files the job started with, and the step keeps
+    their names to show under the answer."""
+    await db.refresh(run, attribute_names=["state", "status", "file_ids"], with_for_update=True)
     s = dict((run.state or {}).get(node_id) or {})
     node = next((n for n in run.graph["nodes"] if n["id"] == node_id), None)
     if node is None or node["type"] != "input" or s.get("status") != "waiting":
         raise RunError("That step is not waiting for an answer.")
-    if not text.strip():
+    files = files or []
+    if not text.strip() and not files:
         raise RunError("Write the answer first.")
-    s.update(status="done", output=text.strip()[:OUTPUT_CHARS], finished_at=_now(), by=by)
+    output = text.strip()
+    if files:
+        names = ", ".join(f.name for f in files)
+        output = f"{output}\n\nFiles: {names}".strip()
+        s["files"] = [{"id": f.id, "name": f.name} for f in files]
+        ids: list[str] = [*(run.file_ids or []), *(f.id for f in files)]
+        run.file_ids = list(dict.fromkeys(ids))
+    s.update(status="done", output=output[:OUTPUT_CHARS], finished_at=_now(), by=by)
     run.state = {**run.state, node_id: s}
     run.status = "running"
     await db.commit()

@@ -5,7 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApprovalCard } from "@/components/approval-card";
@@ -24,6 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, t, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { fileUrl, uploadFile } from "@/lib/documents";
 import { usePagedList } from "@/lib/paged";
 import { branchesQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
@@ -201,16 +202,47 @@ function Answer({ run, s }: { run: Run; s: RunStep }) {
   const t = useT();
   const qc = useQueryClient();
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
   const go = useMutation({
-    mutationFn: () => api<Run>(`/api/workflow-runs/${run.id}/answer`, "POST", { node_id: s.id, text }),
+    mutationFn: () => api<Run>(`/api/workflow-runs/${run.id}/answer`, "POST", { node_id: s.id, text, file_ids: files.map((f) => f.id) }),
     onSuccess: (r) => { qc.setQueryData(runKeys.one(run.id), r); qc.invalidateQueries({ queryKey: runKeys.all }); toast.success(t("Thanks. The run carries on.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // Files upload as they are picked; the answer then hands them on with the text.
+  const attach = async (list: FileList | null) => {
+    const picked = Array.from(list ?? []);
+    setUploading((n) => n + picked.length);
+    for (const f of picked) {
+      try {
+        const up = await uploadFile(f, { branch_id: run.branch_id });
+        setFiles((fs) => [...fs, { id: up.id, name: up.name }]);
+      } catch (e) {
+        toast.error(`${f.name}: ${errorMessage(e)}`);
+      }
+      setUploading((n) => n - 1);
+    }
+  };
+  const ready = (text.trim() || files.length) && !uploading;
   return (
-    <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim()) go.mutate(); }}>
+    <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (ready) go.mutate(); }}>
       {s.body ? <p className="text-[13px] text-muted">{s.body}</p> : null}
-      <TextareaField label={t("Your answer")} rows={2} value={text} onChange={(e) => setText(e.target.value)} hint={t("Every later step sees it.")} />
-      <Button size="sm" type="submit" className="w-fit max-sm:h-9" disabled={!text.trim()} loading={go.isPending}>{t("Send answer")}</Button>
+      <TextareaField label={t("Your answer")} rows={2} value={text} onChange={(e) => setText(e.target.value)} hint={t("Every later step sees it, and any files you attach.")} />
+      <div className="flex flex-wrap items-center gap-2">
+        {files.map((f) => (
+          <span key={f.id} className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border py-0.5 pr-1 pl-2.5 text-[12.5px]">
+            <span className="min-w-0 truncate">{f.name}</span>
+            <button type="button" aria-label={t("Remove {name}", { name: f.name })} className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
+              onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}><XIcon size={12} /></button>
+          </span>
+        ))}
+        <input ref={input} type="file" multiple hidden onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
+        <Button size="sm" variant="ghost" type="button" loading={uploading > 0} onClick={() => input.current?.click()}>
+          <PaperclipIcon size={14} /> {uploading ? t("Uploading…") : t("Attach files")}
+        </Button>
+      </div>
+      <Button size="sm" type="submit" className="w-fit max-sm:h-9" disabled={!ready} loading={go.isPending}>{t("Send answer")}</Button>
     </form>
   );
 }
@@ -307,6 +339,9 @@ export function RunView({ id }: { id: string }) {
   const status = RUN_STATUS[run.status];
   const needs = steps.filter((s) => s.status === "waiting" || s.status === "review");
   const live = run.status === "running" || run.status === "waiting";
+  // The run's files include those attached to answers; "the job as given" lists the rest.
+  const answered = new Set(run.steps.flatMap((s) => (s.files ?? []).map((f) => f.id)));
+  const jobFiles = run.files.filter((f) => !answered.has(f.id));
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
@@ -392,6 +427,16 @@ export function RunView({ id }: { id: string }) {
                     <div className="mt-1.5 max-h-72 overflow-x-hidden overflow-y-auto"><Markdown className="text-[13px] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]">{linkDocs(s.output)}</Markdown></div>
                   </details>
                 ) : null}
+                {s.files?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.files.map((f) => (
+                      <a key={f.id} href={fileUrl(f.id)} download onClick={(e) => e.stopPropagation()}
+                        className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[12.5px] hover:bg-surface-2">
+                        <PaperclipIcon size={12} className="shrink-0 text-muted" /><span className="min-w-0 truncate">{f.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
                 {s.error ? <p className="text-[12.5px] text-danger">{s.error}</p> : null}
                 {s.status === "scheduled" ? <Pause run={run} s={s} /> : null}
                 <div className="flex flex-wrap items-center gap-2">
@@ -411,7 +456,7 @@ export function RunView({ id }: { id: string }) {
         <details className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3 text-[13px]">
           <summary className="min-h-7 cursor-pointer font-medium">{t("The job as given")}</summary>
           <p className="mt-2 break-words whitespace-pre-wrap">{run.input}</p>
-          {run.files.length ? <p className="mt-2 text-muted">{t("Files: {names}", { names: run.files.map((f) => f.name).join(", ") })}</p> : null}
+          {jobFiles.length ? <p className="mt-2 text-muted">{t("Files: {names}", { names: jobFiles.map((f) => f.name).join(", ") })}</p> : null}
         </details>
       ) : null}
       <ConfirmDialog open={stopping} onOpenChange={setStopping} title={t("Stop this run?")} danger confirmLabel={t("Stop it")}

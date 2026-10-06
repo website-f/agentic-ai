@@ -28,13 +28,21 @@ def _branch_ok(ctx: ToolContext, branch_id: str | None, task_id: str | None = No
 
 async def _file(ctx: ToolContext, file_id: str) -> DocFile | None:
     f = await ctx.db.get(DocFile, (file_id or "").strip())
-    if (
-        f is None
-        or f.workspace_id != ctx.workspace.id
-        or not _branch_ok(ctx, f.branch_id, f.task_id)
-    ):
+    if f is None or f.workspace_id != ctx.workspace.id:
+        return None
+    if not _branch_ok(ctx, f.branch_id, f.task_id) and not await _run_file(ctx, f.id):
         return None
     return f
+
+
+async def _run_file(ctx: ToolContext, file_id: str) -> bool:
+    """A file people gave the workflow run this task is a step of (P11): the job's files and
+    those attached to an answer. Like a task's own files, any step of the run may read it."""
+    from ..models import WorkflowRun
+
+    run_id = ctx.task.workflow_run_id if ctx.task is not None else None
+    run = await ctx.db.get(WorkflowRun, run_id) if run_id else None
+    return run is not None and file_id in (run.file_ids or [])
 
 
 async def _doc(ctx: ToolContext, doc_id: str) -> Document | None:

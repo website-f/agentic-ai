@@ -579,6 +579,59 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     related: ["tasks", "channels", "activity"],
   },
 
+  forms: {
+    purpose: "The company's own forms in one place: claims, advances, monthly records, requests and yearly counts. Each has its blank to download and a window to hand it in. Fill it yourself, or let your AI worker fill it from what you tell it and the receipts you attach.",
+    can: [
+      "See what you still have to hand in under **To hand in**, most urgent first: late, due soon, returned to fix, then open.",
+      "Click **Download blank** for the company's own form, fill it in and hand it back with **Hand in**, with receipts, photos or any other files.",
+      "Click **Ask AI to fill it**: say what goes in and attach receipts. Your AI worker fills the company's form, keeping its layout and formulas, and leaves it as your draft.",
+      "Managers: **Add a form** from the ready-made ones (expense claim, travel claim, petty cash, leave, item request, attendance, stock count) or upload your own Excel, Word or PDF form, and set when it opens and is due.",
+      "Managers: see **Who handed in** each round, open their files, **Accept** them or **Return** them with what to fix.",
+    ],
+    spots: {
+      "forms.tabs": "**To hand in** lists what still needs you; **All forms** lists every form for you; managers also see **Archived**.",
+      "forms.list": "Each form shows when it is due, where you stand, and buttons to download, hand in or ask your AI.",
+    },
+    howto: [
+      {
+        title: "Hand in a claim before the deadline",
+        state: "handin",
+        steps: [
+          s("Open **To hand in** and find the form. Its pill says **Open**, **Due soon** or **Late**.", "forms.list"),
+          s("Click **Download blank** and fill it in on your computer or phone."),
+          s("Click **Hand in**, choose the filled form and your receipts or photos, and add a note if you like."),
+          s("Click **Hand in** again. Your manager sees it straight away, and it shows **Handed in**."),
+        ],
+      },
+      {
+        title: "Let your AI worker fill it in",
+        state: "ask",
+        steps: [
+          s("Click **Ask AI to fill it** on the form.", "forms.list"),
+          s("Write what goes in, for example each trip with its date and amount, and attach the receipts."),
+          s("Your AI worker reads the company's form and fills it in. It comes back as **AI draft to check**."),
+          s("Open the draft, check every line, then click **Check and hand in**. Nothing is handed in until you do."),
+        ],
+      },
+      {
+        title: "Add a form and see who handed in",
+        steps: [
+          s("Click **Add a form**. Pick a ready-made one and click **Add**, or switch to **Our own form** and upload yours."),
+          s("Set **When it is handed in**: every month between two days, every year in a month, once by a date, or whenever needed."),
+          s("Pick the company and who fills it in: everyone, or one department. They see it under Forms and on their workspace.", "forms.tabs"),
+          s("Click **Who handed in** on the form. **Accept** each one, or **Return** it with what to fix."),
+        ],
+      },
+    ],
+    tips: [
+      "A form that runs into the next month, for example from the 30th to the 3rd, counts for the month it opened in.",
+      "A missed round stays on the list as **Late** for a few days, so it is not forgotten.",
+      "Everything handed in is also kept in the person's workspace files, so the AI and managers can search inside it.",
+    ],
+    who: "Everyone sees the forms for their company and department. Owners, admins and managers add forms and review them.",
+    related: ["workspace", "files", "my-worker", "tasks"],
+  },
+
   reports: {
     purpose: "What agents wrote up for you: a summary first, then tables you can sort, filter and download.",
     can: [

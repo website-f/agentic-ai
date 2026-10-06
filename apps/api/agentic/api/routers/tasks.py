@@ -40,6 +40,7 @@ from ..agent_schemas import (
     TaskUpdateIn,
 )
 from ..deps import Principal, api_error, require
+from .files import FileOut, file_out
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -713,6 +714,73 @@ async def start_task(
     await start(db, t, principal.actor)
     await db.refresh(t)
     return await task_out(db, t)
+
+
+class AttachIn(BaseModel):
+    file_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+async def _files_note(db: AsyncSession, t: Task, ids: list[str]) -> None:
+    """Files given to a task whose agent already started: a note at the end of its
+    conversation, so its next run (send back, retry) knows them. Never in the middle of a
+    run, nor after a tool call still waiting for its answer (it would break the turn)."""
+    from ...documents import service as doc_service
+    from ...models import DocFile, Workspace
+
+    last = await db.scalar(
+        select(AgentMessage)
+        .where(AgentMessage.task_id == t.id)
+        .order_by(AgentMessage.id.desc())
+        .limit(1)
+    )
+    if last is None or t.status in RUNNING or (last.role == "assistant" and last.tool_calls):
+        return  # not started: the first message lists every file (runtime)
+    ws = await db.get(Workspace, t.workspace_id)
+    today = doc_service.today_in(ws.timezone if ws else None)
+    files = (await db.scalars(select(DocFile).where(DocFile.id.in_(ids)))).all()
+    lines = "\n".join(doc_service.file_line(f, today) for f in files)
+    db.add(
+        AgentMessage(
+            workspace_id=t.workspace_id,
+            agent_id=last.agent_id,
+            task_id=t.id,
+            role="user",
+            content=f"Files added to this task (read them with read_file):\n{lines}",
+            created_at=datetime.now(UTC),
+        )
+    )
+
+
+@router.post("/tasks/{task_id}/files")
+async def attach_files(
+    task_id: str,
+    body: AttachIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> list[FileOut]:
+    """Give files to a task after it was made (P10 file_ids on create, later). The agent
+    reads them with read_file; see _files_note for how a started agent hears of them."""
+    from ...models import DocFile
+
+    t = await _task(db, principal, task_id)
+    ids = list(dict.fromkeys(body.file_ids))
+    await _attach_files(db, principal, t, ids)
+    await _files_note(db, t, ids)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "task.files_attached",
+        target=t.id,
+        after={"file_ids": ids},
+    )
+    await db.commit()
+    files = (await db.scalars(select(DocFile).where(DocFile.id.in_(ids)))).all()
+    names = ", ".join(f.name for f in files)
+    await runtime.task_event(
+        db, t, "files", principal.actor, f"attached {names}"[:500], {"file_ids": ids}
+    )
+    return [await file_out(db, f) for f in files]
 
 
 class RetryFailedIn(BaseModel):

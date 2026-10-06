@@ -27,6 +27,7 @@ import {
   ChartLineUpIcon,
   ClipboardTextIcon,
   LockKeyIcon,
+  NotepadIcon,
   GaugeIcon,
   GearSixIcon,
   GraduationCapIcon,
@@ -51,6 +52,7 @@ export type AppPath =
   | "/twin"
   | "/my-worker"
   | "/workspace"
+  | "/forms"
   | "/overview"
   | "/impact"
   | "/reports"
@@ -139,6 +141,7 @@ export const NAV: NavSection[] = [
     open: "all",
     items: [
       { to: "/tasks", label: msg("Tasks"), icon: KanbanIcon, blurb: msg("A board of everything your agents are working on, from triage to done. Drag a card between columns to move it along.") },
+      { to: "/forms", label: msg("Forms"), icon: NotepadIcon, blurb: msg("Claims, advances, monthly records and requests: download the blank, hand it in before the deadline, or let your AI worker fill it in. Managers see who handed in.") },
       { to: "/approvals", label: msg("Approvals"), icon: SealCheckIcon, blurb: msg("Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification.") },
       { to: "/chat", label: msg("Chat"), icon: ChatsCircleIcon, blurb: msg("Talk to any agent directly, by typing or with your voice, and pick up past conversations.") },
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },

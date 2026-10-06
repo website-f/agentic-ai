@@ -85,6 +85,14 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("approvals.card", "Keputusan yang menunggu"), t("approvals.actions", "Lulus, sentiasa benarkan atau tolak"), t("approvals.history", "Sejarah")],
   },
   {
+    id: "forms", route: "/forms", title: "Borang", group: "Work",
+    states: [
+      { key: "handin", how: "Klik Hantar pada borang: muat naik borang yang diisi dan resit" },
+      { key: "ask", how: "Klik Minta AI isikan pada borang" },
+    ],
+    targets: [t("forms.tabs", "Perlu dihantar dan semua borang"), t("forms.list", "Borang syarikat")],
+  },
+  {
     id: "reports", route: "/reports", title: "Laporan", group: "Work", states: [],
     targets: [t("reports.list", "Laporan yang ditulis ejen"), t("reports.search", "Cari")],
   },

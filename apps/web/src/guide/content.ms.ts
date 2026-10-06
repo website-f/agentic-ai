@@ -540,6 +540,59 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     related: ["tasks", "channels", "activity"],
   },
 
+  forms: {
+    purpose: "Borang syarikat sendiri di satu tempat: tuntutan, pendahuluan, rekod bulanan, permohonan dan kiraan tahunan. Setiap satu ada borang kosong untuk dimuat turun dan tempoh untuk dihantar. Isi sendiri, atau biar pekerja AI anda mengisinya daripada apa yang anda beritahu dan resit yang anda lampirkan.",
+    can: [
+      "Lihat apa yang masih perlu dihantar di **Perlu dihantar**, yang paling mendesak dahulu: lewat, hampir tarikh akhir, dipulangkan untuk dibetulkan, kemudian dibuka.",
+      "Klik **Muat turun borang kosong** untuk borang syarikat, isi dan hantar semula dengan **Hantar**, bersama resit, gambar atau apa-apa fail lain.",
+      "Klik **Minta AI isikan**: beritahu apa yang perlu diisi dan lampirkan resit. Pekerja AI anda mengisi borang syarikat, dengan susun atur dan formula dikekalkan, dan menyimpannya sebagai draf anda.",
+      "Pengurus: **Tambah borang** daripada borang siap sedia (tuntutan perbelanjaan, tuntutan perjalanan, wang runcit, cuti, permohonan barang, kehadiran, kiraan stok) atau muat naik borang Excel, Word atau PDF anda sendiri, dan tetapkan bila ia dibuka dan tarikh akhirnya.",
+      "Pengurus: lihat **Siapa sudah hantar** setiap pusingan, buka fail mereka, **Terima** atau **Pulangkan** dengan apa yang perlu dibetulkan.",
+    ],
+    spots: {
+      "forms.tabs": "**Perlu dihantar** menyenaraikan apa yang masih memerlukan anda; **Semua borang** menyenaraikan setiap borang untuk anda; pengurus juga nampak **Diarkibkan**.",
+      "forms.list": "Setiap borang menunjukkan tarikh akhirnya, status anda, dan butang untuk muat turun, hantar atau minta AI.",
+    },
+    howto: [
+      {
+        title: "Hantar tuntutan sebelum tarikh akhir",
+        state: "handin",
+        steps: [
+          s("Buka **Perlu dihantar** dan cari borang itu. Labelnya menunjukkan **Dibuka**, **Hampir tarikh akhir** atau **Lewat**.", "forms.list"),
+          s("Klik **Muat turun borang kosong** dan isi di komputer atau telefon anda."),
+          s("Klik **Hantar**, pilih borang yang sudah diisi serta resit atau gambar, dan tambah nota jika perlu."),
+          s("Klik **Hantar** sekali lagi. Pengurus anda terus nampak, dan statusnya menjadi **Sudah dihantar**."),
+        ],
+      },
+      {
+        title: "Biar pekerja AI anda mengisinya",
+        state: "ask",
+        steps: [
+          s("Klik **Minta AI isikan** pada borang itu.", "forms.list"),
+          s("Tulis apa yang perlu diisi, contohnya setiap perjalanan dengan tarikh dan jumlahnya, dan lampirkan resit."),
+          s("Pekerja AI anda membaca borang syarikat dan mengisinya. Ia kembali sebagai **Draf AI untuk disemak**."),
+          s("Buka draf itu, semak setiap baris, kemudian klik **Semak dan hantar**. Tiada apa dihantar sehingga anda berbuat demikian."),
+        ],
+      },
+      {
+        title: "Tambah borang dan lihat siapa sudah hantar",
+        steps: [
+          s("Klik **Tambah borang**. Pilih borang siap sedia dan klik **Tambah**, atau tukar ke **Borang kami sendiri** dan muat naik borang anda."),
+          s("Tetapkan **Bila perlu dihantar**: setiap bulan antara dua hari, setiap tahun pada satu bulan, sekali sebelum satu tarikh, atau bila-bila perlu."),
+          s("Pilih syarikat dan siapa yang mengisi: semua orang, atau satu jabatan. Mereka nampak di bawah Borang dan di meja kerja mereka.", "forms.tabs"),
+          s("Klik **Siapa sudah hantar** pada borang itu. **Terima** setiap satu, atau **Pulangkan** dengan apa yang perlu dibetulkan."),
+        ],
+      },
+    ],
+    tips: [
+      "Borang yang berlanjutan ke bulan berikutnya, contohnya dari 30 hb hingga 3 hb, dikira untuk bulan ia dibuka.",
+      "Pusingan yang terlepas kekal dalam senarai sebagai **Lewat** selama beberapa hari, supaya tidak dilupakan.",
+      "Semua yang dihantar juga disimpan dalam fail meja kerja orang itu, supaya AI dan pengurus boleh mencari di dalamnya.",
+    ],
+    who: "Semua orang nampak borang untuk syarikat dan jabatan mereka. Pemilik, pentadbir dan pengurus menambah dan menyemak borang.",
+    related: ["workspace", "files", "my-worker", "tasks"],
+  },
+
   reports: {
     purpose: "Apa yang ditulis oleh ejen untuk anda: ringkasan dahulu, kemudian jadual yang boleh disusun, ditapis dan dimuat turun.",
     can: [

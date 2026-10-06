@@ -12,7 +12,9 @@ from pathlib import Path
 
 # Point the app at test resources before anything imports agentic.core.config.
 PG = os.environ.get("TEST_PG", "agentic:agentic_dev@localhost:8506")
-os.environ["AGENTIC_DATABASE_URL"] = f"postgresql+asyncpg://{PG}/agentic_test"
+# TEST_DB lets two test runs work side by side (each with its own TEST_VALKEY db too).
+TEST_DB = os.environ.get("TEST_DB", "agentic_test")
+os.environ["AGENTIC_DATABASE_URL"] = f"postgresql+asyncpg://{PG}/{TEST_DB}"
 os.environ["AGENTIC_VALKEY_URL"] = os.environ.get("TEST_VALKEY", "redis://localhost:8507/15")
 os.environ["AGENTIC_ENV"] = "dev"
 # Fake provider hosts used by test_ai_engine.py skip DNS in the SSRF guard.
@@ -37,8 +39,8 @@ from sqlalchemy import text  # noqa: E402
 async def _recreate_test_db() -> None:
     conn = await asyncpg.connect(f"postgresql://{PG}/postgres")
     try:
-        await conn.execute("DROP DATABASE IF EXISTS agentic_test WITH (FORCE)")
-        await conn.execute("CREATE DATABASE agentic_test")
+        await conn.execute(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)")
+        await conn.execute(f"CREATE DATABASE {TEST_DB}")
     finally:
         await conn.close()
 

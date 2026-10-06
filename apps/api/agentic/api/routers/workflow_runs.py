@@ -48,6 +48,8 @@ class StepOut(BaseModel):
     action: str = ""
     until: str | None = None
     wait: str = ""
+    # Files a person attached to their answer (an input step): [{id, name}].
+    files: list[dict[str, str]] = []
 
 
 class RunSummary(BaseModel):
@@ -143,6 +145,7 @@ async def run_out(db: AsyncSession, run: WorkflowRun) -> RunOut:
                 action=n.get("action", ""),
                 until=s.get("until"),
                 wait=wait_text(n) if n["type"] == "wait" else "",
+                files=s.get("files") or [],
             )
         )
     files = []
@@ -472,7 +475,30 @@ class NodeIn(BaseModel):
 
 class AnswerIn(BaseModel):
     node_id: str
-    text: str = Field(min_length=1, max_length=6000)
+    # The text, the files, or both (a scan of the signed PO says it all).
+    text: str = Field(default="", max_length=6000)
+    file_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+async def _answer_files(db: AsyncSession, principal: Principal, ids: list[str]) -> list[DocFile]:
+    """Files this person may hand on (the same rule as giving files to a task)."""
+    from ...documents import service as doc_service
+
+    out = []
+    for fid in dict.fromkeys(ids):
+        f = await db.scalar(
+            doc_service.scoped(
+                select(DocFile).where(
+                    DocFile.id == fid, DocFile.workspace_id == principal.workspace_id
+                ),
+                DocFile,
+                principal,
+            )
+        )
+        if f is None:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_file", "Pick files you can see.")
+        out.append(f)
+    return out
 
 
 @router.post("/workflow-runs/{run_id}/answer")
@@ -482,10 +508,12 @@ async def answer(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> RunOut:
-    """A person supplies what an "ask a person" step needs; the run carries on."""
+    """A person supplies what an "ask a person" step needs (text, files or both); the run
+    carries on and every later step sees it."""
     run = await _get(db, principal, run_id)
+    files = await _answer_files(db, principal, body.file_ids)
     try:
-        await runs.answer(db, run, body.node_id, body.text, principal.user.name)
+        await runs.answer(db, run, body.node_id, body.text, principal.user.name, files)
     except runs.RunError as e:
         raise api_error(status.HTTP_409_CONFLICT, "cannot_answer", str(e)) from e
     await audit.record(
@@ -494,7 +522,7 @@ async def answer(
         principal.actor,
         "workflow.run_answered",
         target=run.id,
-        after={"node": body.node_id},
+        after={"node": body.node_id, "file_ids": [f.id for f in files]},
     )
     await db.commit()
     await _poke(run.id)

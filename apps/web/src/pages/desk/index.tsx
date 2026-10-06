@@ -70,6 +70,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import type { Workflow } from "@/lib/workflows";
 import { StartRunDialog } from "@/pages/workflows/run";
 
+import { FormsDue } from "./forms";
 import { AgentsTab } from "./agents";
 import { WorkflowsTab } from "./workflows";
 
@@ -169,6 +170,7 @@ function DeskView({ desk }: { desk: Desk }) {
               <Pinned pins={desk.pins} />
             </div>
             <div className="grid min-w-0 content-start gap-5">
+              <FormsDue />
               <Waiting desk={desk} />
               {desk.recent_searches.length ? <Recent items={desk.recent_searches} /> : null}
             </div>

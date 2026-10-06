@@ -97,6 +97,14 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("approvals.card", "A decision waiting"), t("approvals.actions", "Approve, always or deny"), t("approvals.history", "History")],
   },
   {
+    id: "forms", route: "/forms", title: "Forms", group: "Work",
+    states: [
+      { key: "handin", how: "Click Hand in on a form: upload the filled form and receipts" },
+      { key: "ask", how: "Click Ask AI to fill it on a form" },
+    ],
+    targets: [t("forms.tabs", "To hand in and all forms"), t("forms.list", "The company's forms")],
+  },
+  {
     id: "reports", route: "/reports", title: "Reports", group: "Work", states: [],
     targets: [t("reports.list", "Reports agents wrote"), t("reports.search", "Search")],
   },

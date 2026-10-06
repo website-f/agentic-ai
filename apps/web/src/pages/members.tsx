@@ -1,4 +1,4 @@
-import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, KeyIcon, PencilSimpleIcon, RobotIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
+import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, PencilSimpleIcon, RobotIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
@@ -20,6 +20,8 @@ import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
+
+import { ImportMembersDialog } from "./members-import";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -325,6 +327,7 @@ export function MembersPage() {
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const [addKey, setAddKey] = useState(0);
+  const [importing, setImporting] = useState(false);
   // "Add member" from the palette arrives as ?add=1.
   const addOpen = adding || (!!search.add && canAdd);
   const openAdd = () => { setAddKey((k) => k + 1); setAdding(true); };
@@ -341,9 +344,14 @@ export function MembersPage() {
         title={t("Members")}
         description={scoped ? t("People in {place}, and what their role lets them do.", { place: me.scope?.label ?? "" }) : t("People who can sign in to this workspace, where they sit, and what their role lets them do.")}
         actions={canAdd ? (
-          <Button data-guide="settings.add" onClick={openAdd}>
-            <UserPlusIcon size={16} weight="bold" /> {t("Add member")}
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setImporting(true)}>
+              <FileXlsIcon size={16} /> {t("Import from Excel")}
+            </Button>
+            <Button data-guide="settings.add" onClick={openAdd}>
+              <UserPlusIcon size={16} weight="bold" /> {t("Add member")}
+            </Button>
+          </>
         ) : null}
       />
       {isLoading ? (
@@ -387,6 +395,9 @@ export function MembersPage() {
         </div>
       </Section>
       <AddMemberDialog key={addKey} open={addOpen} onOpenChange={setAddOpen} me={me} />
+      {importing ? (
+        <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={scoped ? me.scope?.branch_id ?? null : null} />
+      ) : null}
     </Page>
   );
 }

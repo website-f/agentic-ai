@@ -831,6 +831,18 @@ MS: dict[str, str] = {
         "Anda belum ada pekerja AI. Ambil satu di Pekerja AI saya, atau pilih ejen."
     ),
     "Find: {what}": "Cari: {what}",
+    # api/routers/forms.py (Forms)
+    "That form is not here.": "Borang itu tiada di sini.",
+    "Only managers add and change their company's forms.": (
+        "Hanya pengurus boleh menambah dan menukar borang syarikat mereka."
+    ),
+    "There is no such ready-made form.": "Tiada borang siap sedia seperti itu.",
+    "This form has no file to download.": "Borang ini tiada fail untuk dimuat turun.",
+    "This round was already accepted.": "Pusingan ini sudah diterima.",
+    "Say what to fix when you return it.": "Nyatakan apa yang perlu dibetulkan apabila memulangkannya.",
+    "Fill in: {form}": "Isi: {form}",
+    "Read a company form": "Baca borang syarikat",
+    "Fill in a company form": "Isi borang syarikat",
     "Only managers and owners choose who else may see a task.": (
         "Hanya pengurus dan pemilik boleh memilih siapa lagi yang boleh melihat tugasan."
     ),
@@ -860,6 +872,56 @@ MS: dict[str, str] = {
     "Document language": "Bahasa dokumen",
     "Brand colour": "Warna jenama",
     "Footer note": "Nota kaki",
+    # member import (members_import)
+    "That file could not be read as Excel. Save it as .xlsx or CSV and try again.": (
+        "Fail itu tidak dapat dibaca sebagai Excel. Simpan sebagai .xlsx atau CSV dan cuba lagi."
+    ),
+    "This is an old Excel file (.xls). Save it as .xlsx or CSV and upload it again.": (
+        "Ini fail Excel lama (.xls). Simpan sebagai .xlsx atau CSV dan muat naik semula."
+    ),
+    "Could not find the Name and Email columns. Use the template, or name the columns Name and Email.": (
+        "Lajur Nama dan E-mel tidak dijumpai. Guna templat, atau namakan lajur itu Nama dan E-mel."
+    ),
+    "The sheet has no people under its header row.": (
+        "Tiada sesiapa di bawah baris tajuk dalam helaian ini."
+    ),
+    'Role "{text}" is not one the app knows. Set to {role}.': (
+        'Peranan "{text}" tidak dikenali. Ditetapkan sebagai {role}.'
+    ),
+    'Read "{text}" as {role}.': '"{text}" dibaca sebagai {role}.',
+    'No company called "{text}". Pick one.': 'Tiada syarikat bernama "{text}". Pilih satu.',
+    'Matched "{text}" to {name}.': '"{text}" dipadankan dengan {name}.',
+    'No department called "{text}" in {company}.': 'Tiada jabatan bernama "{text}" di {company}.',
+    'No department called "{text}". Pick one.': 'Tiada jabatan bernama "{text}". Pilih satu.',
+    'Several companies have a "{text}" department. Pick the company.': (
+        'Beberapa syarikat ada jabatan "{text}". Pilih syarikatnya.'
+    ),
+    "Name is missing.": "Nama tidak diisi.",
+    "Email is missing.": "E-mel tidak diisi.",
+    "{email} is not a valid email address.": "{email} bukan alamat e-mel yang sah.",
+    "{email} is in the sheet twice (row {row}).": "{email} ada dua kali dalam helaian (baris {row}).",
+    "Pick a role.": "Pilih peranan.",
+    "Already has an account. They sign in with their own password.": (
+        "Sudah ada akaun. Mereka log masuk dengan kata laluan sendiri."
+    ),
+    "Members": "Ahli",
+    "Name": "Nama",
+    "Role": "Peranan",
+    "Company": "Syarikat",
+    "Department": "Jabatan",
+    "Notes": "Nota",
+    "Lists": "Senarai",
+    "Companies": "Senarai syarikat",
+    "What they can do": "Apa yang mereka boleh buat",
+    "Example row: replace it with your people.": "Baris contoh: gantikan dengan orang anda.",
+    "Runs one company: its agents, work and people.": (
+        "Mengurus satu syarikat: ejen, kerja dan orangnya."
+    ),
+    "Runs one department.": "Mengurus satu jabatan.",
+    "Follows one department's work.": "Memantau kerja satu jabatan.",
+    "Works with their own agents.": "Bekerja dengan ejen sendiri.",
+    "Sees the whole workspace.": "Nampak seluruh ruang kerja.",
+    "members-template": "templat-ahli",
     # org/starter.py
     "Unknown industry. Pick one of: {names}.": "Industri tidak dikenali. Pilih salah satu: {names}.",
     # engine/gateway.py (what a person sees when no model can answer)

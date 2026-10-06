@@ -8,9 +8,11 @@ import { BUILDERS } from "./builders";
 import { COMMON } from "./common";
 import { DESK } from "./desk";
 import { FILES } from "./files";
+import { FORMS } from "./forms";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
 import { MINUTES } from "./minutes";
+import { PEOPLE } from "./people";
 import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
 import { SEARCH } from "./search";
@@ -30,5 +32,7 @@ export const MS: Record<string, string> = {
   ...FILES,
   ...PROVENANCE,
   ...DESK,
+  ...FORMS,
   ...SEARCH,
+  ...PEOPLE,
 };

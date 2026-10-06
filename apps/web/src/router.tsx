@@ -66,6 +66,7 @@ const page = {
   welcome: lazyRouteComponent(() => import("@/pages/welcome"), "WelcomePage"),
   myWorker: lazyRouteComponent(() => import("@/pages/my-worker"), "MyWorkerPage"),
   desk: lazyRouteComponent(() => import("@/pages/desk"), "DeskPage"),
+  forms: lazyRouteComponent(() => import("@/pages/forms"), "FormsPage"),
   tutorial: lazyRouteComponent(() => import("@/pages/tutorial"), "TutorialPage"),
   impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
   guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
@@ -451,6 +452,18 @@ const deskRoute = createRoute({
   component: page.desk,
 });
 
+// P27: company forms to hand in by a deadline.
+const FORM_TABS = ["todo", "all", "archived"] as const;
+const formsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/forms",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof FORM_TABS)[number]; form?: string } => ({
+    tab: FORM_TABS.find((t) => t === s.tab),
+    form: typeof s.form === "string" ? s.form : undefined,
+  }),
+  component: page.forms,
+});
+
 const TUTORIAL_TRACKS = ["owner", "management", "staff", "approver"] as const;
 const tutorialRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -584,6 +597,7 @@ const routeTree = rootRoute.addChildren([
     twinRoute,
     myWorkerRoute,
     deskRoute,
+    formsRoute,
     tutorialRoute,
     impactRoute,
     guideRoute,

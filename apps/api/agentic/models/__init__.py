@@ -1704,3 +1704,65 @@ class DeskItem(Base):
     title: Mapped[str] = mapped_column(String(200), default="")
     position: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Form(Timestamps, Base):
+    """P27: a company form people fill in and hand back: a claim, the monthly advance record,
+    an item request, a yearly stock count. The blank file (usually Excel, in the company's
+    own layout) is downloadable; `schedule` says when it is due: every month between two days
+    ({"every": "month", "from_day": 1, "to_day": 15}), every year in one month
+    ({"every": "year", "month": 12, "from_day": 1, "to_day": 31}), once ({"every": "once",
+    "due_on": "2026-12-31"}) or whenever needed ({"every": "none"})."""
+
+    __tablename__ = "forms"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'archived')", name="ck_forms_status"),
+        Index("ix_forms_ws_branch", "workspace_id", "branch_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fm"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    department_id: Mapped[str | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str] = mapped_column(Text, default="")
+    kind: Mapped[str] = mapped_column(String(16), default="other")
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id", ondelete="SET NULL"))
+    schedule: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # How to fill it, for people and for the AI (which cells, what goes where).
+    guide: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class FormSubmission(Timestamps, Base):
+    """P27: one person's copy of a form for one period: drafted by them or their AI, handed
+    in, then accepted or returned with a note by a manager."""
+
+    __tablename__ = "form_submissions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'submitted', 'returned', 'accepted')",
+            name="ck_form_submissions_status",
+        ),
+        UniqueConstraint("form_id", "user_id", "period", name="uq_form_submissions_period"),
+        Index("ix_form_submissions_form_period", "form_id", "period"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fs"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    form_id: Mapped[str] = mapped_column(ForeignKey("forms.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
+    period: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    file_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    note: Mapped[str] = mapped_column(Text, default="")
+    made_by: Mapped[str] = mapped_column(String(10), default="person")  # person | agent
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    reviewed_by: Mapped[str | None] = mapped_column(String(80))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
