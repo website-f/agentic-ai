@@ -137,8 +137,22 @@ export function plainText(html: string): string {
 
 /** Where a hit or suggestion opens inside the app (the server's url, kept same-origin). */
 export function safeHref(url: string | null | undefined): string | null {
-  if (!url || !url.startsWith("/") || url.startsWith("//")) return null;
+  // "/\host" and "/<tab>/host" are read by browsers as "//host" (another site): no backslashes
+  // or control characters at all, and the result must still resolve to this origin.
+  // eslint-disable-next-line no-control-regex
+  if (!url || !url.startsWith("/") || url.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(url)) return null;
+  try {
+    const base = "https://same-origin.invalid";
+    if (new URL(url, base).origin !== base) return null;
+  } catch {
+    return null;
+  }
   return url;
+}
+
+/** Where to go after signing in: an in-app path only (never another site), else `fallback`. */
+export function safeNext(next: unknown, fallback = "/"): string {
+  return (typeof next === "string" && safeHref(next)) || fallback;
 }
 
 // ---------------------------------------------------------------- the debounced query

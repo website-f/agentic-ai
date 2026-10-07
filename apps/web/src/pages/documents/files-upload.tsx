@@ -52,7 +52,12 @@ function Bar({ value, tone = "accent", className, label }: { value: number; tone
 }
 
 /** Drop or choose files, folders or a zip; they go to the company's documents as one upload. */
-export function IntakeDrop({ branch, onBatch }: { branch: Branch; onBatch: (batchId: string) => void }) {
+export function IntakeDrop({ branch, folder, onBatch }: {
+  branch: Branch;
+  /** The folder being browsed: uploads go into it ("" or absent: the top). */
+  folder?: string;
+  onBatch: (batchId: string) => void;
+}) {
   const t = useT();
   const qc = useQueryClient();
   const pickFiles = useRef<HTMLInputElement>(null);
@@ -82,7 +87,7 @@ export function IntakeDrop({ branch, onBatch }: { branch: Branch; onBatch: (batc
     const one = async (i: number) => {
       const p = files[i]!;
       update(i, { state: "sending" });
-      const params = { branch_id: branch.id, name: p.path, department_id: dept === AUTO ? null : dept, batch };
+      const params = { branch_id: branch.id, name: p.path, department_id: dept === AUTO ? null : dept, batch, folder: folder || null };
       const progress = (f: number) => update(i, { progress: f });
       try {
         if (!plain) {
@@ -158,6 +163,12 @@ export function IntakeDrop({ branch, onBatch }: { branch: Branch; onBatch: (batc
           <p className="text-[15px] font-semibold text-balance">
             {running ? t("Uploading {done} of {total}…", { done, total }) : t("Drop {company}'s documents here", { company: branch.name })}
           </p>
+          {folder ? (
+            <p className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-[12.5px] font-medium text-accent">
+              <FolderOpenIcon size={13} weight="bold" className="shrink-0" />
+              <span className="truncate">{t("Into the folder {folder}", { folder })}</span>
+            </p>
+          ) : null}
           <p className="text-[13px] text-muted text-pretty">
             {t("Files, whole folders or a .zip: PDF, Word, Excel, PowerPoint, images and text. Folders are kept. Each file is read, sorted by kind and department, and checked for passwords and personal data.")}
           </p>

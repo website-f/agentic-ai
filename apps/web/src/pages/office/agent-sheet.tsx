@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { chatRoute } from "@/components/chat/links";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
-import { WebTaskDialog } from "@/components/web-task-dialog";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { timeAgo } from "@/lib/utils";
@@ -68,7 +69,6 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
   const tabs = viewOnly ? TABS.filter((x) => x.id !== "chat") : TABS;
   const [picked, setTab] = useState<Tab>("monitor");
   const tab: Tab = tabs.some((x) => x.id === picked) ? picked : "monitor";
-  const [browsing, setBrowsing] = useState(false);
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const chat = useMutation({
@@ -107,8 +107,8 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
       }
       actions={
         <>
-          {canWrite ? <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: agent.id }}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Link></Button> : null}
-          {canWrite && full.data ? <Button size="sm" variant="outline" onClick={() => setBrowsing(true)}><BrowserIcon size={14} /> {t("Browse for me")}</Button> : null}
+          {canWrite ? <Button size="sm" onClick={() => openTaskComposer({ agentId: agent.id })}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Button> : null}
+          {canWrite && full.data ? <Button size="sm" variant="outline" onClick={() => openTaskComposer({ agentId: agent.id, kind: "browse" })}><BrowserIcon size={14} /> {t("Browse for me")}</Button> : null}
           {canWrite ? (
             <Button size="sm" variant="outline" loading={pause.isPending} onClick={() => pause.mutate()}>
               {agent.status === "paused" ? <><PlayIcon size={14} /> {t("Resume")}</> : <><PauseIcon size={14} /> {t("Pause")}</>}
@@ -192,21 +192,25 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
           {viewOnly ? null : <Tabs.Content value="chat" className="outline-none">
             {canWrite ? (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+                <Button asChild className="w-full sm:w-fit">
+                  <Link {...chatRoute(agent.id, { from: `/office?agent=${encodeURIComponent(agent.id)}` })}>
+                    <ChatsCircleIcon size={16} weight="fill" /> {t("Open full chat")}
+                  </Link>
+                </Button>
                 <form onSubmit={(e) => { e.preventDefault(); if (message.trim()) chat.mutate(); }} className="flex gap-2">
                   <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t("A quick question for {name}", { name: agent.name })} aria-label={t("Message {name}", { name: agent.name })} />
                   <Button type="submit" size="icon" aria-label={t("Send")} loading={chat.isPending} disabled={!message.trim()}><PaperPlaneRightIcon size={16} /></Button>
                 </form>
                 {reply ? <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3"><Markdown>{reply}</Markdown></div> : null}
                 <p className="text-[12px] text-muted">{withLinks(t("A quick chat. For work that needs tools or your approval, use {task} or Browse for me. The full conversation is on the {chat}."), {
-                  task: <Link to="/tasks" search={{ new: 1, agent: agent.id }} className="text-accent hover:underline">{t("a task")}</Link>,
-                  chat: <Link to="/chat" search={{ agent: agent.id }} className="text-accent hover:underline">{t("Chat page")}</Link>,
+                  task: <button type="button" onClick={() => openTaskComposer({ agentId: agent.id, brief: message })} className="text-accent hover:underline">{t("a task")}</button>,
+                  chat: <Link {...chatRoute(agent.id, { from: `/office?agent=${encodeURIComponent(agent.id)}` })} className="text-accent hover:underline">{t("Chat page")}</Link>,
                 })}</p>
               </div>
             ) : <p className="text-[13px] text-muted">{t("You do not have permission to message agents.")}</p>}
           </Tabs.Content>}
         </Tabs.Root>
       </div>
-      {browsing && full.data && !viewOnly ? <WebTaskDialog agent={full.data} open onOpenChange={setBrowsing} /> : null}
     </SideSheet>
   );
 }

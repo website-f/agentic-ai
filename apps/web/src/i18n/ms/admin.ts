@@ -46,6 +46,8 @@ export const ADMIN: Record<string, string> = {
   "Not listed yet": "Belum disenaraikan",
   "Resting for {s} s after an error. Groups use the next model meanwhile.":
     "Berehat {s} saat selepas ralat. Sementara itu, kumpulan guna model seterusnya.",
+  "{model} is resting for {s} s after an error. Groups use the next model meanwhile.":
+    "{model} berehat {s} saat selepas ralat. Sementara itu, kumpulan guna model seterusnya.",
   "Tested {when}": "Diuji {when}",
   "Never tested": "Belum pernah diuji",
   Test: "Uji",

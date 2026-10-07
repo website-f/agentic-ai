@@ -5,18 +5,22 @@
  */
 import { ADMIN } from "./admin";
 import { BUILDERS } from "./builders";
+import { CHAT } from "./chat";
 import { COMMON } from "./common";
 import { DESK } from "./desk";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
+import { LIBRARY } from "./library";
 import { MINUTES } from "./minutes";
+import { MY_AI } from "./my-ai";
 import { PEOPLE } from "./people";
 import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
 import { SEARCH } from "./search";
 import { SHELL } from "./shell";
+import { TASKS_FLOW } from "./tasks-flow";
 import { WORK } from "./work";
 
 export const MS: Record<string, string> = {
@@ -35,4 +39,8 @@ export const MS: Record<string, string> = {
   ...FORMS,
   ...SEARCH,
   ...PEOPLE,
+  ...CHAT,
+  ...LIBRARY,
+  ...TASKS_FLOW,
+  ...MY_AI,
 };

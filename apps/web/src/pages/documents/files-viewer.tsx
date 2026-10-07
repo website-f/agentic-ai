@@ -353,7 +353,7 @@ export function FileViewer({ id, branch, folders, canManage, canEdit, onClose, i
       <div className="flex flex-wrap items-center gap-2">
         <FileStatus f={f} />
         {held ? <Pill tone="warn"><ShieldWarningIcon size={13} /> {t("Held back")}</Pill> : null}
-        {f.library ? <Pill tone="accent">{t("In library")}</Pill> : null}
+        {f.library ? <Pill tone="accent">{t("Guideline")}</Pill> : null}
         <span className="text-[12.5px] text-muted">{t("added {when}", { when: timeAgo(f.created_at) })}</span>
       </div>
 

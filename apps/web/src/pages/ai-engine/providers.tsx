@@ -210,6 +210,12 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
           {t("Resting for {s} s after an error. Groups use the next model meanwhile.", { s: provider.cooling_seconds })}
         </p>
       ) : null}
+      {Object.entries(provider.cooling_models ?? {}).map(([model, s]) => (
+        <p key={model} className="mx-4 mb-3 flex items-start gap-1.5 rounded-sm bg-info/10 px-2.5 py-1.5 text-[12.5px] text-info">
+          <SnowflakeIcon size={14} className="mt-0.5 shrink-0" />{" "}
+          <span className="min-w-0 break-words">{t("{model} is resting for {s} s after an error. Groups use the next model meanwhile.", { model, s })}</span>
+        </p>
+      ))}
       {provider.last_test_result && !provider.last_test_result.ok ? (
         <p className="mx-4 mb-3 flex items-start gap-1.5 rounded-sm bg-danger/8 px-2.5 py-1.5 text-[12.5px] break-words text-danger">
           <WarningCircleIcon size={14} weight="fill" className="mt-0.5 shrink-0" />

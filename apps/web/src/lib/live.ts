@@ -35,6 +35,27 @@ export const useLive = create<LiveState>((set) => ({
   set: (patch) => set(patch),
 }));
 
+/** Drop events already handled. The server numbers every event (seq > 0); a reconnect can replay
+ * from an older point (the URL's ?since= wins over Last-Event-ID), and a replayed approval must
+ * not toast twice. An event without a number is always let through. */
+export function isNewEvent(ev: Pick<LiveEvent, "seq">, lastSeq: number): boolean {
+  return typeof ev.seq !== "number" || !(ev.seq > 0) || ev.seq > lastSeq;
+}
+
+/** The stream URL, resuming after the last event seen. */
+export function streamUrl(lastSeq: number): string {
+  return `/api/events${lastSeq ? `?since=${lastSeq}` : ""}`;
+}
+
+let stopStream: (() => void) | null = null;
+
+/** Sign-out: close this tab's stream and forget everything live that belonged to the person. */
+export function resetLive(): void {
+  stopStream?.();
+  stopStream = null;
+  useLive.setState({ connected: false, agentStatus: {} });
+}
+
 type Listener = (ev: LiveEvent) => void;
 const listeners = new Set<Listener>();
 
@@ -84,6 +105,9 @@ export function useLiveEvents() {
   useEffect(() => {
     let es: EventSource | null = null;
     let lastSeq = 0;
+    /** lastSeq when the current stream opened: its URL resumes from there. */
+    let openedAt = 0;
+    let stopped = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const pending = new Set<string>();
     let flush: ReturnType<typeof setTimeout> | undefined;
@@ -98,7 +122,8 @@ export function useLiveEvents() {
     };
 
     const handle = (ev: LiveEvent) => {
-      lastSeq = Math.max(lastSeq, ev.seq);
+      if (!isNewEvent(ev, lastSeq)) return; // replayed after a reconnect: already handled
+      if (typeof ev.seq === "number" && ev.seq > 0) lastSeq = ev.seq;
       for (const fn of listeners) fn(ev);
       for (const key of INVALIDATE[ev.type] ?? []) queue(key);
       if (ev.type.startsWith("meeting.")) {
@@ -128,7 +153,9 @@ export function useLiveEvents() {
     };
 
     const open = () => {
-      es = new EventSource(`/api/events${lastSeq ? `?since=${lastSeq}` : ""}`);
+      if (stopped) return;
+      openedAt = lastSeq;
+      es = new EventSource(streamUrl(lastSeq));
       es.onopen = () => useLive.getState().set({ connected: true });
       es.onmessage = (m) => {
         try {
@@ -139,7 +166,14 @@ export function useLiveEvents() {
       };
       es.onerror = () => {
         useLive.getState().set({ connected: false });
-        if (es?.readyState === EventSource.CLOSED) {
+        if (stopped) return;
+        if (es?.readyState === EventSource.CONNECTING && openedAt && openedAt !== lastSeq) {
+          // The browser would reconnect to the same ?since= URL and replay from there: open a
+          // fresh stream that resumes from the last event seen instead.
+          es.close();
+          clearTimeout(retry);
+          retry = setTimeout(open, 3000);
+        } else if (es?.readyState === EventSource.CLOSED) {
           // The server refused (e.g. signed out) or the network dropped: back off, then resume
           // from the last event we saw so nothing is missed.
           clearTimeout(retry);
@@ -155,14 +189,21 @@ export function useLiveEvents() {
       }
     };
 
-    open();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
+    const stop = () => {
+      stopped = true;
       document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(retry);
       clearTimeout(flush);
       es?.close();
       useLive.getState().set({ connected: false });
+    };
+
+    open();
+    document.addEventListener("visibilitychange", onVisible);
+    stopStream = stop;
+    return () => {
+      stop();
+      if (stopStream === stop) stopStream = null;
     };
   }, [qc, navigate]);
 }

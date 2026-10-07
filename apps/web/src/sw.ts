@@ -9,6 +9,8 @@ declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
 };
 
+// A new version takes over at once; the page decides when to reload (main.tsx → lib/unsaved.ts
+// applyUpdate): never under an editor with unsaved changes.
 self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();

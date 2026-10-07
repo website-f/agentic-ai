@@ -2,6 +2,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BrowserIcon,
+  ChatsCircleIcon,
   CheckIcon,
   EyeIcon,
   FileTextIcon,
@@ -21,6 +22,8 @@ import { toast } from "sonner";
 
 import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
+import { chatRoute } from "@/components/chat/links";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { IconTile, Page, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -30,7 +33,7 @@ import { Field, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WebTaskDialog } from "@/components/web-task-dialog";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { useLive } from "@/lib/live";
@@ -39,7 +42,6 @@ import { cn, timeAgo } from "@/lib/utils";
 import { agentQuery, sopsQuery, STATUS_INFO, tasksQuery, workKeys, type Agent, type ToolMode } from "@/lib/work";
 import { chatGroupsQuery } from "@/pages/ai-engine/data";
 
-import { ChatPanel } from "./chat-panel";
 import { MemoryTab } from "./memory-tab";
 import { agentState } from "./roster";
 import { TeamTab } from "./team-tab";
@@ -88,10 +90,8 @@ function Overview({ agent }: { agent: Agent }) {
             title={t("Tasks")}
             description={mine.length ? t("The latest {n} given to {name}.", { n: mine.length, name: agent.name }) : undefined}
             actions={
-              <Button asChild size="sm" variant="outline">
-                <Link to="/tasks" search={{ new: 1, agent: agent.id }}>
-                  <PlusIcon size={14} /> {t("Give a task")}
-                </Link>
+              <Button size="sm" variant="outline" onClick={() => openTaskComposer({ agentId: agent.id })}>
+                <PlusIcon size={14} /> {t("Give a task")}
               </Button>
             }
           />
@@ -328,7 +328,6 @@ export function AgentDetailPage() {
   const canManage = !!agent?.can_manage && !viewOnly;
   const live = useLive((s) => s.agentStatus[agentId]);
   const [retiring, setRetiring] = useState(false);
-  const [browsing, setBrowsing] = useState(false);
   // Watching only: chat and memory are the owner's; the rest stays readable.
   const tabs: readonly Tab[] = viewOnly ? TABS.filter((x) => x !== "chat" && x !== "memory") : TABS;
   const tab: Tab = search.tab && tabs.includes(search.tab) ? search.tab : "overview";
@@ -399,10 +398,22 @@ export function AgentDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2">
-            {canWrite && agent.status === "active" ? (
-              <Button variant="outline" onClick={() => setBrowsing(true)}>
-                <BrowserIcon size={15} /> {t("Browse for me")}
+            {!viewOnly ? (
+              <Button asChild>
+                <Link {...chatRoute(agent.id, { from: `/agents/${agentId}` })}>
+                  <ChatsCircleIcon size={15} weight="fill" /> {t("Chat")}
+                </Link>
               </Button>
+            ) : null}
+            {canWrite && agent.status === "active" ? (
+              <>
+                <Button variant="outline" onClick={() => openTaskComposer({ agentId: agent.id })}>
+                  <PlusIcon size={15} /> {t("Give a task")}
+                </Button>
+                <Button variant="outline" onClick={() => openTaskComposer({ agentId: agent.id, kind: "browse" })}>
+                  <BrowserIcon size={15} /> {t("Browse for me")}
+                </Button>
+              </>
             ) : null}
             <Button variant="outline" asChild>
               <Link to="/monitor" search={{ agent: agent.id }}>
@@ -479,12 +490,15 @@ export function AgentDetailPage() {
       <Tabs.Root
         value={tab}
         onValueChange={(v) =>
-          navigate({
-            to: "/agents/$agentId",
-            params: { agentId },
-            search: { tab: v as Tab },
-            replace: true,
-          })
+          // Chat opens full screen; Back returns to this profile.
+          v === "chat"
+            ? navigate(chatRoute(agentId, { from: `/agents/${agentId}` }))
+            : navigate({
+                to: "/agents/$agentId",
+                params: { agentId },
+                search: { tab: v as Tab },
+                replace: true,
+              })
         }
       >
         <Tabs.List
@@ -507,7 +521,7 @@ export function AgentDetailPage() {
         {viewOnly ? null : (
           <>
             <Tabs.Content value="chat" className="outline-none">
-              <ChatPanel agent={agent} canWrite={canWrite} className="h-[min(70dvh,44rem)]" />
+              <ChatLauncher agent={agent} canWrite={canWrite} from={`/agents/${agentId}?tab=chat`} />
             </Tabs.Content>
             <Tabs.Content value="memory" className="outline-none">
               <MemoryTab agent={agent} canWrite={canWrite} />
@@ -528,21 +542,6 @@ export function AgentDetailPage() {
         </Tabs.Content>
       </Tabs.Root>
 
-      {browsing && !viewOnly ? (
-        <WebTaskDialog
-          agent={agent}
-          open
-          onOpenChange={setBrowsing}
-          onStarted={() =>
-            navigate({
-              to: "/agents/$agentId",
-              params: { agentId },
-              search: { tab: "overview" },
-              replace: true,
-            })
-          }
-        />
-      ) : null}
       <ConfirmDialog
         open={retiring}
         onOpenChange={setRetiring}

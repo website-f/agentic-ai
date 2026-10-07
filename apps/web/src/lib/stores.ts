@@ -60,6 +60,8 @@ interface BranchState extends BranchChoice {
   setBranchId: (id: string | null) => void;
   /** Pages that need one company (office floor, company kit) remember theirs here under "All". */
   setLastId: (id: string) => void;
+  /** Sign-out: nobody's choice is active until the next person signs in (byUser is kept). */
+  unbindUser: () => void;
 }
 
 /** The company the header switcher points at (or all of them). Remembered per person, per device.
@@ -86,6 +88,8 @@ export const useBranch = create<BranchState>()(
         },
         setBranchId: (branchId) => save(branchId && branchId !== ALL_COMPANIES ? { branchId, lastId: branchId } : { branchId }),
         setLastId: (lastId) => save({ lastId }),
+        // "" (not null): the next bindUser must not adopt this device's choice as theirs.
+        unbindUser: () => set({ userId: "", branchId: null, lastId: null }),
       };
     },
     {
@@ -104,3 +108,9 @@ export const usePalette = create<PaletteState>((set) => ({
   open: false,
   setOpen: (open) => set({ open }),
 }));
+
+/** Sign-out: forget in-memory state that belonged to the person (live state is reset in lib/live). */
+export function resetUserStores(): void {
+  useBranch.getState().unbindUser();
+  usePalette.getState().setOpen(false);
+}

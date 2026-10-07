@@ -36,6 +36,8 @@ import { agentsQuery } from "@/lib/work";
 import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem, type NavSection } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
+import { openTaskComposer } from "./task-composer/store";
+import { TaskComposerHost } from "./task-composer/task-composer";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
 import { Button } from "./ui/button";
@@ -479,6 +481,8 @@ function Header() {
   const t = useT();
   const setOpen = usePalette((s) => s.setOpen);
   const navigate = useNavigate();
+  const { data: me } = useSuspenseQuery(meQuery);
+  const canWrite = me.permissions.includes("work.write");
   return (
     <header
       className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/85 px-3 backdrop-blur-md sm:px-4"
@@ -492,6 +496,12 @@ function Header() {
       </div>
       {/* P25: search inside every document; the command palette stays on Ctrl K. */}
       <HeaderSearch />
+      {/* One obvious place to hand out work, on every page. */}
+      {canWrite ? (
+        <Button size="sm" className="max-sm:size-9 max-sm:rounded-full max-sm:px-0" aria-label={t("New task")} title={t("New task")} onClick={() => openTaskComposer()}>
+          <PlusIcon size={16} weight="bold" /><span className="max-sm:hidden">{t("New task")}</span>
+        </Button>
+      ) : null}
       <Button
         variant="ghost"
         size="icon-sm"
@@ -680,6 +690,7 @@ export function AppShell() {
       </div>
       <MobileTabBar />
       <CommandPalette />
+      <TaskComposerHost />
     </div>
   );
 }

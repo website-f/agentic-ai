@@ -38,6 +38,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { GiveTaskPanel } from "@/components/task-composer/quick-kinds";
 import { PageTabs } from "@/components/page-tabs";
 import { PinButton } from "@/components/pin-button";
 import { MadeBy, ReviewPill } from "@/components/provenance";
@@ -135,6 +136,8 @@ function DeskView({ desk }: { desk: Desk }) {
   const open = desk.work.filter((w) => workGroup(w.status) === "open").length;
   const done = desk.work.filter((w) => workGroup(w.status) === "done").length;
   const where = [desk.person.company, desk.person.department].filter(Boolean).join(" · ");
+  // The one this person hands work to first: their AI worker, else their first agent.
+  const mainAgent = desk.agents.find((a) => a.is_twin && a.status === "active") ?? desk.agents.find((a) => a.status === "active");
   return (
     <Page wide>
       <PageHeader
@@ -158,6 +161,9 @@ function DeskView({ desk }: { desk: Desk }) {
       />
       {tab === "overview" ? (
         <>
+          {desk.can_ask && mainAgent ? (
+            <GiveTaskPanel agent={mainAgent} guide="desk.give" title={mainAgent.is_twin ? t("Give my AI a task") : undefined} />
+          ) : null}
           {desk.can_ask ? <AskPanel /> : null}
           <StatGrid guide="desk.stats">
             <Stat label={t("Waiting for you")} value={waiting} icon={SealCheckIcon} tone={waiting ? "warn" : "ok"} hint={waiting ? t("Approvals, answers and reviews") : t("Nothing right now")} onClick={() => go("work")} />

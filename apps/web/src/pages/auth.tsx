@@ -12,6 +12,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { msg, useT } from "@/i18n";
 import { api, ApiError } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
+import { safeNext } from "@/lib/search";
 import { lastLoginPath, rememberLoginPath, staffQuery, type LoginPath } from "@/lib/staff";
 import { staffOnly } from "@/lib/twin";
 import type { Me } from "@/lib/types";
@@ -144,7 +145,8 @@ export function SetupPage() {
  * worker first, if they have not yet; then everyone lands on their own workspace (P26),
  * unless they were on their way somewhere. */
 async function landing(qc: QueryClient, me: Me, path: LoginPath, next?: string): Promise<string> {
-  const wanted = next && next.startsWith("/") ? next : undefined;
+  // Only an in-app path: "//host", "/\host" or a full URL never sends a person off-site.
+  const wanted = safeNext(next, "") || undefined;
   if (path === "staff" && staffOnly(me.permissions)) {
     try {
       const s = await qc.fetchQuery(staffQuery);

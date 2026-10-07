@@ -8,7 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
-import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -29,7 +29,7 @@ import {
 import { branchesQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
-import { DocSteps } from "./visuals";
+import { LibraryHeader } from "../library-hub/hub";
 
 function Progress({ p }: { p: Pack["progress"] }) {
   const t = useT();
@@ -415,10 +415,8 @@ export function PacksPage() {
   if (search.p) return <Page><PackDetail key={search.p} id={search.p} /></Page>;
   return (
     <Page>
-      <PageHeader title={t("Packs")}
-        description={t("Everything a submission needs, in one PDF. List the items, let the office match the company's files and documents (or ask an agent to prepare the rest), then compile it with a cover and contents for you to check and submit.")}
+      <LibraryHeader tab="/packs"
         actions={<Button data-guide="packs.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New pack")}</Button>} />
-      <DocSteps current="/packs" />
       {packs.length ? (
         <StatGrid className="lg:grid-cols-3">
           <Stat label={t("Packs")} value={packs.length} icon={PackageIcon} hint={t("Checklists in progress")} />

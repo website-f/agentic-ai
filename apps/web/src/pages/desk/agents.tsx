@@ -2,20 +2,27 @@
  * it works, the workflows it follows and quick ways to give it work; for people who manage
  * agents, the company agents they look after and their hours. */
 import { ChatCircleDotsIcon, ClockIcon, FlowArrowIcon, KanbanIcon, PencilSimpleIcon, UserFocusIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { chatRoute } from "@/components/chat/links";
 import { IconTile } from "@/components/page";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { useT } from "@/i18n";
 import type { Desk } from "@/lib/desk";
+import { meQuery } from "@/lib/queries";
 
 import { hoursOf } from "./workflows";
 
 export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () => void }) {
   const t = useT();
+  // P30: personal assistants are for people who manage others (assistants.use).
+  const { data: me } = useQuery(meQuery);
+  const canAssist = !!me?.permissions.includes("assistants.use");
   const flowsOf = (id: string) => desk.procedures.workflows.filter((w) => w.followers.some((f) => f.id === id));
   const company = desk.assignable.filter((a) => !a.mine);
   return (
@@ -64,8 +71,8 @@ export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () =
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: a.id }}><KanbanIcon size={14} /> {t("Give a task")}</Link></Button>
-                    <Button size="sm" variant="outline" asChild><Link to="/chat" search={{ agent: a.id }}><ChatCircleDotsIcon size={14} /> {t("Chat")}</Link></Button>
+                    <Button size="sm" onClick={() => openTaskComposer({ agentId: a.id })}><KanbanIcon size={14} /> {t("Give a task")}</Button>
+                    <Button size="sm" variant="outline" asChild><Link {...chatRoute(a.id, { from: "/workspace?tab=agents" })}><ChatCircleDotsIcon size={14} /> {t("Chat")}</Link></Button>
                     {a.is_twin ? (
                       <Button size="sm" variant="ghost" asChild><Link to="/my-worker"><PencilSimpleIcon size={14} /> {t("Hours and duties")}</Link></Button>
                     ) : (
@@ -89,7 +96,7 @@ export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () =
             ) : (
               <>
                 <p>{t("Ask any company agent from the box above, or create your own private assistant that works only for you. Everything they make for you lands here.")}</p>
-                {desk.can_ask ? <div><Button size="sm" asChild><Link to="/assistants">{t("Create my assistant")}</Link></Button></div> : null}
+                {desk.can_ask && canAssist ? <div><Button size="sm" asChild><Link to="/assistants">{t("Create my assistant")}</Link></Button></div> : null}
               </>
             )}
           </CardBody>

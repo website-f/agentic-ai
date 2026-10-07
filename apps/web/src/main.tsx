@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 
 import { ApiError } from "@/lib/api";
 import { useTheme } from "@/lib/stores";
+import { applyUpdate } from "@/lib/unsaved";
 import { makeRouter } from "@/router";
 
 // Session ended or a password change became mandatory while the app was open:
@@ -65,9 +66,11 @@ if (import.meta.env.PROD) {
   import("virtual:pwa-register").then(({ registerSW }) =>
     registerSW({
       immediate: true,
+      // The new version has taken over: reload, unless an editor holds unsaved changes. Then
+      // a toast offers "Reload" and the reload waits until everything is saved.
+      onNeedReload: () => applyUpdate(),
       // A tab left open never navigates, so it would keep the old app forever. Look for a
-      // new version every 15 minutes and whenever the tab comes back; autoUpdate reloads
-      // the page once the new version has taken over.
+      // new version every 15 minutes and whenever the tab comes back.
       onRegisteredSW(_url, reg) {
         if (!reg) return;
         const check = () => {

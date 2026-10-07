@@ -32,6 +32,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { chatRoute } from "@/components/chat/links";
+import { GiveTaskPanel } from "@/components/task-composer/quick-kinds";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { EmptyState, IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
@@ -59,6 +62,7 @@ import {
 } from "@/lib/staff";
 import { cn, timeAgo } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
+import { MyAiTabs } from "@/pages/my-ai/tabs";
 import { ChoiceCard, DutyForm, EMPTY_DUTY, HoursEditor, UrgentPill, useDutyReady, WeekTimeline } from "@/pages/welcome/parts";
 
 export function MyWorkerPage() {
@@ -77,7 +81,7 @@ export function MyWorkerPage() {
   if (error || !data) {
     return (
       <Page>
-        <PageHeader title={t("My AI worker")} />
+        <PageHeader title={t("My AI")} />
         <FormError message={errorMessage(error)} />
       </Page>
     );
@@ -85,7 +89,7 @@ export function MyWorkerPage() {
   if (!data.eligible) {
     return (
       <Page>
-        <PageHeader title={t("My AI worker")} />
+        <PageHeader title={t("My AI")} />
         <EmptyState icon={UserFocusIcon} title={t("This page is for staff")} body={t("Staff hire one AI worker that works on their behalf. Managers add and run agents from Agents.")} action={<Button asChild><Link to="/agents">{t("Go to Agents")}</Link></Button>} />
       </Page>
     );
@@ -98,7 +102,7 @@ function NotHired({ first }: { first: string }) {
   const t = useT();
   return (
     <Page>
-      <PageHeader title={t("My AI worker")} description={t("An AI worker of your own: it works on your behalf, at the hours you set, and asks you before anything important.")} />
+      <PageHeader title={t("My AI")} description={t("An AI worker of your own: it works on your behalf, at the hours you set, and asks you before anything important.")} />
       <section className="relative overflow-hidden rounded-[var(--radius-lg)] border border-accent/25 bg-surface p-6 shadow-[var(--shadow-soft)] sm:p-8">
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,var(--accent-soft),transparent_60%)]" />
         <div className="relative grid max-w-xl gap-3">
@@ -141,9 +145,10 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
   return (
     <Page>
       <PageHeader
-        title={t("My AI worker")}
+        title={t("My AI")}
         description={t("{name} works for you. Here is what it is doing, what needs you, and when it works.", { name: twin.name })}
       />
+      <MyAiTabs />
 
       <Card className="relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 top-0 h-24 opacity-[0.12]" style={{ background: twin.color }} />
@@ -181,13 +186,15 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
             </div>
           </div>
           <div data-guide="my-worker.actions" className="grid grid-cols-2 gap-2 lg:w-80">
-            <QuickAction icon={KanbanIcon} label={t("Give a task")} onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })} />
-            <QuickAction icon={ChatCircleDotsIcon} label={t("Chat")} onClick={() => navigate({ to: "/twin", search: { tab: "chat" } })} />
+            <QuickAction icon={KanbanIcon} label={t("Give a task")} onClick={() => openTaskComposer({ agentId: twin.id })} />
+            <QuickAction icon={ChatCircleDotsIcon} label={t("Chat")} onClick={() => navigate(chatRoute(twin.id, { from: "/my-worker" }))} />
             <QuickAction icon={ClockIcon} label={t("Change hours")} onClick={() => setDialog("hours")} />
             <QuickAction icon={RepeatIcon} label={t("Add a duty")} onClick={() => setDialog("duty")} />
           </div>
         </div>
       </Card>
+
+      <GiveTaskPanel agent={twin} title={t("Give my AI a task")} guide="my-worker.give" />
 
       <StatGrid>
         <Stat label={t("Done today")} value={counts.done_today} icon={CheckCircleIcon} tone="ok" />
@@ -350,7 +357,7 @@ function Today({ data, twin }: { data: WorkerHome; twin: Agent }) {
           icon={ListChecksIcon}
           title={t("A quiet day so far")}
           body={t("Give {name} something to do. Work given outside its hours waits for its next shift.", { name: twin.name })}
-          action={<Button onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })}><PlusIcon size={15} weight="bold" /> {t("Give a task")}</Button>}
+          action={<Button onClick={() => openTaskComposer({ agentId: twin.id })}><PlusIcon size={15} weight="bold" /> {t("Give a task")}</Button>}
         />
       ) : (
         <ol className="relative grid gap-0 rounded-[var(--radius-md)] border border-border bg-surface py-1">

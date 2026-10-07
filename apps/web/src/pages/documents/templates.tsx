@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
-import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -22,7 +22,8 @@ import { api, errorMessage } from "@/lib/api";
 import { BUILTIN_PLACEHOLDERS, docKeys, FIELD_TYPES, templatesQuery, type DocTemplate, type FieldType, type TemplateField } from "@/lib/documents";
 import { cn } from "@/lib/utils";
 import { NewDocumentDialog } from "./new-document";
-import { DocSteps, KindTile } from "./visuals";
+import { LibraryHeader } from "../library-hub/hub";
+import { KindTile } from "./visuals";
 
 interface Draft {
   name: string;
@@ -260,13 +261,11 @@ export function TemplatesPage() {
     (!needle || `${x.name} ${x.kind} ${x.description}`.toLowerCase().includes(needle)));
   return (
     <Page>
-      <PageHeader title={t("Templates")}
-        description={t("The documents you write again and again. Start from a starter, write your own with {{placeholders}}, or upload your own Word file and keep its layout.")}
+      <LibraryHeader tab="/templates"
         actions={<>
           <Button variant="outline" onClick={() => setWord(true)}><UploadSimpleIcon size={16} /> {t("Word template")}</Button>
           <Button data-guide="templates.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New template")}</Button>
         </>} />
-      <DocSteps current="/templates" />
       <Toolbar>
         <Segmented<Show> label={t("Show")} value={show} onChange={setShow} options={[
           { value: "all", label: t("All"), count: templates.length },

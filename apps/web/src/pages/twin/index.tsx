@@ -1,5 +1,6 @@
 /** My twin (P18): a staff member's AI twin, their virtual self at work. Chat with it, see its
- * tasks and what it knows about you, teach it, and edit its persona with the wizard. */
+ * tasks and what it knows about you, teach it, and edit its persona with the wizard.
+ * P30: these are tabs of My AI (pages/my-ai/tabs.tsx), after Today (/my-worker). */
 import {
   BookOpenTextIcon,
   CaretDownIcon,
@@ -25,13 +26,14 @@ import { toast } from "sonner";
 
 import { TwinPill } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { Trans } from "@/components/trans";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
 import { FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
@@ -40,14 +42,15 @@ import { meQuery } from "@/lib/queries";
 import { startingAnswers, teachTwin, twinKeys, twinQuery, type TwinState } from "@/lib/twin";
 import { cn, timeAgo } from "@/lib/utils";
 import { STATUS_INFO, workKeys, type Agent, type Task } from "@/lib/work";
-import { ChatPanel } from "@/pages/agents/chat-panel";
 import { MemoryTab } from "@/pages/agents/memory-tab";
 import { LearnSourceDialog } from "@/pages/learning/learn-source-dialog";
+import { MyAiTabs } from "@/pages/my-ai/tabs";
+import type { TwinTab } from "@/lib/my-ai";
 
 import { TwinDuo, useAdopt } from "./meet-card";
 import { TwinWizard } from "./wizard";
 
-type Tab = "chat" | "tasks" | "memory" | "teach";
+type Tab = TwinTab;
 
 function NoTwin({ state, onCreate }: { state: TwinState; onCreate: () => void }) {
   const t = useT();
@@ -175,7 +178,7 @@ function Tasks({ twin, canWrite }: { twin: Agent; canWrite: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] text-muted">{t("What {name} is doing and has done. It tells you when something needs you.", { name: twin.name })}</p>
         {canWrite ? (
-          <Button size="sm" onClick={() => navigate({ to: "/tasks", search: { new: 1, agent: twin.id } })}>
+          <Button size="sm" onClick={() => openTaskComposer({ agentId: twin.id })}>
             <PlusIcon size={15} weight="bold" /> {t("Give it a task")}
           </Button>
         ) : null}
@@ -289,7 +292,7 @@ export function TwinPage() {
   const qc = useQueryClient();
   const [wizard, setWizard] = useState(!!search.edit);
   const [wizardKey, setWizardKey] = useState(0);
-  const tab: Tab = search.tab ?? "chat";
+  const tab: Tab = search.tab ?? "profile";
   const canWrite = me.permissions.includes("work.write");
   const twin = state?.twin ?? null;
 
@@ -315,7 +318,7 @@ export function TwinPage() {
   if (isLoading || !state) {
     return (
       <Page>
-        <PageHeader title={t("My twin")} description={t("Your virtual self at work.")} />
+        <PageHeader title={t("My AI")} description={t("Your virtual self at work.")} />
         {error ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : (
           <>
             <Skeleton className="h-44 rounded-[var(--radius-md)]" />
@@ -339,7 +342,7 @@ export function TwinPage() {
   return (
     <Page>
       <PageHeader
-        title={twin ? twin.name : t("My twin")}
+        title={twin ? twin.name : t("My AI")}
         description={twin ? t("Your AI twin: your virtual self at work. It works the way you do and asks you before anything important.") : t("Your virtual self at work.")}
         actions={twin ? (
           <>
@@ -352,7 +355,7 @@ export function TwinPage() {
       />
       {twin ? (
         <>
-          <Profile state={state} twin={twin} />
+          <MyAiTabs />
           {!state.profile ? (
             <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 px-4 py-3">
               <SparkleIcon size={18} weight="fill" className="shrink-0 text-accent" />
@@ -360,20 +363,11 @@ export function TwinPage() {
               <Button size="sm" onClick={openWizard}>{t("Tell it about me")}</Button>
             </div>
           ) : null}
-          <Segmented<Tab>
-            label={t("My twin")}
-            value={tab}
-            onChange={(v) => navigate({ to: "/twin", search: { tab: v === "chat" ? undefined : v }, replace: true })}
-            options={[
-              { value: "chat", label: t("Chat") },
-              { value: "tasks", label: t("Tasks"), count: twin.open_tasks },
-              { value: "memory", label: t("What it knows") },
-              { value: "teach", label: t("Teach it") },
-            ]}
-            className="w-full sm:w-fit [&>button]:flex-1 [&>button]:justify-center"
-          />
-          {tab === "chat" ? (
-            <ChatPanel agent={twin} canWrite={canWrite} className="h-[min(70dvh,40rem)] min-h-[24rem]" />
+          {tab === "profile" ? (
+            <Profile state={state} twin={twin} />
+          ) : tab === "chat" ? (
+            // Old links (?tab=chat) still land here; the My AI Chat tab opens it full screen.
+            <ChatLauncher agent={twin} canWrite={canWrite} from="/twin?tab=chat" />
           ) : tab === "tasks" ? (
             <Tasks twin={twin} canWrite={canWrite} />
           ) : tab === "memory" ? (

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { IconTile } from "@/components/page";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -50,7 +51,7 @@ export function PingsCard({ canWrite }: { canWrite: boolean }) {
             {canWrite ? (
               <div className="ml-11 flex flex-wrap gap-2 sm:ml-0">
                 {p.kind === "idle" ? (
-                  <Button size="sm" asChild><Link to="/tasks" search={{ new: 1, agent: p.agent_id }}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Link></Button>
+                  <Button size="sm" onClick={() => openTaskComposer({ agentId: p.agent_id })}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Button>
                 ) : (
                   <Button size="sm" variant="outline" asChild><Link to="/agents/$agentId" params={{ agentId: p.agent_id }} search={{ tab: "team" }}>{t("See budget")}</Link></Button>
                 )}

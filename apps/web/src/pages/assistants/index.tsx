@@ -2,19 +2,17 @@
  * company, let them read Gmail and draft replies (sent only when approved here), and have them
  * chase people and other agents on WhatsApp. Built phone-first. */
 import {
-  ArrowDownIcon, ArrowRightIcon, ArrowsInSimpleIcon, ArrowsOutSimpleIcon, CalendarBlankIcon, ClockCounterClockwiseIcon, SidebarSimpleIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon,
-  ChatCircleDotsIcon, ClockCountdownIcon, EnvelopeSimpleIcon, GearSixIcon, LightningIcon, VideoCameraIcon,
-  LockSimpleIcon, MagnifyingGlassIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon, TrendDownIcon, UsersThreeIcon,
+  CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon, ChatCircleDotsIcon,
+  EnvelopeSimpleIcon, GearSixIcon, VideoCameraIcon, LockSimpleIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon,
   WarningCircleIcon, WhatsappLogoIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Markdown } from "@/components/markdown";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Trans } from "@/components/trans";
 import { Button } from "@/components/ui/button";
@@ -25,19 +23,17 @@ import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
-import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
-import { VoiceInput } from "@/components/voice-input";
-import { msg, t as tr, useT } from "@/i18n";
+import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import {
-  assistantKeys, assistantsQuery, calendarDraftsQuery, draftsQuery, QUICK_PROMPTS, type AssistantsHome, type CalendarDraft, type EmailDraft, type Preset,
+  assistantKeys, assistantsQuery, calendarDraftsQuery, draftsQuery, type AssistantsHome, type CalendarDraft, type EmailDraft, type Preset,
 } from "@/lib/assistants";
-import { useFillHeight } from "@/lib/use-fill-height";
-import { useIsPhone } from "@/lib/use-media";
 import { cn, timeAgo } from "@/lib/utils";
-import { workKeys, type Agent } from "@/lib/work";
+import type { Agent } from "@/lib/work";
+
+import { assistantPrompts } from "./chat-extras";
 
 type Tab = "chat" | "drafts" | "settings";
 
@@ -47,42 +43,6 @@ const PRESET_LOOK: Record<Preset["key"], { icon: Icon; tone: Tone; can: string[]
   analyst: { icon: ChartLineUpIcon, tone: "violet", can: [msg("Team performance"), msg("Trends & tables"), msg("Three actions")] },
   custom: { icon: GearSixIcon, tone: "orange", can: [msg("Your own instructions")] },
 };
-
-/** What each tool looks like under a reply. */
-const TOOL_LOOK: Record<string, { label: string; icon: Icon }> = {
-  company_pulse: { label: msg("Company pulse"), icon: ChartLineUpIcon },
-  team_performance: { label: msg("Team performance"), icon: UsersThreeIcon },
-  slacking_report: { label: msg("Where things slip"), icon: TrendDownIcon },
-  notify_person: { label: msg("Messaged a person"), icon: WhatsappLogoIcon },
-  message_agent: { label: msg("Gave an agent a job"), icon: LightningIcon },
-  email_search: { label: msg("Searched email"), icon: MagnifyingGlassIcon },
-  email_read: { label: msg("Read an email"), icon: EnvelopeSimpleIcon },
-  email_draft_reply: { label: msg("Drafted a reply"), icon: PaperPlaneRightIcon },
-  email_draft: { label: msg("Drafted an email"), icon: PaperPlaneRightIcon },
-  calendar_agenda: { label: msg("Read your calendar"), icon: CalendarBlankIcon },
-  calendar_free_slots: { label: msg("Found free time"), icon: CalendarCheckIcon },
-  calendar_create_event: { label: msg("Proposed an event"), icon: CalendarPlusIcon },
-  calendar_update_event: { label: msg("Proposed a change"), icon: CalendarBlankIcon },
-  calendar_cancel_event: { label: msg("Proposed a cancellation"), icon: CalendarXIcon },
-  schedule_task: { label: msg("Set up a schedule"), icon: ClockCountdownIcon },
-  list_my_schedules: { label: msg("Checked schedules"), icon: ClockCountdownIcon },
-  cancel_schedule: { label: msg("Cancelled a schedule"), icon: ClockCountdownIcon },
-};
-
-/** Tools whose result waits on the Drafts tab. */
-const PROPOSES = ["email_draft", "email_draft_reply", "calendar_create_event", "calendar_update_event", "calendar_cancel_event"];
-
-/** While the assistant works: what it is probably doing, from what was asked. */
-function thinkingLine(q: string): string {
-  const s = q.toLowerCase();
-  if (/\bevery\b|remind me|\bdaily\b|\bweekly\b|\bmonthly\b/.test(s)) return tr("Setting up the schedule…");
-  if (/calendar|meeting|free time|free slot|\bbook\b|agenda/.test(s)) return tr("Checking your calendar…");
-  if (/inbox|email|mail|reply|draft/.test(s)) return tr("Going through your email…");
-  if (/slack|stuck|late|behind|slip/.test(s)) return tr("Looking for what's stuck…");
-  if (/who|staff|team|perform|doing well/.test(s)) return tr("Checking how everyone is doing…");
-  if (/tell|remind|chase|notify|whatsapp/.test(s)) return tr("Reaching out…");
-  return tr("Looking at the company…");
-}
 
 // ---------------------------------------------------------------- creating
 
@@ -168,398 +128,6 @@ function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["k
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- chat
-
-interface Msg { id: number | string; role: "user" | "assistant"; content: string; meta?: { tools?: string[] } | null }
-interface ChatSession { id: string; title: string; updated_at: string }
-
-/** WhatsApp and Telegram conversations live with the channel; the web chat picks up the rest. */
-const isChannelChat = (s: ChatSession) => s.title.startsWith("WhatsApp") || s.title.startsWith("Telegram");
-
-/** Remembered per device: whether the conversation list is open beside the full-screen chat. */
-const RAIL_KEY = "agentic.assistants.rail";
-function readRail(): boolean {
-  try {
-    return localStorage.getItem(RAIL_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
-
-/** Typing somewhere: single-key shortcuts stay out of the way. */
-const typing = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
-
-function SessionList({ sessions, current, onPick, onNew, loading }: {
-  sessions: ChatSession[];
-  current: string | null;
-  onPick: (id: string) => void;
-  onNew: () => void;
-  loading: boolean;
-}) {
-  const t = useT();
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 p-2">
-        <Button variant="outline" className="w-full justify-start" onClick={onNew}><PlusIcon size={15} /> {t("New conversation")}</Button>
-      </div>
-      <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2" aria-label={t("Conversations")}>
-        {loading ? [0, 1, 2].map((i) => <li key={i}><Skeleton className="mb-1.5 h-12 rounded-sm" /></li>) : null}
-        {!loading && !sessions.length ? <li className="px-2 py-6 text-center text-[12.5px] text-muted">{t("No conversations yet.")}</li> : null}
-        {sessions.map((s) => {
-          const on = s.id === current;
-          const channel = isChannelChat(s);
-          return (
-            <li key={s.id}>
-              <button type="button" onClick={() => onPick(s.id)} aria-current={on || undefined}
-                className={cn("flex min-h-12 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left transition-colors", on ? "bg-accent-soft" : "hover:bg-surface-2")}>
-                {channel ? <WhatsappLogoIcon size={16} className="shrink-0 text-ok" /> : <ChatCircleDotsIcon size={16} className={cn("shrink-0", on ? "text-accent" : "text-muted")} />}
-                <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-[13px]", on && "font-medium text-accent")}>{s.title || t("Conversation")}</span>
-                  <span className="block truncate text-[11.5px] text-muted">{timeAgo(s.updated_at)}</span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function Chat({ agent, home, onDrafts }: { agent: Agent; home: AssistantsHome; onDrafts: () => void }) {
-  const t = useT();
-  const qc = useQueryClient();
-  const reduce = useReducedMotion();
-  const phone = useIsPhone();
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [picked, setPicked] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [local, setLocal] = useState<Msg[]>([]);
-  const [asked, setAsked] = useState("");
-  const [full, setFull] = useState(false);
-  const [rail, setRail] = useState(readRail);
-  const [history, setHistory] = useState(false);
-  const [atBottom, setAtBottom] = useState(true);
-  const [seen, setSeen] = useState(0);
-  const root = useRef<HTMLDivElement>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const stick = useRef(true);
-  const composer = useRef<HTMLDivElement>(null);
-
-  // Normal view: exactly the screen that is left below the tabs (measured, not guessed), so the
-  // page itself never scrolls and only the conversation does.
-  useFillHeight(root, { fit: "page", min: phone ? 352 : 384, enabled: !full });
-
-  const sessions = useQuery({
-    queryKey: workKeys.sessions(agent.id),
-    queryFn: () => api<ChatSession[]>(`/api/agents/${agent.id}/sessions`),
-  });
-  // Pick up the latest conversation (web ones; WhatsApp chats have their own).
-  const latest = (sessions.data ?? []).find((s) => !isChannelChat(s));
-  const current = picked ? sessionId : sessionId ?? latest?.id ?? null;
-  const thread = useQuery({
-    queryKey: workKeys.messages(current ?? "none"),
-    queryFn: () => api<Msg[]>(`/api/chat/sessions/${current}/messages`),
-    enabled: !!current,
-  });
-  const messages = [...(current ? thread.data ?? [] : []), ...local];
-  const title = (sessions.data ?? []).find((s) => s.id === current)?.title;
-
-  const send = useMutation({
-    mutationFn: (text: string) =>
-      api<{ session_id: string; reply: string; tools_used: string[] }>(`/api/agents/${agent.id}/chat`, "POST", { message: text, session_id: current }),
-    onMutate: (text) => { setAsked(text); setLocal((l) => [...l, { id: `u${Date.now()}`, role: "user", content: text }]); },
-    onSuccess: async (r) => {
-      setSessionId(r.session_id);
-      setPicked(true);
-      await qc.invalidateQueries({ queryKey: workKeys.messages(r.session_id) });
-      qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
-      if (r.tools_used.some((x) => PROPOSES.includes(x))) {
-        qc.invalidateQueries({ queryKey: assistantKeys.allDrafts });
-        qc.invalidateQueries({ queryKey: assistantKeys.allCalendar });
-        qc.invalidateQueries({ queryKey: assistantKeys.home });
-      }
-      setLocal([]);
-    },
-    onError: (e) => { toast.error(errorMessage(e)); setLocal((l) => l.slice(0, -1)); },
-  });
-
-  const toBottom = (smooth: boolean) => {
-    const el = scroller.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth && !reduce ? "smooth" : "auto" });
-  };
-  // New messages follow the conversation down, unless you scrolled up to read something.
-  useEffect(() => {
-    if (stick.current) toBottom(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- toBottom only reads refs
-  }, [messages.length, send.isPending]);
-  // Another conversation (or the full-screen switch): start at its latest message.
-  useEffect(() => {
-    stick.current = true;
-    toBottom(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- toBottom only reads refs
-  }, [current, full, thread.isSuccess]);
-  const onScroll = () => {
-    const el = scroller.current;
-    if (!el) return;
-    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 72;
-    stick.current = bottom;
-    if (bottom !== atBottom) setAtBottom(bottom);
-    if (bottom && seen !== messages.length) setSeen(messages.length);
-  };
-  const unseen = !atBottom && messages.length > seen && messages[messages.length - 1]?.role === "assistant";
-
-  // Full screen: F toggles it (when not typing), Esc leaves it (when no sheet or dialog is open).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.key === "f" || e.key === "F") && !typing(e.target)) {
-        e.preventDefault();
-        setFull((f) => !f);
-      } else if (e.key === "Escape" && full && ![...document.querySelectorAll('[role="dialog"]')].some((d) => d !== root.current)) {
-        setFull(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [full]);
-  // Full screen owns the viewport: the page behind it does not scroll, and on phones the chat
-  // follows the visible area so the keyboard never covers the message box.
-  useEffect(() => {
-    if (!full) return;
-    const html = document.documentElement;
-    const prev = html.style.overflow;
-    html.style.overflow = "hidden";
-    const vv = window.visualViewport;
-    const el = root.current;
-    const fit = () => {
-      if (!vv || !el) return;
-      el.style.height = `${vv.height}px`;
-      el.style.top = `${vv.offsetTop}px`;
-    };
-    fit();
-    vv?.addEventListener("resize", fit);
-    vv?.addEventListener("scroll", fit);
-    return () => {
-      html.style.overflow = prev;
-      vv?.removeEventListener("resize", fit);
-      vv?.removeEventListener("scroll", fit);
-      if (el) {
-        el.style.height = "";
-        el.style.top = "";
-      }
-    };
-  }, [full]);
-
-  // The jump-to-latest button floats just above the message box, whatever its height.
-  useEffect(() => {
-    const el = composer.current;
-    const host = el?.parentElement;
-    if (!el || !host) return;
-    const ro = new ResizeObserver(() => host.style.setProperty("--composer-h", `${el.offsetHeight}px`));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const toggleRail = () => setRail((r) => {
-    try {
-      localStorage.setItem(RAIL_KEY, r ? "0" : "1");
-    } catch {
-      /* storage blocked: remembered for this visit only */
-    }
-    return !r;
-  });
-  const startNew = () => { setLocal([]); setSessionId(null); setPicked(true); setHistory(false); box.current?.focus(); };
-  const pick = (id: string) => { setLocal([]); setSessionId(id); setPicked(true); setHistory(false); };
-
-  const submit = (text = draft) => {
-    const said = text.trim();
-    if (!said || send.isPending) return;
-    setDraft("");
-    stick.current = true;
-    send.mutate(said);
-  };
-  const gmail = !!home.google.account;
-  const cal = !!home.google.account?.calendar;
-  const prompts = QUICK_PROMPTS.filter((p) => !p.needs || (p.needs === "gmail" ? gmail : cal));
-  const waiting = home.drafts_pending + (home.calendar_pending ?? 0);
-  const railOpen = full && rail && !phone;
-  const list = (
-    <SessionList sessions={sessions.data ?? []} current={current} onPick={pick} onNew={startNew} loading={sessions.isLoading} />
-  );
-
-  return (
-    <div
-      ref={root}
-      data-guide="assistants.chat"
-      role={full ? "dialog" : undefined}
-      aria-modal={full || undefined}
-      aria-label={full ? t("Chat with {name}, full screen", { name: agent.name }) : undefined}
-      className={cn(
-        "flex min-w-0 overflow-hidden bg-surface",
-        full
-          ? "fixed inset-x-0 top-0 z-40 h-dvh pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] motion-safe:animate-[fade-in_160ms_ease-out]"
-          : "h-[var(--fill-h,32rem)] rounded-[var(--radius-lg)] border border-border",
-      )}
-    >
-      {/* Full screen on wide screens: the conversations sit beside the chat (and fold away). */}
-      {railOpen ? (
-        <aside aria-label={t("Conversations")} className="flex w-72 shrink-0 flex-col border-r border-border bg-surface-2/40">
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
-            <AgentAvatar name={agent.name} color={agent.color} size="sm" />
-            <p className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{agent.name}</p>
-            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Hide conversations")} title={t("Hide conversations")}><SidebarSimpleIcon size={17} /></Button>
-          </div>
-          {list}
-        </aside>
-      ) : null}
-
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className={cn("flex shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-4", full ? "h-14" : "py-2.5")}>
-          {full && !phone && !rail ? (
-            <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Show conversations")} title={t("Show conversations")}><SidebarSimpleIcon size={17} /></Button>
-          ) : null}
-          <AgentAvatar name={agent.name} color={agent.color} size="sm" working={send.isPending} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-semibold">{agent.name}</p>
-            <p className="truncate text-[11.5px] text-muted">{send.isPending ? thinkingLine(asked) : title && current ? title : agent.role}</p>
-          </div>
-          {waiting ? (
-            <Button size="sm" variant="outline" onClick={() => { setFull(false); onDrafts(); }} title={t("{n} to approve", { n: waiting })}>
-              <CheckCircleIcon size={14} /> {waiting}<span className="max-sm:hidden"> {t("to approve")}</span>
-            </Button>
-          ) : null}
-          {!railOpen ? (
-            <Button size="icon-sm" variant="ghost" onClick={() => setHistory(true)} aria-label={t("Conversations")} title={t("Conversations")}><ClockCounterClockwiseIcon size={17} /></Button>
-          ) : null}
-          {current ? (
-            <Button size="sm" variant="ghost" onClick={startNew} aria-label={t("New conversation")} title={t("New conversation")}><PlusIcon size={15} /><span className="max-md:hidden">{t("New")}</span></Button>
-          ) : null}
-          <Button size="icon-sm" variant="ghost" onClick={() => setFull((f) => !f)} aria-pressed={full}
-            aria-label={full ? t("Exit full screen") : t("Full screen")} title={full ? t("Exit full screen (Esc)") : t("Full screen (F)")}>
-            {full ? <ArrowsInSimpleIcon size={17} /> : <ArrowsOutSimpleIcon size={17} />}
-          </Button>
-        </div>
-
-        <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6" aria-live="polite">
-          {!messages.length && !send.isPending ? (
-            current && thread.isLoading ? (
-              <div className="mx-auto grid max-w-3xl gap-4">{[0, 1, 2].map((i) => <Skeleton key={i} className={cn("h-16 rounded-[var(--radius-lg)]", i % 2 ? "ml-auto w-2/3" : "w-4/5")} />)}</div>
-            ) : (
-              <div className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center gap-4 py-6 text-center">
-                <AgentAvatar name={agent.name} color={agent.color} size="lg" />
-                <div>
-                  <p className="text-[17px] font-semibold">{t("Hi, I'm {name}.", { name: agent.name })}</p>
-                  <p className="mt-1 text-[13px] text-muted">{t("Ask me about the company, your team or your inbox. Try one of these:")}</p>
-                </div>
-                <div data-guide="assistants.quick" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-                  {prompts.slice(0, 6).map((p) => (
-                    <button key={p.label} type="button" onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
-                      className="group flex min-h-11 items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border px-3.5 py-3 text-left text-[13px] transition-colors hover:border-accent/50 hover:bg-accent-soft/40">
-                      <span className="font-medium">{t(p.label)}</span>
-                      <ArrowRightIcon size={14} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
-                    </button>
-                  ))}
-                </div>
-                {!gmail ? <p className="text-[12px] text-muted">{t("Connect Google in Settings and I can read your inbox and calendar too.")}</p>
-                  : !cal ? <p className="text-[12px] text-muted">{t("Reconnect Google in Settings to add your calendar.")}</p> : null}
-              </div>
-            )
-          ) : null}
-          <ol className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-5">
-            <AnimatePresence initial={false}>
-              {messages.map((m) => (
-                <motion.li key={m.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={cn("flex gap-2.5", m.role === "user" && "justify-end")}>
-                  {m.role === "assistant" ? <AgentAvatar name={agent.name} color={agent.color} size="sm" className="mt-0.5 shrink-0 max-sm:hidden" /> : null}
-                  <div className={cn("min-w-0", m.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
-                    {m.role === "user" ? (
-                      <div className="rounded-[var(--radius-lg)] rounded-br-sm bg-accent px-3.5 py-2.5 text-[14px] break-words whitespace-pre-wrap text-accent-fg">{m.content}</div>
-                    ) : (
-                      <div className="min-w-0 overflow-x-auto rounded-[var(--radius-lg)] rounded-tl-sm bg-surface-2/70 px-4 py-3">
-                        <Markdown className="text-[14px] [&_table]:text-[12.5px]">{m.content}</Markdown>
-                      </div>
-                    )}
-                    {m.role === "assistant" && m.meta?.tools?.length ? (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {[...new Set(m.meta.tools)].map((tool) => {
-                          const look = TOOL_LOOK[tool];
-                          const IconCmp = look?.icon ?? LightningIcon;
-                          return (
-                            <span key={tool} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-muted">
-                              <IconCmp size={11} /> {look ? t(look.label) : tool.replace(/_/g, " ")}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                </motion.li>
-              ))}
-            </AnimatePresence>
-            {send.isPending ? (
-              <li className="flex items-center gap-2.5">
-                <AgentAvatar name={agent.name} color={agent.color} size="sm" working />
-                <span className="flex items-center gap-2 rounded-[var(--radius-lg)] bg-surface-2/70 px-3.5 py-2.5 text-[12.5px] text-muted">
-                  <span className="flex gap-1">{[0, 1, 2].map((i) => <span key={i} className="size-1.5 rounded-full bg-accent motion-safe:animate-bounce" style={{ animationDelay: `${i * 120}ms` }} />)}</span>
-                  {thinkingLine(asked)}
-                </span>
-              </li>
-            ) : null}
-          </ol>
-        </div>
-
-        {/* Scrolled up to read: one tap back to the latest message. */}
-        <AnimatePresence>
-          {!atBottom && messages.length ? (
-            <motion.div initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, y: 8 }}
-              className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--composer-h,7.5rem)+0.75rem)] flex justify-center">
-              <button type="button" onClick={() => { stick.current = true; toBottom(true); }}
-                className="pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium shadow-[var(--shadow-pop)] hover:border-accent/50 hover:text-accent">
-                <ArrowDownIcon size={14} weight="bold" /> {unseen ? t("New reply") : t("Jump to latest")}
-              </button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <div ref={composer} className="shrink-0">
-          {messages.length ? (
-            <div data-guide="assistants.quick" className={cn("flex gap-1.5 overflow-x-auto border-t border-border px-3 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", full && "sm:justify-center")}>
-              {prompts.map((p) => (
-                <button key={p.label} type="button" disabled={send.isPending}
-                  onClick={() => (p.prompt.includes("<") ? (setDraft(p.prompt), box.current?.focus()) : submit(p.prompt))}
-                  className="h-8 shrink-0 rounded-full border border-border px-3 text-[12px] whitespace-nowrap text-muted hover:border-accent/50 hover:text-fg disabled:opacity-50 pointer-coarse:h-9">
-                  {t(p.label)}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <form className={cn("mx-auto flex w-full items-end gap-2 p-2.5 sm:p-3", full && "max-w-4xl")} onSubmit={(e) => { e.preventDefault(); submit(); }}>
-            <label htmlFor={`as-${agent.id}`} className="sr-only">{t("Message {name}", { name: agent.name })}</label>
-            <textarea ref={box} id={`as-${agent.id}`} value={draft} rows={1}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
-              disabled={agent.status !== "active"}
-              placeholder={agent.status !== "active" ? t("{name} is {status}", { name: agent.name, status: agent.status === "paused" ? t("Paused").toLowerCase() : agent.status }) : phone ? t("Ask anything…") : t("Ask {name} anything…", { name: agent.name })}
-              className="max-h-40 min-h-11 flex-1 resize-none rounded-[var(--radius-md)] border border-border bg-bg px-3.5 py-2.5 text-[14px] [field-sizing:content] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none disabled:opacity-60 max-sm:text-[16px]" />
-            <VoiceInput round disabled={agent.status !== "active"}
-              onText={(said) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${said}` : said)); box.current?.focus(); }} />
-            <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || send.isPending} aria-label={t("Send")}>
-              <PaperPlaneRightIcon size={18} weight="fill" />
-            </Button>
-          </form>
-        </div>
-      </div>
-
-      {/* Conversations as a sheet: phones always, wide screens when the side list is not shown. */}
-      <SideSheet open={history} onOpenChange={setHistory} size="sm" title={t("Conversations")} description={t("Your chats with {name}. WhatsApp chats are listed too.", { name: agent.name })}>
-        {list}
-      </SideSheet>
     </div>
   );
 }
@@ -902,20 +470,21 @@ export function AssistantsPage() {
   }, [search.google, search.msg, navigate, qc, t]);
 
   return (
-    // Phones in the chat: tighter page padding, so the conversation reaches down to the tab bar.
-    <Page wide className={list.length && tab === "chat" ? "max-md:pt-3 max-md:pb-2" : undefined}>
-      {/* On phones with assistants, the chat gets the screen: its own header names the assistant. */}
-      <div className={list.length ? "max-md:hidden" : undefined}>
-        <PageHeader title={t("My assistants")}
-          description={t("Your own private AI assistants: they know the whole company, read your inbox, and chase people for you.")}
-          actions={list.length ? <Button onClick={() => setCreating("chief_of_staff")}><PlusIcon size={16} weight="bold" /> {t("New assistant")}</Button> : null} />
-      </div>
+    // The chat itself opens full screen (/chat/$agentId); this page is its home: presets, drafts, settings.
+    <Page wide>
+      <PageHeader title={t("My assistants")}
+        description={t("Your own private AI assistants: they know the whole company, read your inbox, and chase people for you.")}
+        actions={list.length ? <Button onClick={() => setCreating("chief_of_staff")}><PlusIcon size={16} weight="bold" /> {t("New assistant")}</Button> : null} />
       {isLoading ? <Skeleton className="h-[60dvh] rounded-[var(--radius-lg)]" />
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
-        : !home || !agent ? (
+        : home?.available === false ? (
+          // P30: personal assistants are for people who manage others; staff have their twin.
+          <EmptyState icon={SparkleIcon} title={t("Not for your role")} body={home.reason ?? t("Personal assistants are for people who manage others.")}
+            action={<Button asChild><Link to="/my-worker">{t("Open My AI")}</Link></Button>} />
+        ) : !home || !agent ? (
           home ? <Welcome presets={home.presets} onPick={(k) => setCreating(k)} /> : null
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
             {/* assistants: a rail on desktop, chips on phones */}
             <aside className="min-w-0">
               {/* Wide screens: the view tabs head the side rail, so the chat starts higher and runs taller. */}
@@ -960,9 +529,14 @@ export function AssistantsPage() {
               </div>
             </aside>
 
-            <div className="grid min-w-0 content-start gap-3">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
               <div className="lg:hidden">{viewTabs}</div>
-              {tab === "chat" ? <Chat key={agent.id} agent={agent} home={home} onDrafts={() => go({ tab: "drafts" })} />
+              {tab === "chat" ? (
+                <ChatLauncher key={agent.id} agent={agent} canWrite from={`/assistants?a=${encodeURIComponent(agent.id)}`}
+                  quickPrompts={assistantPrompts(home)} guide={{ root: "assistants.chat", quick: "assistants.quick" }}
+                  footer={!home.google.account ? <p className="text-[12px] text-muted">{t("Connect Google in Settings and I can read your inbox and calendar too.")}</p>
+                    : !home.google.account.calendar ? <p className="text-[12px] text-muted">{t("Reconnect Google in Settings to add your calendar.")}</p> : null} />
+              )
                 : tab === "drafts" ? <Drafts home={home} />
                 : <Settings key={agent.id + agent.soul.length} agent={agent} home={home} />}
             </div>

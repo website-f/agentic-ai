@@ -85,8 +85,11 @@ export type CompanyFile = DocFile & {
 export interface FolderInfo {
   /** "TENDER HQ/CARTA ALIR"; "" holds the files at the top level. */
   path: string;
-  /** Files directly in this folder. */
+  /** Files in this folder. Servers that send `direct` count everything under it here (and
+   * list every parent); older ones count only the folder's own files. */
   files: number;
+  /** Files sitting in this folder itself (servers that list parents and cumulative counts). */
+  direct?: number;
   size: number;
   /** Files per kind directly in this folder. */
   kinds: Record<string, number>;
@@ -266,6 +269,23 @@ export function buildTree(folders: FolderInfo[]): FolderNode {
     byPath.set(path, n);
     return n;
   };
+  // Newer servers send each folder's counts with everything under it already included, and
+  // list every parent: take them as they are (adding them up again would double them).
+  if (folders.some((f) => f.direct !== undefined)) {
+    for (const f of folders) {
+      const n = node(cleanFolder(f.path));
+      n.files = f.files;
+      n.flagged = f.flagged;
+      n.size = f.size;
+    }
+    for (const c of root.children) {
+      root.files += c.files;
+      root.flagged += c.flagged;
+      root.size += c.size;
+    }
+    sortTree(root);
+    return root;
+  }
   for (const f of folders) {
     const path = cleanFolder(f.path);
     node(path);
@@ -279,12 +299,13 @@ export function buildTree(folders: FolderInfo[]): FolderNode {
       p = p === "" ? null : p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
     }
   }
-  const sort = (n: FolderNode) => {
-    n.children.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
-    n.children.forEach(sort);
-  };
-  sort(root);
+  sortTree(root);
   return root;
+}
+
+function sortTree(n: FolderNode) {
+  n.children.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  n.children.forEach(sortTree);
 }
 
 export function cleanFolder(path: string): string {
@@ -356,6 +377,9 @@ export interface IntakeParams {
   name: string;
   department_id?: string | null;
   batch?: string | null;
+  /** The folder the upload goes into ("" or absent: the top); a dropped folder keeps its own
+   * folders under it. */
+  folder?: string | null;
 }
 
 /** POST a raw body with upload progress (fetch cannot report it). */
@@ -394,6 +418,7 @@ export function uploadIntake(file: File, p: IntakeParams, onProgress: (fraction:
   const q = new URLSearchParams({ branch_id: p.branch_id, name: p.name });
   if (p.department_id) q.set("department_id", p.department_id);
   if (p.batch) q.set("batch", p.batch);
+  if (p.folder) q.set("folder", cleanFolder(p.folder));
   return postRaw<IntakeBatch>(`/api/intake?${q}`, file, onProgress, signal);
 }
 

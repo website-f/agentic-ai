@@ -46,12 +46,12 @@ export const GUIDE_PAGES: GuidePage[] = [
     ],
   },
   {
-    id: "my-worker", route: "/my-worker", title: "My AI worker", group: "Home", who: "Staff",
+    id: "my-worker", route: "/my-worker", title: "My AI", group: "Home", who: "Staff",
     states: [{ key: "welcome", how: "First sign-in as staff: the Hire your AI worker steps (/welcome)" }],
     targets: [t("my-worker.status", "What it is doing now"), t("my-worker.actions", "Give a task, chat, change hours"), t("my-worker.week", "Its working week")],
   },
   {
-    id: "assistants", route: "/assistants", title: "My assistants", group: "Home",
+    id: "assistants", route: "/assistants", title: "My assistants", group: "Home", who: "Owners and managers",
     states: [],
     targets: [t("assistants.chat", "Chat with your assistant"), t("assistants.quick", "One-tap questions"), t("assistants.connections", "Gmail, Calendar and WhatsApp")],
   },
@@ -119,7 +119,7 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("company-kit.fields", "Company facts"), t("company-kit.save", "Save")],
   },
   {
-    id: "files", route: "/files", title: "Company files", group: "Documents",
+    id: "files", route: "/files", title: "Library: Browse", group: "Documents",
     states: [{ key: "sheet", how: "Click a file: its preview and what was read from it" }],
     targets: [
       t("files.company", "Pick the company"), t("files.upload", "Upload files, folders or a zip"), t("files.report", "Upload report"),
@@ -156,7 +156,7 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("sops.new", "New SOP"), t("sops.list", "SOPs by scope")],
   },
   {
-    id: "library", route: "/library", title: "Library", group: "Knowledge", states: [],
+    id: "library", route: "/library", title: "Guidelines", group: "Knowledge", states: [],
     targets: [t("library.upload", "Upload guidelines"), t("library.sources", "Sources and status"), t("library.search", "Try a search")],
   },
   {

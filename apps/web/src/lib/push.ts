@@ -63,6 +63,21 @@ export async function disablePush(): Promise<void> {
   await sub.unsubscribe();
 }
 
+/** Sign-out: this device stops getting the person's notifications (the server forgets the
+ * subscription, then the browser drops it). Never throws; hands back the endpoint it dropped. */
+export async function dropPushOnSignOut(): Promise<string | null> {
+  try {
+    const sub = await (await registration())?.pushManager?.getSubscription();
+    if (!sub) return null;
+    const endpoint = sub.endpoint;
+    await api("/api/push/unsubscribe", "POST", { endpoint }).catch(() => undefined);
+    await sub.unsubscribe().catch(() => false);
+    return endpoint;
+  } catch {
+    return null;
+  }
+}
+
 /** On every start: re-send the current subscription (the browser may have rotated it). */
 export async function syncPush(): Promise<void> {
   try {

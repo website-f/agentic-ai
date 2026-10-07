@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/markdown";
-import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
@@ -24,12 +24,15 @@ import { branchesQuery, meQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { sopsQuery, workKeys, type SOP } from "@/lib/work";
 
+import { LibraryHeader } from "./library-hub/hub";
+import { sopScopeLabel } from "./library-hub/views";
+
 type Scope = SOP["scope"];
 const SCOPES: { value: Scope; label: string; hint: string }[] = [
   { value: "workspace", label: msg("Every company"), hint: msg("Every agent in every branch follows it.") },
   { value: "branch", label: msg("One company"), hint: msg("Every agent in that branch.") },
   { value: "department", label: msg("One department"), hint: msg("Every agent in that department.") },
-  { value: "library", label: msg("Library"), hint: msg("Only agents you attach it to, like a skill pack.") },
+  { value: "library", label: msg("Attached to agents"), hint: msg("Only agents you attach it to, like a skill pack.") },
 ];
 const SCOPE_LOOK: Record<Scope, { icon: typeof FileTextIcon; tone: Tone }> = {
   workspace: { icon: GlobeHemisphereEastIcon, tone: "accent" },
@@ -91,7 +94,7 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
       open={open}
       onOpenChange={onOpenChange}
       title={sop ? sop.title : t("New SOP")}
-      description={sop ? `${sop.scope_label} · ${t("version {n}", { n: sop.version })} · ${t("updated {when}", { when: timeAgo(sop.updated_at).toLowerCase() })}` : t("Agents read SOPs before every step, so they follow them without being reminded.")}
+      description={sop ? `${sopScopeLabel(sop)} · ${t("version {n}", { n: sop.version })} · ${t("updated {when}", { when: timeAgo(sop.updated_at).toLowerCase() })}` : t("Agents read SOPs before every step, so they follow them without being reminded.")}
       actions={canManage ? (
         <>
           {isDraft ? (
@@ -202,7 +205,7 @@ export function SopsPage() {
       scope,
       label: SCOPES.find((s) => s.value === scope)!.label,
       hint: SCOPES.find((s) => s.value === scope)!.hint,
-      items: (sops ?? []).filter((s) => s.scope === scope && (filter !== "draft" || s.status === "draft") && (!needle || s.title.toLowerCase().includes(needle) || s.scope_label.toLowerCase().includes(needle))),
+      items: (sops ?? []).filter((s) => s.scope === scope && (filter !== "draft" || s.status === "draft") && (!needle || s.title.toLowerCase().includes(needle) || sopScopeLabel(s).toLowerCase().includes(needle))),
     })).filter((g) => g.items.length);
   }, [sops, filter, q]);
   const count = (scope: Scope) => (sops ?? []).filter((s) => s.scope === scope).length;
@@ -210,15 +213,12 @@ export function SopsPage() {
 
   return (
     <Page>
-      <PageHeader
-        title={t("SOPs")}
-        description={t("Written procedures your agents follow. Company and department SOPs apply automatically; library SOPs are attached to specific agents.")}
+      <LibraryHeader tab="/sops"
         actions={<>
           {/* P24: turn a company's uploaded procedures into SOPs from Company files. */}
-          <Button variant="ghost" asChild><Link to="/files">{t("Upload company documents →")}</Link></Button>
+          <Button variant="ghost" asChild><Link to="/files">{t("Upload in Browse →")}</Link></Button>
           {canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New SOP")}</Button> : null}
-        </>}
-      />
+        </>} />
       {isLoading ? (
         <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-none" />)}
@@ -257,7 +257,7 @@ export function SopsPage() {
                           leading={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
                           title={<span className="block whitespace-normal break-words">{s.title}</span>}
                           trailing={s.status === "draft" ? <Pill tone="warn">{t("Draft")}</Pill> : undefined}
-                          meta={<Meta items={[s.scope_label, <span key="v" className="tabular">v{s.version}</span>, t("updated {when}", { when: timeAgo(s.updated_at).toLowerCase() })]} />} />
+                          meta={<Meta items={[sopScopeLabel(s), <span key="v" className="tabular">v{s.version}</span>, t("updated {when}", { when: timeAgo(s.updated_at).toLowerCase() })]} />} />
                       ))}
                     </ListCard>
                   </section>

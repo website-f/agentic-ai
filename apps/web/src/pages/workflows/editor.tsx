@@ -23,6 +23,7 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { SwitchField } from "@/components/ui/switch";
 import { msg, t, useLang, useT, type Vars } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { LeaveGuard } from "@/lib/unsaved";
 import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { agentsQuery, workKeys } from "@/lib/work";
@@ -787,6 +788,7 @@ export function WorkflowEditor({ existing, initial, onClose, onSaved, onOpenRun 
       </ResponsiveDialog>
       <ConfirmDialog open={leaving} onOpenChange={setLeaving} title={t("Leave without saving?")} danger confirmLabel={t("Discard changes")}
         body={t("Your changes to this workflow will be lost.")} onConfirm={async () => onClose()} />
+      <LeaveGuard when={dirty} />
       {existing ? <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete {name}?", { name: existing.name })} danger confirmLabel={t("Delete")}
         body={t("Agents following it stop following it. Its finished runs are deleted; tasks they created stay on the board.")} onConfirm={async () => { await del.mutateAsync(); }} /> : null}
     </div>

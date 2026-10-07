@@ -5,7 +5,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Fragment, useMemo } from "react";
 
-import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
 import { Marked, SearchField, TYPE_ICON, useOpenTarget } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 import { kindVisual } from "./documents/visuals";
+import { LibraryHeader } from "./library-hub/hub";
 
 const ANY = "__any";
 type Search = { q?: string; type?: HitType; kind?: string; dept?: string; source?: "upload" | "agent" | "person" };
@@ -171,10 +172,7 @@ export function SearchPage() {
 
   return (
     <Page>
-      <PageHeader
-        title={t("Search documents")}
-        description={t("Search inside every document your company has: files page by page, SOPs, prepared documents, templates and wiki pages.")}
-      />
+      <LibraryHeader tab="/search" />
       <div className="grid gap-3">
         {/* Phones: no auto focus (the keyboard would cover the page). */}
         <SearchField variant="page" initial={q} autoFocus={!q && !phone} />

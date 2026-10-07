@@ -32,6 +32,8 @@ export interface Provider {
   enabled: boolean;
   health: Health;
   cooling_seconds: number;
+  /** Models resting on their own after a model-specific error: seconds left each. */
+  cooling_models?: Record<string, number>;
   last_test_at: string | null;
   last_test_result: { ok: boolean; summary: string; model: string | null; error_class: string | null } | null;
   model_count: number;

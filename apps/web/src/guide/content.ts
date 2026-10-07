@@ -156,7 +156,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         steps: [
           s("Click **Upload to my workspace** and pick the files.", "desk.files"),
           s("They are read like any company file, so you and your AI worker can search inside them."),
-          s("Only you and your managers see them. They are also in Company files under My workspace and your name."),
+          s("Only you and your managers see them. They are also in the Library under My workspace and your name."),
         ],
       },
     ],
@@ -170,7 +170,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   "my-worker": {
-    purpose: "Staff only: the home of the one AI worker you hired. See what it is doing, what waits for you, its duties and the hours it works.",
+    purpose: "Staff only: My AI, the home of your one AI worker, your twin. Today shows what it is doing, what waits for you, its duties and the hours it works. Its tabs open the chat, its tasks, what it knows, teaching it and its profile.",
     can: [
       "Hire your AI worker in five short steps the first time you sign in: company, the worker, its job, working hours and the offer letter.",
       "See its status: **Working**, **Waiting for you**, **Paused**, on a break or **Free for work**.",
@@ -188,7 +188,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "Hire your AI worker",
         state: "welcome",
         steps: [
-          s("On **My AI worker**, click **Start hiring**. The hiring steps open full screen."),
+          s("Sign in for the first time: the hiring steps open full screen. (Without a worker yet, **My AI** offers **Create my twin**.)"),
           s("**Your company**: pick your company and department. If you are not sure, choose **Not sure yet**; your manager can set it later."),
           s("**Meet your AI worker**: give it a name, a job title and say how it should work. Tick what it must ask you about first."),
           s("**Its job** (optional): pick a role blueprint, workflows it follows, recurring duties and a first task."),
@@ -233,7 +233,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Change its name, how it works for you, how it thinks and what it may use in **Settings**.",
     ],
     spots: {
-      "assistants.chat": "The conversation with your assistant.",
+      "assistants.chat": "Open the chat with your assistant full screen, or pick up a recent conversation.",
       "assistants.quick": "One-tap questions. Gmail and calendar ones appear once Google is connected.",
       "assistants.connections": "Gmail, Calendar and WhatsApp: what is connected.",
     },
@@ -269,7 +269,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Calendar guests get an invitation only when you confirm the change in **Drafts**.",
       "Voice turns your speech into text in the message box. You can edit it before sending.",
     ],
-    who: "Everyone who can create work (all roles except approver and viewer). Each person's assistants are private to them.",
+    who: "People who manage others: owners, admins, branch managers, HODs and supervisors. Each person's assistants are private to them. Staff have one personal AI, their twin, in My AI.",
     related: ["chat", "channels", "overview"],
   },
 
@@ -662,7 +662,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   chat: {
     purpose: "Talk to any agent directly. When something needs doing, turn the reply into a task.",
     can: [
-      "Pick an agent and chat with it.",
+      "Pick an agent: the chat opens full screen, so replies are easy to read. **Back** or Esc returns you.",
       "Speak instead of typing: click the microphone, talk, and your words appear in the box.",
       "Start a **New** conversation, or go back to an earlier one.",
       "Click **Make this a task** under a reply to turn it into a task.",
@@ -738,7 +738,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   files: {
-    purpose: "Company files: one place per company for all its documents. Drop a whole folder or zip and its folders are kept, every file is read and sorted, and how-to documents go to the library for agents.",
+    purpose: "The Library's Browse tab: every file in folders, one place per company for all its documents. Drop a whole folder or zip and its folders are kept, every file is read and sorted, and how-to documents go to the guidelines for agents.",
     can: [
       "Pick the company under **Company**, then drop files, whole folders or a .zip on the upload area.",
       "Follow each upload as it is unpacked, read and sorted, then read its report: what was found, what went to the library and what was held back.",
@@ -763,7 +763,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       {
         title: "Company documents: where to upload",
         steps: [
-          s("Open **Company files** (under Documents) and pick the company under **Company**.", "files.company"),
+          s("Open **Library**, stay on **Browse**, and pick the company under **Company**.", "files.company"),
           s("What to upload: SOPs, guides, checklists, flowcharts, forms, templates, certificates and contracts. A whole zip of the company's documents is fine."),
           s("Drop the zip, the files or a whole folder on the upload area, or click **Choose files** or **Choose a folder**.", "files.upload"),
           s("Wait while it shows **Unpacking**, **Reading** and **Sorting**. You can leave the page; the work carries on."),
@@ -815,7 +815,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("Pick a suggestion: a word from your own documents, a title, a heading, or one of your recent searches. The ↑ ↓ and Enter keys work too."),
           s("Press Enter for **Search all documents**: every file page by page, SOPs, documents, templates and wiki pages, with the matching words marked."),
           s("Put words in quotes for an exact phrase, like \"load system calculation\". Amounts and dates work as people write them: RM700, RM 700.00, 16hb. Reference numbers, like a PO or tender number, complete as you type."),
-          s("Click a result: a file opens in Company files at the page that matched. You only find what you may open, and never a held-back file."),
+          s("Click a result: a file opens in the Library at the page that matched. You only find what you may open, and never a held-back file."),
         ],
       },
     ],
@@ -1569,14 +1569,14 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Search inside every uploaded file, word by word, with suggestions as you type: a phrase, an amount like RM700 or a reference number.",
       "Show four workflows built from the company's uploaded procedures, each ending in a document a person reviews.",
       "Show where risky steps stop and wait in **Approvals**: sending outside, signing, payments and portal submissions.",
-      "Finish in **Documents** and **Company files** filtered to **Made by AI**, so the client sees everything the AI made in one place.",
+      "Finish in **Documents** and **Library** filtered to **Made by AI**, so the client sees everything the AI made in one place.",
     ],
     spots: {},
     howto: [
       {
         title: "Before the demo: set up the company",
         steps: [
-          s("Sign in as the owner. In **Company files**, pick the company and drop a zip of its procedures: uniform and equipment requests, disciplinary steps, the salary advance rules and the tender procedure."),
+          s("Sign in as the owner. In **Library**, pick the company and drop a zip of its procedures: uniform and equipment requests, disciplinary steps, the salary advance rules and the tender procedure."),
           s("When the upload is ready, select the procedure files and click **Make an SOP** or **Build a workflow**. Check each draft and save it."),
           s("Fill in **Company kit** (legal name, registration number, address, signatory, payment terms) so letters and orders print on the letterhead. Set **Document language** to Bahasa Melayu for a Malay-speaking company: its quotations, invoices and AI folder are then in Malay."),
           s("Add a staff member with the staff role in Members, and keep their sign-in details for the demo."),
@@ -1585,7 +1585,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       {
         title: "1. A staff member hires their AI worker",
         steps: [
-          s("Sign in as the staff member. The hiring steps open by themselves; if not, click **Start hiring** on **My AI worker**."),
+          s("Sign in as the staff member. The hiring steps open by themselves; if not, open **My AI** and click **Create my twin**."),
           s("Give the worker a name and a job title, for example HR assistant at your security company, and tick what it must ask about first."),
           s("Under **Its job**, add a duty it does every day, such as checking new leave requests each morning."),
           s("Under **Working hours**, pick **Office week**. Work given after hours waits for its next shift."),
@@ -1604,10 +1604,10 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       {
         title: "2. Give it a task based on an SOP",
         steps: [
-          s("On **My AI worker**, click **Give a task**."),
+          s("On **My AI**, click **Give a task**."),
           s("Write the request and name the SOP to follow, for example: prepare a quotation for guarding two schools for 12 months, with the company's rates, following the quotation SOP."),
           s("Open the task in **Tasks** and show the timeline: the SOP it read, the files it opened and what it is doing now."),
-          s("The quotation is made from the company's template, on its letterhead. It is saved in **Documents**, and its PDF in **Company files** under AI documents, marked **Made by AI**."),
+          s("The quotation is made from the company's template, on its letterhead. It is saved in **Documents**, and its PDF in **Library** under AI documents, marked **Made by AI**."),
           s("When it finishes, the result waits for review. Click **Accept**, or **Send back** with a note to show the agent fixing its own work."),
         ],
       },
@@ -1672,7 +1672,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("On the home page, a card shows how many documents AI made this week and how many wait for review. Click **Review now**."),
           s("In **Documents**, open **Review what AI made**. Each row shows the agent, the task or workflow it came from, and **Approve**, **Send back** and **Open**."),
           s("Send one back with a note and show the agent revising it. It comes back to the same list when it is done."),
-          s("In **Company files**, choose **Made by AI** and pick an agent. The purchase order, the warning letter, the salary report and the tender letters are all there, each with its task and review status."),
+          s("In **Library**, choose **Made by AI** and pick an agent. The purchase order, the warning letter, the salary report and the tender letters are all there, each with its task and review status."),
           s("Switch the filter to **Uploaded** to show the company's own files, the procedures and forms the agents worked from."),
         ],
       },

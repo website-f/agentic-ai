@@ -1,14 +1,11 @@
-/** The file store: every file of the company in one place, by how people look for it. What
- * waits for a person's review, each piece of work with everything it made, downloaded or was
- * given, the newest files, what AI made, what agents fetched from websites, uploads, the
- * library, and the folders. Any file opens in the same viewer from any view. */
-import {
-  ArrowRightIcon, BooksIcon, ClockIcon, CloudArrowUpIcon, DownloadSimpleIcon, FolderOpenIcon, GlobeIcon,
-  ListChecksIcon, RobotIcon, SealCheckIcon, TreeStructureIcon, type Icon,
-} from "@phosphor-icons/react";
+/** The file store's lists on the Library's Browse tab: what waits for review, each piece of
+ * work with everything it made, downloaded or was given, the newest files, what AI made, what
+ * agents fetched from websites, uploads, and the guidelines. Any file opens in the same viewer
+ * from any list. */
+import { ArrowRightIcon, DownloadSimpleIcon, FolderOpenIcon, GlobeIcon, ListChecksIcon, SealCheckIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { FileStatus } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
@@ -21,11 +18,11 @@ import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { locale, msg, useT } from "@/i18n";
+import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
-import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
-import { docKeys, fileQuery, fileSize, fileUrl, siteOf, type FileStats } from "@/lib/documents";
+import type { FileView } from "@/lib/file-store";
+import { docKeys, fileQuery, fileSize, fileUrl, siteOf } from "@/lib/documents";
 import { kindKey, kindLabel, type CompanyFile } from "@/lib/intake";
 import { useDebounced, usePagedList } from "@/lib/paged";
 import { fileOrigin, provKeys, type FileProvenance, type ReviewedDoc } from "@/lib/provenance";
@@ -33,94 +30,14 @@ import { meQuery } from "@/lib/queries";
 import { hasAny } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 
+import { BrowseControls, sortRows, Tile, TileGrid, useBrowsePrefs } from "../library-hub/browse-bits";
+import { VIEW_INFO } from "../library-hub/views";
 import { QueueRow } from "./documents";
 import { FileViewer } from "./files-viewer";
 import { FileTile, KindTile } from "./visuals";
 
 
 type StoreFile = CompanyFile & FileProvenance;
-
-const VIEWS: Record<StoreView, { label: string; hint: string; icon: Icon }> = {
-  review: { label: msg("Needs review"), hint: msg("Documents AI made that wait for a person to approve or send back."), icon: SealCheckIcon },
-  tasks: { label: msg("By task"), hint: msg("Each piece of work with everything it made, downloaded or was given, its helpers' too."), icon: ListChecksIcon },
-  recent: { label: msg("Recent"), hint: msg("The newest files of every kind, whoever added them."), icon: ClockIcon },
-  agents: { label: msg("Made by AI"), hint: msg("Documents, reports and files your agents produced."), icon: RobotIcon },
-  downloads: { label: msg("From websites"), hint: msg("Files agents downloaded from websites and portals, such as tender documents."), icon: GlobeIcon },
-  uploaded: { label: msg("Uploaded"), hint: msg("Files people uploaded or attached to work."), icon: CloudArrowUpIcon },
-  library: { label: msg("In the library"), hint: msg("Guidelines and manuals agents search and cite."), icon: BooksIcon },
-  folders: { label: msg("All folders"), hint: msg("Every file in its folder, with uploads of whole folders and zips."), icon: TreeStructureIcon },
-};
-
-// ---------------------------------------------------------------- the list of views
-
-export function StoreNav({ view, onPick, stats, waiting }: {
-  view: StoreView;
-  onPick: (v: StoreView) => void;
-  stats?: FileStats;
-  waiting: number;
-}) {
-  const t = useT();
-  const count: Partial<Record<StoreView, number | undefined>> = {
-    review: waiting,
-    tasks: stats?.in_tasks,
-    recent: stats?.total,
-    agents: stats?.agent,
-    downloads: stats?.download,
-    uploaded: stats?.upload,
-    library: stats?.library,
-  };
-  return (
-    <>
-      {/* Phone and tablet: a row of chips that scrolls sideways. */}
-      <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
-        <div className="flex w-max gap-1.5" role="tablist" aria-label={t("Views")}>
-          {STORE_VIEWS.map((v) => {
-            const on = v === view;
-            const V = VIEWS[v];
-            return (
-              <button key={v} type="button" role="tab" aria-selected={on} onClick={() => onPick(v)}
-                ref={on ? (el) => el?.scrollIntoView({ inline: "center", block: "nearest" }) : undefined}
-                className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium whitespace-nowrap transition-colors",
-                  on ? "border-accent bg-accent-soft text-accent" : "border-border bg-surface text-muted hover:text-fg")}>
-                <V.icon size={15} weight={on ? "fill" : "regular"} />{t(V.label)}
-                {count[v] ? <span className={cn("tabular", v === "review" ? "rounded-full bg-accent px-1.5 text-[11px] text-white" : "text-[12px] text-muted")}>{count[v]?.toLocaleString(locale())}</span> : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {/* Desktop: a list down the side. */}
-      <nav aria-label={t("Views")} data-guide="files.views" className="hidden lg:grid lg:content-start lg:gap-0.5">
-        {STORE_VIEWS.map((v) => {
-          const on = v === view;
-          const V = VIEWS[v];
-          return (
-            <button key={v} type="button" onClick={() => onPick(v)} aria-current={on ? "page" : undefined} title={t(V.hint)}
-              className={cn("flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-left text-[13.5px] transition-colors",
-                on ? "bg-accent-soft font-semibold text-accent" : "text-fg hover:bg-surface-2",
-                v === "folders" && "mt-2 border-t border-border pt-3")}>
-              <V.icon size={17} weight={on ? "fill" : "duotone"} className={cn("shrink-0", !on && "text-muted")} />
-              <span className="min-w-0 flex-1 truncate">{t(V.label)}</span>
-              {count[v] ? (
-                <span className={cn("tabular", v === "review" ? "rounded-full bg-accent px-1.5 text-[11.5px] font-semibold text-white" : "text-[12px] text-muted")}>
-                  {count[v]?.toLocaleString(locale())}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </nav>
-    </>
-  );
-}
-
-export function viewHint(v: StoreView): string {
-  return VIEWS[v].hint;
-}
-
-export function viewLabel(v: StoreView): string {
-  return VIEWS[v].label;
-}
 
 // ---------------------------------------------------------------- one file
 
@@ -163,7 +80,7 @@ export function StoreRow({ f, onOpen, showCompany, showTask = true, active }: {
       trailing={<>
         <ReviewPill status={f.review_status} />
         <FileStatus f={f} />
-        {f.library ? <Pill tone="accent">{t("In library")}</Pill> : null}
+        {f.library ? <Pill tone="accent">{t("Guideline")}</Pill> : null}
         <a href={fileUrl(f.id)} download onClick={(e) => e.stopPropagation()} aria-label={t("Download {name}", { name: f.name })}
           className="grid size-8 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg pointer-coarse:size-10">
           <DownloadSimpleIcon size={16} />
@@ -203,7 +120,7 @@ export function StoreFileSheet({ id, onClose }: { id: string; onClose: () => voi
 
 // ---------------------------------------------------------------- flat views
 
-const FLAT: Partial<Record<StoreView, Record<string, string>>> = {
+const FLAT: Partial<Record<FileView, Record<string, string>>> = {
   recent: {},
   agents: { origin: "agent" },
   downloads: { source: "download" },
@@ -211,8 +128,26 @@ const FLAT: Partial<Record<StoreView, Record<string, string>>> = {
   library: { library: "true" },
 };
 
-function FlatView({ view, branchId, onOpen, openId }: { view: StoreView; branchId: string | null; onOpen: (id: string) => void; openId?: string }) {
+/** A file as a tile in the grid. */
+export function StoreTile({ f, onOpen, active, corner }: { f: StoreFile; onOpen: () => void; active?: boolean; corner?: ReactNode }) {
   const t = useT();
+  const kk = kindKey(f.kind);
+  return (
+    <Tile onClick={onOpen} active={active} corner={corner}
+      leading={kk === "other" ? <FileTile mime={f.mime} name={f.name} size="lg" /> : <KindTile kind={kk} size="lg" />}
+      title={f.title || f.name}
+      meta={[kindLabel(f.kind), fileSize(f.size), timeAgo(f.created_at)].filter(Boolean).join(" · ")}
+      badge={(f.review_status === "waiting" || f.library || f.status !== "ready") ? <>
+        <ReviewPill status={f.review_status} />
+        <FileStatus f={f} />
+        {f.library ? <Pill tone="accent">{t("Guideline")}</Pill> : null}
+      </> : undefined} />
+  );
+}
+
+function FlatView({ view, branchId, onOpen, openId }: { view: FileView; branchId: string | null; onOpen: (id: string) => void; openId?: string }) {
+  const t = useT();
+  const prefs = useBrowsePrefs();
   const [q, setQ] = useState("");
   const needle = useDebounced(q.trim());
   const list = usePagedList<StoreFile>(docKeys.files, "/api/files", {
@@ -220,24 +155,36 @@ function FlatView({ view, branchId, onOpen, openId }: { view: StoreView; branchI
     branch_id: branchId ?? undefined,
     q: needle || undefined,
   }, { pageSize: 50, poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
+  const files = useMemo(() => sortRows(list.items, prefs.sort, (f) => f.title || f.name, (f) => f.created_at), [list.items, prefs.sort]);
+  const V = VIEW_INFO[view];
   return (
     <div className="grid min-w-0 content-start gap-3">
       <Toolbar>
-        <SearchInput value={q} onChange={setQ} placeholder={t("Search names, titles and kinds")} />
-        <Button size="sm" variant="ghost" asChild>
-          <Link to="/search" search={needle ? { q: needle } : {}}>{t("Search inside documents")} <ArrowRightIcon size={13} /></Link>
-        </Button>
+        <SearchInput value={q} onChange={setQ} placeholder={t("Search names, titles and kinds")} className="sm:max-w-80" />
+        <BrowseControls prefs={prefs} />
+        <div className="flex flex-wrap gap-1 sm:ml-auto">
+          {view === "library" ? (
+            <Button size="sm" variant="ghost" asChild>
+              <Link to="/library">{t("Open the Guidelines tab")} <ArrowRightIcon size={13} /></Link>
+            </Button>
+          ) : null}
+          <Button size="sm" variant="ghost" asChild>
+            <Link to="/search" search={needle ? { q: needle } : {}}>{t("Search inside documents")} <ArrowRightIcon size={13} /></Link>
+          </Button>
+        </div>
       </Toolbar>
       {list.isLoading ? <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[76px]" />)}</div>
         : list.error ? <p role="alert" className="text-danger">{errorMessage(list.error)}</p>
-        : !list.items.length ? (
-          <EmptyState icon={VIEWS[view].icon} title={needle ? t("No files match") : t("Nothing here yet")} body={t(VIEWS[view].hint)} />
+        : !files.length ? (
+          <EmptyState icon={V.icon} title={needle ? t("No files match") : t("Nothing here yet")} body={t(V.hint)} />
+        ) : prefs.layout === "grid" ? (
+          <TileGrid>{files.map((f) => <StoreTile key={f.id} f={f} onOpen={() => onOpen(f.id)} active={openId === f.id} />)}</TileGrid>
         ) : (
           <ListCard>
-            {list.items.map((f) => <StoreRow key={f.id} f={f} onOpen={() => onOpen(f.id)} showCompany={!branchId} active={openId === f.id} />)}
+            {files.map((f) => <StoreRow key={f.id} f={f} onOpen={() => onOpen(f.id)} showCompany={!branchId} active={openId === f.id} />)}
           </ListCard>
         )}
-      {list.items.length ? <LoadMore noun="files" shown={list.items.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
+      {files.length ? <LoadMore noun="files" shown={files.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
     </div>
   );
 }
@@ -391,7 +338,7 @@ function ReviewView({ branchId }: { branchId: string | null }) {
 // ---------------------------------------------------------------- one view
 
 export function StoreViewBody({ view, branchId, taskId, onOpen, openId }: {
-  view: Exclude<StoreView, "folders">;
+  view: FileView;
   branchId: string | null;
   taskId?: string;
   onOpen: (id: string) => void;

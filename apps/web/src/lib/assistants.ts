@@ -20,6 +20,10 @@ export interface GoogleState {
 }
 
 export interface AssistantsHome {
+  /** P30: false for a role without assistants.use (staff have their AI twin instead); then
+   * `reason` says why and the lists are empty. */
+  available?: boolean;
+  reason?: string | null;
   assistants: Agent[];
   presets: Preset[];
   google: GoogleState;

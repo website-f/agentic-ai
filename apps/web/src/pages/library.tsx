@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { FileDrop } from "@/components/file-drop";
 import { LibraryStatusPill, parseScope, ScopeSelect, scopeOptions, WHOLE } from "@/components/library-toggle";
-import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
+import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -39,6 +39,7 @@ import {
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { FileTile } from "./documents/visuals";
+import { LibraryHeader } from "./library-hub/hub";
 
 type Show = "all" | "file" | "sop";
 
@@ -100,14 +101,14 @@ function TrySearch() {
       <CardBody className="grid gap-3">
         <form onSubmit={submit} className="flex flex-wrap gap-2 max-sm:[&>*]:w-full">
           <label className="relative min-w-0 flex-1 basis-60">
-            <span className="sr-only">{t("Search the library")}</span>
+            <span className="sr-only">{t("Search the guidelines")}</span>
             <MagnifyingGlassIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
             <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("e.g. refund for damaged goods")} className="pl-9" />
           </label>
           <Button type="submit" loading={isFetching} disabled={draft.trim().length < 2}>{t("Search")}</Button>
         </form>
         {error ? <p role="alert" className="text-[13px] text-danger">{errorMessage(error)}</p>
-          : q && isFetched && !hits.length ? <p className="text-[13px] text-muted">{t("Nothing in the library matches “{q}”. Try other words.", { q })}</p>
+          : q && isFetched && !hits.length ? <p className="text-[13px] text-muted">{t("No guideline matches “{q}”. Try other words.", { q })}</p>
           : hits.length ? (
             <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
               {hits.map((p) => <Passage key={`${p.source_id}-${p.n}`} p={p} />)}
@@ -183,7 +184,7 @@ export function LibraryPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: libraryKeys.all });
       qc.invalidateQueries({ queryKey: docKeys.files });
-      toast.success(tr("Taken out of the library. The file itself is kept."));
+      toast.success(tr("Taken out of the guidelines. The file itself is kept."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -193,11 +194,10 @@ export function LibraryPage() {
 
   return (
     <Page>
-      <PageHeader title={t("Library")}
-        description={t("The office's guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.")}
+      <LibraryHeader tab="/library"
         actions={<>
-          {/* P24: a company's whole document set (zips, folders) goes in through Company files. */}
-          <Button variant="ghost" asChild><Link to="/files">{t("Upload company documents →")}</Link></Button>
+          {/* P24: a company's whole document set (zips, folders) goes in through Browse. */}
+          <Button variant="ghost" asChild><Link to="/files">{t("Upload in Browse →")}</Link></Button>
           {data?.can_reindex ? (
             <Button variant="outline" loading={reindex.isPending} onClick={() => reindex.mutate()}>
               <ArrowClockwiseIcon size={16} /> {t("Index again")}
@@ -208,7 +208,7 @@ export function LibraryPage() {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {data?.can_edit ? <AddGuidelines /> : null}
         <StatGrid className="grid-cols-2 content-start lg:grid-cols-2">
-          <Stat label={t("Guidelines")} value={files.length} icon={BooksIcon} hint={t("Files in the library")} />
+          <Stat label={t("Guidelines")} value={files.length} icon={BooksIcon} hint={t("Files agents search")} />
           <Stat label={t("SOPs")} value={sources.length - files.length} icon={FileTextIcon} tone="violet" hint={t("Searched by find_sop too")} />
           <Stat label={t("Passages")} value={data?.passages ?? 0} icon={StackIcon} tone="info" hint={t("What agents search")} />
           <Stat label={t("On the way")} value={reading} icon={HourglassMediumIcon} tone={reading ? "warn" : "neutral"} hint={t("Being read or indexed")} />
@@ -229,7 +229,7 @@ export function LibraryPage() {
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !shown.length ? (
-          <EmptyState icon={BooksIcon} title={sources.length ? t("Nothing here") : t("The library is empty")}
+          <EmptyState icon={BooksIcon} title={sources.length ? t("Nothing here") : t("No guidelines yet")}
             body={t("Upload SOPs, policies and manuals. Agents search them and cite the page.")} />
         ) : (
           <ListCard data-guide="library.sources">
@@ -257,7 +257,7 @@ export function LibraryPage() {
           </ListCard>
         )}
 
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={t("Take this file out of the library?")}
+      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={t("Take this file out of the guidelines?")}
         confirmLabel={t("Take out")} body={t("Agents stop finding it in searches. The file stays in Files, and you can add it back any time.")}
         onConfirm={async () => { if (removing) await takeOut.mutateAsync(removing.id); }} />
     </Page>

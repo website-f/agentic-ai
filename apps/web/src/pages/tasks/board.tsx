@@ -31,6 +31,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { openTaskComposer } from "@/components/task-composer/store";
 import { LoadMore } from "@/components/load-more";
 import { ObjectiveChip } from "@/components/objective-bits";
 import { EmptyState, Page, PageHeader } from "@/components/page";
@@ -54,7 +55,6 @@ import { cn, shortAge, timeAgo } from "@/lib/utils";
 import { PRIORITY_INFO, STATUS_INFO, VISIBILITY, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { ReviewRoundPill, waitingPath, WaitingChip, type TaskX } from "./accountable";
-import { NewTaskDialog } from "./new-task";
 import { TaskSheet } from "./task-sheet";
 
 const COLUMNS: { status: TaskStatus; hint: string; empty: string }[] = [
@@ -412,7 +412,6 @@ export function TasksPage() {
   const reduce = !!useReducedMotion();
   const phone = useIsPhone();
   const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string; objective?: string };
-  const [creating, setCreating] = useState(0);
   const [active, setActive] = useState<Task | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
   const [overStatus, setOverStatus] = useState<TaskStatus | null>(null);
@@ -708,11 +707,12 @@ export function TasksPage() {
     onDragCancel: () => t("Move cancelled. Nothing changed."),
   };
 
-  const newOpen = creating > 0 || (!!search.new && canWrite);
-  const closeNew = () => {
-    setCreating(0);
-    if (search.new) navigate({ to: "/tasks", search: {}, replace: true });
-  };
+  // Links like /tasks?new=1&agent=…&brief=… (guide, objectives, impact) open the task composer.
+  useEffect(() => {
+    if (!search.new) return;
+    if (canWrite) openTaskComposer({ agentId: search.agent, brief: search.brief, objectiveId: search.objective });
+    navigate({ to: "/tasks", search: {}, replace: true });
+  }, [search.new, search.agent, search.brief, search.objective, canWrite, navigate]);
   // A click that ends a drag (or a long press that lifted a card) never opens the task.
   const openTask = (id: string) => {
     if (active || holdClicks.current) return;
@@ -729,7 +729,7 @@ export function TasksPage() {
         title={t("Tasks")}
         description={phone ? undefined : t("Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves.")}
         // Phones: a round "+" beside the search instead of a full-width button, so the board gets the screen.
-        actions={canWrite && !(phone && showBoard) ? <Button data-guide="tasks.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
+        actions={canWrite && !(phone && showBoard) ? <Button data-guide="tasks.new" onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
       />
       {isLoading ? (
         <BoardSkeleton />
@@ -737,7 +737,7 @@ export function TasksPage() {
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
       ) : !anyTasks && !needle && who === "all" ? (
         <EmptyState icon={KanbanIcon} title={branchFilter && selected ? t("No tasks at {name} yet", { name: selected.name }) : t("No tasks yet")} body={t("Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review.")}
-          action={canWrite ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
+          action={canWrite ? <Button onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
       ) : (
         <DndContext
           sensors={sensors}
@@ -756,7 +756,7 @@ export function TasksPage() {
             <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
               <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Search cards by title, agent or label")} />
               {canWrite && phone ? (
-                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={() => setCreating((n) => n + 1)}>
+                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={() => openTaskComposer()}>
                   <PlusIcon size={18} weight="bold" />
                 </Button>
               ) : null}
@@ -841,10 +841,6 @@ export function TasksPage() {
         </DndContext>
       )}
       {search.task ? <TaskSheet taskId={search.task} onClose={() => navigate({ to: "/tasks", search: {} })} /> : null}
-      {newOpen ? (
-        <NewTaskDialog key={`${creating}-${search.agent ?? ""}`} open onOpenChange={(o) => !o && closeNew()} initialAgent={search.agent} initialBrief={search.brief} initialObjective={search.objective}
-          onCreated={(t) => { setCreating(0); navigate({ to: "/tasks", search: { task: t.id } }); }} />
-      ) : null}
     </Page>
   );
 }

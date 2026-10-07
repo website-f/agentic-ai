@@ -29,6 +29,7 @@ import {
   type Check, type DocDetail, type DocStatus, type FieldValue, type LineItem, type TemplateField,
 } from "@/lib/documents";
 import { meQuery } from "@/lib/queries";
+import { LeaveGuard } from "@/lib/unsaved";
 import { cn, timeAgo } from "@/lib/utils";
 import { KindTile } from "./visuals";
 
@@ -523,6 +524,7 @@ export function DocumentEditor({ id }: { id: string }) {
         onPick={(f) => setFillFiles((fs) => (fs.some((x) => x.id === f.id) ? fs : [...fs, { id: f.id, name: f.name }]))} />
       <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete this document?")} danger confirmLabel={t("Delete")}
         body={t("Its versions go too. Packs that use it will show the item as missing.")} onConfirm={async () => { await del.mutateAsync(); }} />
+      <LeaveGuard when={dirty && !locked && !del.isPending} />
     </div>
   );
 }

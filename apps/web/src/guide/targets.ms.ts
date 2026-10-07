@@ -34,12 +34,12 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     ],
   },
   {
-    id: "my-worker", route: "/my-worker", title: "Pekerja AI saya", group: "Home", who: "Kakitangan",
+    id: "my-worker", route: "/my-worker", title: "AI saya", group: "Home", who: "Kakitangan",
     states: [{ key: "welcome", how: "Log masuk kali pertama sebagai kakitangan: langkah Ambil pekerja AI anda (/welcome)" }],
     targets: [t("my-worker.status", "Apa yang sedang dibuatnya"), t("my-worker.actions", "Beri tugasan, sembang, tukar waktu"), t("my-worker.week", "Minggu kerjanya")],
   },
   {
-    id: "assistants", route: "/assistants", title: "Pembantu saya", group: "Home",
+    id: "assistants", route: "/assistants", title: "Pembantu saya", group: "Home", who: "Pemilik dan pengurus",
     states: [],
     targets: [t("assistants.chat", "Sembang dengan pembantu anda"), t("assistants.quick", "Soalan sekali ketik"), t("assistants.connections", "Gmail, Calendar dan WhatsApp")],
   },
@@ -107,7 +107,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("company-kit.fields", "Fakta syarikat"), t("company-kit.save", "Simpan")],
   },
   {
-    id: "files", route: "/files", title: "Fail syarikat", group: "Documents",
+    id: "files", route: "/files", title: "Perpustakaan: Semak imbas", group: "Documents",
     states: [{ key: "sheet", how: "Klik fail: pratonton dan apa yang dibaca daripadanya" }],
     targets: [
       t("files.company", "Pilih syarikat"), t("files.upload", "Muat naik fail, folder atau zip"), t("files.report", "Laporan muat naik"),
@@ -144,7 +144,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("sops.new", "SOP baharu"), t("sops.list", "SOP ikut skop")],
   },
   {
-    id: "library", route: "/library", title: "Perpustakaan", group: "Knowledge", states: [],
+    id: "library", route: "/library", title: "Garis panduan", group: "Knowledge", states: [],
     targets: [t("library.upload", "Muat naik garis panduan"), t("library.sources", "Sumber dan status"), t("library.search", "Cuba cari")],
   },
   {

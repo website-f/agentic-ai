@@ -117,7 +117,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         steps: [
           s("Klik **Muat naik ke meja kerja saya** dan pilih fail.", "desk.files"),
           s("Fail itu dibaca seperti fail syarikat lain, jadi anda dan pekerja AI anda boleh mencari di dalamnya."),
-          s("Hanya anda dan pengurus anda yang nampak. Ia juga ada dalam Fail syarikat di bawah Meja kerja saya dan nama anda."),
+          s("Hanya anda dan pengurus anda yang nampak. Ia juga ada dalam Perpustakaan di bawah Meja kerja saya dan nama anda."),
         ],
       },
     ],
@@ -131,7 +131,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   "my-worker": {
-    purpose: "Untuk kakitangan sahaja: halaman pekerja AI yang anda ambil. Lihat apa yang sedang ia buat, apa yang menunggu anda, tugas rutinnya dan waktu ia bekerja.",
+    purpose: "Untuk kakitangan sahaja: AI saya, halaman satu-satunya pekerja AI anda, iaitu kembar anda. Hari ini menunjukkan apa yang sedang ia buat, apa yang menunggu anda, tugas rutinnya dan waktu ia bekerja. Tabnya membuka sembang, tugasannya, apa yang ia tahu, cara mengajarnya dan profilnya.",
     can: [
       "Ambil pekerja AI anda dalam lima langkah ringkas semasa log masuk kali pertama: syarikat, pekerja itu, kerjanya, waktu bekerja dan surat tawaran.",
       "Lihat statusnya: **Sedang bekerja**, **Menunggu anda**, **Dijeda**, sedang berehat atau **Sedia untuk kerja**.",
@@ -149,7 +149,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "Ambil pekerja AI anda",
         state: "welcome",
         steps: [
-          s("Di **Pekerja AI saya**, klik **Mulakan**. Langkah pengambilan dibuka dalam skrin penuh."),
+          s("Log masuk kali pertama: langkah pengambilan dibuka dalam skrin penuh. (Jika belum ada pekerja, **AI saya** menawarkan **Cipta kembar saya**.)"),
           s("**Syarikat anda**: pilih syarikat dan jabatan anda. Jika tidak pasti, pilih **Belum pasti**; pengurus anda boleh menetapkannya kemudian."),
           s("**Kenali pekerja AI anda**: beri nama dan jawatan, dan terangkan cara ia patut bekerja. Tandakan perkara yang mesti ia tanya anda dahulu."),
           s("**Kerjanya** (pilihan): pilih pelan tugas untuk peranannya, aliran kerja yang diikutinya, tugas rutin dan tugasan pertama."),
@@ -194,7 +194,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Tukar namanya, cara ia bekerja untuk anda, cara ia berfikir dan apa yang boleh digunakannya dalam **Tetapan**.",
     ],
     spots: {
-      "assistants.chat": "Perbualan dengan pembantu anda.",
+      "assistants.chat": "Buka sembang dengan pembantu anda dalam skrin penuh, atau sambung perbualan terkini.",
       "assistants.quick": "Soalan sekali ketik. Soalan Gmail dan kalendar muncul selepas Google disambungkan.",
       "assistants.connections": "Gmail, Calendar dan WhatsApp: apa yang sudah disambungkan.",
     },
@@ -230,7 +230,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Tetamu kalendar hanya menerima jemputan selepas anda mengesahkan perubahan dalam **Draf**.",
       "Suara anda ditukar kepada teks dalam kotak mesej. Anda boleh mengubahnya sebelum menghantar.",
     ],
-    who: "Semua yang boleh mencipta kerja (semua peranan kecuali pelulus dan pemerhati). Pembantu setiap orang hanya boleh dilihat oleh pemiliknya.",
+    who: "Orang yang mengurus orang lain: pemilik, pentadbir, pengurus cawangan, ketua jabatan dan penyelia. Pembantu setiap orang hanya boleh dilihat oleh pemiliknya. Kakitangan ada satu AI peribadi, iaitu kembar mereka, dalam AI saya.",
     related: ["chat", "channels", "overview"],
   },
 
@@ -623,7 +623,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   chat: {
     purpose: "Bercakap terus dengan mana-mana ejen. Jika ada kerja yang perlu dibuat, jadikan balasannya satu tugasan.",
     can: [
-      "Pilih ejen dan bersembang dengannya.",
+      "Pilih ejen: sembang dibuka dalam skrin penuh supaya balasan mudah dibaca. **Kembali** atau Esc membawa anda semula.",
       "Tak perlu menaip: klik mikrofon, bercakap, dan kata-kata anda muncul dalam kotak.",
       "Mulakan perbualan **Baharu**, atau kembali ke perbualan lama.",
       "Klik **Jadikan tugasan** di bawah balasan untuk menukarnya kepada tugasan.",
@@ -699,7 +699,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   files: {
-    purpose: "Fail syarikat: satu tempat bagi setiap syarikat untuk semua dokumennya. Lepaskan seluruh folder atau zip dan foldernya dikekalkan, setiap fail dibaca dan diisih, dan dokumen cara kerja masuk ke perpustakaan untuk ejen.",
+    purpose: "Tab Semak imbas dalam Perpustakaan: setiap fail dalam folder, satu tempat bagi setiap syarikat untuk semua dokumennya. Lepaskan seluruh folder atau zip dan foldernya dikekalkan, setiap fail dibaca dan diisih, dan dokumen cara kerja masuk ke garis panduan untuk ejen.",
     can: [
       "Pilih syarikat di **Syarikat**, kemudian lepaskan fail, seluruh folder atau .zip di ruang muat naik.",
       "Ikuti setiap muat naik semasa ia dibuka, dibaca dan diisih, kemudian baca laporannya: apa yang ditemui, apa yang masuk perpustakaan dan apa yang ditahan.",
@@ -724,7 +724,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       {
         title: "Dokumen syarikat: di mana hendak muat naik",
         steps: [
-          s("Buka **Fail syarikat** (di bawah Dokumen) dan pilih syarikat di **Syarikat**.", "files.company"),
+          s("Buka **Perpustakaan**, kekal di **Semak imbas**, dan pilih syarikat di **Syarikat**.", "files.company"),
           s("Apa yang perlu dimuat naik: SOP, panduan, senarai semak, carta alir, borang, templat, sijil dan kontrak. Satu zip penuh dokumen syarikat pun boleh."),
           s("Lepaskan zip, fail atau seluruh folder di ruang muat naik, atau klik **Pilih fail** atau **Pilih folder**.", "files.upload"),
           s("Tunggu semasa ia menunjukkan **Membuka**, **Membaca** dan **Mengisih**. Anda boleh tinggalkan halaman ini; kerja itu tetap berjalan."),
@@ -776,7 +776,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Pilih cadangan: perkataan daripada dokumen anda sendiri, tajuk, tajuk bahagian, atau carian terkini anda. Kekunci ↑ ↓ dan Enter juga boleh digunakan."),
           s("Tekan Enter untuk **Cari dalam semua dokumen**: setiap fail halaman demi halaman, SOP, dokumen, templat dan halaman wiki, dengan perkataan yang sepadan ditanda."),
           s("Letak perkataan dalam tanda petik untuk frasa yang tepat, seperti \"load system calculation\". Amaun dan tarikh boleh ditaip seperti biasa: RM700, RM 700.00, 16hb. Nombor rujukan, seperti nombor PO atau tender, dilengkapkan semasa anda menaip."),
-          s("Klik hasil carian: fail dibuka dalam Fail syarikat pada halaman yang sepadan. Anda hanya jumpa apa yang anda boleh buka, dan tidak sekali-kali fail yang ditahan."),
+          s("Klik hasil carian: fail dibuka dalam Perpustakaan pada halaman yang sepadan. Anda hanya jumpa apa yang anda boleh buka, dan tidak sekali-kali fail yang ditahan."),
         ],
       },
     ],
@@ -1530,14 +1530,14 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Cari dalam setiap fail yang dimuat naik, perkataan demi perkataan, dengan cadangan semasa menaip: frasa, amaun seperti RM700 atau nombor rujukan.",
       "Tunjukkan empat aliran kerja yang dibina daripada prosedur syarikat yang dimuat naik, setiap satu berakhir dengan dokumen yang disemak oleh seseorang.",
       "Tunjukkan langkah berisiko yang berhenti dan menunggu di **Kelulusan**: menghantar ke luar, menandatangani, pembayaran dan penghantaran di portal.",
-      "Akhiri di **Dokumen** dan **Fail syarikat** yang ditapis kepada **Dibuat oleh AI**, supaya pelanggan nampak semua hasil AI di satu tempat.",
+      "Akhiri di **Dokumen** dan **Perpustakaan** yang ditapis kepada **Dibuat oleh AI**, supaya pelanggan nampak semua hasil AI di satu tempat.",
     ],
     spots: {},
     howto: [
       {
         title: "Sebelum demo: sediakan syarikat",
         steps: [
-          s("Log masuk sebagai pemilik. Di **Fail syarikat**, pilih syarikat dan letakkan fail zip prosedurnya: permohonan pakaian seragam dan peralatan, langkah tatatertib, peraturan pendahuluan gaji dan prosedur tender."),
+          s("Log masuk sebagai pemilik. Di **Perpustakaan**, pilih syarikat dan letakkan fail zip prosedurnya: permohonan pakaian seragam dan peralatan, langkah tatatertib, peraturan pendahuluan gaji dan prosedur tender."),
           s("Apabila muat naik siap, pilih fail prosedur itu dan klik **Jadikan SOP** atau **Bina aliran kerja**. Semak setiap draf dan simpan."),
           s("Isi **Kit syarikat** (nama berdaftar, nombor pendaftaran, alamat, penandatangan, terma bayaran) supaya surat dan pesanan dicetak dengan kepala surat. Tetapkan **Bahasa dokumen** kepada Bahasa Melayu bagi syarikat berbahasa Melayu: sebut harga, invois dan folder AI syarikat itu kemudiannya dalam bahasa Melayu."),
           s("Tambah seorang kakitangan dengan peranan kakitangan di Ahli, dan simpan butiran log masuknya untuk demo."),
@@ -1546,7 +1546,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       {
         title: "1. Kakitangan mengambil pekerja AI mereka",
         steps: [
-          s("Log masuk sebagai kakitangan itu. Langkah pengambilan terbuka dengan sendiri; jika tidak, klik **Mulakan** di **Pekerja AI saya**."),
+          s("Log masuk sebagai kakitangan itu. Langkah pengambilan terbuka dengan sendiri; jika tidak, buka **AI saya** dan klik **Cipta kembar saya**."),
           s("Beri pekerja itu nama dan jawatan, contohnya pembantu HR di syarikat keselamatan anda, dan tandakan perkara yang mesti ia tanya dahulu."),
           s("Di bawah **Kerjanya**, tambah tugas harian, contohnya menyemak permohonan cuti baharu setiap pagi."),
           s("Di bawah **Waktu bekerja**, pilih **Minggu pejabat**. Kerja yang diberi selepas waktu kerja akan menunggu syif seterusnya."),
@@ -1565,10 +1565,10 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       {
         title: "2. Beri tugasan berdasarkan SOP",
         steps: [
-          s("Di **Pekerja AI saya**, klik **Beri tugasan**."),
+          s("Di **AI saya**, klik **Beri tugasan**."),
           s("Tulis permintaan dan sebut SOP yang perlu diikuti, contohnya: sediakan sebut harga kawalan keselamatan dua sekolah untuk 12 bulan, dengan kadar syarikat, ikut SOP sebut harga."),
           s("Buka tugasan itu di **Tugasan** dan tunjukkan garis masanya: SOP yang dibaca, fail yang dibuka dan apa yang sedang dibuat."),
-          s("Sebut harga itu dibuat daripada templat syarikat, dengan kepala suratnya. Ia disimpan di **Dokumen**, dan PDFnya di **Fail syarikat** di bawah Dokumen AI, bertanda **Dibuat oleh AI**."),
+          s("Sebut harga itu dibuat daripada templat syarikat, dengan kepala suratnya. Ia disimpan di **Dokumen**, dan PDFnya di **Perpustakaan** di bawah Dokumen AI, bertanda **Dibuat oleh AI**."),
           s("Apabila siap, hasilnya menunggu semakan. Klik **Terima**, atau **Hantar semula** dengan nota untuk menunjukkan ejen membetulkan kerjanya sendiri."),
         ],
       },
@@ -1633,7 +1633,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Di halaman utama, satu kad menunjukkan berapa dokumen yang disediakan AI minggu ini dan berapa yang menunggu semakan. Klik **Semak sekarang**."),
           s("Di **Dokumen**, buka **Semak hasil AI**. Setiap baris menunjukkan ejen, tugasan atau aliran kerja asalnya, serta **Luluskan**, **Hantar semula** dan **Buka**."),
           s("Hantar semula satu dokumen dengan nota dan tunjukkan ejen membetulkannya. Ia kembali ke senarai yang sama apabila siap."),
-          s("Di **Fail syarikat**, pilih **Dibuat oleh AI** dan pilih ejen. Pesanan belian, surat amaran, laporan gaji dan surat tender semuanya ada di situ, masing-masing dengan tugasan dan status semakannya."),
+          s("Di **Perpustakaan**, pilih **Dibuat oleh AI** dan pilih ejen. Pesanan belian, surat amaran, laporan gaji dan surat tender semuanya ada di situ, masing-masing dengan tugasan dan status semakannya."),
           s("Tukar penapis kepada **Dimuat naik** untuk menunjukkan fail syarikat sendiri, iaitu prosedur dan borang yang dirujuk oleh ejen."),
         ],
       },

@@ -1,12 +1,13 @@
-/** Files (P24, the file store since P28): every file in one place. The views (file-store.tsx)
- * show what waits for review, each task's files together, recent files, what AI made, what
- * agents downloaded, uploads and the library; "All folders" is the company browser here:
- * upload anything (files, folders, zips), see each upload sorted with a report, browse the
- * folders, open and download any file, a folder or everything, and turn procedures into SOPs
- * and workflows. */
+/** The Library's Browse tab (/files): a folder directory of everything. Down the side, the
+ * company's own folders as a tree, then ready-made folders: documents, SOPs, guidelines,
+ * templates, and quick views of the file store (what waits for review, each task's files,
+ * recent, made by AI, from websites, uploaded). In a company's folders: upload anything
+ * (files, folders, zips) into the folder you are in, see each upload sorted with a report,
+ * search, sort, list or grid, open and download any file, a folder or everything, and turn
+ * procedures into SOPs and workflows. */
 import {
   BooksIcon, BuildingsIcon, CaretRightIcon, CheckIcon, DownloadSimpleIcon, FolderIcon, FolderOpenIcon, FolderSimpleIcon,
-  ShieldWarningIcon, TrashIcon, TreeStructureIcon, UploadSimpleIcon, XIcon,
+  ShieldWarningIcon, TrashIcon, UploadSimpleIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -16,7 +17,7 @@ import { toast } from "sonner";
 import { FileStatus } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
 import { FileProvenanceCard, MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -31,13 +32,13 @@ import { errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { docKeys, fileQuery, fileSize, fileStatsQuery } from "@/lib/documents";
 import {
-  archiveUrl, buildTree, deleteFile, fileTreeQuery, folderChain, folderName, intakeKeys, KINDS, kindKey, kindLabel, notThere,
+  archiveUrl, deleteFile, fileTreeQuery, intakeKeys, KINDS, kindKey, kindLabel, notThere,
   type CompanyFile, type FolderNode, type IntakeBatch, type KindKey,
 } from "@/lib/intake";
 import { libraryKeys, setLibrary } from "@/lib/library";
 import { usePagedList, useDebounced } from "@/lib/paged";
 import { type StoreView } from "@/lib/file-store";
-import { fileOrigin, reviewCountQuery, type FileOrigin, type FileProvenance } from "@/lib/provenance";
+import { fileOrigin, type FileOrigin, type FileProvenance } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { useMedia } from "@/lib/use-media";
@@ -45,9 +46,14 @@ import { cn } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 
 import { BuildFromDocs } from "@/components/doc-builders";
+import { BrowseControls, sortRows, Tile, TileGrid, useBrowsePrefs } from "../library-hub/browse-bits";
+import { DocumentsFolder, SopsFolder, TemplatesFolder } from "../library-hub/collections";
+import { LibraryHeader } from "../library-hub/hub";
+import { BrowseCrumbs, findNode, LibraryTree, QuickFolders, useFolderTree } from "../library-hub/tree";
+import { VIEW_INFO } from "../library-hub/views";
 import { BatchCard, IntakeDrop, type ShowFilter } from "./files-upload";
 import { FileViewer, MoveDialog, moveMany } from "./files-viewer";
-import { StoreFileSheet, StoreNav, StoreViewBody, viewHint, viewLabel } from "./file-store";
+import { StoreFileSheet, StoreTile, StoreViewBody } from "./file-store";
 import { FileTile, KindTile } from "./visuals";
 
 type View = "folder" | "kind" | "department";
@@ -56,107 +62,6 @@ const NO_DEPT = "__none";
 /** P25: who made it. */
 type OriginFilter = FileOrigin | typeof ANY;
 type ProvFile = CompanyFile & FileProvenance;
-
-// ---------------------------------------------------------------- folder tree
-
-function TreeNode({ node, depth, current, open, onToggle, onPick }: {
-  node: FolderNode;
-  depth: number;
-  current: string;
-  open: Set<string>;
-  onToggle: (path: string) => void;
-  onPick: (path: string) => void;
-}) {
-  const t = useT();
-  const isOpen = open.has(node.path);
-  const on = current === node.path;
-  return (
-    <li>
-      <div className={cn("group flex min-w-0 items-center rounded-sm", on ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}
-        style={{ paddingLeft: `${depth * 12}px` }}>
-        {node.children.length ? (
-          <button type="button" onClick={() => onToggle(node.path)} aria-expanded={isOpen}
-            aria-label={isOpen ? t("Close {name}", { name: node.name }) : t("Open {name}", { name: node.name })}
-            className="grid size-7 shrink-0 place-items-center rounded-sm text-muted hover:text-fg pointer-coarse:size-9">
-            <CaretRightIcon size={12} weight="bold" className={cn("transition-transform", isOpen && "rotate-90")} />
-          </button>
-        ) : <span className="size-7 shrink-0 pointer-coarse:size-9" aria-hidden />}
-        <button type="button" onClick={() => onPick(node.path)} aria-current={on ? "true" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-left text-[13px] pointer-coarse:py-2.5">
-          {isOpen || on ? <FolderOpenIcon size={16} weight="duotone" className="shrink-0" /> : <FolderIcon size={16} weight="duotone" className="shrink-0 text-muted" />}
-          <span className="min-w-0 flex-1 truncate" title={node.path}>{node.name}</span>
-          {node.flagged ? (
-            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warn/14 px-1.5 text-[11px] font-medium text-warn" title={t("{n} held back", { n: node.flagged })}>
-              <ShieldWarningIcon size={11} weight="bold" />{node.flagged}
-            </span>
-          ) : null}
-          <span className="shrink-0 text-[11.5px] text-muted tabular">{node.files.toLocaleString(locale())}</span>
-        </button>
-      </div>
-      {isOpen && node.children.length ? (
-        <ul>
-          {node.children.map((c) => <TreeNode key={c.path} node={c} depth={depth + 1} current={current} open={open} onToggle={onToggle} onPick={onPick} />)}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function FolderTree({ root, current, onPick, total }: { root: FolderNode; current: string; onPick: (path: string) => void; total: number }) {
-  const t = useT();
-  // Open the chain to the current folder, plus whatever the person opens.
-  const [opened, setOpened] = useState<Set<string>>(() => new Set(folderChain(current).slice(0, -1)));
-  const open = useMemo(() => new Set([...opened, ...folderChain(current).slice(0, -1)]), [opened, current]);
-  const toggle = (p: string) => setOpened((s) => {
-    const n = new Set(s);
-    if (n.has(p)) n.delete(p);
-    else n.add(p);
-    return n;
-  });
-  return (
-    <nav aria-label={t("Folders")} data-guide="files.tree" className="grid gap-1">
-      <button type="button" onClick={() => onPick("")} aria-current={current === "" ? "true" : undefined}
-        className={cn("flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] font-medium pointer-coarse:py-2.5", current === "" ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}>
-        <TreeStructureIcon size={16} weight="duotone" className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{t("All files")}</span>
-        {root.flagged ? <span className="inline-flex items-center gap-0.5 rounded-full bg-warn/14 px-1.5 text-[11px] font-medium text-warn"><ShieldWarningIcon size={11} weight="bold" />{root.flagged}</span> : null}
-        <span className="text-[11.5px] text-muted tabular">{total.toLocaleString(locale())}</span>
-      </button>
-      {root.children.length ? (
-        <ul>
-          {root.children.map((c) => <TreeNode key={c.path} node={c} depth={0} current={current} open={open} onToggle={toggle} onPick={onPick} />)}
-        </ul>
-      ) : <p className="px-2 py-1 text-[12.5px] text-muted">{t("No folders yet. Upload a folder or a zip and its folders show here.")}</p>}
-    </nav>
-  );
-}
-
-function findNode(root: FolderNode, path: string): FolderNode | null {
-  if (root.path === path) return root;
-  for (const c of root.children) {
-    if (path === c.path || path.startsWith(`${c.path}/`)) return findNode(c, path);
-  }
-  return null;
-}
-
-function Crumbs({ folder, onPick }: { folder: string; onPick: (p: string) => void }) {
-  const t = useT();
-  const chain = folderChain(folder);
-  return (
-    <nav aria-label={t("Folder path")} className="flex min-w-0 flex-wrap items-center gap-1 text-[13px]">
-      <button type="button" onClick={() => onPick("")} className={cn("shrink-0 rounded-sm px-1.5 py-0.5 whitespace-nowrap hover:bg-surface-2", !folder && "font-semibold")}>{t("All files")}</button>
-      {chain.map((p, i) => (
-        <span key={p} className="flex min-w-0 items-center gap-1">
-          <CaretRightIcon size={11} className="shrink-0 text-muted" aria-hidden />
-          <button type="button" onClick={() => onPick(p)}
-            className={cn("min-w-0 rounded-sm px-1.5 py-0.5 text-left break-words [overflow-wrap:anywhere] hover:bg-surface-2", i === chain.length - 1 && "font-semibold")}>
-            {folderName(p)}
-          </button>
-        </span>
-      ))}
-    </nav>
-  );
-}
 
 // ---------------------------------------------------------------- rows
 
@@ -203,7 +108,7 @@ function FileRow({ f, branch, picked, onPick, onOpen, active, showFolder }: {
           <FileStatus f={f} />
           {f.status === "ready" && !f.expires_on && !f.quarantined ? <Pill tone="ok">{t("Ready")}</Pill> : null}
           {f.expires_on && !f.expired && f.status === "ready" ? <Pill>{t("Valid until {date}", { date: f.expires_on })}</Pill> : null}
-          {f.library ? <Pill tone="accent">{t("In library")}</Pill> : null}
+          {f.library ? <Pill tone="accent">{t("Guideline")}</Pill> : null}
           {f.quarantined ? <Pill tone="warn"><ShieldWarningIcon size={12} weight="bold" /> {t("Held back")}</Pill> : null}
         </span>
       </button>
@@ -250,7 +155,7 @@ function FileSheet({ id, onClose, children }: { id: string; onClose: () => void;
 
 // ---------------------------------------------------------------- the hub for one company
 
-function CompanyHub({ branch }: { branch: Branch }) {
+function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolean }) {
   const t = useT();
   const qc = useQueryClient();
   const search = useSearch({ from: "/app/files" });
@@ -258,7 +163,9 @@ function CompanyHub({ branch }: { branch: Branch }) {
   const { data: me } = useQuery(meQuery);
   const canEdit = !!me && hasAny(me, "work.write");
   const canManage = !!me && hasAny(me, "org.manage", "vault.manage");
-  const wide = useMedia("(min-width: 1280px)");
+  // A file opened from the list shows beside it only when there is room next to the folders.
+  const wide = useMedia("(min-width: 1440px)");
+  const prefs = useBrowsePrefs();
 
   const folder = search.folder ?? "";
   const [q, setQ] = useState("");
@@ -271,13 +178,12 @@ function CompanyHub({ branch }: { branch: Branch }) {
   const [recent, setRecent] = useState<string[]>([]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Map<string, CompanyFile>>(new Map());
-  const [foldersOpen, setFoldersOpen] = useState(false);
   const [moving, setMoving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const go = (patch: { f?: string | undefined; folder?: string | undefined }) =>
-    navigate({ search: (s: { f?: string; folder?: string }) => ({ ...s, ...patch }), replace: "folder" in patch && !("f" in patch) });
+    navigate({ search: (s: { f?: string; folder?: string }) => ({ ...s, ...patch }) });
   // On wide screens a file opened from the list shows in a pane beside it; one opened from an
   // upload report or a link (further up, or straight in) opens in the side sheet.
   const [inPane, setInPane] = useState(false);
@@ -285,14 +191,10 @@ function CompanyHub({ branch }: { branch: Branch }) {
     setInPane(fromList);
     go({ f: id });
   };
-  const pickFolder = (p: string) => {
-    go({ folder: p || undefined });
-    setFoldersOpen(false);
-  };
+  const pickFolder = (p: string) => go({ folder: p || undefined, f: undefined });
 
   // Folders.
-  const { data: tree } = useQuery(fileTreeQuery(branch.id));
-  const root = useMemo(() => buildTree(tree?.folders ?? []), [tree]);
+  const { tree, root } = useFolderTree(branch.id);
   const here = findNode(root, folder) ?? root;
   const folderPaths = useMemo(() => {
     const out: string[] = [];
@@ -332,7 +234,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
     agent_id: agent === ANY ? undefined : agent,
   }, { poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
   // The server filters; this also keeps the list right on a server that ignores a filter.
-  const files = list.items.filter((f) => {
+  const shown = list.items.filter((f) => {
     if (kind !== ANY && kindKey(f.kind) !== kind) return false;
     if (dept === NO_DEPT && f.department_id) return false;
     if (dept !== ANY && dept !== NO_DEPT && f.department_id !== dept) return false;
@@ -341,6 +243,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
     if (origin !== ANY && fileOrigin(f as ProvFile) !== origin) return false;
     return true;
   });
+  const files = useMemo(() => sortRows(shown, prefs.sort, (f) => f.title || f.name, (f) => f.created_at), [shown, prefs.sort]);
 
   const groups = useMemo(() => {
     if (view === "folder") return null;
@@ -402,7 +305,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
     }
     setBusy(false);
     refresh();
-    if (ok) toast.success(ok === 1 ? tr("1 file added to the library.") : tr("{n} files added to the library.", { n: ok }));
+    if (ok) toast.success(ok === 1 ? tr("1 file added to the guidelines.") : tr("{n} files added to the guidelines.", { n: ok }));
     if (held) toast(held === 1 ? tr("1 held-back file was left out.") : tr("{n} held-back files were left out.", { n: held }));
   };
 
@@ -436,10 +339,13 @@ function CompanyHub({ branch }: { branch: Branch }) {
 
   const subfolders = view === "folder" && !filtering ? here.children : [];
   const folderTotal = folder ? here.files : tree?.total_files || list.total || files.length;
+  // A company with no files yet starts with the upload area open.
+  const showUpload = canEdit && (uploadOpen || (!!tree && !tree.total_files));
+  const grid = prefs.layout === "grid" && !groups;
 
   return (
     <>
-      {canEdit ? <IntakeDrop branch={branch} onBatch={(id) => setRecent((r) => [id, ...r.filter((x) => x !== id)])} /> : null}
+      {showUpload ? <IntakeDrop branch={branch} folder={folder} onBatch={(id) => setRecent((r) => [id, ...r.filter((x) => x !== id)])} /> : null}
 
       {uploadIds.length ? (
         <section className="grid gap-3" aria-label={t("Uploads")}>
@@ -453,26 +359,12 @@ function CompanyHub({ branch }: { branch: Branch }) {
       ) : null}
 
       <section id="company-files-list" className="grid scroll-mt-20 gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold">{t("Browse")}</h2>
-            <p className="text-[13px] text-muted">
-              {tree?.total_files ? t("{n} files · {size}", { n: tree.total_files.toLocaleString(locale()), size: fileSize(tree.total_size) }) : t("Every file this company has, in its folders.")}
-            </p>
-          </div>
-          <Segmented<View> label={t("Group")} value={view} onChange={setView} size="sm" guide="files.view"
-            options={[
-              { value: "folder", label: t("By folder") },
-              { value: "kind", label: t("By kind") },
-              { value: "department", label: t("By department") },
-            ]} />
-        </div>
-
         <div data-guide="files.filters" className="grid gap-2">
           <Toolbar>
-            <SearchInput value={q} onChange={setQ} placeholder={t("Search names, titles and kinds")} />
-            <Select value={dept} onValueChange={setDept} label={t("Department")} className="sm:w-56"
+            <SearchInput value={q} onChange={setQ} placeholder={folder ? t("Search this folder") : t("Search names, titles and kinds")} className="sm:max-w-80" />
+            <Select value={dept} onValueChange={setDept} label={t("Department")} className="sm:w-52"
               options={[{ value: ANY, label: t("Every department") }, ...branch.departments.map((d) => ({ value: d.id, label: d.name })), { value: NO_DEPT, label: t("No department") }]} />
+            <BrowseControls prefs={prefs} grid={view === "folder"} />
           </Toolbar>
           <div data-guide="files.origin" className="flex min-w-0 flex-wrap items-center gap-2">
             <Segmented<OriginFilter> label={t("Made by")} value={origin} size="sm"
@@ -511,18 +403,22 @@ function CompanyHub({ branch }: { branch: Branch }) {
           ) : null}
         </div>
 
-        {/* Desktop: folders | files; with a file open beside the list: files | file (the
-            breadcrumb and the Folders button still move between folders). */}
-        <div className={cn("grid gap-4", paneOpen ? "grid-cols-[minmax(0,1fr)_minmax(0,34rem)]" : "lg:grid-cols-[16rem_minmax(0,1fr)]")}>
-          <Card className={cn("hidden max-h-[calc(100dvh-8rem)] self-start overflow-y-auto p-2 lg:sticky lg:top-4", !paneOpen && "lg:block")}>
-            <FolderTree root={root} current={folder} onPick={pickFolder} total={tree?.total_files || list.total || files.length} />
-          </Card>
-
+        {/* With a file open beside the list (wide screens): files | file. */}
+        <div className={cn("grid gap-4", paneOpen && "grid-cols-[minmax(0,1fr)_minmax(0,34rem)]")}>
           <div className="grid min-w-0 content-start gap-3">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-              <div className="flex min-w-0 flex-1 basis-full items-center gap-2 sm:basis-auto">
-                <Button size="sm" variant="outline" className={cn(!paneOpen && "lg:hidden")} onClick={() => setFoldersOpen(true)}><TreeStructureIcon size={14} /> {t("Folders")}</Button>
-                <Crumbs folder={folder} onPick={pickFolder} />
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                <Segmented<View> label={t("Group")} value={view} onChange={setView} size="sm" guide="files.view"
+                  options={[
+                    { value: "folder", label: t("By folder") },
+                    { value: "kind", label: t("By kind") },
+                    { value: "department", label: t("By department") },
+                  ]} />
+                {folderTotal ? (
+                  <span className="text-[12.5px] text-muted">
+                    {t("{n} files · {size}", { n: folderTotal.toLocaleString(locale()), size: fileSize(folder ? here.size : tree?.total_size ?? 0) })}
+                  </span>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 text-[12.5px] whitespace-nowrap text-muted">
@@ -544,6 +440,20 @@ function CompanyHub({ branch }: { branch: Branch }) {
                   title={filtering ? t("No files match") : folder ? t("This folder is empty") : t("No files yet")}
                   body={filtering ? t("Try another kind or department, or clear the filters.") : t("Drop the company's SOPs, guides, forms, certificates and contracts above. A whole zip is fine.")}
                   action={filtering ? <Button size="sm" variant="outline" onClick={clearFilters}>{t("Clear filters")}</Button> : undefined} />
+              ) : grid ? (
+                <TileGrid data-guide="files.list">
+                  {subfolders.map((n) => (
+                    <Tile key={n.path} onClick={() => pickFolder(n.path)} title={n.name}
+                      leading={<span className="grid size-12 place-items-center rounded-[var(--radius-sm)] bg-warn/12 text-warn ring-1 ring-warn/20 ring-inset"><FolderIcon size={24} weight="duotone" /></span>}
+                      meta={`${n.files === 1 ? t("1 file") : t("{n} files", { n: n.files.toLocaleString(locale()) })} · ${fileSize(n.size)}`}
+                      badge={n.flagged ? <Pill tone="warn"><ShieldWarningIcon size={12} weight="bold" /> {n.flagged}</Pill> : undefined} />
+                  ))}
+                  {files.map((f) => (
+                    <StoreTile key={f.id} f={f as ProvFile} onOpen={() => openFile(f.id, true)} active={search.f === f.id}
+                      corner={<input type="checkbox" checked={picked.has(f.id)} onChange={(e) => pick(f, e.target.checked)}
+                        className="size-4 accent-[var(--accent)] pointer-coarse:size-5" aria-label={t("Select {name}", { name: f.title || f.name })} />} />
+                  ))}
+                </TileGrid>
               ) : (
                 <ul data-guide="files.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
                   {subfolders.map((n) => <FolderRow key={n.path} node={n} onPick={() => pickFolder(n.path)} />)}
@@ -583,7 +493,7 @@ function CompanyHub({ branch }: { branch: Branch }) {
           </Button>
           {canEdit ? <>
             <Button size="sm" variant="outline" onClick={() => setMoving(true)}><FolderOpenIcon size={14} /> {t("Move|file")}</Button>
-            <Button size="sm" variant="outline" loading={busy} onClick={() => void addToLibrary()}><BooksIcon size={14} /> {t("Add to library")}</Button>
+            <Button size="sm" variant="outline" loading={busy} onClick={() => void addToLibrary()}><BooksIcon size={14} /> {t("Add to guidelines")}</Button>
             <BuildFromDocs fileIds={ids} branchId={branch.id} />
             <Button size="sm" variant="ghost" className="text-danger" onClick={() => setRemoving(true)}><TrashIcon size={14} /> {t("Delete")}</Button>
           </> : null}
@@ -593,9 +503,6 @@ function CompanyHub({ branch }: { branch: Branch }) {
 
       {!(wide && inPane) && viewer}
 
-      <SideSheet open={foldersOpen} onOpenChange={setFoldersOpen} title={t("Folders")} size="sm">
-        <FolderTree root={root} current={folder} onPick={pickFolder} total={tree?.total_files || list.total || files.length} />
-      </SideSheet>
       <MoveDialog open={moving} onOpenChange={setMoving} folders={folderPaths} current={folder} count={picked.size}
         onMove={async (to) => {
           try {
@@ -655,58 +562,92 @@ export function FilesPage() {
   const co = useCompanies();
   const search = useSearch({ from: "/app/files" });
   const navigate = useNavigate({ from: "/files" });
+  const { data: me } = useQuery(meQuery);
+  const canEdit = !!me && hasAny(me, "work.write");
   const branch = co.isAll ? null : co.selected;
   const options = [...(co.canAll ? [{ value: ALL_COMPANIES, label: t("All companies") }] : []), ...co.branches.map((b) => ({ value: b.id, label: b.name }))];
-  // Old links (a folder, "made by") open the folders; anything else starts with the work.
-  const view: StoreView = search.view ?? (search.folder || search.origin ? "folders" : "tasks");
-  const pick = (v: StoreView) => navigate({ search: (s) => ({ ...s, view: v, task: undefined, folder: undefined, origin: undefined }) });
+  // The company's folders unless a link asks for another folder of the Library (a task's
+  // files, what waits for review...).
+  const view: StoreView = search.view ?? (search.task ? "tasks" : "folders");
+  const folder = view === "folders" ? (search.folder ?? "") : "";
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const pick = (v: StoreView) => {
+    setTreeOpen(false);
+    void navigate({ search: (s) => ({ ...s, view: v === "folders" ? undefined : v, task: undefined, folder: undefined, origin: undefined, f: undefined, page: undefined }) });
+  };
+  const pickFolder = (p: string) => {
+    setTreeOpen(false);
+    void navigate({ search: (s) => ({ ...s, view: undefined, task: undefined, folder: p || undefined, f: undefined, page: undefined }) });
+  };
+  const pickCompany = (id: string) => {
+    co.select(id);
+    pickFolder("");
+  };
   const open = (id?: string) => navigate({ search: (s) => ({ ...s, f: id, page: undefined }) });
-  const { data: stats } = useQuery(fileStatsQuery(branch ? { branch_id: branch.id } : {}));
-  const { data: review } = useQuery(reviewCountQuery);
+  const startUpload = () => {
+    if (view !== "folders") pickFolder("");
+    setUploadOpen((o) => (view === "folders" ? !o : true));
+  };
+
+  const tree = (
+    <LibraryTree view={view} folder={folder} branch={branch} branches={co.branches} onView={pick} onFolder={pickFolder} onCompany={pickCompany} />
+  );
+  // One company's folders show in the hub, which opens its own files; elsewhere a file opens
+  // in the side sheet.
+  const hub = view === "folders" && !!branch;
+
+  let body: ReactNode;
+  if (view === "folders") body = branch ? <CompanyHub key={branch.id} branch={branch} uploadOpen={uploadOpen} /> : <CompanyPicker branches={co.branches} onPick={pickCompany} />;
+  else if (view === "documents") body = <DocumentsFolder branch={branch} />;
+  else if (view === "sops") body = <SopsFolder branch={branch} />;
+  else if (view === "templates") body = <TemplatesFolder branch={branch} />;
+  else body = <StoreViewBody view={view} branchId={branch?.id ?? null} taskId={search.task} onOpen={open} openId={search.f} />;
 
   return (
     <Page wide>
-      <PageHeader title={t("Files")}
-        description={t("Every file of the company in one place: what agents made or downloaded, what waits for your review, each task's files together, uploads, the library and the folders.")}
+      <LibraryHeader tab="/files"
         actions={<>
-          <Button variant="outline" onClick={() => pick("folders")}><UploadSimpleIcon size={16} /> {t("Upload files")}</Button>
+          {canEdit ? (
+            <Button variant={uploadOpen && view === "folders" ? "secondary" : "outline"} aria-pressed={uploadOpen && view === "folders"} onClick={startUpload}>
+              <UploadSimpleIcon size={16} /> {t("Upload files")}
+            </Button>
+          ) : null}
           {branch ? (
             <Button variant="ghost" asChild>
               <a href={archiveUrl({ branch_id: branch.id })} download data-guide="files.download-all"><DownloadSimpleIcon size={16} /> {t("Download everything")}</a>
             </Button>
           ) : null}
         </>} />
-      <div data-guide="files.company" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
-        <BuildingsIcon size={20} weight="duotone" className="shrink-0 text-accent" />
-        <span className="text-[13.5px] font-medium">{t("Company")}</span>
-        <Select value={branch?.id ?? ALL_COMPANIES} onValueChange={co.select} label={t("Company")} className="min-w-0 flex-1 sm:max-w-xs"
-          options={options} placeholder={t("Pick a company")} />
-        <span className="text-[12.5px] text-muted max-sm:w-full">
-          {branch ? t("Showing {company} only.", { company: branch.name }) : t("Showing every company you work in.")}
-        </span>
-      </div>
+      {co.branches.length > 1 ? (
+        <div data-guide="files.company" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
+          <BuildingsIcon size={20} weight="duotone" className="shrink-0 text-accent" />
+          <span className="text-[13.5px] font-medium">{t("Company")}</span>
+          <Select value={branch?.id ?? ALL_COMPANIES} onValueChange={co.select} label={t("Company")} className="min-w-0 flex-1 sm:max-w-xs"
+            options={options} placeholder={t("Pick a company")} />
+          <span className="text-[12.5px] text-muted max-sm:w-full">
+            {branch ? t("Showing {company} only.", { company: branch.name }) : t("Showing every company you work in.")}
+          </span>
+        </div>
+      ) : null}
       {co.isLoading && !co.branches.length ? <Skeleton className="h-48" />
         : !co.branches.length ? (
           <EmptyState icon={BuildingsIcon} title={t("No companies yet")} body={t("Add a company in Organization first. Each company keeps its own documents.")} />
         ) : (
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
-            <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-              <StoreNav view={view} onPick={pick} stats={stats} waiting={review?.waiting ?? 0} />
-            </div>
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <Card className="hidden max-h-[calc(100dvh-2rem)] min-w-0 self-start overflow-y-auto p-2 lg:sticky lg:top-4 lg:block">{tree}</Card>
             <div className="grid min-w-0 content-start gap-4">
-              <div className="min-w-0">
-                <h2 className="text-[16px] font-semibold">{t(viewLabel(view))}</h2>
-                <p className="text-[13px] text-muted">{t(viewHint(view))}</p>
-              </div>
-              {view === "folders" ? (
-                branch ? <CompanyHub key={branch.id} branch={branch} /> : <CompanyPicker branches={co.branches} onPick={co.select} />
-              ) : (
-                <StoreViewBody view={view} branchId={branch?.id ?? null} taskId={search.task} onOpen={open} openId={search.f} />
-              )}
+              <BrowseCrumbs view={view} folder={folder} branch={branch} onRoot={() => pickFolder("")} onFolder={pickFolder} onOpenTree={() => setTreeOpen(true)} />
+              {view !== "folders" ? <p className="-mt-1 px-1 text-[13px] text-muted">{t(VIEW_INFO[view].hint)}</p> : null}
+              {/* Phones: the root of the Library lists its ready-made folders to tap into. */}
+              {view === "folders" && !folder ? <QuickFolders branch={branch} onView={pick} className="lg:hidden" /> : null}
+              {body}
             </div>
           </div>
         )}
-      {view !== "folders" && search.f ? <StoreFileSheet id={search.f} onClose={() => open(undefined)} /> : null}
+      <SideSheet open={treeOpen} onOpenChange={setTreeOpen} title={t("Folders")} size="sm">{tree}</SideSheet>
+      {!hub && search.f ? <StoreFileSheet id={search.f} onClose={() => open(undefined)} /> : null}
     </Page>
   );
 }

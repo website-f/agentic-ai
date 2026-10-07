@@ -1,5 +1,5 @@
 import {
-  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, FileMagnifyingGlassIcon, FileTextIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon, SignOutIcon, SunIcon,
+  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon, SignOutIcon, SunIcon,
   TextAlignLeftIcon, UserPlusIcon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { Dialog } from "radix-ui";
 import { useState, type ReactNode } from "react";
 
 import { useCompanies } from "@/lib/company";
+import { meQuery } from "@/lib/queries";
 import { suggestQuery, useDebounced } from "@/lib/search";
 
 import { useT } from "@/i18n";
@@ -18,6 +19,7 @@ import { NAV } from "@/nav";
 import { useSignOut } from "@/lib/use-sign-out";
 
 import { typeLabel, useOpenTarget } from "./search-box";
+import { openTaskComposer } from "./task-composer/store";
 
 const GROUP =
   "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-muted [&_[cmdk-group-heading]]:uppercase";
@@ -55,6 +57,7 @@ export function CommandPalette() {
   const typed = useDebounced(q.trim(), 150);
   const co = useCompanies();
   const openTarget = useOpenTarget();
+  const { data: me } = useQuery(meQuery);
   const { data: sug } = useQuery(suggestQuery(typed, co.isAll ? undefined : co.selected?.id, open && typed.length >= 2));
   const titles = typed.length >= 2 ? (sug?.suggestions ?? []).filter((s) => s.kind === "title" || s.kind === "heading").slice(0, 4) : [];
 
@@ -104,7 +107,8 @@ export function CommandPalette() {
               ) : null}
               {NAV.map((section) => (
                 <Command.Group key={section.title} heading={t(section.title)} className={GROUP}>
-                  {section.items.map((n) => {
+                  {/* Only pages the person may open (the sidebar's rule; hidden tabs stay findable). */}
+                  {section.items.filter((n) => !n.perm || [n.perm].flat().some((p) => me?.permissions.includes(p))).map((n) => {
                     const IconCmp = n.icon;
                     return (
                       <Item key={n.to} value={`${t(section.title)} ${t(n.label)} ${section.title} ${n.label} ${n.to}`} icon={<IconCmp weight="duotone" />} hint={n.phase} onSelect={() => run(() => navigate({ to: n.to }))}>
@@ -115,6 +119,11 @@ export function CommandPalette() {
                 </Command.Group>
               ))}
               <Command.Group heading={t("Actions")} className={GROUP}>
+                {me?.permissions.includes("work.write") ? (
+                  <Item icon={<KanbanIcon />} keywords={["task", "tugasan", "research", "browse", "schedule"]} onSelect={() => run(() => openTaskComposer())}>
+                    {t("New task")}
+                  </Item>
+                ) : null}
                 <Item icon={<PlusIcon />} onSelect={() => run(() => navigate({ to: "/organization", search: { new: 1 } }))}>
                   {t("New branch")}
                 </Item>

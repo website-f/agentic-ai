@@ -662,7 +662,7 @@ function OfferStep({
   const shift = `${hours.start}–${hours.end}`;
   return (
     <div className="grid min-w-0 gap-6">
-      <StepHead step={4} title={t("Your offer letter")} body={t("Read it over, then hire {name}. Everything here can be changed later from My AI worker.", { name })} />
+      <StepHead step={4} title={t("Your offer letter")} body={t("Read it over, then hire {name}. Everything here can be changed later from My AI.", { name })} />
       <article className="relative overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-[var(--shadow-pop)]">
         <div aria-hidden className="h-1.5" style={{ background: color }} />
         <div className="grid gap-5 p-5 sm:p-7">

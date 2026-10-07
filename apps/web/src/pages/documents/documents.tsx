@@ -4,7 +4,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { LoadMore } from "@/components/load-more";
-import { EmptyState, Page, PageHeader } from "@/components/page";
+import { EmptyState, Page } from "@/components/page";
 import { MadeBy, ReviewActions, ReviewPill, WorkLinks } from "@/components/provenance";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
@@ -25,7 +25,8 @@ import { timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 import { DocumentEditor } from "./editor";
 import { NewDocumentDialog } from "./new-document";
-import { DocSteps, KindTile } from "./visuals";
+import { LibraryHeader } from "../library-hub/hub";
+import { KindTile } from "./visuals";
 
 const ALL = "__all";
 type Filter = DocStatus | typeof ALL | "fix";
@@ -85,10 +86,8 @@ export function DocumentsPage() {
 
   return (
     <Page>
-      <PageHeader title={t("Documents")}
-        description={t("Quotations, invoices, letters and proposals, written by you or by agents. Each is checked automatically, approved by a person, then exported to PDF, Word or Excel.")}
+      <LibraryHeader tab="/documents"
         actions={<Button data-guide="documents.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New document")}</Button>} />
-      <DocSteps current="/documents" />
 
       <Segmented<View> label={t("View")} value={view} onChange={showView} guide="documents.review-tab"
         options={[
@@ -178,7 +177,7 @@ export function DocumentsPage() {
   );
 }
 
-function DocRow({ d, onOpen }: { d: ReviewedDoc; onOpen: () => void }) {
+export function DocRow({ d, onOpen }: { d: ReviewedDoc; onOpen: () => void }) {
   const t = useT();
   const s = STATUS_LABEL[d.status];
   const ai = docOrigin(d) === "agent";

@@ -7,7 +7,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ActionBar, Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, TextareaField } from "@/components/ui/field";
@@ -18,7 +18,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
 import { docKeys, fileUrl, kitQuery, kitsQuery, uploadFile, type CompanyKit, type CustomKitField } from "@/lib/documents";
 import { cn } from "@/lib/utils";
-import { DocSteps } from "./visuals";
+import { LibraryHeader } from "../library-hub/hub";
 
 type KitData = Record<string, string>;
 
@@ -202,9 +202,7 @@ export function CompanyKitPage() {
 
   return (
     <Page>
-      <PageHeader title={t("Company kit")}
-        description={t("The facts every document about a company reuses: legal name, registration, address, bank, signatory and logo. Fill it once; templates and agents use it everywhere.")} />
-      <DocSteps current="/company-kit" />
+      <LibraryHeader tab="/company-kit" />
       {isLoading ? <Skeleton className="h-64" />
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !kits.length ? (

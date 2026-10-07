@@ -3,11 +3,12 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
+import { clearWorkflowDraft, peekWorkflowDraft } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
 import { ResponsiveDialog } from "@/components/ui/dialog";
@@ -173,7 +174,9 @@ export function WorkflowsPage() {
   const search = useSearch({ strict: false }) as { w?: string; run?: string };
   const navigate = useNavigate();
   const [choosing, setChoosing] = useState(false);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  // "Turn into a workflow" on a task hands its drafted graph over: opened for review, then saved.
+  const [draft, setDraft] = useState<Draft | null>(() => peekWorkflowDraft());
+  useEffect(() => clearWorkflowDraft(), []);
   const [q, setQ] = useState("");
   const [show, setShow] = useState<"all" | "active" | "draft">("all");
 

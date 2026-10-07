@@ -10,6 +10,7 @@ import {
   useRouter,
   type ParsedLocation,
 } from "@tanstack/react-router";
+import { safeFrom } from "@/components/chat/links";
 import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
 
 import { AppShell } from "@/components/shell";
@@ -17,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
-import { staffOnly } from "@/lib/twin";
+import { assistantsFallback, canAssist, TWIN_TABS, type TwinTab } from "@/lib/my-ai";
+import { staffOnly, twinQuery } from "@/lib/twin";
 import { ALL_NAV, type AppPath } from "@/nav";
 import type { Me } from "@/lib/types";
 import { NotFoundPage, PlaceholderPage } from "@/pages/placeholder";
@@ -72,6 +74,7 @@ const page = {
   impact: lazyRouteComponent(() => import("@/pages/impact"), "ImpactPage"),
   guide: lazyRouteComponent(() => import("@/pages/guide"), "GuidePage"),
   present: lazyRouteComponent(() => import("@/pages/present"), "PresentPage"),
+  chatFull: lazyRouteComponent(() => import("@/pages/chat-full"), "ChatFullPage"),
   objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
 };
@@ -180,6 +183,10 @@ const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", compo
 const assistantsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/assistants",
+  // P30: private assistants are for people who manage others; staff have their AI twin.
+  beforeLoad: ({ context }) => {
+    if (!canAssist(context.me.permissions)) throw redirect({ to: assistantsFallback(context.me.permissions) });
+  },
   validateSearch: (s: Record<string, unknown>): { a?: string; tab?: "chat" | "drafts" | "settings"; google?: string; msg?: string } => ({
     a: str(s.a),
     tab: s.tab === "drafts" || s.tab === "settings" || s.tab === "chat" ? s.tab : undefined,
@@ -269,6 +276,10 @@ const chatRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/chat",
   validateSearch: (s: Record<string, unknown>): { agent?: string } => ({ agent: str(s.agent) }),
+  // Old links (/chat?agent=…) open that agent's chat full screen.
+  beforeLoad: ({ search }) => {
+    if (search.agent) throw redirect({ to: "/chat/$agentId", params: { agentId: search.agent }, search: { from: "/chat" } });
+  },
   component: page.chat,
 });
 const sopsRoute = createRoute({
@@ -424,11 +435,11 @@ const blueprintsRoute = createRoute({
   component: page.blueprints,
 });
 
-const TWIN_TABS = ["chat", "tasks", "memory", "teach"] as const;
+// P30: /twin holds the My AI tabs after Today (lib/my-ai.ts); /my-worker is Today.
 const twinRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/twin",
-  validateSearch: (s: Record<string, unknown>): { tab?: (typeof TWIN_TABS)[number]; edit?: number } => ({
+  validateSearch: (s: Record<string, unknown>): { tab?: TwinTab; edit?: number } => ({
     tab: TWIN_TABS.find((t) => t === s.tab),
     edit: num(s.edit),
   }),
@@ -446,7 +457,17 @@ const welcomeRoute = createRoute({
   },
   component: page.welcome,
 });
-const myWorkerRoute = createRoute({ getParentRoute: () => appRoute, path: "/my-worker", component: page.myWorker });
+const myWorkerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/my-worker",
+  // P30: My AI without a twin yet opens "Meet your AI twin" (its wizard).
+  beforeLoad: async ({ context }) => {
+    if (!context.me.permissions.includes("agents.own")) return;
+    const state = await context.queryClient.fetchQuery(twinQuery).catch(() => null);
+    if (state?.eligible && !state.twin) throw redirect({ to: "/twin" });
+  },
+  component: page.myWorker,
+});
 // P26: each person's own desk.
 const DESK_TABS = ["overview", "work", "files", "procedures", "agents"] as const;
 const deskRoute = createRoute({
@@ -547,6 +568,18 @@ const presentRoute = createRoute({
   component: page.present,
 });
 
+// One agent's chat, full screen without the app shell (like /present), signed in.
+const chatFullRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/chat/$agentId",
+  validateSearch: (s: Record<string, unknown>): { session?: string; from?: string } => ({ session: str(s.session), from: safeFrom(s.from) }),
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+  },
+  component: page.chatFull,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -563,6 +596,7 @@ const routeTree = rootRoute.addChildren([
   changePasswordRoute,
   welcomeRoute,
   presentRoute,
+  chatFullRoute,
   appRoute.addChildren([
     homeRoute,
     assistantsRoute,

@@ -803,7 +803,7 @@ export const SHELL: Record<string, string> = {
   "It stops and asks you (on your phone too). Untick what it may just do.": "Ia berhenti dan bertanya anda (di telefon juga). Nyahtanda apa yang boleh terus dibuat.",
   "Always": "Sentiasa",
   "Your offer letter": "Surat tawaran anda",
-  "Read it over, then hire {name}. Everything here can be changed later from My AI worker.": "Baca dahulu, kemudian ambil {name}. Semua di sini boleh diubah kemudian dalam Pekerja AI saya.",
+  "Read it over, then hire {name}. Everything here can be changed later from My AI.": "Baca dahulu, kemudian ambil {name}. Semua di sini boleh diubah kemudian dalam AI saya.",
   "Letter of appointment": "Surat lantikan",
   "{name} — {role} at {company}": "{name} — {role} di {company}",
   "{person} hires {name} as their AI worker: {role} in {dept} at {company}. {plain} works on {first}'s behalf, the way {first} would, says it is an AI when it deals with others, and reports back when work is done.": "{person} melantik {name} sebagai pekerja AI: {role} di {dept}, {company}. {plain} bekerja bagi pihak {first}, mengikut cara {first}, memberitahu bahawa ia AI bila berurusan dengan orang lain, dan melapor semula bila kerja selesai.",
@@ -1183,4 +1183,10 @@ export const SHELL: Record<string, string> = {
   "Open|verb": "Buka",
   "Never|tool": "Jangan",
   "Never|expiry": "Tiada tamat tempoh",
+
+  // Unsaved work guard + app updates (lib/unsaved.ts)
+  "A new version is ready": "Versi baharu sudah sedia",
+  "It loads as soon as your changes are saved.": "Ia dimuatkan sebaik sahaja perubahan anda disimpan.",
+  "Reload": "Muat semula",
+  "Your unsaved changes will be lost.": "Perubahan yang belum disimpan akan hilang.",
 };
