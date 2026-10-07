@@ -220,7 +220,8 @@ services:
       start_period: 15s
     mem_limit: 1g  # includes the ~300 MB embedding model
     cpus: 1.0  # one Python process uses one core at most
-    networks: [data, edge, llm]
+    # browser (P31): the browser service reaches the PC CDP relay at api:8501/internal/...
+    networks: [data, edge, llm, browser]
     <<: [*app-hardening, *logging]
 
   worker:

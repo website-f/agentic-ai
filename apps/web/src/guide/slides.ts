@@ -243,6 +243,23 @@ export const SLIDES: Slide[] = [
       "Private means private: nobody else sees your assistant or its conversations. It never sends an email by itself; it prepares drafts for you. Staff do not need this, because their own AI, My AI, already works for them.",
   },
   {
+    id: "computer",
+    kind: "feature",
+    eyebrow: "Your own computer",
+    title: "Your AI can work on your own PC too",
+    lead: "Link your Windows or Mac with one line. Your own AI finds and reads files in the folders you choose, brings them into the office, and browses in a real window on your screen.",
+    bullets: [
+      "Only your own AI, only the folders you pick; keys and passwords are always off-limits",
+      "Browses from your own internet line, in a separate window you can watch",
+      "Saving to your PC and sending forms ask you first; pause or unlink any time",
+    ],
+    shot: "computers",
+    phone: "computers",
+    note: "Windows 10/11 and macOS. Everything it does on the computer is logged.",
+    notes:
+      "This is where the office meets the files people keep on their own laptops: last year's quotation, the SSM certificate, the signed letter. Ask your AI and it finds them and brings them into the workspace, no hunting through folders. It can also open a real browser on your screen for portals that need your own connection. It is strictly personal: only your own AI, only the folders you choose, and passwords, keys and browser data are never touched. Pause or unlink stops it at once.",
+  },
+  {
     id: "companies",
     kind: "feature",
     eyebrow: "Companies and ready-made teams",

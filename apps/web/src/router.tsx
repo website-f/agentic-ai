@@ -77,6 +77,7 @@ const page = {
   chatFull: lazyRouteComponent(() => import("@/pages/chat-full"), "ChatFullPage"),
   objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
+  computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -546,6 +547,17 @@ const searchRoute = createRoute({
   component: page.search,
 });
 
+// P31: a person's own computers, for their own AI (twin: agents.own; private assistant: assistants.use).
+const computersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/computers",
+  validateSearch: (s: Record<string, unknown>): { link?: number; device?: string } => ({ link: num(s.link), device: str(s.device) }),
+  beforeLoad: ({ context }) => {
+    if (!["agents.own", "assistants.use"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+  },
+  component: page.computers,
+});
+
 const objectivesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/objectives",
@@ -644,6 +656,7 @@ const routeTree = rootRoute.addChildren([
     guidePageRoute,
     objectivesRoute,
     searchRoute,
+    computersRoute,
   ]),
 ]);
 

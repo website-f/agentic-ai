@@ -5,7 +5,8 @@ Order (first match wins):
    at private or internal addresses. Nothing overrides these, including autonomy "auto".
 2. Tools the agent is never offered (P29, the same gating as runtime.offered_tools): a
    personal assistant's tools on any other agent, run_python without a sandbox, the browser
-   without a browser service. Naming one does not run it.
+   without a browser service, the PC tools (P31) on anything but its person's own AI with a
+   linked computer. Naming one does not run it.
 3. A "deny" a person set on the agent (before ALWAYS_ASK, so it raises no approval card).
 4. ALWAYS_ASK tools wait for a person.
 5. The agent's own mode for the tool: deny | ask | allow (tool default if unset).
@@ -23,12 +24,13 @@ from ..api.scope import Scope
 from ..assistants.names import ASSISTANT_ONLY
 from ..core.config import settings
 from ..core.security import can
+from ..devices.core import PC_TOOLS, has_device, personal
 from ..models import Agent, Membership
 from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
 # Outward actions a person signs off every time, whatever an agent's settings say.
-ALWAYS_ASK = frozenset({"browser_submit", "browser_upload"})
+ALWAYS_ASK = frozenset({"browser_submit", "browser_upload", "pc_save_to_pc"})
 # Tools whose approver is the person asking: when someone who could approve the agent's
 # requests asks for it directly in chat ("every Monday 9am send me the report"), that request
 # is the approval. Anywhere else (a task, an email the agent read) a person approves it,
@@ -64,6 +66,10 @@ OUTSIDE_CONTENT = frozenset(
         "tool_search",
         "tool_describe",
         "meeting_minutes",
+        # P31: names, paths and text from the person's own computer.
+        "pc_find_files",
+        "pc_list_folder",
+        "pc_read_file",
     }
 )
 
@@ -98,6 +104,8 @@ def hidden(agent: Agent, tool_name: str) -> str | None:
         return "there is no code sandbox on this server"
     if tool_name.startswith("browser_") and not settings.browser_url:
         return "there is no browser on this server"
+    if tool_name in PC_TOOLS and not personal(agent):  # P31
+        return "only a person's own AI (their twin or private assistant) uses their computer"
     return None
 
 
@@ -153,6 +161,8 @@ async def _evaluate(
             return Decision("deny", "hardline.internal_address", problem, True)
 
     why = hidden(agent, tool_name)
+    if not why and tool_name in PC_TOOLS and not await has_device(agent):
+        why = "its person has no linked computer"
     if why:
         return Decision(
             "deny", f"hidden.{tool_name}", f"{agent.name} does not have {tool.label}: {why}."

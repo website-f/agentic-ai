@@ -7,6 +7,7 @@ import { ADMIN } from "./admin";
 import { BUILDERS } from "./builders";
 import { CHAT } from "./chat";
 import { COMMON } from "./common";
+import { COMPUTERS } from "./computers";
 import { DESK } from "./desk";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
@@ -43,4 +44,5 @@ export const MS: Record<string, string> = {
   ...LIBRARY,
   ...TASKS_FLOW,
   ...MY_AI,
+  ...COMPUTERS,
 };

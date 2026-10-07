@@ -20,6 +20,7 @@ import {
   TreeStructureIcon,
   ClockCounterClockwiseIcon,
   DeskIcon,
+  DesktopTowerIcon,
   EyeIcon,
   CpuIcon,
   ChartBarIcon,
@@ -50,6 +51,7 @@ export type AppPath =
   | "/assistants"
   | "/twin"
   | "/my-worker"
+  | "/computers"
   | "/workspace"
   | "/forms"
   | "/overview"
@@ -136,6 +138,8 @@ export const NAV: NavSection[] = [
       { to: "/twin", label: msg("My twin"), icon: UserFocusIcon, perm: "agents.own", hidden: true, blurb: msg("Your AI twin: your virtual self at work. It handles routine tasks the way you would, and asks you before anything important.") },
       // Private assistants are for people who manage others (assistants.use); staff have their twin.
       { to: "/assistants", label: msg("My assistants"), icon: SparkleIcon, perm: "assistants.use", blurb: msg("Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp.") },
+      // P31: the person's own computers, for their own AI (twin or private assistant) only.
+      { to: "/computers", label: msg("My computers"), icon: DesktopTowerIcon, perm: ["agents.own", "assistants.use"], blurb: msg("Let your own AI find files on your computer and browse on your screen. Only your AI can use it, only in the folders you choose.") },
       { to: "/impact", label: msg("Impact"), icon: ChartLineUpIcon, perm: ["org.manage", "team.manage"], blurb: msg("What the AI team measurably did per company and department, the time it freed against what it cost, and what it can do next.") },
     ],
   },

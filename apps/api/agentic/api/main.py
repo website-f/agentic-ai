@@ -68,6 +68,11 @@ CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
 # JSON-only guarantee holds; the CSRF token is still checked.
 RAW_UPLOAD_PATHS = {"/api/files", "/api/transcribe"}
 WEBHOOK_PREFIX = "/api/whatsapp/hook/"
+# P31: a PC posts file bytes here with its bearer token (never a session cookie).
+RAW_UPLOAD_PREFIXES: tuple[str, ...] = ("/api/devices/uploads/",)
+# P31: a PC authenticates with its link code or bearer token, not a session, so a stray
+# cookie never asks it for a CSRF token.
+DEVICE_PATHS = ("/api/devices/claim", "/api/devices/uploads/", "/api/devices/self/")
 
 
 @asynccontextmanager
@@ -101,14 +106,16 @@ async def csrf_guard(request: Request, call_next):
     if request.method in UNSAFE_METHODS and path.startswith("/api/"):
         ctype = request.headers.get("content-type", "")
         raw_ok = (
-            path in RAW_UPLOAD_PATHS
+            (path in RAW_UPLOAD_PATHS or path.startswith(RAW_UPLOAD_PREFIXES))
             and request.method == "POST"
             and ctype.startswith("application/octet-stream")
         )
         if not ctype.startswith("application/json") and not raw_ok:
             return _error(415, "json_required", tr("Send requests as application/json."))
         # Signed webhooks (WhatsApp) never use the session cookie, so CSRF does not apply.
-        exempt = path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX)
+        exempt = (
+            path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX) or path.startswith(DEVICE_PATHS)
+        )
         if not exempt and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
             header = request.headers.get(CSRF_HEADER, "")
@@ -332,3 +339,8 @@ app.include_router(member_import_router.router)
 from .routers import task_flow as task_flow_router  # noqa: E402
 
 app.include_router(task_flow_router.router)
+
+# P31: a person's own computers (the PC agent): linking, the connection, files, CDP relay.
+from .routers import devices as devices_router  # noqa: E402
+
+app.include_router(devices_router.router)

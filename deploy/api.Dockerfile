@@ -78,6 +78,8 @@ RUN groupadd --system --gid 10001 app \
 WORKDIR /app
 COPY --from=build --chown=app:app /app /app
 COPY --from=build /opt/models /opt/models
+# P31: the PC agent's install script templates (agentic/devices/install.py reads them here).
+COPY --chown=app:app apps/pc-agent/install /app/pc-agent/install
 # The vault and media volumes inherit this owner the first time Docker creates them.
 RUN mkdir -p /data/vault /data/media && chown app:app /data/vault /data/media
 ENV PATH="/app/.venv/bin:$PATH" \

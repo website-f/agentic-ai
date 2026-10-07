@@ -469,6 +469,8 @@ async def seed() -> None:  # noqa: C901, PLR0912, PLR0915 - one long, linear scr
         BrainFact,
         Broadcast,
         BroadcastReceipt,
+        Device,
+        DeviceActivity,
         ChatSession,
         CompanyKit,
         Credential,
@@ -1182,6 +1184,31 @@ async def seed() -> None:  # noqa: C901, PLR0912, PLR0915 - one long, linear scr
         ]
         for i, (role, content) in enumerate(a_convo):
             db.add(AgentMessage(workspace_id=ws.id, agent_id=assistant.id, session_id=acs.id, role=role, content=content, created_at=ago(hours=1) + timedelta(minutes=i)))
+        await db.commit()
+
+        # ------------------------------------------------ P31: the owner's own laptop
+        # (demo_frames.py marks it online in Valkey for the capture).
+        docs = "C:\\Users\\Aminah\\Documents"
+        laptop = Device(
+            id="dv_demo_aminah_laptop", workspace_id=ws.id, user_id=owner.id, name="Aminah's laptop",
+            os="windows", arch="x64", version="0.1.0", hostname="AMINAH-LAPTOP", token_hash="0" * 64,
+            folders=[docs, "C:\\Users\\Aminah\\Desktop", "C:\\Users\\Aminah\\Downloads"],
+            browsers=["chrome", "edge"], last_seen_at=ago(minutes=1), created_at=ago(9),
+        )
+        db.add(laptop)
+        await db.flush()
+        for when, kind, detail in (
+            (ago(2, hours=3), "search", {"query": "insurance renewal 2026", "found": 3}),
+            (ago(2, hours=3) + timedelta(minutes=1), "read", {"path": docs + "\\Insurance\\Fleet insurance renewal 2026.pdf"}),
+            (ago(1, hours=5), "search", {"query": "SSM certificate", "exts": ["pdf"], "found": 2}),
+            (ago(1, hours=5) + timedelta(minutes=1), "upload", {"path": docs + "\\Company\\SSM certificate Nusantara Logistics.pdf", "name": "SSM certificate Nusantara Logistics.pdf"}),
+            (ago(hours=4), "browser_open", {"start_url": "https://www.ssm.com.my", "browser": "chrome"}),
+            (ago(hours=3, minutes=40), "browser_close", {}),
+            (ago(hours=2), "search", {"query": "Mega Mart quotation", "found": 1}),
+            (ago(hours=2) + timedelta(minutes=1), "read", {"path": docs + "\\Sales\\Mega Mart quotation draft.docx"}),
+            (ago(minutes=50), "save", {"folder": docs + "\\Sales", "name": "Mega Mart quotation v2.pdf"}),
+        ):
+            db.add(DeviceActivity(device_id=laptop.id, workspace_id=ws.id, user_id=owner.id, agent_id=assistant.id, kind=kind, detail=detail, ok=True, ts=when))
         await db.commit()
 
         # ------------------------------------------------ logins, MCP server

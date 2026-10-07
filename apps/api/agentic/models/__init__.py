@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
@@ -437,6 +438,8 @@ class Task(Timestamps, Base):
     # not met and under the cap, the agent is nudged and continues the same work.
     goal: Mapped[str | None] = mapped_column(Text)
     goal_tries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # P31: which of the person's computers this task browses on (agents/pc_tools.py).
+    device_id: Mapped[str | None] = mapped_column(String(40))
 
 
 class AgentMessage(Base):
@@ -1766,3 +1769,72 @@ class FormSubmission(Timestamps, Base):
     review_note: Mapped[str] = mapped_column(Text, default="")
     reviewed_by: Mapped[str | None] = mapped_column(String(80))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Device(Base):
+    """P31: a person's own computer running the PC agent. Only that person's own AI (their
+    twin or private assistant) may use it. The token is stored as SHA-256 only. `folders` and
+    `paused` are the server's truth (the PC reports changes made on it); an empty folder list
+    means the PC's defaults until it reports them."""
+
+    __tablename__ = "devices"
+    __table_args__ = (Index("ix_devices_user", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dv"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    os: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    arch: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    version: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    hostname: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    folders: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    paused: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    browsers: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DeviceLinkCode(Base):
+    """P31: a one-time code (10 minutes) that links a computer; stored as SHA-256 only."""
+
+    __tablename__ = "device_link_codes"
+    __table_args__ = (Index("ix_device_link_codes_user", "user_id"),)
+
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    device_id: Mapped[str | None] = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DeviceActivity(Base):
+    """P31: one thing done on a person's computer (search, read, save, browser...). `detail`
+    holds the path, url or query, never file contents."""
+
+    __tablename__ = "device_activity"
+    __table_args__ = (
+        Index("ix_device_activity_user", "user_id"),
+        Index("ix_device_activity_device_ts", "device_id", "ts"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(16))
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    ok: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

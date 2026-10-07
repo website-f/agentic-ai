@@ -19,8 +19,9 @@ from ...agents.tools import modes_for
 from ...agents.vault import for_agent as logins_for
 from ...core.db import get_db
 from ...core.ssrf import BlockedURL, guard_url
+from ...devices import core as devices
 from ...i18n.labels import agent_status_label
-from ...models import Task
+from ...models import Device, Task
 from ...services import audit, events
 from ..agent_schemas import TaskOut
 from ..deps import Principal, api_error, require
@@ -80,6 +81,8 @@ class WebTaskIn(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     labels: list[str] = Field(default_factory=list, max_length=8)
     requires_review: bool = True
+    # P31: browse in a real window on one of the person's own computers (their own AI only).
+    device_id: str | None = Field(default=None, max_length=40)
 
 
 def brief_for(body: WebTaskIn) -> str:
@@ -266,6 +269,36 @@ async def web_task(
             login=body.login,
         )
 
+    device: Device | None = None
+    if body.device_id:  # P31: only the person's own AI, on the person's own linked computer
+        device = await db.get(Device, body.device_id)
+        if (
+            device is None
+            or device.revoked_at is not None
+            or device.workspace_id != principal.workspace_id
+            or device.user_id != principal.user.id
+        ):
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "device_not_found", "That computer is not linked."
+            )
+        if not devices.personal(agent) or agent.owner_user_id != principal.user.id:
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "not_your_ai",
+                "Only your own AI (your twin or private assistant) can browse on your computer.",
+            )
+        if device.paused:
+            raise api_error(
+                status.HTTP_409_CONFLICT, "device_paused", "{name} is paused.", name=device.name
+            )
+        if not await devices.online_ids([device.id]):
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "device_offline",
+                "{name} is offline. Turn it on (the agent starts with it) and try again.",
+                name=device.name,
+            )
+
     lowest = (
         await db.scalar(
             select(func.min(Task.position)).where(Task.workspace_id == principal.workspace_id)
@@ -273,10 +306,17 @@ async def web_task(
         or 0
     )
     title = (body.title or "").strip() or body.instructions.strip().splitlines()[0][:120]
+    brief = brief_for(body)
+    if device is not None:
+        brief += (
+            f"\n\nThis runs in a real browser window on {device.name}, the person's own "
+            "computer (from their own internet line). They may be watching: work calmly."
+        )
     t = Task(
         workspace_id=principal.workspace_id,
         title=title[:200],
-        brief=brief_for(body),
+        brief=brief,
+        device_id=device.id if device is not None else None,
         priority="normal",
         assignee_agent_id=agent.id,
         branch_id=agent.branch_id,

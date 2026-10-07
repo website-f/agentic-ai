@@ -56,6 +56,14 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("assistants.chat", "Chat with your assistant"), t("assistants.quick", "One-tap questions"), t("assistants.connections", "Gmail, Calendar and WhatsApp")],
   },
   {
+    id: "computers", route: "/computers", title: "My computers", group: "Home", who: "Anyone with their own AI (an AI twin or a private assistant)",
+    states: [{ key: "activity", how: "Click Recent activity on a computer" }],
+    targets: [
+      t("computers.link", "Link a computer"), t("computers.device", "A linked computer"), t("computers.folders", "Folders your AI may see"),
+      t("computers.activity", "What your AI did on it"), t("computers.safety", "What it can and cannot do"),
+    ],
+  },
+  {
     id: "overview", route: "/overview", title: "Company overview", group: "Home",
     states: [],
     targets: [t("overview.range", "Period"), t("overview.branches", "Every company side by side"), t("overview.briefing", "AI briefing")],

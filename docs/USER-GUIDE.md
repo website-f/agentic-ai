@@ -4,19 +4,19 @@
 
 Every page of the office: what it is for, what you can do there, and how, step by step. The same guide is in the app under **Help > Guide** (`/guide`), with highlighted screenshots and videos.
 
-Screenshots: Sample companies (demo data), captured 2026-10-04. Numbers in the steps match the numbered boxes in the app's guide.
+Screenshots: Sample companies (demo data), captured 2026-10-07. Numbers in the steps match the numbered boxes in the app's guide.
 
 ## Contents
 
-- **Home**: [Command center](#command-center) · [My AI worker](#my-ai-worker) · [My assistants](#my-assistants) · [Company overview](#company-overview) · [Impact](#impact)
+- **Home**: [Command center](#command-center) · [My workspace](#my-workspace) · [My AI](#my-ai) · [My assistants](#my-assistants) · [My computers](#my-computers) · [Company overview](#company-overview) · [Impact](#impact)
 - **Office**: [Office floor](#office-floor) · [Monitor](#monitor) · [Agents](#agents)
-- **Work**: [Tasks](#tasks) · [Approvals](#approvals) · [Reports](#reports) · [Chat](#chat)
-- **Documents**: [Company kit](#company-kit) · [Files](#files) · [Templates](#templates) · [Documents](#documents) · [Packs](#packs)
+- **Work**: [Tasks](#tasks) · [Approvals](#approvals) · [Forms](#forms) · [Reports](#reports) · [Chat](#chat)
+- **Documents**: [Company kit](#company-kit) · [Library: Browse](#library-browse) · [Templates](#templates) · [Documents](#documents) · [Packs](#packs)
 - **Collaboration**: [Meetings](#meetings) · [Broadcasts](#broadcasts)
-- **Knowledge**: [SOPs](#sops) · [Library](#library) · [Brain](#brain) · [Skills](#skills) · [Learning](#learning) · [Blueprints](#blueprints) · [Workflows](#workflows)
+- **Knowledge**: [SOPs](#sops) · [Guidelines](#guidelines) · [Brain](#brain) · [Skills](#skills) · [Learning](#learning) · [Blueprints](#blueprints) · [Workflows](#workflows)
 - **Operations**: [Schedules](#schedules) · [Logins](#logins) · [AI Engine](#ai-engine) · [MCP tools](#mcp-tools) · [Channels](#channels)
 - **Admin**: [Organization](#organization) · [Activity](#activity) · [Members and settings](#members-and-settings)
-- **Help**: [Tutorial](#tutorial)
+- **Help**: [Tutorial](#tutorial) · [Demo: a working day with AI agents](#demo-a-working-day-with-ai-agents)
 - **Videos**: [Short recordings](#short-recordings)
 
 ---
@@ -70,14 +70,87 @@ Your start page: today at a glance. How many agents are working, what waits for 
 
 **Related:** [Company overview](#company-overview) · [Approvals](#approvals) · [Tasks](#tasks) · [Organization](#organization)
 
-### My AI worker
+### My workspace
+
+Opens at `/workspace`.
+
+Your own desk, for everyone from staff to owners. Instead of going through Files, SOPs, Workflows, Tasks and Documents one by one, ask or search here, keep what you use often pinned, and find everything your work produced in one place. The other pages are still there to browse.
+
+![My workspace on a desktop](../apps/web/public/guide-media/shots/workspace-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/workspace-mobile.webp" alt="My workspace on a phone" width="280">
+
+**On this screen**
+
+1. **The workspace tabs**: Five tabs: **Overview**, **My work**, **My files**, **Workflows & SOPs** and **AI workers**.
+2. **Ask or search**: Type a word, amount or reference number. **Search** shows matches here; **Ask** gives it to your AI worker.
+3. **Your day in numbers**: What waits for you, what is in progress, what finished this week and how much is in your workspace.
+4. **Pinned**: Your shortcuts. Workflows have **Run**, files have **Download**.
+5. **My work**: Everything you asked for or your AI does, with the documents and files it made.
+6. **My workspace files**: Files you uploaded here and everything your work produced. Filter by **Made by AI** or **Uploaded**.
+7. **My AI workers**: Your AI worker and assistants: what each is doing, and quick ways to give them work.
+8. **Waiting for you**: Questions, approvals and results that need you.
+9. **My procedures**: The SOPs and workflows for your job: your department's first, then your company's.
+
+**What you can do here**
+
+- Ask or search anything inside the company's documents, SOPs and records, with suggestions as you type.
+- Hand a question to your AI worker: it searches the documents, answers with the file and page it used and, if you ask, prepares a document.
+- Pin SOPs, workflows, files, documents and searches, and open them in one click.
+- Run a workflow again straight from **My procedures** or a pin.
+- Follow **My work**: what you asked for, what your AI workers are doing, and the documents and files they made.
+- Keep your own files in **My workspace files**, next to everything your AI made for you.
+- Answer what waits for you: your AI's questions and approvals, and its work to review.
+
+#### How to: Find something in the company's documents
+
+1. Type in **Ask or search**, for example a word, an amount like RM700 or a tender number. Suggestions appear as you type. _(box 2)_
+2. Click **Search**. The best matches appear under the box, with the page of the PDF where they were found.
+3. Click **Open** to read it, or the pin to keep it on your workspace. Pin the whole search to run it again later.
+
+#### How to: Ask your AI worker to find it and hand it over
+
+1. Type your question in **Ask or search**, for example: how much advance can a guard with 8 working days get? _(box 2)_
+2. Choose **Find and answer**, or **Answer and prepare a document** when you need a letter, quotation or report.
+3. Click **Ask** followed by your AI worker's name. It searches the documents and SOPs, and asks colleagues when it needs to.
+4. The answer appears under **My work**, with every source cited. A document it prepared is in **My workspace files** and waits for your review. _(box 5)_
+
+#### How to: Keep your shortcuts and run a workflow again
+
+1. Press the pin next to any SOP, workflow, file, document or search result, here or on its own page.
+2. It appears under **Pinned**. Click it to open it. _(box 4)_
+3. For a workflow, click **Run**, fill in the job and start it. You can also run one from **My procedures**. _(box 9)_
+
+#### How to: Choose which AI follows a workflow, and when it works
+
+1. Open the **Workflows & SOPs** tab and pick a workflow on the left. _(box 1)_
+2. Read its steps, then under **Who follows it, and when they work** switch on the agents that should do this job this way. Each shows its working hours. _(box 9)_
+3. Click **Run it now** to start a job through it. Work given outside an agent's hours waits for its next shift.
+4. On the **AI workers** tab, each worker shows when it works and the workflows it follows. _(box 7)_
+
+#### How to: Keep your own files on your workspace
+
+1. Click **Upload to my workspace** and pick the files. _(box 6)_
+2. They are read like any company file, so you and your AI worker can search inside them.
+3. Only you and your managers see them. They are also in the Library under My workspace and your name.
+
+**Tips**
+
+- Anything your AI worker makes, or anyone makes on a task you gave, lands on your workspace by itself.
+- Staff see only their own company's guidelines and their own work. Owners see their own desk too, not everyone else's.
+- A pinned item that was deleted stays on your workspace, marked **No longer there**, until you unpin it.
+
+**Who can use it:** Everyone. Asking your AI worker and uploading need a role that can create work.
+
+**Related:** [My AI](#my-ai) · [Library: Browse](#library-browse) · [SOPs](#sops) · [Workflows](#workflows) · [Documents](#documents) · [Tasks](#tasks)
+
+### My AI
 
 Opens at `/my-worker`. For: Staff.
 
-Staff only: the home of the one AI worker you hired. See what it is doing, what waits for you, its duties and the hours it works.
+Staff only: My AI, the home of your one AI worker, your twin. Today shows what it is doing, what waits for you, its duties and the hours it works. Its tabs open the chat, its tasks, what it knows, teaching it and its profile.
 
-![My AI worker on a desktop](../apps/web/public/guide-media/shots/my-worker-desktop.webp)
-<img src="../apps/web/public/guide-media/shots/my-worker-mobile.webp" alt="My AI worker on a phone" width="280">
+![My AI on a desktop](../apps/web/public/guide-media/shots/my-worker-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/my-worker-mobile.webp" alt="My AI on a phone" width="280">
 
 **On this screen**
 
@@ -97,9 +170,9 @@ Staff only: the home of the one AI worker you hired. See what it is doing, what 
 
 _Welcome: First sign-in as staff: the Hire your AI worker steps (/welcome)._
 
-![My AI worker, welcome](../apps/web/public/guide-media/shots/my-worker-welcome-desktop.webp)
+![My AI, welcome](../apps/web/public/guide-media/shots/my-worker-welcome-desktop.webp)
 
-1. On **My AI worker**, click **Start hiring**. The hiring steps open full screen.
+1. Sign in for the first time: the hiring steps open full screen. (Without a worker yet, **My AI** offers **Create my twin**.)
 2. **Your company**: pick your company and department. If you are not sure, choose **Not sure yet**; your manager can set it later.
 3. **Meet your AI worker**: give it a name, a job title and say how it should work. Tick what it must ask you about first.
 4. **Its job** (optional): pick a role blueprint, workflows it follows, recurring duties and a first task.
@@ -130,7 +203,7 @@ _Welcome: First sign-in as staff: the Hire your AI worker steps (/welcome)._
 
 ### My assistants
 
-Opens at `/assistants`.
+Opens at `/assistants`. For: Owners and managers.
 
 Your own private AI assistants. Nobody else sees them. Ask about the whole company, let it draft Gmail replies you approve, and chase people on WhatsApp.
 
@@ -139,7 +212,7 @@ Your own private AI assistants. Nobody else sees them. Ask about the whole compa
 
 **On this screen**
 
-1. **Chat with your assistant**: The conversation with your assistant.
+1. **Chat with your assistant**: Open the chat with your assistant full screen, or pick up a recent conversation.
 2. **One-tap questions**: One-tap questions. Gmail and calendar ones appear once Google is connected.
 3. **Gmail, Calendar and WhatsApp**: Gmail, Calendar and WhatsApp: what is connected.
 
@@ -177,9 +250,69 @@ Your own private AI assistants. Nobody else sees them. Ask about the whole compa
 - Calendar guests get an invitation only when you confirm the change in **Drafts**.
 - Voice turns your speech into text in the message box. You can edit it before sending.
 
-**Who can use it:** Everyone who can create work (all roles except approver and viewer). Each person's assistants are private to them.
+**Who can use it:** People who manage others: owners, admins, branch managers, HODs and supervisors. Each person's assistants are private to them. Staff have one personal AI, their twin, in My AI.
 
 **Related:** [Chat](#chat) · [Channels](#channels) · [Company overview](#company-overview)
+
+### My computers
+
+Opens at `/computers`. For: Anyone with their own AI (an AI twin or a private assistant).
+
+Let your own AI work on your Windows or Mac computer: find and read files in the folders you choose, copy them into your workspace, and browse in a real window on your screen.
+
+![My computers on a desktop](../apps/web/public/guide-media/shots/computers-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/computers-mobile.webp" alt="My computers on a phone" width="280">
+
+**On this screen**
+
+1. **Link a computer**: Link another computer. The code in the line works once, for 10 minutes.
+2. **A linked computer**: A linked computer: online or offline, paused or not, and which browsers it has.
+3. **Folders your AI may see**: The only folders your AI may look in. Add or remove them here.
+4. **What your AI did on it**: Every search, file read, copy, save and browser window, newest first.
+5. **What it can and cannot do**: What your AI can do on your computer, and what it never touches.
+
+**What you can do here**
+
+- Link a computer with one line you copy into PowerShell (Windows) or Terminal (Mac). It installs a small program and links it with a one-time code.
+- Choose the **Folders** your AI may see (by default Documents, Desktop and Downloads). Everything else on the computer stays out of reach.
+- Ask your AI in chat, for example **Find my SSM certificate and put it in my workspace**.
+- Give a **Browse a website** task and pick **On my computer**: a real Chrome or Edge window opens on your screen, from your own internet line.
+- See everything it did under **Recent activity**, **Pause** it, or **Unlink** the computer. Both work at once.
+
+#### How to: Link your computer
+
+1. Click **Link a computer**. _(box 1)_
+2. Copy the line for your computer (Windows or Mac).
+3. Windows: open **PowerShell**, paste it and press Enter. Mac: open **Terminal**, paste it and press Enter.
+4. Wait for **Linked** (about a minute). The page shows the computer as online. _(box 2)_
+
+#### How to: Get a file from your computer
+
+_Activity: Click Recent activity on a computer._
+
+![My computers, activity](../apps/web/public/guide-media/shots/computers-activity-desktop.webp)
+
+1. Open the chat with your own AI (My AI, or your private assistant).
+2. Ask in plain words, for example **Find the Mega Mart quotation on my computer and save it to my workspace**.
+3. It searches only your shared folders, then copies the file into **My workspace / From my PC**.
+4. Check what it did under **Recent activity**. _(box 4)_
+
+#### How to: Browse on your own computer
+
+1. Give a task, choose **Browse a website** and enter the link.
+2. Under **Where to browse**, pick **On my computer**.
+3. A Chrome or Edge window opens with its own **Agent** profile, separate from your own browsing. Sending a form still waits for your approval.
+
+**Tips**
+
+- Only your own AI can use your computer. Company agents, colleagues and managers cannot.
+- Passwords, keys, browser data and password managers are refused even inside a shared folder.
+- Saving a file to your computer asks you first, every time. Programs and scripts are never saved.
+- To remove it completely, run **agentic-pc uninstall** on the computer.
+
+**Who can use it:** Anyone with their own AI: staff with an AI twin, and people who manage others with a private assistant. Each computer is private to its owner.
+
+**Related:** [My AI](#my-ai) · [My assistants](#my-assistants) · [Chat](#chat)
 
 ### Company overview
 
@@ -437,24 +570,31 @@ A board of everything your agents are working on, from new to done.
 
 **What you can do here**
 
-- Create a task with **New task**: what you need, who does it, priority, files and whether you review the result.
-- Follow every task through the columns: **Triage**, **Ready**, **Running**, **Waiting on you**, **In review** and **Done**.
+- Create a task with **New task**: say what you need, pick how (a task, web research, a website or a workflow), who does it and when (now or on repeat).
+- Follow every task through the columns: **Triage**, **Ready**, **Running**, **Waiting**, **In review** and **Done**.
 - Drag a card between columns, for example from **In review** to **Done**.
 - Open a card to see its plan, result, sub-tasks, timeline and the self-check.
 - **Accept**, **Send back**, **Start**, **Retry**, **Cancel** or **Delete** a task, and call a **Meeting** about it.
 - Search by title, agent or label, and retry all failed tasks at once.
 
+#### How to: Find your own cards, pin them, and share a task
+
+1. Type in the search box to find cards by title, agent or label. _(box 4)_
+2. Choose **Mine** for the work you gave or your own AI does, or **Pinned** for the cards you pinned to your workspace.
+3. Open a card and press **Pin to my workspace**: it stays on your workspace for one-click access.
+4. Managers and owners: under **Who can see it**, share the task with its department, the whole company or everyone. Others can look at it but not change it.
+
 #### How to: Give a task
 
-_New: Click New task: the new-task form._
+_New: Click New task: the task composer opens (what you need, how, who and when)._
 
 ![Tasks, new](../apps/web/public/guide-media/shots/tasks-new-desktop.webp)
 
-1. Click **New task**. _(box 1)_
-2. Write a **Title** and a **Brief**: what you need and what done looks like.
-3. Pick the agent in **Assign to**, and a **Priority**.
-4. Add files with **Attach or upload** if the agent needs them.
-5. Keep **I review the result** on, then click **Create and start**.
+1. Click **New task** in the header, or **Give a task** from an agent, the office or a chat. The task composer opens. _(box 1)_
+2. Under **What do you need?**, type or speak what you need and what done looks like.
+3. Pick **How**: a general task, **Research the web**, **Browse a website** or **Follow a workflow**.
+4. Pick **Who** does it, and under **When** choose **Now** or **Repeat** to put it on a schedule.
+5. Open **More options** for files, priority and review, then click **Start task**.
 
 #### How to: Check and accept a result
 
@@ -474,10 +614,11 @@ _Sheet: Click a task card: its sheet with plan, result and timeline._
 
 **Tips**
 
-- **Running** and **Waiting on you** are moved by agents; you move the other columns.
+- **Running** and **Waiting** are moved by agents; you move the other columns.
 - The plan shows if the self-check passed, or what it caught and fixed before hand-in.
 - On a phone, press and hold a card to drag it, or use the column switcher.
 - Deleting a task keeps the reports and files it produced.
+- Open a task's **More** menu to **Reassign** it, **Run again**, **Repeat on a schedule**, or **Turn into a workflow** from how it was done.
 
 **Who can use it:** Everyone can see tasks. Creating and acting on tasks needs a role that can create work (not approver or viewer).
 
@@ -527,6 +668,63 @@ Decisions your agents are waiting on: tools they want to use, questions, and bud
 
 **Related:** [Tasks](#tasks) · [Channels](#channels) · [Activity](#activity)
 
+### Forms
+
+Opens at `/forms`.
+
+The company's own forms in one place: claims, advances, monthly records, requests and yearly counts. Each has its blank to download and a window to hand it in. Fill it yourself, or let your AI worker fill it from what you tell it and the receipts you attach.
+
+![Forms on a desktop](../apps/web/public/guide-media/shots/forms-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/forms-mobile.webp" alt="Forms on a phone" width="280">
+
+**On this screen**
+
+1. **To hand in and all forms**: **To hand in** lists what still needs you; **All forms** lists every form for you; managers also see **Archived**.
+2. **The company's forms**: Each form shows when it is due, where you stand, and buttons to download, hand in or ask your AI.
+
+**What you can do here**
+
+- See what you still have to hand in under **To hand in**, most urgent first: late, due soon, returned to fix, then open.
+- Click **Download blank** for the company's own form, fill it in and hand it back with **Hand in**, with receipts, photos or any other files.
+- Click **Ask AI to fill it**: say what goes in and attach receipts. Your AI worker fills the company's form, keeping its layout and formulas, and leaves it as your draft.
+- Managers: **Add a form** from the ready-made ones (expense claim, travel claim, petty cash, leave, item request, attendance, stock count) or upload your own Excel, Word or PDF form, and set when it opens and is due.
+- Managers: see **Who handed in** each round, open their files, **Accept** them or **Return** them with what to fix.
+
+#### How to: Hand in a claim before the deadline
+
+_Handin: Click Hand in on a form: upload the filled form and receipts._
+
+1. Open **To hand in** and find the form. Its pill says **Open**, **Due soon** or **Late**. _(box 2)_
+2. Click **Download blank** and fill it in on your computer or phone.
+3. Click **Hand in**, choose the filled form and your receipts or photos, and add a note if you like.
+4. Click **Hand in** again. Your manager sees it straight away, and it shows **Handed in**.
+
+#### How to: Let your AI worker fill it in
+
+_Ask: Click Ask AI to fill it on a form._
+
+1. Click **Ask AI to fill it** on the form. _(box 2)_
+2. Write what goes in, for example each trip with its date and amount, and attach the receipts.
+3. Your AI worker reads the company's form and fills it in. It comes back as **AI draft to check**.
+4. Open the draft, check every line, then click **Check and hand in**. Nothing is handed in until you do.
+
+#### How to: Add a form and see who handed in
+
+1. Click **Add a form**. Pick a ready-made one and click **Add**, or switch to **Our own form** and upload yours.
+2. Set **When it is handed in**: every month between two days, every year in a month, once by a date, or whenever needed.
+3. Pick the company and who fills it in: everyone, or one department. They see it under Forms and on their workspace. _(box 1)_
+4. Click **Who handed in** on the form. **Accept** each one, or **Return** it with what to fix.
+
+**Tips**
+
+- A form that runs into the next month, for example from the 30th to the 3rd, counts for the month it opened in.
+- A missed round stays on the list as **Late** for a few days, so it is not forgotten.
+- Everything handed in is also kept in the person's workspace files, so the AI and managers can search inside it.
+
+**Who can use it:** Everyone sees the forms for their company and department. Owners, admins and managers add forms and review them.
+
+**Related:** [My workspace](#my-workspace) · [Library: Browse](#library-browse) · [My AI](#my-ai) · [Tasks](#tasks)
+
 ### Reports
 
 Opens at `/reports`.
@@ -566,7 +764,7 @@ What agents wrote up for you: a summary first, then tables you can sort, filter 
 
 Opens at `/chat`.
 
-Talk to any agent directly. When something needs doing, turn the reply into a task.
+Talk to any agent directly. The chat opens full screen, with your conversations beside it and a wide, easy-to-read column. When something needs doing, turn a reply into a task.
 
 ![Chat on a desktop](../apps/web/public/guide-media/shots/chat-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/chat-mobile.webp" alt="Chat on a phone" width="280">
@@ -578,20 +776,22 @@ Talk to any agent directly. When something needs doing, turn the reply into a ta
 
 **What you can do here**
 
-- Pick an agent and chat with it.
+- Pick an agent, or pick up a recent conversation: the chat opens full screen, with your conversations beside it. **Back** or Esc returns you.
+- Read each reply in a wide column, with the tools it used shown underneath.
+- **Copy** a reply, or click **Make this a task** to hand the work to the agent.
+- Give the agent work without leaving the chat with **Give a task**.
 - Speak instead of typing: click the microphone, talk, and your words appear in the box.
-- Start a **New** conversation, or go back to an earlier one.
-- Click **Make this a task** under a reply to turn it into a task.
+- Start a **New** conversation, switch between conversations, or delete one.
 
 #### How to: Ask an agent something
 
-_Conversation: Pick an agent: the conversation opens._
+_Conversation: Pick an agent: the full-screen conversation opens._
 
 ![Chat, conversation](../apps/web/public/guide-media/shots/chat-conversation-desktop.webp)
 
-1. Pick the agent in the list. _(box 1)_
+1. Pick the agent, or a recent conversation. It opens full screen. _(box 1)_
 2. Type your message and press Enter. Shift+Enter starts a new line. _(box 2)_
-3. Under its reply you see which model answered and which tools it used.
+3. Under each reply you see which model answered and which tools it used. **Copy** it if you like.
 
 #### How to: Speak instead of typing
 
@@ -602,7 +802,7 @@ _Conversation: Pick an agent: the conversation opens._
 #### How to: Turn a reply into a task
 
 1. Click **Make this a task** under the agent's reply.
-2. New task opens with the agent and the reply already filled in. Check it and create the task.
+2. The task composer opens with the agent and the reply filled in. Check it, then **Start task**. Tasks made here show as live cards in the chat.
 
 **Tips**
 
@@ -621,7 +821,7 @@ _Conversation: Pick an agent: the conversation opens._
 
 Opens at `/company-kit`.
 
-Each company's facts that every document reuses: legal name, registration, address, bank, signatory, logo.
+The Library's Company kit tab: each company's facts that every document reuses: legal name, registration, address, bank, signatory, logo.
 
 ![Company kit on a desktop](../apps/web/public/guide-media/shots/company-kit-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/company-kit-mobile.webp" alt="Company kit on a phone" width="280">
@@ -652,61 +852,104 @@ Each company's facts that every document reuses: legal name, registration, addre
 
 **Who can use it:** Everyone can read it. Admins and that company's manager can change it.
 
-**Related:** [Templates](#templates) · [Documents](#documents) · [Files](#files)
+**Related:** [Templates](#templates) · [Documents](#documents) · [Library: Browse](#library-browse)
 
-### Files
+### Library: Browse
 
 Opens at `/files`.
 
-Certificates, statements, letters and photos the office keeps. Each one is read once (scans too) and summarised for agents.
+The Library's Browse tab: every file in folders, one place per company for all its documents. Drop a whole folder or zip and its folders are kept, every file is read and sorted, and how-to documents go to the guidelines for agents.
 
-![Files on a desktop](../apps/web/public/guide-media/shots/files-desktop.webp)
-<img src="../apps/web/public/guide-media/shots/files-mobile.webp" alt="Files on a phone" width="280">
+![Library: Browse on a desktop](../apps/web/public/guide-media/shots/files-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/files-mobile.webp" alt="Library: Browse on a phone" width="280">
 
 **On this screen**
 
-1. **Upload**: Drop files here, or choose them.
-2. **Files**: Your files, with what was read from them and expiry warnings.
-3. **Use as a guideline**: Make a file a guideline agents search and cite.
+1. **Pick the company**: The company these documents belong to. Uploads and downloads are for this company only.
+2. **Upload files, folders or a zip**: Drop files, a whole folder or a zip here, or choose them.
+3. **Upload report**: One upload: its progress, then its report with flagged files and AI suggestions.
+4. **Folders**: The company's folders, with file counts and held-back files.
+5. **Search and filters**: Search, and filter by department or kind.
+6. **Files**: The files in the folder, with kind, department, status and library.
+7. **Download a folder**: Download the folder you are in as a zip.
+8. **Download everything**: Download every file this company has as a zip.
+9. **Use as a guideline**: Make a file a guideline agents search and cite.
+10. **Search inside every document**
 
 **What you can do here**
 
-- Upload PDFs, Word, Excel, CSV and photos, up to 20 MB each.
-- See what was read from a file: a summary, key facts such as **Valid until**, and the full text agents read.
-- Spot files that are expired or expire within 60 days.
-- Move a file to a company, download, open or delete it.
-- Turn on **Use as a guideline (library)** so agents search it and cite the page.
+- Pick the company under **Company**, then drop files, whole folders or a .zip on the upload area.
+- Follow each upload as it is unpacked, read and sorted, then read its report: what was found, what went to the library and what was held back.
+- Browse the company's folders, search, filter by kind or department, or group the list **By kind** or **By department**.
+- Open a file to see a preview, its summary, kind, department and folder, and change any of them.
+- Download one file, a folder, everything for the company, or just the files you ticked, as a zip.
+- Turn a procedure into an SOP or a workflow with **Make an SOP** or **Build a workflow**.
+- Managers: **Release** a held-back file after checking it, or **Hold back** one yourself.
 
-#### How to: Upload a file
+#### How to: Company documents: where to upload
 
-1. Drop the file on the upload area, or click **Choose files**. _(box 1)_
-2. It shows **Reading…** while it is read. Scans are read too.
-3. Click the file to see what was read from it. _(box 2)_
+1. Open **Library**, stay on **Browse**, and pick the company under **Company**. _(box 1)_
+2. What to upload: SOPs, guides, checklists, flowcharts, forms, templates, certificates and contracts. A whole zip of the company's documents is fine.
+3. Drop the zip, the files or a whole folder on the upload area, or click **Choose files** or **Choose a folder**. _(box 2)_
+4. Wait while it shows **Unpacking**, **Reading** and **Sorting**. You can leave the page; the work carries on.
+5. When it shows **Ready**, read the report: files by kind and department, how many went to the library, and what was held back. _(box 3)_
+
+#### How to: What happens to an upload by itself
+
+1. Folders are kept as they were, so a file in TENDER/CARTA ALIR stays in that folder. _(box 4)_
+2. Every file is read (scans too), given a kind such as SOP, form or certificate, and matched to a department.
+3. How-to documents such as SOPs, guides and checklists go to the library, so agents search them and cite the page.
+4. Files with passwords or staff ID numbers are **Held back**: kept and downloadable, but agents cannot read them until a manager checks them and clicks **Release**.
+
+#### How to: View or download a file, a folder or everything
+
+_Sheet: Click a file: its preview and what was read from it._
+
+1. Pick a folder on the left, or tap **Folders** on a phone. _(box 4)_
+2. Click a file to open it: a preview, what it is and where it sits. **Download** gives you the original. _(box 6)_
+3. Click **Download folder** to get the folder you are in as a zip. _(box 7)_
+4. Click **Download everything** to get all of the company's files. _(box 8)_
+5. To download a few, tick them and click **Download zip**.
+
+#### How to: Turn a procedure into an SOP or a workflow
+
+_Sheet: Click a file: its preview and what was read from it._
+
+1. Open the document, or tick several that belong together.
+2. Click **Make an SOP** for written steps agents follow, or **Build a workflow** to run the job step by step.
+3. Check the draft before you save it. The upload report also lists **AI suggestions** you can start from.
 
 #### How to: Make a file a guideline
 
-_Sheet: Click a file: what was read from it._
-
-![Files, sheet](../apps/web/public/guide-media/shots/files-sheet-desktop.webp)
+_Sheet: Click a file: its preview and what was read from it._
 
 1. Click the file to open it.
-2. Turn on **Use as a guideline (library)**. _(box 3)_
+2. Turn on **Use as a guideline (library)**. _(box 9)_
 3. Pick **Who it is for**. Agents in that scope now search it and cite the page they used.
+
+#### How to: Search inside every document
+
+1. Click the search box at the top of any page, or press **/**, and start typing. On a phone, tap the magnifier. _(box 10)_
+2. Pick a suggestion: a word from your own documents, a title, a heading, or one of your recent searches. The ↑ ↓ and Enter keys work too.
+3. Press Enter for **Search all documents**: every file page by page, SOPs, documents, templates and wiki pages, with the matching words marked.
+4. Put words in quotes for an exact phrase, like "load system calculation". Amounts and dates work as people write them: RM700, RM 700.00, 16hb. Reference numbers, like a PO or tender number, complete as you type.
+5. Click a result: a file opens in the Library at the page that matched. You only find what you may open, and never a held-back file.
 
 **Tips**
 
+- A held-back file never reaches agents until a manager releases it. The report says why in plain words and never shows the secret itself.
 - Deleting a file shows it as missing in any pack that uses it.
-- Use the **Expiring or expired** tile to renew certificates in time.
+- Certificates show **Valid until**, so you can renew them in time.
 
-**Who can use it:** Everyone who can sign in. What you can change depends on your role.
+**Who can use it:** Everyone can browse and download. Uploading and changing files needs a role that can create work; releasing held-back files needs a manager.
 
-**Related:** [Library](#library) · [Packs](#packs) · [Documents](#documents)
+**Related:** [Guidelines](#guidelines) · [SOPs](#sops) · [Workflows](#workflows) · [Packs](#packs)
 
 ### Templates
 
 Opens at `/templates`.
 
-Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} that agents and people fill in.
+The Library's Templates tab: quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} that agents and people fill in.
 
 ![Templates on a desktop](../apps/web/public/guide-media/shots/templates-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/templates-mobile.webp" alt="Templates on a phone" width="280">
@@ -749,7 +992,7 @@ Quotations, invoices, letters, proposals and your own Word files, with {{placeho
 
 Opens at `/documents`.
 
-Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.
+The Library's Documents tab: documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.
 
 ![Documents on a desktop](../apps/web/public/guide-media/shots/documents-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/documents-mobile.webp" alt="Documents on a phone" width="280">
@@ -800,7 +1043,7 @@ _Editor: Open a document: the editor with fields and preview._
 
 Opens at `/packs`.
 
-Submission packs, such as for a tender: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.
+The Library's Packs tab: submission packs, such as for a tender, with a checklist matched to real files and documents, compiled into one PDF with a cover and contents.
 
 ![Packs on a desktop](../apps/web/public/guide-media/shots/packs-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/packs-mobile.webp" alt="Packs on a phone" width="280">
@@ -833,7 +1076,7 @@ Submission packs, such as for a tender: a checklist matched to real files and do
 
 **Who can use it:** Everyone who can sign in. What you can change depends on your role.
 
-**Related:** [Files](#files) · [Documents](#documents) · [Company kit](#company-kit)
+**Related:** [Library: Browse](#library-browse) · [Documents](#documents) · [Company kit](#company-kit)
 
 ---
 
@@ -921,7 +1164,7 @@ Send one message to every agent, a company, departments or chosen agents, and se
 
 Opens at `/sops`.
 
-Written procedures your agents follow. Company and department SOPs apply by themselves; library SOPs are attached to chosen agents.
+The Library's SOPs tab: written procedures your agents follow. Company and department SOPs apply by themselves; library SOPs are attached to chosen agents.
 
 ![SOPs on a desktop](../apps/web/public/guide-media/shots/sops-desktop.webp)
 <img src="../apps/web/public/guide-media/shots/sops-mobile.webp" alt="SOPs on a phone" width="280">
@@ -953,16 +1196,16 @@ Written procedures your agents follow. Company and department SOPs apply by them
 
 **Who can use it:** Everyone can read SOPs. Owners and admins write and change them.
 
-**Related:** [Library](#library) · [Agents](#agents) · [Blueprints](#blueprints)
+**Related:** [Guidelines](#guidelines) · [Agents](#agents) · [Blueprints](#blueprints)
 
-### Library
+### Guidelines
 
 Opens at `/library`.
 
-Guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.
+The Library's Guidelines tab: guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.
 
-![Library on a desktop](../apps/web/public/guide-media/shots/library-desktop.webp)
-<img src="../apps/web/public/guide-media/shots/library-mobile.webp" alt="Library on a phone" width="280">
+![Guidelines on a desktop](../apps/web/public/guide-media/shots/library-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/library-mobile.webp" alt="Guidelines on a phone" width="280">
 
 **On this screen**
 
@@ -993,7 +1236,7 @@ Guidelines, manuals and policies, plus every SOP. Agents search them when the wo
 
 **Who can use it:** Everyone can search. Adding and taking out files needs a role that can create work.
 
-**Related:** [Files](#files) · [SOPs](#sops) · [Brain](#brain)
+**Related:** [Library: Browse](#library-browse) · [SOPs](#sops) · [Brain](#brain)
 
 ### Brain
 
@@ -1035,7 +1278,7 @@ What the office knows: facts agents learned, wiki pages, and a nightly tidy-up c
 
 **Who can use it:** Everyone can read. Editing needs a role that can create work; vault tools and dream undo are for owners and admins.
 
-**Related:** [Library](#library) · [Skills](#skills) · [Learning](#learning)
+**Related:** [Guidelines](#guidelines) · [Skills](#skills) · [Learning](#learning)
 
 ### Skills
 
@@ -1190,6 +1433,7 @@ Draw how a job is done as connected steps, then run it: each step goes to its ag
 - Add steps for AI work, communication, documents, the web and people, such as an **Approval**.
 - See problems before you run it, and let **Improve with AI** suggest changes.
 - Run a job through it, give it with a task, or make it an agent's standard way of working.
+- Draft a workflow from a task that already ran: on the task's **More** menu, pick **Turn into a workflow**.
 
 #### How to: Build a workflow from a template
 
@@ -1256,10 +1500,11 @@ Recurring work for your agents, and a record of every run with its result.
 
 - Failed runs retry by themselves after 5, 15 and 30 minutes.
 - Each run creates a fresh task with the date added to its title.
+- A schedule is also made when you pick **Repeat** in the task composer, or **Repeat on a schedule** on a task's menu.
 
 **Who can use it:** Everyone can see schedules. Creating and changing them needs a role that can create work.
 
-**Related:** [Tasks](#tasks) · [Workflows](#workflows) · [My AI worker](#my-ai-worker)
+**Related:** [Tasks](#tasks) · [Workflows](#workflows) · [My AI](#my-ai)
 
 ### Logins
 
@@ -1338,6 +1583,7 @@ Connect the AI providers your agents use, decide which models answer first, and 
 - Keys are stored encrypted. Only the last four characters are ever shown again.
 - Free tiers from Groq, OpenRouter, Mistral and HuggingFace are enough to start.
 - Agents ask for a group, never a provider, so you can change models without touching agents.
+- After an error, a provider or a single model rests for a short while (a cooldown). Groups use the next model meanwhile, and the page shows the seconds left.
 
 **Who can use it:** Owners and admins change it. Operators, approvers and viewers can look.
 
@@ -1579,6 +1825,114 @@ Learn the system for your role, step by step: from your first agent to giving ta
 
 **Related:** [Command center](#command-center)
 
+### Demo: a working day with AI agents
+
+Opens at `/tutorial`.
+
+A script for showing a client one working day with AI agents: a staff member hires their AI worker, agents run the company's own procedures, and a person approves what the AI made. Use your company's procedures; each step says what to click and what to point out.
+
+![Demo: a working day with AI agents on a desktop](../apps/web/public/guide-media/shots/demo-day-desktop.webp)
+<img src="../apps/web/public/guide-media/shots/demo-day-mobile.webp" alt="Demo: a working day with AI agents on a phone" width="280">
+
+**What you can do here**
+
+- Run the whole demo in about half an hour with one owner account and one staff account.
+- Search inside every uploaded file, word by word, with suggestions as you type: a phrase, an amount like RM700 or a reference number.
+- Show four workflows built from the company's uploaded procedures, each ending in a document a person reviews.
+- Show where risky steps stop and wait in **Approvals**: sending outside, signing, payments and portal submissions.
+- Finish in **Documents** and **Library** filtered to **Made by AI**, so the client sees everything the AI made in one place.
+
+#### How to: Before the demo: set up the company
+
+1. Sign in as the owner. In **Library**, pick the company and drop a zip of its procedures: uniform and equipment requests, disciplinary steps, the salary advance rules and the tender procedure.
+2. When the upload is ready, select the procedure files and click **Make an SOP** or **Build a workflow**. Check each draft and save it.
+3. Fill in **Company kit** (legal name, registration number, address, signatory, payment terms) so letters and orders print on the letterhead. Set **Document language** to Bahasa Melayu for a Malay-speaking company: its quotations, invoices and AI folder are then in Malay.
+4. Add a staff member with the staff role in Members, and keep their sign-in details for the demo.
+
+#### How to: 1. A staff member hires their AI worker
+
+1. Sign in as the staff member. The hiring steps open by themselves; if not, open **My AI** and click **Create my twin**.
+2. Give the worker a name and a job title, for example HR assistant at your security company, and tick what it must ask about first.
+3. Under **Its job**, add a duty it does every day, such as checking new leave requests each morning.
+4. Under **Working hours**, pick **Office week**. Work given after hours waits for its next shift.
+5. Read the offer letter and click **Hire**.
+
+#### How to: 1b. Show the staff member's own workspace
+
+1. After hiring, the staff member lands on **My workspace**: their desk, with their AI worker, their procedures and their work.
+2. Type a question in **Ask or search**, for example the advance rules, and click **Search**: the matching pages appear at once.
+3. Then click **Ask** with the AI worker's name and choose **Answer and prepare a document**. The answer and the document land under **My work** and **My workspace files**.
+4. Pin the SOPs and workflows they use every day, and run a workflow again from **Pinned**.
+
+#### How to: 2. Give it a task based on an SOP
+
+1. On **My AI**, click **Give a task**.
+2. Write the request and name the SOP to follow, for example: prepare a quotation for guarding two schools for 12 months, with the company's rates, following the quotation SOP.
+3. Open the task in **Tasks** and show the timeline: the SOP it read, the files it opened and what it is doing now.
+4. The quotation is made from the company's template, on its letterhead. It is saved in **Documents**, and its PDF in **Library** under AI documents, marked **Made by AI**.
+5. When it finishes, the result waits for review. Click **Accept**, or **Send back** with a note to show the agent fixing its own work.
+
+#### How to: 2b. Search anything inside the company's documents
+
+1. Click the search box at the top of any page, or press **/**.
+2. Type the first letters of a word, for example kelay. Suggestions appear as you type: whole words from the documents, file titles and headings inside the files.
+3. Search an amount such as RM700, a reference number such as a tender or PO number, or a phrase in quotes. Results show the page of the PDF where it was found.
+4. Click a result: the file opens at that page with the words highlighted. Filter by company, kind, department or **Made or uploaded**.
+5. Point out that agents search the same way and quote the file and page they used. Staff only find what their company and role may open.
+
+#### How to: 3a. A uniform or equipment request, ending in a purchase order
+
+1. Open **Workflows**, pick the uniform request workflow built from the company's procedure and click **Run**.
+2. Type the request (who needs what, sizes and quantities) and click **Start**.
+3. The run stops where the procedure needs a person: the manager's decision before any order is made. Show it under **Needs you**, then approve.
+4. The agents check the request against the procedure and draft the purchase order from the company's template. Its PDF goes into the company's files under AI documents.
+5. When the goods arrive, a person records what was received and the run closes.
+
+#### How to: 3b. A disciplinary case, ending in a warning letter
+
+1. Run the disciplinary workflow with the case details: the staff member, what happened, the dates and any earlier warnings.
+2. The agent follows the company's disciplinary steps, reads the records it was given and drafts the warning letter in the company's language.
+3. Point out that the letter waits for a person. Nobody signs or sends it until someone approves it.
+
+#### How to: 3c. The monthly salary advance
+
+1. Run the salary advance workflow with the month and the attendance for the first half of the month.
+2. The agent works out how much each person may get under the company's rules, such as days worked and the advance limit, and shows the calculation in a report.
+3. A person keys the approved amounts into the payroll system. The agent never makes a payment itself.
+4. The run waits for that person to confirm it is done before it closes.
+
+#### How to: 3d. A tender, from the notice to the submission checklist
+
+1. Run the tender workflow with the tender notice: upload the notice or paste its details.
+2. The agents read the notice, note the closing date and any compulsory briefing, and tell the team what to prepare.
+3. They draft the briefing notice and the letter asking the bank for a certified true copy (CTC) of the bank statement.
+4. Submitting on the tender portal is always done by an authorised officer. The run waits for them to confirm it was submitted.
+
+#### How to: 4. Where approvals appear and how a person approves
+
+1. Anything risky stops and asks first: an email or WhatsApp to someone outside the company, signing, payments and portal submissions.
+2. The request shows in **Approvals**, and as a phone notification when channels are set up, with the agent, the action and its reason.
+3. Click **Approve once** to let it go ahead this one time, or **Deny** with a reason the agent reads.
+4. Every decision is kept in **History** and in the activity log, with who decided and when.
+
+#### How to: 5. Find what the AI made and review it
+
+1. On the home page, a card shows how many documents AI made this week and how many wait for review. Click **Review now**.
+2. In **Documents**, open **Review what AI made**. Each row shows the agent, the task or workflow it came from, and **Approve**, **Send back** and **Open**.
+3. Send one back with a note and show the agent revising it. It comes back to the same list when it is done.
+4. In **Library**, choose **Made by AI** and pick an agent. The purchase order, the warning letter, the salary report and the tender letters are all there, each with its task and review status.
+5. Switch the filter to **Uploaded** to show the company's own files, the procedures and forms the agents worked from.
+
+**Tips**
+
+- Use made-up staff names and figures in a demo. Never show a real employee's case or salary.
+- Run each workflow once before the meeting so you know how long it takes with your AI provider.
+- AI folders follow the company's language: AI documents in English, Dokumen AI in Malay. A new version of a document replaces its file; Documents keeps every version.
+
+**Who can use it:** Owners and managers who show the system to a client. The first two parts need a staff account.
+
+**Related:** [My workspace](#my-workspace) · [My AI](#my-ai) · [Tasks](#tasks) · [Workflows](#workflows) · [Approvals](#approvals) · [Documents](#documents) · [Library: Browse](#library-browse)
+
 ---
 
 ## Short recordings
@@ -1589,7 +1943,7 @@ Build an agent from a template, place it in a department, set what it may do and
 
 [![Create an agent](../apps/web/public/guide-media/videos/create-agent-poster.webp)](../apps/web/public/guide-media/videos/create-agent.mp4)
 
-Video (0:26, desktop): `../apps/web/public/guide-media/videos/create-agent.mp4`
+Video (0:27, desktop): `../apps/web/public/guide-media/videos/create-agent.mp4`
 
 - `0:00` Agents: your AI team, by department
 - `0:03` Pick a starting point
@@ -1606,15 +1960,16 @@ Give an agent a task, watch it plan and work, and accept the result.
 
 [![Give a task and follow it](../apps/web/public/guide-media/videos/give-task-poster.webp)](../apps/web/public/guide-media/videos/give-task.mp4)
 
-Video (0:49, desktop): `../apps/web/public/guide-media/videos/give-task.mp4`
+Video (0:46, desktop): `../apps/web/public/guide-media/videos/give-task.mp4`
 
 - `0:00` The task board
 - `0:02` Say what you need
-- `0:12` Pick the agent
-- `0:15` Create and start
-- `0:17` Follow the plan, live
-- `0:42` The result waits for your review
-- `0:47` Accept it
+- `0:09` Pick how it works
+- `0:11` Pick the agent
+- `0:12` Start it
+- `0:14` Follow the plan, live
+- `0:39` The result waits for your review
+- `0:43` Accept it
 
 ### Approve a decision
 
@@ -1636,7 +1991,7 @@ Add a company with its industry, and a ready-made AI team joins it.
 
 [![Add a company with a ready-made AI team](../apps/web/public/guide-media/videos/add-company-poster.webp)](../apps/web/public/guide-media/videos/add-company.mp4)
 
-Video (0:23, desktop): `../apps/web/public/guide-media/videos/add-company.mp4`
+Video (0:24, desktop): `../apps/web/public/guide-media/videos/add-company.mp4`
 
 - `0:00` Your companies
 - `0:02` Name the company
@@ -1650,14 +2005,14 @@ Staff hire their own AI worker in five short steps.
 
 [![Staff: hire your AI worker](../apps/web/public/guide-media/videos/hire-worker-poster.webp)](../apps/web/public/guide-media/videos/hire-worker.mp4)
 
-Video (0:35, mobile): `../apps/web/public/guide-media/videos/hire-worker.mp4`
+Video (0:34, mobile): `../apps/web/public/guide-media/videos/hire-worker.mp4`
 
 - `0:00` Where you work (set by your manager)
 - `0:03` Meet your AI worker
-- `0:11` Give it a job
+- `0:10` Give it a job
 - `0:17` When it works and rests
-- `0:22` The offer: check and hire
-- `0:29` Its first day: working on your task
+- `0:21` The offer: check and hire
+- `0:28` Its first day: working on your task
 
 ### On the phone
 
@@ -1665,10 +2020,10 @@ The whole office fits in your pocket: the tab bar, approvals and the More menu o
 
 [![On the phone](../apps/web/public/guide-media/videos/phone-tour-poster.webp)](../apps/web/public/guide-media/videos/phone-tour.mp4)
 
-Video (0:27, mobile): `../apps/web/public/guide-media/videos/phone-tour.mp4`
+Video (0:30, mobile): `../apps/web/public/guide-media/videos/phone-tour.mp4`
 
 - `0:00` Command center: how the office is doing
 - `0:03` Approvals: decide from your phone
 - `0:07` Tasks: the board, one column at a time
-- `0:17` Office floor: who is working
-- `0:22` Everything else is under More
+- `0:17` Chat: full screen, easy to read
+- `0:26` Everything else is under More

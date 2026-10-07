@@ -32,6 +32,7 @@ import { runKeys, workflowsQuery, type Run } from "@/lib/workflows";
 import { TaskPicker, type TaskRef } from "@/pages/tasks/accountable";
 
 import { AgentPicker, NOBODY } from "./agent-picker";
+import { BrowseWhere, canBrowseOn, ON_SERVER, useMyDevicesFor } from "./browse-where";
 import { cronFor, researchBrief, titleFrom, type RepeatPreset } from "./briefs";
 import { lastAgent, rememberAgent, useComposerStore, type ComposerKind, type ComposerPrefill, type ComposerResult } from "./store";
 
@@ -164,6 +165,11 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   const needsAgent = kind === "research" || kind === "browse" || repeatOn;
   const hasAgent = !!agent;
 
+  // P31: browse on the person's own computer (only their own AI, only a computer that is on).
+  const [where, setWhere] = useState(ON_SERVER);
+  const myDevices = useMyDevicesFor(kind === "browse" ? agent : null, me.user.id);
+  const deviceId = myDevices.find((d) => d.id === where && canBrowseOn(d))?.id ?? null;
+
   const logins = useQuery({
     queryKey: ["agent-logins", agentId],
     queryFn: () => api<{ name: string; hosts: string[] }[]>(`/api/agents/${agentId}/logins`),
@@ -221,7 +227,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
         const task = await api<Task>(`/api/agents/${agentId}/web-task`, "POST", {
           url, instructions: text, mode, values: mode === "read" ? "" : values,
           output: mode === "tender" ? "report" : output, login: login === NONE ? null : login,
-          title: shownTitle || null, requires_review: review, labels: labelList,
+          title: shownTitle || null, requires_review: review, labels: labelList, device_id: deviceId,
         });
         return { kind: "task", task };
       }
@@ -383,6 +389,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
                 {kind === "browse" ? (
                   <div className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
                     <Field label={t("Link")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("https://… or portal.example.com/page")} error={fields.url} inputMode="url" />
+                    {myDevices.length ? <BrowseWhere devices={myDevices} value={deviceId ?? ON_SERVER} onChange={setWhere} /> : null}
                     <RadioGroup.Root value={mode} onValueChange={(v) => pickMode(v as "read" | "interact" | "tender")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-3">
                       <ModeChoice value="read" icon={MagnifyingGlassIcon} title={t("Find information")} body={t("Reads the page (and the pages it links to). Fills in nothing.")} />
                       <ModeChoice value="interact" icon={CursorClickIcon} title={t("Interact and fill in")} body={t("Clicks, types and fills forms. Sending a form waits for your approval.")} />

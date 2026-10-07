@@ -44,6 +44,14 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("assistants.chat", "Sembang dengan pembantu anda"), t("assistants.quick", "Soalan sekali ketik"), t("assistants.connections", "Gmail, Calendar dan WhatsApp")],
   },
   {
+    id: "computers", route: "/computers", title: "Komputer saya", group: "Home", who: "Sesiapa yang ada AI sendiri (kembar AI atau pembantu peribadi)",
+    states: [{ key: "activity", how: "Klik Aktiviti terkini pada komputer" }],
+    targets: [
+      t("computers.link", "Pautkan komputer"), t("computers.device", "Komputer yang dipautkan"), t("computers.folders", "Folder yang boleh dilihat AI anda"),
+      t("computers.activity", "Apa yang dibuat AI anda padanya"), t("computers.safety", "Apa yang boleh dan tidak boleh dibuatnya"),
+    ],
+  },
+  {
     id: "overview", route: "/overview", title: "Gambaran syarikat", group: "Home",
     states: [],
     targets: [t("overview.range", "Tempoh"), t("overview.branches", "Semua syarikat sebelah-menyebelah"), t("overview.briefing", "Taklimat AI")],

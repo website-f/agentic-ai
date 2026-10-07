@@ -273,6 +273,61 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     related: ["chat", "channels", "overview"],
   },
 
+  computers: {
+    purpose: "Let your own AI work on your Windows or Mac computer: find and read files in the folders you choose, copy them into your workspace, and browse in a real window on your screen.",
+    can: [
+      "Link a computer with one line you copy into PowerShell (Windows) or Terminal (Mac). It installs a small program and links it with a one-time code.",
+      "Choose the **Folders** your AI may see (by default Documents, Desktop and Downloads). Everything else on the computer stays out of reach.",
+      "Ask your AI in chat, for example **Find my SSM certificate and put it in my workspace**.",
+      "Give a **Browse a website** task and pick **On my computer**: a real Chrome or Edge window opens on your screen, from your own internet line.",
+      "See everything it did under **Recent activity**, **Pause** it, or **Unlink** the computer. Both work at once.",
+    ],
+    spots: {
+      "computers.link": "Link another computer. The code in the line works once, for 10 minutes.",
+      "computers.device": "A linked computer: online or offline, paused or not, and which browsers it has.",
+      "computers.folders": "The only folders your AI may look in. Add or remove them here.",
+      "computers.activity": "Every search, file read, copy, save and browser window, newest first.",
+      "computers.safety": "What your AI can do on your computer, and what it never touches.",
+    },
+    howto: [
+      {
+        title: "Link your computer",
+        steps: [
+          s("Click **Link a computer**.", "computers.link"),
+          s("Copy the line for your computer (Windows or Mac)."),
+          s("Windows: open **PowerShell**, paste it and press Enter. Mac: open **Terminal**, paste it and press Enter."),
+          s("Wait for **Linked** (about a minute). The page shows the computer as online.", "computers.device"),
+        ],
+      },
+      {
+        title: "Get a file from your computer",
+        state: "activity",
+        steps: [
+          s("Open the chat with your own AI (My AI, or your private assistant)."),
+          s("Ask in plain words, for example **Find the Mega Mart quotation on my computer and save it to my workspace**."),
+          s("It searches only your shared folders, then copies the file into **My workspace / From my PC**."),
+          s("Check what it did under **Recent activity**.", "computers.activity"),
+        ],
+      },
+      {
+        title: "Browse on your own computer",
+        steps: [
+          s("Give a task, choose **Browse a website** and enter the link."),
+          s("Under **Where to browse**, pick **On my computer**."),
+          s("A Chrome or Edge window opens with its own **Agent** profile, separate from your own browsing. Sending a form still waits for your approval."),
+        ],
+      },
+    ],
+    tips: [
+      "Only your own AI can use your computer. Company agents, colleagues and managers cannot.",
+      "Passwords, keys, browser data and password managers are refused even inside a shared folder.",
+      "Saving a file to your computer asks you first, every time. Programs and scripts are never saved.",
+      "To remove it completely, run **agentic-pc uninstall** on the computer.",
+    ],
+    who: "Anyone with their own AI: staff with an AI twin, and people who manage others with a private assistant. Each computer is private to its owner.",
+    related: ["my-worker", "assistants", "chat"],
+  },
+
   overview: {
     purpose: "Every company side by side: work done, what is failing or waiting, and AI spend, with a short AI briefing.",
     can: [

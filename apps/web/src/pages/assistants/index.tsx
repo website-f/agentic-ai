@@ -32,6 +32,7 @@ import {
 } from "@/lib/assistants";
 import { cn, timeAgo } from "@/lib/utils";
 import type { Agent } from "@/lib/work";
+import { ComputersLink } from "@/pages/computers/indicator";
 
 import { assistantPrompts } from "./chat-extras";
 
@@ -525,6 +526,7 @@ export function AssistantsPage() {
                     {home.whatsapp.linked ? t("Your phone is linked") : t("Link your phone →")}
                   </button>
                 ) : null}
+                <ComputersLink className="-mx-1 justify-self-start" />
                 {waiting ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {t("{n} waiting for you", { n: waiting })}</button> : null}
               </div>
             </aside>

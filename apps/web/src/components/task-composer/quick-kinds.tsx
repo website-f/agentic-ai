@@ -1,11 +1,12 @@
 /** The obvious ways in: "Give my AI a task" with the three quick kinds of work, for the staff
  * home, the desk and an empty chat. Each opens the one task composer, ready to go. */
-import { ArrowRightIcon, BrowserIcon, FileTextIcon, GlobeIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, BrowserIcon, DesktopTowerIcon, FileTextIcon, GlobeIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { msg, t as tr, useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
+import { useMyDevicesForId } from "./browse-where";
 import type { ComposerPrefill } from "./store";
 import { openTaskComposer } from "./store";
 
@@ -29,14 +30,22 @@ export const QUICK_KINDS: QuickKind[] = [
 /** Small chips (an empty chat): each opens the composer with that kind of work picked. */
 export function QuickKindChips({ agentId, onCreated, className }: { agentId: string; onCreated?: ComposerPrefill["onCreated"]; className?: string }) {
   const t = useT();
+  // P31: the person's own AI, once they linked a computer, can fetch a file from it.
+  const hasPc = useMyDevicesForId(agentId).length > 0;
+  const chip = "inline-flex min-h-10 items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft/40 px-3.5 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent-soft";
   return (
     <div className={cn("flex flex-wrap justify-center gap-2", className)}>
       {QUICK_KINDS.map((k) => (
-        <button key={k.key} type="button" onClick={() => openTaskComposer({ ...k.prefill(), agentId, onCreated })}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft/40 px-3.5 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent-soft">
+        <button key={k.key} type="button" onClick={() => openTaskComposer({ ...k.prefill(), agentId, onCreated })} className={chip}>
           <k.icon size={15} weight="duotone" /> {t(k.label)}
         </button>
       ))}
+      {hasPc ? (
+        <button type="button" className={chip}
+          onClick={() => openTaskComposer({ kind: "general", agentId, onCreated, brief: tr("Find the file … on my computer and save it to my workspace.") })}>
+          <DesktopTowerIcon size={15} weight="duotone" /> {t("Find a file on my computer")}
+        </button>
+      ) : null}
     </div>
   );
 }

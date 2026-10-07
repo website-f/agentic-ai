@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { t } from "@/i18n";
 
 import { brainKeys } from "./brain";
+import { deviceKeys } from "./devices";
 import { learningKeys } from "./learning";
 import { objectiveKeys } from "./objectives";
 import { keys } from "./queries";
@@ -96,6 +97,10 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "workflow_run.updated": [["workflow-runs"]],
   "objective.updated": [objectiveKeys.all, workKeys.tasks],
   "objective.budget": [objectiveKeys.all, ["approvals"]],
+  // P31: a PC came online or went offline (device.status), or was linked, renamed, paused,
+  // given folders or unlinked (device.updated). A claimed link code's poll shares the key.
+  "device.status": [deviceKeys.all],
+  "device.updated": [deviceKeys.all],
 };
 
 export function useLiveEvents() {

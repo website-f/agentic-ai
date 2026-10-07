@@ -219,7 +219,10 @@ class Scope:
     ) -> bool:
         """Live events: an agent's events reach the people who see that agent; office
         knowledge (brain, skills) reaches everyone; workspace plumbing (deliveries, incidents,
-        job runs, broadcasts) only the workspace roles."""
+        job runs, broadcasts) only the workspace roles. A person's own computers (P31)
+        reach only that person."""
+        if type_ in PERSONAL_EVENTS:
+            return bool(data.get("user_id")) and data.get("user_id") == self.user_id
         if type_ in KNOWLEDGE_EVENTS:
             return True
         if type_ in BRANCH_EVENTS:  # P24: a company's uploads reach the people of it
@@ -241,6 +244,9 @@ class Scope:
 WATCH_EVENTS = frozenset({"agent.status", "agent.thinking", "agent.activity", "agent.upsert"})
 
 BRANCH_EVENTS = frozenset({"intake.updated"})
+
+# P31: about one person's own computer (online, settings): for that person only.
+PERSONAL_EVENTS = frozenset({"device.status", "device.updated"})
 
 KNOWLEDGE_EVENTS = frozenset(
     {"brain.page", "brain.dream", "skill.proposal", "skill.updated", "skill.used"}

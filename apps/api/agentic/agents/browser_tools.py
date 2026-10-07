@@ -65,7 +65,12 @@ BROWSE_LOGIN_RE = re.compile(r"use the saved login '([^']+)'")
 
 
 class BrowsersBusy(Exception):
-    """Every browser is in use by other agents."""
+    """Every browser is in use by other agents (or, P31, the browser on the person's own
+    computer could not open: `message` says why)."""
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(message or "busy")
+        self.message = message
 
 
 def _client(timeout: float = 60) -> httpx.AsyncClient:
@@ -192,18 +197,28 @@ async def _session(ctx: Any) -> str:
     body: dict[str, Any] = {"task_id": task_id, "agent_id": ctx.agent.id, "allowed_hosts": allowed}
     if storage:
         body["storage_state"] = storage
-    async with _client() as c:
-        r = await c.post("/sessions", json=body)
-        for _ in range(BUSY_RETRIES - 1):  # every browser in use by other agents: wait a little
-            if r.status_code != 503:
-                break
-            await asyncio.sleep(BUSY_WAIT)
+    # P31: a task for the person's own computer drives a real window there (CDP relay).
+    device_id: str | None = getattr(ctx.task, "device_id", None)
+    channel = ""
+    if device_id:
+        channel, body["cdp_url"] = await _open_on_pc(ctx, device_id)
+    try:
+        async with _client() as c:
             r = await c.post("/sessions", json=body)
-        if r.status_code == 503:
-            raise BrowsersBusy()
-        r.raise_for_status()
-        out = r.json()
-        sid = out["id"]
+            for _ in range(BUSY_RETRIES - 1):  # every browser in use by other agents: wait
+                if r.status_code != 503 or device_id:
+                    break
+                await asyncio.sleep(BUSY_WAIT)
+                r = await c.post("/sessions", json=body)
+            if r.status_code == 503:
+                raise BrowsersBusy()
+            r.raise_for_status()
+            out = r.json()
+            sid = out["id"]
+    except BaseException:
+        if channel and device_id:
+            await _close_on_pc(device_id, channel, ctx.agent.id, task_id)
+        raise
     del storage, body  # the saved sessions never go further than the browser service
     meta = json.dumps(
         {
@@ -211,6 +226,7 @@ async def _session(ctx: Any) -> str:
             "agent_id": ctx.agent.id,
             "task_id": task_id,
             "allowed": allowed,
+            **({"device_id": device_id, "channel": channel} if channel else {}),
         }
     )
     await valkey().set(key, sid, ex=SESSION_TTL)
@@ -234,6 +250,38 @@ async def _session(ctx: Any) -> str:
     if saved or ctx.db.deleted:
         await ctx.db.commit()  # deleted expired sessions, audit lines
     return sid
+
+
+async def _open_on_pc(ctx: Any, device_id: str) -> tuple[str, str]:
+    """Start the browser on the person's computer; (channel, the relay URL for the service)."""
+    from ..devices import bridge
+    from ..devices.core import DeviceError, personal
+
+    if not personal(ctx.agent):
+        raise BrowsersBusy("Only the person's own AI may browse on their computer.")
+    try:
+        return await bridge.open_browser(device_id, agent_id=ctx.agent.id, task_id=ctx.task.id)
+    except DeviceError as e:
+        why = {
+            "offline": "it is offline (turned off, asleep, or the agent is not running)",
+            "paused": "the person paused it",
+            "revoked": "it was unlinked",
+            "no_browser": "it has no Chrome or Edge",
+            "busy": "its browser is already in use by another task",
+        }.get(e.code, e.message or e.code)
+        raise BrowsersBusy(
+            f"The browser on the person's computer could not open: {why}. Tell the person; "
+            "do not switch to another browser."
+        ) from None
+
+
+async def _close_on_pc(device_id: str, channel: str, agent_id: str, task_id: str) -> None:
+    from ..devices import bridge
+
+    try:
+        await bridge.close_browser(device_id, channel, agent_id=agent_id, task_id=task_id)
+    except Exception:  # noqa: BLE001 - the relay ending closes it on the PC anyway
+        log.info("could not close the PC browser %s", channel)
 
 
 async def _task_sid(task_id: str) -> str:
@@ -382,9 +430,10 @@ async def _act(
         return {"error": "The browser only works inside a task."}
     try:
         sid = await _session(ctx)
-    except BrowsersBusy:
+    except BrowsersBusy as e:
         return {
-            "error": "All browsers are in use by other agents right now. Do the parts that "
+            "error": e.message
+            or "All browsers are in use by other agents right now. Do the parts that "
             "need no browser first, or try again in a minute."
         }
     if since is _UNSET:
@@ -403,9 +452,10 @@ async def _act(
                 r = await c.post(f"/sessions/{sid}/act", json=payload)
             r.raise_for_status()
             obs = r.json()
-    except BrowsersBusy:
+    except BrowsersBusy as e:
         return {
-            "error": "All browsers are in use by other agents right now. Try again in a minute."
+            "error": e.message
+            or "All browsers are in use by other agents right now. Try again in a minute."
         }
     except httpx.HTTPError as e:
         return {"error": f"The browser service did not answer ({e.__class__.__name__})."}
@@ -717,8 +767,10 @@ async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
     note = ""
     try:
         outcome, checked, name = await _restore_check(ctx, url)
-    except BrowsersBusy:
-        return "Error: All browsers are in use by other agents right now. Try again in a minute."
+    except BrowsersBusy as e:
+        return "Error: " + (
+            e.message or "All browsers are in use by other agents right now. Try again in a minute."
+        )
     if outcome == "ok" and checked is not None:
         note = (
             f"Already signed in with the saved login {name!r} (kept from an earlier task): "
@@ -1217,6 +1269,7 @@ async def close_for_task(task_id: str) -> None:
     if not sid:
         return
     await valkey().delete(key)
+    meta_raw = await valkey().get(f"browser:session:{sid}")
     try:
         await _keep_sessions(sid)
     except Exception:  # noqa: BLE001 - closing must not fail because a save did
@@ -1226,6 +1279,12 @@ async def close_for_task(task_id: str) -> None:
             await c.delete(f"/sessions/{sid}")
     except Exception:  # noqa: BLE001 - the idle reaper closes it anyway
         log.info("could not close browser session %s", sid)
+    try:
+        meta = json.loads(meta_raw) if meta_raw else {}
+    except ValueError:
+        meta = {}
+    if meta.get("channel") and meta.get("device_id"):  # P31: the window on the person's PC
+        await _close_on_pc(meta["device_id"], meta["channel"], meta.get("agent_id", ""), task_id)
     for k in ("logins", "verify", "rev"):
         await valkey().delete(f"browser:{k}:{sid}")
 

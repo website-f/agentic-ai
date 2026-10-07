@@ -1379,3 +1379,8 @@ TOOLS.update({t.name: t for t in SEARCH_TOOLS})
 from .form_tools import FORM_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in FORM_TOOLS})
+
+# P31: the person's own computer (their own AI only): find, read, copy files in and out.
+from .pc_tools import PC_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in PC_TOOLS})

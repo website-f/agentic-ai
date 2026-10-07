@@ -292,6 +292,12 @@ const STATES = {
     await sleep(600);
   },
   "organization:new": async (page) => clickGuide(page, "organization.add"),
+  "computers:activity": async (page) => {
+    const toggle = page.locator('[data-guide="computers.activity"]:visible button').first();
+    await toggle.click();
+    await settle(page);
+    await sleep(400);
+  },
   "impact:roi": async (page) => {
     // Far down the page: the shot is the window scrolled to the calculator.
     const roi = page.locator('[data-guide="impact.roi"]:visible').first();

@@ -23,6 +23,8 @@ from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
+from ..devices.core import PC_TOOLS, pc_ready
+from ..devices.core import personal as pc_personal
 from ..engine import gateway
 from ..i18n import explicit_lang
 from ..i18n import notes as lang_notes
@@ -473,11 +475,13 @@ async def _has_mcp(db: AsyncSession, workspace_id: str) -> bool:
 
 
 def offered_tools(
-    agent: Agent, task: Task | None = None, *, mcp: bool = False
+    agent: Agent, task: Task | None = None, *, mcp: bool = False, pc: bool = False
 ) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
     delegate only for orchestrators above their depth cap. The MCP bridge is shown only when
-    the workspace has a connected MCP server, so offices that use none pay no prompt tokens."""
+    the workspace has a connected MCP server, so offices that use none pay no prompt tokens.
+    The PC tools (P31) only when `pc` (devices.core.pc_ready: the person's own AI, with a
+    linked computer)."""
     out = []
     for n, mode in modes_for(agent).items():
         if mode == "deny" or n in GLOBAL_DENY:
@@ -489,6 +493,8 @@ def offered_tools(
         if n.startswith("browser_") and not settings.browser_url:  # small servers: no browser
             continue
         if n in ASSISTANT_ONLY and not agent.private:  # a person's assistant only (P16)
+            continue
+        if n in PC_TOOLS and not (pc and pc_personal(agent)):  # their own computer (P31)
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
@@ -1055,7 +1061,9 @@ async def run_task_step(task_id: str) -> StepResult:
                     agent.model_group,
                     messages,
                     task="agent.task",
-                    tools=offered_tools(agent, task, mcp=await _has_mcp(db, ws.id)),
+                    tools=offered_tools(
+                        agent, task, mcp=await _has_mcp(db, ws.id), pc=await pc_ready(db, agent)
+                    ),
                     max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,
                     task_id=task.id,
@@ -1715,7 +1723,11 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 agent.model_group,
                 messages,
                 task="agent.chat",
-                tools=None if last else offered_tools(agent, mcp=await _has_mcp(db, ws.id)),
+                tools=None
+                if last
+                else offered_tools(
+                    agent, mcp=await _has_mcp(db, ws.id), pc=await pc_ready(db, agent)
+                ),
                 max_tokens=1600 if last else 1200,
                 agent_id=agent.id,
             )

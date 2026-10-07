@@ -213,6 +213,23 @@ export const SLIDES_MS: Slide[] = [
       "Peribadi bermakna peribadi: tiada orang lain boleh melihat pembantu anda atau perbualannya. Ia tidak pernah menghantar e-mel sendiri; ia hanya menyediakan draf untuk anda. Kakitangan tidak memerlukan ini, kerana AI mereka sendiri, AI Saya, sudah bekerja untuk mereka.",
   },
   {
+    id: "computer",
+    kind: "feature",
+    eyebrow: "Komputer anda sendiri",
+    title: "AI anda boleh bekerja di PC anda juga",
+    lead: "Pautkan Windows atau Mac anda dengan satu baris. AI anda sendiri mencari dan membaca fail dalam folder yang anda pilih, membawanya ke pejabat, dan melayari dalam tetingkap sebenar di skrin anda.",
+    bullets: [
+      "Hanya AI anda sendiri, hanya folder yang anda pilih; kunci dan kata laluan sentiasa di luar had",
+      "Melayari melalui talian internet anda sendiri, dalam tetingkap berasingan yang boleh anda tonton",
+      "Menyimpan ke PC dan menghantar borang bertanya anda dahulu; jeda atau nyahpaut bila-bila masa",
+    ],
+    shot: "computers",
+    phone: "computers",
+    note: "Windows 10/11 dan macOS. Semua yang dibuatnya di komputer direkodkan.",
+    notes:
+      "Di sinilah pejabat bertemu fail yang orang simpan di komputer riba sendiri: sebut harga tahun lepas, sijil SSM, surat yang ditandatangani. Minta AI anda dan ia mencarinya lalu membawanya ke ruang kerja, tanpa perlu menyelongkar folder. Ia juga boleh membuka pelayar sebenar di skrin anda untuk portal yang memerlukan sambungan anda sendiri. Ia benar-benar peribadi: hanya AI anda sendiri, hanya folder yang anda pilih, dan kata laluan, kunci serta data pelayar tidak pernah disentuh. Jeda atau nyahpaut menghentikannya serta-merta.",
+  },
+  {
     id: "companies",
     kind: "feature",
     eyebrow: "Syarikat dan pasukan siap sedia",

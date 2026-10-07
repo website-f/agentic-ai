@@ -326,6 +326,9 @@ class Session:
         self.pending: set[asyncio.Task[None]] = set()
         self.last_server = 0.0  # when this session last made the site's server work
         self.act_times: list[float] = []  # recent server-action times, for the per-minute cap
+        # P31: a Chrome/Edge on the person's own computer, reached over the API's CDP relay
+        # (connect_over_cdp). Closing the session only disconnects; the PC closes its window.
+        self.remote: Any = None
 
 
 async def _pace(s: "Session", action: str) -> None:
@@ -517,6 +520,12 @@ async def _close(sid: str) -> None:
     if sess is None:
         return
     sess.slot.sessions.discard(sid)
+    if sess.remote is not None:  # P31: let go of the person's browser (never close theirs)
+        try:
+            await asyncio.wait_for(sess.remote.close(), 15)
+        except Exception:  # noqa: BLE001 - the relay may already be gone
+            log.info("PC browser for %s already disconnected", sid)
+        return
     try:
         await asyncio.wait_for(sess.context.close(), 15)
     except Exception:  # noqa: BLE001
@@ -557,6 +566,8 @@ async def lifespan(_: FastAPI):
         await _close(sid)
     for slot in state["slots"]:
         await slot.stop()
+    if state.get("pw") is not None:
+        await state["pw"].stop()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -575,6 +586,14 @@ class Open(BaseModel):
     allowed_hosts: list[str] | None = Field(default=None, max_length=40)
     # A saved session (cookies + origins) to open the context with. Never logged or echoed.
     storage_state: dict[str, Any] | None = None
+    # P31: drive the browser on the person's own computer through the API's CDP relay
+    # (ws://api:8501/internal/devices/cdp/{channel}) instead of one of ours.
+    cdp_url: str | None = Field(default=None, max_length=300)
+
+
+CDP_RELAY = re.compile(
+    r"^wss?://[A-Za-z0-9.\-]+(:\d{1,5})?/internal/devices/cdp/[A-Za-z0-9_\-]{8,64}$"
+)
 
 
 class Act(BaseModel):
@@ -826,6 +845,8 @@ async def open_session(
         if sess.owner["task_id"] == body.task_id:
             sess.last = time.time()
             return {"id": sess.id, "restored": False, "reused": True}
+    if body.cdp_url:
+        return await _open_on_pc(body)
     slot = _slot_for_new()
     if slot is None:
         # Full: free the longest-idle session, but never one used in the last minute.
@@ -873,6 +894,65 @@ async def open_session(
         raise
     state["sessions"][sid] = sess
     return {"id": sid, "restored": bool(restore), "reused": False}
+
+
+async def _playwright() -> Any:
+    if state.get("pw") is None:
+        from playwright.async_api import async_playwright
+
+        state["pw"] = await async_playwright().start()
+    return state["pw"]
+
+
+async def _open_on_pc(body: Open) -> dict[str, Any]:
+    """P31: a session on the person's own Chrome/Edge (a visible window, its own Agent
+    profile, their own internet line). It takes no place in our browsers; the same page
+    guards (allowed hosts, private addresses, pacing) apply."""
+    if not CDP_RELAY.match(body.cdp_url or ""):
+        raise HTTPException(422, "bad cdp_url")
+    sid = "bs_" + secrets.token_hex(8)
+    slot = Slot(-1)  # this session's own, never one of state["slots"]
+    sess = Session(
+        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts
+    )
+    pw = await _playwright()
+    try:
+        browser = await pw.chromium.connect_over_cdp(
+            body.cdp_url, headers={"x-browser-token": TOKEN}, timeout=45_000
+        )
+    except Exception as e:  # noqa: BLE001 - the PC went away or never connected
+        raise HTTPException(502, "The browser on the person's computer did not connect.") from e
+    sess.remote = slot.browser = browser
+    try:
+        ctx = browser.contexts[0] if browser.contexts else await browser.new_context()
+        restore = _clean_state(body.storage_state)
+        if restore and restore.get("cookies"):
+            try:
+                await ctx.add_cookies(restore["cookies"])
+            except Exception:  # noqa: BLE001 - a damaged saved session: start clean
+                log.warning("saved session for %s could not be loaded on the PC", sid)
+        sess.context = ctx
+
+        async def route(r: Any) -> None:
+            await _route(r, sess)
+
+        await ctx.route("**/*", route)
+        ctx.on("page", lambda p: _on_page(sess, p))
+        for p in ctx.pages:
+            _on_page(sess, p)
+        sess.page = ctx.pages[-1] if ctx.pages else await ctx.new_page()
+        if sess.page not in sess.pages:
+            _on_page(sess, sess.page)
+        sess.page = sess.pages[-1]
+        sess.opened.clear()
+    except Exception:
+        await browser.close()
+        raise
+    slot.sessions.add(sid)
+    state["sessions"][sid] = sess
+    # The person closed the window, the PC slept, or the relay ended: the next action reopens.
+    browser.on("disconnected", lambda *_: asyncio.ensure_future(_close(sid)))
+    return {"id": sid, "restored": False, "reused": False, "on_pc": True}
 
 
 def _cookie_for(domain: str, hosts: list[str]) -> bool:

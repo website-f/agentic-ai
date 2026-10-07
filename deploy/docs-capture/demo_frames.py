@@ -53,6 +53,8 @@ async def main() -> None:
                 db.add(Event(workspace_id=t.workspace_id, ts=now - timedelta(minutes=5), type="agent.activity", data={"agent_id": a.id, "agent_name": a.name, "task_id": t.id, "task_title": t.title, "kind": "browser", "action": "goto", "title": page_title, "url": "https://" + url, "session": sid}))
             print(f"browser screen for {a.name}")
         await db.commit()
+    # P31: the owner's demo laptop (seed_demo.py) shows as online, as a running PC agent would.
+    await valkey().set("devices:online:dv_demo_aminah_laptop", json.dumps({"conn": "demo", "base": ""}), ex=6 * 3600)
     await engine.dispose()
 
 

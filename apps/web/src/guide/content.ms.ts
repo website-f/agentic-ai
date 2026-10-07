@@ -234,6 +234,61 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     related: ["chat", "channels", "overview"],
   },
 
+  computers: {
+    purpose: "Biarkan AI anda sendiri bekerja di komputer Windows atau Mac anda: cari dan baca fail dalam folder yang anda pilih, salin ke ruang kerja anda, dan layari dalam tetingkap sebenar di skrin anda.",
+    can: [
+      "Pautkan komputer dengan satu baris yang anda salin ke PowerShell (Windows) atau Terminal (Mac). Ia memasang program kecil dan memautkannya dengan kod sekali guna.",
+      "Pilih **Folder** yang boleh dilihat AI anda (asalnya Documents, Desktop dan Downloads). Yang lain di komputer kekal di luar capaian.",
+      "Minta AI anda dalam sembang, contohnya **Cari sijil SSM saya dan letak dalam ruang kerja saya**.",
+      "Beri tugas **Layari laman web** dan pilih **Di komputer saya**: tetingkap Chrome atau Edge sebenar dibuka di skrin anda, melalui talian internet anda sendiri.",
+      "Lihat semua yang dibuatnya di bawah **Aktiviti terkini**, **Jeda** atau **Nyahpaut** komputer. Kedua-duanya berkuat kuasa serta-merta.",
+    ],
+    spots: {
+      "computers.link": "Pautkan komputer lain. Kod dalam baris itu sah sekali sahaja, selama 10 minit.",
+      "computers.device": "Komputer yang dipautkan: dalam talian atau tidak, dijeda atau tidak, dan pelayar yang ada padanya.",
+      "computers.folders": "Satu-satunya folder yang boleh dilihat AI anda. Tambah atau buang di sini.",
+      "computers.activity": "Setiap carian, bacaan fail, salinan, simpanan dan tetingkap pelayar, yang terbaharu dahulu.",
+      "computers.safety": "Apa yang boleh dibuat AI anda di komputer anda, dan apa yang tidak pernah disentuhnya.",
+    },
+    howto: [
+      {
+        title: "Pautkan komputer anda",
+        steps: [
+          s("Klik **Pautkan komputer**.", "computers.link"),
+          s("Salin baris untuk komputer anda (Windows atau Mac)."),
+          s("Windows: buka **PowerShell**, tampal dan tekan Enter. Mac: buka **Terminal**, tampal dan tekan Enter."),
+          s("Tunggu **Dipautkan** (kira-kira seminit). Halaman menunjukkan komputer dalam talian.", "computers.device"),
+        ],
+      },
+      {
+        title: "Dapatkan fail dari komputer anda",
+        state: "activity",
+        steps: [
+          s("Buka sembang dengan AI anda sendiri (AI saya, atau pembantu peribadi anda)."),
+          s("Minta dengan perkataan biasa, contohnya **Cari sebut harga Mega Mart di komputer saya dan simpan ke ruang kerja saya**."),
+          s("Ia mencari dalam folder yang dikongsi sahaja, kemudian menyalin fail ke **Ruang kerja saya / Dari PC saya**."),
+          s("Semak apa yang dibuatnya di bawah **Aktiviti terkini**.", "computers.activity"),
+        ],
+      },
+      {
+        title: "Layari di komputer anda sendiri",
+        steps: [
+          s("Beri tugas, pilih **Layari laman web** dan masukkan pautan."),
+          s("Di bawah **Di mana melayari web**, pilih **Di komputer saya**."),
+          s("Tetingkap Chrome atau Edge dibuka dengan profil **Ejen** sendiri, berasingan daripada pelayaran anda. Menghantar borang tetap menunggu kelulusan anda."),
+        ],
+      },
+    ],
+    tips: [
+      "Hanya AI anda sendiri boleh menggunakan komputer anda. Ejen syarikat, rakan sekerja dan pengurus tidak boleh.",
+      "Kata laluan, kunci, data pelayar dan pengurus kata laluan ditolak walaupun di dalam folder yang dikongsi.",
+      "Menyimpan fail ke komputer anda akan bertanya dahulu, setiap kali. Program dan skrip tidak pernah disimpan.",
+      "Untuk membuangnya sepenuhnya, jalankan **agentic-pc uninstall** di komputer.",
+    ],
+    who: "Sesiapa yang ada AI sendiri: kakitangan dengan kembar AI, dan orang yang mengurus orang lain dengan pembantu peribadi. Setiap komputer peribadi untuk pemiliknya.",
+    related: ["my-worker", "assistants", "chat"],
+  },
+
   overview: {
     purpose: "Semua syarikat sebelah-menyebelah: kerja yang siap, apa yang gagal atau menunggu, dan belanja AI, berserta taklimat pendek oleh AI.",
     can: [
@@ -1719,6 +1774,9 @@ export const FLOW_DOCS_MS: Record<string, FlowDoc> = {
 export const FLOW_CHAPTERS_MS: Record<string, string> = {
   "Agents: your AI team, by department": "Ejen: pasukan AI anda, ikut jabatan",
   "Pick a starting point": "Pilih titik permulaan",
+  "Pick how it works": "Pilih cara ia berfungsi",
+  "Start it": "Mulakannya",
+  "Chat: full screen, easy to read": "Sembang: skrin penuh, mudah dibaca",
   "Choose its company and department": "Pilih syarikat dan jabatannya",
   "Give it a name and a job title": "Beri nama dan jawatan",
   "SOPs it follows": "SOP yang diikutinya",

@@ -81,6 +81,9 @@ class Settings(BaseSettings):
 
     # Where people open the app (P16): Google sign-in returns here, links in messages point here.
     public_url: str = "http://localhost:8500"
+    # P31: the PC agent desktop app builds (shown on the link dialog only when both are set).
+    pc_app_windows_url: str = ""
+    pc_app_mac_url: str = ""
     # Google OAuth app for Gmail (P16). Can also be set in the dashboard (Channels > Google).
     google_client_id: str = ""
     google_client_secret: str = ""

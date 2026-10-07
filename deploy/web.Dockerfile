@@ -12,6 +12,9 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter web...
 COPY apps/web apps/web
 RUN pnpm --filter web build
+# P31: the PC agent, served at /downloads/pc-agent/ for the one-line installers.
+COPY apps/pc-agent/agent.cjs apps/web/dist/downloads/pc-agent/agent.cjs
+RUN cd apps/web/dist/downloads/pc-agent && sha256sum agent.cjs > agent.cjs.sha256
 
 
 FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
