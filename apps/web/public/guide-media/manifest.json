@@ -1,61 +1,147 @@
 {
- "generated_at": "2026-10-04T17:20:17.195Z",
+ "generated_at": "2026-10-07T03:40:10.335Z",
  "source": "Sample companies (demo data)",
  "shots": {
   "home": {
    "desktop": {
     "src": "/guide-media/shots/home-desktop.webp",
     "w": 1440,
-    "h": 1139,
+    "h": 1293,
     "boxes": [
      {
       "id": "home.health",
       "x": 0.6175,
-      "y": 0.5571,
+      "y": 0.6094,
       "w": 0.345,
-      "h": 0.333
+      "h": 0.2933
      },
      {
       "id": "home.getting-started",
       "x": 0.2069,
-      "y": 0.5571,
+      "y": 0.6094,
       "w": 0.3967,
-      "h": 0.333
+      "h": 0.2933
      },
      {
       "id": "home.shortcuts",
       "x": 0.2069,
-      "y": 0.9076,
+      "y": 0.9182,
       "w": 0.7556,
-      "h": 0.0571
+      "h": 0.0503
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/home-mobile.webp",
     "w": 786,
-    "h": 4146,
+    "h": 4260,
     "boxes": [
      {
       "id": "home.health",
       "x": 0.0407,
-      "y": 0.6458,
+      "y": 0.7626,
       "w": 0.9186,
-      "h": 0.1744
+      "h": 0.1697
      },
      {
       "id": "home.getting-started",
       "x": 0.0407,
-      "y": 0.3997,
+      "y": 0.523,
       "w": 0.9186,
-      "h": 0.2365
+      "h": 0.2302
      },
      {
       "id": "home.shortcuts",
       "x": 0.0407,
-      "y": 0.8298,
+      "y": 0.9417,
       "w": 0.9186,
-      "h": 0.1056
+      "h": 0.0583
+     }
+    ]
+   }
+  },
+  "workspace": {
+   "desktop": {
+    "src": "/guide-media/shots/workspace-desktop.webp",
+    "w": 1440,
+    "h": 1209,
+    "boxes": [
+     {
+      "id": "desk.tabs",
+      "x": 0.1917,
+      "y": 0.1706,
+      "w": 0.7861,
+      "h": 0.0347
+     },
+     {
+      "id": "desk.ask",
+      "x": 0.1917,
+      "y": 0.415,
+      "w": 0.7861,
+      "h": 0.1489
+     },
+     {
+      "id": "desk.stats",
+      "x": 0.1917,
+      "y": 0.5804,
+      "w": 0.7861,
+      "h": 0.1042
+     },
+     {
+      "id": "desk.pinned",
+      "x": 0.1917,
+      "y": 0.7012,
+      "w": 0.5167,
+      "h": 0.1592
+     },
+     {
+      "id": "desk.waiting",
+      "x": 0.7222,
+      "y": 0.7012,
+      "w": 0.2556,
+      "h": 0.2721
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workspace-mobile.webp",
+    "w": 786,
+    "h": 4208,
+    "boxes": [
+     {
+      "id": "desk.tabs",
+      "x": 0,
+      "y": 0.1065,
+      "w": 1,
+      "h": 0.02
+     },
+     {
+      "id": "desk.ask",
+      "x": 0.0407,
+      "y": 0.3066,
+      "w": 0.9186,
+      "h": 0.1636
+     },
+     {
+      "id": "desk.stats",
+      "x": 0.0407,
+      "y": 0.4797,
+      "w": 0.9186,
+      "h": 0.1134
+     },
+     {
+      "id": "desk.pinned",
+      "x": 0.0407,
+      "y": 0.6025,
+      "w": 0.9186,
+      "h": 0.1151
+     },
+     {
+      "id": "desk.waiting",
+      "x": 0.0407,
+      "y": 0.7272,
+      "w": 0.9186,
+      "h": 0.2272
      }
     ]
    }
@@ -64,28 +150,28 @@
    "desktop": {
     "src": "/guide-media/shots/my-worker-desktop.webp",
     "w": 1440,
-    "h": 999,
+    "h": 1294,
     "boxes": [
      {
       "id": "my-worker.status",
       "x": 0.2743,
-      "y": 0.2715,
+      "y": 0.2575,
       "w": 0.2587,
-      "h": 0.0638
+      "h": 0.0493
      },
      {
       "id": "my-worker.actions",
       "x": 0.7229,
-      "y": 0.2336,
+      "y": 0.2283,
       "w": 0.2222,
-      "h": 0.1041
+      "h": 0.0804
      },
      {
       "id": "my-worker.week",
       "x": 0.6469,
-      "y": 0.5513,
+      "y": 0.654,
       "w": 0.3156,
-      "h": 0.4079
+      "h": 0.3149
      }
     ]
    },
@@ -97,23 +183,23 @@
      {
       "id": "my-worker.status",
       "x": 0.2672,
-      "y": 0.1411,
+      "y": 0.1702,
       "w": 0.6489,
       "h": 0.0299
      },
      {
       "id": "my-worker.actions",
       "x": 0.084,
-      "y": 0.2008,
+      "y": 0.2299,
       "w": 0.8321,
       "h": 0.0488
      },
      {
       "id": "my-worker.week",
       "x": 0.0407,
-      "y": 0.671,
+      "y": 0.9164,
       "w": 0.9186,
-      "h": 0.2082
+      "h": 0.0836
      }
     ]
    }
@@ -141,21 +227,21 @@
      {
       "id": "assistants.chat",
       "x": 0.3806,
-      "y": 0.2847,
+      "y": 0.2292,
       "w": 0.5972,
-      "h": 0.6889
+      "h": 0.3297
      },
      {
       "id": "assistants.quick",
-      "x": 0.3813,
-      "y": 0.8514,
-      "w": 0.5958,
-      "h": 0.0456
+      "x": 0.3979,
+      "y": 0.3414,
+      "w": 0.5625,
+      "h": 0.04
      },
      {
       "id": "assistants.connections",
       "x": 0.1917,
-      "y": 0.3636,
+      "y": 0.4192,
       "w": 0.1778,
       "h": 0.0769
      }
@@ -164,21 +250,21 @@
    "mobile": {
     "src": "/guide-media/shots/assistants-mobile.webp",
     "w": 786,
-    "h": 1704,
+    "h": 1964,
     "boxes": [
      {
       "id": "assistants.chat",
       "x": 0.0407,
-      "y": 0.2441,
+      "y": 0.3949,
       "w": 0.9186,
-      "h": 0.6526
+      "h": 0.5069
      },
      {
       "id": "assistants.quick",
-      "x": 0.0433,
-      "y": 0.7418,
-      "w": 0.9135,
-      "h": 0.0481
+      "x": 0.084,
+      "y": 0.5578,
+      "w": 0.8321,
+      "h": 0.1711
      }
     ]
    }
@@ -187,28 +273,28 @@
    "desktop": {
     "src": "/guide-media/shots/overview-desktop.webp",
     "w": 1440,
-    "h": 1150,
+    "h": 1212,
     "boxes": [
      {
       "id": "overview.range",
       "x": 0.7836,
-      "y": 0.1254,
+      "y": 0.119,
       "w": 0.1942,
-      "h": 0.033
+      "h": 0.0314
      },
      {
       "id": "overview.branches",
       "x": 0.1917,
-      "y": 0.7945,
+      "y": 0.805,
       "w": 0.7861,
-      "h": 0.17
+      "h": 0.1613
      },
      {
       "id": "overview.briefing",
       "x": 0.656,
-      "y": 0.4159,
+      "y": 0.4458,
       "w": 0.3218,
-      "h": 0.3613
+      "h": 0.3428
      }
     ]
    },
@@ -227,14 +313,14 @@
      {
       "id": "overview.branches",
       "x": 0.0407,
-      "y": 0.8828,
+      "y": 0.9119,
       "w": 0.9186,
-      "h": 0.1172
+      "h": 0.0881
      },
      {
       "id": "overview.briefing",
       "x": 0.0407,
-      "y": 0.6401,
+      "y": 0.6692,
       "w": 0.9186,
       "h": 0.2333
      }
@@ -370,21 +456,21 @@
    "desktop": {
     "src": "/guide-media/shots/monitor-desktop.webp",
     "w": 1440,
-    "h": 1786,
+    "h": 1690,
     "boxes": [
      {
       "id": "monitor.agents",
       "x": 0.1917,
-      "y": 0.1155,
+      "y": 0.122,
       "w": 0.1778,
-      "h": 0.5711
+      "h": 0.6036
      },
      {
       "id": "monitor.screen",
       "x": 0.3833,
-      "y": 0.1155,
+      "y": 0.122,
       "w": 0.5944,
-      "h": 0.8665
+      "h": 0.8592
      }
     ]
    },
@@ -426,15 +512,15 @@
      {
       "id": "agents.card",
       "x": 0.2069,
-      "y": 0.4942,
+      "y": 0.5492,
       "w": 0.2463,
-      "h": 0.2031
+      "h": 0.1697
      },
      {
       "id": "agents.org",
       "x": 0.2069,
       "y": 0.3914,
-      "w": 0.1586,
+      "w": 0.1633,
       "h": 0.0422
      }
     ]
@@ -454,7 +540,7 @@
      {
       "id": "agents.card",
       "x": 0.0407,
-      "y": 0.2905,
+      "y": 0.3137,
       "w": 0.9186,
       "h": 0.0717
      },
@@ -462,7 +548,7 @@
       "id": "agents.org",
       "x": 0.0407,
       "y": 0.2433,
-      "w": 0.5813,
+      "w": 0.5984,
       "h": 0.0216
      }
     ]
@@ -514,20 +600,20 @@
       "x": 0.1917,
       "y": 0.2958,
       "w": 0.7861,
-      "h": 0.6711
+      "h": 0.6911
      },
      {
       "id": "tasks.card",
       "x": 0.3303,
       "y": 0.3744,
       "w": 0.1116,
-      "h": 0.1719
+      "h": 0.1991
      },
      {
       "id": "tasks.search",
       "x": 0.1917,
       "y": 0.2292,
-      "w": 0.3111,
+      "w": 0.354,
       "h": 0.0444
      }
     ]
@@ -535,35 +621,35 @@
    "mobile": {
     "src": "/guide-media/shots/tasks-mobile.webp",
     "w": 786,
-    "h": 1812,
+    "h": 1772,
     "boxes": [
      {
       "id": "tasks.new",
-      "x": 0.0407,
-      "y": 0.2384,
-      "w": 0.9186,
-      "h": 0.0442
+      "x": 0.8473,
+      "y": 0.1797,
+      "w": 0.112,
+      "h": 0.0497
      },
      {
       "id": "tasks.columns",
       "x": 0,
-      "y": 0.4305,
+      "y": 0.3648,
       "w": 1,
-      "h": 0.5232
+      "h": 0.5655
      },
      {
       "id": "tasks.card",
       "x": 0.0636,
-      "y": 0.5086,
+      "y": 0.4447,
       "w": 0.7684,
-      "h": 0.1502
+      "h": 0.1536
      },
      {
       "id": "tasks.search",
       "x": 0.0407,
-      "y": 0.3091,
-      "w": 0.9186,
-      "h": 0.0442
+      "y": 0.182,
+      "w": 0.7863,
+      "h": 0.0451
      }
     ]
    }
@@ -654,6 +740,36 @@
     ]
    }
   },
+  "forms": {
+   "desktop": {
+    "src": "/guide-media/shots/forms-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "forms.tabs",
+      "x": 0.1917,
+      "y": 0.2292,
+      "w": 0.7861,
+      "h": 0.0467
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/forms-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "forms.tabs",
+      "x": 0,
+      "y": 0.3286,
+      "w": 1,
+      "h": 0.0493
+     }
+    ]
+   }
+  },
   "reports": {
    "desktop": {
     "src": "/guide-media/shots/reports-desktop.webp",
@@ -706,31 +822,24 @@
     "boxes": [
      {
       "id": "chat.agents",
-      "x": 0.1917,
-      "y": 0.2067,
-      "w": 0.2,
-      "h": 0.7511
-     },
-     {
-      "id": "chat.composer",
-      "x": 0.4035,
-      "y": 0.8889,
-      "w": 0.5736,
-      "h": 0.0678
+      "x": 0.2069,
+      "y": 0.3961,
+      "w": 0.7556,
+      "h": 0.4022
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/chat-mobile.webp",
     "w": 786,
-    "h": 2236,
+    "h": 3358,
     "boxes": [
      {
       "id": "chat.agents",
       "x": 0.0407,
-      "y": 0.1822,
+      "y": 0.2863,
       "w": 0.9186,
-      "h": 0.8175
+      "h": 0.6563
      }
     ]
    }
@@ -742,18 +851,11 @@
     "h": 900,
     "boxes": [
      {
-      "id": "chat.agents",
-      "x": 0.1917,
-      "y": 0.2067,
-      "w": 0.2,
-      "h": 0.7511
-     },
-     {
       "id": "chat.composer",
-      "x": 0.4035,
-      "y": 0.8889,
-      "w": 0.5736,
-      "h": 0.0678
+      "x": 0.3194,
+      "y": 0.9017,
+      "w": 0.5611,
+      "h": 0.0756
      }
     ]
    },
@@ -764,10 +866,10 @@
     "boxes": [
      {
       "id": "chat.composer",
-      "x": 0.0433,
-      "y": 0.8357,
-      "w": 0.9135,
-      "h": 0.0739
+      "x": 0,
+      "y": 0.9225,
+      "w": 1,
+      "h": 0.0775
      }
     ]
    }
@@ -781,14 +883,14 @@
      {
       "id": "company-kit.fields",
       "x": 0.2069,
-      "y": 0.3664,
+      "y": 0.3383,
       "w": 0.4972,
       "h": 0.3689
      },
      {
       "id": "company-kit.save",
       "x": 0.7299,
-      "y": 0.7919,
+      "y": 0.7639,
       "w": 0.2208,
       "h": 0.0444
      }
@@ -802,7 +904,7 @@
      {
       "id": "company-kit.fields",
       "x": 0.0407,
-      "y": 0.3566,
+      "y": 0.3447,
       "w": 0.9186,
       "h": 0.2249
      },
@@ -820,72 +922,35 @@
    "desktop": {
     "src": "/guide-media/shots/files-desktop.webp",
     "w": 1440,
-    "h": 1262,
+    "h": 900,
     "boxes": [
      {
-      "id": "files.upload",
-      "x": 0.2069,
-      "y": 0.2157,
-      "w": 0.2491,
-      "h": 0.2092
+      "id": "files.company",
+      "x": 0.1917,
+      "y": 0.2744,
+      "w": 0.7861,
+      "h": 0.0733
      },
      {
-      "id": "files.list",
-      "x": 0.2069,
-      "y": 0.4883,
-      "w": 0.7556,
-      "h": 0.4861
+      "id": "shell.search",
+      "x": 0.5765,
+      "y": 0.0106,
+      "w": 0.2222,
+      "h": 0.04
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/files-mobile.webp",
     "w": 786,
-    "h": 4254,
+    "h": 2950,
     "boxes": [
      {
-      "id": "files.upload",
+      "id": "files.company",
       "x": 0.0407,
-      "y": 0.1459,
+      "y": 0.2175,
       "w": 0.9186,
-      "h": 0.1172
-     },
-     {
-      "id": "files.list",
-      "x": 0.0407,
-      "y": 0.4664,
-      "w": 0.9186,
-      "h": 0.4885
-     }
-    ]
-   }
-  },
-  "files:sheet": {
-   "desktop": {
-    "src": "/guide-media/shots/files-sheet-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "files.library",
-      "x": 0.4396,
-      "y": 0.569,
-      "w": 0.5438,
-      "h": 0.0744
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/files-sheet-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": [
-     {
-      "id": "files.library",
-      "x": 0.0509,
-      "y": 0.8072,
-      "w": 0.8982,
-      "h": 0.1006
+      "h": 0.0656
      }
     ]
    }
@@ -894,21 +959,21 @@
    "desktop": {
     "src": "/guide-media/shots/templates-desktop.webp",
     "w": 1440,
-    "h": 1142,
+    "h": 1117,
     "boxes": [
      {
       "id": "templates.new",
       "x": 0.8599,
-      "y": 0.1246,
+      "y": 0.1119,
       "w": 0.1026,
-      "h": 0.035
+      "h": 0.0358
      },
      {
       "id": "templates.list",
       "x": 0.2069,
-      "y": 0.2909,
+      "y": 0.2748,
       "w": 0.7556,
-      "h": 0.6808
+      "h": 0.6961
      }
     ]
    },
@@ -920,16 +985,16 @@
      {
       "id": "templates.new",
       "x": 0.5127,
-      "y": 0.1014,
+      "y": 0.0933,
       "w": 0.4466,
       "h": 0.0188
      },
      {
       "id": "templates.list",
       "x": 0.0407,
-      "y": 0.216,
+      "y": 0.2041,
       "w": 0.9186,
-      "h": 0.784
+      "h": 0.7959
      }
     ]
    }
@@ -938,42 +1003,42 @@
    "desktop": {
     "src": "/guide-media/shots/documents-desktop.webp",
     "w": 1440,
-    "h": 900,
+    "h": 942,
     "boxes": [
      {
       "id": "documents.new",
       "x": 0.8548,
-      "y": 0.1581,
+      "y": 0.1327,
       "w": 0.1077,
-      "h": 0.0444
+      "h": 0.0425
      },
      {
       "id": "documents.list",
       "x": 0.2069,
-      "y": 0.5314,
+      "y": 0.5998,
       "w": 0.7556,
-      "h": 0.3719
+      "h": 0.3665
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/documents-mobile.webp",
     "w": 786,
-    "h": 3174,
+    "h": 3620,
     "boxes": [
      {
       "id": "documents.new",
       "x": 0.0407,
-      "y": 0.1361,
+      "y": 0.1098,
       "w": 0.9186,
-      "h": 0.0252
+      "h": 0.0221
      },
      {
       "id": "documents.list",
       "x": 0.0407,
-      "y": 0.483,
+      "y": 0.5068,
       "w": 0.9186,
-      "h": 0.4562
+      "h": 0.4402
      }
     ]
    }
@@ -988,7 +1053,7 @@
    "mobile": {
     "src": "/guide-media/shots/documents-editor-mobile.webp",
     "w": 786,
-    "h": 3022,
+    "h": 3438,
     "boxes": []
    }
   },
@@ -1001,14 +1066,14 @@
      {
       "id": "packs.new",
       "x": 0.878,
-      "y": 0.1806,
+      "y": 0.1614,
       "w": 0.0845,
       "h": 0.0444
      },
      {
       "id": "packs.list",
       "x": 0.2069,
-      "y": 0.4872,
+      "y": 0.4592,
       "w": 0.7556,
       "h": 0.1728
      }
@@ -1017,21 +1082,21 @@
    "mobile": {
     "src": "/guide-media/shots/packs-mobile.webp",
     "w": 786,
-    "h": 2096,
+    "h": 2046,
     "boxes": [
      {
       "id": "packs.new",
       "x": 0.0407,
-      "y": 0.2254,
+      "y": 0.2141,
       "w": 0.9186,
-      "h": 0.0382
+      "h": 0.0391
      },
      {
       "id": "packs.list",
       "x": 0.0407,
-      "y": 0.5961,
+      "y": 0.586,
       "w": 0.9186,
-      "h": 0.312
+      "h": 0.3196
      }
     ]
    }
@@ -1045,7 +1110,7 @@
      {
       "id": "meetings.list",
       "x": 0.2069,
-      "y": 0.4522,
+      "y": 0.5167,
       "w": 0.7556,
       "h": 0.2278
      },
@@ -1061,21 +1126,21 @@
    "mobile": {
     "src": "/guide-media/shots/meetings-mobile.webp",
     "w": 786,
-    "h": 2022,
+    "h": 2154,
     "boxes": [
      {
       "id": "meetings.list",
       "x": 0.0407,
-      "y": 0.5618,
+      "y": 0.5887,
       "w": 0.9186,
-      "h": 0.3427
+      "h": 0.3217
      },
      {
       "id": "meetings.new",
       "x": 0.0407,
-      "y": 0.2337,
+      "y": 0.2194,
       "w": 0.9186,
-      "h": 0.0396
+      "h": 0.0371
      }
     ]
    }
@@ -1133,14 +1198,14 @@
      {
       "id": "sops.new",
       "x": 0.8805,
-      "y": 0.1581,
+      "y": 0.1389,
       "w": 0.082,
       "h": 0.0444
      },
      {
       "id": "sops.list",
       "x": 0.2069,
-      "y": 0.2958,
+      "y": 0.3411,
       "w": 0.7556,
       "h": 0.5997
      }
@@ -1149,21 +1214,21 @@
    "mobile": {
     "src": "/guide-media/shots/sops-mobile.webp",
     "w": 786,
-    "h": 2184,
+    "h": 2266,
     "boxes": [
      {
       "id": "sops.new",
-      "x": 0.0407,
-      "y": 0.1978,
-      "w": 0.9186,
-      "h": 0.0366
+      "x": 0.5102,
+      "y": 0.1754,
+      "w": 0.4491,
+      "h": 0.0353
      },
      {
       "id": "sops.list",
       "x": 0.0407,
-      "y": 0.3608,
+      "y": 0.3837,
       "w": 0.9186,
-      "h": 0.5513
+      "h": 0.5313
      }
     ]
    }
@@ -1172,28 +1237,28 @@
    "desktop": {
     "src": "/guide-media/shots/library-desktop.webp",
     "w": 1440,
-    "h": 1337,
+    "h": 1378,
     "boxes": [
      {
       "id": "library.upload",
       "x": 0.2069,
-      "y": 0.1543,
+      "y": 0.1792,
       "w": 0.3736,
-      "h": 0.2352
+      "h": 0.2282
      },
      {
       "id": "library.sources",
       "x": 0.2069,
-      "y": 0.5761,
+      "y": 0.5885,
       "w": 0.7556,
-      "h": 0.4001
+      "h": 0.3882
      },
      {
       "id": "library.search",
       "x": 0.2069,
-      "y": 0.4045,
+      "y": 0.422,
       "w": 0.7556,
-      "h": 0.1133
+      "h": 0.1099
      }
     ]
    },
@@ -1205,21 +1270,21 @@
      {
       "id": "library.upload",
       "x": 0.0407,
-      "y": 0.1315,
+      "y": 0.1506,
       "w": 0.9186,
       "h": 0.1527
      },
      {
       "id": "library.sources",
       "x": 0.0407,
-      "y": 0.5502,
+      "y": 0.5694,
       "w": 0.9186,
-      "h": 0.4498
+      "h": 0.4306
      },
      {
       "id": "library.search",
       "x": 0.0407,
-      "y": 0.4112,
+      "y": 0.4303,
       "w": 0.9186,
       "h": 0.0987
      }
@@ -1455,28 +1520,28 @@
       "x": 0.2069,
       "y": 0.4806,
       "w": 0.7556,
-      "h": 0.2241
+      "h": 0.2597
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/workflows-mobile.webp",
     "w": 786,
-    "h": 2756,
+    "h": 2884,
     "boxes": [
      {
       "id": "workflows.new",
       "x": 0.0407,
-      "y": 0.1714,
+      "y": 0.1638,
       "w": 0.9186,
-      "h": 0.029
+      "h": 0.0277
      },
      {
       "id": "workflows.list",
       "x": 0.0407,
-      "y": 0.4882,
+      "y": 0.4665,
       "w": 0.9186,
-      "h": 0.3014
+      "h": 0.3324
      }
     ]
    }
@@ -1862,9 +1927,9 @@
     "boxes": [
      {
       "id": "settings.add",
-      "x": 0.0407,
+      "x": 0.5127,
       "y": 0.0919,
-      "w": 0.9186,
+      "w": 0.4466,
       "h": 0.0188
      },
      {
@@ -1887,7 +1952,7 @@
       "id": "tutorial.tracks",
       "x": 0.2069,
       "y": 0.2303,
-      "w": 0.2908,
+      "w": 0.2911,
       "h": 0.0422
      },
      {
@@ -1920,6 +1985,20 @@
      }
     ]
    }
+  },
+  "demo-day": {
+   "desktop": {
+    "src": "/guide-media/shots/demo-day-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/demo-day-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": []
+   }
   }
  },
  "videos": {
@@ -1928,26 +2007,26 @@
    "poster": "/guide-media/videos/create-agent-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 26.8,
+   "duration": 27.2,
    "chapters": [
     {
      "t": 0.2,
      "label": "Agents: your AI team, by department"
     },
     {
-     "t": 3.9,
+     "t": 3.8,
      "label": "Pick a starting point"
     },
     {
-     "t": 7.3,
+     "t": 7.1,
      "label": "Choose its company and department"
     },
     {
-     "t": 9.7,
+     "t": 9.6,
      "label": "Give it a name and a job title"
     },
     {
-     "t": 15.6,
+     "t": 15.5,
      "label": "SOPs it follows"
     },
     {
@@ -1955,11 +2034,11 @@
      "label": "What it may do, and what it must ask first"
     },
     {
-     "t": 20.3,
+     "t": 20.2,
      "label": "Review and create"
     },
     {
-     "t": 23.3,
+     "t": 23.5,
      "label": "The new agent joins the team"
     }
    ],
@@ -1970,7 +2049,7 @@
    "poster": "/guide-media/videos/give-task-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 49.9,
+   "duration": 46.6,
    "chapters": [
     {
      "t": 0.2,
@@ -1981,23 +2060,27 @@
      "label": "Say what you need"
     },
     {
-     "t": 12.8,
+     "t": 9.7,
+     "label": "Pick how it works"
+    },
+    {
+     "t": 11.2,
      "label": "Pick the agent"
     },
     {
-     "t": 15.7,
-     "label": "Create and start"
+     "t": 12.3,
+     "label": "Start it"
     },
     {
-     "t": 17.7,
+     "t": 14.2,
      "label": "Follow the plan, live"
     },
     {
-     "t": 42.7,
+     "t": 39.3,
      "label": "The result waits for your review"
     },
     {
-     "t": 47,
+     "t": 43.7,
      "label": "Accept it"
     }
    ],
@@ -2008,7 +2091,7 @@
    "poster": "/guide-media/videos/approve-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 23.2,
+   "duration": 23.4,
    "chapters": [
     {
      "t": 0.2,
@@ -2027,7 +2110,7 @@
      "label": "History keeps every decision"
     },
     {
-     "t": 12.2,
+     "t": 12.4,
      "label": "The agent carries on and hands in the result"
     }
    ],
@@ -2038,7 +2121,7 @@
    "poster": "/guide-media/videos/add-company-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 23.7,
+   "duration": 24.2,
    "chapters": [
     {
      "t": 0.2,
@@ -2057,7 +2140,7 @@
      "label": "Create it"
     },
     {
-     "t": 15.4,
+     "t": 15.8,
      "label": "Its AI team is ready, desk by desk"
     }
    ],
@@ -2068,30 +2151,30 @@
    "poster": "/guide-media/videos/hire-worker-poster.webp",
    "w": 786,
    "h": 1704,
-   "duration": 35.4,
+   "duration": 34.8,
    "chapters": [
     {
      "t": 0.2,
      "label": "Where you work (set by your manager)"
     },
     {
-     "t": 3.7,
+     "t": 3.6,
      "label": "Meet your AI worker"
     },
     {
-     "t": 11,
+     "t": 10.8,
      "label": "Give it a job"
     },
     {
-     "t": 17.7,
+     "t": 17.4,
      "label": "When it works and rests"
     },
     {
-     "t": 22,
+     "t": 21.5,
      "label": "The offer: check and hire"
     },
     {
-     "t": 29.2,
+     "t": 28.7,
      "label": "Its first day: working on your task"
     }
    ],
@@ -2102,7 +2185,7 @@
    "poster": "/guide-media/videos/phone-tour-poster.webp",
    "w": 786,
    "h": 1704,
-   "duration": 27.6,
+   "duration": 30.9,
    "chapters": [
     {
      "t": 0.2,
@@ -2118,10 +2201,10 @@
     },
     {
      "t": 17.8,
-     "label": "Office floor: who is working"
+     "label": "Chat: full screen, easy to read"
     },
     {
-     "t": 22.2,
+     "t": 26.5,
      "label": "Everything else is under More"
     }
    ],

@@ -438,7 +438,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   tasks: {
     purpose: "Papan bagi semua kerja ejen anda, dari baharu hingga selesai.",
     can: [
-      "Cipta tugasan dengan **Tugasan baharu**: apa yang anda perlukan, siapa yang membuatnya, keutamaan, fail dan sama ada anda menyemak hasilnya.",
+      "Cipta tugasan dengan **Tugasan baharu**: nyatakan apa yang anda perlukan, pilih cara (tugasan, kajian web, laman web atau aliran kerja), siapa yang membuatnya dan bila (sekarang atau berulang).",
       "Ikuti setiap tugasan melalui lajur: **Saringan**, **Sedia**, **Berjalan**, **Menunggu**, **Semakan** dan **Selesai**.",
       "Seret kad antara lajur, contohnya dari **Semakan** ke **Selesai**.",
       "Buka kad untuk melihat pelan, hasil, sub-tugasan, garis masa dan semakan kendiri.",
@@ -465,11 +465,11 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "Beri tugasan",
         state: "new",
         steps: [
-          s("Klik **Tugasan baharu**.", "tasks.new"),
-          s("Tulis **Tajuk** dan **Penerangan**: apa yang anda perlukan dan bagaimana hasil siap sepatutnya."),
-          s("Pilih ejen dalam **Tugaskan kepada**, dan pilih **Keutamaan**."),
-          s("Tambah fail dengan **Lampir atau muat naik** jika ejen memerlukannya."),
-          s("Biarkan **Saya semak hasilnya** dihidupkan, kemudian klik **Cipta dan mula**."),
+          s("Klik **Tugasan baharu** di pengepala, atau **Beri tugasan** daripada seorang ejen, pejabat atau sembang. Komposer tugasan dibuka.", "tasks.new"),
+          s("Di bawah **Apa yang anda perlukan?**, taip atau sebut apa yang anda perlukan dan bagaimana hasil siap sepatutnya."),
+          s("Pilih **Cara**: tugasan am, **Kaji web**, **Layari laman web** atau **Ikut aliran kerja**."),
+          s("Pilih **Siapa** membuatnya, dan di bawah **Bila** pilih **Sekarang** atau **Ulang** untuk menjadualkannya."),
+          s("Buka **Lagi pilihan** untuk fail, keutamaan dan semakan, kemudian klik **Mula tugasan**."),
         ],
       },
       {
@@ -495,6 +495,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Pelan menunjukkan sama ada semakan kendiri lulus, atau apa yang dikesan dan dibaiki sebelum kerja diserahkan.",
       "Di telefon, tekan lama pada kad untuk menyeretnya, atau guna penukar lajur.",
       "Laporan dan fail yang dihasilkan oleh tugasan kekal walaupun tugasan itu dipadam.",
+      "Buka menu **Lagi** sesuatu tugasan untuk **Tugaskan semula**, **Jalankan lagi**, **Ulang ikut jadual**, atau **Jadikan aliran kerja** daripada cara ia dibuat.",
     ],
     who: "Semua boleh melihat tugasan. Mencipta dan mengurus tugasan memerlukan peranan yang boleh mencipta kerja (bukan pelulus atau pemerhati).",
     related: ["approvals", "reports", "meetings", "workflows"],
@@ -621,12 +622,14 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   chat: {
-    purpose: "Bercakap terus dengan mana-mana ejen. Jika ada kerja yang perlu dibuat, jadikan balasannya satu tugasan.",
+    purpose: "Bercakap terus dengan mana-mana ejen. Sembang dibuka dalam skrin penuh, dengan perbualan anda di sebelahnya dan ruang membaca yang luas. Jika ada kerja yang perlu dibuat, jadikan balasan itu satu tugasan.",
     can: [
-      "Pilih ejen: sembang dibuka dalam skrin penuh supaya balasan mudah dibaca. **Kembali** atau Esc membawa anda semula.",
+      "Pilih ejen, atau sambung perbualan terkini: sembang dibuka dalam skrin penuh, dengan perbualan anda di sebelahnya. **Kembali** atau Esc membawa anda semula.",
+      "Baca setiap balasan dalam ruang yang luas, dengan alat yang digunakannya ditunjukkan di bawah.",
+      "**Salin** balasan, atau klik **Jadikan tugasan** untuk menyerahkan kerja kepada ejen.",
+      "Beri ejen kerja tanpa meninggalkan sembang dengan **Beri tugasan**.",
       "Tak perlu menaip: klik mikrofon, bercakap, dan kata-kata anda muncul dalam kotak.",
-      "Mulakan perbualan **Baharu**, atau kembali ke perbualan lama.",
-      "Klik **Jadikan tugasan** di bawah balasan untuk menukarnya kepada tugasan.",
+      "Mulakan perbualan **Baharu**, beralih antara perbualan, atau padamkan satu.",
     ],
     spots: {
       "chat.agents": "Pilih ejen yang anda mahu ajak bercakap.",
@@ -637,9 +640,9 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "Tanya ejen sesuatu",
         state: "conversation",
         steps: [
-          s("Pilih ejen dalam senarai.", "chat.agents"),
+          s("Pilih ejen, atau perbualan terkini. Ia dibuka dalam skrin penuh.", "chat.agents"),
           s("Taip mesej dan tekan Enter. Shift+Enter untuk baris baharu.", "chat.composer"),
-          s("Di bawah balasannya, anda nampak model mana yang menjawab dan alat yang digunakan."),
+          s("Di bawah setiap balasan, anda nampak model mana yang menjawab dan alat yang digunakan. **Salin** jika mahu."),
         ],
       },
       {
@@ -654,7 +657,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "Jadikan balasan satu tugasan",
         steps: [
           s("Klik **Jadikan tugasan** di bawah balasan ejen."),
-          s("Borang tugasan baharu dibuka dengan ejen dan balasan sudah diisi. Semak, kemudian cipta tugasan."),
+          s("Komposer tugasan dibuka dengan ejen dan balasan sudah diisi. Semak, kemudian **Mula tugasan**. Tugasan yang dibuat di sini muncul sebagai kad langsung dalam sembang."),
         ],
       },
     ],
@@ -668,7 +671,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
 
   // ------------------------------------------------------------------ Documents
   "company-kit": {
-    purpose: "Fakta setiap syarikat yang digunakan semula oleh semua dokumen: nama sah, nombor pendaftaran, alamat, bank, penandatangan dan logo.",
+    purpose: "Tab Kit syarikat dalam Perpustakaan: fakta setiap syarikat yang digunakan semula oleh semua dokumen: nama sah, nombor pendaftaran, alamat, bank, penandatangan dan logo.",
     can: [
       "Pilih syarikat dan isi butiran identiti, hubungan, bank, orang, kewangan dan jenama.",
       "Muat naik logo syarikat dan lihat pratonton kepala surat secara langsung.",
@@ -790,7 +793,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   templates: {
-    purpose: "Sebut harga, invois, surat, kertas cadangan dan fail Word anda sendiri, dengan {{placeholders}} yang diisi oleh ejen atau orang.",
+    purpose: "Tab Templat dalam Perpustakaan: sebut harga, invois, surat, kertas cadangan dan fail Word anda sendiri, dengan {{placeholders}} yang diisi oleh ejen atau orang.",
     can: [
       "Guna templat permulaan, atau buat sendiri dengan **Templat baharu**.",
       "Muat naik fail Word anda sendiri dengan **Templat Word**; susun aturnya dikekalkan.",
@@ -827,7 +830,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   documents: {
-    purpose: "Dokumen yang didraf oleh orang atau ejen, disemak secara automatik, diluluskan, dan dieksport ke PDF, Word atau Excel.",
+    purpose: "Tab Dokumen dalam Perpustakaan: dokumen yang didraf oleh orang atau ejen, disemak secara automatik, diluluskan, dan dieksport ke PDF, Word atau Excel.",
     can: [
       "Cipta dokumen: **Tulis dengan AI**, mula dengan **Halaman kosong**, atau pilih templat.",
       "Isi medan sendiri, atau guna **Isi dengan AI** berdasarkan penerangan atau fail.",
@@ -871,7 +874,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   packs: {
-    purpose: "Pek serahan, contohnya untuk tender: senarai semak yang dipadankan dengan fail dan dokumen sebenar, disusun menjadi satu PDF dengan muka depan dan senarai kandungan.",
+    purpose: "Tab Pek dalam Perpustakaan: pek serahan, contohnya untuk tender, dengan senarai semak yang dipadankan dengan fail dan dokumen sebenar, disusun menjadi satu PDF dengan muka depan dan senarai kandungan.",
     can: [
       "Cipta pek dengan senarai semak, sama ada anda tulis sendiri atau didraf dengan AI.",
       "Padankan item dengan fail secara automatik melalui **Isi automatik dari fail**, kemudian sahkan setiap padanan.",
@@ -968,7 +971,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
 
   // ------------------------------------------------------------------ Knowledge
   sops: {
-    purpose: "Prosedur bertulis yang diikuti ejen anda. SOP syarikat dan jabatan terpakai dengan sendirinya; SOP perpustakaan dilampirkan kepada ejen yang dipilih.",
+    purpose: "Tab SOP dalam Perpustakaan: prosedur bertulis yang diikuti ejen anda. SOP syarikat dan jabatan terpakai dengan sendirinya; SOP perpustakaan dilampirkan kepada ejen yang dipilih.",
     can: [
       "Tulis SOP dan pilih siapa yang mengikutinya: **Semua syarikat**, **Satu syarikat**, **Satu jabatan** atau **Perpustakaan**.",
       "Tapis ikut siapa yang mengikutinya, dan cari.",
@@ -1000,7 +1003,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   library: {
-    purpose: "Garis panduan, manual dan polisi, serta semua SOP. Ejen mencarinya apabila kerja memerlukannya dan memetik halaman yang digunakan.",
+    purpose: "Tab Garis panduan dalam Perpustakaan: garis panduan, manual dan polisi, serta semua SOP. Ejen mencarinya apabila kerja memerlukannya dan memetik halaman yang digunakan.",
     can: [
       "Muat naik garis panduan dan pilih untuk siapa: seluruh organisasi, satu syarikat atau satu jabatan.",
       "Lihat setiap sumber dan sama ada ia sudah sedia (**Diindeks**) atau masih dibaca.",
@@ -1193,6 +1196,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Tambah langkah untuk kerja AI, komunikasi, dokumen, web dan orang, seperti **Kelulusan**.",
       "Lihat masalah sebelum menjalankannya, dan biar **Perbaiki dengan AI** mencadangkan perubahan.",
       "Jalankan kerja melaluinya, lampirkannya pada tugasan, atau jadikannya cara kerja standard sesuatu ejen.",
+      "Draf aliran kerja daripada tugasan yang sudah dijalankan: pada menu **Lagi** tugasan itu, pilih **Jadikan aliran kerja**.",
     ],
     spots: {
       "workflows.new": "Cipta aliran kerja baharu.",
@@ -1257,6 +1261,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     tips: [
       "Larian yang gagal dicuba semula dengan sendiri selepas 5, 15 dan 30 minit.",
       "Setiap larian mencipta tugasan baharu, dengan tarikh ditambah pada tajuknya.",
+      "Jadual juga dibuat apabila anda memilih **Ulang** dalam komposer tugasan, atau **Ulang ikut jadual** pada menu tugasan.",
     ],
     who: "Semua boleh melihat jadual. Mencipta dan mengubahnya memerlukan peranan yang boleh mencipta kerja.",
     related: ["tasks", "workflows", "my-worker"],
@@ -1329,6 +1334,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Kunci disimpan secara tersulit. Hanya empat aksara terakhir dipaparkan semula.",
       "Pakej percuma daripada Groq, OpenRouter, Mistral dan HuggingFace cukup untuk bermula.",
       "Ejen meminta kumpulan, bukan penyedia, jadi anda boleh menukar model tanpa menyentuh ejen.",
+      "Selepas satu ralat, penyedia atau satu model berehat seketika (penyejukan). Kumpulan menggunakan model seterusnya sementara itu, dan halaman menunjukkan saat yang berbaki.",
     ],
     who: "Pemilik dan pentadbir boleh mengubahnya. Operator, pelulus dan pemerhati boleh melihat.",
     related: ["agents", "mcp-servers", "impact"],
@@ -1664,9 +1670,9 @@ export const FLOW_DOCS_MS: Record<string, FlowDoc> = {
   "give-task": {
     summary: "Beri ejen tugasan, lihat ia merancang dan bekerja, kemudian terima hasilnya.",
     steps: [
-      "Buka Tugasan dan klik Tugasan baharu.",
-      "Tulis tajuk dan penerangan, dan pilih ejen.",
-      "Klik Cipta dan mula: kad berpindah ke Berjalan.",
+      "Klik Tugasan baharu untuk membuka komposer tugasan.",
+      "Nyatakan apa yang anda perlukan, kemudian pilih cara, siapa dan bila.",
+      "Klik Mula tugasan: kad berpindah ke Berjalan.",
       "Buka kad untuk mengikuti pelan dan semakan kendiri.",
       "Apabila kad sampai ke Semakan, baca hasilnya dan klik Terima.",
     ],

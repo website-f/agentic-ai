@@ -237,12 +237,16 @@ const FLOWS = {
       await h.click(g(page, "tasks.new"));
       h.chapter("Say what you need");
       const dlg = page.getByRole("dialog");
-      await h.type(dlg.getByLabel("Title", { exact: true }), title);
-      await h.type(dlg.getByLabel("Brief", { exact: true }), "Collections this week, what is still due this month and the payments coming up. One table, then the next step.");
+      await h.type(dlg.locator("#composer-what"), "Collections this week, what is still due this month and the payments coming up. One table, then the next step.");
+      await h.sleep(500);
+      await dlg.locator("#composer-title").fill(title);
+      h.chapter("Pick how it works");
+      await h.point(dlg.getByRole("radio", { name: /General task/ })).catch(() => {});
+      await h.sleep(900);
       h.chapter("Pick the agent");
-      await h.pick("Assign to", /Aisyah \(Finance\)/, "Aisyah");
-      h.chapter("Create and start");
-      await h.click(page.getByRole("button", { name: /Create and start|Create task/ }));
+      await h.click(dlg.getByRole("radio", { name: /Chief of Staff/ }).first());
+      h.chapter("Start it");
+      await h.click(dlg.getByRole("button", { name: /Start task|Create task/ }));
       await h.settle(); // the new task opens in its sheet by itself
       h.advance(title, ["--pace", "1.3"]);
       h.chapter("Follow the plan, live");
@@ -417,10 +421,20 @@ const FLOWS = {
       await h.sleep(1200);
       await page.keyboard.press("Escape");
       await h.sleep(600);
-      h.chapter("Office floor: who is working");
-      await h.click(tab(/Office/));
+      h.chapter("Chat: full screen, easy to read");
+      await h.click(tab(/Chat/));
       await h.settle();
-      await h.sleep(2500);
+      await h.sleep(1200);
+      const agent = page.locator('[data-guide="chat.agents"] button, a[href^="/chat/"]').first();
+      if (await agent.count()) {
+        await h.click(agent);
+        await h.settle();
+        await h.sleep(1800);
+        await h.scroll(250);
+        await h.sleep(800);
+        await page.goBack().catch(() => {});
+        await h.sleep(500);
+      }
       h.chapter("Everything else is under More");
       await h.click(page.getByRole("button", { name: /More/ }).last());
       await h.sleep(2200);

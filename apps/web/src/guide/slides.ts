@@ -83,7 +83,7 @@ export const SLIDES: Slide[] = [
     eyebrow: "How a task flows",
     title: "From request to approved result",
     points: [
-      { icon: "list", title: "You give a task", body: "Say what you need and what done looks like." },
+      { icon: "list", title: "You give a task", body: "One composer everywhere: say what you need, or pick research, a website or a workflow." },
       { icon: "lightning", title: "The agent plans", body: "It breaks the job into steps, following your SOPs." },
       { icon: "tools", title: "It works with tools", body: "Files, documents, the web, colleagues and calculations." },
       { icon: "check", title: "It checks itself", body: "A second model reads the work against the request first." },
@@ -92,7 +92,7 @@ export const SLIDES: Slide[] = [
     shot: "tasks:sheet",
     video: "give-task",
     notes:
-      "This is the heart of it. Every task has a visible plan, a timeline of what the agent did, and a self-check before it reaches you. If the self-check finds a gap, the agent fixes it once before you see the work.",
+      "This is the heart of it. You give work through one composer, from anywhere in the app. Every task then has a visible plan, a timeline of what the agent did, and a self-check before it reaches you. If the self-check finds a gap, the agent fixes it once before you see the work.",
   },
   {
     id: "live",
@@ -113,26 +113,27 @@ export const SLIDES: Slide[] = [
   {
     id: "work",
     kind: "feature",
-    eyebrow: "Tasks and approvals",
-    title: "Every task and every decision in one place",
-    lead: "A board from new to done, and one list of decisions waiting for you, on desktop or phone.",
+    eyebrow: "Give work, then decide",
+    title: "One way to give work, one place to decide",
+    lead: "A single \"Give a task\" button, from the header, an agent, the office or a chat. A board tracks every task; one list holds the decisions.",
     bullets: [
-      "Tasks move from Triage to Running, In review and Done",
-      "Approve once, always allow, or deny with a reason",
+      "Four kinds in one composer: a general task, research the web, browse a website, or follow a workflow",
+      "Choose Now, or Repeat to put the work on a schedule",
+      "A board from Triage to Done; approve once, always, or deny with a reason",
       "Decide from a phone notification, in one tap",
     ],
     shot: "tasks",
     phone: "approvals",
     video: "approve",
     notes:
-      "Managers love this screen: they no longer ask 'where are we on that?'. The approvals list is the only place where agents wait for people, and it works from a phone notification.",
+      "Everyone gives work the same way, so there is nothing new to learn per task. Browsing a website, web research and following a workflow are all just a choice in the composer. The approvals list is the only place agents wait for people, and it works from a phone notification.",
   },
   {
     id: "documents",
     kind: "feature",
     eyebrow: "Documents and packs",
     title: "Documents drafted, checked and packed",
-    lead: "Company facts entered once. Quotations, letters and submission packs built from them, checked automatically.",
+    lead: "Company facts entered once. Quotations, letters and submission packs built from them, checked automatically, and kept in your Library.",
     bullets: [
       "Templates with your letterhead, or your own Word files",
       "Automatic checks flag gaps before anyone approves",
@@ -142,23 +143,39 @@ export const SLIDES: Slide[] = [
     phone: "packs",
     note: "The office prepares; a person checks and submits.",
     notes:
-      "AI drafts only from what you wrote and the files you attached; it doesn't invent facts. Expired certificates are flagged in the pack checklist before they become a problem.",
+      "AI drafts only from what you wrote and the files you attached; it doesn't invent facts. Expired certificates are flagged in the pack checklist before they become a problem, and everything it makes lands in the one Library.",
   },
   {
     id: "knowledge",
     kind: "feature",
-    eyebrow: "Knowledge",
-    title: "Your procedures, followed and cited",
-    lead: "Write your SOPs once; agents follow them. Upload guidelines and manuals; agents search them and cite the page.",
+    eyebrow: "One Library",
+    title: "Every file, SOP and guideline in one place",
+    lead: "One Library holds your files, documents, templates, SOPs and guidelines, in folders. Agents search it when the work needs it, follow your SOPs, and cite the page.",
     bullets: [
-      "SOPs for every company, one company or one department",
-      "A library of guidelines agents search when the work needs it",
-      "Every answer points back to the page it came from",
+      "Browse the company's folders, or open Documents, SOPs, Guidelines, Templates and Packs as tabs",
+      "SOPs for every company, one company or one department, followed from the next step",
+      "Every answer points back to the file and page it came from",
     ],
-    shot: "library",
+    shot: "files",
     phone: "sops",
     notes:
-      "This is how the office keeps your way of working. Change an SOP and every agent in scope follows the new version from its next step.",
+      "This is how the office keeps your way of working, all in one place. Drop in a whole folder or zip and it is read, sorted and filed. Change an SOP and every agent in scope follows the new version from its next step.",
+  },
+  {
+    id: "workflows",
+    kind: "feature",
+    eyebrow: "Workflows and schedules",
+    title: "Whole jobs, mapped and on time",
+    lead: "Draw how a job is done, let AI draft it from a sentence, or build one from a task you already ran. Run it, or put recurring work on a schedule.",
+    bullets: [
+      "12 ready templates: enquiry to quotation, leave, month-end close",
+      "Approval steps wherever money or customers are involved",
+      "Turn a finished task into a workflow; schedule recurring runs with retries and a record",
+    ],
+    shot: "workflows:editor",
+    phone: "schedules",
+    notes:
+      "Workflows are where the office becomes a process: each step goes to the right agent, and the run stops for a person exactly where you drew an approval. Done something well once? Turn that task into a workflow and reuse it.",
   },
   {
     id: "learning",
@@ -194,26 +211,26 @@ export const SLIDES: Slide[] = [
   {
     id: "workers",
     kind: "feature",
-    eyebrow: "Staff AI workers",
-    title: "Every employee can hire an AI worker",
-    lead: "Staff hire their own AI worker in five short steps: its job, its duties and the hours it works and rests.",
+    eyebrow: "Everyone's own AI",
+    title: "Every employee gets an AI of their own",
+    lead: "Each person hires their own AI, their twin, in five short steps: its job, its duties, and the hours it works and rests.",
     bullets: [
+      "One home, My AI: today, chat, its tasks, what it knows and teaching it",
       "Working hours and breaks; work outside hours waits",
-      "Recurring duties written in plain words",
-      "It asks its person before anything important",
+      "It asks its person before anything important, and tells others it is an AI",
     ],
     shot: "my-worker",
     phone: "my-worker:welcome",
     video: "hire-worker",
     notes:
-      "This turns AI from a tool for managers into help for everyone. Each person's worker handles their routine and tells others it is an AI when it deals with them.",
+      "This turns AI from a tool for managers into help for everyone. Each person's AI handles their routine in its own working hours, and lives on one page, My AI, with tabs for today, chat, its tasks, what it knows and teaching it.",
   },
   {
     id: "assistants",
     kind: "feature",
     eyebrow: "Personal assistants",
-    title: "A private assistant for every person",
-    lead: "Ask about the whole company, let it draft your email replies and calendar changes, and chase people on WhatsApp.",
+    title: "Private assistants for people who manage",
+    lead: "Owners, admins and managers also get their own private assistant: ask about the whole company, let it draft your email replies and calendar changes, and chase people on WhatsApp.",
     bullets: [
       "Gmail drafts only: you read, edit and send",
       "Calendar changes wait for your confirmation",
@@ -221,24 +238,9 @@ export const SLIDES: Slide[] = [
     ],
     shot: "assistants",
     phone: "assistants",
+    note: "Staff get their own AI, My AI; assistants are for people who manage others.",
     notes:
-      "Private means private: nobody else sees your assistant or its conversations. It never sends an email by itself; it prepares drafts for you.",
-  },
-  {
-    id: "workflows",
-    kind: "feature",
-    eyebrow: "Workflows and schedules",
-    title: "Whole jobs, mapped and on time",
-    lead: "Draw how a job is done, or let AI draft it from a sentence. Run it, or put recurring work on a schedule.",
-    bullets: [
-      "12 ready templates: enquiry to quotation, leave, month-end close",
-      "Approval steps wherever money or customers are involved",
-      "Schedules with retries and a record of every run",
-    ],
-    shot: "workflows:editor",
-    phone: "schedules",
-    notes:
-      "Workflows are where the office becomes a process: each step goes to the right agent, and the run stops for a person exactly where you drew an approval.",
+      "Private means private: nobody else sees your assistant or its conversations. It never sends an email by itself; it prepares drafts for you. Staff do not need this, because their own AI, My AI, already works for them.",
   },
   {
     id: "companies",

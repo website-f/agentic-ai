@@ -75,7 +75,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   {
     id: "tasks", route: "/tasks", title: "Tugasan", group: "Work",
     states: [
-      { key: "new", how: "Klik Tugasan baharu: borang tugasan baharu" },
+      { key: "new", how: "Klik Tugasan baharu: komposer tugasan dibuka (apa yang anda perlukan, cara, siapa dan bila)" },
       { key: "sheet", how: "Klik kad tugasan: helaiannya dengan pelan, hasil dan garis masa" },
     ],
     targets: [t("tasks.new", "Tugasan baharu"), t("tasks.columns", "Lajur papan"), t("tasks.card", "Kad tugasan"), t("tasks.search", "Cari")],
@@ -98,7 +98,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   {
     id: "chat", route: "/chat", title: "Sembang", group: "Work",
-    states: [{ key: "conversation", how: "Pilih ejen: perbualan terbuka" }],
+    states: [{ key: "conversation", how: "Pilih ejen: perbualan skrin penuh terbuka" }],
     targets: [t("chat.agents", "Pilih ejen"), t("chat.composer", "Taip, atau tahan mikrofon")],
   },
   // ---------------------------------------------------------------- Documents

@@ -477,7 +477,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   tasks: {
     purpose: "A board of everything your agents are working on, from new to done.",
     can: [
-      "Create a task with **New task**: what you need, who does it, priority, files and whether you review the result.",
+      "Create a task with **New task**: say what you need, pick how (a task, web research, a website or a workflow), who does it and when (now or on repeat).",
       "Follow every task through the columns: **Triage**, **Ready**, **Running**, **Waiting**, **In review** and **Done**.",
       "Drag a card between columns, for example from **In review** to **Done**.",
       "Open a card to see its plan, result, sub-tasks, timeline and the self-check.",
@@ -504,11 +504,11 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "Give a task",
         state: "new",
         steps: [
-          s("Click **New task**.", "tasks.new"),
-          s("Write a **Title** and a **Brief**: what you need and what done looks like."),
-          s("Pick the agent in **Assign to**, and a **Priority**."),
-          s("Add files with **Attach or upload** if the agent needs them."),
-          s("Keep **I review the result** on, then click **Create and start**."),
+          s("Click **New task** in the header, or **Give a task** from an agent, the office or a chat. The task composer opens.", "tasks.new"),
+          s("Under **What do you need?**, type or speak what you need and what done looks like."),
+          s("Pick **How**: a general task, **Research the web**, **Browse a website** or **Follow a workflow**."),
+          s("Pick **Who** does it, and under **When** choose **Now** or **Repeat** to put it on a schedule."),
+          s("Open **More options** for files, priority and review, then click **Start task**."),
         ],
       },
       {
@@ -534,6 +534,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "The plan shows if the self-check passed, or what it caught and fixed before hand-in.",
       "On a phone, press and hold a card to drag it, or use the column switcher.",
       "Deleting a task keeps the reports and files it produced.",
+      "Open a task's **More** menu to **Reassign** it, **Run again**, **Repeat on a schedule**, or **Turn into a workflow** from how it was done.",
     ],
     who: "Everyone can see tasks. Creating and acting on tasks needs a role that can create work (not approver or viewer).",
     related: ["approvals", "reports", "meetings", "workflows"],
@@ -660,12 +661,14 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   chat: {
-    purpose: "Talk to any agent directly. When something needs doing, turn the reply into a task.",
+    purpose: "Talk to any agent directly. The chat opens full screen, with your conversations beside it and a wide, easy-to-read column. When something needs doing, turn a reply into a task.",
     can: [
-      "Pick an agent: the chat opens full screen, so replies are easy to read. **Back** or Esc returns you.",
+      "Pick an agent, or pick up a recent conversation: the chat opens full screen, with your conversations beside it. **Back** or Esc returns you.",
+      "Read each reply in a wide column, with the tools it used shown underneath.",
+      "**Copy** a reply, or click **Make this a task** to hand the work to the agent.",
+      "Give the agent work without leaving the chat with **Give a task**.",
       "Speak instead of typing: click the microphone, talk, and your words appear in the box.",
-      "Start a **New** conversation, or go back to an earlier one.",
-      "Click **Make this a task** under a reply to turn it into a task.",
+      "Start a **New** conversation, switch between conversations, or delete one.",
     ],
     spots: {
       "chat.agents": "Pick the agent you want to talk to.",
@@ -676,9 +679,9 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "Ask an agent something",
         state: "conversation",
         steps: [
-          s("Pick the agent in the list.", "chat.agents"),
+          s("Pick the agent, or a recent conversation. It opens full screen.", "chat.agents"),
           s("Type your message and press Enter. Shift+Enter starts a new line.", "chat.composer"),
-          s("Under its reply you see which model answered and which tools it used."),
+          s("Under each reply you see which model answered and which tools it used. **Copy** it if you like."),
         ],
       },
       {
@@ -693,7 +696,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "Turn a reply into a task",
         steps: [
           s("Click **Make this a task** under the agent's reply."),
-          s("New task opens with the agent and the reply already filled in. Check it and create the task."),
+          s("The task composer opens with the agent and the reply filled in. Check it, then **Start task**. Tasks made here show as live cards in the chat."),
         ],
       },
     ],
@@ -707,7 +710,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
 
   // ------------------------------------------------------------------ Documents
   "company-kit": {
-    purpose: "Each company's facts that every document reuses: legal name, registration, address, bank, signatory, logo.",
+    purpose: "The Library's Company kit tab: each company's facts that every document reuses: legal name, registration, address, bank, signatory, logo.",
     can: [
       "Pick a company and fill in its identity, contact, bank, people, money and brand details.",
       "Upload the company logo and see a live letterhead preview.",
@@ -829,7 +832,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   templates: {
-    purpose: "Quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} that agents and people fill in.",
+    purpose: "The Library's Templates tab: quotations, invoices, letters, proposals and your own Word files, with {{placeholders}} that agents and people fill in.",
     can: [
       "Use a starter template, or make your own with **New template**.",
       "Upload your own Word file with **Word template**; its layout is kept.",
@@ -866,7 +869,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   documents: {
-    purpose: "Documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.",
+    purpose: "The Library's Documents tab: documents drafted by people or agents, checked automatically, approved, and exported to PDF, Word or Excel.",
     can: [
       "Create a document: **Write it with AI**, start from a **Blank page**, or pick a template.",
       "Fill fields by hand, or with **Fill with AI** from a description or a file.",
@@ -910,7 +913,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   packs: {
-    purpose: "Submission packs, such as for a tender: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.",
+    purpose: "The Library's Packs tab: submission packs, such as for a tender, with a checklist matched to real files and documents, compiled into one PDF with a cover and contents.",
     can: [
       "Create a pack with a checklist, written by you or drafted with AI.",
       "Match items to files automatically with **Auto-fill from files**, then confirm each match.",
@@ -1007,7 +1010,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
 
   // ------------------------------------------------------------------ Knowledge
   sops: {
-    purpose: "Written procedures your agents follow. Company and department SOPs apply by themselves; library SOPs are attached to chosen agents.",
+    purpose: "The Library's SOPs tab: written procedures your agents follow. Company and department SOPs apply by themselves; library SOPs are attached to chosen agents.",
     can: [
       "Write an SOP and choose who follows it: **Every company**, **One company**, **One department** or **Library**.",
       "Filter by who follows it, and search.",
@@ -1039,7 +1042,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   library: {
-    purpose: "Guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.",
+    purpose: "The Library's Guidelines tab: guidelines, manuals and policies, plus every SOP. Agents search them when the work needs it and cite the page they used.",
     can: [
       "Upload guidelines and choose who they are for: the whole company, one company or one department.",
       "See every source and whether it is ready (**Indexed**) or still being read.",
@@ -1232,6 +1235,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Add steps for AI work, communication, documents, the web and people, such as an **Approval**.",
       "See problems before you run it, and let **Improve with AI** suggest changes.",
       "Run a job through it, give it with a task, or make it an agent's standard way of working.",
+      "Draft a workflow from a task that already ran: on the task's **More** menu, pick **Turn into a workflow**.",
     ],
     spots: {
       "workflows.new": "Create a new workflow.",
@@ -1296,6 +1300,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     tips: [
       "Failed runs retry by themselves after 5, 15 and 30 minutes.",
       "Each run creates a fresh task with the date added to its title.",
+      "A schedule is also made when you pick **Repeat** in the task composer, or **Repeat on a schedule** on a task's menu.",
     ],
     who: "Everyone can see schedules. Creating and changing them needs a role that can create work.",
     related: ["tasks", "workflows", "my-worker"],
@@ -1368,6 +1373,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "Keys are stored encrypted. Only the last four characters are ever shown again.",
       "Free tiers from Groq, OpenRouter, Mistral and HuggingFace are enough to start.",
       "Agents ask for a group, never a provider, so you can change models without touching agents.",
+      "After an error, a provider or a single model rests for a short while (a cooldown). Groups use the next model meanwhile, and the page shows the seconds left.",
     ],
     who: "Owners and admins change it. Operators, approvers and viewers can look.",
     related: ["agents", "mcp-servers", "impact"],
@@ -1703,9 +1709,9 @@ export const FLOW_DOCS: Record<string, FlowDoc> = {
   "give-task": {
     summary: "Give an agent a task, watch it plan and work, and accept the result.",
     steps: [
-      "Open Tasks and click New task.",
-      "Write the title and brief, and pick the agent.",
-      "Click Create and start: the card moves to Running.",
+      "Click New task to open the task composer.",
+      "Say what you need, then pick how, who and when.",
+      "Click Start task: the card moves to Running.",
       "Open the card to follow the plan and the self-check.",
       "When it reaches In review, read the result and click Accept.",
     ],

@@ -53,7 +53,7 @@ export const SLIDES_MS: Slide[] = [
     eyebrow: "Perjalanan sesuatu tugasan",
     title: "Daripada permintaan kepada hasil yang diluluskan",
     points: [
-      { icon: "list", title: "Anda beri tugasan", body: "Nyatakan apa yang anda perlukan dan bagaimana hasil siap sepatutnya." },
+      { icon: "list", title: "Anda beri tugasan", body: "Satu komposer di mana-mana: nyatakan apa yang anda perlukan, atau pilih kajian web, laman web atau aliran kerja." },
       { icon: "lightning", title: "Ejen merancang", body: "Ia memecahkan kerja kepada langkah, mengikut SOP anda." },
       { icon: "tools", title: "Ia bekerja dengan alat", body: "Fail, dokumen, web, rakan sekerja dan pengiraan." },
       { icon: "check", title: "Ia menyemak sendiri", body: "Model kedua membaca kerja itu dan membandingkannya dengan permintaan." },
@@ -62,7 +62,7 @@ export const SLIDES_MS: Slide[] = [
     shot: "tasks:sheet",
     video: "give-task",
     notes:
-      "Inilah terasnya. Setiap tugasan ada pelan yang boleh dilihat, garis masa apa yang dibuat oleh ejen, dan semakan kendiri sebelum kerja sampai kepada anda. Jika semakan kendiri menemui kekurangan, ejen membaikinya sekali sebelum anda melihatnya.",
+      "Inilah terasnya. Anda beri kerja melalui satu komposer, dari mana-mana sahaja dalam aplikasi. Setiap tugasan kemudian ada pelan yang boleh dilihat, garis masa apa yang dibuat oleh ejen, dan semakan kendiri sebelum kerja sampai kepada anda. Jika semakan kendiri menemui kekurangan, ejen membaikinya sekali sebelum anda melihatnya.",
   },
   {
     id: "live",
@@ -83,26 +83,27 @@ export const SLIDES_MS: Slide[] = [
   {
     id: "work",
     kind: "feature",
-    eyebrow: "Tugasan dan kelulusan",
-    title: "Setiap tugasan dan keputusan di satu tempat",
-    lead: "Papan dari baharu hingga selesai, dan satu senarai keputusan yang menunggu anda, di komputer atau telefon.",
+    eyebrow: "Beri kerja, kemudian putuskan",
+    title: "Satu cara beri kerja, satu tempat buat keputusan",
+    lead: "Satu butang \"Beri tugasan\", dari pengepala, seorang ejen, pejabat atau sembang. Papan menjejaki setiap tugasan; satu senarai memegang keputusan.",
     bullets: [
-      "Tugasan bergerak dari Saringan ke Berjalan, Semakan dan Selesai",
-      "Lulus sekali, sentiasa benarkan, atau tolak dengan sebab",
+      "Empat jenis dalam satu komposer: tugasan am, kaji web, layari laman web, atau ikut aliran kerja",
+      "Pilih Sekarang, atau Ulang untuk menjadualkan kerja itu",
+      "Papan dari Saringan hingga Selesai; lulus sekali, sentiasa, atau tolak dengan sebab",
       "Buat keputusan daripada pemberitahuan telefon, dengan satu ketikan",
     ],
     shot: "tasks",
     phone: "approvals",
     video: "approve",
     notes:
-      "Pengurus biasanya suka skrin ini kerana mereka tidak perlu lagi bertanya 'kerja itu sudah sampai mana?'. Senarai kelulusan ialah satu-satunya tempat ejen menunggu orang, dan ia boleh dibuka terus daripada pemberitahuan telefon.",
+      "Semua orang memberi kerja dengan cara yang sama, jadi tiada apa yang baharu untuk dipelajari bagi setiap tugasan. Melayari laman web, kajian web dan mengikut aliran kerja hanyalah satu pilihan dalam komposer. Senarai kelulusan ialah satu-satunya tempat ejen menunggu orang, dan ia berfungsi daripada pemberitahuan telefon.",
   },
   {
     id: "documents",
     kind: "feature",
     eyebrow: "Dokumen dan pek serahan",
     title: "Dokumen didraf, disemak dan disusun",
-    lead: "Fakta syarikat dimasukkan sekali sahaja. Sebut harga, surat dan pek serahan dibina daripadanya dan disemak secara automatik.",
+    lead: "Fakta syarikat dimasukkan sekali sahaja. Sebut harga, surat dan pek serahan dibina daripadanya, disemak secara automatik, dan disimpan dalam Perpustakaan anda.",
     bullets: [
       "Templat dengan kepala surat anda, atau fail Word anda sendiri",
       "Semakan automatik menanda kekurangan sebelum sesiapa meluluskan",
@@ -112,23 +113,39 @@ export const SLIDES_MS: Slide[] = [
     phone: "packs",
     note: "Pejabat yang menyediakan; orang yang menyemak dan menyerahkan.",
     notes:
-      "AI hanya mendraf daripada apa yang anda tulis dan fail yang anda lampirkan; ia tidak mereka fakta. Sijil yang tamat tempoh ditanda dalam senarai semak pek sebelum menjadi masalah.",
+      "AI hanya mendraf daripada apa yang anda tulis dan fail yang anda lampirkan; ia tidak mereka fakta. Sijil yang tamat tempoh ditanda dalam senarai semak pek sebelum menjadi masalah, dan segala yang dibuatnya masuk ke dalam satu Perpustakaan.",
   },
   {
     id: "knowledge",
     kind: "feature",
-    eyebrow: "Pengetahuan",
-    title: "Prosedur anda diikuti dan dirujuk",
-    lead: "Tulis SOP sekali, dan ejen mengikutinya. Muat naik garis panduan dan manual, dan ejen mencarinya serta memetik halamannya.",
+    eyebrow: "Satu Perpustakaan",
+    title: "Setiap fail, SOP dan garis panduan di satu tempat",
+    lead: "Satu Perpustakaan menyimpan fail, dokumen, templat, SOP dan garis panduan anda, dalam folder. Ejen mencarinya apabila kerja memerlukannya, mengikut SOP anda, dan memetik halamannya.",
     bullets: [
-      "SOP untuk semua syarikat, satu syarikat atau satu jabatan",
-      "Perpustakaan garis panduan yang dicari ejen apabila kerja memerlukannya",
-      "Setiap jawapan merujuk kembali kepada halaman sumbernya",
+      "Semak imbas folder syarikat, atau buka Dokumen, SOP, Garis panduan, Templat dan Pek sebagai tab",
+      "SOP untuk semua syarikat, satu syarikat atau satu jabatan, diikuti mulai langkah seterusnya",
+      "Setiap jawapan merujuk kembali kepada fail dan halaman sumbernya",
     ],
-    shot: "library",
+    shot: "files",
     phone: "sops",
     notes:
-      "Beginilah pejabat mengekalkan cara kerja anda. Ubah satu SOP, dan setiap ejen dalam skopnya mengikut versi baharu mulai langkah seterusnya.",
+      "Beginilah pejabat mengekalkan cara kerja anda, semuanya di satu tempat. Lepaskan satu folder penuh atau zip, dan ia dibaca, disusun dan difailkan. Ubah satu SOP, dan setiap ejen dalam skopnya mengikut versi baharu mulai langkah seterusnya.",
+  },
+  {
+    id: "workflows",
+    kind: "feature",
+    eyebrow: "Aliran kerja dan jadual",
+    title: "Kerja dipetakan, siap ikut jadual",
+    lead: "Lukis cara sesuatu kerja dibuat, biar AI mendrafnya daripada satu ayat, atau bina daripada tugasan yang sudah anda jalankan. Jalankannya terus, atau jadualkan kerja berulang.",
+    bullets: [
+      "12 templat sedia: pertanyaan ke sebut harga, cuti, tutup akaun hujung bulan",
+      "Langkah kelulusan di mana-mana yang melibatkan wang atau pelanggan",
+      "Jadikan tugasan yang selesai satu aliran kerja; jadualkan larian berulang dengan cubaan semula dan rekod",
+    ],
+    shot: "workflows:editor",
+    phone: "schedules",
+    notes:
+      "Dengan aliran kerja, kerja pejabat menjadi satu proses: setiap langkah pergi kepada ejen yang betul, dan larian berhenti untuk seseorang tepat di tempat anda meletakkan kelulusan. Pernah buat sesuatu dengan baik? Jadikan tugasan itu satu aliran kerja dan guna semula.",
   },
   {
     id: "learning",
@@ -164,26 +181,26 @@ export const SLIDES_MS: Slide[] = [
   {
     id: "workers",
     kind: "feature",
-    eyebrow: "Pekerja AI untuk kakitangan",
-    title: "Setiap kakitangan boleh mengambil pekerja AI",
-    lead: "Kakitangan mengambil pekerja AI sendiri dalam lima langkah ringkas: kerjanya, tugas rutinnya, serta waktu ia bekerja dan berehat.",
+    eyebrow: "AI milik semua orang",
+    title: "Setiap kakitangan mendapat AI sendiri",
+    lead: "Setiap orang mengambil AI sendiri, kembarnya, dalam lima langkah ringkas: kerjanya, tugas rutinnya, serta waktu ia bekerja dan berehat.",
     bullets: [
+      "Satu laman, AI Saya: hari ini, sembang, tugasannya, apa yang diketahuinya dan mengajarnya",
       "Waktu bekerja dan rehat; kerja di luar waktu akan menunggu",
-      "Tugas rutin ditulis dalam bahasa biasa",
-      "Ia bertanya kepada kakitangannya sebelum apa-apa yang penting",
+      "Ia bertanya kepada orangnya sebelum apa-apa yang penting, dan memberitahu orang lain bahawa ia AI",
     ],
     shot: "my-worker",
     phone: "my-worker:welcome",
     video: "hire-worker",
     notes:
-      "Dengan ini, AI bukan lagi alat untuk pengurus sahaja, tetapi bantuan untuk semua orang. Pekerja AI setiap orang mengendalikan kerja rutin mereka, dan memberitahu orang lain bahawa ia AI apabila berurusan dengan mereka.",
+      "Dengan ini, AI bukan lagi alat untuk pengurus sahaja, tetapi bantuan untuk semua orang. AI setiap orang mengendalikan kerja rutin mereka dalam waktu kerjanya sendiri, dan berada di satu laman, AI Saya, dengan tab untuk hari ini, sembang, tugasannya, apa yang diketahuinya dan mengajarnya.",
   },
   {
     id: "assistants",
     kind: "feature",
     eyebrow: "Pembantu peribadi",
-    title: "Pembantu peribadi untuk setiap orang",
-    lead: "Tanya tentang seluruh syarikat, biar ia drafkan balasan e-mel dan perubahan kalendar anda, dan susuli orang melalui WhatsApp.",
+    title: "Pembantu peribadi untuk orang yang mengurus",
+    lead: "Pemilik, pentadbir dan pengurus turut mendapat pembantu peribadi sendiri: tanya tentang seluruh syarikat, biar ia drafkan balasan e-mel dan perubahan kalendar anda, dan susuli orang melalui WhatsApp.",
     bullets: [
       "Gmail hanya draf: anda yang baca, ubah dan hantar",
       "Perubahan kalendar menunggu pengesahan anda",
@@ -191,24 +208,9 @@ export const SLIDES_MS: Slide[] = [
     ],
     shot: "assistants",
     phone: "assistants",
+    note: "Kakitangan mendapat AI sendiri, AI Saya; pembantu adalah untuk orang yang mengurus orang lain.",
     notes:
-      "Peribadi bermakna peribadi: tiada orang lain boleh melihat pembantu anda atau perbualannya. Ia tidak pernah menghantar e-mel sendiri; ia hanya menyediakan draf untuk anda.",
-  },
-  {
-    id: "workflows",
-    kind: "feature",
-    eyebrow: "Aliran kerja dan jadual",
-    title: "Kerja dipetakan, siap ikut jadual",
-    lead: "Lukis cara sesuatu kerja dibuat, atau biar AI mendrafnya daripada satu ayat. Jalankannya terus, atau jadualkan kerja berulang.",
-    bullets: [
-      "12 templat sedia: pertanyaan ke sebut harga, cuti, tutup akaun hujung bulan",
-      "Langkah kelulusan di mana-mana yang melibatkan wang atau pelanggan",
-      "Jadual dengan cubaan semula dan rekod setiap larian",
-    ],
-    shot: "workflows:editor",
-    phone: "schedules",
-    notes:
-      "Dengan aliran kerja, kerja pejabat menjadi satu proses: setiap langkah pergi kepada ejen yang betul, dan larian berhenti untuk seseorang tepat di tempat anda meletakkan kelulusan.",
+      "Peribadi bermakna peribadi: tiada orang lain boleh melihat pembantu anda atau perbualannya. Ia tidak pernah menghantar e-mel sendiri; ia hanya menyediakan draf untuk anda. Kakitangan tidak memerlukan ini, kerana AI mereka sendiri, AI Saya, sudah bekerja untuk mereka.",
   },
   {
     id: "companies",

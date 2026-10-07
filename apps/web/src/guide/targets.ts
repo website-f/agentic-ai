@@ -87,7 +87,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   {
     id: "tasks", route: "/tasks", title: "Tasks", group: "Work",
     states: [
-      { key: "new", how: "Click New task: the new-task form" },
+      { key: "new", how: "Click New task: the task composer opens (what you need, how, who and when)" },
       { key: "sheet", how: "Click a task card: its sheet with plan, result and timeline" },
     ],
     targets: [t("tasks.new", "New task"), t("tasks.columns", "Board columns"), t("tasks.card", "A task card"), t("tasks.search", "Search")],
@@ -110,7 +110,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   {
     id: "chat", route: "/chat", title: "Chat", group: "Work",
-    states: [{ key: "conversation", how: "Pick an agent: the conversation opens" }],
+    states: [{ key: "conversation", how: "Pick an agent: the full-screen conversation opens" }],
     targets: [t("chat.agents", "Pick an agent"), t("chat.composer", "Type, or hold the microphone")],
   },
   // ---------------------------------------------------------------- Documents
