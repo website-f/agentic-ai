@@ -400,6 +400,35 @@ async def test_poller_keeps_its_offset(client: httpx.AsyncClient, net, temporal)
     assert [b for m, b in net.tg if m == "getUpdates"][-1]["offset"] == 42
 
 
+async def test_poller_that_lost_its_lock_stops(client: httpx.AsyncClient, net, temporal):
+    """P29: the lock is checked and renewed per message; another worker holding it means
+    this poller handles nothing more (no message answered twice)."""
+    from agentic.channels import poller
+    from agentic.core.valkey import valkey
+
+    await office(client)
+    ch = await telegram_setup(client, net)
+    update = {
+        "update_id": 50,
+        "message": {
+            "message_id": 1,
+            "text": "/help",
+            "chat": {"id": 555, "type": "private"},
+            "from": {"id": 777},
+        },
+    }
+    net.updates = [update]
+    await valkey().set(f"tgpoll:{ch['id']}", "another-worker", ex=60)
+    assert await poller.poll_once(ch["id"], timeout=0) == 0
+    async with SessionLocal() as db:
+        channel = await db.get(Channel, ch["id"])
+        assert channel is not None and not channel.state.get("offset")  # not taken
+    await valkey().delete(f"tgpoll:{ch['id']}")
+    net.updates = [update]
+    assert await poller.poll_once(ch["id"], timeout=0) == 1
+    assert await valkey().get(f"tgpoll:{ch['id']}") == poller.ME  # held (and renewed) by us
+
+
 # ---------------------------------------------------------------- API tokens + OpenAI endpoint
 
 

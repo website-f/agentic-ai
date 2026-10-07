@@ -10,6 +10,11 @@ Filling an Excel form (`describe`, `fill`): the AI reads the layout as labelled 
 ("B5 'NAMA PENGAWAL'", "D12 'KUANTITI'") and writes values into a copy, by cell, by label (the
 first empty cell to the right of it) or as table rows under a header row. Formatting, merged
 cells and formulas are kept; only values are written.
+
+P29 limits: a workbook is looked inside before it is opened (documents.extract
+.check_office_zip, FORM_MAX_UNZIPPED), only the first MAX_SCAN_ROWS x MAX_SCAN_COLS of a
+sheet's used range are scanned for labels and headers, and text the AI writes that starts
+like a formula (= + - @) is stored as text, never as a live formula.
 """
 
 import io
@@ -26,6 +31,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 KINDS = ("claim", "advance", "payroll", "request", "report", "record", "checklist", "other")
 EXCEL = (".xlsx", ".xlsm")
+FORM_MAX_UNZIPPED = 40 * 1024 * 1024  # a form, not a database: openpyxl holds every cell
+MAX_SCAN_ROWS = 2000
+MAX_SCAN_COLS = 200
+FORMULA_START = ("=", "+", "-", "@")
 
 
 # ---------------------------------------------------------------- when it is due
@@ -154,15 +163,33 @@ def _text(v: Any) -> str:
     return " ".join(str(v).split())
 
 
+def _load(data: bytes) -> Any:
+    """The workbook, after checking it does not unpack into more than a form's worth."""
+    from ..documents.extract import check_office_zip
+
+    check_office_zip(data, FORM_MAX_UNZIPPED)
+    return load_workbook(io.BytesIO(data))
+
+
+def _scan(ws: Worksheet) -> Any:
+    """The rows of a sheet's used range, at most MAX_SCAN_ROWS x MAX_SCAN_COLS."""
+    return ws.iter_rows(
+        min_row=max(1, ws.min_row),
+        max_row=min(ws.max_row, max(1, ws.min_row) + MAX_SCAN_ROWS - 1),
+        min_col=max(1, ws.min_column),
+        max_col=min(ws.max_column, max(1, ws.min_column) + MAX_SCAN_COLS - 1),
+    )
+
+
 def describe(data: bytes, limit: int = 450) -> str:
     """The form's layout for the AI: every sheet, its filled cells by reference (formulas
     shown as formulas), and the merged areas, so it can tell labels from blanks."""
-    wb = load_workbook(io.BytesIO(data))
+    wb = _load(data)
     lines: list[str] = []
     n = 0
     for ws in wb.worksheets:
         lines.append(f"## Sheet {ws.title!r} ({ws.max_row} rows x {ws.max_column} columns)")
-        for row in ws.iter_rows():
+        for row in _scan(ws):
             for c in row:
                 if isinstance(c, MergedCell) or c.value is None or _text(c.value) == "":
                     continue
@@ -209,10 +236,21 @@ def _number(v: Any) -> Any:
     return v
 
 
+def _put(cell: Any, value: Any) -> None:
+    """Write a value the AI gave. Text starting like a formula ("=HYPERLINK(...)", "+60...",
+    "-5 days", "@x") is kept as text: written into the form it would run as a formula (or
+    be read as one by whoever opens it). The form's own formulas are never overwritten
+    (callers skip those cells)."""
+    value = _number(value)
+    cell.value = value
+    if isinstance(value, str) and value.startswith(FORMULA_START):
+        cell.data_type = "s"  # openpyxl: a string, saved as text even though it starts with =
+
+
 def _find_label(ws: Worksheet, label: str) -> Any:
     want = _norm(label)
     best = None
-    for row in ws.iter_rows():
+    for row in _scan(ws):
         for c in row:
             if isinstance(c, MergedCell) or not isinstance(c.value, str):
                 continue
@@ -247,7 +285,7 @@ def fill(
     sheet: str | None = None,
 ) -> tuple[bytes, list[str]]:
     """A filled copy of the form and what was done (or could not be placed)."""
-    wb = load_workbook(io.BytesIO(data))
+    wb = _load(data)
     ws = _sheet(wb, sheet)
     report: list[str] = []
     for ref, value in (cells or {}).items():
@@ -262,10 +300,12 @@ def fill(
             report.append(f"skipped {ref!r}: not a cell reference")
             continue
         target = _writable(target_ws, ref)
-        if isinstance(target.value, str) and target.value.startswith("="):
+        if target.data_type == "f" or (
+            isinstance(target.value, str) and target.value.startswith("=")
+        ):
             report.append(f"kept the formula in {ref}")
             continue
-        target.value = _number(value)
+        _put(target, value)
     for label, value in (fields or {}).items():
         c = _find_label(ws, str(label))
         if c is None:
@@ -275,7 +315,7 @@ def fill(
         if target is None:
             report.append(f"no empty cell next to {label!r}")
             continue
-        target.value = _number(value)
+        _put(target, value)
         report.append(f"{label} -> {target.coordinate}")
     if rows:
         report += _rows(ws, rows)
@@ -288,7 +328,7 @@ def _rows(ws: Worksheet, rows: list[dict[str, Any]]) -> list[str]:
     """Write table rows under the header row that names most of their keys."""
     keys = {k for r in rows for k in r}
     best: tuple[int, int, dict[str, int]] | None = None
-    for row in ws.iter_rows():
+    for row in _scan(ws):
         cols: dict[str, int] = {}
         for c in row:
             if isinstance(c, MergedCell) or not isinstance(c.value, str):
@@ -304,13 +344,13 @@ def _rows(ws: Worksheet, rows: list[dict[str, Any]]) -> list[str]:
     r = header + 1
     written = 0
     for item in rows:
-        while any(
+        while r <= header + MAX_SCAN_ROWS and any(
             _text(_writable(ws, f"{get_column_letter(col)}{r}").value) for col in cols.values()
         ):
             r += 1
         for k, col in cols.items():
             if k in item:
-                _writable(ws, f"{get_column_letter(col)}{r}").value = _number(item[k])
+                _put(_writable(ws, f"{get_column_letter(col)}{r}"), item[k])
         written += 1
         r += 1
     missing = sorted(keys - set(cols))

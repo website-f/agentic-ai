@@ -24,7 +24,7 @@ flowchart LR
 
   subgraph Optional["Optional profiles"]
     LF["langfuse :8503 (obs)"]
-    OLL["ollama :8504 (llm)<br/>optional, off by default"]
+    OLL["ollama (internal llm network)<br/>small local backup model"]
   end
 
   PROV["AI providers<br/>Groq · OpenRouter · HuggingFace<br/>Mistral · DeepSeek · OpenAI"]
@@ -60,7 +60,7 @@ flowchart LR
 | `valkey` | `valkey/valkey:8-alpine` | Event fan-out to SSE, provider cooldowns, rate limits, idempotency keys. |
 | `rustfs` | `rustfs/rustfs:1.0.0` | S3-compatible files: uploads, attachments, vault snapshots, exported traces. Same image CrawlOps already runs. |
 | `langfuse` | profile `obs` | Optional deep tracing. Our own token log works without it. |
-| `ollama` | profile `llm` | Optional local models; off by default. The default plan runs on hosted APIs only. |
+| `ollama` (+ `ollama-pull`) | default | The local backup model (`qwen3:0.6b`) for a few small side jobs and chat backup mode; internal `llm` network, never published. Agent work runs on hosted APIs. |
 
 ## 2. Layers inside the Python package
 

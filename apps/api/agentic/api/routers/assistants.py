@@ -14,13 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...assistants import calendar, gmail
+from ...assistants.access import may_assist
 from ...channels import deliver
 from ...core import crypto
 from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.security import can
 from ...i18n import tr
-from ...i18n.labels import decision_status_label
+from ...i18n.labels import decision_status_label, role_label
 from ...models import (
     Agent,
     Branch,
@@ -33,7 +34,7 @@ from ...models import (
 )
 from .. import paging
 from ..agent_schemas import AgentOut
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, optional_principal, require
 from .agents import agent_out
 
 router = APIRouter(prefix="/api", tags=["assistants"])
@@ -106,6 +107,24 @@ ASSISTANT_TOOLS = {
 }
 
 
+def assist_perm():
+    """P30: private assistants, their Gmail and their calendar are for roles with
+    assistants.use (people who manage others). Staff have their twin instead."""
+
+    async def checker(principal: Principal = Depends(require("read"))) -> Principal:
+        if not may_assist(principal.role):
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "assistants_not_for_role",
+                "Personal assistants are for people who manage others. Your role ({role}) has "
+                "one personal AI: your AI twin, in My AI.",
+                role=role_label(principal.role),
+            )
+        return principal
+
+    return checker
+
+
 class AssistantIn(BaseModel):
     preset: str = Field(default="chief_of_staff", pattern="^(chief_of_staff|inbox|analyst|custom)$")
     name: str | None = Field(default=None, max_length=60)
@@ -157,9 +176,26 @@ async def _google(db: AsyncSession, principal: Principal) -> dict[str, Any]:
 
 @router.get("/assistants")
 async def assistants_home(
-    principal: Principal = Depends(require("work.write")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
-    """Everything the My assistants page needs in one call."""
+    """Everything the My assistants page needs in one call. P30: for a role without
+    assistants.use, an empty "not for your role" answer (their assistants are kept, dormant)."""
+    if not may_assist(principal.role):
+        return {
+            "available": False,
+            "reason": tr(
+                "Personal assistants are for people who manage others. Your role ({role}) has "
+                "one personal AI: your AI twin, in My AI.",
+                role=role_label(principal.role),
+            ),
+            "assistants": [],
+            "presets": [],
+            "google": None,
+            "whatsapp": None,
+            "reach": None,
+            "drafts_pending": 0,
+            "calendar_pending": 0,
+        }
     mine = await _mine(db, principal)
     wa = await db.scalar(
         select(Channel).where(
@@ -190,6 +226,8 @@ async def assistants_home(
     from ...assistants.tools import pending_drafts
 
     return {
+        "available": True,
+        "reason": None,
         "assistants": [await agent_out(db, a, None, principal) for a in mine],
         "presets": [
             {"key": k, **{f: v for f, v in p.items() if f != "soul"}} for k, p in PRESETS.items()
@@ -214,7 +252,7 @@ async def assistants_home(
 @router.post("/assistants", status_code=status.HTTP_201_CREATED)
 async def create_assistant(
     body: AssistantIn,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
     if len(await _mine(db, principal)) >= 8:
@@ -316,10 +354,13 @@ async def google_configure(
 
 @router.post("/integrations/google/connect")
 async def google_connect(
-    principal: Principal = Depends(require("work.write")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(assist_perm()), db: AsyncSession = Depends(get_db)
 ) -> dict[str, str]:
     try:
-        return {"url": await gmail.auth_url(db, principal.workspace_id, principal.user.id)}
+        url = await gmail.auth_url(
+            db, principal.workspace_id, principal.user.id, principal.session_id
+        )
+        return {"url": url}
     except gmail.GmailError as e:
         raise api_error(status.HTTP_409_CONFLICT, "not_configured", str(e)) from e
 
@@ -329,6 +370,7 @@ async def google_callback(
     state: str = Query(default=""),
     code: str = Query(default=""),
     error: str = Query(default=""),
+    principal: Principal | None = Depends(optional_principal),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     def back(result: str, msg: str = "") -> RedirectResponse:
@@ -338,8 +380,17 @@ async def google_callback(
     if error:
         cancelled = error == "access_denied"
         return back("error", tr("Google sign-in was cancelled.") if cancelled else error)
+    if principal is None:  # P29: the callback belongs to the signed-in person who started it
+        return back("error", tr("Sign in first, then connect Gmail again from Assistants."))
     try:
-        acct = await gmail.finish(db, state, code)
+        acct = await gmail.finish(
+            db,
+            state,
+            code,
+            workspace_id=principal.workspace_id,
+            user_id=principal.user.id,
+            session_id=principal.session_id,
+        )
     except gmail.GmailError as e:
         return back("error", str(e))
     except Exception:  # noqa: BLE001 - Google unreachable and the like
@@ -441,7 +492,7 @@ async def list_drafts(
 async def edit_draft(
     draft_id: str,
     body: DraftEditIn,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     d, acct = await _my_draft(db, principal, draft_id)
@@ -469,7 +520,7 @@ async def edit_draft(
 @router.post("/email-drafts/{draft_id}/send")
 async def send_draft(
     draft_id: str,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """The person approves: Gmail sends the draft from their mailbox."""
@@ -494,7 +545,7 @@ async def send_draft(
 @router.post("/email-drafts/{draft_id}/discard")
 async def discard_draft(
     draft_id: str,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     d, acct = await _my_draft(db, principal, draft_id)
@@ -569,7 +620,7 @@ async def list_calendar_drafts(
 @router.post("/calendar-drafts/{proposal_id}/confirm")
 async def confirm_calendar_draft(
     proposal_id: str,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """The person says yes: only now does the Calendar API run (and invite the guests)."""
@@ -606,7 +657,7 @@ async def confirm_calendar_draft(
 @router.post("/calendar-drafts/{proposal_id}/discard")
 async def discard_calendar_draft(
     proposal_id: str,
-    principal: Principal = Depends(require("work.write")),
+    principal: Principal = Depends(assist_perm()),
 ) -> dict[str, Any]:
     p = await calendar.get(principal.workspace_id, principal.user.id, proposal_id)
     if p is None:

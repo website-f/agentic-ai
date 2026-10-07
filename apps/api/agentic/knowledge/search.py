@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import embed
@@ -27,6 +27,7 @@ from ..core import threats
 from ..core.config import settings
 from ..core.fence import fence
 from ..models import Agent, DocFile, KnowledgeChunk
+from . import indexer
 
 RRF_K = 60
 POOL = 40
@@ -81,6 +82,25 @@ def sees(r: Reader, branch_id: str | None, department_id: str | None) -> bool:
     if branch_id is not None and branch_id != r.branch_id:
         return False
     return r.all_departments or department_id is None or department_id == r.department_id
+
+
+# P29: HNSW returns ef_search candidates, THEN the WHERE (workspace, company, department)
+# filters them; with the default 40 a small company's passages can all be filtered away.
+EF_SEARCH = 100
+_iterative: bool | None = None  # pgvector 0.8+: keep scanning until enough rows pass
+
+
+async def tune_vector_scan(db: AsyncSession) -> None:
+    """Widen the HNSW scan for the filtered vector query that follows (this transaction
+    only). With pgvector 0.8+ the scan also continues until enough rows pass the filter."""
+    global _iterative
+    if _iterative is None:
+        ver = await db.scalar(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'"))
+        parts = [int(p) for p in str(ver or "0").split(".")[:2] if p.isdigit()]
+        _iterative = tuple(parts + [0, 0])[:2] >= (0, 8)
+    await db.execute(text(f"SET LOCAL hnsw.ef_search = {EF_SEARCH}"))
+    if _iterative:
+        await db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
 
 
 def _not_held_back(workspace_id: str) -> Any:
@@ -153,6 +173,8 @@ async def search(
     words = terms(query)
     if not embedded:
         qvec = await embed.embed_one(query) if query.strip() else None
+    if not indexer.dims_ok(qvec):  # P29: a model of the wrong size: keywords only
+        qvec = None
     scope = and_(scope_where(reader), _not_held_back(reader.workspace_id))
     if kinds:
         scope = and_(scope, KnowledgeChunk.source_kind.in_(kinds))
@@ -172,6 +194,7 @@ async def search(
     sims: dict[int, float] = {}
     vec: list[int] = []
     if qvec is not None:
+        await tune_vector_scan(db)
         dist = KnowledgeChunk.embedding.cosine_distance(qvec)
         for cid, sim in (
             await db.execute(

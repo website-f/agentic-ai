@@ -24,6 +24,7 @@ from ..skills import curator as skills_curator
 from ..skills import store as skills_store
 from . import store
 from .facts import end, has_list, parse_json, same_numbers
+from .search import tune_scan
 
 log = logging.getLogger("agentic.brain.dream")
 
@@ -98,6 +99,7 @@ async def _judge(
 async def _consolidate(
     db: AsyncSession, ws: Workspace, stats: dict[str, Any]
 ) -> list[dict[str, Any]]:
+    await tune_scan(db)  # P30: the nearest-neighbour scan is filtered by agent and company
     rows = (await db.execute(_PAIRS, {"ws": ws.id, "min_sim": JUDGE_SIMILARITY})).all()
     seen: set[tuple[str, str]] = set()
     pairs: list[tuple[str, str, float]] = []
@@ -174,20 +176,36 @@ def _n(n: int, word: str) -> str:
     return f"{n} {word}" + ("" if n == 1 else "s")
 
 
-def _diary(ws: Workspace, day: date, changes: list[dict[str, Any]], stats: dict[str, Any]) -> str:
+def diary(
+    ws: Workspace,
+    day: date,
+    changes: list[dict[str, Any]],
+    stats: dict[str, Any],
+    *,
+    scoped: bool = False,
+) -> str:
+    """The diary text. `scoped` (P30): an office role's share, without the workspace-wide
+    counts."""
     merges = [c for c in changes if c["kind"] == "merge"]
     fixes = [c for c in changes if c["kind"] == "contradiction"]
     imports = [c for c in changes if c["kind"] == "import"]
     conflicts = [c for c in changes if c["kind"] == "conflict"]
+    learned = (
+        ""
+        if scoped
+        else f"{_n(stats.get('facts_learned', 0), 'fact')} learned and "
+        f"{_n(stats.get('pages_changed', 0), 'page')} changed since the last dream. "
+    )
     out = [
         f"# Dream diary, {day:%d %B %Y}",
         "",
-        f"{_n(stats.get('facts_learned', 0), 'fact')} learned and "
-        f"{_n(stats.get('pages_changed', 0), 'page')} changed since the last dream. "
-        f"{_n(len(merges), 'duplicate')} merged, {_n(len(fixes), 'contradiction')} settled, "
+        f"{learned}{_n(len(merges), 'duplicate')} merged, "
+        f"{_n(len(fixes), 'contradiction')} settled, "
         f"{_n(len(imports), 'vault edit')} imported.",
         "",
-        "Review and undo in the dashboard: Brain > Dreams.",
+        "Only what your role may see."
+        if scoped
+        else "Review and undo in the dashboard: Brain > Dreams.",
     ]
     if merges:
         out += ["", f"## Merged duplicates ({len(merges)})"]
@@ -290,7 +308,7 @@ async def run_dream(
             db,
             ws,
             path,
-            _diary(ws, day, changes, stats),
+            diary(ws, day, changes, stats),
             store.SYSTEM,
             f"Dream diary {day:%Y-%m-%d}",
         )

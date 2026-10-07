@@ -116,18 +116,29 @@ def _cos(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
-async def candidates(db: AsyncSession, pack: Pack) -> list[dict[str, Any]]:
-    """The company's ready files and documents an item could use."""
+async def candidates(db: AsyncSession, pack: Pack, principal: Any) -> list[dict[str, Any]]:
+    """The company's ready files and documents an item could use. P29: only what this
+    person may open themselves, never a held-back file nor someone's own (desk) files, and
+    only the pack's company (a pack for no company is a workspace role's: every company)."""
     out: list[dict[str, Any]] = []
-    fq = select(DocFile).where(
-        DocFile.workspace_id == pack.workspace_id,
-        DocFile.status == "ready",
-        DocFile.source == "upload",
+    fq = service.visible_files(
+        select(DocFile).where(
+            DocFile.workspace_id == pack.workspace_id,
+            DocFile.status == "ready",
+            DocFile.source == "upload",
+            DocFile.quarantined.is_(False),
+            ~service.personal_file(),
+        ),
+        principal,
     )
-    dq = select(Document).where(Document.workspace_id == pack.workspace_id)
+    dq = service.scoped(
+        select(Document).where(Document.workspace_id == pack.workspace_id), Document, principal
+    )
     if pack.branch_id:
         fq = fq.where((DocFile.branch_id == pack.branch_id) | (DocFile.branch_id.is_(None)))
         dq = dq.where(Document.branch_id == pack.branch_id)
+    elif not principal.scope.everything:
+        return []
     for f in (await db.scalars(fq.order_by(DocFile.created_at.desc()).limit(300))).all():
         out.append(
             {
@@ -151,13 +162,16 @@ async def candidates(db: AsyncSession, pack: Pack) -> list[dict[str, Any]]:
     return out
 
 
-async def auto_match(db: AsyncSession, pack: Pack) -> tuple[list[dict[str, Any]], int]:
-    """Fill missing items with the best-matching file or document. Matches are marked auto
-    so people confirm them; items people filled by hand are never changed."""
+async def auto_match(
+    db: AsyncSession, pack: Pack, principal: Any
+) -> tuple[list[dict[str, Any]], int]:
+    """Fill missing items with the best-matching file or document this person may see.
+    Matches are marked auto so people confirm them; items people filled by hand are never
+    changed."""
     from ..brain import embed
 
     items = [dict(i) for i in pack.items or []]
-    cands = await candidates(db, pack)
+    cands = await candidates(db, pack, principal)
     used = {i.get("file_id") for i in items} | {i.get("document_id") for i in items}
     cands = [c for c in cands if c["id"] not in used]
     todo = [i for i in items if i.get("status") == "missing"]
@@ -210,13 +224,21 @@ def _pages(data: bytes) -> int:
 
 
 def _image_pdf(label: str, data: bytes, lh: render_pdf.Letterhead | None) -> bytes:
-    from PIL import Image, ImageOps
+    from PIL import ImageOps
+
+    from .extract import IMAGE_MAX_PIXELS, OCR_MAX_PIXELS, TooLarge, _pil
 
     pdf = render_pdf.new_pdf(label, None, numbered=False)
     pdf.add_page()
     pdf.font(11, "B")
     pdf.cell(0, 6, pdf.t(label), new_x="LMARGIN", new_y="NEXT")
-    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    src = _pil().open(io.BytesIO(data))
+    if src.width * src.height > IMAGE_MAX_PIXELS:  # P29: never decode a picture bomb
+        raise TooLarge("the picture is too large")
+    src.thumbnail((8000, 8000))  # plenty for a printed page; caps the memory used
+    if src.width * src.height > OCR_MAX_PIXELS:
+        src.thumbnail((5000, 5000))
+    img = ImageOps.exif_transpose(src).convert("RGB")
     max_w, max_h = pdf.w - pdf.l_margin - pdf.r_margin, pdf.h - pdf.get_y() - 24
     ratio = min(max_w / img.width, max_h / img.height)
     w, h = img.width * ratio, img.height * ratio
@@ -229,13 +251,24 @@ def _image_pdf(label: str, data: bytes, lh: render_pdf.Letterhead | None) -> byt
 
 
 async def item_pdf(
-    db: AsyncSession, item: dict[str, Any], lh: render_pdf.Letterhead | None
+    db: AsyncSession,
+    item: dict[str, Any],
+    lh: render_pdf.Letterhead | None,
+    pack: Pack | None = None,
+    principal: Any = None,
 ) -> tuple[bytes | None, str]:
-    """One checklist item as PDF bytes, or (None, why not)."""
+    """One checklist item as PDF bytes, or (None, why not). P29: checked again now, not
+    only when it was attached: still there, in the pack's workspace, not held back, and
+    (with `principal`) still one the person compiling may open."""
+    ws = pack.workspace_id if pack is not None else None
     if item.get("document_id"):
         d = await db.get(Document, item["document_id"])
-        if d is None:
+        if d is None or (ws and d.workspace_id != ws):
             return None, "the document was deleted"
+        if principal is not None and not await db.scalar(
+            service.scoped(select(Document.id).where(Document.id == d.id), Document, principal)
+        ):
+            return None, "it is not a document you can open"
         data, _, _ = await service.export(db, d, "pdf", numbered=False)
         return data, ""
     if item.get("file_id"):
@@ -244,8 +277,14 @@ async def item_pdf(
             .where(DocFile.id == item["file_id"])
             .options(undefer(DocFile.data), undefer(DocFile.text))
         )
-        if f is None:
+        if f is None or (ws and f.workspace_id != ws):
             return None, "the file was deleted"
+        if f.quarantined:
+            return None, "the file is held back for review (passwords or personal data)"
+        if principal is not None and not await db.scalar(
+            service.visible_files(select(DocFile.id).where(DocFile.id == f.id), principal)
+        ):
+            return None, "it is not a file you can open"
         raw = bytes(f.data)
         kind = sniff(raw, f.name, f.mime)
         if kind == "pdf":
@@ -255,7 +294,10 @@ async def item_pdf(
             except Exception:  # noqa: BLE001 - a damaged or locked PDF is reported
                 return None, "the PDF is damaged or password-protected"
         if kind == "image":
-            return _image_pdf(item["label"], raw, lh), ""
+            try:
+                return _image_pdf(item["label"], raw, lh), ""
+            except Exception:  # noqa: BLE001 - a broken or oversized picture is reported
+                return None, "the picture is damaged or too large"
         if f.text.strip():
             md = f"# {item['label']}\n\n_From {f.name}_\n\n{f.text}"
             return render_pdf.render(md, item["label"], lh, numbered=False), ""
@@ -344,8 +386,11 @@ def _stamp(data: bytes, title: str) -> bytes:
     return out.getvalue()
 
 
-async def compile_pack(db: AsyncSession, pack: Pack, actor: str) -> tuple[DocFile, list[str]]:
-    """Build the pack PDF and store it as a generated file. Returns it and what was left out."""
+async def compile_pack(
+    db: AsyncSession, pack: Pack, actor: str, principal: Any = None
+) -> tuple[DocFile, list[str]]:
+    """Build the pack PDF and store it as a generated file. Returns it and what was left out.
+    `principal`: the person compiling (each item is checked against what they may open)."""
     from pypdf import PdfReader, PdfWriter
 
     lh = await service.letterhead(db, pack.branch_id)
@@ -357,7 +402,7 @@ async def compile_pack(db: AsyncSession, pack: Pack, actor: str) -> tuple[DocFil
     for it in pack.items or []:
         if it.get("status") == "waived":
             continue
-        data, why = await item_pdf(db, it, lh)
+        data, why = await item_pdf(db, it, lh, pack, principal)
         if data is None:
             if it.get("required"):
                 skipped.append(f"{it['label']}: {why}")
@@ -405,6 +450,9 @@ async def compile_pack(db: AsyncSession, pack: Pack, actor: str) -> tuple[DocFil
         f" Left out: {len(skipped)}." if skipped else ""
     )
     f.text = f"{pack.title}\n\nContents:\n{index}"
+    from ..intake import scan
+
+    scan.note(f, scan.scan(f.text))  # P29: for the record (the items were checked one by one)
     pack.compiled_file_id = f.id
     pack.compiled_at = datetime.now(UTC)
     pack.status = "compiled"

@@ -55,15 +55,20 @@ def ev(new: tuple[int, int], old: tuple[int, int] | None = None) -> dict[str, An
 def test_autopilot_verdicts():
     v = autopilot.verdict
     assert v(P(eval=ev((3, 3))), "review")[0] is False  # people review everything
-    assert v(P(eval=ev((3, 3))), "auto_safe")[0] is True
-    assert v(P(eval=ev((1, 3))), "auto_safe")[0] is False  # a new skill must mostly pass
+    # P29: a brand-new skill always waits for a person in auto_safe (it wrote its own tests)
+    assert v(P(eval=ev((3, 3))), "auto_safe") == (
+        False,
+        "a brand-new skill is always checked by a person first",
+    )
+    assert v(P(eval=ev((3, 3))), "auto")[0] is True
+    assert v(P(eval=ev((1, 3))), "auto")[0] is False  # a new skill must mostly pass
     assert v(P(kind="patch", eval=ev((2, 3), (3, 3))), "auto_safe")[0] is False  # regression
     assert v(P(kind="patch", eval=ev((2, 3), (2, 3))), "auto_safe")[0] is True  # no worse
     assert v(P(kind="patch", eval=ev((0, 2), (0, 2))), "auto_safe")[0] is False
     assert v(P(kind="retire"), "auto")[0] is False  # retiring is always a person's call
     warn = [{"level": "warn", "code": "x", "message": "m"}]
     assert v(P(scan=warn, eval=ev((3, 3))), "auto")[0] is False
-    assert v(P(), "auto_safe") == (False, "it has no test results yet")
+    assert v(P(kind="patch"), "auto_safe") == (False, "it has no test results yet")
     assert v(P(), "auto")[0] is True  # untested but clean: auto mode only
     assert v(P(eval={"new": {"error": "down", "passed": 0, "total": 2}}), "auto_safe")[0] is False
 
@@ -115,9 +120,24 @@ def test_chat_triggers():
 # ---------------------------------------------------------------- reflect -> evals -> autopilot
 
 
+async def test_a_new_skill_waits_for_a_person_in_auto_safe(
+    client: httpx.AsyncClient, llm, temporal
+):
+    """P29: a brand-new skill passed only the cases its own author wrote: a person checks it."""
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    first = await long_task(client, llm, agent)
+    llm.say(json.dumps(DRAFT)).say(PASSING)
+    async with SessionLocal() as db:
+        p = await reflect.reflect_on_task(db, first["id"])
+    assert p is not None and p.status == "pending" and p.eval["new"]["passed"] == 1
+    assert "brand-new skill is always checked by a person" in (p.decision_note or "")
+
+
 async def test_a_proven_skill_goes_live_by_itself(client: httpx.AsyncClient, llm, temporal):
     o = await office(client)
     agent = await new_agent(client, o, "Aina")
+    await set_mode(client, "auto")  # P29: auto_safe never publishes a brand-new skill
     first = await long_task(client, llm, agent)
     llm.say(json.dumps(DRAFT)).say(PASSING)  # the draft, then its one test case passes
     async with SessionLocal() as db:
@@ -131,7 +151,7 @@ async def test_a_proven_skill_goes_live_by_itself(client: httpx.AsyncClient, llm
     assert draft_req["model"] == "m1"
 
     overview = (await client.get("/api/learning/overview?days=7")).json()
-    assert overview["mode"] == "auto_safe"
+    assert overview["mode"] == "auto"
     assert overview["proposals"]["approved_auto"] == 1
     assert overview["recent"][0]["auto"] is True
     assert overview["recent"][0]["decided_by"] == "Learning autopilot"
@@ -223,7 +243,9 @@ async def test_untested_drafts_are_tested_and_tidied(client: httpx.AsyncClient, 
         llm.say(PASSING)
         tidied = await autopilot.tidy(db, ws)
         await db.refresh(p)
-    assert tidied["approved"] == 1 and p.status == "approved" and p.eval is not None
+    # Tested now; P29: a brand-new skill still waits for a person in auto_safe.
+    assert tidied["approved"] == 0 and p.status == "pending" and p.eval is not None
+    assert p.eval["new"]["passed"] == 1 and "brand-new skill" in (p.decision_note or "")
 
 
 # ---------------------------------------------------------------- revert

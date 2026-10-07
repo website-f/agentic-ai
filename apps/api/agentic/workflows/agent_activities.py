@@ -37,9 +37,12 @@ async def task_expire_approval(approval_id: str) -> None:
 
 
 @activity.defn
-async def task_finish(task_id: str, state: str, message: str | None) -> None:
-    await runtime.finish(task_id, state, message)
-    await _poke_run(task_id)
+async def task_finish(task_id: str, state: str, message: str | None) -> dict[str, Any] | None:
+    """{"continue": True} when a self-check or goal fix sends the work back (P29)."""
+    out = await runtime.finish(task_id, state, message)
+    if not out:
+        await _poke_run(task_id)
+    return out
 
 
 async def _poke_run(task_id: str) -> None:

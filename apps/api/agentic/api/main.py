@@ -327,3 +327,8 @@ from .routers import member_import as member_import_router  # noqa: E402
 
 RAW_UPLOAD_PATHS.add(member_import_router.UPLOAD_PATH)
 app.include_router(member_import_router.router)
+
+# Task flow: a task into a workflow or a schedule, and the person's recent chats.
+from .routers import task_flow as task_flow_router  # noqa: E402
+
+app.include_router(task_flow_router.router)

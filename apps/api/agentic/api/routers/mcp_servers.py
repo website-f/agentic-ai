@@ -146,7 +146,12 @@ async def _clean_agents(db: AsyncSession, principal: Principal, ids: list[str]) 
     out = []
     for aid in dict.fromkeys(ids):
         a = await db.get(Agent, aid)
-        if a is None or a.workspace_id != principal.workspace_id:
+        # P29: never someone else's private assistant (sees_agent leaves those out).
+        if (
+            a is None
+            or a.workspace_id != principal.workspace_id
+            or not principal.scope.sees_agent(a)
+        ):
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_agent", "Pick agents in this workspace."
             )
@@ -169,6 +174,7 @@ async def update_server(
     db: AsyncSession = Depends(get_db),
 ) -> McpOut:
     s = await _get(db, principal.workspace_id, sid)
+    before = {"enabled": s.enabled, "agent_ids": list(s.agent_ids or [])}
     if body.description is not None:
         s.description = body.description
     if body.enabled is not None:
@@ -179,6 +185,17 @@ async def update_server(
         s.auth_header_enc = (
             crypto.encrypt(body.auth_header.strip(), s.aad) if body.auth_header.strip() else ""
         )
+    # P29: like adding one, every change is on the record (never the header itself).
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "mcp.updated",
+        target=s.id,
+        before=before,
+        after={"enabled": s.enabled, "agent_ids": list(s.agent_ids or [])},
+        note="auth header changed" if body.auth_header is not None else None,
+    )
     await db.commit()
     await db.refresh(s)
     return _out(s)

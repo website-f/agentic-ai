@@ -8,7 +8,10 @@ can be rolled back in one click.
 
 Modes (workspace setting `skill_learning.mode`):
 - review     every change waits for a person (the old behaviour)
-- auto_safe  (default) proven changes go live; unproven ones wait
+- auto_safe  (default) proven improvements to skills a person approved go live; unproven
+             ones wait. P29: a brand-new skill always waits for a person (its test cases
+             were written by the same model that wrote it, so passing them proves little),
+             and so does a change to a skill whose live text no person approved.
 - auto       also approve changes with no test cases, if the scan is clean
 """
 
@@ -45,6 +48,8 @@ def verdict(p: SkillProposal, how: str) -> tuple[bool, str]:
         return False, "the workspace reviews every skill change by hand"
     if p.kind == "retire":
         return False, "retiring a skill is always a person's call"
+    if how == "auto_safe" and p.kind == "new":
+        return False, "a brand-new skill is always checked by a person first"
     if blocked(p.scan or []):
         return False, "the safety scan blocked it"
     if any(f.get("level") == "warn" for f in p.scan or []):
@@ -73,7 +78,10 @@ async def consider(db: AsyncSession, ws: Workspace, p: SkillProposal) -> Skill |
     """Approve `p` automatically if it has proven itself. Returns the live skill, or None."""
     if p.status != "pending":
         return None
-    ok, why = verdict(p, mode(ws))
+    how = mode(ws)
+    ok, why = verdict(p, how)
+    if ok and how == "auto_safe" and not await _person_approved(db, p):
+        ok, why = False, "the live skill was not approved by a person"
     if not ok:
         p.decision_note = f"Waiting for a person: {why}."[:2000]
         await db.commit()
@@ -100,6 +108,14 @@ async def consider(db: AsyncSession, ws: Workspace, p: SkillProposal) -> Skill |
         ws.id, "skill.updated", {"skill_id": skill.id, "name": skill.name, "auto": True}
     )
     return skill
+
+
+async def _person_approved(db: AsyncSession, p: SkillProposal) -> bool:
+    """P29: auto_safe only improves skills whose live text a person (or the product's own
+    seed) approved, never a chain of the autopilot's own changes."""
+    skill = await db.get(Skill, p.skill_id) if p.skill_id else None
+    approver = (skill.approved_by or "") if skill else ""
+    return bool(approver) and approver != AUTOPILOT.actor and not approver.startswith("agent:")
 
 
 async def revert(

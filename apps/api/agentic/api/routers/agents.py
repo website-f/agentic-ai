@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select
@@ -12,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch, runtime, twin, work_hours
 from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
-from ...agents.tools import FOLLOWS, TOOLS
+from ...agents.tools import FOLLOWS, TOOLS, mode_of
+from ...assistants import access as assistant_access
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
 from ...engine import gateway
@@ -95,7 +97,10 @@ async def agent_out(
         sop_ids=a.sop_ids or [],
         color=a.color,
         reports_to=a.reports_to,
-        status=a.status,
+        # P30: an assistant whose owner's role has no assistants.use reads as paused.
+        status="paused"
+        if a.status == "active" and await assistant_access.dormant(db, a)
+        else a.status,
         role_kind=a.role_kind,
         max_parallel_children=a.max_parallel_children,
         max_spawn_depth=a.max_spawn_depth,
@@ -466,6 +471,52 @@ async def _guard_twin(db: AsyncSession, principal: Principal, a: Agent, changes:
         )
 
 
+# P29: on a twin, what only its managers set. Its person may make it stricter (pause or
+# retire it, ask more, deny a tool, lower a budget) but never looser than their manager
+# left it.
+TWIN_GOVERNED = (
+    "status",
+    "autonomy",
+    "tools",
+    "model_group",
+    "sop_ids",
+    "budget_daily_tokens",
+    "budget_monthly_usd",
+    "max_parallel_children",
+    "max_spawn_depth",
+)
+_STRICT = {"deny": 0, "ask": 1, "allow": 2}
+
+
+def _looser(a: Agent, k: str, v: Any) -> bool:
+    """Would this change loosen what a twin may do?"""
+    old = getattr(a, k)
+    if v == old:
+        return False
+    if k == "status":  # pausing or retiring it is theirs; switching it back on is not
+        return v == "active"
+    if k == "autonomy":
+        return v != "ask"
+    if k == "tools":
+        return any(_STRICT[mode_of(v or {}, n)] > _STRICT[mode_of(old or {}, n)] for n in TOOLS)
+    if k in ("budget_daily_tokens", "budget_monthly_usd"):
+        return old is None or v is None or v > old
+    return True  # its model, SOPs and helpers are its managers' call
+
+
+def _guard_own_twin(a: Agent, changes: dict) -> None:
+    looser = [k for k in TWIN_GOVERNED if k in changes and _looser(a, k, changes[k])]
+    if looser:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "twin_governed",
+            "Your manager sets how far {name} may go: you can pause it or make it ask more, "
+            "but not switch it back on, let it act alone, add tools, change its model or SOPs, "
+            "or raise its budget.",
+            name=a.name,
+        )
+
+
 @router.patch("/agents/{agent_id}")
 async def update_agent(
     agent_id: str,
@@ -480,6 +531,10 @@ async def update_agent(
             changes.pop(k, None)
     if a.is_twin:
         await _guard_twin(db, principal, a, changes)
+        if "agents.manage" not in PERMISSIONS.get(principal.role, frozenset()):
+            _guard_own_twin(a, changes)
+    if changes.get("status") == "active" and await assistant_access.dormant(db, a):
+        raise _dormant_error(a)
     if "tools" in changes:
         _check_tools(changes["tools"] or {})
     if "work_hours" in changes:  # the person (a twin's owner) and its managers set hours
@@ -625,6 +680,16 @@ async def delete_session(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _dormant_error(a: Agent) -> Exception:
+    return api_error(
+        status.HTTP_409_CONFLICT,
+        "assistant_dormant",
+        "{name} is paused: personal assistants are for people who manage others. Nothing was "
+        "deleted; use your AI twin in My AI instead.",
+        name=a.name,
+    )
+
+
 @router.post("/agents/{agent_id}/chat")
 async def chat(
     agent_id: str,
@@ -632,7 +697,11 @@ async def chat(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> ChatOut:
+    # sees_agent, not observes_agent: staff only watch the rest of their office (view_only),
+    # and nobody but its owner reaches a private assistant.
     a = await get_agent(db, principal, agent_id)
+    if await assistant_access.dormant(db, a):
+        raise _dormant_error(a)
     if a.status != "active":
         raise api_error(
             status.HTTP_409_CONFLICT,

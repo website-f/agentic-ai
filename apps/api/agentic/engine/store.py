@@ -211,6 +211,31 @@ async def cool(provider_id: str, seconds: int) -> None:
 
 async def clear_cooldown(provider_id: str) -> None:
     await valkey().delete(f"ai_cooldown:{provider_id}")
+    async for k in valkey().scan_iter(match=f"ai_cooldown:{provider_id}:*"):  # P29: per model
+        await valkey().delete(k)
+
+
+async def model_cooling_for(provider_id: str, model: str) -> int:
+    """P29: one model resting (a per-model 403 or 429), not the whole provider."""
+    ttl = await valkey().ttl(f"ai_cooldown:{provider_id}:{model}")
+    return max(int(ttl), 0)
+
+
+async def models_cooling(provider_id: str) -> dict[str, int]:
+    """P29: each resting model of a provider and its seconds left, for the AI Engine page."""
+    out: dict[str, int] = {}
+    prefix = f"ai_cooldown:{provider_id}:"
+    async for k in valkey().scan_iter(match=f"{prefix}*"):
+        key = k.decode() if isinstance(k, bytes) else str(k)
+        ttl = int(await valkey().ttl(key))
+        if ttl > 0:
+            out[key[len(prefix) :]] = ttl
+    return out
+
+
+async def cool_model(provider_id: str, model: str, seconds: int) -> None:
+    if seconds > 0:
+        await valkey().set(f"ai_cooldown:{provider_id}:{model}", "1", ex=seconds)
 
 
 async def is_reasoning(provider_id: str, model: str) -> bool:

@@ -20,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from ..brain import embed
-from ..models import SOP, Department, DocFile, KnowledgeChunk
+from ..core.config import settings
+from ..models import EMBED_DIMS, SOP, Department, DocFile, KnowledgeChunk
 from .chunker import Passage, chunk_text
 
 log = logging.getLogger("agentic.knowledge")
@@ -36,19 +37,52 @@ def embed_input(title: str, heading: str, body: str) -> str:
     return f"{prefix}\n{head}" if prefix else head
 
 
+_dims_logged = False
+
+
+def dims_ok(vec: list[float] | None) -> bool:
+    """P29: a vector fits the embedding columns (EMBED_DIMS). The model is configurable
+    (AGENTIC_EMBED_MODEL) but the columns are not: a model of another size would fail every
+    insert, so its vectors are dropped (keyword search keeps working) and it is logged once."""
+    global _dims_logged
+    if vec is None:
+        return True
+    if len(vec) == EMBED_DIMS:
+        return True
+    if not _dims_logged:
+        _dims_logged = True
+        log.error(
+            "embedding model %s gives %d-dimension vectors but the index holds %d: vectors "
+            "are not stored or searched (keywords only). Use a %d-dimension model.",
+            settings.embed_model,
+            len(vec),
+            EMBED_DIMS,
+            EMBED_DIMS,
+        )
+    return False
+
+
 async def _vectors(title: str, passages: list[Passage]) -> list[list[float] | None]:
     vecs = await embed.embed([embed_input(title, p.heading, p.text) for p in passages])
-    return list(vecs) if vecs else [None] * len(passages)
+    if not vecs or not dims_ok(vecs[0]):
+        return [None] * len(passages)
+    return list(vecs)
 
 
 async def _lock(db: AsyncSession, kind: str, source_id: str) -> None:
-    await db.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"knowledge:{kind}:{source_id}"}
-    )
+    # Taken before anything pending is flushed: a flushed row (the file's library flag)
+    # would hold its row lock while waiting here, and deadlock with index_file.
+    with db.no_autoflush:
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"knowledge:{kind}:{source_id}"},
+        )
 
 
 async def remove(db: AsyncSession, kind: str, source_id: str) -> None:
-    """Drop a source's passages (the caller commits)."""
+    """Drop a source's passages (the caller commits). P29: under the source's lock, so an
+    index_file running at the same time cannot put them back after the caller commits."""
+    await _lock(db, kind, source_id)
     await db.execute(
         delete(KnowledgeChunk).where(
             KnowledgeChunk.source_kind == kind, KnowledgeChunk.source_id == source_id
@@ -113,16 +147,47 @@ async def index_file(db: AsyncSession, file_id: str) -> int:
             f.indexed_at = None
         await db.commit()
         return 0
-    n = await _write(
-        db,
-        workspace_id=f.workspace_id,
-        kind="file",
-        source_id=f.id,
-        branch_id=f.branch_id,
-        department_id=f.department_id,
-        title=file_title(f),
-        body=f.text or "",
-    )
+    scope = (f.branch_id, f.department_id, file_title(f))
+    for _ in range(3):
+        n = await _write(
+            db,
+            workspace_id=f.workspace_id,
+            kind="file",
+            source_id=f.id,
+            branch_id=scope[0],
+            department_id=scope[1],
+            title=scope[2],
+            body=f.text or "",
+        )
+        # P29: embedding takes a while; look again before committing, so a file taken out
+        # of the library, held back, deleted or moved meanwhile never keeps stale passages.
+        now = (
+            await db.execute(
+                select(
+                    DocFile.library,
+                    DocFile.quarantined,
+                    DocFile.status,
+                    DocFile.branch_id,
+                    DocFile.department_id,
+                    DocFile.title,
+                    DocFile.name,
+                )
+                .where(DocFile.id == file_id)
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        if now is None or not now.library or now.quarantined or now.status != "ready":
+            await remove(db, "file", file_id)
+            await db.commit()
+            return 0
+        fresh = (
+            now.branch_id,
+            now.department_id,
+            (now.title or now.name or "Untitled file").strip(),
+        )
+        if fresh == scope:
+            break
+        scope = fresh
     f.indexed_at = datetime.now(UTC)
     await db.commit()
     log.info("indexed file %s: %d passages", f.id, n)

@@ -272,13 +272,61 @@ async def _department(
     return d.id
 
 
-def _share_template(file: DocFile, branch_id: str | None, department_id: str | None) -> None:
-    """A form's blank is a guideline everyone it is for (and their agents) may open."""
+async def _share_template(
+    db: AsyncSession,
+    principal: Principal,
+    file: DocFile,
+    branch_id: str | None,
+    department_id: str | None,
+) -> DocFile:
+    """A form's blank is a guideline everyone it is for (and their agents) may open.
+    Returns the file the form uses. P29: a file this person only reads (a guideline shared
+    with them), or one already shared with another audience (a workspace guideline, another
+    form's blank), is copied rather than moved, so nobody pulls a guideline away from the
+    people it was for. The caller re-indexes it (index_template) after committing."""
+    mine = await db.scalar(
+        service.scoped(select(DocFile.id).where(DocFile.id == file.id), DocFile, principal)
+    )
+    elsewhere = file.library and (file.branch_id, file.department_id) != (
+        branch_id,
+        department_id,
+    )
+    if mine is None or elsewhere:
+        full = await db.scalar(
+            select(DocFile)
+            .where(DocFile.id == file.id)
+            .options(undefer(DocFile.data), undefer(DocFile.text))
+        )
+        assert full is not None
+        copy = await service.create_file(
+            db,
+            workspace_id=principal.workspace_id,
+            name=full.name,
+            data=bytes(full.data),
+            created_by=principal.actor,
+            mime=full.mime,
+            branch_id=branch_id,
+            source="generated",
+            status=full.status,
+            folder=full.folder,
+        )
+        copy.text, copy.pages, copy.ocr = full.text, full.pages, full.ocr
+        copy.title, copy.summary, copy.fields = full.title, full.summary, dict(full.fields or {})
+        file = copy
     file.library = True
     file.branch_id = branch_id
     file.department_id = department_id
     file.kind = "form"
     file.owner_user_id = None
+    return file
+
+
+async def index_template(file_id: str | None) -> None:
+    """P29: the blank's library passages follow its (new) audience at once."""
+    if file_id:
+        from .library import start_index
+
+        await start_index("file", file_id)
 
 
 class StarterIn(BaseModel):
@@ -321,7 +369,7 @@ async def add_starter(
         status="ready",
         folder="Borang" if lang == "ms" else "Forms",
     )
-    _share_template(file, body.branch_id, dept)
+    file = await _share_template(db, principal, file, body.branch_id, dept)
     f = Form(
         workspace_id=principal.workspace_id,
         branch_id=body.branch_id,
@@ -344,6 +392,7 @@ async def add_starter(
         after={"name": f.name, "starter": body.key},
     )
     await db.commit()
+    await index_template(f.file_id)
     return await form_out(db, principal, f, await store.today_in(db, principal.workspace_id))
 
 
@@ -380,8 +429,10 @@ async def add_form(
 ) -> dict[str, Any]:
     await _check_manage(db, principal, body.branch_id)
     dept = await _department(db, body.branch_id, body.department_id)
+    file_id = None
     if body.file_id:
-        _share_template(await _usable_file(db, principal, body.file_id), body.branch_id, dept)
+        file = await _usable_file(db, principal, body.file_id)
+        file_id = (await _share_template(db, principal, file, body.branch_id, dept)).id
     f = Form(
         workspace_id=principal.workspace_id,
         branch_id=body.branch_id,
@@ -389,7 +440,7 @@ async def add_form(
         name=body.name.strip(),
         description=body.description.strip(),
         kind=body.kind,
-        file_id=body.file_id,
+        file_id=file_id,
         schedule=F.clean_schedule(body.schedule),
         guide=body.guide.strip(),
         created_by=principal.actor,
@@ -405,6 +456,7 @@ async def add_form(
         after={"name": f.name},
     )
     await db.commit()
+    await index_template(f.file_id)
     return await form_out(db, principal, f, await store.today_in(db, principal.workspace_id))
 
 
@@ -429,12 +481,13 @@ async def change_form(
     f = await _form(db, principal, form_id)
     await _check_manage(db, principal, f.branch_id)
     changes = body.model_dump(exclude_unset=True)
+    reindex = False
     if "department_id" in changes:
         f.department_id = await _department(db, f.branch_id, changes["department_id"])
     if changes.get("file_id"):
         file = await _usable_file(db, principal, changes["file_id"])
-        _share_template(file, f.branch_id, f.department_id)
-        f.file_id = file.id
+        f.file_id = (await _share_template(db, principal, file, f.branch_id, f.department_id)).id
+        reindex = True
     if changes.get("schedule") is not None:
         f.schedule = F.clean_schedule(changes["schedule"])
     for k in ("name", "description", "kind", "guide", "status"):
@@ -450,6 +503,8 @@ async def change_form(
         after={k: v for k, v in changes.items() if k != "guide"},
     )
     await db.commit()
+    if reindex:
+        await index_template(f.file_id)
     return await form_out(db, principal, f, await store.today_in(db, principal.workspace_id))
 
 
@@ -583,7 +638,7 @@ async def ask_ai(
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "no_ai_worker",
-            "You have no AI worker yet. Hire one in My AI worker, or pick an agent.",
+            "You have no AI worker yet. Hire one in My AI, or pick an agent.",
         )
     today = await store.today_in(db, principal.workspace_id)
     period = await store.person_round(db, f, principal.user.id, today)

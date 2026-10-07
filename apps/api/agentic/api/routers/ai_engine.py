@@ -92,6 +92,7 @@ async def _provider_out(db: AsyncSession, p: AIProvider) -> ProviderOut:
         enabled=p.enabled,
         health=p.health,
         cooling_seconds=await store.cooling_for(p.id),
+        cooling_models=await store.models_cooling(p.id),
         last_test_at=p.last_test_at,
         last_test_result=p.last_test_result,
         model_count=model_count,

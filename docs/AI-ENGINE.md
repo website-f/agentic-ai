@@ -8,7 +8,7 @@ The AI Engine is where users paste provider keys, test them, pick models, and se
 
 - Providers live in the DB with encrypted keys; the UI only ever sees a masked hint (`…a9F2`).
 - Every provider is called through the OpenAI-compatible `/chat/completions`, `/embeddings`, `/models` shape.
-- Priority-ordered fallback per task group, skipping providers in cooldown (Valkey key `ai_cooldown:<id>`, 60 s on network error, 300 s on 401/403/429/5xx).
+- Priority-ordered fallback per model group, skipping providers and models in cooldown (Valkey keys `ai_cooldown:<provider>` and `ai_cooldown:<provider>:<model>`). Cooldowns as built: 429 waits the provider's `retry-after` (60 s when absent); 5xx 120 s; timeout or network error 60 s; 401, 402 / no credit and 403 300 s. Errors that belong to one model (403 "not allowed", a per-model 429, an unknown model) cool or skip only that model; the rest cool the whole provider.
 - Reasoning-model detection: empty reply with `finish_reason=length` means hidden thinking ate the budget; retry once with a larger floor and remember it for 7 days.
 - `accept` callback: a reply that fails validation (bad JSON, empty) falls through to the next provider.
 - **Key exfil guard:** when testing or listing models with a *stored* key, the destination is pinned to that provider's stored `base_url`. A caller-supplied URL never receives a decrypted stored key.
@@ -21,12 +21,12 @@ The AI Engine is where users paste provider keys, test them, pick models, and se
 | Task groups fixed (judge, enrich, agent, embed) | User-defined **model groups**: `smart`, `fast`, `bulk`, `reasoning`, `vision`, `embed`, `tools`; each an ordered list of (provider, model) |
 | No cost | `ai_models` price table (input, output, cached input per 1M tokens), editable, seeded with known prices |
 | Usage row has prompt + completion only | Also cached tokens, reasoning tokens, latency, status, agent, task, workspace, cost |
-| Sync DB write per call | Batched async writes via a Valkey list drained every 2 s |
+| Sync DB write per call | Batched async writes via a Valkey list drained every 2 s (**not implemented**: one row per call is written directly) |
 | No budgets | Per-agent and per-workspace budgets with alert at 80 % and auto-pause at 100 % |
 | No health view | Scheduled health check every 30 min; status chip per provider; history sparkline |
 | Fernet with key derived from `SECRET_KEY` | AES-256-GCM envelope encryption, `key_version` column, master key from Docker secret, rotation command |
 | No streaming | SSE streaming for agent chat |
-| No capability info | Per-model flags: tools, JSON mode, vision, embeddings, context window, reasoning |
+| No capability info | Per-model flags: tools, JSON mode, vision, embeddings, context window, reasoning (stored and shown; routing does **not** filter on them) |
 
 ## 3. Provider presets (seeded with no keys)
 
@@ -82,16 +82,29 @@ One button, three steps, each shown live with a status chip, timing and plain-la
 ## 6. Routing
 
 ```
-resolve(group="smart", needs={tools:true}) ->
+resolve(group="smart") ->
   for (provider, model) in group order:
-     skip if provider disabled, cooling, over budget, or model lacks a needed capability
-     call; on 401/403/429/5xx -> cool + next; on unusable reply -> next
+     skip if provider disabled, keyless, cooling (provider or this model), or model stale
+     call; on 401/402/403/429/5xx/timeout -> cool (provider or model) + next;
+     on unusable reply -> next
+  if only short waits remain (a per-minute 429): wait for them, bounded, then retry
   raise GatewayUnavailable(explain why: no key / disabled / all cooling)
 ```
 
+As designed but **not implemented**: `needs={...}` capability filtering, skipping
+over-budget providers in routing (budgets are enforced per agent before each call, which
+pauses the agent and asks), and a response cache. Request and response bodies are not
+stored: `llm_calls` keeps metadata (model, tokens, cost, latency, status, error class);
+prompts appear only in optional Langfuse traces, with secrets masked.
+
+The local model (Ollama, group `local`) is never used for agent work in another group; it
+answers only `TINY_TASKS` (colleague memory check, file understanding, page digests), side
+jobs routed through `cheap_groups` when the prompt fits its 4k context, and chat backup
+mode when every cloud model is down.
+
 Agents never name a provider directly; they name a group. Users reorder groups by drag and drop.
 
-**Cascade option per group:** try the first (cheap) model, validate the answer with a deterministic check or a tiny judge, escalate to the next model only on failure. Used for `bulk` and `fast`.
+**Cascade option per group** (**not implemented**; design intent): try the first (cheap) model, validate the answer with a deterministic check or a tiny judge, escalate to the next model only on failure. Today an `accept` check per call (valid JSON, non-empty) falls through to the next member, which covers the common case.
 
 ## 7. Usage and cost (AI Engine > Usage)
 

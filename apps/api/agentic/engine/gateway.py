@@ -2,8 +2,9 @@
 
 Agents name a group ("smart", "fast", ...), never a provider. The gateway walks the
 group's members in order and skips providers that are disabled, keyless or cooling
-down. On 401/403/429/5xx it cools the provider and moves on; a model the provider
-no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
+down. On 401/402/5xx/timeouts it cools the provider and moves on; a failure that belongs to
+one model (403 "not allowed", a per-model 429) cools only that model (P29); a model the
+provider no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
 """
 
 import asyncio
@@ -49,6 +50,8 @@ class GatewayReply:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     attempts: list[dict[str, Any]] = field(default_factory=list)
     reasoning_content: str = ""
+    # P29: the reply stopped at the token limit (finish_reason "length"): not a whole answer.
+    truncated: bool = False
 
 
 def prefix_hash(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> str:
@@ -64,6 +67,10 @@ def prefix_hash(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | No
     raw = json.dumps({"system": system, "tools": tools or []}, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
+
+# P29: failures that belong to one model, not the provider: cool that model only, so the
+# provider's other models keep answering.
+MODEL_SCOPED = frozenset({"forbidden", "rate_limited", "model_not_found"})
 
 # The only jobs the tiny local backup model may do when reached through another group.
 TINY_TASKS = frozenset({"colleague.memory", "file.understand", "browser.digest"})
@@ -142,6 +149,10 @@ async def chat(
             continue
         if wait := await store.cooling_for(p.id):
             attempts.append({"member": label, "skipped": f"cooling down for {wait} s"})
+            waits.append(wait)
+            continue
+        if wait := await store.model_cooling_for(p.id, model_id):
+            attempts.append({"member": label, "skipped": f"model cooling down for {wait} s"})
             waits.append(wait)
             continue
         if p.name == store.LOCAL_PROVIDER and group != "local" and task not in TINY_TASKS:
@@ -245,11 +256,15 @@ async def chat(
                 tool_calls=r.tool_calls,
                 attempts=attempts,
                 reasoning_content=r.reasoning_content,
+                truncated=r.finish_reason == "length",
             )
         if f is not None:
             if f.error_class == "model_not_found":
                 await _mark_stale(db, p, model_id)
-            await store.cool(p.id, f.cool_seconds)
+            if f.error_class in MODEL_SCOPED:
+                await store.cool_model(p.id, model_id, f.cool_seconds)
+            else:
+                await store.cool(p.id, f.cool_seconds)
             if f.error_class == "rate_limited" and f.cool_seconds:
                 waits.append(f.cool_seconds)
             else:
@@ -469,6 +484,8 @@ async def _walk(
         if f is not None:
             if f.error_class == "model_not_found":
                 await _mark_stale(db, p, model_id)
+            # Speech and pictures: one model per provider in practice, and the minutes
+            # pipeline reads the provider's rest to schedule its retry.
             await store.cool(p.id, f.cool_seconds)
             last = f.message
         attempts.append(

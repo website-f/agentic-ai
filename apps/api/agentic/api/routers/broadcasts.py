@@ -2,9 +2,10 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch, runtime
@@ -72,7 +73,9 @@ async def resolve_audience(db: AsyncSession, ws: str, body: BroadcastIn) -> tupl
     return agents, label[:300]
 
 
-async def _out(db: AsyncSession, b: Broadcast, with_receipts: bool = False) -> BroadcastOut:
+async def _out(
+    db: AsyncSession, b: Broadcast, with_receipts: bool = False, agent_where: Any = None
+) -> BroadcastOut:
     targets = (
         await db.scalar(
             select(func.count())
@@ -100,7 +103,10 @@ async def _out(db: AsyncSession, b: Broadcast, with_receipts: bool = False) -> B
                 .join(Agent, Agent.id == BroadcastReceipt.agent_id)
                 .join(Branch, Branch.id == Agent.branch_id)
                 .outerjoin(Department, Department.id == Agent.department_id)
-                .where(BroadcastReceipt.broadcast_id == b.id)
+                .where(
+                    BroadcastReceipt.broadcast_id == b.id,
+                    agent_where if agent_where is not None else true(),
+                )
                 .order_by(Agent.name)
             )
         ).all()
@@ -240,6 +246,17 @@ async def send(
     return await _out(db, b, with_receipts=True)
 
 
+def _visible(principal: Principal) -> Any:
+    """What they sent, and what reached an agent they can see."""
+    reached = (
+        select(BroadcastReceipt.broadcast_id)
+        .join(Agent, Agent.id == BroadcastReceipt.agent_id)
+        .where(BroadcastReceipt.broadcast_id == Broadcast.id, principal.scope.agent_where())
+        .exists()
+    )
+    return or_(Broadcast.sender == principal.actor, reached)
+
+
 @router.get("")
 async def history(
     response: Response,
@@ -250,16 +267,9 @@ async def history(
 ) -> list[BroadcastOut]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count). A scoped
     person sees what they sent and what reached an agent they can see."""
-    q = select(Broadcast).where(Broadcast.workspace_id == principal.workspace_id)
-    cond = principal.scope.agent_where()
-    if cond is not None:
-        reached = (
-            select(BroadcastReceipt.broadcast_id)
-            .join(Agent, Agent.id == BroadcastReceipt.agent_id)
-            .where(BroadcastReceipt.broadcast_id == Broadcast.id, cond)
-            .exists()
-        )
-        q = q.where(or_(Broadcast.sender == principal.actor, reached))
+    q = select(Broadcast).where(
+        Broadcast.workspace_id == principal.workspace_id, _visible(principal)
+    )
     rows = await paging.paginate(
         db,
         q,
@@ -277,9 +287,16 @@ async def detail(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> BroadcastOut:
-    b = await db.get(Broadcast, broadcast_id)
-    if b is None or b.workspace_id != principal.workspace_id:
+    # P29: the same rule as the list, and only the replies of agents they can see.
+    b = await db.scalar(
+        select(Broadcast).where(
+            Broadcast.id == broadcast_id,
+            Broadcast.workspace_id == principal.workspace_id,
+            _visible(principal),
+        )
+    )
+    if b is None:
         raise api_error(
             status.HTTP_404_NOT_FOUND, "broadcast_not_found", "That broadcast is not here."
         )
-    return await _out(db, b, with_receipts=True)
+    return await _out(db, b, with_receipts=True, agent_where=principal.scope.agent_where())

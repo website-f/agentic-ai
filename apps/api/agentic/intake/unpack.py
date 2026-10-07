@@ -28,6 +28,7 @@ MAX_RATIO = 200  # uncompressed / compressed, for entries over RATIO_FLOOR
 RATIO_FLOOR = 1024 * 1024
 MAX_FOLDER = 300
 MAX_PATH = 500
+MAX_SKIPPED = 200  # P29: skip lines kept per upload (the rest are only counted)
 
 JUNK_NAMES = frozenset({".ds_store", "thumbs.db", "desktop.ini", ".localized", "icon\r"})
 JUNK_DIRS = frozenset({"__macosx", ".git", ".svn"})
@@ -62,8 +63,13 @@ class Report:
     skipped: list[dict[str, str]] = field(default_factory=list)
     files: int = 0
     total: int = 0
+    skipped_more: int = 0  # P29: skips past MAX_SKIPPED, counted, not listed
+    junk_seen: set[str] = field(default_factory=set)
 
     def skip(self, path: str, reason: str) -> None:
+        if len(self.skipped) >= MAX_SKIPPED:
+            self.skipped_more += 1
+            return
         self.skipped.append({"path": path[:MAX_PATH], "reason": reason, "code": code_of(reason)})
 
 
@@ -165,14 +171,18 @@ def _note_junk(report: Report, parts: list[str], where: str) -> None:
     for i, p in enumerate(parts[:-1]):
         if p.lower() in JUNK_DIRS:
             key = lead + "/".join(parts[: i + 1]) + "/"
-            if not any(s["path"] == key for s in report.skipped):
+            if key not in report.junk_seen:
+                report.junk_seen.add(key)
                 report.skip(key, REASON_JUNK)
             return
     report.skip(lead + "/".join(parts), REASON_JUNK)
 
 
-def _open(data: bytes) -> zipfile.ZipFile:
+def _open(data: bytes | io.BytesIO) -> zipfile.ZipFile:
     try:
+        if isinstance(data, io.BytesIO):  # P29: the upload's own buffer, not a copy
+            data.seek(0)
+            return zipfile.ZipFile(data)
         return zipfile.ZipFile(io.BytesIO(data))
     except (zipfile.BadZipFile, OSError, ValueError) as e:
         raise UnpackError(str(e)) from e
@@ -184,7 +194,7 @@ def _read(zf: zipfile.ZipFile, info: zipfile.ZipInfo, limit: int) -> bytes:
     return data
 
 
-def entries(data: bytes, zip_name: str, base: str = "") -> Iterator[Entry | Report]:
+def entries(data: bytes | io.BytesIO, zip_name: str, base: str = "") -> Iterator[Entry | Report]:
     """Yield each document in the zip, then the Report (always last).
 
     Folders: the zip's own name is the top folder unless everything already sits in one

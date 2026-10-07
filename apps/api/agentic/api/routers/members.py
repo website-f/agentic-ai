@@ -2,11 +2,20 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...assistants import access as assistant_access
 from ...core.db import get_db
 from ...core.security import SCOPED_ROLES, can, hash_password, temp_password
 from ...i18n import Msg
 from ...i18n.labels import role_label
-from ...models import Agent, AuthSession, Branch, Department, Membership, User
+from ...models import (
+    Agent,
+    AuthSession,
+    Branch,
+    Department,
+    Membership,
+    PushSubscription,
+    User,
+)
 from ...services import audit
 from ..deps import Principal, api_error, current_principal, require
 from ..schemas import (
@@ -328,6 +337,10 @@ async def update_member(
         before=before,
         after={"role": body.role, "branch_id": branch_id, "department_id": department_id},
     )
+    if before["role"] != body.role:  # P30: assistants follow the role (kept, never deleted)
+        await assistant_access.follow_role(
+            db, principal.workspace_id, user_id, body.role, principal.actor
+        )
     await db.commit()
     await db.refresh(m)
     return _out(m, await _names(db, principal.workspace_id))
@@ -371,6 +384,7 @@ async def remove_member(
 @router.post("/{user_id}/reset-password")
 async def reset_password(
     user_id: str,
+    response: Response,
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> TempPasswordOut:
@@ -382,12 +396,35 @@ async def reset_password(
     if not _member_in_scope(principal, m):
         raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
     _check_can_touch(principal, m.role)
+    # P29: a password opens every workspace the person is in. Resetting it from here must not
+    # hand this admin someone's place elsewhere (an owner there, added here as a viewer).
+    elsewhere = await db.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(Membership.user_id == user_id, Membership.workspace_id != principal.workspace_id)
+    )
+    if elsewhere:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "member_elsewhere",
+            "This person also belongs to another workspace, so only they can change their "
+            "password (Change password).",
+        )
     password = temp_password()
     m.user.password_hash = hash_password(password)
-    m.user.must_change_password = True
+    m.user.must_change_password = True  # the temp password only lets them set a new one
+    # Every device signs out, and phones stop getting approval buttons until they sign in.
     await db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
+    await db.execute(delete(PushSubscription).where(PushSubscription.user_id == user_id))
     await audit.record(
-        db, principal.workspace_id, principal.actor, "member.password_reset", target=user_id
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.password_reset",
+        target=user_id,
+        note="sessions and push devices revoked; new password required at next sign-in",
     )
     await db.commit()
+    # Shown once: never cached, never logged or audited.
+    response.headers["Cache-Control"] = "no-store"
     return TempPasswordOut(temp_password=password)

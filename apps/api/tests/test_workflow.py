@@ -22,6 +22,8 @@ class FakeRun:
         self.steps = steps
         self.log: list[tuple] = []
         self.learn_fails = False
+        self.apply_fails = False
+        self.finish_results: list[dict | None] = []  # P29: what each finish returns
 
     def activities(self):
         @activity.defn(name="task_start")
@@ -39,14 +41,17 @@ class FakeRun:
         @activity.defn(name="task_apply_approval")
         async def task_apply_approval(approval_id: str) -> None:
             self.log.append(("apply", approval_id))
+            if self.apply_fails:
+                raise RuntimeError("database down")
 
         @activity.defn(name="task_expire_approval")
         async def task_expire_approval(approval_id: str) -> None:
             self.log.append(("expire", approval_id))
 
         @activity.defn(name="task_finish")
-        async def task_finish(task_id: str, state: str, message: str | None) -> None:
+        async def task_finish(task_id: str, state: str, message: str | None) -> dict | None:
             self.log.append(("finish", state, message))
+            return self.finish_results.pop(0) if self.finish_results else None
 
         @activity.defn(name="brain_learn_task")
         async def brain_learn_task(task_id: str) -> int:
@@ -149,3 +154,29 @@ async def test_step_out_of_retries_marks_the_task_failed(env):
     assert [x[0] for x in fake.log].count("step") == 3  # STEP_RETRY attempts
     finish = next(x for x in fake.log if x[0] == "finish")
     assert finish[1] == "failed" and "could not run the step" in finish[2]
+
+
+async def test_a_fix_continues_the_same_run(env):
+    """P29: a self-check or goal fix loops back into the steps of the SAME workflow, so a
+    parent or a schedule waiting on it gets the fixed answer, not "done" too early."""
+    fake = FakeRun(
+        [
+            {"state": "done", "message": "First answer."},
+            {"state": "done", "message": "Fixed answer."},
+        ]
+    )
+    fake.finish_results = [{"continue": True}, None]
+    assert await _run(env, fake) == "done"
+    kinds = [x[0] for x in fake.log]
+    assert kinds == ["start", "step", "finish", "step", "finish", "learn", "reflect"]
+    assert fake.log[4] == ("finish", "done", "Fixed answer.")
+
+
+async def test_a_failed_follow_up_finishes_the_task_as_failed(env):
+    """P29: applying a decision that keeps failing must not leave the task 'running'."""
+    fake = FakeRun([{"state": "needs_approval", "approval_id": "ap_9", "timeout_seconds": DAY}])
+    fake.apply_fails = True
+    assert await _run(env, fake, signal_after="ap_9") == "failed"
+    assert [x[0] for x in fake.log].count("apply") == 3  # STEP_RETRY attempts
+    finish = next(x for x in fake.log if x[0] == "finish")
+    assert finish[1] == "failed" and "could not apply the decision" in finish[2]

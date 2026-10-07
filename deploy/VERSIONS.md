@@ -1,39 +1,51 @@
 # Pinned versions
 
-Recorded at P0 (2026-10-01). Lockfiles (`apps/api/uv.lock`, `pnpm-lock.yaml`) are the source of truth for libraries; this table tracks images and the headline packages.
+Lockfiles (`apps/api/uv.lock`, `pnpm-lock.yaml`) are the source of truth for libraries; this
+table tracks images and the headline packages. Checked against `docker-compose.yml`, the
+Dockerfiles in `deploy/`, `apps/*/requirements.txt` and the lockfiles on 2026-10-07.
 
 ## Images
 
-Updated at P8 (2026-10-02). Digests are the multi-arch index digests that were pulled and
-tested; pin them (`image: name:tag@sha256:...`) in the VPS copy if you want byte-for-byte
-repeatable deploys, and re-scan with Trivy whenever you move them.
+Compose pins every upstream image by **version tag** (no digests), except WAHA: locally it
+follows `WAHA_IMAGE` (default `latest`), and on a VPS `docker-compose.vps.yml` requires
+`WAHA_IMAGE` to be pinned (`.env.vps.example` carries a digest). To make another image
+byte-for-byte repeatable, add `@sha256:...` to its tag in your server's copy and re-scan
+with Trivy when you move it.
 
-| Service | Image | Digest | Note |
-|---|---|---|---|
-| postgres | `pgvector/pgvector:0.8.6-pg17-trixie` | `sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6` | PostgreSQL 17.11 + pgvector 0.8.6, runs as 999 |
-| valkey | `valkey/valkey:8.1.10-alpine` | `sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507` | runs as 999 |
-| temporal | `temporalio/auto-setup:1.29.7` | `sha256:f14912b699cf73015ad5c4fc18d522d4b014db90e794039214dfb7c022c2644f` | Last auto-setup tag. Moving to `temporalio/server` + an admin-tools schema job is still open |
-| temporal-ui | `temporalio/ui:2.54.1` | `sha256:ff0943fe532b8e33c46cd28b29e81e0ce0b6f55b9ee50a38ef1b437cc4de3fa5` | |
-| api / worker base | `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.10.7` | built | `agentic-py`, Debian 13, Python 3.12.14, OpenSSL 3.5.7, 0 critical (Trivy). Meeting minutes add Debian's `ffmpeg` package (7.1, apt, about +90 MB); re-scan after the next build |
-| backup base | `postgres:17.11-alpine3.24` + restic 0.18.1 | built | `agentic-backup`, gosu removed, 0 critical |
-| web build | `node:22-alpine` | `sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32` | pnpm 10.18.0 via corepack |
-| web runtime | `nginxinc/nginx-unprivileged:1.31-alpine` | built | `agentic-web`, about 86 MB, 0 critical / 0 high |
-| langfuse-web (obs) | `langfuse/langfuse:4.49.0` | `sha256:a9d1951e9e6cc1b5ad48bca3aefd31358a54fde4f84b9681f8ace2ff076c0c03` | MIT core; OTLP ingestion |
-| langfuse-worker (obs) | `langfuse/langfuse-worker:4.49.0` | `sha256:40df08a1d15ecfa9542f1fd3b481f6d1afa16404a512e1ff51bc85b72144cedd` | |
-| clickhouse (obs) | `clickhouse/clickhouse-server:25.12.11.4` | `sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6` | Apache-2.0, runs as 101 |
-| rustfs (obs) | `rustfs/rustfs:1.0.0` | `sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff` | S3, Apache-2.0, runs as 10001 |
-| obs-bucket job | `rclone/rclone:1.71` | `sha256:3103526c506266a9ecdf064efe99bf3677d92ef6407af124d8c56b4f49cbaa51` | MIT |
+| Service | Image | Note |
+|---|---|---|
+| postgres | `pgvector/pgvector:0.8.6-pg17-trixie` | PostgreSQL 17 + pgvector 0.8.6, runs as 999 |
+| valkey | `valkey/valkey:8.1.10-alpine` | runs as 999 |
+| temporal | `temporalio/auto-setup:1.29.7` | Last auto-setup tag; moving to `temporalio/server` + a schema job is still open. Runs as 1000 |
+| temporal-ui | `temporalio/ui:2.54.1` | runs as 1000 |
+| api / worker | built: `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.10.7` | `agentic-py`, Debian 13, apt `ffmpeg` for meeting minutes; runs as 10001 |
+| web | built: `node:22-alpine` (pnpm via corepack) → `nginxinc/nginx-unprivileged:1.31-alpine` | `agentic-web`, runs as 101 |
+| browser | built: `python:3.12-slim-trixie` + `camoufox==0.5.6` + `playwright==1.62.0` (Firefox deps from Playwright, Camoufox binary fetched at build) | `agentic-browser`, runs as 10001 |
+| egress | built: `python:3.12-slim-trixie`, standard library only | `agentic-egress`, runs as 10001 |
+| sandbox | built: `python:3.12-slim-trixie` + `apps/sandbox/requirements.txt` (fastapi, uvicorn, pydantic, openpyxl, matplotlib, pillow, python-docx; lower bounds only, resolved at build) | `agentic-sandbox`, runs as its own uid 10010 |
+| backup | built: `postgres:17.11-alpine3.24` + restic 0.18.1 (Alpine package) | `agentic-backup`, gosu removed, runs as 10001 |
+| ollama, ollama-pull | `ollama/ollama:0.34.0` | local backup model `qwen3:0.6b` (`AGENTIC_LOCAL_LLM_MODEL`); runs as root with all capabilities dropped |
+| waha | `${WAHA_IMAGE}` (`devlikeapro/waha`) | NOWEB engine; runs as root with all capabilities dropped. Pin per server: a new image may not read old sessions |
+| practice-portal (demo) | `agentic-py:dev` | dev/demo profile only |
+| langfuse-web (obs) | `langfuse/langfuse:4.49.0` | MIT core; OTLP ingestion |
+| langfuse-worker (obs) | `langfuse/langfuse-worker:4.49.0` | |
+| clickhouse (obs) | `clickhouse/clickhouse-server:25.12.11.4` | Apache-2.0, runs as 101 |
+| rustfs (obs) | `rustfs/rustfs:1.0.0` | S3, Apache-2.0 |
+| obs-bucket job | `rclone/rclone:1.71` | MIT |
 
-Tools used, not shipped: `grafana/k6` (load test), `aquasec/trivy` (image scan).
+Tools used, not shipped: `grafana/k6` (load test), `aquasec/trivy` (image scan, by hand: there
+is no CI).
 
 ## Libraries (headline)
 
 | Area | Package | Version |
 |---|---|---|
 | API | fastapi | 0.142.2 |
+| API | uvicorn | 0.54.0 |
 | API | sqlalchemy | 2.1.1 |
 | API | temporalio | 1.34.0 |
 | API | redis (Valkey client) | 8.1.0 |
+| Browser | camoufox / playwright | 0.5.6 / 1.62.0 |
 | Web | react / react-dom | 19.3.0 |
 | Web | @tanstack/react-router | 1.170 |
 | Web | @tanstack/react-query | 5.104 |

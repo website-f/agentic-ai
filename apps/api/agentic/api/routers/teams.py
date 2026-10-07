@@ -10,8 +10,11 @@ from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch
+from ...assistants import access as assistant_access
 from ...core.db import get_db
+from ...core.security import can
 from ...i18n import render
+from ...i18n.labels import role_label
 from ...models import (
     Agent,
     AgentPing,
@@ -137,6 +140,26 @@ async def _seen_agent(db: AsyncSession, principal: Principal, agent_id: str | No
     a = await db.get(Agent, agent_id) if agent_id else None
     if a is None or a.workspace_id != principal.workspace_id or not principal.scope.sees_agent(a):
         raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
+    return a
+
+
+async def _schedulable_agent(db: AsyncSession, principal: Principal, agent_id: str | None) -> Agent:
+    """P30: who may put an agent on a schedule. Staff (scope "own") only their own AI twin,
+    never a leftover agent or an assistant; nobody a dormant assistant (assistants/access)."""
+    a = await _seen_agent(db, principal, agent_id)
+    if principal.scope.kind == "own" and not (a.is_twin and a.owner_user_id == principal.user.id):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "twin_only",
+            "Staff put only their own AI twin on a schedule.",
+        )
+    if await assistant_access.dormant(db, a):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "assistant_dormant",
+            "{name} is paused: personal assistants are for people who manage others.",
+            name=a.name,
+        )
     return a
 
 
@@ -393,7 +416,7 @@ async def create_schedule(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    agent = await _seen_agent(db, principal, body.agent_id)
+    agent = await _schedulable_agent(db, principal, body.agent_id)
     tz = body.timezone or (await _ws(db, principal.workspace_id)).timezone
     try:
         schedules.next_runs(body.cron, tz)
@@ -436,7 +459,7 @@ async def update_schedule(
     s = await _schedule(db, principal, schedule_id)
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
     if "agent_id" in changes:
-        await _seen_agent(db, principal, changes["agent_id"])
+        await _schedulable_agent(db, principal, changes["agent_id"])
     if "cron" in changes:
         changes["cron"] = " ".join(changes["cron"].split())
     try:
@@ -614,9 +637,18 @@ async def list_incidents(
 @router.post("/incidents/{incident_id}/resolve")
 async def resolve_incident(
     incident_id: int,
-    principal: Principal = Depends(require("org.read")),
+    principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    # P29: closing an incident changes things: work.write, on top of seeing incidents
+    # (org.read, the workspace roles). A viewer looks; it does not resolve.
+    if not can(principal.role, "org.read"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Your role ({role}) cannot do this.",
+            role=role_label(principal.role),
+        )
     i = await db.get(Incident, incident_id)
     if i is None or i.workspace_id != principal.workspace_id:
         raise api_error(status.HTTP_404_NOT_FOUND, "incident_not_found", "Not here.")

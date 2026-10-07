@@ -318,3 +318,49 @@ async def test_the_driver_ticks_until_finished_and_wakes_on_a_poke(env):  # noqa
         await env.sleep(timedelta(minutes=2))  # ...and the timer keeps it going
         assert await handle.result() == "finished"
     assert ticks == ["wr_1", "wr_1", "wr_1"]
+
+
+async def test_two_steps_with_the_same_title_get_their_own_tasks(client, llm, temporal, driver):
+    """P29: the crash-safe reuse of a step's task matches the step (node id), not its title."""
+    o = await office(client)
+    fin = await new_agent(client, o, "Faiz", "Finance")
+    same = {
+        "nodes": [
+            {"id": "s", "type": "start", "title": "In"},
+            {"id": "a", "type": "step", "title": "Check", "role": "Finance", "body": "First."},
+            {"id": "b", "type": "step", "title": "Check", "role": "Finance", "body": "Second."},
+            {"id": "e", "type": "end", "title": "Closed"},
+        ],
+        "edges": [
+            {"id": "e1", "from": "s", "to": "a"},
+            {"id": "e2", "from": "a", "to": "b"},
+            {"id": "e3", "from": "b", "to": "e"},
+        ],
+    }
+    wf = await client.post(
+        "/api/workflows", json={"name": "Twice", "graph": same}, headers=csrf(client)
+    )
+    assert wf.status_code == 201, wf.text
+    r = await client.post(
+        f"/api/workflows/{wf.json()['id']}/runs",
+        json={
+            "title": "Two checks",
+            "input": "x",
+            "branch_id": o["branch"]["id"],
+            "assign": {"a": fin["id"], "b": fin["id"]},
+        },
+        headers=csrf(client),
+    )
+    assert r.status_code == 201, r.text
+    run_id = r.json()["id"]
+    await tick(run_id)
+    run = (await client.get(f"/api/workflow-runs/{run_id}")).json()
+    a = step(run, "a")
+    await finish_task(a["task_id"], result="first check done")
+    await tick(run_id)
+    run = (await client.get(f"/api/workflow-runs/{run_id}")).json()
+    b = step(run, "b")
+    assert b["status"] == "running" and b["task_id"] != a["task_id"]
+    async with SessionLocal() as db:
+        t = await db.get(Task, b["task_id"])
+        assert t is not None and "Second." in t.brief

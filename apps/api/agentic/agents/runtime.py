@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -307,6 +307,14 @@ _PROMISE = re.compile(
 )
 
 
+CUT_NUDGE = (
+    "Your last reply was cut off by the length limit, so it is incomplete. Give the complete "
+    "final answer again, shorter: summarise, or save long content with your tools (a page or "
+    "a document) and point to it."
+)
+CUT_NOTE = "(Note: this answer was cut off at the length limit and may be incomplete.)"
+
+
 def promises_more_work(text: str | None) -> bool:
     return bool(_PROMISE.search((text or "").replace("\u2019", "'")))
 
@@ -340,6 +348,55 @@ async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
     except Exception as e:  # noqa: BLE001 - a broken tool must not kill the task
         log.warning("tool %s failed", name, exc_info=True)
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
+
+
+# P29: tools with an effect outside the conversation. A step retried after the tool ran but
+# before its result was saved must not do it again (a second notice, a second meeting).
+SIDE_EFFECTS = frozenset(
+    {
+        "notify_person",
+        "message_agent",
+        "calendar_create_event",
+        "calendar_update_event",
+        "calendar_cancel_event",
+        "create_task",
+        "schedule_task",
+        "cancel_schedule",
+        "email_draft",
+        "email_draft_reply",
+        "tool_call",
+    }
+)
+ONCE_TTL = 7 * 86400
+_RUNNING = "\x00running"
+MAYBE_DONE = (
+    "This action may already have been done: the worker restarted while it was running, so "
+    "it was not repeated. Check whether it happened before trying again."
+)
+
+
+async def run_tool_once(ctx: ToolContext, name: str, args: dict[str, Any], call_id: str) -> str:
+    """run_tool, at most once per (task, call) for SIDE_EFFECTS tools: a retry gets the
+    recorded result instead of a second run (P29)."""
+    if name not in SIDE_EFFECTS or ctx.task is None or not call_id:
+        return await run_tool(ctx, name, args)
+    from ..core.valkey import valkey
+
+    key = f"toolonce:{ctx.task.id}:{call_id}"
+    try:
+        claimed = await valkey().set(key, _RUNNING, nx=True, ex=ONCE_TTL)
+        prior = None if claimed else await valkey().get(key)
+    except Exception:  # noqa: BLE001 - no Valkey: run it, as before
+        log.warning("no idempotency marker for %s", key, exc_info=True)
+        return await run_tool(ctx, name, args)
+    if not claimed:
+        return MAYBE_DONE if prior in (None, _RUNNING) else str(prior)
+    result = await run_tool(ctx, name, args)
+    try:
+        await valkey().set(key, result, ex=ONCE_TTL)
+    except Exception:  # noqa: BLE001
+        log.warning("could not record the result for %s", key, exc_info=True)
+    return result
 
 
 HELP_HINT = (
@@ -495,6 +552,9 @@ async def _pending_calls(db: AsyncSession, history: list[AgentMessage]) -> list[
     return [c for c in last.tool_calls or [] if c.get("id") not in answered]
 
 
+DECIDED = ("approved", "denied", "answered", "expired")
+
+
 async def _resolve_calls(
     db: AsyncSession, ctx: ToolContext, task: Task, history: list[AgentMessage]
 ) -> StepResult | None:
@@ -504,15 +564,24 @@ async def _resolve_calls(
         fn = call.get("function") or {}
         name = str(fn.get("name", ""))
 
-        waiting = await db.scalar(
-            select(Approval).where(
-                Approval.task_id == task.id,
-                Approval.tool_call_id == call_id,
-                Approval.status == "pending",
-            )
+        prior = await db.scalar(
+            select(Approval)
+            .where(Approval.task_id == task.id, Approval.tool_call_id == call_id)
+            .order_by(Approval.created_at.desc())
+            .limit(1)
         )
-        if waiting:
-            return _waiting(waiting)
+        if prior is not None and prior.status == "pending":
+            if task.status != "blocked":  # P29: a new run (relaunched) waits on it again
+                await _block_for(db, task, agent, prior)
+            return _waiting(prior)
+        approved_team = False
+        if prior is not None and prior.status in DECIDED:
+            if prior.status == "approved" and name in TEAM_TOOLS:
+                approved_team = True  # P29: an approved team call goes ahead below
+            else:
+                # P29: a decision its run never applied (the run ended first): apply it now.
+                await _apply_decision(db, prior)
+                continue
 
         args, err = _parse_args(fn.get("arguments"))
         if err or args is None:
@@ -537,8 +606,11 @@ async def _resolve_calls(
             )
 
         decision = await policy.evaluate(agent, name, args)
-        if name in TEAM_TOOLS and decision.effect != "deny":
-            # Coordination inside the office, no outside effect: never waits for approval.
+        if name in TEAM_TOOLS and (
+            decision.effect == "allow" or (approved_team and decision.effect != "deny")
+        ):
+            # Coordination inside the office, no outside effect: waits for approval only when
+            # a manager set the tool to "ask" for this agent (P29).
             team = await _team_call(db, ctx, task, name, call_id, args)
             if team is not None:
                 return team
@@ -594,7 +666,7 @@ async def _resolve_calls(
         await activity(
             agent, task, "tool_call", tool=name, label=TOOLS[name].label, args=_brief(args)
         )
-        result = await run_tool(ctx, name, args)
+        result = await run_tool_once(replace(ctx, call_id=call_id), name, args, call_id)
         if _stuck(name, result) and await _help_hint_once(db, task, agent):
             result += HELP_HINT
         await _add_tool_result(
@@ -711,6 +783,11 @@ async def _team_call(
         others = await meetings.resolve_agents(
             db, task.workspace_id, [str(r) for r in refs] if isinstance(refs, list) else []
         )
+        for o in others:  # P29: never someone's private assistant or a walled-off company
+            if not await delegation.visible(db, agent, o):
+                raise meetings.MeetingError(
+                    f"No active agent called {o.name!r} you can meet. Use team_directory."
+                )
         m = await meetings.create(
             db,
             task.workspace_id,
@@ -774,6 +851,40 @@ async def _budget_gate(
     )
 
 
+async def _block_for(db: AsyncSession, task: Task, agent: Agent, a: Approval) -> str:
+    """Mark the task blocked on approval `a`: what it waits for, who decides, what to do."""
+    reason, tool = a.reason or "", a.tool_name
+    if a.kind == "question":
+        what, note = f"Question: {reason}", f"asked: {reason}"
+        action = "Answer the question"
+    elif a.kind == "budget":
+        what, note = "Over budget: approve more to continue", "hit its budget and asked for more"
+        action = "Approve more budget or stop it"
+    else:
+        label = TOOLS[tool].label if tool in TOOLS else tool
+        what, note, action = (
+            f"Wants to use {label}",
+            f"wants to use {label}",
+            f"Approve or deny: {label}",
+        )
+    # P21: a named owner for the decision: the person who gave the task, else the agent's
+    # owner; None = whoever may decide approvals for this agent.
+    owner = task.created_by if (task.created_by or "").startswith("user:") else None
+    if owner is None and agent.owner_user_id:
+        owner = f"user:{agent.owner_user_id}"
+    await set_task_status(
+        db,
+        task,
+        "blocked",
+        actor=f"agent:{agent.id}",
+        note=note,
+        blocked_reason=what[:300],
+        blocked_owner=owner,
+        blocked_action=action[:300],
+    )
+    return what
+
+
 async def _create_approval(
     db: AsyncSession,
     task: Task,
@@ -802,31 +913,7 @@ async def _create_approval(
     )
     db.add(a)
     await db.flush()
-    if kind == "question":
-        what, note = f"Question: {reason}", f"asked: {reason}"
-        action = "Answer the question"
-    elif kind == "budget":
-        what, note = "Over budget: approve more to continue", "hit its budget and asked for more"
-        action = "Approve more budget or stop it"
-    else:
-        what = f"Wants to use {TOOLS[tool].label}"
-        note = f"wants to use {TOOLS[tool].label}"
-        action = f"Approve or deny: {TOOLS[tool].label}"
-    # P21: a named owner for the decision: the person who gave the task, else the agent's
-    # owner; None = whoever may decide approvals for this agent.
-    owner = task.created_by if (task.created_by or "").startswith("user:") else None
-    if owner is None and agent.owner_user_id:
-        owner = f"user:{agent.owner_user_id}"
-    await set_task_status(
-        db,
-        task,
-        "blocked",
-        actor=f"agent:{agent.id}",
-        note=note,
-        blocked_reason=what[:300],
-        blocked_owner=owner,
-        blocked_action=action[:300],
-    )
+    what = await _block_for(db, task, agent, a)
     await events.publish(
         task.workspace_id,
         "approval.requested",
@@ -1033,6 +1120,26 @@ async def run_task_step(task_id: str) -> StepResult:
             )
             await db.commit()
             answer = reply.content
+            if reply.truncated:
+                # P29: a reply cut off at the token limit is not a final answer. Ask once for
+                # it again, shorter; a second cut-off answer is handed in flagged.
+                cut = await db.scalar(
+                    select(TaskEvent.id).where(
+                        TaskEvent.task_id == task.id, TaskEvent.kind == "truncated"
+                    )
+                )
+                if not cut:
+                    _add(db, agent, "user", task_id=task.id, content=CUT_NUDGE)
+                    await task_event(
+                        db,
+                        task,
+                        "truncated",
+                        "system",
+                        "the answer was cut off at the length limit; asked for it again",
+                    )
+                    continue
+                if not task.output_schema:
+                    answer = f"{answer}\n\n{CUT_NOTE}"
             if task.output_schema:
                 value, why = delegation.check_output(reply.content, task.output_schema)
                 if why is not None:
@@ -1105,13 +1212,60 @@ async def start_run(task_id: str) -> None:
         await agent_status(agent, "working", task)
 
 
-async def finish(task_id: str, state: str, message: str | None) -> None:
-    from ..teams import blockers, review  # late: they import this module
-    from . import browser_tools, launch  # late: both import this module
+# P29: the model calls a self-check or goal fix gets back, on top of what is left (never a
+# reset of the task's call limit, so a looping task still stops).
+FIX_CALLS = 10
+SETTLED = ("done", "failed", "cancelled")
+CONTINUE = {"continue": True}
 
-    await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
+
+async def _fix_pending(db: AsyncSession, task: Task) -> bool:
+    """finish() already asked for a fix and the agent has not answered since: a retried
+    finish must not judge (or count) the same answer twice."""
+    last = await db.scalar(
+        select(AgentMessage)
+        .where(AgentMessage.task_id == task.id)
+        .order_by(AgentMessage.id.desc())
+        .limit(1)
+    )
+    return last is not None and last.role == "user" and bool((last.meta or {}).get("fix"))
+
+
+async def _keep_working(
+    db: AsyncSession,
+    task: Task,
+    agent: Agent,
+    nudge: str,
+    kind: str,
+    note: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send the work back to the agent inside the same run (P29): the nudge, the extra calls
+    and the event land in one commit, and the workflow loops back into its steps."""
+    _add(db, agent, "user", task_id=task.id, content=nudge, meta={"fix": kind})
+    task.steps_used = max(0, task.steps_used - FIX_CALLS)
+    await task_event(db, task, kind, "system", note[:300], data)
+    await agent_status(agent, "working", task)
+    return CONTINUE
+
+
+async def finish(task_id: str, state: str, message: str | None) -> dict[str, Any] | None:
+    """Settle a run. Returns CONTINUE when the self-check or the goal judge sends the work
+    back: the task stays running and the same workflow continues (P29). Safe to retry."""
+    from ..teams import blockers, review  # late: they import this module
+    from . import browser_tools  # late: it imports this module
+
     async with SessionLocal() as db:
-        task, agent, ws = await _load(db, task_id)
+        try:
+            task, agent, ws = await _load(db, task_id)
+        except LookupError:
+            log.warning("finish: task %s is gone", task_id)
+            return None
+        # P29: a retried finish after the task was settled does nothing twice.
+        if task.status in SETTLED or (state == "done" and task.status == "review"):
+            return None
+        if state == "done" and await _fix_pending(db, task):
+            return CONTINUE
         unchecked = False
         reviewing = task.source == "review"  # P21: a reviewer agent's verdict on others' work
         # P19: a reviewer reads real work once before it is handed in; one chance to fix.
@@ -1124,42 +1278,31 @@ async def finish(task_id: str, state: str, message: str | None) -> None:
                 if rv.ok
                 else f"self-check found {len(rv.issues)} problem(s); fixing before handing in"
             )
-            await task_event(
-                db,
-                task,
-                "selfcheck",
-                "system",
-                note,
-                {"ok": rv.ok, "checked": rv.checked, "issues": rv.issues},
-            )
+            data = {"ok": rv.ok, "checked": rv.checked, "issues": rv.issues}
             if not rv.ok:
-                _add(db, agent, "user", task_id=task.id, content=verify.nudge(rv.issues))
-                await db.commit()
-                await launch.launch(db, task, "self-check")
-                return
+                return await _keep_working(
+                    db, task, agent, verify.nudge(rv.issues), "selfcheck", note, data
+                )
+            await task_event(db, task, "selfcheck", "system", note, data)
         if state == "done" and task.goal and task.goal_tries < goals.MAX_GOAL_TRIES:
             verdict = await goals.judge(db, task, agent, message)
             if not verdict.met:
-                task.goal_tries += 1
-                _add(db, agent, "user", task_id=task.id, content=goals.nudge(verdict.missing))
-                await db.commit()
-                await task_event(
+                task.goal_tries += 1  # committed with the nudge: counted once per judgement
+                return await _keep_working(
                     db,
                     task,
+                    agent,
+                    goals.nudge(verdict.missing),
                     "goal",
-                    "system",
-                    f"goal not met ({task.goal_tries}/{goals.MAX_GOAL_TRIES}): {verdict.missing}"[
-                        :300
-                    ],
+                    f"goal not met ({task.goal_tries}/{goals.MAX_GOAL_TRIES}): {verdict.missing}",
                 )
-                await launch.launch(db, task, "goal-loop")
-                return
             if not verdict.checked:
                 # P17: never pass a goal nobody checked; a person looks instead.
                 unchecked = True
                 await task_event(
                     db, task, "goal", "system", "no model could check the goal; sent for review"
                 )
+        await browser_tools.close_for_task(task_id)  # its browser goes when the task ends
         if state == "done" and not reviewing and not unchecked:
             # P21 review stages: a reviewer agent checks it before a person or done.
             try:
@@ -1235,95 +1378,110 @@ async def apply_approval(approval_id: str) -> None:
         a = await db.get(Approval, approval_id)
         if a is None:
             return
-        task, agent, ws = await _load(db, a.task_id)
-        answered = (
-            await db.scalar(
-                select(AgentMessage.id).where(
-                    AgentMessage.task_id == task.id,
-                    AgentMessage.role == "tool",
-                    AgentMessage.tool_call_id == a.tool_call_id,
-                )
+        await _apply_decision(db, a)
+
+
+async def _apply_decision(db: AsyncSession, a: Approval) -> None:
+    """apply_approval's work in a given session; also used when a new run finds a decision
+    its old run never applied (P29)."""
+    task, agent, ws = await _load(db, a.task_id)
+    answered = (
+        await db.scalar(
+            select(AgentMessage.id).where(
+                AgentMessage.task_id == task.id,
+                AgentMessage.role == "tool",
+                AgentMessage.tool_call_id == a.tool_call_id,
             )
-        ) is not None
-        if answered or a.status in ("pending", "cancelled"):
-            return
-        if a.kind == "budget":
-            # No tool message: the next step re-checks the budget (and fails if denied).
-            if a.status == "approved":
-                await budget.grant(
-                    db, agent, await budget.state(db, agent, ws.timezone), a.decided_by or "system"
-                )
-                await task_event(
-                    db, task, "budget", a.decided_by or "system", "approved more budget"
-                )
-            await set_task_status(
-                db,
-                task,
-                "running",
-                actor=f"agent:{agent.id}",
-                note="resumed after the budget decision",
-                blocked_reason=None,
-            )
-            await agent_status(agent, "working", task)
-            return
-        who = "a person"
-        if a.decided_by and a.decided_by.startswith("user:"):
-            user = await db.get(User, a.decided_by.removeprefix("user:"))
-            who = user.name if user else who
-        if a.status == "approved":
-            # "Always" never un-gates a high-risk tool from an approval card; a manager can
-            # still choose that deliberately in the agent's permissions.
-            tool = TOOLS.get(a.tool_name)
-            if a.scope == "always" and tool is not None and tool.risk != "high":
-                agent.tools = {**(agent.tools or {}), a.tool_name: "allow"}
-            result = await run_tool(
-                ToolContext(db=db, agent=agent, workspace=ws, task=task), a.tool_name, a.args
-            )
-            await activity(
-                agent, task, "tool_result", tool=a.tool_name, preview=_brief(result, 400)
-            )
-            await task_event(
-                db,
-                task,
-                "tool",
-                f"agent:{agent.id}",
-                f"used {TOOLS[a.tool_name].label} (approved)",
-                {"tool": a.tool_name, "args": a.args, "result_preview": result[:300]},
-            )
-        elif a.status == "denied":
-            result = (
-                f"{who} denied this request."
-                + (f" Reason: {a.answer}" if a.answer else "")
-                + " Continue without it, or finish and explain what is missing."
-            )
-            if (a.answer or "").strip():
-                await _learn_denial(db, agent, task, a, who)
-        elif a.status == "answered":
-            result = f"Answer from {who}: {a.answer}"
-        else:  # expired
-            result = (
-                "No one answered within 24 hours. Continue without it, or finish and "
-                "explain what is missing."
-            )
-        await _add_tool_result(
-            db,
-            agent,
-            task_id=task.id,
-            call_id=a.tool_call_id or "",
-            name=a.tool_name,
-            content=result,
-            query=task_query(task),
-            args=a.args,
         )
+    ) is not None
+    if answered or a.status in ("pending", "cancelled"):
+        return
+    if a.kind == "budget":
+        # No tool message: the next step re-checks the budget (and fails if denied).
+        if a.status == "approved":
+            await budget.grant(
+                db, agent, await budget.state(db, agent, ws.timezone), a.decided_by or "system"
+            )
+            await task_event(db, task, "budget", a.decided_by or "system", "approved more budget")
         await set_task_status(
             db,
             task,
             "running",
             actor=f"agent:{agent.id}",
-            note="resumed after the decision",
+            note="resumed after the budget decision",
             blocked_reason=None,
         )
         await agent_status(agent, "working", task)
+        return
+    who = "a person"
+    if a.decided_by and a.decided_by.startswith("user:"):
+        user = await db.get(User, a.decided_by.removeprefix("user:"))
+        who = user.name if user else who
+    if a.status == "approved":
+        # "Always" never un-gates a high-risk tool from an approval card; a manager can
+        # still choose that deliberately in the agent's permissions.
+        tool = TOOLS.get(a.tool_name)
+        if a.scope == "always" and tool is not None and tool.risk != "high":
+            agent.tools = {**(agent.tools or {}), a.tool_name: "allow"}
+        if a.tool_name in TEAM_TOOLS:
+            # P29: an approved team call runs in the next step (the workflow runs its
+            # children), so no tool result here.
+            await set_task_status(
+                db,
+                task,
+                "running",
+                actor=f"agent:{agent.id}",
+                note="resumed after the decision",
+                blocked_reason=None,
+            )
+            await agent_status(agent, "working", task)
+            return
+        call = a.tool_call_id or ""
+        ctx = ToolContext(db=db, agent=agent, workspace=ws, task=task, call_id=call or None)
+        result = await run_tool_once(ctx, a.tool_name, a.args, call)
+        await activity(agent, task, "tool_result", tool=a.tool_name, preview=_brief(result, 400))
+        await task_event(
+            db,
+            task,
+            "tool",
+            f"agent:{agent.id}",
+            f"used {TOOLS[a.tool_name].label} (approved)",
+            {"tool": a.tool_name, "args": a.args, "result_preview": result[:300]},
+        )
+    elif a.status == "denied":
+        result = (
+            f"{who} denied this request."
+            + (f" Reason: {a.answer}" if a.answer else "")
+            + " Continue without it, or finish and explain what is missing."
+        )
+        if (a.answer or "").strip():
+            await _learn_denial(db, agent, task, a, who)
+    elif a.status == "answered":
+        result = f"Answer from {who}: {a.answer}"
+    else:  # expired
+        result = (
+            "No one answered within 24 hours. Continue without it, or finish and "
+            "explain what is missing."
+        )
+    await _add_tool_result(
+        db,
+        agent,
+        task_id=task.id,
+        call_id=a.tool_call_id or "",
+        name=a.tool_name,
+        content=result,
+        query=task_query(task),
+        args=a.args,
+    )
+    await set_task_status(
+        db,
+        task,
+        "running",
+        actor=f"agent:{agent.id}",
+        note="resumed after the decision",
+        blocked_reason=None,
+    )
+    await agent_status(agent, "working", task)
 
 
 async def _learn_denial(db: AsyncSession, agent: Agent, task: Task, a: Approval, who: str) -> None:
@@ -1356,7 +1514,9 @@ async def _learn_denial(db: AsyncSession, agent: Agent, task: Task, a: Approval,
 
 async def expire_approval(approval_id: str) -> None:
     async with SessionLocal() as db:
-        a = await db.get(Approval, approval_id)
+        # P29: locked like decisions.decide, so a last-second decision and the expiry
+        # cannot both win.
+        a = await db.scalar(select(Approval).where(Approval.id == approval_id).with_for_update())
         if a is not None and a.status == "pending":
             a.status = "expired"
             a.decided_at = _now()
@@ -1426,6 +1586,63 @@ async def _backup_reply(
     return r
 
 
+OUTSIDE_HOLD = (
+    "Not done yet: you read outside content (an email, a page or a file) in this "
+    "conversation, so this needs the person's own confirmation. Tell them exactly what you "
+    "would set up and when, and ask them to reply yes."
+)
+_YES = re.compile(
+    r"^\s*(yes|ya|yah|yeah|yep|ok|okay|confirm(ed)?|go ahead|proceed|sure|do it|betul|setuju|"
+    r"boleh)\b[\s.!]*$",
+    re.I,
+)
+
+
+async def _outside_seen(db: AsyncSession, session_id: str, before: int) -> bool:
+    """A tool in this conversation already read outside text (P29: not just this turn)."""
+    return (
+        await db.scalar(
+            select(AgentMessage.id)
+            .where(
+                AgentMessage.session_id == session_id,
+                AgentMessage.role == "tool",
+                AgentMessage.id < before,
+                AgentMessage.name.in_(policy.OUTSIDE_CONTENT),
+            )
+            .limit(1)
+        )
+    ) is not None
+
+
+async def _confirms(db: AsyncSession, session_id: str, asked_id: int, text: str) -> bool:
+    """The person's message is a plain yes, and the agent's previous turn was held for
+    exactly that confirmation."""
+    if not _YES.match(text or ""):
+        return False
+    prev = await db.scalar(
+        select(AgentMessage.id)
+        .where(
+            AgentMessage.session_id == session_id,
+            AgentMessage.role == "user",
+            AgentMessage.id < asked_id,
+        )
+        .order_by(AgentMessage.id.desc())
+        .limit(1)
+    )
+    held = await db.scalar(
+        select(AgentMessage.id)
+        .where(
+            AgentMessage.session_id == session_id,
+            AgentMessage.role == "tool",
+            AgentMessage.id > (prev or 0),
+            AgentMessage.id < asked_id,
+            AgentMessage.content == OUTSIDE_HOLD,
+        )
+        .limit(1)
+    )
+    return held is not None
+
+
 async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks."""
@@ -1457,7 +1674,11 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
     # A person who could approve this agent's requests asking it directly (policy.py).
     approver = await policy.chat_approver(db, agent, session.user_id)
     used: list[str] = []
-    outside_read = False  # outside text was read this turn (policy.OUTSIDE_CONTENT)
+    # Outside text was read in this conversation (policy.OUTSIDE_CONTENT). P29: it persists
+    # across turns (the text is still in the context); the person's own "yes" right after
+    # the agent asked for confirmation is the confirmation.
+    outside_read = await _outside_seen(db, session.id, asked.id)
+    confirmed = outside_read and await _confirms(db, session.id, asked.id, text)
     for round_no in range(CHAT_ROUNDS):
         # The last round offers no tools: the agent answers from what it has found so far,
         # instead of the person getting "could not finish" after real work was done.
@@ -1506,6 +1727,8 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
         finally:
             await agent_thinking(agent, False)
         if not reply.tool_calls and (reply.content or "").strip():
+            if reply.truncated:  # P29: say so instead of passing a cut-off reply as whole
+                reply.content = f"{reply.content}\n\n{CUT_NOTE}"
             answer = _add(
                 db,
                 agent,
@@ -1535,16 +1758,13 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 result = "You are already talking to a person. Ask your question in your reply."
             else:
                 d = await policy.evaluate(agent, name, args, asked_by=approver)
-                if d.rule == "chat.person_asked" and outside_read:
-                    result = (
-                        "Not done yet: you read outside content (an email, a page or a file) "
-                        "in this turn, so this needs the person's own confirmation. Tell them "
-                        "exactly what you would set up and when, and ask them to reply yes."
-                    )
+                if d.rule == "chat.person_asked" and outside_read and not confirmed:
+                    result = OUTSIDE_HOLD
                 elif d.effect == "allow":
                     result = await run_tool(ctx, name, args)
                     used.append(name)
-                    outside_read = outside_read or name in policy.OUTSIDE_CONTENT
+                    if name in policy.OUTSIDE_CONTENT:
+                        outside_read, confirmed = True, False
                 elif d.effect == "ask":
                     result = (
                         "This needs approval, which only works inside a task. Tell the "

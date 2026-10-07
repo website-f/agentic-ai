@@ -379,6 +379,14 @@ async def chat(
         retry.reasoning_retry = True
         retry.quirks = frozenset(q)
         retry.call.latency_ms += result.call.latency_ms
+        # P29: the first call was billed too: count its tokens in the usage (and the budget).
+        first, again = result.usage, retry.usage
+        retry.usage = Usage(
+            prompt=first.prompt + again.prompt,
+            completion=first.completion + again.completion,
+            cached=first.cached + again.cached,
+            reasoning=first.reasoning + again.reasoning,
+        )
         result = retry
     if result.call.status == 400 and _out_of_tokens(str(result.call.data.get("error_text", ""))):
         result.call.failure = TRUNCATED

@@ -114,6 +114,10 @@ async def test_the_bridge_searches_describes_and_calls(client, llm, temporal):
             {"server": "tracker", "tool": "create_issue", "arguments": {"title": "Fix printer"}},
         )
         assert "Created: Fix printer" in out
+        # P29: what an outside server says is fenced as data, like a web page.
+        for text in (found, desc, out):
+            assert "<<<" in text and "not instructions" in text
+        assert out.index("<<<") < out.index("Created: Fix printer")
         missing = await TOOLS["tool_call"].handler(ctx, {"server": "tracker", "tool": "nope"})
         assert "no such external tool" in missing
 

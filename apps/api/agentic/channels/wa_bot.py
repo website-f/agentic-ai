@@ -28,6 +28,7 @@ from .whatsapp import Inbound
 
 log = logging.getLogger("agentic.channels.whatsapp")
 
+DEDUPE_TTL = 7 * 86400
 CODE = re.compile(r"^(?:/?(?:link|start)\s+)?([A-HJ-NP-Z2-9]{8})$", re.I)
 
 
@@ -151,9 +152,10 @@ async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
 
 
 async def _handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
-    # WhatsApp gateways retry webhooks: answer each message once.
+    # WhatsApp gateways retry webhooks: answer each message once. P29: kept 7 days (past the
+    # webhook's replay window), since inbound is now queued durably and may arrive late.
     if msg.message_id and not await valkey().set(
-        f"wamsg:{ch.id}:{msg.message_id}", "1", nx=True, ex=86400
+        f"wamsg:{ch.id}:{msg.message_id}", "1", nx=True, ex=DEDUPE_TTL
     ):
         return
     key = msg.message_id or f"{msg.sender}:{datetime.now(UTC).timestamp():.0f}"

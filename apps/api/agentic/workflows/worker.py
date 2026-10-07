@@ -78,6 +78,7 @@ from .teams_activities import (
     task_meeting_result,
 )
 from .teams_workflows import HeartbeatWorkflow, MeetingWorkflow, ScheduledTaskWorkflow
+from .whatsapp_workflows import WhatsAppInboundWorkflow, whatsapp_inbound
 
 log = logging.getLogger("agentic.worker")
 
@@ -103,9 +104,11 @@ WORKFLOWS = [
     LivenessReconcileWorkflow,
     BuildFromDocsWorkflow,
     IntakeWorkflow,
+    WhatsAppInboundWorkflow,
 ]
 ACTIVITIES = [
     pong,
+    whatsapp_inbound,
     check_all_providers,
     task_start,
     task_step,
@@ -186,10 +189,20 @@ async def resync_user_schedules() -> None:
     from sqlalchemy import select
 
     from ..agents import dispatch
+    from ..assistants import access as assistant_access
     from ..core.db import SessionLocal
     from ..models import Schedule
 
     async with SessionLocal() as db:
+        # P30: assistants of people whose role has no assistants.use pause for real first, so
+        # their schedules, channels and workflows (which read the stored status) stop too.
+        try:
+            if paused := await assistant_access.settle_existing(db):
+                await db.commit()
+                log.info("paused %d assistants whose owners' roles no longer have them", paused)
+        except Exception:  # noqa: BLE001 - never stop the worker over this
+            await db.rollback()
+            log.warning("could not settle dormant assistants", exc_info=True)
         rows = (await db.scalars(select(Schedule))).all()
     for s in rows:
         try:

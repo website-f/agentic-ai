@@ -66,7 +66,8 @@ async def heartbeat_tick() -> dict[str, int]:
 
 @activity.defn
 async def schedule_claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
-    return await schedules.claim(schedule_id, manual)
+    # P29: keyed on the workflow run, so a retried claim never makes a second task.
+    return await schedules.claim(schedule_id, manual, activity.info().workflow_run_id)
 
 
 @activity.defn

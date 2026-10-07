@@ -76,6 +76,14 @@ def _rrf(ranked: list[list[Any]]) -> dict[Any, float]:
     return score
 
 
+async def tune_scan(db: AsyncSession) -> None:
+    """P30: these vector queries are filtered (workspace, company, agent), so widen the HNSW
+    scan first, as knowledge search does (SET LOCAL hnsw.ef_search / iterative_scan)."""
+    from ..knowledge.search import tune_vector_scan  # late: knowledge.search imports us
+
+    await tune_vector_scan(db)
+
+
 def _chunk_scope(v: Viewer) -> Any:
     conds = [BrainChunk.workspace_id == v.workspace_id, BrainChunk.kind.not_in(UNSEARCHED)]
     if v.branch_ids is not None:
@@ -104,6 +112,7 @@ async def search_pages(
     vec: list[int] = []
     sims: dict[int, float] = {}
     if qvec is not None:
+        await tune_scan(db)
         dist = BrainChunk.embedding.cosine_distance(qvec)
         for cid, sim in (
             await db.execute(
@@ -231,6 +240,7 @@ async def search_facts(
     vec: list[str] = []
     sims: dict[str, float] = {}
     if qvec is not None:
+        await tune_scan(db)
         dist = BrainFact.embedding.cosine_distance(qvec)
         for fid, sim in (
             await db.execute(
@@ -305,6 +315,8 @@ async def search_history(
     )
     if v.agent_id is not None:
         q = q.where(AgentMessage.agent_id == v.agent_id)
+    if v.agent_ids is not None:  # P29: a person recalls only the agents they see
+        q = q.where(AgentMessage.agent_id.in_(v.agent_ids))
     if exclude_task_id:
         q = q.where(or_(AgentMessage.task_id.is_(None), AgentMessage.task_id != exclude_task_id))
     if exclude_session_id:

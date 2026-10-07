@@ -21,6 +21,7 @@ from ...core.ids import new_id
 from ...core.security import can
 from ...i18n import tr
 from ...models import Channel, ChannelLink
+from ...workflows import whatsapp_workflows
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api", tags=["whatsapp"])
@@ -305,6 +306,32 @@ async def whatsapp_test(
 # ---------------------------------------------------------------- webhooks (no login; signed)
 
 
+# P29: a signed WAHA event older than this (or from the future) is not acted on: a replayed
+# capture can not make the office answer again (within it, wa_bot's 7-day dedupe key does).
+REPLAY_WINDOW = timedelta(days=1)
+CLOCK_SKEW = timedelta(minutes=5)
+
+
+def _fresh(payload: dict) -> bool:
+    """WAHA puts the event time (ms) in the signed body; events without one pass."""
+    raw = payload.get("timestamp")
+    if not isinstance(raw, int | float) or raw <= 0:
+        return True
+    at = datetime.fromtimestamp(raw / 1000 if raw > 1e11 else raw, UTC)
+    now = datetime.now(UTC)
+    return now - REPLAY_WINDOW <= at <= now + CLOCK_SKEW
+
+
+async def _answer(
+    channel_id: str, items: list[whatsapp.Inbound], background: BackgroundTasks
+) -> None:
+    """P29: each message goes to a durable workflow (it survives an API restart); only when
+    Temporal is unreachable is it answered in this process, in the background."""
+    later = [m for m in items if not await whatsapp_workflows.start(channel_id, m)]
+    if later:
+        background.add_task(_handle_later, channel_id, later)
+
+
 async def _handle_later(channel_id: str, items: list[whatsapp.Inbound]) -> None:
     async with SessionLocal() as db:
         ch = await db.get(Channel, channel_id)
@@ -340,9 +367,12 @@ async def waha_webhook(
                 "checked_at": datetime.now(UTC).isoformat(),
             }
             await db.commit()
+    if not _fresh(payload):
+        log.warning("stale or replayed WAHA event on %s ignored", channel_id)
+        return {"ok": True}
     items = whatsapp.parse_waha(payload)
     if items:
-        background.add_task(_handle_later, channel_id, items)  # answer the gateway at once
+        await _answer(channel_id, items, background)  # answer the gateway at once
     return {"ok": True}
 
 
@@ -377,5 +407,5 @@ async def meta_webhook(
         raise api_error(status.HTTP_401_UNAUTHORIZED, "bad_signature", "Signature mismatch.")
     items = whatsapp.parse_meta(json.loads(body or b"{}"))
     if items:
-        background.add_task(_handle_later, channel_id, items)
+        await _answer(channel_id, items, background)
     return {"ok": True}

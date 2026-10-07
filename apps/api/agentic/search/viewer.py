@@ -11,8 +11,11 @@ A person:
 - wiki pages: workspace roles all; office roles workspace-wide pages and their company's
 
 An agent: what read_file / find_sop / search_library let it read: its company's files and
-the workspace's (department guidelines only for its department), active SOPs in its scope,
-its company's documents and templates. No wiki pages (it has recall for those).
+the workspace's (department guidelines only for its department; never a person's own files
+or another person's private assistant's work, documents.service.agent_files), active SOPs in
+its scope, its company's documents and templates. No wiki pages (it has recall for those).
+
+P29: nobody finds another person's private assistant's files or documents, admins included.
 
 Held-back (quarantined) files are never found by anyone, managers included: their text is
 for reading in the file viewer, not for search.
@@ -48,22 +51,12 @@ class Viewer:
     def files(self) -> ColumnElement[bool]:
         ws = DocFile.workspace_id == self.workspace_id
         open_ = and_(ws, DocFile.quarantined.is_(False), DocFile.status == "ready")
-        if self.everything:
-            return open_
+        if self.agent is not None:  # P29: read_file's rule (documents.service.agent_files)
+            return and_(open_, service.agent_files(self.agent))
+        if self.everything:  # P29: never another person's private assistant's work
+            hidden = service.not_private_work(DocFile, self.principal)
+            return and_(open_, hidden) if hidden is not None else open_
         shared = and_(DocFile.library.is_(True), library_scope(self.reader))
-        if self.agent is not None:
-            r = self.reader
-            branch = (
-                or_(DocFile.branch_id.is_(None), DocFile.branch_id == r.branch_id)
-                if r.branch_id
-                else DocFile.branch_id.is_(None)
-            )
-            dept = (
-                or_(DocFile.department_id.is_(None), DocFile.department_id == r.department_id)
-                if r.department_id
-                else DocFile.department_id.is_(None)
-            )
-            return and_(open_, branch, or_(DocFile.library.is_(False), dept))
         mine = service.scoped(select(DocFile.id).where(ws), DocFile, self.principal)
         return and_(open_, or_(DocFile.id.in_(mine), shared))
 
@@ -90,11 +83,11 @@ class Viewer:
 
     def documents(self) -> ColumnElement[bool]:
         ws = Document.workspace_id == self.workspace_id
-        if self.everything:
-            return ws
         if self.agent is not None:
-            b = self.agent.branch_id
-            return and_(ws, or_(Document.branch_id.is_(None), Document.branch_id == b))
+            return service.agent_documents(self.agent)
+        if self.everything:
+            hidden = service.not_private_work(Document, self.principal)
+            return and_(ws, hidden) if hidden is not None else ws
         mine = service.scoped(select(Document.id).where(ws), Document, self.principal)
         return and_(ws, Document.id.in_(mine))
 

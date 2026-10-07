@@ -14,11 +14,13 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..assistants import access as assistant_access
 from ..models import Agent, Task
 from . import dispatch, runtime, work_hours
 
 RUNNING = ("running", "blocked")
-# A goal-loop nudge continues work already started in hours: it is not new work.
+# A goal-loop nudge continues work already started in hours: it is not new work. (P29: the
+# goal loop and the self-check now continue inside the same run and no longer launch.)
 CONTINUES = ("goal-loop",)
 WAKE_ACTOR = "system:work-hours"
 
@@ -39,6 +41,13 @@ async def launch(
     agent = await db.get(Agent, t.assignee_agent_id)
     if agent is None or agent.status != "active":
         raise LaunchError(409, "agent_inactive", "The assigned agent is not active.")
+    if await assistant_access.dormant(db, agent):  # P30: kept, but treated as paused
+        raise LaunchError(
+            409,
+            "assistant_dormant",
+            "This personal assistant is paused: personal assistants are for people who manage "
+            "others.",
+        )
     if t.status in RUNNING and not restartable(t):
         raise LaunchError(409, "already_running", "This task is already running.")
     now = now or datetime.now(UTC)

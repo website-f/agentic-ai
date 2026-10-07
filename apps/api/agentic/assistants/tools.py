@@ -148,7 +148,9 @@ async def _notify(ctx: ToolContext, args: dict[str, Any]) -> str:
         title,
         Plain(message[:1500]),  # the agent wrote it (in the person's language already)
         f"/tasks?task={ctx.task.id}" if ctx.task else "/assistants",
-        dedupe=f"notify:{a.id}:{ctx.task.id if ctx.task else 'chat'}:{count}:{target.id}",
+        # P29: keyed on the tool call, so a retried step finds the same ledger row instead of
+        # sending again (the hourly counter changed on every try).
+        dedupe=f"notify:{a.id}:{ctx.task.id if ctx.task else 'chat'}:{ctx.call_id or count}:{target.id}",
     )
     await deliver.start(ids)
     reach = await deliver.reach(ctx.db, ctx.workspace.id, target.id)

@@ -18,6 +18,7 @@ async def _worked(client, llm, title="Reconcile the September statement", agent=
     if agent is None:
         agent = await new_agent(client, await office(client), "Aina")
     task = await new_task(client, agent, title, "Statement lines: 100, 250, 75.")
+    await runtime.start_run(task["id"])  # what the workflow does first: the task is running
     llm.call("calc", expression="100 + 250").call("calc", expression="350 + 75")
     llm.say("Total is 425.")
     r = await runtime.run_task_step(task["id"])
@@ -42,7 +43,8 @@ async def test_a_found_problem_gets_one_fix_before_hand_in(client, llm, temporal
     agent, task, answer = await _worked(client, llm)
     starts = len(temporal["start"])
     llm.say(json.dumps({"ok": False, "issues": ["The unmatched lines are not listed."]}))
-    await runtime.finish(task["id"], "done", answer)
+    # P29: the fix happens inside the same run (a relaunch of a running task was refused).
+    assert await runtime.finish(task["id"], "done", answer) == runtime.CONTINUE
     async with SessionLocal() as db:
         t = await db.get(Task, task["id"])
         nudge = await db.scalar(
@@ -50,10 +52,15 @@ async def test_a_found_problem_gets_one_fix_before_hand_in(client, llm, temporal
             .where(AgentMessage.task_id == task["id"], AgentMessage.role == "user")
             .order_by(AgentMessage.id.desc())
         )
-    assert t is not None and t.status not in ("done", "review")  # back to work, not handed in
+    assert t is not None and t.status == "running"  # back to work, not handed in
+    assert t.steps_used == 0  # 3 calls used, FIX_CALLS given back (bounded, never negative)
     assert nudge and nudge.startswith("Self-check before handing in:")
     assert "unmatched lines" in nudge
-    assert len(temporal["start"]) == starts + 1  # relaunched once
+    assert len(temporal["start"]) == starts  # same run, no new workflow
+    # A retried finish does not review again.
+    calls = len(llm.requests)
+    assert await runtime.finish(task["id"], "done", answer) == runtime.CONTINUE
+    assert len(llm.requests) == calls
     ev = await _events(task["id"], "selfcheck")
     assert len(ev) == 1 and ev[0].data["issues"] == ["The unmatched lines are not listed."]
     # The review went to a different group than the worker's own (smart -> fast first).
@@ -62,9 +69,11 @@ async def test_a_found_problem_gets_one_fix_before_hand_in(client, llm, temporal
     )
     assert "ANSWER:" in review["messages"][1]["content"]
 
-    # Second hand-in: no second check; it goes to the person.
+    # Second hand-in (the agent answered the nudge): no second check; it goes to the person.
+    llm.say("Total is 425. Unmatched: 75.")
+    assert (await runtime.run_task_step(task["id"])).state == "done"
     calls = len(llm.requests)
-    await runtime.finish(task["id"], "done", "Total is 425. Unmatched: 75.")
+    assert await runtime.finish(task["id"], "done", "Total is 425. Unmatched: 75.") is None
     async with SessionLocal() as db:
         t = await db.get(Task, task["id"])
         msgs = (

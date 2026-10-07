@@ -131,7 +131,12 @@ class VoiceWaha(FakeWaha):
 @pytest.fixture
 def waha(monkeypatch):
     from agentic.core.config import settings
+    from agentic.workflows import whatsapp_workflows
 
+    async def not_durable(channel_id, msg):  # P29: no worker here: the API answers it
+        return False
+
+    monkeypatch.setattr(whatsapp_workflows, "start", not_durable)
     w = VoiceWaha()
     whatsapp.transport = httpx.MockTransport(w.handler)
     monkeypatch.setattr(settings, "waha_url", "http://waha.test:3000")

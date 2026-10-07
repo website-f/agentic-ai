@@ -1,5 +1,32 @@
 # Agent runtime
 
+## Current behaviour (2026-10-07)
+
+The sections below mix design intent with what shipped. Where they differ, this is how the
+code behaves now:
+
+- **Loop limits:** a loop step makes at most 6 model calls (`agents/runtime.py`,
+  `MAX_CALLS_PER_STEP`); a task makes at most 30 by default (AI Engine > Settings, hard
+  ceiling 200). Search tools stop after 20 searches per task and tell the agent to conclude.
+- **Meetings:** 2 to 5 agents, 2 rounds by default (at most 4), 350 output tokens per turn,
+  24k token budget, `recall` as the only tool, early stop when everyone passes.
+- **Self-check (P19, `agents/verify.py`):** after real work (2+ tool calls or a long brief), a
+  reviewer model from a different group looks for concrete defects. If it finds some, the
+  agent fixes them **in the same workflow run**, with a bounded extra model-call allowance
+  (the goal judge works the same way), then hands in. Each catch is a learning signal.
+- **Local model:** used only for a few tiny side jobs (colleague memory check, file
+  understanding, page digests, short goal/self-check/twin prompts that fit its 4k context;
+  `gateway.cheap_groups` / `TINY_TASKS`) and as chat backup when cloud models are down.
+  Real agent work always goes to the agent's cloud group.
+- **Approvals:** hardline floor, then the agent's allow/ask/deny, then `ALWAYS_ASK`
+  (`browser_submit`, `browser_upload`) and `PERSON_APPROVES` (`schedule_task`). Approvals
+  expire after 24 h.
+- **Not implemented** (kept below as design intent): smart (LLM) risk review,
+  `ask_fallback`, a hardline "no schedules from a scheduled run" rule, per-call capability
+  or budget-aware routing (budgets pause the agent instead, section 15), model cascades,
+  response caching, storing request/response bodies (only metadata goes to `llm_calls`;
+  optional Langfuse traces hold masked prompts).
+
 ## 1. What an agent is
 
 An agent is a row in `agents` plus files in the vault. At run time the worker builds an Agno `Agent` from it.
@@ -92,7 +119,7 @@ Crawler and Automator are built to work together through delegation: Crawler gat
 
 Like a researcher walking over to accounting before a decision. Any agent working a task can call `agents.consult` to open a **meeting** with one or more other agents.
 
-- **Bounded by design:** max 5 participants, max rounds (default 6), a per-meeting token budget, no nested meetings, and the only tool allowed during a meeting is `brain.search`.
+- **Bounded by design:** max 5 participants, 2 rounds by default (at most 4), a per-meeting token budget (24k), no nested meetings, and the only tool allowed during a meeting is `recall` (memory search).
 - The initiator states the question. Participants answer in turns, each with its own soul, SOPs and memory, so the Finance agent genuinely argues from the accounting SOP while Research argues from its findings.
 - The initiator closes with a **structured outcome**: decision, options considered, dissent, who does what. The outcome posts back to the originating task and is saved as a vault decision page; the full transcript is kept.
 - **Humans can watch live** in the Meetings page (and see the characters sitting in the office meeting room) and interject; an interjection becomes the next turn.
@@ -112,12 +139,13 @@ The megaphone: message **everyone**, chosen **branches**, chosen **departments**
 
 Evaluation order for every tool call:
 
-1. **Hardline blocklist** (cannot be overridden by any mode, including "auto"). Examples: reading secrets, writing outside allowed paths, private-network URLs, disabling policy, creating schedules from inside a scheduled run.
+1. **Hardline blocklist** (cannot be overridden by any mode, including "auto"). Examples: reading secrets, writing outside allowed paths, private-network URLs, disabling policy. (A hardline rule against creating schedules from inside a scheduled run is **not implemented**; instead `schedule_task` is `PERSON_APPROVES`: inside any task, or after the agent read outside content, a person must approve it.)
 2. **Agent tool mode**: `deny` / `ask` / `allow`.
 3. **Risk rules** (deterministic): money, external messages, deletes, bulk writes are `ask` unless explicitly allowed.
-4. **Smart review** (optional): an auxiliary cheap model scores risk and can only *escalate* `allow` to `ask`, never relax.
+4. **Smart review** (optional): an auxiliary cheap model scores risk and can only *escalate* `allow` to `ask`, never relax. **Not implemented.**
+5. **`ALWAYS_ASK`** (built): `browser_submit` and `browser_upload` always wait for a person, whatever the mode.
 
-Approval card (dashboard, phone push, Telegram): what, why, arguments preview, risk, policy rule that triggered it. Buttons: **Approve once**, **Always allow for this agent**, **Deny**. `ask_fallback` when nobody answers within the timeout: `deny` (default) or `escalate to manager`.
+Approval card (dashboard, phone push, Telegram): what, why, arguments preview, risk, policy rule that triggered it. Buttons: **Approve once**, **Always allow for this agent**, **Deny**. `ask_fallback` (deny or escalate to a manager when nobody answers) is **not implemented**: an unanswered approval expires after 24 h and the task fails with that reason.
 
 ## 10. Scheduling (Hermes cron ledger on Temporal Schedules)
 
@@ -156,9 +184,9 @@ Approval card (dashboard, phone push, Telegram): what, why, arguments preview, r
 | `delegate_task` with parallel children, depth cap, leaf vs orchestrator, output schema + one correction turn | Hermes | delegation | P7 |
 | Governed agent-to-agent sessions (spawn allowlists, coordinator pattern) | OpenClaw `sessions_spawn` | meetings | P7 |
 | Kanban board, task claimed by profile, human block / unblock | Hermes | tasks | P2 |
-| Cron ledger, retry ladder 5/15/30, incident de-dup, secret redaction, no recursive cron | Hermes | schedules | P7 |
-| Smart approvals + hardline blocklist that no mode overrides | Hermes | policy engine | P2 |
-| Approval modes deny / allowlist / full, ask off / on-miss / always, `ask_fallback` | OpenClaw | policy engine | P2 |
+| Cron ledger, retry ladder 5/15/30, incident de-dup, secret redaction (no-recursive-cron rule not implemented; `schedule_task` needs a person instead) | Hermes | schedules | P7 |
+| Hardline blocklist that no mode overrides (smart approvals not implemented) | Hermes | policy engine | P2 |
+| Approval modes deny / ask / allow (`ask_fallback` not implemented) | OpenClaw | policy engine | P2 |
 | Approval cards in UI and chat with approve-once / always | OpenClaw | approvals UI, Telegram | P2, P6 |
 | Bindings: channel/peer to agent routing, most specific wins | OpenClaw | channels | P7 |
 | Durable delivery ledger for outbound messages | Hermes | channels | P6 |
@@ -194,8 +222,8 @@ have been a second source of truth next to that.
 | `AgentTaskWorkflow` (approval signal, 24 h wait, cancel) and `BroadcastRepliesWorkflow` | `workflows/agent_workflows.py` |
 | Routes: agents, sops, tasks, approvals, broadcasts, `/api/events` (SSE with replay) | `api/routers/` |
 
-Limits: 6 tool calls per step, 30 model calls per task by default, and approvals expire
-after 24 h. The per-task model-call limit is configurable in AI Engine > Settings, with
+Limits: up to 6 **model calls** per loop step (`MAX_CALLS_PER_STEP`; each call may request
+several tools), 30 model calls per task by default, and approvals expire after 24 h. The per-task model-call limit is configurable in AI Engine > Settings, with
 a hard ceiling of 200. Fetched web content is fenced as untrusted text before the model
 sees it. Internal and metadata addresses are blocked by the hardline even when the agent
 runs on auto.

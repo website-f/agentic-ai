@@ -11,6 +11,10 @@ nothing will wake it. Runs every 10 minutes (the `liveness-reconcile` schedule, 
    the event carries a fingerprint (run + last activity time), so one quiet spell is
    reported once, and new activity followed by a new quiet spell is reported again.
 
+3. P29: a task `blocked` on a pending approval whose workflow is gone (nobody would ever
+   receive the decision) is treated like 1: one relaunch (the new run waits on the same
+   approval), then its owner.
+
 Temporal unreachable: the run is skipped entirely (nothing is relaunched or blocked blind).
 """
 
@@ -21,7 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import SessionLocal
-from ..models import Event, LLMCall, Meeting, MeetingTurn, Task, TaskEvent
+from ..models import Approval, Event, LLMCall, Meeting, MeetingTurn, Task, TaskEvent
 
 log = logging.getLogger("agentic.teams.reconcile")
 
@@ -199,8 +203,9 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
                 .limit(500)
             )
         ).all()
+        waiting = await _waiting_on_approval(db, now)
         alive: list[Task] = []
-        for t in rows:
+        for t in [*rows, *waiting]:
             totals["checked"] += 1
             try:
                 open_ = await workflow_open(t.workflow_id) if t.workflow_id else False
@@ -210,7 +215,8 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
             if open_ is None:
                 continue
             if open_:
-                alive.append(t)
+                if t.status == "running":
+                    alive.append(t)
                 continue
             try:
                 totals[await _gone(db, t)] += 1
@@ -222,3 +228,24 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
             except Exception:  # noqa: BLE001
                 log.warning("could not check %s for silence", t.id, exc_info=True)
     return totals
+
+
+async def _waiting_on_approval(db: AsyncSession, now: datetime) -> list[Task]:
+    """P29: blocked tasks whose run waits on a pending approval (not the ones parked behind
+    blockers or already handed to a person: those have no run on purpose)."""
+    from ..agents import launch
+
+    pending = select(Approval.task_id).where(Approval.status == "pending")
+    rows = (
+        await db.scalars(
+            select(Task)
+            .where(
+                Task.status == "blocked",
+                Task.updated_at < now - GRACE,
+                Task.id.in_(pending),
+            )
+            .order_by(Task.updated_at)
+            .limit(500)
+        )
+    ).all()
+    return [t for t in rows if not launch.restartable(t)]

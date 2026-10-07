@@ -440,6 +440,42 @@ async def test_ledger_and_incidents_group_failures(client, llm, team_temporal):
     assert await schedules.claim(s["id"], True)  # "run now" still works
 
 
+async def test_schedule_claim_and_attempt_are_safe_to_repeat(client, llm, team_temporal):
+    """P29: a retried claim makes no second task; attempt resets the run's budget, stops for
+    a cancelled or deleted task, and never starts a second run on a task already running."""
+    o = await office(client)
+    a = await new_agent(client, o, "Aina")
+    body = {"name": "Daily cash", "agent_id": a["id"], "title": "Cash report", "cron": "0 9 * * *"}
+    s = (await client.post("/api/schedules", json=body, headers=csrf(client))).json()
+    first = await schedules.claim(s["id"], False, "run-abc")
+    again = await schedules.claim(s["id"], False, "run-abc")
+    assert first and again == first
+    async with SessionLocal() as db:
+        assert len((await db.scalars(select(Task).where(Task.schedule_id == s["id"]))).all()) == 1
+        t = await db.get(Task, first["task_id"])
+        t.steps_used, t.correction_used, t.status = 30, True, "failed"
+        await db.commit()
+    assert await schedules.attempt(first["run_id"], 2) == f"task-{first['task_id']}-1"
+    async with SessionLocal() as db:
+        t = await db.get(Task, first["task_id"])
+        assert t.steps_used == 0 and t.correction_used is False and t.status == "ready"
+        t.status = "running"  # a person started it by hand meanwhile
+        await db.commit()
+    assert await schedules.attempt(first["run_id"], 3) == schedules.BUSY
+    async with SessionLocal() as db:
+        (await db.get(Task, first["task_id"])).status = "cancelled"
+        await db.commit()
+    assert await schedules.attempt(first["run_id"], 3) == "stop:cancelled"
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Task, first["task_id"]))
+        await db.commit()
+    assert await schedules.attempt(first["run_id"], 4) == "stop:failed"
+    await schedules.finish(first["run_id"], "failed")
+    async with SessionLocal() as db:
+        run = await db.get(JobRun, int(first["run_id"]))
+        assert run.status == "failed" and run.error == "The task for this run was deleted."
+
+
 # ---------------------------------------------------------------- org chart
 
 

@@ -29,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agents import launch
-from ..models import Agent, DocFile, Task, WorkflowRun
+from ..models import Agent, DocFile, Task, TaskEvent, WorkflowRun
 from ..services import events
 from ..teams import objectives
 from .procedure import ACTIONS, WAIT_UNITS, clean_graph, runnable, wait_text
@@ -244,6 +244,41 @@ async def _brief(
     return "\n".join(lines)
 
 
+async def _step_task(db: AsyncSession, run: WorkflowRun, node_id: str, title: str) -> Task | None:
+    """The newest task made for this step of this run. P29: matched on the node id (kept on
+    its "created" event), not the title; two steps with the same title had shared a task.
+    Tasks from before the node id was kept fall back to the title, if no other step owns it."""
+    rows = (
+        await db.scalars(
+            select(Task).where(Task.workflow_run_id == run.id).order_by(Task.created_at.desc())
+        )
+    ).all()
+    if not rows:
+        return None
+    marks = {
+        e.task_id: (e.data or {}).get("node_id")
+        for e in (
+            await db.scalars(
+                select(TaskEvent).where(
+                    TaskEvent.task_id.in_([t.id for t in rows]), TaskEvent.kind == "created"
+                )
+            )
+        ).all()
+        if (e.data or {}).get("node_id")
+    }
+    for t in rows:
+        if marks.get(t.id) == node_id:
+            return t
+    owned = {
+        str(st.get("task_id"))
+        for nid, st in (run.state or {}).items()
+        if nid != node_id and st.get("task_id")
+    }
+    return next(
+        (t for t in rows if t.id not in marks and t.title == title and t.id not in owned), None
+    )
+
+
 async def _launch(db: AsyncSession, run: WorkflowRun, node: dict[str, Any]) -> dict[str, Any]:
     agent = await db.get(Agent, run.assign.get(node["id"], ""))
     if agent is None or agent.status != "active":
@@ -263,7 +298,7 @@ async def _launch(db: AsyncSession, run: WorkflowRun, node: dict[str, Any]) -> d
         }
     title = f"{run.title[:90]} · {node['title'] or node['type']}"[:200]
     # A tick that crashed after starting this step already made its task: reuse it.
-    prior = await db.scalar(select(Task).where(Task.workflow_run_id == run.id, Task.title == title))
+    prior = await _step_task(db, run, node["id"], title)
     if prior is not None and prior.status not in ("failed", "cancelled"):
         return {"status": "running", "task_id": prior.id, "started_at": _now(), "by": agent.name}
     lowest = (
@@ -291,6 +326,17 @@ async def _launch(db: AsyncSession, run: WorkflowRun, node: dict[str, Any]) -> d
     )
     db.add(t)
     await db.flush()
+    # P29: which step this task is (two steps may share a title); commits with the task.
+    db.add(
+        TaskEvent(
+            task_id=t.id,
+            ts=datetime.now(UTC),
+            kind="created",
+            actor=f"workflow:{run.id}",
+            text=f"created for the step {node['title'] or node['type']}"[:300],
+            data={"node_id": node["id"], "run_id": run.id},
+        )
+    )
     try:
         await launch.launch(db, t, f"workflow:{run.id}")
     except launch.LaunchError as e:

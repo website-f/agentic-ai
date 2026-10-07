@@ -195,7 +195,10 @@ services:
       dockerfile: deploy/api.Dockerfile
     image: agentic-py:dev
     restart: unless-stopped
-    command: ["sh", "-c", "alembic upgrade head && python -m agentic.seed && exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --forwarded-allow-ips '*'"]
+    # Forwarded headers are trusted only from private (Docker network) addresses: in practice
+    # the web container, whose nginx overwrites X-Forwarded-For / X-Real-IP with the real
+    # client address (deploy/nginx/web.conf). Nothing public reaches the api directly.
+    command: ["sh", "-c", "alembic upgrade head && python -m agentic.seed && exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --forwarded-allow-ips '${AGENTIC_FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'"]
     environment: *app-env
     depends_on:
       postgres: { condition: service_healthy }
@@ -348,6 +351,9 @@ services:
       # host's. Empty = off. See docs/EPEROLEHAN-EXIT-IP.md.
       EGRESS_UPSTREAM: ${EGRESS_UPSTREAM:-}
       EGRESS_UPSTREAM_HOSTS: ${EGRESS_UPSTREAM_HOSTS:-}
+      # The ONLY destinations allowed (host suffixes), for a single-purpose proxy. Empty = any
+      # public host. Used by the ePerolehan exit proxy on a home line, not by this stack.
+      EGRESS_ONLY_HOSTS: ${EGRESS_ONLY_HOSTS:-}
       EGRESS_MAX_CONNECTIONS: ${EGRESS_MAX_CONNECTIONS:-512}
       EGRESS_LOG_ALLOWED: ${EGRESS_LOG_ALLOWED:-false}  # denials are always logged
     healthcheck:
@@ -363,9 +369,11 @@ services:
     <<: [*app-hardening, *logging]
 
   ollama:
-    # The local backup brain (P14): one small model (qwen3:0.6b, ~0.8 GB RAM loaded) for free
-    # side jobs (picking the note that answers a question, page digests, file summaries) and
-    # chat backup mode when cloud models are down. Private network only; never published.
+    # The local backup brain (P14): one small model (qwen3:0.6b, ~0.8 GB RAM loaded) for a few
+    # small side jobs and chat backup mode when cloud models are down. Internal network only
+    # (no internet, never published); ollama-pull fetches the model on its own network.
+    # Runs as the image's root user (its model volume is root-owned) but with every
+    # capability dropped and no-new-privileges, verified to serve and list models.
     image: ollama/ollama:0.34.0
     restart: unless-stopped
     environment:
@@ -390,14 +398,16 @@ services:
     mem_limit: 1536m
     cpus: 2
     networks: [llm]
-    security_opt: ["no-new-privileges:true"]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   waha:
     # WhatsApp gateway (P16, devlikeapro/waha): the office phone scans a QR code shown on the
     # Channels page. NOWEB engine: no browser inside, ~150 MB. Unofficial; for production at
     # scale use the Meta Cloud API instead (no container needed). Never published.
     # Pin WAHA_IMAGE (tag or digest) in production: a new image may not read old sessions.
+    # docker-compose.vps.yml requires it; `latest` here is for local tries only.
+    # Runs as the image's root user, with every capability dropped (NOWEB needs none; verified
+    # to start, answer /ping and write sessions) and no-new-privileges.
     image: ${WAHA_IMAGE:-devlikeapro/waha:latest}
     restart: unless-stopped
     environment:
@@ -418,24 +428,38 @@ services:
     mem_limit: 512m
     cpus: 1
     networks: [edge]  # reaches WhatsApp, and our api for webhooks
-    security_opt: ["no-new-privileges:true"]
-    <<: *logging
+    <<: [*hardening, *logging]
 
   ollama-pull:
-    # One-shot: fetches the model into the volume (instant when it is already there).
+    # One-shot: fetches the model into the shared volume (instant when it is already there).
+    # In ollama the SERVER downloads, so this runs its own short-lived server on the volume,
+    # on the only network with internet (llm-pull); the main ollama stays offline and sees
+    # the new model on disk. If the download fails but the model is already there, it exits 0.
     image: ollama/ollama:0.34.0
     restart: "no"
-    entrypoint: ["ollama", "pull", "${AGENTIC_LOCAL_LLM_MODEL:-qwen3:0.6b}"]
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        ollama serve >/tmp/serve.log 2>&1 &
+        for i in $$(seq 1 30); do ollama list >/dev/null 2>&1 && break; sleep 1; done
+        ollama pull "$$MODEL" || ollama show "$$MODEL" >/dev/null
+        rc=$$?
+        kill $$! 2>/dev/null
+        exit $$rc
     environment:
-      OLLAMA_HOST: ollama:11434
-    depends_on:
-      ollama: { condition: service_healthy }
-    networks: [llm]
-    <<: *logging
+      OLLAMA_HOST: 127.0.0.1:11434
+      MODEL: ${AGENTIC_LOCAL_LLM_MODEL:-qwen3:0.6b}
+    volumes: ["ollamadata:/root/.ollama"]
+    tmpfs: ["/tmp:size=16m"]
+    mem_limit: 512m
+    networks: [llm-pull]
+    <<: [*hardening, *logging]
 
   sandbox:
     # Runs agents' Python in a sealed box: a private network with NO internet (sandbox net is
-    # internal), no database, no secrets. Each run is rlimit-capped and ephemeral.
+    # internal), no database, no secrets. Its own uid (10010, no other service uses it). One
+    # run at a time (others wait up to SANDBOX_QUEUE_SECONDS, then get 503); each run is
+    # rlimit-capped, in a private directory, and its whole process group is killed after.
     build:
       context: .
       dockerfile: deploy/sandbox.Dockerfile
@@ -446,6 +470,7 @@ services:
       SANDBOX_CPU_SECONDS: ${SANDBOX_CPU_SECONDS:-15}
       SANDBOX_WALL_SECONDS: ${SANDBOX_WALL_SECONDS:-30}
       SANDBOX_MEM_MB: ${SANDBOX_MEM_MB:-512}
+      SANDBOX_QUEUE_SECONDS: ${SANDBOX_QUEUE_SECONDS:-45}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8610/healthz', timeout=3)"]
       interval: 15s
@@ -461,7 +486,7 @@ services:
     read_only: true
     tmpfs:
       - "/tmp:size=64m"
-      - "/work:size=512m,uid=10001,gid=10001"
+      - "/work:size=512m,uid=10010,gid=10010,mode=0700"
     <<: *logging
 
   practice-portal:
@@ -485,8 +510,9 @@ services:
     <<: *logging
 
   backup:
-    # Nightly pg_dump + vault archive into an encrypted restic repository (P8).
+    # Nightly pg_dump + vault + WhatsApp sessions into an encrypted restic repository (P8).
     # On demand: docker compose run --rm backup backup | snapshots | check | restore
+    # (deploy/scripts/deploy-vps.sh runs `agentic-backup backup` here before every deploy).
     build:
       context: .
       dockerfile: deploy/backup/Dockerfile
@@ -499,6 +525,8 @@ services:
       TZ: ${BACKUP_TZ:-Asia/Kuala_Lumpur}
       BACKUP_HOUR: ${BACKUP_HOUR:-3}
       BACKUP_INCLUDE_SECRETS: ${BACKUP_INCLUDE_SECRETS:-true}
+      # Unhealthy when the last success is older than this (a nightly job + slack).
+      BACKUP_MAX_AGE_HOURS: ${BACKUP_MAX_AGE_HOURS:-30}
       # A local folder by default (free). For an offsite copy point it at s3:/b2:/sftp:
       # and add the provider's variables (AWS_ACCESS_KEY_ID, B2_ACCOUNT_ID, ...) to .env.
       RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-/repo}
@@ -512,13 +540,18 @@ services:
       AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:-}
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      # WhatsApp sessions (root-owned but world-readable files), read-only: a move or restore
+      # does not need a new QR scan. Restore unpacks to data/restore/waha (docs/RUNBOOK.md).
+      - "wahadata:/data/waha:ro"
       - "${BACKUP_DIR:-./data/backups}:/repo"
       - "./data/restore:/restore"
       - backupwork:/work
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
-      test: ["CMD-SHELL", "[ $$(( $$(date +%s) - $$(stat -c %Y /tmp/alive 2>/dev/null || echo 0) )) -lt 180 ]"]
+      # Unhealthy if the loop stopped, the last backup failed, or the last success is older
+      # than BACKUP_MAX_AGE_HOURS (a fresh install counts from the container's start).
+      test: ["CMD", "agentic-backup", "health"]
       interval: 60s
       timeout: 5s
       retries: 3
@@ -704,7 +737,9 @@ networks:
   egress-out: {}  # the egress proxy's way out (and dev's practice portal); nothing else
   sandbox:
     internal: true  # code sandbox <-> worker only; NO internet
-  llm: {}  # api/worker <-> ollama; egress only so ollama-pull can fetch the model
+  llm:
+    internal: true  # api/worker <-> ollama; NO internet
+  llm-pull: {}  # ollama-pull only: downloads the model into the shared volume
 
 volumes:
   pgdata: {}

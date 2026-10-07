@@ -137,14 +137,15 @@ Global: command palette (Ctrl/Cmd+K) for every page, agent and action; **broadca
 
 - `vite-plugin-pwa` in `injectManifest` mode with our own service worker.
 - Local-first testing: `localhost` is a secure context, so install and push work on the dev machine without HTTPS; for a phone on the same network, Tailscale's free HTTPS serve (or mkcert) provides the secure origin. No domain needed until the stack goes public.
-- Manifest: `display: standalone`, theme color from `--surface`, maskable icons, shortcuts (Approvals, New task, Office).
-- Offline: app shell + last snapshot cached; actions queue is **not** offline (approvals must reach the server live).
+- Manifest: `display: standalone`, theme color from `--surface`, maskable icons, shortcuts (Approvals, Office).
+- Offline: only the app shell is precached (Workbox `precacheAndRoute`, navigation falls back to the shell). API data (snapshots, lists) is **not** cached, so offline the app opens but shows no data; actions are **not** queued offline (approvals must reach the server live).
+- Updates: open tabs check for a new version every 15 minutes and when the tab becomes visible again, and reload once it takes over.
 - Push: VAPID Web Push. Permission asked only from a user tap in Settings or after the first approval.
   - Android / desktop Chromium: notification actions **Approve** / **Deny** call the API from the service worker with a single-use signed token (scoped to that approval, 10 min expiry), then show a confirmation notification.
   - iOS (16.4+, installed to Home Screen only): no action buttons; tapping opens `/approve/<id>`, a one-screen page with large buttons. Declarative Web Push payload added for iOS 18.4+.
   - Badge API set to the number of pending approvals.
   - Re-subscribe on every app open; prune subscriptions that return 404/410.
-- Background: pause SSE and the office loop when hidden; on resume, replay from `since=<seq>`.
+- Background: the live stream (SSE) is **not** paused when the tab is hidden; if the browser closed it meanwhile, it reopens when the tab becomes visible and replays from `since=<last seq>` (`lib/live.ts`). The office draws with `requestAnimationFrame`, which the browser itself throttles in hidden tabs; there is no explicit pause.
 - Capacitor wrap (reusing the existing APK pipeline) only if iOS push limits become a real problem.
 
 ## 11. Accessibility and performance

@@ -41,6 +41,25 @@ def render(agent: Agent, target: str, items: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def target_of(path: str) -> str | None:
+    """'memory' / 'user' when `path` is an agent's core memory file (agents/<slug>/...)."""
+    parts = path.split("/")
+    if len(parts) != 3 or parts[0] != "agents":
+        return None
+    return next((t for t, f in FILES.items() if f == parts[2]), None)
+
+
+def refused(items: list[str]) -> str | None:
+    """P29: why these entries may not go into core memory (it is in every future prompt),
+    or None. The same rules the agent's own `memory` tool follows."""
+    for e in items:
+        if threats.scan(e, "strict"):
+            return "Not saved. Core memory cannot change the rules, approvals or SOPs."
+        if _SECRET.search(e):
+            return "Not saved. Never keep passwords, keys, card or IC numbers in memory."
+    return None
+
+
 def used(items: list[str]) -> int:
     return sum(len(e) + 1 for e in items)
 
@@ -128,10 +147,9 @@ async def edit(
     else:
         return "Error: action must be add, replace or remove."
     # Core memory goes into every future system prompt: refuse overrides and secrets there.
-    if text and threats.scan(text, "strict"):
-        return "Error: not saved. Core memory cannot change the rules, approvals or SOPs."
-    if text and _SECRET.search(text):
-        return "Error: not saved. Never keep passwords, keys, card or IC numbers in memory."
+    why = refused([text]) if text else None
+    if why:
+        return f"Error: {why[0].lower()}{why[1:]}"
     try:
         await write(db, ws, agent, target, new, Author(f"agent:{agent.id}", agent.name))
     except MemoryFull:

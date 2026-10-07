@@ -2,14 +2,19 @@
 #
 #   cp .env.vps.example .env && nano .env
 #   install -d -o 10001 -g 10001 data/backups data/restore
-#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+#   ./deploy/scripts/deploy-vps.sh     # backup, pull, build, up, port check (every deploy)
+#
+# Never a bare `docker compose up -d --build` on the server: without this file that is dev
+# mode, with the dev test logins and the dev ports.
 #
 # What changes from the local stack:
 #   - only `web` is published, on 127.0.0.1:${AGENTIC_PORT}; Caddy is the only way in
 #   - Postgres, Valkey, Temporal and the api publish nothing; the data network is internal
 #   - the browser network is internal in every stack (docker-compose.yml): the browser's
 #     only way out is the egress proxy, which refuses non-public addresses
-#   - Temporal UI stays on 127.0.0.1:8502 for an SSH tunnel / Tailscale, never public
+#   - Temporal UI stays on 127.0.0.1:8502 for an SSH tunnel / Tailscale, never public; it
+#     publishes through its own `ops` network, not `edge` (it only talks to Temporal)
+#   - WAHA_IMAGE must be pinned in .env (a tag or digest, never latest)
 #   - production mode: the api refuses to start without real secrets and Secure cookies
 #   - every secret is required (`:?`), so a missing value stops the deploy, not the app
 x-prod-env: &prod-env
@@ -41,7 +46,9 @@ services:
 
   temporal-ui:
     ports: !override ["127.0.0.1:${TEMPORAL_UI_PORT:-8502}:8080"]
-    networks: [data, edge]  # the data network is internal, so publishing needs edge
+    # The data network is internal, so publishing needs a normal network: its own `ops`,
+    # shared with nothing else (it only talks to Temporal, over data).
+    networks: [data, ops]
 
   api:
     ports: !override []
@@ -73,6 +80,8 @@ services:
       BROWSER_PACE_MAX_PER_MIN: ${BROWSER_PACE_MAX_PER_MIN:-12}
 
   waha:
+    # A new WAHA image may not read the sessions an old one wrote: never `latest` here.
+    image: ${WAHA_IMAGE:?set WAHA_IMAGE in .env to a pinned tag or digest (see .env.vps.example)}
     environment:
       WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:?set AGENTIC_WAHA_API_KEY in .env}
 
@@ -95,3 +104,4 @@ networks:
   # backup reach out (AI providers, push services, Telegram, offsite backups) via edge.
   data:
     internal: true
+  ops: {}  # Temporal UI's published port only

@@ -25,6 +25,10 @@ with workflow.unsafe.imports_passed_through():
 MAX_STEPS = 40
 STEP_RETRY = RetryPolicy(maximum_attempts=3, initial_interval=timedelta(seconds=5))
 QUICK = timedelta(seconds=60)
+# P29: finish may run the self-check and the goal judge (model calls): more time, and a
+# bounded retry (it is safe to retry; the default retried forever).
+FINISH_TIMEOUT = timedelta(minutes=5)
+FINISH_RETRY = RetryPolicy(maximum_attempts=5, initial_interval=timedelta(seconds=5))
 
 
 @workflow.defn
@@ -72,13 +76,12 @@ class AgentTaskWorkflow:
                 await self._run_children(r["children"])
                 if self.cancelled:
                     break
-                await workflow.execute_activity(
-                    task_collect_children,
-                    args=[task_id, r["call_id"]],
-                    start_to_close_timeout=QUICK,
-                    retry_policy=STEP_RETRY,
+                why = await self._follow_up(
+                    task_collect_children, [task_id, r["call_id"]], QUICK, "collect the answers"
                 )
-                continue
+                if why is None:
+                    continue
+                state, r = "failed", {"state": "failed", "message": why}
             if state == "meeting":
                 handle = await workflow.start_child_workflow(
                     "MeetingWorkflow", r["meeting_id"], id=f"meeting-{r['meeting_id']}"
@@ -87,13 +90,15 @@ class AgentTaskWorkflow:
                 if self.cancelled:
                     handle.cancel()
                     break
-                await workflow.execute_activity(
+                why = await self._follow_up(
                     task_meeting_result,
-                    args=[task_id, r["call_id"], r["meeting_id"]],
-                    start_to_close_timeout=QUICK,
-                    retry_policy=STEP_RETRY,
+                    [task_id, r["call_id"], r["meeting_id"]],
+                    QUICK,
+                    "read the meeting result",
                 )
-                continue
+                if why is None:
+                    continue
+                state, r = "failed", {"state": "failed", "message": why}
             if state == "needs_approval":
                 aid = r["approval_id"]
                 try:
@@ -107,19 +112,28 @@ class AgentTaskWorkflow:
                     )
                 if self.cancelled:
                     break
-                await workflow.execute_activity(
-                    task_apply_approval,
-                    aid,
-                    start_to_close_timeout=timedelta(minutes=2),
-                    retry_policy=STEP_RETRY,
+                why = await self._follow_up(
+                    task_apply_approval, [aid], timedelta(minutes=2), "apply the decision"
                 )
-                continue
+                if why is None:
+                    continue
+                state, r = "failed", {"state": "failed", "message": why}
             if state in ("done", "failed"):
-                await workflow.execute_activity(
+                fin = await workflow.execute_activity(
                     task_finish,
                     args=[task_id, state, r.get("message")],
-                    start_to_close_timeout=QUICK,
+                    start_to_close_timeout=FINISH_TIMEOUT,
+                    retry_policy=FINISH_RETRY,
                 )
+                # P29: the self-check or the goal judge sent the work back: the same run
+                # continues (a new workflow would orphan a parent or a schedule waiting on
+                # this one). Older runs (no marker) replay as they were.
+                if (
+                    isinstance(fin, dict)
+                    and fin.get("continue")
+                    and workflow.patched("finish-continue-v1")
+                ):
+                    continue
                 # P3: learn from finished work. `patched` keeps runs started before this
                 # existed replayable. P17: a failure teaches too.
                 learn = state == "done" or workflow.patched("learn-failed-v1")
@@ -149,15 +163,34 @@ class AgentTaskWorkflow:
                 return state
         if self.cancelled:
             await workflow.execute_activity(
-                task_finish, args=[task_id, "cancelled", None], start_to_close_timeout=QUICK
+                task_finish,
+                args=[task_id, "cancelled", None],
+                start_to_close_timeout=QUICK,
+                retry_policy=FINISH_RETRY,
             )
             return "cancelled"
         await workflow.execute_activity(
             task_finish,
             args=[task_id, "failed", f"Stopped after {MAX_STEPS} steps."],
-            start_to_close_timeout=QUICK,
+            start_to_close_timeout=FINISH_TIMEOUT,
+            retry_policy=FINISH_RETRY,
         )
         return "failed"
+
+    async def _follow_up(
+        self, fn: Any, args: list[Any], timeout: timedelta, what: str
+    ) -> str | None:
+        """Run a follow-up activity. None when it worked; out of retries, the reason the
+        task fails (P29: never left looking like it is still running)."""
+        try:
+            await workflow.execute_activity(
+                fn, args=args, start_to_close_timeout=timeout, retry_policy=STEP_RETRY
+            )
+        except ActivityError as e:
+            if not workflow.patched("follow-up-fails-task-v1"):
+                raise
+            return f"The worker could not {what} ({str(e.cause or e)[:300]})."
+        return None
 
     async def _run_children(self, children: list[dict[str, str]]) -> None:
         handles = [

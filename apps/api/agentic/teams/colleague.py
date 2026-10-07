@@ -93,16 +93,20 @@ async def memory_answer(
 
 
 async def find_agent(
-    db: AsyncSession, ws_id: str, ref: str, exclude: str | set[str] | None = None
+    db: AsyncSession,
+    ws_id: str,
+    ref: str,
+    exclude: str | set[str] | None = None,
+    caller: Agent | None = None,
 ) -> Agent | None:
     """A colleague by name, or else by the expertise asked for ("software engineer",
     "finance"): the active agent whose role or department matches best (never one in
     `exclude`)."""
     skip = {exclude} if isinstance(exclude, str) else set(exclude or ())
     from ..models import Department
-    from .delegation import _find_agent
+    from .delegation import _find_agent, visible
 
-    exact = await _find_agent(db, ws_id, ref)
+    exact = await _find_agent(db, ws_id, ref, caller)
     if exact is not None:
         return exact
     words = {w for w in re.findall(r"[a-z]+", ref.lower()) if len(w) > 2} - {"the", "and", "agent"}
@@ -122,8 +126,8 @@ async def find_agent(
             )
         )
     ).all():
-        if a.id in skip:
-            continue
+        if a.id in skip or (caller is not None and not await visible(db, caller, a)):
+            continue  # P29: never a private assistant or across an isolated company
         hay = f"{a.role} {depts.get(a.department_id or '', '')} {a.template or ''}".lower()
         score = sum(1 for w in words if w in hay or w.rstrip("s") in hay)
         if score and (best is None or score > best[0]):
@@ -165,7 +169,9 @@ async def plan(
         if len(question) < 5:
             raise ColleagueError("Write the question in full.")
         waiting = await waiting_up_the_chain(db, task)
-        who = await find_agent(db, task.workspace_id, str(args.get("agent", "")), waiting)
+        who = await find_agent(
+            db, task.workspace_id, str(args.get("agent", "")), waiting, caller=agent
+        )
         if who is None:
             raise ColleagueError(
                 f"No active colleague called or working as {args.get('agent')!r}. "

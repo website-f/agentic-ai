@@ -16,6 +16,7 @@ class Fakes:
     def __init__(self, steps: dict[str, list[dict]]):
         self.steps = steps
         self.log: list[tuple] = []
+        self.attempts: list[str] = []  # P29: scripted attempt answers (busy / stop:...)
 
     def activities(self):
         log, steps = self.log, self.steps
@@ -82,6 +83,8 @@ class Fakes:
         @activity.defn(name="schedule_attempt")
         async def schedule_attempt(run_id: str, n: int) -> str:
             log.append(("attempt", n))
+            if self.attempts:
+                return self.attempts.pop(0)
             return f"task-tk_s-{n}-{uuid.uuid4().hex[:6]}"
 
         @activity.defn(name="schedule_finish")
@@ -179,4 +182,33 @@ async def test_scheduled_run_retries_then_records(env):  # noqa: F811
         )
     assert state == "done"
     assert [x[1] for x in fakes.log if x[0] == "attempt"] == [1, 2, 3]  # 5 and 15 min skipped
+    assert fakes.log[-1] == ("schedule_finish", "done")
+
+
+async def _scheduled(env, fakes: Fakes) -> str:  # noqa: F811
+    queue, worker = await _worker(env, fakes)
+    async with worker:
+        return await env.client.execute_workflow(
+            ScheduledTaskWorkflow.run,
+            args=["sc_1", False],
+            id=f"sch-{uuid.uuid4().hex[:6]}",
+            task_queue=queue,
+        )
+
+
+async def test_scheduled_run_stops_when_its_task_was_cancelled(env):  # noqa: F811
+    """P29: cancelled (or deleted) during the retry wait: no more attempts, a clean end."""
+    fakes = Fakes({"tk_s": [{"state": "failed", "message": "provider down"}]})
+    fakes.attempts = [f"task-tk_s-1-{uuid.uuid4().hex[:6]}", "stop:cancelled"]
+    assert await _scheduled(env, fakes) == "cancelled"
+    assert [x[1] for x in fakes.log if x[0] == "attempt"] == [1, 2]
+    assert fakes.log[-1] == ("schedule_finish", "cancelled")
+
+
+async def test_scheduled_run_waits_for_a_run_started_by_hand(env):  # noqa: F811
+    """P29: never a second workflow on a task a person already started."""
+    fakes = Fakes({"tk_s": []})
+    fakes.attempts = ["busy", "busy", "stop:done"]
+    assert await _scheduled(env, fakes) == "done"
+    assert [x[0] for x in fakes.log].count("start") == 0  # no task run of its own
     assert fakes.log[-1] == ("schedule_finish", "done")

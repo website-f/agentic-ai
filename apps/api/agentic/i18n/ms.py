@@ -831,8 +831,8 @@ MS: dict[str, str] = {
     ),
     "That is not here, or you cannot open it.": "Item itu tiada, atau anda tidak boleh membukanya.",
     "That is not on your workspace.": "Item itu tiada dalam ruang kerja anda.",
-    "You have no AI worker yet. Hire one in My AI worker, or pick an agent.": (
-        "Anda belum ada pekerja AI. Ambil satu di Pekerja AI saya, atau pilih ejen."
+    "You have no AI worker yet. Hire one in My AI, or pick an agent.": (
+        "Anda belum ada pekerja AI. Ambil satu di AI saya, atau pilih ejen."
     ),
     "Find: {what}": "Cari: {what}",
     # api/routers/forms.py (Forms)
@@ -1156,4 +1156,22 @@ MS: dict[str, str] = {
     "Export a document": "Eksport dokumen",
     # P25 document search (search_tools.py)
     "Search documents": "Cari dokumen",
+    # P29 security fixes (brain, skills, Gmail, members, twins)
+    "Only the people who manage this agent can change its memory.": "Hanya orang yang mengurus ejen ini boleh mengubah memorinya.",
+    "Not saved. Core memory cannot change the rules, approvals or SOPs.": "Tidak disimpan. Memori teras tidak boleh mengubah peraturan, kelulusan atau SOP.",
+    "Not saved. Never keep passwords, keys, card or IC numbers in memory.": "Tidak disimpan. Jangan simpan kata laluan, kunci, nombor kad atau IC dalam memori.",
+    "Only an owner or admin can publish a skill for the whole workspace; a manager can publish one only for the agents they manage.": "Hanya pemilik atau admin boleh menerbitkan kemahiran untuk seluruh ruang kerja; pengurus hanya boleh menerbitkannya untuk ejen yang diurusnya.",
+    "Sign in first, then connect Gmail again from Assistants.": "Log masuk dahulu, kemudian sambung Gmail semula daripada Pembantu.",
+    "This Google sign-in was started by someone else or in another browser. Start again from your own Assistants page.": "Log masuk Google ini dimulakan oleh orang lain atau dalam pelayar lain. Mulakan semula daripada halaman Pembantu anda sendiri.",
+    "This person also belongs to another workspace, so only they can change their password (Change password).": "Orang ini juga ahli ruang kerja lain, jadi hanya mereka boleh menukar kata laluan sendiri (Tukar kata laluan).",
+    "Your manager sets how far {name} may go: you can pause it or make it ask more, but not switch it back on, let it act alone, add tools, change its model or SOPs, or raise its budget.": "Pengurus anda menetapkan had {name}: anda boleh menjedanya atau menyuruhnya lebih kerap bertanya, tetapi tidak boleh menghidupkannya semula, membenarkannya bertindak sendiri, menambah alat, menukar model atau SOP, atau menaikkan bajetnya.",
+    # Task flow (routers/task_flow.py): a task on a schedule or into a workflow
+    "Assign an agent before setting it to repeat.": "Tugaskan ejen sebelum menetapkannya berulang.",
+    # P30 personal assistants only for people who manage others; staff have one AI (their twin)
+    "Personal assistants are for people who manage others. Your role ({role}) has one personal AI: your AI twin, in My AI.": "Pembantu peribadi adalah untuk orang yang mengurus orang lain. Peranan anda ({role}) ada satu AI peribadi: kembar AI anda, dalam AI saya.",
+    "{name} is paused: personal assistants are for people who manage others. Nothing was deleted; use your AI twin in My AI instead.": "{name} dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain. Tiada apa dipadam; guna kembar AI anda dalam AI saya.",
+    "{name} is paused: personal assistants are for people who manage others.": "{name} dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain.",
+    "This personal assistant is paused: personal assistants are for people who manage others.": "Pembantu peribadi ini dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain.",
+    "Staff put only their own AI twin on a schedule.": "Kakitangan hanya boleh menjadualkan kembar AI mereka sendiri.",
+    "Your manager retired {name}. Ask them before making a new AI twin.": "Pengurus anda telah menamatkan {name}. Tanya mereka dahulu sebelum mencipta kembar AI baharu.",
 }

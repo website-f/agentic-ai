@@ -98,3 +98,27 @@ async def test_optimize_endpoint_starts_the_job(client, llm, temporal):
         await db.commit()
         pick = await optimize.nightly_pick(db, ws)
     assert pick is not None and pick.id == sid
+
+
+async def test_auto_safe_only_improves_skills_a_person_approved(client, llm, temporal):
+    """P29: the autopilot never builds on its own unreviewed text in auto_safe."""
+    from agentic.skills import autopilot
+
+    sid = await _skill_with_cases(client, 2)
+    async with SessionLocal() as db:
+        skill = await db.get(Skill, sid)
+        assert skill is not None
+        skill.approved_by = autopilot.AUTOPILOT.actor  # its live text came from the autopilot
+        await db.commit()
+    llm.say("Here are the quotes.").say("Done.")  # baseline: 0/2
+    llm.say(json.dumps({"diagnosis": "It never says which is cheapest.", "body": BETTER}))
+    llm.say("The cheapest is B.").say("B is the cheapest.")  # variant: 2/2
+    async with SessionLocal() as db:
+        skill = await db.get(Skill, sid)
+        ws = await db.get(Workspace, skill.workspace_id) if skill else None
+        assert skill is not None and ws is not None
+        out = await optimize.optimize(db, ws, skill)
+    assert out.status == "pending"
+    async with SessionLocal() as db:
+        p = await db.scalar(select(SkillProposal).where(SkillProposal.proposed_by == "optimizer"))
+    assert p is not None and "not approved by a person" in (p.decision_note or "")

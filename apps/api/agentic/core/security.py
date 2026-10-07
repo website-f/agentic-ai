@@ -76,7 +76,12 @@ _ADMIN = {
     "brain.manage",
     "channels.manage",
     "vault.manage",
+    "assistants.use",
 }
+
+# P30 "assistants.use": private personal assistants (company pulse, team performance, Gmail,
+# calendar, chasing people) are for people who manage others: owner, admin, branch manager,
+# HOD and supervisor. Everyone else has at most one personal AI, their twin (agents.own).
 
 # Capabilities per role. Approver and operator are siblings, not a ladder:
 # operators drive work, approvers decide on it.
@@ -85,15 +90,32 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(_ADMIN),
     # Manage agents, work, approvals, logins and their own people, within the branch.
     "branch_manager": frozenset(
-        {"read", "work.write", "approvals.decide", "agents.manage", "vault.manage", "team.manage"}
+        {
+            "read",
+            "work.write",
+            "approvals.decide",
+            "agents.manage",
+            "vault.manage",
+            "team.manage",
+            "assistants.use",
+        }
     ),
     # The same within one department.
     "hod": frozenset(
-        {"read", "work.write", "approvals.decide", "agents.manage", "vault.manage", "team.manage"}
+        {
+            "read",
+            "work.write",
+            "approvals.decide",
+            "agents.manage",
+            "vault.manage",
+            "team.manage",
+            "assistants.use",
+        }
     ),
     # Runs the department's work day to day, but does not change agents.
-    "supervisor": frozenset({"read", "work.write", "approvals.decide"}),
-    # Has personal agents: creates them, gives them work, decides what they ask.
+    "supervisor": frozenset({"read", "work.write", "approvals.decide", "assistants.use"}),
+    # Has one personal agent, their AI twin: gives it work, decides what it asks. No private
+    # assistants (assistants.use): those are for people who manage others.
     "staff": frozenset({"read", "work.write", "approvals.decide", "agents.own", "vault.own"}),
     "operator": frozenset({"read", "org.read", "work.write"}),
     "approver": frozenset({"read", "org.read", "approvals.decide"}),

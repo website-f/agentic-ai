@@ -1,13 +1,14 @@
 """The Brain: wiki pages, facts, search, the dream diary, the vault, and agent core memory."""
 
 import asyncio
+import dataclasses
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, and_, func, not_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch
@@ -15,11 +16,12 @@ from ...brain import core as core_memory
 from ...brain import dream as brain_dream
 from ...brain import embed, store, vault
 from ...brain import facts as brain_facts
-from ...brain.pages import GENERATED, PathError, normalize_path
-from ...brain.scope import for_agent, for_people
+from ...brain.pages import GENERATED, PathError, normalize_path, split_branch
+from ...brain.scope import for_agent, for_people, for_person, sees_fact
 from ...brain.search import Hit, search_facts, search_history, search_pages
 from ...core.config import settings
 from ...core.db import get_db
+from ...core.security import PERMISSIONS
 from ...models import (
     Agent,
     BrainDream,
@@ -33,7 +35,7 @@ from ...models import (
 from ...skills import store as skills_store
 from .. import paging
 from ..deps import Principal, api_error, require
-from .agents import get_agent
+from .agents import can_manage, get_agent
 
 router = APIRouter(prefix="/api", tags=["brain"])
 
@@ -240,7 +242,9 @@ async def _facts_out(db: AsyncSession, rows: list[BrainFact]) -> list[FactOut]:
 
 async def _fact(db: AsyncSession, principal: Principal, fact_id: str) -> BrainFact:
     f = await db.get(BrainFact, fact_id)
-    if f is None or f.workspace_id != principal.workspace_id:
+    if f is None or not sees_fact(
+        await for_person(db, principal.workspace_id, principal.scope), f
+    ):  # P29: outside the caller's scope is "not here"
         raise api_error(status.HTTP_404_NOT_FOUND, "fact_not_found", "That fact is not here.")
     return f
 
@@ -250,12 +254,139 @@ async def _check_scope(
 ) -> None:
     if branch_id:
         b = await db.get(Branch, branch_id)
-        if b is None or b.workspace_id != principal.workspace_id:
+        if b is None or b.workspace_id != principal.workspace_id or not _branch_ok(principal, b.id):
             raise api_error(
                 status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here."
             )
     if agent_id:
         await get_agent(db, principal, agent_id)
+
+
+# ---------------------------------------------------------------- P29: who reads which page
+#
+# Office roles read and write only their own company's pages (and the workspace-wide ones),
+# as in search/viewer.py. An agent's folder (agents/<slug>/: its core memory) is read by the
+# people who see that agent and changed only by the people who manage it, so nobody reads or
+# rewrites a private assistant but its owner.
+
+
+def _agent_slug(path: str) -> str | None:
+    """agents/<slug>/... (also inside a company folder) -> slug."""
+    _, rel = split_branch(path)
+    parts = rel.split("/")
+    return parts[1] if len(parts) >= 3 and parts[0] == "agents" else None
+
+
+async def _page_agent(db: AsyncSession, ws_id: str, path: str) -> tuple[bool, Agent | None]:
+    slug = _agent_slug(path)
+    if slug is None:
+        return False, None
+    a = await db.scalar(select(Agent).where(Agent.workspace_id == ws_id, Agent.slug == slug))
+    return True, a
+
+
+def _branch_ok(principal: Principal, branch_id: str | None) -> bool:
+    return principal.scope.everything or branch_id is None or branch_id == principal.branch_id
+
+
+async def _page_branch(db: AsyncSession, ws_id: str, path: str) -> str | None:
+    slug, _ = split_branch(path)
+    if slug is None:
+        return None
+    return await db.scalar(
+        select(Branch.id).where(Branch.workspace_id == ws_id, Branch.slug == slug)
+    )
+
+
+def _not_found() -> Exception:
+    return api_error(status.HTTP_404_NOT_FOUND, "page_not_found", "There is no page at that path.")
+
+
+# P30: a dream diary covers the whole workspace; office roles read their share of it through
+# /brain/dreams (filtered), never the raw diary page.
+DREAMS = "DREAMS/"
+
+
+async def _readable_page(
+    db: AsyncSession, principal: Principal, path: str, branch_id: str | None
+) -> bool:
+    if not _branch_ok(principal, branch_id):
+        return False
+    if not principal.scope.everything and path.startswith(DREAMS):
+        return False
+    is_agent, a = await _page_agent(db, principal.workspace_id, path)
+    return not is_agent or a is None or principal.scope.sees_agent(a)
+
+
+async def _check_page_write(
+    db: AsyncSession, principal: Principal, path: str, branch_id: str | None
+) -> Agent | None:
+    """404 outside the person's pages, 403 for an agent's folder they cannot manage.
+    Returns the agent whose folder this is, if any."""
+    if not await _readable_page(db, principal, path, branch_id):
+        raise _not_found()
+    is_agent, a = await _page_agent(db, principal.workspace_id, path)
+    if not is_agent:
+        return None
+    perms = PERMISSIONS.get(principal.role, frozenset())
+    allowed = (
+        can_manage(principal, a)
+        if a is not None
+        else ("agents.manage" in perms and principal.scope.everything)
+    )
+    if not allowed:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only the people who manage this agent can change its memory.",
+        )
+    return a
+
+
+async def _page_where(db: AsyncSession, principal: Principal) -> ColumnElement[bool]:
+    """SQL twin of _readable_page, for lists, links and the graph."""
+    sc = principal.scope
+    conds: list[ColumnElement[bool]] = []
+    if not sc.everything:
+        conds.append(
+            or_(BrainPage.branch_id.is_(None), BrainPage.branch_id == principal.branch_id)
+            if principal.branch_id
+            else BrainPage.branch_id.is_(None)
+        )
+        conds.append(not_(BrainPage.path.startswith(DREAMS, autoescape=True)))
+    agents = (
+        await db.scalars(select(Agent).where(Agent.workspace_id == principal.workspace_id))
+    ).all()
+    for a in agents:
+        if not sc.sees_agent(a):
+            conds.append(
+                not_(
+                    or_(
+                        BrainPage.path.startswith(f"agents/{a.slug}/", autoescape=True),
+                        BrainPage.path.contains(f"/agents/{a.slug}/", autoescape=True),
+                    )
+                )
+            )
+    return and_(true(), *conds)
+
+
+async def _write_core(
+    db: AsyncSession,
+    ws: Workspace,
+    agent: Agent,
+    target: str,
+    items: list[str],
+    principal: Principal,
+) -> None:
+    """Core memory from a person: capped, and refused when an entry is new and unsafe."""
+    old = (await core_memory.read(db, agent))[target]
+    why = core_memory.refused([e for e in items if e not in old])
+    if why:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "memory_refused", why)
+    try:
+        await core_memory.write(db, ws, agent, target, items, _author(principal))
+    except core_memory.MemoryFull as e:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "memory_full", str(e)) from e
 
 
 def _dream_out(d: BrainDream, diary: str | None = None) -> DreamOut:
@@ -328,7 +459,9 @@ async def list_pages(
     through it instead (X-Next-Cursor, X-Total-Count); `q` filters on path and title."""
     ws = await _ws(db, principal)
     await store.ensure_vault(db, ws)
-    query = select(BrainPage).where(BrainPage.workspace_id == ws.id)
+    query = select(BrainPage).where(
+        BrainPage.workspace_id == ws.id, await _page_where(db, principal)
+    )
     if q.strip():
         like = f"%{q.strip()}%"
         query = query.where(or_(BrainPage.path.ilike(like), BrainPage.title.ilike(like)))
@@ -343,8 +476,9 @@ async def list_pages(
     return [PageSummary(**_summary(p, names)) for p in rows]
 
 
-async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage) -> PageOut:
+async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage, principal: Principal) -> PageOut:
     await db.refresh(p)  # updated_at is set by the database on save
+    readable = await _page_where(db, principal)  # P29: links name only pages they may read
     out_names = list(
         (await db.scalars(select(BrainLink.dst_name).where(BrainLink.src_page_id == p.id))).all()
     )
@@ -354,7 +488,7 @@ async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage) -> PageOut:
             for name, path, title in (
                 await db.execute(
                     select(BrainPage.name, BrainPage.path, BrainPage.title)
-                    .where(BrainPage.workspace_id == ws.id, BrainPage.name.in_(out_names))
+                    .where(BrainPage.workspace_id == ws.id, BrainPage.name.in_(out_names), readable)
                     .order_by(BrainPage.path)
                 )
             ).all()
@@ -371,6 +505,7 @@ async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage) -> PageOut:
                 BrainLink.dst_name == p.name,
                 BrainPage.id != p.id,
                 BrainPage.path.not_in(GENERATED),  # the index links to everything
+                readable,
             )
             .distinct()
             .order_by(BrainPage.path)
@@ -403,11 +538,9 @@ async def get_page(
     p = await db.scalar(
         select(BrainPage).where(BrainPage.workspace_id == ws.id, BrainPage.path == path)
     )
-    if p is None:
-        raise api_error(
-            status.HTTP_404_NOT_FOUND, "page_not_found", "There is no page at that path."
-        )
-    return await _page_out(db, ws, p)
+    if p is None or not await _readable_page(db, principal, p.path, p.branch_id):
+        raise _not_found()
+    return await _page_out(db, ws, p, principal)
 
 
 @router.put("/brain/page")
@@ -423,10 +556,23 @@ async def put_page(
             raise PathError("index.md is rebuilt every night; edit the pages it lists instead.")
         if path.startswith("skills/"):
             raise PathError("Skills change through review: edit them on the Skills page.")
-        p = await store.save_page(db, ws, path, body.body, _author(principal), body.message)
+        agent = await _check_page_write(db, principal, path, await _page_branch(db, ws.id, path))
+        target = core_memory.target_of(path)
+        if target is not None:
+            # P29: core memory is in every prompt: the same cap and checks as the memory tool.
+            if agent is None or path != core_memory.path_for(agent, target):
+                raise _not_found()
+            await _write_core(db, ws, agent, target, core_memory.entries(body.body), principal)
+            p = await db.scalar(
+                select(BrainPage).where(BrainPage.workspace_id == ws.id, BrainPage.path == path)
+            )
+            if p is None:  # an empty memory that was never written
+                raise _not_found()
+        else:
+            p = await store.save_page(db, ws, path, body.body, _author(principal), body.message)
     except PathError as e:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_path", str(e)) from e
-    return await _page_out(db, ws, p)
+    return await _page_out(db, ws, p, principal)
 
 
 @router.delete("/brain/page", status_code=status.HTTP_204_NO_CONTENT)
@@ -443,10 +589,14 @@ async def delete_page(
             path=path,
         )
     ws = await _ws(db, principal)
+    p = await db.scalar(
+        select(BrainPage).where(BrainPage.workspace_id == ws.id, BrainPage.path == path)
+    )
+    if p is None:
+        raise _not_found()
+    await _check_page_write(db, principal, p.path, p.branch_id)
     if not await store.delete_page(db, ws, path, _author(principal)):
-        raise api_error(
-            status.HTTP_404_NOT_FOUND, "page_not_found", "There is no page at that path."
-        )
+        raise _not_found()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -464,6 +614,7 @@ async def graph(
                 BrainPage.workspace_id == ws_id,
                 BrainPage.path.not_in(GENERATED),
                 BrainPage.kind.not_in(("dream", "log", "agent", "index", "skill")),
+                await _page_where(db, principal),
             )
         )
     ).all()
@@ -519,10 +670,16 @@ async def search(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
-    v = for_people(principal.workspace_id)
+    # P29: the caller's scope: their agents' facts and conversations (never someone else's
+    # private assistant), and office roles only their company's facts and pages.
+    v = await for_person(db, principal.workspace_id, principal.scope)
+    pv = v
+    if not principal.scope.everything:
+        own = frozenset({principal.branch_id}) if principal.branch_id else frozenset()
+        pv = dataclasses.replace(v, branch_ids=own)
     qvec = await embed.embed_one(q)
     facts = [h for _, h in await search_facts(db, v, q, qvec, limit=10)]
-    pages = await search_pages(db, v, q, qvec, limit=8)
+    pages = await search_pages(db, pv, q, qvec, limit=8)
     past = await search_history(db, v, q, limit=6) if history else []
     return {
         "facts": [_hit(h) for h in facts],
@@ -551,7 +708,8 @@ async def list_facts(
 ) -> dict[str, Any]:
     """Newest first. `{total, items, next_cursor}`: pass `next_cursor` (also sent as
     X-Next-Cursor) back as `cursor` for the next page; `offset` still works for old callers."""
-    conds = [BrainFact.workspace_id == principal.workspace_id]
+    v = await for_person(db, principal.workspace_id, principal.scope)  # P29
+    conds = [BrainFact.workspace_id == principal.workspace_id, brain_facts.scope_filter(v, True)]
     if state == "active":
         conds.append(BrainFact.valid_to.is_(None))
     elif state == "ended":
@@ -694,7 +852,60 @@ async def list_dreams(
             .limit(60)
         )
     ).all()
-    return [_dream_out(d) for d in rows]
+    if principal.scope.everything:
+        return [_dream_out(d) for d in rows]
+    return [await _scoped_dream(db, principal, d) for d in rows]
+
+
+async def _scoped_dream(
+    db: AsyncSession, principal: Principal, d: BrainDream, with_diary: bool = False
+) -> DreamOut:
+    """P30: an office role's share of a dream: merges and fixes of facts they may recall,
+    vault edits of pages they may read, skill proposals (office knowledge). Workspace-wide
+    counts are left out, and the diary is rewritten from what is left."""
+    v = await for_person(db, principal.workspace_id, principal.scope)
+    ids = {
+        str(c.get(k))
+        for c in d.changes or []
+        if c.get("kind") in ("merge", "contradiction")
+        for k in ("ended", "kept")
+    }
+    facts = (
+        {f.id: f for f in (await db.scalars(select(BrainFact).where(BrainFact.id.in_(ids)))).all()}
+        if ids
+        else {}
+    )
+    kept: list[dict[str, Any]] = []
+    for c in d.changes or []:
+        kind = c.get("kind")
+        if kind in ("merge", "contradiction"):
+            pair = [facts.get(str(c.get("ended"))), facts.get(str(c.get("kept")))]
+            ok = all(f is not None and sees_fact(v, f) for f in pair)
+        elif kind in ("import", "conflict"):
+            path = str(c.get("path") or "")
+            branch = await _page_branch(db, principal.workspace_id, path)
+            ok = await _readable_page(db, principal, path, branch)
+        else:
+            ok = kind == "skill"
+        if ok:
+            kept.append(c)
+    stats = {k: x for k, x in (d.stats or {}).items() if k == "judge_skipped"}
+    diary = None
+    if with_diary and d.diary_path:
+        ws = await _ws(db, principal)
+        diary = brain_dream.diary(ws, d.day, kept, stats, scoped=True)
+    return DreamOut(
+        id=d.id,
+        day=d.day.isoformat(),
+        status=d.status,
+        stats={**stats, "scoped": True},
+        changes=kept,
+        diary_path=None,
+        diary=diary,
+        error=d.error,
+        started_at=d.started_at,
+        finished_at=d.finished_at,
+    )
 
 
 async def _dream(db: AsyncSession, principal: Principal, dream_id: str) -> BrainDream:
@@ -711,6 +922,8 @@ async def get_dream(
     db: AsyncSession = Depends(get_db),
 ) -> DreamOut:
     d = await _dream(db, principal, dream_id)
+    if not principal.scope.everything:
+        return await _scoped_dream(db, principal, d, with_diary=True)
     diary = None
     if d.diary_path:
         diary = await db.scalar(
@@ -810,14 +1023,17 @@ async def put_core_memory(
     db: AsyncSession = Depends(get_db),
 ) -> CoreMemoryOut:
     agent = await get_agent(db, principal, agent_id)
+    if not can_manage(principal, agent):  # P29: core memory is the agent's settings
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only the people who manage this agent can change its memory.",
+        )
     ws = await _ws(db, principal)
-    try:
-        for target in ("memory", "user"):
-            items = getattr(body, target)
-            if items != (await core_memory.read(db, agent))[target]:
-                await core_memory.write(db, ws, agent, target, items, _author(principal))
-    except core_memory.MemoryFull as e:
-        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "memory_full", str(e)) from e
+    for target in ("memory", "user"):
+        items = getattr(body, target)
+        if items != (await core_memory.read(db, agent))[target]:
+            await _write_core(db, ws, agent, target, items, principal)
     return await _core_out(db, agent)
 
 

@@ -25,6 +25,9 @@ log = logging.getLogger("agentic.codetool")
 
 MAX_IN_FILES = 10
 PREVIEW = 6000
+# The sandbox runs one job at a time: a run may wait up to ~45 s for the one before it, then
+# run up to 30 s (SANDBOX_QUEUE_SECONDS / SANDBOX_WALL_SECONDS), plus file transfer.
+TIMEOUT = httpx.Timeout(120, connect=10)
 
 
 async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
@@ -47,7 +50,7 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
 
     payload = {"code": code, "files": files_in, "stdin": str(args.get("stdin") or "")}
     try:
-        async with httpx.AsyncClient(timeout=60) as http:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as http:
             r = await http.post(
                 f"{settings.sandbox_url.rstrip('/')}/run",
                 json=payload,
@@ -55,6 +58,8 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
             )
     except httpx.HTTPError as e:
         return f"Error: could not reach the code sandbox ({e.__class__.__name__})."
+    if r.status_code == 503:
+        return "Error: the code sandbox is busy with another run. Try again in a minute."
     if r.status_code != 200:
         return f"Error: the sandbox refused the run ({r.status_code}: {r.text[:200]})."
     data = r.json()

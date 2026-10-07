@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
@@ -49,10 +49,40 @@ MAX_VERSIONS = 50
 # ---------------------------------------------------------------- scope
 
 
+def _others_private(workspace_id: str, user_id: str | None) -> Any:
+    """Ids of other people's private assistants (scope.py: hidden even from admins)."""
+    return select(Agent.id).where(
+        Agent.workspace_id == workspace_id,
+        Agent.private.is_(True),
+        or_(Agent.owner_user_id.is_(None), Agent.owner_user_id != user_id),
+    )
+
+
+def not_private_work(model: Any, principal: Any) -> ColumnElement[bool] | None:
+    """P29: rows made by (or for a task of) someone else's private assistant stay with that
+    assistant's owner, as its tasks do: hidden from everyone else, admins included."""
+    if not hasattr(model, "agent_id") and not hasattr(model, "task_id"):
+        return None
+    theirs = _others_private(principal.workspace_id, principal.scope.user_id)
+    conds: list[ColumnElement[bool]] = []
+    if hasattr(model, "agent_id"):
+        conds.append(or_(model.agent_id.is_(None), model.agent_id.not_in(theirs)))
+    if hasattr(model, "task_id"):
+        their_tasks = select(Task.id).where(
+            Task.workspace_id == principal.workspace_id, Task.assignee_agent_id.in_(theirs)
+        )
+        conds.append(or_(model.task_id.is_(None), model.task_id.not_in(their_tasks)))
+    return or_(model.created_by == principal.actor, and_(*conds))
+
+
 def scoped(q: Any, model: Any, principal: Any) -> Any:
     """Rows a person may see: everything for workspace roles; for office roles, what they
-    made, what their visible agents made or work on, and (branch managers) their branch."""
+    made, what their visible agents made or work on, and (branch managers) their branch.
+    Never someone else's private assistant's work (P29)."""
     sc = principal.scope
+    hidden = not_private_work(model, principal)
+    if hidden is not None:
+        q = q.where(hidden)
     if sc.everything:
         return q
     cond = sc.agent_where()
@@ -75,6 +105,100 @@ def branch_ok(principal: Any, branch_id: str | None) -> bool:
     if sc.everything or branch_id is None:
         return True
     return sc.kind != "branch" or branch_id == sc.branch_id
+
+
+def visible_files(query: Any, principal: Any) -> Any:
+    """Files a person sees: their own and their agents' (scoped), plus the guidelines shared
+    with them (library files of their company and department, not held back), which they
+    open and download like files.get_file(library_ok=True) but do not change."""
+    if principal.scope.everything:
+        return scoped(query, DocFile, principal)
+    from ..knowledge import search as library
+    from ..search.viewer import library_scope
+
+    mine = scoped(
+        select(DocFile.id).where(DocFile.workspace_id == principal.workspace_id), DocFile, principal
+    )
+    shared = and_(
+        DocFile.library.is_(True),
+        DocFile.quarantined.is_(False),
+        library_scope(library.for_person(principal)),
+    )
+    return query.where(or_(DocFile.id.in_(mine), shared))
+
+
+# P29: a person's own files ("My workspace", desk uploads) and the forms filled for them.
+# Every file a person uploads carries owner_user_id (whose desk it shows on), so the owner
+# alone does not make a file private; these do.
+DESK_ROOTS = ("My workspace", "Meja kerja saya")
+
+
+def personal_file() -> ColumnElement[bool]:
+    """A file that is someone's own: on their desk, or a form filled in for them."""
+    desk = or_(*[or_(DocFile.folder == r, DocFile.folder.like(f"{r}/%")) for r in DESK_ROOTS])
+    return and_(
+        DocFile.owner_user_id.is_not(None),
+        DocFile.library.is_(False),
+        or_(desk, DocFile.kind == "form"),
+    )
+
+
+def agent_files(agent: Any, task_id: str | None = None) -> ColumnElement[bool]:
+    """P29: the files an agent may read (read_file, list_files, document search, packs):
+    its company's and the workspace's; a library guideline of a department only when it is
+    that agent's department (as for the people of it); never someone else's private
+    assistant's work, nor a person's own files unless they are the agent's owner's. Files
+    given to its current task are always its to read."""
+    branch = (
+        or_(DocFile.branch_id.is_(None), DocFile.branch_id == agent.branch_id)
+        if agent.branch_id
+        else DocFile.branch_id.is_(None)
+    )
+    dept = or_(
+        DocFile.library.is_(False),
+        DocFile.department_id.is_(None),
+        *([DocFile.department_id == agent.department_id] if agent.department_id else []),
+    )
+    own = [agent.id] + ([agent.clone_of] if getattr(agent, "clone_of", None) else [])
+    private = select(Agent.id).where(
+        Agent.workspace_id == agent.workspace_id, Agent.private.is_(True), Agent.id.not_in(own)
+    )
+    private_tasks = select(Task.id).where(
+        Task.workspace_id == agent.workspace_id, Task.assignee_agent_id.in_(private)
+    )
+    not_private = and_(
+        or_(DocFile.agent_id.is_(None), DocFile.agent_id.not_in(private)),
+        or_(DocFile.task_id.is_(None), DocFile.task_id.not_in(private_tasks)),
+    )
+    mine = [DocFile.agent_id.in_(own)]
+    if agent.owner_user_id:
+        mine.append(DocFile.owner_user_id == agent.owner_user_id)
+    not_personal = or_(~personal_file(), *mine)
+    cond = and_(DocFile.workspace_id == agent.workspace_id, branch, dept, not_private, not_personal)
+    if task_id:
+        cond = or_(
+            cond, and_(DocFile.workspace_id == agent.workspace_id, DocFile.task_id == task_id)
+        )
+    return cond
+
+
+def agent_documents(agent: Any, task_id: str | None = None) -> ColumnElement[bool]:
+    """P29: Document Studio documents an agent may use: its company's and the workspace's,
+    never someone else's private assistant's (its task's own documents always)."""
+    ws = Document.workspace_id == agent.workspace_id
+    branch = (
+        or_(Document.branch_id.is_(None), Document.branch_id == agent.branch_id)
+        if agent.branch_id
+        else Document.branch_id.is_(None)
+    )
+    own = [agent.id] + ([agent.clone_of] if getattr(agent, "clone_of", None) else [])
+    private = select(Agent.id).where(
+        Agent.workspace_id == agent.workspace_id, Agent.private.is_(True), Agent.id.not_in(own)
+    )
+    cond = and_(ws, branch, or_(Document.agent_id.is_(None), Document.agent_id.not_in(private)))
+    if task_id:
+        cond = or_(cond, and_(ws, Document.task_id == task_id))
+    return cond
 
 
 # ---------------------------------------------------------------- company kit
@@ -431,6 +555,13 @@ async def create_file(
     )
     if kind == "image" and mime.startswith("image/"):
         f.mime = mime[:120]
+    if source not in ("upload", "download") and status == "ready":
+        # P29: what the office makes itself (exports, run_python output, filled forms) is
+        # scanned too, for the record people see; only outside content is held back (on
+        # reading, in process_file), so an agent's own deliverable is never blocked.
+        from ..intake import scan
+
+        scan.note(f, await asyncio.to_thread(scan.scan_bytes, data, f.name, f.mime))
     db.add(f)
     await db.flush()
     return f
@@ -505,11 +636,19 @@ async def process_file(
     f.error = out.note or None
     model_text = out.text
     # P24: secrets never reach the model, agents or the library (a site's download is as
-    # untrusted as a person's upload).
+    # untrusted as a person's upload). P29: Word / Excel / PowerPoint are also scanned as
+    # their raw parts (headers, footers, comments, text boxes, rows past what was read);
+    # what the office made itself is scanned for the record but not held back.
+    found = scan.scan(out.text)
+    if kind_of(f) in ("docx", "xlsx", "pptx"):
+        raw = await asyncio.to_thread(scan.office_text, bytes(f.data))
+        if raw:
+            found.merge(await asyncio.to_thread(scan.scan, raw))
     if f.source in ("upload", "download"):
-        found = scan.scan(out.text)
         scan.apply(f, found)
-        model_text = scan.mask(out.text, found)
+    else:
+        scan.note(f, found)
+    model_text = scan.mask(out.text, found)
     info = await understand(db, f, model_text, hint)
     if info:
         f.kind, f.title, f.summary = info["kind"], info["title"], info["summary"]
@@ -542,6 +681,11 @@ async def process_file(
 
     await search_index.try_index(db, "file", f.id)
     return f.status
+
+
+def kind_of(f: DocFile) -> str:
+    """pdf | docx | xlsx | pptx | ... for a stored file (its bytes must be loaded)."""
+    return sniff(bytes(f.data[:4096]) if f.data else b"", f.name, f.mime)
 
 
 def file_line(f: DocFile, today: date | None = None) -> str:

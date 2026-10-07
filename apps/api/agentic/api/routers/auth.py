@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...core.security import hash_password, needs_rehash, verify_password
-from ...models import AuthSession, Membership, User, Workspace
+from ...models import AuthSession, Membership, PushSubscription, User, Workspace
 from ...services import audit, loginguard
 from ...services.text import slugify
 from ..deps import (
@@ -141,13 +142,28 @@ async def login(
     return await _me(db, user, membership.workspace_id, membership.role)
 
 
+class LogoutIn(BaseModel):
+    # P29: this device's web-push endpoint (the browser's PushSubscription.endpoint). Push
+    # subscriptions are per person, not per session, so the app names the one to drop.
+    push_endpoint: str | None = Field(default=None, max_length=2000)
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     response: Response,
+    body: LogoutIn | None = None,
     principal: Principal = Depends(principal_allow_pw_change),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     await db.execute(delete(AuthSession).where(AuthSession.id == principal.session_id))
+    if body is not None and body.push_endpoint:
+        # Signed out here: this device stops getting approval buttons. Only the person's own.
+        await db.execute(
+            delete(PushSubscription).where(
+                PushSubscription.endpoint == body.push_endpoint,
+                PushSubscription.user_id == principal.user.id,
+            )
+        )
     await db.commit()
     clear_session_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT

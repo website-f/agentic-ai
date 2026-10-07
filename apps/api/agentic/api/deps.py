@@ -1,5 +1,6 @@
 """Request auth: session cookie -> Principal, permission checks, CSRF, cookie helpers."""
 
+import ipaddress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -78,7 +79,45 @@ def _remember_lang(request: Request, user: User) -> None:
         set_lang(lang)
 
 
+def _ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    v = value.strip().strip('"')
+    if v.startswith("["):  # [v6]:port
+        v = v[1 : v.find("]")] if "]" in v else v
+    elif v.count(":") == 1:  # v4:port
+        v = v.split(":", 1)[0]
+    try:
+        return ipaddress.ip_address(v)
+    except ValueError:
+        return None
+
+
+def _public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return not (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
+    )
+
+
 def client_ip(request: Request) -> str:
+    """The address that really connected, for sign-in lockouts and the audit trail.
+
+    P29: uvicorn runs with --proxy-headers, and with --forwarded-allow-ips '*' it takes the
+    LEFTMOST X-Forwarded-For entry, which the client writes itself (nginx only appends).
+    So: X-Real-IP first (our nginx sets it to $remote_addr), else the rightmost public
+    X-Forwarded-For entry (the one our proxy added), else the socket peer."""
+    real = _ip(request.headers.get("x-real-ip", ""))
+    if real is not None:
+        return str(real)
+    hops = [
+        ip
+        for raw in request.headers.getlist("x-forwarded-for")
+        for part in raw.split(",")
+        if (ip := _ip(part)) is not None
+    ]
+    for ip in reversed(hops):
+        if _public(ip):
+            return str(ip)
+    if hops:  # all private: an office network talking to an internal install
+        return str(hops[-1])
     return request.client.host if request.client else "unknown"
 
 
@@ -165,6 +204,18 @@ async def principal_allow_pw_change(
 ) -> Principal:
     """For the few endpoints a user may call while a password change is pending."""
     return await _load_principal(request, db)
+
+
+async def optional_principal(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> Principal | None:
+    """P29: the signed-in person, or None. For top-level GET redirects (an OAuth callback)
+    that must answer with a page, not a JSON 401. The Lax session cookie is sent on them."""
+    try:
+        p = await _load_principal(request, db)
+    except HTTPException:
+        return None
+    return None if p.user.must_change_password else p
 
 
 async def current_principal(request: Request, db: AsyncSession = Depends(get_db)) -> Principal:

@@ -18,6 +18,12 @@ Rules (English and Malay):
 `mask` hides the values themselves, for text that leaves the scanner (the model that reads
 and summarises a file sees "[hidden]").
 
+P29: also Anthropic keys (sk-ant-...) and a password inside a web address
+(scheme://user:password@host). Word, Excel and PowerPoint files are also scanned as their
+raw parts (`office_text`: headers, footers, comments, text boxes, links, every sheet row),
+not only the text the reader extracted. Files the office makes itself (generated, packs,
+run_python output) are scanned for the record (`scan_bytes` / `note`) but not held back.
+
 Same spirit as core/threats.py: compiled patterns, bounded gaps, no backtracking blow-ups.
 """
 
@@ -91,6 +97,12 @@ _RAW_TOKENS = re.compile(
     r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"
     r"|\bAIza[0-9A-Za-z_-]{35}"
     r"|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    r"|\bsk-ant-[A-Za-z0-9_-]{20,}"  # P29: Anthropic
+)
+# P29: scheme://user:password@host (a database URL, an FTP link with its login).
+_URL_CRED = re.compile(
+    r"\b[a-z][a-z0-9+.-]{1,15}://[^\s:/@\[\]<>\"']{1,64}:([^\s/@<>\"']{1,128})@[A-Za-z0-9\[]",
+    re.I,
 )
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]{0,20}PRIVATE KEY-----")
 
@@ -168,6 +180,15 @@ class Findings:
     def quarantine(self) -> bool:
         return bool(self.credentials) or self.ic_count >= IC_QUARANTINE
 
+    def merge(self, other: "Findings") -> "Findings":
+        """Add what another scan found (of other text: its spans are not ours to mask)."""
+        for k, pages in other.credentials.items():
+            self.credentials.setdefault(k, set()).update(pages)
+        for k, values in other.personal.items():
+            self.personal.setdefault(k, set()).update(values)
+        self.personal_pages |= other.personal_pages
+        return self
+
     def record(self) -> dict[str, Any]:
         """What is stored on the file: kinds, counts and pages. Never a value."""
         if not self.any:
@@ -198,6 +219,76 @@ def apply(f: Any, found: Findings) -> None:
     f.sensitive = rec
     if found.quarantine and not prev.get("released"):
         f.quarantined = True
+
+
+def note(f: Any, found: Findings) -> None:
+    """P29: record a scan on a file the office made itself, without holding it back (the
+    agent or person who made it already had what it holds; people see the record)."""
+    prev = dict(f.sensitive or {})
+    rec = found.record()
+    rec.update({k: prev[k] for k in REVIEW_KEYS if k in prev})
+    f.sensitive = rec
+
+
+# ---------------------------------------------------------------- raw file parts (P29)
+
+OFFICE_PART = re.compile(r"^(?:word|xl|ppt)/.*\.(?:xml|rels)$|^docProps/.*\.xml$", re.I)
+MAX_PART = 20 * 1024 * 1024  # one part read
+MAX_PARTS_READ = 40 * 1024 * 1024  # all parts read
+MAX_RAW_TEXT = 2_000_000  # characters of text kept for the scan
+_TAG = re.compile(r"<[^>]{0,2000}>")
+_BREAK = re.compile(r"</(?:w:p|w:tc|w:tr|a:p|si|c|row|comment|t)>", re.I)
+_TARGET = re.compile(r'\bTarget="([^"]{1,2000})"')
+
+
+def office_text(data: bytes) -> str:
+    """The text of every part of a Word / Excel / PowerPoint file (a zip): document body,
+    headers and footers, comments, notes, text boxes, every row of every sheet, and link
+    targets. Plain patterns, no XML parser (no entity expansion); bounded. "" when it is
+    not such a file."""
+    import html
+    import io
+    import zipfile
+
+    if data[:2] != b"PK":
+        return ""
+    out: list[str] = []
+    size = read = 0
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for info in z.infolist():
+                if not OFFICE_PART.match(info.filename) or info.file_size > MAX_PART:
+                    continue
+                if read + info.file_size > MAX_PARTS_READ or size >= MAX_RAW_TEXT:
+                    break
+                read += info.file_size
+                xml = z.read(info).decode("utf-8", errors="replace")
+                links = _TARGET.findall(xml) if info.filename.endswith(".rels") else []
+                text = _TAG.sub("", _BREAK.sub(lambda m: m.group(0) + "\n", xml))
+                text = html.unescape(text)
+                piece = "\n".join([*links, text]).strip()
+                if piece:
+                    out.append(piece[: MAX_RAW_TEXT - size])
+                    size += len(out[-1])
+    except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, EOFError):
+        return "\n\n".join(out)
+    return "\n\n".join(out)
+
+
+TEXTISH = (".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm", ".log", ".py", ".sql", ".env")
+
+
+def scan_bytes(data: bytes, name: str = "", mime: str = "") -> Findings:
+    """A cheap scan of a file's bytes (no OCR, no PDF): text files as text, Word / Excel /
+    PowerPoint by their raw parts. For files the office makes itself (`note`)."""
+    found = Findings()
+    low = name.lower()
+    if data[:2] == b"PK":
+        raw = office_text(data)
+        return scan(raw) if raw else found
+    if low.endswith(TEXTISH) or mime.startswith("text/") or mime == "application/json":
+        return scan(data[: 2 * MAX_RAW_TEXT].decode("utf-8", errors="replace")[:MAX_RAW_TEXT])
+    return found
 
 
 def reasons(record: dict[str, Any]) -> list[str]:
@@ -371,6 +462,10 @@ def scan(text: str) -> Findings:
             cred("api_key", m.start(), (got[1], got[2]))
     for m in _RAW_TOKENS.finditer(text):
         cred("api_key", m.start(), (m.start(), m.end()))
+    for m in _URL_CRED.finditer(text):
+        v = m.group(1)
+        if not v.startswith(("$", "%", "{", "<")) and _secretish(v, True):
+            cred("password", m.start(), (m.start(1), m.end(1)))
     for m in _PRIVATE_KEY.finditer(text):
         end = text.find("-----END", m.end())
         cred("private_key", m.start(), (m.start(), end if end != -1 else m.end()))

@@ -1043,6 +1043,13 @@ async def act(
                         "error": "The check page is not on this login's site.",
                         "verified": False,
                     }
+                # Same public-address guard as goto: a login's hosts list is no reason to
+                # load an internal address.
+                if not await host_ok(u.hostname):
+                    return {
+                        "error": "That address is not allowed (only public http/https sites).",
+                        "verified": False,
+                    }
                 if s.allowed and not host_matches(body.url or "", s.allowed):
                     return {"error": blocked_text(body.url or "", s.allowed), "verified": False}
                 await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)

@@ -3,6 +3,8 @@ a laptop with no public address.
 
 One poller per bot across all workers (a Valkey lock), the offset is saved after every
 update, and a bad token switches the bot off with the reason shown in the dashboard.
+P29: the lock is renewed for every message and while a slow one is being answered (an agent
+reply can take longer than the lock), and a poller that lost its lock stops at once.
 """
 
 import asyncio
@@ -34,6 +36,27 @@ async def _lock(channel_id: str) -> bool:
     return False
 
 
+@contextlib.asynccontextmanager
+async def _held(channel_id: str):
+    """Keep renewing the lock while one message is handled."""
+
+    async def renew() -> None:
+        while True:
+            await asyncio.sleep(LOCK_TTL / 3)
+            try:
+                await _lock(channel_id)
+            except Exception:  # noqa: BLE001 - the next renewal tries again
+                log.info("could not renew the telegram lock for %s", channel_id)
+
+    beat = asyncio.create_task(renew())
+    try:
+        yield
+    finally:
+        beat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await beat
+
+
 async def poll_once(channel_id: str, timeout: int = 20) -> int:
     """One getUpdates round for one bot. Returns how many updates were handled."""
     async with SessionLocal() as db:
@@ -51,7 +74,9 @@ async def poll_once(channel_id: str, timeout: int = 20) -> int:
     updates = await telegram.get_updates(token, offset, timeout=timeout)
     handled = 0
     for u in updates:
-        async with SessionLocal() as db:
+        if not await _lock(channel_id):  # P29: renewed per message; lost it: stop here
+            return handled
+        async with SessionLocal() as db, _held(channel_id):
             ch = await db.get(Channel, channel_id)
             if ch is None:
                 return handled

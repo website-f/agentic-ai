@@ -6,9 +6,12 @@ agent's own when one is set up, so the work is not graded by the model that wrot
 goal and the result and returns met / not met with what is missing. If no judge can answer, the
 task is not passed silently: it goes to a person for review. If it is not met
 and the task is under the cap, the agent is nudged with what is missing and the same work
-continues (a fresh run on the same conversation, like a person's "send back"). Bounded by
-MAX_GOAL_TRIES so it can never loop forever, and every model call still counts against the
-task's call limit and the agent's budget.
+continues. P29: inside the SAME run (runtime.finish returns "continue" and the workflow loops
+back into its steps), so a parent or a schedule waiting on the run gets the finished answer;
+a relaunch was refused for a task that was still running. Each try is counted once (a
+retried finish does not judge again) and adds a bounded number of model calls (FIX_CALLS),
+never a reset. Bounded by MAX_GOAL_TRIES so it can never loop forever, and every model call
+still counts against the task's call limit and the agent's budget.
 """
 
 import logging

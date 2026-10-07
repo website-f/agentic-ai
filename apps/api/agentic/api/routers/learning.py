@@ -41,6 +41,7 @@ from ...skills.learn_source import SourceError, learn
 from ...skills.store import SkillError
 from ..deps import Principal, api_error, require
 from .brain import _names
+from .skills import _no_publish, may_publish
 
 log = logging.getLogger("agentic.api.learning")
 
@@ -414,13 +415,15 @@ class RevertIn(BaseModel):
 async def revert_skill(
     skill_id: str,
     body: RevertIn,
-    principal: Principal = Depends(require("approvals.decide")),
+    principal: Principal = Depends(require("agents.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     ws = await db.get(Workspace, principal.workspace_id)
     skill = await db.get(Skill, skill_id)
     if ws is None or skill is None or skill.workspace_id != ws.id:
         raise api_error(status.HTTP_404_NOT_FOUND, "skill_not_found", "That skill is not here.")
+    if not await may_publish(db, principal, skill):  # P29: a revert is a publish
+        raise _no_publish(principal)
     try:
         skill = await autopilot.revert(
             db, ws, skill, body.version, Author(principal.actor, principal.user.name)

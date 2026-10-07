@@ -260,7 +260,12 @@ async def approval_page(
 ) -> dict[str, Any]:
     """The one-screen approve page that iPhone notifications open."""
     a = await db.get(Approval, approval_id)
-    if a is None or a.workspace_id != principal.workspace_id:
+    asker = await db.get(Agent, a.agent_id) if a is not None else None
+    if (
+        a is None
+        or a.workspace_id != principal.workspace_id
+        or not principal.scope.sees_agent(asker)  # P29: as /approvals/{id}
+    ):
         raise api_error(
             status.HTTP_404_NOT_FOUND, "approval_not_found", "That approval is not here."
         )
@@ -480,7 +485,11 @@ async def put_binding(
 ) -> dict[str, Any]:
     ch = await _channel(db, principal, channel_id)
     agent = await db.get(Agent, body.agent_id)
-    if agent is None or agent.workspace_id != principal.workspace_id:
+    if (
+        agent is None
+        or agent.workspace_id != principal.workspace_id
+        or not principal.scope.sees_agent(agent)  # P29: never someone else's assistant
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "agent_not_found", "That agent is not here.")
     b = await db.scalar(
         select(Binding).where(Binding.channel_id == ch.id, Binding.match == body.match)

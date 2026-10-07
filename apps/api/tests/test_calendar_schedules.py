@@ -715,3 +715,34 @@ async def test_outside_content_in_the_same_turn_needs_the_persons_yes(client, ll
     await _chat(client, a["id"], "Yes, set it up")
     async with SessionLocal() as db:
         assert await db.scalar(select(Schedule)) is not None
+
+
+async def test_outside_text_read_earlier_in_the_chat_still_needs_a_yes(
+    client, llm, temporal, sched
+):
+    """P29: outside text read in an earlier turn is still in the conversation, so a request
+    after it waits for the person's own "yes" (it used to reset every turn)."""
+    o = await office(client)
+    a = await new_agent(client, o, "Faiz")  # schedule_task left at "ask": the owner's chat OKs it
+    llm.call("search_library", query="supplier rates").say("Nothing in the library.")
+
+    async def say(text: str) -> None:
+        r = await client.post(
+            f"/api/agents/{a['id']}/chat",
+            json={"message": text, "session_id": sid},
+            headers=csrf(client),
+        )
+        assert r.status_code == 200, r.text
+
+    sid = (await _chat(client, a["id"], "Look up our supplier rates"))["session_id"]
+    ask = {"title": "Ping", "brief": "ping", "when": "every Monday at 9am"}
+    llm.call("schedule_task", **ask).say("Shall I set it up?")
+    await say("Set up a weekly ping")  # a later turn of the same conversation
+    assert _tool_results(llm)[-1] == runtime.OUTSIDE_HOLD
+    async with SessionLocal() as db:
+        assert await db.scalar(select(Schedule)) is None
+    llm.call("schedule_task", **ask).say("Done.")
+    await say("yes")
+    assert _tool_results(llm)[-1].startswith("Scheduled 'Ping'")
+    async with SessionLocal() as db:
+        assert await db.scalar(select(Schedule)) is not None

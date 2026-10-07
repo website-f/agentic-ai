@@ -97,6 +97,22 @@ async def test_run_python_reports_a_stopped_process(client, llm, temporal, monke
     assert "too much CPU or memory" in out
 
 
+async def test_run_python_reports_a_busy_sandbox(client, llm, temporal, monkeypatch):
+    # The sandbox runs one job at a time and answers 503 when the queue wait runs out.
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    monkeypatch.setattr(codetool.settings, "sandbox_url", "http://sandbox.test")
+
+    def busy(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"detail": "sandbox busy, try again shortly"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_client(busy))
+    async with SessionLocal() as db:
+        ctx, _ = await _ctx(db, agent["id"])
+        out = await codetool.run_python(ctx, {"code": "print(1)"})
+    assert out.startswith("Error:") and "busy" in out
+
+
 async def test_run_python_off_without_a_sandbox(client, llm, temporal, monkeypatch):
     o = await office(client)
     agent = await new_agent(client, o, "Aina")

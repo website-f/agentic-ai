@@ -4,6 +4,7 @@ with the company's files and, when a person asked for it, waits as their draft t
 hand in (agentic/api/routers/forms.py). Nothing is sent or handed in by the agent.
 """
 
+import asyncio
 from typing import Any
 
 from sqlalchemy import select
@@ -48,7 +49,10 @@ async def _describe_form(ctx: ToolContext, args: dict[str, Any]) -> str:
             head + f"The blank is {blank.name!r} (not Excel): read it with read_file file_id="
             f"'{blank.id}' and prepare the filled version as a document (draft_document)."
         )
-    return head + describe(bytes(blank.data))
+    try:  # P29: off the event loop (a big sheet takes a while), and refused when too big
+        return head + await asyncio.to_thread(describe, bytes(blank.data))
+    except Exception as e:  # noqa: BLE001 - a broken or oversized workbook
+        return head + f"Error: could not read the form ({e.__class__.__name__}: {str(e)[:200]})."
 
 
 async def _fill_form(ctx: ToolContext, args: dict[str, Any]) -> str:
@@ -67,8 +71,10 @@ async def _fill_form(ctx: ToolContext, args: dict[str, Any]) -> str:
     if not (cells or fields or rows):
         return "Error: give cells, fields or rows to write."
     try:
-        data, report = fill(
-            bytes(blank.data), cells=cells, fields=fields, rows=rows, sheet=args.get("sheet")
+        data, report = await asyncio.to_thread(
+            lambda: fill(
+                bytes(blank.data), cells=cells, fields=fields, rows=rows, sheet=args.get("sheet")
+            )
         )
     except Exception as e:  # noqa: BLE001 - a broken workbook or a bad value
         return f"Error: could not fill the form ({e.__class__.__name__}: {str(e)[:200]})."

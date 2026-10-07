@@ -1,8 +1,13 @@
 """Skills: the library, its review queue, test cases and evals.
 
-People who can decide approvals (owner, admin, approver) publish directly: their edits go
-through the same proposal -> approve path, so every change gets a version and a git commit.
-Everyone else with work.write proposes, and the proposal waits for review.
+People who manage agents publish directly: their edits go through the same proposal ->
+approve path, so every change gets a version and a git commit. Everyone else with
+work.write proposes, and the proposal waits for review.
+
+P29: a skill is in the prompt of every agent it reaches, so publishing, approving,
+retiring, reverting and choosing who uses it need agents.manage. Owners and admins may do it
+for any skill; a branch manager or HOD only for skills that reach just the agents they
+manage (agent_ids inside their scope), never one that reaches the whole workspace.
 """
 
 from datetime import datetime
@@ -17,7 +22,17 @@ from ...agents import dispatch
 from ...brain.store import Author
 from ...core.db import get_db
 from ...core.security import can
-from ...models import Skill, SkillEvalCase, SkillProposal, SkillUse, SkillVersion, Task, Workspace
+from ...models import (
+    Agent,
+    Skill,
+    SkillEvalCase,
+    SkillProposal,
+    SkillUse,
+    SkillVersion,
+    Task,
+    Workspace,
+)
+from ...services import audit
 from ...skills import format as fmt
 from ...skills import store
 from .. import paging
@@ -135,8 +150,40 @@ def _author(p: Principal) -> Author:
     return Author(p.actor, p.user.name)
 
 
-def _can_publish(p: Principal) -> bool:
-    return can(p.role, "approvals.decide")
+async def may_publish(
+    db: AsyncSession, p: Principal, skill: Skill | None, agent_ids: list[str] | None = None
+) -> bool:
+    """P29: may this person publish (approve, retire, revert, re-target) `skill`, reaching
+    `agent_ids` afterwards (default: whom it reaches now)? A new skill is `skill=None`."""
+    if not can(p.role, "agents.manage"):
+        return False
+    if p.scope.everything:
+        return True
+    if skill is not None and skill.branch_id and skill.branch_id != p.branch_id:
+        return False
+    after = list(agent_ids if agent_ids is not None else (skill.agent_ids if skill else []))
+    # Both who it reaches now and who it will reach must be agents this manager manages:
+    # an empty list means everyone, which is never a branch's to decide.
+    for ids in [after] + ([list(skill.agent_ids or [])] if skill is not None else []):
+        if not ids:
+            return False
+        rows = (
+            await db.scalars(
+                select(Agent).where(Agent.id.in_(ids), Agent.workspace_id == p.workspace_id)
+            )
+        ).all()
+        if len(rows) != len(set(ids)) or not all(p.scope.sees_agent(a) for a in rows):
+            return False
+    return True
+
+
+def _no_publish(p: Principal) -> Exception:
+    return api_error(
+        status.HTTP_403_FORBIDDEN,
+        "forbidden",
+        "Only an owner or admin can publish a skill for the whole workspace; a manager can "
+        "publish one only for the agents they manage.",
+    )
 
 
 async def _ws(db: AsyncSession, p: Principal) -> Workspace:
@@ -159,6 +206,13 @@ async def _proposal(db: AsyncSession, p: Principal, proposal_id: str) -> SkillPr
             status.HTTP_404_NOT_FOUND, "proposal_not_found", "That proposal is not here."
         )
     return sp
+
+
+async def _check_decide(db: AsyncSession, p: Principal, sp: SkillProposal) -> None:
+    """P29: deciding a proposal is publishing the skill it creates or changes."""
+    skill = await db.get(Skill, sp.skill_id) if sp.skill_id else None
+    if not await may_publish(db, p, skill):
+        raise _no_publish(p)
 
 
 def _bad(e: Exception) -> Exception:
@@ -420,7 +474,9 @@ async def create_skill(
             reason=body.note or f"Written by {principal.user.name}.",
             proposed_by=principal.actor,
         )
-        if _can_publish(principal):
+        # A draft that matches an existing skill became a patch of it: publish rights follow.
+        target = await db.get(Skill, sp.skill_id) if sp.skill_id else None
+        if await may_publish(db, principal, target):
             s = await store.approve(db, ws, sp, _author(principal))
             return {"skill": (await _detail(db, s)).model_dump(), "proposal": None}
     except (store.SkillError, fmt.SkillFormatError) as e:
@@ -437,15 +493,24 @@ async def update_skill(
 ) -> dict[str, Any]:
     ws = await _ws(db, principal)
     s = await _skill(db, principal, skill_id)
-    publish = _can_publish(principal)
-    if (body.agent_ids is not None or body.status is not None) and not publish:
-        raise api_error(
-            status.HTTP_403_FORBIDDEN,
-            "forbidden",
-            "Only approvers can change who uses a skill or retire it.",
+    publish = await may_publish(db, principal, s)
+    new_ids = list(dict.fromkeys(body.agent_ids)) if body.agent_ids is not None else None
+    if (new_ids is not None or body.status is not None) and not (
+        publish and await may_publish(db, principal, s, new_ids)
+    ):
+        raise _no_publish(principal)
+    if new_ids is not None:
+        before = list(s.agent_ids or [])
+        s.agent_ids = new_ids
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "skill.agents_changed",
+            target=s.id,
+            before={"agent_ids": before},
+            after={"agent_ids": new_ids},
         )
-    if body.agent_ids is not None:
-        s.agent_ids = list(dict.fromkeys(body.agent_ids))
         await db.commit()
     proposal = None
     try:
@@ -735,10 +800,11 @@ async def get_proposal(
 async def approve_proposal(
     proposal_id: str,
     body: ApproveIn,
-    principal: Principal = Depends(require("approvals.decide")),
+    principal: Principal = Depends(require("agents.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> SkillDetail:
     sp = await _proposal(db, principal, proposal_id)
+    await _check_decide(db, principal, sp)
     try:
         s = await store.approve(
             db,
@@ -757,10 +823,11 @@ async def approve_proposal(
 async def reject_proposal(
     proposal_id: str,
     body: RejectIn,
-    principal: Principal = Depends(require("approvals.decide")),
+    principal: Principal = Depends(require("agents.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> ProposalOut:
     sp = await _proposal(db, principal, proposal_id)
+    await _check_decide(db, principal, sp)
     try:
         await store.reject(db, await _ws(db, principal), sp, _author(principal), body.reason)
     except store.SkillError as e:

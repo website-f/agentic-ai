@@ -153,8 +153,15 @@ def google():
 @pytest.fixture
 def waha(monkeypatch):
     from agentic.core.config import settings
+    from agentic.workflows import whatsapp_workflows
+
+    async def not_durable(channel_id, msg):  # no worker here: answer in the API, as before
+        w.durable.append((channel_id, msg.message_id))
+        return False
 
     w = FakeWaha()
+    w.durable = []
+    monkeypatch.setattr(whatsapp_workflows, "start", not_durable)
     whatsapp.transport = httpx.MockTransport(w.handler)
     monkeypatch.setattr(settings, "waha_url", "http://waha.test:3000")
     monkeypatch.setattr(settings, "waha_api_key", "waha-key")
@@ -521,6 +528,40 @@ async def test_waha_connect_link_chat_and_notices(client, llm, temporal, waha):
     assert (
         await client.post("/api/channels/whatsapp", json={"provider": "waha"}, headers=csrf(client))
     ).status_code == 409
+
+
+async def test_waha_inbound_is_durable_and_replays_are_ignored(
+    client, llm, temporal, waha, monkeypatch
+):
+    """P29: a message goes to a worker workflow keyed on its id (it survives an API restart);
+    the API answers it itself only when Temporal is unreachable. A signed event far outside
+    the replay window is not acted on."""
+    import time
+
+    from agentic.api.routers import whatsapp as wa_router
+    from agentic.channels import wa_bot
+
+    await office(client)
+    ch = (
+        await client.post("/api/channels/whatsapp", json={"provider": "waha"}, headers=csrf(client))
+    ).json()
+    queued: list[tuple[str, str]] = []
+
+    async def durable(channel_id, msg):
+        queued.append((channel_id, msg.message_id))
+        return True
+
+    monkeypatch.setattr(wa_router.whatsapp_workflows, "start", durable)
+    await _waha_hook(client, ch["id"], _msg("60999@c.us", "hello?", "d1"))
+    assert queued == [(ch["id"], "d1")] and waha.durable == []
+    stale = {**_msg("60999@c.us", "hello again", "d2"), "timestamp": int(time.time() * 1000)}
+    stale["timestamp"] -= 3 * 86400 * 1000  # three days old: a replayed capture
+    assert (await _waha_hook(client, ch["id"], stale)).status_code == 200
+    assert queued == [(ch["id"], "d1")]
+    fresh = {**_msg("60999@c.us", "hi", "d3"), "timestamp": int(time.time() * 1000)}
+    await _waha_hook(client, ch["id"], fresh)
+    assert queued[-1] == (ch["id"], "d3")
+    assert wa_bot.DEDUPE_TTL == 7 * 86400
 
 
 async def test_meta_cloud_api_verify_signature_and_send(client, llm, temporal, waha):

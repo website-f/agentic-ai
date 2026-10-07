@@ -31,8 +31,53 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 MAX_SLIDE_XML = 5 * 1024 * 1024
+# P29: parser limits (a crafted upload must not exhaust the worker's memory).
+OCR_MAX_PIXELS = 25_000_000  # one page or picture handed to Tesseract
+OCR_SCALE = 2.2  # PDF pages are rendered at this scale unless that passes OCR_MAX_PIXELS
+IMAGE_MAX_PIXELS = 100_000_000  # a picture larger than this is not decoded at all
+IMAGE_MAX_ASPECT = 40  # a 1 x 100,000 strip is not a document
+OFFICE_MAX_UNZIPPED = 200 * 1024 * 1024  # Word / Excel / PowerPoint: all parts, as declared
+OFFICE_MAX_RATIO = 250  # one part may expand this many times (parts over OFFICE_RATIO_FLOOR)
+OFFICE_RATIO_FLOOR = 1024 * 1024
+OFFICE_MAX_PARTS = 5000
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp", ".gif")
 TEXT_EXT = (".txt", ".md", ".json", ".xml", ".html", ".htm", ".log")
+
+
+class TooLarge(ValueError):
+    """A file whose content would expand past the parser limits (a zip or picture bomb)."""
+
+
+def check_office_zip(data: bytes, max_unzipped: int = OFFICE_MAX_UNZIPPED) -> None:
+    """P29: look inside a Word / Excel / PowerPoint file (a zip) before a parser opens it:
+    the parts' declared sizes add up to at most `max_unzipped`, and no big part expands
+    more than OFFICE_MAX_RATIO times. Raises TooLarge (or zipfile.BadZipFile)."""
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        infos = z.infolist()
+        if len(infos) > OFFICE_MAX_PARTS:
+            raise TooLarge(f"it has {len(infos)} parts inside")
+        total = 0
+        for i in infos:
+            total += i.file_size
+            if i.file_size > OFFICE_RATIO_FLOOR and i.file_size > OFFICE_MAX_RATIO * max(
+                i.compress_size, 1
+            ):
+                raise TooLarge("it is compressed suspiciously well (a possible zip bomb)")
+        if total > max_unzipped:
+            raise TooLarge(
+                f"it unpacks to {total // (1024 * 1024)} MB "
+                f"(the limit is {max_unzipped // (1024 * 1024)} MB)"
+            )
+
+
+def _pil() -> Any:
+    """PIL's Image module with a sane decompression-bomb limit (PIL refuses twice this)."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = IMAGE_MAX_PIXELS // 2
+    return Image
 
 
 @dataclass
@@ -114,10 +159,17 @@ def ocr_image(img: Any) -> str:
         return ""
     from PIL import ImageOps
 
+    w, h = img.size
+    if not w or not h or max(w, h) > IMAGE_MAX_ASPECT * min(w, h) or w * h > IMAGE_MAX_PIXELS:
+        return ""  # P29: an absurd strip or a giant is not a page; enlarging it costs gigabytes
     g = ImageOps.exif_transpose(img).convert("L")
+    scale = 1.0
     if g.width < 1600:  # small photos read far better enlarged
         scale = 1600 / max(1, g.width)
-        g = g.resize((int(g.width * scale), int(g.height * scale)))
+    # P29: never more than OCR_MAX_PIXELS for Tesseract (shrink a huge one, cap the enlarging)
+    scale = min(scale, (OCR_MAX_PIXELS / max(1, g.width * g.height)) ** 0.5)
+    if abs(scale - 1.0) > 0.01:
+        g = g.resize((max(1, int(g.width * scale)), max(1, int(g.height * scale))))
     g = ImageOps.autocontrast(g)
     buf = io.BytesIO()
     g.save(buf, format="PNG")
@@ -172,39 +224,58 @@ def _picture_share(pdfium: Any, page: Any) -> float:
         return 0.0
 
 
+def _render_scale(page: Any) -> float:
+    """OCR_SCALE, or less when that would pass OCR_MAX_PIXELS (a poster-sized page)."""
+    try:
+        w, h = page.get_size()
+    except Exception:  # noqa: BLE001 - an odd page: a plain scale
+        return 1.0
+    if w <= 0 or h <= 0:
+        return 1.0
+    return max(0.05, min(OCR_SCALE, (OCR_MAX_PIXELS / (w * h)) ** 0.5))
+
+
 def _pdf(data: bytes) -> Extracted:
     import pypdfium2 as pdfium
 
     texts: list[str] = []
-    scans: dict[int, Any] = {}  # page index -> rendered image to OCR
-    pictures: set[int] = set()  # pages with text AND a large picture (a scanned sample)
+    ocred = 0
+    # P29: one page at a time: render it (under the PDFium lock), OCR it (outside the lock),
+    # let it go, then the next; never every scanned page in memory at once.
     with _PDFIUM:
         doc = pdfium.PdfDocument(data)
-        try:
+    try:
+        with _PDFIUM:
             total = len(doc)
-            want_ocr = ocr_available()
-            for i in range(min(total, MAX_PDF_PAGES)):
+        want_ocr = ocr_available()
+        for i in range(min(total, MAX_PDF_PAGES)):
+            img, picture = None, False
+            with _PDFIUM:
                 page = doc[i]
                 text = page.get_textpage().get_text_range().strip()
-                if want_ocr and len(scans) < MAX_OCR_PAGES:
+                if want_ocr and ocred < MAX_OCR_PAGES:
                     if len(text) < 25:
-                        scans[i] = page.render(scale=2.2).to_pil()  # type: ignore[arg-type]
+                        img = page.render(scale=_render_scale(page)).to_pil()  # type: ignore[arg-type]
                     elif _picture_share(pdfium, page) >= PICTURE_PAGE_SHARE:
                         # A typed page around a pasted scan (a sample letter, a form, a
                         # screenshot): read the picture too, or what it shows (names, IC
                         # numbers) is invisible to the search and the sensitive-data scan.
-                        scans[i] = page.render(scale=2.2).to_pil()  # type: ignore[arg-type]
-                        pictures.add(i)
-                texts.append(text)
-        finally:
+                        img = page.render(scale=_render_scale(page)).to_pil()  # type: ignore[arg-type]
+                        picture = True
+                page.close()
+            if img is not None:
+                ocred += 1
+                read = ocr_image(img)
+                img.close()
+                if picture:
+                    if read:
+                        text = f"{text}\n\n[picture on this page]\n{read}"
+                else:
+                    text = read or text
+            texts.append(text)
+    finally:
+        with _PDFIUM:
             doc.close()
-    for i, img in scans.items():
-        read = ocr_image(img)
-        if i in pictures:
-            if read:
-                texts[i] = f"{texts[i]}\n\n[picture on this page]\n{read}"
-        else:
-            texts[i] = read or texts[i]
     parts = [f"[page {i + 1}]\n{t}" for i, t in enumerate(texts)]
     note = ""
     if total > MAX_PDF_PAGES:
@@ -212,13 +283,14 @@ def _pdf(data: bytes) -> Extracted:
     joined = "\n\n".join(parts)
     if len(re.sub(r"\[page \d+\]|\s", "", joined)) < 20 and not ocr_available():
         note = "This looks like a scan, and OCR is not installed here, so no text was read."
-    return Extracted(joined, total, bool(scans), note)
+    return Extracted(joined, total, bool(ocred), note)
 
 
 def _docx(data: bytes) -> Extracted:
     from docx import Document as Docx
     from docx.table import Table
 
+    check_office_zip(data)  # P29: before python-docx unpacks every part
     doc = Docx(io.BytesIO(data))
     out: list[str] = []
     for block in doc.iter_inner_content():
@@ -237,6 +309,7 @@ def _docx(data: bytes) -> Extracted:
 def _xlsx(data: bytes) -> Extracted:
     from openpyxl import load_workbook
 
+    check_office_zip(data)
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     out: list[str] = []
     try:
@@ -267,6 +340,7 @@ def _pptx(data: bytes) -> Extracted:
     import zipfile
 
     out: list[str] = []
+    check_office_zip(data)
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         slides = sorted(
             (int(m.group(1)), i)
@@ -291,9 +365,10 @@ def _csv(data: bytes) -> Extracted:
 
 
 def _image(data: bytes) -> Extracted:
-    from PIL import Image
-
-    img = Image.open(io.BytesIO(data))
+    img = _pil().open(io.BytesIO(data))  # lazy: only the header is read here
+    w, h = img.size
+    if not w or not h or w * h > IMAGE_MAX_PIXELS or max(w, h) > IMAGE_MAX_ASPECT * min(w, h):
+        return Extracted("", 1, False, "This picture is too large or too oddly shaped to read.")
     if not ocr_available():
         return Extracted("", 1, False, "OCR is not installed here, so the picture was not read.")
     return Extracted(ocr_image(img), 1, True)
@@ -301,6 +376,15 @@ def _image(data: bytes) -> Extracted:
 
 def extract(data: bytes, name: str, mime: str = "") -> Extracted:
     kind = sniff(data, name, mime)
+    try:
+        out = _extract(kind, data)
+    except TooLarge as e:  # P29: refused before a parser expands it
+        return Extracted("", 0, False, f"This file was not read: {e}.")
+    out.text = out.text[:MAX_TEXT]
+    return out
+
+
+def _extract(kind: str, data: bytes) -> Extracted:
     if kind == "pdf":
         out = _pdf(data)
     elif kind == "docx":

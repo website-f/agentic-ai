@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import embed
 from ..core.config import settings
+from ..knowledge import indexer
 from ..knowledge import search as library
 from ..models import (
     SOP,
@@ -385,8 +386,9 @@ async def _meaning(
         qvec = await embed.embed_one(raw)
     except Exception:  # noqa: BLE001 - no model: keywords only
         return
-    if qvec is None:
+    if qvec is None or not indexer.dims_ok(qvec):
         return
+    await library.tune_vector_scan(db)  # P29: filtered HNSW queries look further
     dist = KnowledgeChunk.embedding.cosine_distance(qvec)
     allowed = or_(
         *[

@@ -20,8 +20,18 @@ def _value(cell: str) -> Any:
     m = _NUM.match(text)
     if m and len(m.group(2).replace(",", "").lstrip("-").split(".")[0]) <= 12:
         n = float(m.group(2).replace(",", ""))
+        if text.startswith("-") and n > 0:  # "-3", "-RM 5": the sign sits before the amount
+            n = -n
         return int(n) if n.is_integer() and "." not in m.group(2) else n
     return text
+
+
+def _text(cell: Any) -> Any:
+    """P29: every value here is document text (often the AI's): one that starts like a
+    formula (= + - @) is stored as text, so opening the export never runs it."""
+    if isinstance(cell.value, str) and cell.value.startswith(("=", "+", "-", "@")):
+        cell.data_type = "s"
+    return cell
 
 
 def _sheet_name(title: str, used: set[str]) -> str:
@@ -48,10 +58,10 @@ def render(
         "solid", fgColor="".join(f"{int(255 - (255 - v) * 0.15):02X}" for v in hex_rgb(accent))
     )
     ws["A1"] = title or "Document"
-    ws["A1"].font = Font(bold=True, size=14)
+    _text(ws["A1"]).font = Font(bold=True, size=14)
     for i, (k, v) in enumerate(details, 3):
-        ws.cell(i, 1, k).font = Font(bold=True)
-        ws.cell(i, 2, v).alignment = Alignment(wrap_text=True, vertical="top")
+        _text(ws.cell(i, 1, k)).font = Font(bold=True)
+        _text(ws.cell(i, 2, v)).alignment = Alignment(wrap_text=True, vertical="top")
     ws.column_dimensions["A"].width = 26
     ws.column_dimensions["B"].width = 70
 
@@ -64,14 +74,14 @@ def render(
             continue
         sh = wb.create_sheet(_sheet_name(heading or "Table", used))
         for c, h in enumerate(b.header, 1):
-            cell = sh.cell(1, c, plain(h))
+            cell = _text(sh.cell(1, c, plain(h)))
             cell.font = Font(bold=True)
             cell.fill = head_fill
         widths = [len(plain(h)) for h in b.header]
         for r, row in enumerate(b.rows, 2):
             for c, v in enumerate(row, 1):
                 val = _value(v)
-                cell = sh.cell(r, c, val)
+                cell = _text(sh.cell(r, c, val))
                 if "**" in v:
                     cell.font = Font(bold=True)
                 if isinstance(val, float):

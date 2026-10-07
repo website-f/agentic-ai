@@ -14,6 +14,7 @@ from ...core.valkey import valkey, valkey_bytes
 from ...models import Agent, Event, LLMCall, Task
 from ...teams import reconcile
 from ..deps import Principal, api_error, require
+from ..scope import WATCH_EVENTS
 
 router = APIRouter(prefix="/api", tags=["monitor"])
 
@@ -44,6 +45,10 @@ async def activity(
 ) -> dict[str, Any]:
     """The agent's recent steps (newest last), plus what it is working on and has spent."""
     a = await _agent(db, principal, agent_id)
+    # P29: someone who only watches this agent (staff, their office) gets what the live
+    # stream gives them: that it works and on what step, not its task log, approvals or screen.
+    watching = not principal.scope.sees_agent(a)
+    types = tuple(t for t in FEED_TYPES if t in WATCH_EVENTS) if watching else FEED_TYPES
     mine = or_(
         Event.data["agent_id"].astext == a.id,
         and_(Event.type == "task.event", Event.data["actor"].astext == f"agent:{a.id}"),
@@ -51,7 +56,7 @@ async def activity(
     rows = (
         await db.scalars(
             select(Event)
-            .where(Event.workspace_id == a.workspace_id, Event.type.in_(FEED_TYPES), mine)
+            .where(Event.workspace_id == a.workspace_id, Event.type.in_(types), mine)
             .order_by(Event.seq.desc())
             .limit(limit)
         )
@@ -84,6 +89,8 @@ async def activity(
         ).one()
         task_spent = {"calls": int(t[0]), "tokens": int(t[1])}
     sid = _s(await valkey().get(f"browser:agent:{a.id}"))
+    if watching:
+        sid = None
     if sid and current is not None:
         # While it works, show only this task's browser, not the last screen of an older one.
         meta = _s(await valkey().get(f"browser:session:{sid}"))

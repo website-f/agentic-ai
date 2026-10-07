@@ -32,6 +32,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import launch
+from ...assistants.access import may_assist
 from ...core.db import get_db
 from ...documents import provenance, service
 from ...i18n import lookup, tr
@@ -84,21 +85,17 @@ def _now() -> datetime:
 
 
 async def my_agents(db: AsyncSession, principal: Principal) -> list[Agent]:
-    """The AI workers this person owns: their twin first, then their assistants."""
-    return list(
-        (
-            await db.scalars(
-                select(Agent)
-                .where(
-                    Agent.workspace_id == principal.workspace_id,
-                    Agent.owner_user_id == principal.user.id,
-                    Agent.clone_of.is_(None),
-                    Agent.status != "retired",
-                )
-                .order_by(Agent.is_twin.desc(), Agent.created_at)
-            )
-        ).all()
+    """The AI workers this person owns: their twin first, then their assistants. P30: a role
+    without assistants.use has no assistants here (theirs are kept, dormant)."""
+    q = select(Agent).where(
+        Agent.workspace_id == principal.workspace_id,
+        Agent.owner_user_id == principal.user.id,
+        Agent.clone_of.is_(None),
+        Agent.status != "retired",
     )
+    if not may_assist(principal.role):
+        q = q.where(Agent.private.is_not(True))
+    return list((await db.scalars(q.order_by(Agent.is_twin.desc(), Agent.created_at))).all())
 
 
 def _mine(principal: Principal, agent_ids: list[str]) -> Any:
@@ -858,7 +855,7 @@ async def ask(
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "no_ai_worker",
-            "You have no AI worker yet. Hire one in My AI worker, or pick an agent.",
+            "You have no AI worker yet. Hire one in My AI, or pick an agent.",
         )
     text = body.text.strip()
     title = " ".join(text.split())

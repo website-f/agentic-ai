@@ -67,6 +67,8 @@ def scope_filter(v: Viewer, include_ended: bool = False) -> Any:
         conds.append(BrainFact.valid_to.is_(None))
     if v.agent_id is not None:
         conds.append(or_(BrainFact.agent_id.is_(None), BrainFact.agent_id == v.agent_id))
+    if v.agent_ids is not None:  # P29: a person: only the private facts of agents they see
+        conds.append(or_(BrainFact.agent_id.is_(None), BrainFact.agent_id.in_(v.agent_ids)))
     if v.branch_ids is not None:
         conds.append(or_(BrainFact.branch_id.is_(None), BrainFact.branch_id.in_(v.branch_ids)))
     return and_(*conds)
@@ -108,6 +110,9 @@ async def similar(
     min_sim: float = 0.0,
     same_scope: tuple[str | None, str | None] | None = None,
 ) -> list[tuple[BrainFact, float]]:
+    from .search import tune_scan  # late: search imports this module
+
+    await tune_scan(db)
     dist = BrainFact.embedding.cosine_distance(vector)
     q = select(BrainFact, (1 - dist).label("sim")).where(
         scope_filter(v), BrainFact.embedding.is_not(None)

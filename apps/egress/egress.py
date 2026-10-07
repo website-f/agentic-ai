@@ -18,6 +18,10 @@ Settings (environment):
   EGRESS_ALLOW_PORTS      ports any public host may use (default 80,443)
   EGRESS_ALLOW_HOSTS      host names allowed although private, e.g. the dev practice portal:
                           `practice-portal` (any port) or `practice-portal:8080` (that port)
+  EGRESS_ONLY_HOSTS       optional comma list of host suffixes that are the ONLY allowed
+                          destinations (host and subdomains); everything else is refused,
+                          on top of the address checks. For a single-purpose proxy such as
+                          the ePerolehan exit on a home line: `eperolehan.gov.my`
   EGRESS_UPSTREAM         optional host:port of a TRUSTED upstream CONNECT proxy (e.g. our
                           own egress on a home/office line, reached over a private tunnel).
                           When set, the hosts in EGRESS_UPSTREAM_HOSTS leave through it
@@ -26,7 +30,9 @@ Settings (environment):
                           upstream must itself be a trusted egress: this path forwards to it
                           and lets it do the resolving and public-address check.
   EGRESS_UPSTREAM_HOSTS   comma list of host suffixes routed through EGRESS_UPSTREAM, e.g.
-                          `eperolehan.gov.my,mda.gov.my` (matches the host and its subdomains)
+                          `eperolehan.gov.my,mda.gov.my` (matches the host and its subdomains).
+                          Both https (CONNECT) and plain http (absolute-form request) to
+                          these hosts go through the upstream; neither leaves directly.
   EGRESS_MAX_CONNECTIONS  connections at once (default 512); more get 503
   EGRESS_CONNECT_TIMEOUT  seconds to connect upstream (default 10)
   EGRESS_DNS_TIMEOUT      seconds to resolve (default 5)
@@ -206,6 +212,9 @@ class Policy:
     allow_ports: frozenset[int] = frozenset({80, 443})
     # host -> None (any port) or the ports it may use; these hosts may be private
     allow_hosts: Mapping[str, frozenset[int] | None] = field(default_factory=dict)
+    # When set, the ONLY destinations (host suffixes); everything else is refused. For a
+    # single-purpose proxy, e.g. the ePerolehan exit on a home line (docs/EPEROLEHAN-EXIT-IP.md).
+    only_hosts: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Policy":
@@ -225,7 +234,19 @@ class Policy:
                     hosts[name] = prev | {int(port)}
             else:
                 hosts[name] = None
-        return cls(allow_ports=ports, allow_hosts=hosts)
+        only = tuple(
+            h.strip().lower().rstrip(".")
+            for h in env.get("EGRESS_ONLY_HOSTS", "").split(",")
+            if h.strip()
+        )
+        return cls(allow_ports=ports, allow_hosts=hosts, only_hosts=only)
+
+    def destination_allowed(self, host: str) -> bool:
+        """False when EGRESS_ONLY_HOSTS is set and the host is not one of them (or a subdomain)."""
+        if not self.only_hosts:
+            return True
+        h = host.lower().rstrip(".")
+        return any(h == s or h.endswith("." + s) for s in self.only_hosts)
 
     def host_allowed(self, host: str, port: int) -> bool:
         """An allow-listed host on one of its ports: private addresses are fine there."""
@@ -268,6 +289,8 @@ async def _decide(
     resolver: Resolver,
     dns_timeout: float,
 ) -> tuple[str, list[str]]:
+    if not policy.destination_allowed(host):
+        raise Denied("host not in EGRESS_ONLY_HOSTS")
     trusted = policy.host_allowed(host, port)
     if not trusted and port not in policy.allow_ports:
         raise Denied(f"port {port} not allowed")
@@ -543,6 +566,8 @@ class Proxy:
                 if self.via_upstream(canon):
                     # A listed host: hand it to the trusted upstream, which does the egress and
                     # the public-address check. Keep the port allow-list here.
+                    if not self.policy.destination_allowed(canon):
+                        raise Denied("host not in EGRESS_ONLY_HOSTS")
                     if not (
                         port in self.policy.allow_ports or self.policy.host_allowed(canon, port)
                     ):
@@ -629,7 +654,19 @@ class Proxy:
         host, port = split_authority(authority, 80)
         if not re.fullmatch(r"[A-Z]{3,10}", method) or method == "CONNECT":
             raise Denied("method not allowed", status=405)
-        host, ips = await decide(host, port, self.policy, self.resolver, self.dns_timeout)
+        canon, _lit = normalize_host(host)
+        upstream = self.via_upstream(canon)
+        ips: list[str] = []
+        if upstream:
+            # A listed host leaves through the trusted upstream over plain http too, never
+            # straight from here: otherwise http:// would leak this host's IP to the site.
+            if not self.policy.destination_allowed(canon):
+                raise Denied("host not in EGRESS_ONLY_HOSTS")
+            if not (port in self.policy.allow_ports or self.policy.host_allowed(canon, port)):
+                raise Denied(f"port {port} not allowed")
+            host = canon
+        else:
+            host, ips = await decide(host, port, self.policy, self.resolver, self.dns_timeout)
         names = {n.lower() for n, _ in headers}
         conn_tokens = {
             t.strip().lower()
@@ -638,7 +675,13 @@ class Proxy:
             for t in v.split(",")
         }
         upgrade = "upgrade" in conn_tokens and "upgrade" in names
-        out = [f"{method} {path} HTTP/1.1", f"Host: {authority}"]
+        # The upstream is a proxy itself: it gets the absolute form, a site the origin form.
+        line = (
+            f"{method} http://{authority}{path} HTTP/1.1"
+            if upstream
+            else f"{method} {path} HTTP/1.1"
+        )
+        out = [line, f"Host: {authority}"]
         for n, v in headers:
             low = n.lower()
             if (
@@ -649,7 +692,15 @@ class Proxy:
                 continue
             out.append(f"{n}: {v}")
         out.append("Connection: Upgrade" if upgrade else "Connection: close")
-        ur, uw, ip = await self._connect(ips, port)
+        if upstream:
+            assert self.upstream is not None
+            try:
+                ur, uw = await asyncio.wait_for(self.opener(*self.upstream), self.connect_timeout)
+            except (TimeoutError, OSError) as e:
+                raise Denied("upstream proxy did not answer", status=502) from e
+            ip = "upstream"
+        else:
+            ur, uw, ip = await self._connect(ips, port)
         self._allowed(client, method, host, port, ip)
         act = [time.monotonic()]
         body: asyncio.Task | None = None
@@ -725,6 +776,7 @@ async def serve(env: Mapping[str, str] = os.environ) -> None:
         listen=f"{host}:{port}",
         allow_ports=sorted(proxy.policy.allow_ports),
         allow_hosts=sorted(proxy.policy.allow_hosts),
+        only_hosts=sorted(proxy.policy.only_hosts),
         upstream=f"{proxy.upstream[0]}:{proxy.upstream[1]}" if proxy.upstream else None,
         upstream_hosts=sorted(proxy.upstream_hosts),
         max_connections=proxy.max_connections,

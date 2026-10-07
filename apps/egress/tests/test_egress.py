@@ -642,3 +642,153 @@ def test_upstream_routes_listed_hosts_and_leaves_the_rest_direct():
             pserver.close()
 
     asyncio.run(main())
+
+
+def _upstream_proxy_stack(upstream_hosts=("eperolehan.gov.my",)):
+    """A fake trusted upstream proxy that answers plain-http (absolute-form) requests, and an
+    egress pointed at it. The site's own address must never be dialed for listed hosts."""
+
+    async def build():
+        seen: list[bytes] = []
+
+        async def up_handle(r, w):
+            head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), 5)
+            seen.append(head)
+            w.write(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nvia-home")
+            await w.drain()
+            w.close()
+
+        upserver = await asyncio.start_server(up_handle, "127.0.0.1", 0)
+        upport = upserver.sockets[0].getsockname()[1]
+        opened: list[tuple[str, int]] = []
+        direct = Upstream()
+        dserver = await asyncio.start_server(direct.handle, "127.0.0.1", 0)
+        direct.port = dserver.sockets[0].getsockname()[1]
+
+        async def opener(ip, port):
+            opened.append((ip, port))
+            if (ip, port) == ("127.0.0.1", upport):
+                return await asyncio.open_connection(ip, port)
+            return await asyncio.open_connection("127.0.0.1", direct.port)
+
+        proxy = eg.Proxy(
+            eg.Policy(),
+            resolver=fake_dns(
+                {"www.eperolehan.gov.my": ["203.0.113.9"], "public.test": ["93.184.215.14"]}
+            ),
+            opener=opener,
+            out=io.StringIO(),
+            upstream=("127.0.0.1", upport),
+            upstream_hosts=upstream_hosts,
+        )
+        pserver = await asyncio.start_server(proxy.handle, "127.0.0.1", 0)
+        pport = pserver.sockets[0].getsockname()[1]
+        return proxy, pport, upport, seen, opened, (upserver, dserver, pserver)
+
+    return build
+
+
+def test_upstream_plain_http_goes_through_the_upstream():
+    """Plain http:// to a listed host must also leave through the upstream (absolute form),
+    or the site would see this host's datacenter IP."""
+
+    async def main():
+        proxy, pport, upport, seen, opened, servers = await _upstream_proxy_stack()()
+        try:
+            out = await ask(
+                pport,
+                b"GET http://www.eperolehan.gov.my/login?x=1 HTTP/1.1\r\n"
+                b"Host: www.eperolehan.gov.my\r\nProxy-Connection: keep-alive\r\n"
+                b"Accept: */*\r\n\r\n",
+            )
+            assert out.startswith(b"HTTP/1.1 200 OK\r\n") and out.endswith(b"via-home")
+            assert opened == [("127.0.0.1", upport)]  # never the site's own 203.0.113.9
+            sent = seen[0]
+            assert sent.startswith(
+                b"GET http://www.eperolehan.gov.my/login?x=1 HTTP/1.1\r\n"
+                b"Host: www.eperolehan.gov.my\r\n"
+            )
+            assert b"proxy-connection" not in sent.lower()
+        finally:
+            for s in servers:
+                s.close()
+
+    asyncio.run(main())
+
+
+def test_upstream_plain_http_keeps_the_port_rule_and_others_stay_direct():
+    async def main():
+        proxy, pport, upport, seen, opened, servers = await _upstream_proxy_stack()()
+        try:
+            out = await ask(
+                pport, b"GET http://www.eperolehan.gov.my:6379/ HTTP/1.1\r\nHost: x\r\n\r\n"
+            )
+            assert out.startswith(b"HTTP/1.1 403")
+            assert opened == [] and seen == []
+            out = await ask(pport, b"GET http://public.test/ HTTP/1.1\r\nHost: public.test\r\n\r\n")
+            assert out.startswith(b"HTTP/1.1 200 OK\r\n")
+            assert opened == [("93.184.215.14", 80)] and seen == []  # direct, vetted address
+        finally:
+            for s in servers:
+                s.close()
+
+    asyncio.run(main())
+
+
+def test_upstream_plain_http_unreachable_upstream_is_502():
+    async def main():
+        proxy, pport, upport, seen, opened, servers = await _upstream_proxy_stack()()
+        servers[0].close()
+        await servers[0].wait_closed()
+        try:
+            out = await ask(
+                pport, b"GET http://eperolehan.gov.my/ HTTP/1.1\r\nHost: eperolehan.gov.my\r\n\r\n"
+            )
+            assert out.startswith(b"HTTP/1.1 502")
+            assert all(o == ("127.0.0.1", upport) for o in opened)  # never fell back to direct
+        finally:
+            for s in servers[1:]:
+                s.close()
+
+    asyncio.run(main())
+
+
+def test_only_hosts_from_env():
+    p = eg.Policy.from_env({"EGRESS_ONLY_HOSTS": " ePerolehan.gov.my. , mda.gov.my"})
+    assert p.only_hosts == ("eperolehan.gov.my", "mda.gov.my")
+    assert p.destination_allowed("www.eperolehan.gov.my")
+    assert p.destination_allowed("eperolehan.gov.my")
+    assert not p.destination_allowed("evil-eperolehan.gov.my")
+    assert not p.destination_allowed("example.com")
+    assert eg.Policy().destination_allowed("example.com")  # unset = no restriction
+
+
+def test_only_hosts_refuses_everything_else():
+    policy = eg.Policy(only_hosts=("public.test",))
+    table = {"public.test": ["93.184.215.14"], "other.test": ["93.184.215.15"]}
+    assert decide("public.test", 443, policy, table)[1] == ["93.184.215.14"]
+    with pytest.raises(eg.Denied) as e:
+        decide("other.test", 443, policy, table)
+    assert "EGRESS_ONLY_HOSTS" in e.value.reason
+    # Address checks still apply to the listed host.
+    with pytest.raises(eg.Denied):
+        decide("public.test", 443, policy, {"public.test": ["10.0.0.1"]})
+
+
+def test_only_hosts_live_connect_and_http():
+    async def main():
+        stack = await run_proxy(dict(TABLE), policy=eg.Policy(only_hosts=("public.test",)))
+        proxy, pport, up, opened, log, servers = stack
+        try:
+            out = await ask(pport, b"CONNECT inside-ok.test:443 HTTP/1.1\r\n\r\n")
+            assert out.startswith(b"HTTP/1.1 403")
+            out = await ask(pport, b"GET http://example.org/ HTTP/1.1\r\nHost: x\r\n\r\n")
+            assert out.startswith(b"HTTP/1.1 403")
+            assert opened == []
+            out = await ask(pport, b"GET http://public.test/ HTTP/1.1\r\nHost: x\r\n\r\n")
+            assert out.startswith(b"HTTP/1.1 200")
+        finally:
+            for s in servers:
+                s.close()
+
+    asyncio.run(main())

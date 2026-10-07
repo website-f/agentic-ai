@@ -3,6 +3,10 @@ talk to an agent: `model: "agent/<slug>"`, `Authorization: Bearer agt_...` (scop
 
 Agents answer with the same rules as dashboard chat. Errors use OpenAI's error shape so
 clients show them properly.
+
+P29: a token acts for the person who made it, as they are now. It stops working when they
+leave the workspace or lose channels.manage, reaches only the agents they see, and never
+reaches someone else's private assistant or AI twin.
 """
 
 import hashlib
@@ -13,14 +17,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import runtime
 from ...core.db import get_db
 from ...core.ids import new_id
+from ...core.security import can
 from ...engine import gateway
-from ...models import Agent, ApiToken, Workspace
+from ...models import Agent, ApiToken, Membership, User, Workspace
+from ..scope import Scope
 
 router = APIRouter(prefix="/api/v1", tags=["openai-compatible"])
 
@@ -67,17 +73,40 @@ async def token_from(authorization: str | None, db: AsyncSession, scope: str) ->
             "permission_error",
             "missing_scope",
         )
+    await creator_scope(db, t)
     t.last_used_at = now
     await db.commit()
     return t
 
 
-async def _agents(db: AsyncSession, workspace_id: str) -> list[Agent]:
+async def creator_scope(db: AsyncSession, t: ApiToken) -> Scope:
+    """P29: the token's maker, as they are now: still a member, still allowed tokens."""
+    m = await db.get(Membership, (t.workspace_id, t.created_by))
+    user = await db.get(User, t.created_by)
+    if m is None or user is None or not user.is_active or not can(m.role, "channels.manage"):
+        raise OpenAIError(
+            401,
+            "The person who made this token no longer has access to it. Make a new one.",
+            "authentication_error",
+            "invalid_token",
+        )
+    return Scope.of(m.role, user.id, m.branch_id, m.department_id)
+
+
+def _reachable(sc: Scope) -> ColumnElement[bool]:
+    """The agents a token reaches: those its maker sees, and no one else's AI twin."""
+    return and_(sc.agent_where(), or_(Agent.is_twin.is_(False), Agent.owner_user_id == sc.user_id))
+
+
+async def _agents(db: AsyncSession, t: ApiToken) -> list[Agent]:
+    sc = await creator_scope(db, t)
     return list(
         (
             await db.scalars(
                 select(Agent)
-                .where(Agent.workspace_id == workspace_id, Agent.status == "active")
+                .where(
+                    Agent.workspace_id == t.workspace_id, Agent.status == "active", _reachable(sc)
+                )
                 .order_by(Agent.name)
             )
         ).all()
@@ -104,7 +133,7 @@ async def models(
                 "owned_by": ws.slug if ws else "agentic",
                 "description": f"{a.name}, {a.role}",
             }
-            for a in await _agents(db, t.workspace_id)
+            for a in await _agents(db, t)
         ],
     }
 
@@ -125,7 +154,10 @@ async def chat_completions(
         slug = model.removeprefix("agent/")
         agent = await db.scalar(
             select(Agent).where(
-                Agent.workspace_id == t.workspace_id, Agent.slug == slug, Agent.status == "active"
+                Agent.workspace_id == t.workspace_id,
+                Agent.slug == slug,
+                Agent.status == "active",
+                _reachable(await creator_scope(db, t)),
             )
         )
         if agent is None:

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+from temporalio.exceptions import ActivityError, ChildWorkflowError
 
 with workflow.unsafe.imports_passed_through():
     from .agent_workflows import AgentTaskWorkflow
@@ -21,6 +21,10 @@ with workflow.unsafe.imports_passed_through():
 
 QUICK = timedelta(seconds=60)
 TURN_RETRY = RetryPolicy(maximum_attempts=3, initial_interval=timedelta(seconds=5))
+# P29: the schedule bookkeeping retried forever by default; now a bounded few times.
+SCHEDULE_RETRY = RetryPolicy(maximum_attempts=5, initial_interval=timedelta(seconds=10))
+BUSY_WAIT = timedelta(minutes=10)  # a task a person started by hand: look again this often
+BUSY_LOOKS = 150  # ~25 hours (an approval waits up to 24)
 
 
 @workflow.defn
@@ -82,7 +86,10 @@ class ScheduledTaskWorkflow:
     @workflow.run
     async def run(self, schedule_id: str, manual: bool = False) -> str:
         claimed = await workflow.execute_activity(
-            schedule_claim, args=[schedule_id, manual], start_to_close_timeout=QUICK
+            schedule_claim,
+            args=[schedule_id, manual],
+            start_to_close_timeout=QUICK,
+            retry_policy=SCHEDULE_RETRY,
         )
         if not claimed:
             return "skipped"
@@ -95,15 +102,44 @@ class ScheduledTaskWorkflow:
         for n, delay in enumerate((0, 300, 900, 1800), 1):
             if delay:
                 await workflow.sleep(timedelta(seconds=delay))
-            wid = await workflow.execute_activity(
-                schedule_attempt, args=[claimed["run_id"], n], start_to_close_timeout=QUICK
-            )
-            state = await workflow.execute_child_workflow(
-                AgentTaskWorkflow.run, claimed["task_id"], id=wid
-            )
+            wid = await self._attempt(claimed["run_id"], n)
+            if wid.startswith("stop:"):  # P29: deleted, cancelled or finished meanwhile
+                state = wid.removeprefix("stop:")
+                break
+            try:
+                state = await workflow.execute_child_workflow(
+                    AgentTaskWorkflow.run, claimed["task_id"], id=wid
+                )
+            except ChildWorkflowError:
+                if not workflow.patched("schedule-child-fails-v1"):
+                    raise
+                state = "failed"  # the run crashed: retry it like any failure
             if state in ("done", "cancelled"):
                 break
         await workflow.execute_activity(
-            schedule_finish, args=[claimed["run_id"], state], start_to_close_timeout=QUICK
+            schedule_finish,
+            args=[claimed["run_id"], state],
+            start_to_close_timeout=QUICK,
+            retry_policy=SCHEDULE_RETRY,
         )
         return state
+
+    async def _attempt(self, run_id: str, n: int) -> str:
+        """The child workflow id to run, or "stop:<state>". P29: a task someone already
+        started by hand is waited for (never a second workflow on it)."""
+        for _ in range(BUSY_LOOKS):
+            try:
+                wid = await workflow.execute_activity(
+                    schedule_attempt,
+                    args=[run_id, n],
+                    start_to_close_timeout=QUICK,
+                    retry_policy=SCHEDULE_RETRY,
+                )
+            except ActivityError:
+                if not workflow.patched("schedule-attempt-fails-v1"):
+                    raise
+                return "stop:failed"
+            if wid != "busy":
+                return wid
+            await workflow.sleep(BUSY_WAIT)
+        return "stop:failed"

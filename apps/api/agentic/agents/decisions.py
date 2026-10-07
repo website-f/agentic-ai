@@ -1,8 +1,15 @@
 """Deciding an approval. One function for every way a person can decide: the dashboard,
-a phone notification button, or a Telegram button. Same checks, same audit, same signal."""
+a phone notification button, or a Telegram button. Same checks, same audit, same signal.
+
+P29: the approval row is locked while it is decided (a dashboard click, a Telegram button and
+the expiry can race), and a run that no longer exists (Temporal NOT_FOUND) is not "Temporal
+unreachable": the decision is kept and the task is handed back so a person can restart it;
+the new run applies the recorded decision (runtime._resolve_calls).
+"""
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..i18n import Msg
@@ -29,6 +36,14 @@ async def decide(
     answer: str | None = None,
     via: str = "dashboard",
 ) -> Approval:
+    # P29: lock the row and read its current state; a second decider waits, then sees it.
+    locked = await db.scalar(
+        select(Approval)
+        .where(Approval.id == a.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    a = locked or a
     if a.status != "pending":
         raise DecisionError(
             409,
@@ -66,6 +81,9 @@ async def decide(
             # Temporal stores the signal even if no worker is running right now.
             await dispatch.signal_decision(t.workflow_id, a.id)
         except Exception as e:  # noqa: BLE001 - Temporal itself is unreachable
+            if _not_found(e):
+                await _run_gone(db, t, a)
+                return await _resolved(a, via)
             a.status, a.scope, a.answer, a.decided_by, a.decided_at = (
                 "pending",
                 None,
@@ -82,6 +100,10 @@ async def decide(
                     "Try again in a moment."
                 ),
             ) from e
+    return await _resolved(a, via)
+
+
+async def _resolved(a: Approval, via: str) -> Approval:
     await events.publish(
         a.workspace_id,
         "approval.resolved",
@@ -94,3 +116,34 @@ async def decide(
         },
     )
     return a
+
+
+def _not_found(e: Exception) -> bool:
+    """Temporal answered: that workflow does not exist (or has already closed)."""
+    from temporalio.service import RPCError, RPCStatusCode
+
+    return isinstance(e, RPCError) and e.status == RPCStatusCode.NOT_FOUND
+
+
+GONE_REASON = "Its run ended before the decision arrived"
+
+
+async def _run_gone(db: AsyncSession, t: Task, a: Approval) -> None:
+    """The decision stands, but no run is waiting for it: hand the task to a person, who can
+    start it again (launch.restartable); the new run applies the decision."""
+    from ..teams.reconcile import STOPPED
+    from . import runtime  # late: runtime imports the channels that import this module
+
+    if t.status not in ("running", "blocked"):
+        return  # finished or cancelled meanwhile: nothing waits for it
+    owner = a.decided_by if (a.decided_by or "").startswith("user:") else t.created_by
+    await runtime.set_task_status(
+        db,
+        t,
+        "blocked",
+        actor="system",
+        note="its run had ended when the decision arrived; start it again to continue",
+        blocked_reason=GONE_REASON[:300],
+        blocked_owner=owner,
+        blocked_action=f"{STOPPED}: start it again to apply the decision"[:300],
+    )

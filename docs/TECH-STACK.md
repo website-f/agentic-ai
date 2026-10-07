@@ -57,7 +57,7 @@ Versions were observed on 2026-10-01. Pin exact versions (and image digests) whe
 | Cache / pub-sub | Valkey 8 |
 | Object storage | rustfs 1.0.0 (S3 API) |
 | Observability | Own token log (always), OpenTelemetry traces, Langfuse (profile `obs`) |
-| Local models | Ollama (optional profile `llm`, off by default; the default plan uses hosted APIs only) |
+| Local models | Ollama in the default stack: one small model (`qwen3:0.6b`) for tiny side jobs and chat backup mode; agent work uses hosted APIs |
 | Reverse proxy | Existing shared Caddy in `/opt/reverse-proxy` |
 | Backups | restic (pg_dump + vault git bundle + rustfs bucket) to a local repo on a second disk by default (free); any S3 target such as B2 optional later |
 | CI | GitHub Actions: lint, typecheck, tests, build images, Trivy scan |

@@ -6,6 +6,7 @@ CSRF token still checked; see RAW_UPLOAD_PATHS in api/main.py). Several files at
 call per file with the same `batch`.
 """
 
+import io
 import logging
 from datetime import datetime
 from typing import Any
@@ -127,22 +128,26 @@ async def upload(
                 status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department of that company."
             )
     base = clean_folder(folder) if folder else ""
-    data = bytearray()
+    # P29: one buffer for the whole upload (up to 200 MB): a zip is read straight from it,
+    # never copied into a second bytes object.
+    buf = io.BytesIO()
     limit = unpack.MAX_ZIP_BYTES
     async for chunk in request.stream():
-        data.extend(chunk)
-        if len(data) > limit:
+        buf.write(chunk)
+        if buf.tell() > limit:
             raise api_error(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 "upload_too_large",
                 "One upload can be up to {mb} MB. Split the zip into smaller ones.",
                 mb=limit // (1024 * 1024),
             )
-    if not data:
+    size = buf.tell()
+    if not size:
         raise api_error(status.HTTP_400_BAD_REQUEST, "empty_file", "That file is empty.")
-    raw = bytes(data)
-    is_zip = unpack.is_zip(raw, name)
-    if not is_zip and len(raw) > service.MAX_FILE_BYTES:
+    with buf.getbuffer() as view:
+        head = bytes(view[:4096])
+    is_zip = unpack.is_zip(head, name)
+    if not is_zip and size > service.MAX_FILE_BYTES:
         raise api_error(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             "file_too_large",
@@ -168,7 +173,7 @@ async def upload(
             db,
             batch=b,
             name=name,
-            data=raw,
+            data=buf if is_zip else buf.getvalue(),
             mime=request.headers.get("x-file-type", "")[:120],
             created_by=principal.actor,
             folder=base,

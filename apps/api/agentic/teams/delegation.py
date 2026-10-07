@@ -134,17 +134,50 @@ def correction_prompt(why: str, schema: dict[str, Any]) -> str:
     )
 
 
-async def _find_agent(db: AsyncSession, ws_id: str, ref: str) -> Agent | None:
+async def visible(db: AsyncSession, caller: Agent, other: Agent) -> bool:
+    """May `caller` hand work to, ask or meet `other`? Never someone's private assistant
+    (P16), and never across an isolated company's wall, either way (P29)."""
+    from ..models import Branch
+
+    if other.id == caller.id:
+        return True
+    if other.private or other.workspace_id != caller.workspace_id:
+        return False
+    if other.branch_id == caller.branch_id:
+        return True
+    for bid in (caller.branch_id, other.branch_id):
+        b = await db.get(Branch, bid) if bid else None
+        if b is not None and b.isolated:
+            return False
+    return True
+
+
+async def _find_agent(
+    db: AsyncSession, ws_id: str, ref: str, caller: Agent | None = None
+) -> Agent | None:
+    """An active agent by id, slug or name; with `caller`, only one it may see (visible)."""
     ref = ref.strip()
     if not ref:
         return None
-    return await db.scalar(
-        select(Agent).where(
-            Agent.workspace_id == ws_id,
-            Agent.status == "active",
-            or_(Agent.id == ref, Agent.slug == ref.lower(), func.lower(Agent.name) == ref.lower()),
+    rows = (
+        await db.scalars(
+            select(Agent)
+            .where(
+                Agent.workspace_id == ws_id,
+                Agent.status == "active",
+                or_(
+                    Agent.id == ref,
+                    Agent.slug == ref.lower(),
+                    func.lower(Agent.name) == ref.lower(),
+                ),
+            )
+            .order_by(Agent.created_at)
         )
-    )
+    ).all()
+    for a in rows:
+        if caller is None or await visible(db, caller, a):
+            return a
+    return None
 
 
 async def _delegated_event(db: AsyncSession, task_id: str, call_id: str) -> TaskEvent | None:
@@ -223,7 +256,9 @@ async def plan(
                     f"{agent.name} merges all parts.\n\nYour part:\n{brief}"
                 )
             else:
-                who = await _find_agent(db, task.workspace_id, str(item.get("agent", "")))
+                who = await _find_agent(
+                    db, task.workspace_id, str(item.get("agent", "")), caller=agent
+                )
                 if who is None:
                     raise DelegationError(
                         f"Task {i}: no active agent called {item.get('agent')!r}. "
@@ -259,7 +294,8 @@ async def plan(
             db.add(c)
         await db.flush()
         ids = [c.id for c in children]
-        await db.commit()
+        # P29: the children and the "delegated" event commit together (task_event commits),
+        # so a crash in between can never leave children a retry would create again.
         await runtime.task_event(
             db,
             task,

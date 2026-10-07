@@ -178,16 +178,16 @@ async def get_file(
         )
     )
     if f is None and library_ok:
-        from ...knowledge import search as library
-
-        shared = await db.get(DocFile, file_id)
-        if (
-            shared is not None
-            and shared.workspace_id == principal.workspace_id
-            and shared.library
-            and library.sees(library.for_person(principal), shared.branch_id, shared.department_id)
-        ):
-            f = shared
+        f = await db.scalar(
+            service.visible_files(
+                select(DocFile).where(
+                    DocFile.id == file_id,
+                    DocFile.workspace_id == principal.workspace_id,
+                    DocFile.library.is_(True),
+                ),
+                principal,
+            )
+        )
     if f is None:
         raise api_error(status.HTTP_404_NOT_FOUND, "file_not_found", "That file is not here.")
     return f
@@ -203,6 +203,23 @@ async def check_branch(db: AsyncSession, principal: Principal, branch_id: str | 
         or not service.branch_ok(principal, branch_id)
     ):
         raise api_error(status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a company you work in.")
+
+
+def place_refused(principal: Principal, branch_id: str | None, department_id: str | None) -> Any:
+    """None when this person may put a file in that company + department (the rule of
+    library._check_scope), else "company" or "department": what they got wrong. Workspace
+    roles anywhere; a branch manager inside their company; a HOD, supervisor or staff member
+    of a department only that department; anyone else their company with no department."""
+    sc = principal.scope
+    if sc.everything:
+        return None
+    if sc.kind == "branch":
+        return None if branch_id is not None and branch_id == sc.branch_id else "company"
+    if branch_id is None or branch_id != sc.branch_id:
+        return "company"
+    if department_id != sc.department_id:
+        return "department"
+    return None
 
 
 async def check_task(db: AsyncSession, principal: Principal, task_id: str | None) -> Task | None:
@@ -308,23 +325,9 @@ def _filtered(
 
 
 def visible_files(query: Any, principal: Principal) -> Any:
-    """Files a person sees: their own and their agents' (service.scoped), plus the guidelines
-    shared with them (library files of their company and department, not held back), which
-    they open and download like get_file(library_ok=True) but do not change."""
-    if principal.scope.everything:
-        return query
-    from ...knowledge import search as library
-    from ...search.viewer import library_scope
-
-    mine = service.scoped(
-        select(DocFile.id).where(DocFile.workspace_id == principal.workspace_id), DocFile, principal
-    )
-    shared = and_(
-        DocFile.library.is_(True),
-        DocFile.quarantined.is_(False),
-        library_scope(library.for_person(principal)),
-    )
-    return query.where(or_(DocFile.id.in_(mine), shared))
+    """Files a person sees (documents.service.visible_files): their own and their agents',
+    plus the guidelines shared with them; never another person's private assistant's work."""
+    return service.visible_files(query, principal)
 
 
 @router.get("/stats")
@@ -612,36 +615,50 @@ async def update_file(
                 kinds=", ".join(KINDS),
             )
         f.kind = body.kind
+    from ...models import Department
+
+    branch_id, department_id = f.branch_id, f.department_id
     if "branch_id" in body.model_fields_set:
         await check_branch(db, principal, body.branch_id)
-        f.branch_id = body.branch_id
-        if f.department_id and body.branch_id is None:
-            f.department_id = None  # a department belongs to one company
-        elif f.department_id:
-            from ...models import Department
-
-            d = await db.get(Department, f.department_id)
-            if d is None or d.branch_id != body.branch_id:
-                f.department_id = None
+        branch_id = body.branch_id
+        if department_id and branch_id is None:
+            department_id = None  # a department belongs to one company
+        elif department_id:
+            d = await db.get(Department, department_id)
+            if d is None or d.branch_id != branch_id:
+                department_id = None
     if "department_id" in body.model_fields_set:
         if body.department_id is not None:
-            from ...models import Department
-
             d = await db.get(Department, body.department_id)
-            if d is None or d.workspace_id != principal.workspace_id or d.branch_id != f.branch_id:
+            if d is None or d.workspace_id != principal.workspace_id or d.branch_id != branch_id:
                 raise api_error(
                     status.HTTP_400_BAD_REQUEST,
                     "bad_department",
                     "Pick a department of this file's company.",
                 )
-        f.department_id = body.department_id
+        department_id = body.department_id
+    if (branch_id, department_id) != (f.branch_id, f.department_id):
+        # P29: an office role keeps files inside what it manages (as library._check_scope):
+        # never to "whole workspace", no department, or another company or department.
+        wrong = place_refused(principal, branch_id, department_id)
+        if wrong == "company":
+            raise api_error(
+                status.HTTP_403_FORBIDDEN, "out_of_scope", "Pick a company you work in."
+            )
+        if wrong == "department":
+            raise api_error(
+                status.HTTP_403_FORBIDDEN, "out_of_scope", "Pick a department from here."
+            )
+        f.branch_id, f.department_id = branch_id, department_id
     if body.task_id:
         await check_task(db, principal, body.task_id)
         f.task_id = body.task_id
     elif body.clear_task:
         f.task_id = None
     await db.commit()
-    if f.library and (f.name, f.branch_id, f.department_id) != before:  # P18: title + scope
+    if f.library and (f.name, f.branch_id, f.department_id) != before:
+        # P18/P29: passages carry the title and the audience (company + department); rebuild
+        # them whenever either changes, so search never answers with the old audience.
         from .library import start_index
 
         await start_index("file", f.id)

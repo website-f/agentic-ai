@@ -45,6 +45,8 @@ class ProviderOut(BaseModel):
     enabled: bool
     health: str
     cooling_seconds: int
+    # P29: models resting on their own (a per-model 403/404/429), seconds left each.
+    cooling_models: dict[str, int] = {}
     last_test_at: datetime | None
     last_test_result: dict[str, Any] | None
     model_count: int

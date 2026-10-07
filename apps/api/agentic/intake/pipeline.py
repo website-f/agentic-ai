@@ -10,6 +10,7 @@ activity, an appended upload or two runs at once never double-count.
 """
 
 import asyncio
+import io
 import json
 import logging
 import re
@@ -64,7 +65,7 @@ async def add_upload(
     *,
     batch: IntakeBatch,
     name: str,
-    data: bytes,
+    data: bytes | io.BytesIO,
     mime: str,
     created_by: str,
     folder: str = "",
@@ -72,9 +73,11 @@ async def add_upload(
 ) -> int:
     """Store one upload's files in the batch (the caller commits). Returns how many files
     were added; skipped zip entries go to the batch report. Raises unpack.UnpackError for a
-    zip that cannot be opened at all."""
+    zip that cannot be opened at all. `data` may be the upload's buffer (a zip is read from
+    it in place, P29)."""
     added = 0
     skipped: list[dict[str, str]] = []
+    skipped_more = 0
 
     async def store(entry: unpack.Entry) -> None:
         nonlocal added
@@ -94,7 +97,8 @@ async def add_upload(
         db.expunge(f)  # the bytes are written; do not hold every file in memory
         added += 1
 
-    if unpack.is_zip(data, name):
+    head = data.getbuffer()[:4096].tobytes() if isinstance(data, io.BytesIO) else data[:4096]
+    if unpack.is_zip(head, name):
         gen = unpack.entries(data, name, base=folder)
         first = True
         while True:
@@ -108,7 +112,7 @@ async def add_upload(
             if item is None:
                 break
             if isinstance(item, unpack.Report):
-                skipped = item.skipped
+                skipped, skipped_more = item.skipped, item.skipped_more
                 break
             await store(item)
     else:
@@ -117,9 +121,15 @@ async def add_upload(
         path = name.replace("\\", "/")
         parent, _, base_name = path.rpartition("/")
         clean = unpack.clean_part(base_name) or "file"
-        await store(unpack.Entry(unpack.join_folder(folder, parent), clean[:200], name[:500], data))
+        raw = data.getvalue() if isinstance(data, io.BytesIO) else data
+        await store(unpack.Entry(unpack.join_folder(folder, parent), clean[:200], name[:500], raw))
     report = {**empty_report(), **(batch.report or {})}
-    report["skipped"] = list(report.get("skipped") or []) + skipped
+    # P29: a batch keeps at most unpack.MAX_SKIPPED skip lines, plus how many more there were.
+    every = list(report.get("skipped") or []) + skipped
+    report["skipped"] = every[: unpack.MAX_SKIPPED]
+    more = int(report.get("skipped_more") or 0) + skipped_more + len(every[unpack.MAX_SKIPPED :])
+    if more:
+        report["skipped_more"] = more
     batch.report = report
     batch.total = await _count(db, batch.id)
     batch.status = "reading"
@@ -266,6 +276,7 @@ async def build_report(db: AsyncSession, b: IntakeBatch) -> dict[str, Any]:
             if f.status == "failed"
         ],
         "skipped": list(old.get("skipped") or []),
+        **({"skipped_more": old["skipped_more"]} if old.get("skipped_more") else {}),
         "suggestions": list(old.get("suggestions") or []),
     }
 

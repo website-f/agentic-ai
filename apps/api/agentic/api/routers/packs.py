@@ -56,13 +56,39 @@ class PackOut(BaseModel):
     updated_at: datetime
 
 
-async def pack_out(db: AsyncSession, p: Pack) -> PackOut:
+async def _seen_file(db: AsyncSession, principal: Principal, file_id: str) -> DocFile | None:
+    """P29: a file as files.get_file(library_ok=True) would give it to this person."""
+    return await db.scalar(
+        service.visible_files(
+            select(DocFile).where(
+                DocFile.id == file_id, DocFile.workspace_id == principal.workspace_id
+            ),
+            principal,
+        )
+    )
+
+
+async def _seen_doc(db: AsyncSession, principal: Principal, doc_id: str) -> Document | None:
+    """P29: a document as the documents router's _get would give it to this person."""
+    return await db.scalar(
+        service.scoped(
+            select(Document).where(
+                Document.id == doc_id, Document.workspace_id == principal.workspace_id
+            ),
+            Document,
+            principal,
+        )
+    )
+
+
+async def pack_out(db: AsyncSession, p: Pack, principal: Principal) -> PackOut:
     b = await db.get(Branch, p.branch_id) if p.branch_id else None
     today = service.today_in(None)
     items = []
     for it in p.items or []:
-        f = await db.get(DocFile, it["file_id"]) if it.get("file_id") else None
-        d = await db.get(Document, it["document_id"]) if it.get("document_id") else None
+        # P29: names only of what this person may see (someone else may have attached it).
+        f = await _seen_file(db, principal, it["file_id"]) if it.get("file_id") else None
+        d = await _seen_doc(db, principal, it["document_id"]) if it.get("document_id") else None
         items.append(
             PackItemOut(
                 id=it["id"],
@@ -110,11 +136,22 @@ async def get_pack(db: AsyncSession, principal: Principal, pack_id: str) -> Pack
     return p
 
 
-async def _check_refs(db: AsyncSession, principal: Principal, items: list[dict[str, Any]]) -> None:
+async def _check_refs(
+    db: AsyncSession,
+    principal: Principal,
+    items: list[dict[str, Any]],
+    old: list[dict[str, Any]] | None = None,
+) -> None:
+    """P29: every attached file and document is one this person may open themselves, and no
+    file is held back for review. References already on the pack (an agent or a colleague
+    attached them) may stay as they are."""
+    kept = {(i.get("file_id"), i.get("document_id")) for i in old or []}
     for it in items:
+        if (it.get("file_id"), it.get("document_id")) in kept:
+            continue
         if it.get("file_id"):
-            f = await db.get(DocFile, it["file_id"])
-            if f is None or f.workspace_id != principal.workspace_id:
+            f = await _seen_file(db, principal, it["file_id"])
+            if f is None or f.quarantined:
                 raise api_error(
                     status.HTTP_400_BAD_REQUEST,
                     "bad_file",
@@ -122,8 +159,8 @@ async def _check_refs(db: AsyncSession, principal: Principal, items: list[dict[s
                     label=it["label"],
                 )
         if it.get("document_id"):
-            d = await db.get(Document, it["document_id"])
-            if d is None or d.workspace_id != principal.workspace_id:
+            d = await _seen_doc(db, principal, it["document_id"])
+            if d is None:
                 raise api_error(
                     status.HTTP_400_BAD_REQUEST,
                     "bad_document",
@@ -143,7 +180,7 @@ async def list_packs(
             ).order_by(Pack.updated_at.desc())
         )
     ).all()
-    return [await pack_out(db, p) for p in rows]
+    return [await pack_out(db, p, principal) for p in rows]
 
 
 class PackIn(BaseModel):
@@ -160,13 +197,21 @@ async def create_pack(
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> PackOut:
-    await check_branch(db, principal, body.branch_id)
+    branch_id = body.branch_id
+    if branch_id is None and not principal.scope.everything:
+        # P29: a pack for no company draws on every company's files: workspace roles only.
+        branch_id = principal.scope.branch_id
+        if branch_id is None:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a company you work in."
+            )
+    await check_branch(db, principal, branch_id)
     await check_task(db, principal, body.task_id)
     items = pack_svc.clean_items(body.items)
     await _check_refs(db, principal, items)
     p = Pack(
         workspace_id=principal.workspace_id,
-        branch_id=body.branch_id,
+        branch_id=branch_id,
         task_id=body.task_id,
         title=body.title.strip(),
         description=body.description,
@@ -186,7 +231,7 @@ async def create_pack(
     )
     await db.commit()
     await db.refresh(p)
-    return await pack_out(db, p)
+    return await pack_out(db, p, principal)
 
 
 @router.get("/{pack_id}")
@@ -195,7 +240,7 @@ async def read_pack(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> PackOut:
-    return await pack_out(db, await get_pack(db, principal, pack_id))
+    return await pack_out(db, await get_pack(db, principal, pack_id), principal)
 
 
 class PackUpdateIn(BaseModel):
@@ -218,13 +263,13 @@ async def update_pack(
         p.description = body.description
     if body.items is not None:
         items = pack_svc.clean_items(body.items, p.items)
-        await _check_refs(db, principal, items)
+        await _check_refs(db, principal, items, p.items)
         p.items = items
         if p.status == "compiled":
             p.status = "collecting"  # the compiled PDF is now out of date
     await db.commit()
     await db.refresh(p)
-    return await pack_out(db, p)
+    return await pack_out(db, p, principal)
 
 
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -277,11 +322,11 @@ async def auto_match(
     db: AsyncSession = Depends(get_db),
 ) -> MatchOut:
     p = await get_pack(db, principal, pack_id)
-    items, matched = await pack_svc.auto_match(db, p)
+    items, matched = await pack_svc.auto_match(db, p, principal)
     p.items = items
     await db.commit()
     await db.refresh(p)
-    return MatchOut(pack=await pack_out(db, p), matched=matched)
+    return MatchOut(pack=await pack_out(db, p, principal), matched=matched)
 
 
 class CompileOut(BaseModel):
@@ -299,7 +344,7 @@ async def compile_pack(
 ) -> CompileOut:
     p = await get_pack(db, principal, pack_id)
     try:
-        f, skipped = await pack_svc.compile_pack(db, p, principal.actor)
+        f, skipped = await pack_svc.compile_pack(db, p, principal.actor, principal)
     except ValueError as e:
         raise api_error(status.HTTP_400_BAD_REQUEST, "nothing_to_compile", str(e)) from e
     await audit.record(
@@ -312,7 +357,9 @@ async def compile_pack(
     )
     await db.commit()
     await db.refresh(p)
-    return CompileOut(pack=await pack_out(db, p), file_id=f.id, pages=f.pages, skipped=skipped)
+    return CompileOut(
+        pack=await pack_out(db, p, principal), file_id=f.id, pages=f.pages, skipped=skipped
+    )
 
 
 class DelegateIn(BaseModel):

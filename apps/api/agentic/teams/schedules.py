@@ -128,10 +128,27 @@ async def record_incident(db: AsyncSession, ws_id: str, sig: str, title: str) ->
     return reopened
 
 
-async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
+def _claimed(run: JobRun) -> dict[str, str]:
+    out = {"run_id": str(run.id), "task_id": run.task_id or ""}
+    if (run.detail or {}).get("waits_until"):
+        out["wait_until"] = str(run.detail["waits_until"])
+    return out
+
+
+async def claim(schedule_id: str, manual: bool, key: str | None = None) -> dict[str, str] | None:
+    """One firing: a JobRun and a fresh task. `key` (the workflow run id) makes a retried
+    claim return the same run instead of creating a second task (P29)."""
     from ..agents import runtime
 
     async with SessionLocal() as db:
+        if key:
+            prior = await db.scalar(
+                select(JobRun).where(
+                    JobRun.schedule_id == schedule_id, JobRun.detail["claim"].astext == key
+                )
+            )
+            if prior is not None:
+                return _claimed(prior) if prior.task_id and prior.status != "failed" else None
         s = await db.get(Schedule, schedule_id)
         if s is None or (not s.enabled and not manual):
             return None
@@ -143,7 +160,7 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
             schedule_id=s.id,
             status="claimed",
             started_at=now,
-            detail={"name": s.name, "manual": manual},
+            detail={"name": s.name, "manual": manual, **({"claim": key} if key else {})},
         )
         db.add(run)
         s.last_run_at = now
@@ -205,19 +222,39 @@ async def claim(schedule_id: str, manual: bool) -> dict[str, str] | None:
         return out
 
 
+# P29: what attempt() returns instead of a workflow id when the run must not start a task.
+STOP = "stop:"  # stop:failed | stop:cancelled | stop:done (the run ends with that state)
+BUSY = "busy"  # the task is already running in another workflow (a person started it)
+
+
 async def attempt(run_id: str, n: int) -> str:
-    """Start (or retry) the run's task: returns the child workflow id to use."""
-    from ..agents import runtime
+    """Start (or retry) the run's task: returns the child workflow id to use, or STOP/BUSY
+    (P29) when the task is gone, was cancelled or finished meanwhile, or is already running."""
+    from ..agents import launch, runtime
 
     async with SessionLocal() as db:
         run = await db.get(JobRun, int(run_id))
-        assert run is not None and run.task_id
-        t = await db.get(Task, run.task_id)
-        assert t is not None
+        if run is None:
+            return f"{STOP}failed"
+        t = await db.get(Task, run.task_id) if run.task_id else None
+        if t is None:
+            run.error = "The task for this run was deleted."
+            await db.commit()
+            return f"{STOP}failed"
+        if t.status == "cancelled":
+            return f"{STOP}cancelled"  # cancelled while waiting for a retry: stop retrying
+        if t.status in ("done", "review"):
+            return f"{STOP}done"  # finished by a run someone else started
+        if t.status in launch.RUNNING and not launch.restartable(t):
+            return BUSY
         t.run_count += 1
         t.workflow_id = f"task-{t.id}-{t.run_count}"
         t.status = "ready"
         t.result = t.error = t.blocked_reason = None
+        # A fresh run, as launch() does: the call budget and the one correction start again.
+        t.blocked_owner = t.blocked_action = None
+        t.steps_used = 0
+        t.correction_used = False
         run.status, run.attempt = "running", n
         await db.commit()
         note = f"started run {t.run_count}" + (f" (retry {n - 1})" if n > 1 else "")
@@ -238,7 +275,7 @@ async def finish(run_id: str, state: str) -> None:
             run.status, run.error = "completed", None
         else:
             run.status = "failed"
-            run.error = (t.error if t else None) or f"The task ended as {state}."
+            run.error = (t.error if t else None) or run.error or f"The task ended as {state}."
             run.signature = signature("schedule", run.schedule_id or "", run.error)
         await db.commit()
         await _publish(run)

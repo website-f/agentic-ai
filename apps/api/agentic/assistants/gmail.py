@@ -13,6 +13,7 @@ API enabled. Reading and drafting cost nothing (Gmail API quota is free).
 
 import base64
 import hashlib
+import hmac
 import html
 import json
 import re
@@ -81,7 +82,12 @@ async def app_credentials(db: AsyncSession, workspace_id: str) -> tuple[str, str
     return None
 
 
-async def auth_url(db: AsyncSession, workspace_id: str, user_id: str) -> str:
+def _sid(session_id: str) -> str:
+    """P29: the sign-in session that started the flow, hashed again for the state."""
+    return hashlib.sha256(f"gauth:{session_id}".encode()).hexdigest()
+
+
+async def auth_url(db: AsyncSession, workspace_id: str, user_id: str, session_id: str) -> str:
     creds = await app_credentials(db, workspace_id)
     if creds is None:
         raise GmailError(Msg("Google sign-in is not set up yet (Channels > Gmail)."))
@@ -92,7 +98,9 @@ async def auth_url(db: AsyncSession, workspace_id: str, user_id: str) -> str:
     )
     await valkey().set(
         f"gauth:{state}",
-        json.dumps({"ws": workspace_id, "user": user_id, "verifier": verifier}),
+        json.dumps(
+            {"ws": workspace_id, "user": user_id, "sid": _sid(session_id), "verifier": verifier}
+        ),
         ex=STATE_TTL,
     )
     q = {
@@ -110,12 +118,29 @@ async def auth_url(db: AsyncSession, workspace_id: str, user_id: str) -> str:
     return f"{AUTH_URL}?{urllib.parse.urlencode(q)}"
 
 
-async def finish(db: AsyncSession, state: str, code: str) -> GoogleAccount:
-    """The callback: trade the code for tokens and remember the mailbox."""
+async def finish(
+    db: AsyncSession, state: str, code: str, *, workspace_id: str, user_id: str, session_id: str
+) -> GoogleAccount:
+    """The callback: trade the code for tokens and remember the mailbox.
+
+    P29: only in the browser session that started it. Otherwise someone could send their
+    own sign-in link to a colleague and have the colleague's click connect a mailbox to
+    the wrong person (login CSRF), or finish a flow started elsewhere."""
     raw = await valkey().getdel(f"gauth:{state}")
     if not raw:
         raise GmailError(Msg("That sign-in link expired. Start again from the dashboard."))
     st = json.loads(raw)
+    if (
+        st.get("ws") != workspace_id
+        or st.get("user") != user_id
+        or not hmac.compare_digest(str(st.get("sid") or ""), _sid(session_id))
+    ):
+        raise GmailError(
+            Msg(
+                "This Google sign-in was started by someone else or in another browser. "
+                "Start again from your own Assistants page."
+            )
+        )
     creds = await app_credentials(db, st["ws"])
     if creds is None:
         raise GmailError(Msg("Google sign-in is not set up."))

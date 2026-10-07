@@ -10,12 +10,12 @@ from typing import Any, Literal
 from fastapi import Depends, status
 from fastapi.routing import APIRouter
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import twin
-from ...agents.tools import mode_of
+from ...agents.tools import TOOLS, mode_of
 from ...brain import core as core_memory
 from ...brain.facts import _SECRET
 from ...brain.store import Author
@@ -23,7 +23,7 @@ from ...core import threats
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
 from ...i18n.labels import role_label
-from ...models import Agent, Workspace
+from ...models import Agent, AuditLog, Workspace
 from ...services import audit, events
 from ...services.text import slugify
 from ..agent_schemas import HEX
@@ -99,6 +99,84 @@ def own_perm():
         return principal
 
     return checker
+
+
+# P30: the twin endpoints follow the same rule as PATCH /api/agents for a twin's own person
+# (agents._guard_own_twin): its managers set how far it may go, and the person may make it
+# stricter but never looser. The wizard never touches status, autonomy, model, SOPs or
+# budgets; for tools and "picks up work by itself" it never goes past what someone else
+# (a manager) last set. That is read from the audit log, which nobody can edit, not from the
+# profile page the person can rewrite.
+_RANK = {"allow": 0, "ask": 1, "deny": 2}
+
+
+async def _governed(db: AsyncSession, a: Agent, person: str) -> tuple[dict[str, str], bool | None]:
+    """Tool modes and the heartbeat as anyone but `person` (an actor) last changed them."""
+    tools: dict[str, str] = {}
+    heartbeat: bool | None = None
+    rows = (
+        await db.execute(
+            select(AuditLog.before, AuditLog.after)
+            .where(
+                AuditLog.workspace_id == a.workspace_id,
+                AuditLog.target == a.id,
+                AuditLog.action == "agent.updated",
+                AuditLog.actor != person,
+            )
+            .order_by(AuditLog.id)
+        )
+    ).all()
+    for before, after in rows:
+        after = after or {}
+        if isinstance(after.get("tools"), dict):
+            old = (before or {}).get("tools") or {}
+            for name, mode in after["tools"].items():
+                if old.get(name) != mode and mode in _RANK:
+                    tools[name] = mode
+        if "heartbeat" in after and after["heartbeat"] is not None:
+            heartbeat = bool(after["heartbeat"])
+    return tools, heartbeat
+
+
+def _not_looser(tools: dict[str, str], floor: dict[str, str]) -> dict[str, str]:
+    out = dict(tools)
+    for name, mode in floor.items():
+        if name not in TOOLS:
+            continue
+        mine = mode_of(out, name)
+        if _RANK.get(mine, 0) < _RANK[mode]:
+            out[name] = mode
+    return out
+
+
+async def _retired_by_someone_else(db: AsyncSession, principal: Principal) -> str | None:
+    """The name of the person's last twin when someone else (a manager) retired it: then a
+    new twin is theirs to give, not a way round it."""
+    last = await db.scalar(
+        select(Agent)
+        .where(
+            Agent.workspace_id == principal.workspace_id,
+            Agent.owner_user_id == principal.user.id,
+            or_(Agent.is_twin.is_(True), Agent.template == "twin"),
+            Agent.status == "retired",
+        )
+        .order_by(Agent.updated_at.desc())
+        .limit(1)
+    )
+    if last is None:
+        return None
+    by = await db.scalar(
+        select(AuditLog.actor)
+        .where(
+            AuditLog.workspace_id == principal.workspace_id,
+            AuditLog.target == last.id,
+            AuditLog.action == "agent.updated",
+            AuditLog.after["status"].astext == "retired",
+        )
+        .order_by(AuditLog.id.desc())
+        .limit(1)
+    )
+    return last.name if by is not None and by != principal.actor else None
 
 
 def _public(p: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -190,6 +268,13 @@ async def _save(
     dept_id = home.department.id if home.department else None
     if a is None:
         await refuse_second_agent(db, principal)
+        if gone := await _retired_by_someone_else(db, principal):
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "twin_retired",
+                "Your manager retired {name}. Ask them before making a new AI twin.",
+                name=gone,
+            )
         await twin.free_retired_place(db, ws.id, user.id)
         base = slugify(p["name"], "twin")
         slug, n = base, 2
@@ -249,12 +334,14 @@ async def _save(
         )
     else:
         tools = twin.keep_stricter(made, dict(a.tools or {}), old.get("_tools") or {})
+        floor, beat = await _governed(db, a, principal.actor)
+        tools = _not_looser(tools, floor)
         changes: dict[str, Any] = {
             "name": p["name"],
             "role": p["role"],
             "soul": soul,
             "color": p["color"],
-            "heartbeat": bool(p["heartbeat"]),
+            "heartbeat": bool(p["heartbeat"]) and beat is not False,
             "tools": tools,
             "branch_id": home.branch.id,
             "department_id": dept_id,

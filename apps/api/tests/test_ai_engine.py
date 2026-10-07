@@ -356,11 +356,67 @@ async def test_fallback_cools_failing_provider(client: httpx.AsyncClient):
             "/api/ai/playground", json={"group": "smart", "prompt": "hi"}, headers=csrf(client)
         )
     ).json()
-    assert "cooling down" in again["attempts"][0]["skipped"]
+    assert "model cooling down" in again["attempts"][0]["skipped"]
+    # P29: a 429 belongs to the model; the provider itself (its other models) is not cooled.
+    from agentic.engine import store
+
+    assert 0 < await store.model_cooling_for(limited["id"], "good-model") <= 30
     listed = next(
         p for p in (await client.get("/api/ai/providers")).json() if p["name"] == "Limited"
     )
-    assert 0 < listed["cooling_seconds"] <= 30
+    assert listed["cooling_seconds"] == 0
+
+
+async def test_a_model_scoped_failure_cools_only_that_model(client: httpx.AsyncClient):
+    """P29: 403 "this account cannot use that model" must not take the provider's other
+    models out of the group; a 5xx still cools the whole provider."""
+    from agentic.engine import store
+
+    await setup_owner(client)
+    good = await add_provider(client, "Good", "good.fake")
+
+    def forbidden(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/chat/completions"):
+            if json.loads(request.content)["model"] == "locked-model":
+                return httpx.Response(403, json={"error": {"message": "model not allowed"}})
+        return fake_provider(request)
+
+    engine_client.use_transport(httpx.MockTransport(forbidden))
+    await _set_group(client, "smart", [(good["id"], "locked-model"), (good["id"], "good-model")])
+    body = (
+        await client.post(
+            "/api/ai/playground", json={"group": "smart", "prompt": "hi"}, headers=csrf(client)
+        )
+    ).json()
+    assert body["attempts"][0]["error_class"] == "forbidden" and body["content"] == "OK"
+    assert await store.cooling_for(good["id"]) == 0  # the provider still answers
+    assert await store.model_cooling_for(good["id"], "locked-model") > 0
+    again = (
+        await client.post(
+            "/api/ai/playground", json={"group": "smart", "prompt": "hi"}, headers=csrf(client)
+        )
+    ).json()
+    assert "model cooling down" in again["attempts"][0]["skipped"] and again["content"] == "OK"
+
+    broken = await add_provider(client, "Broken", "broken.fake")
+    await _set_group(client, "fast", [(broken["id"], "good-model"), (good["id"], "good-model")])
+    await client.post(
+        "/api/ai/playground", json={"group": "fast", "prompt": "hi"}, headers=csrf(client)
+    )
+    assert await store.cooling_for(broken["id"]) > 0  # 5xx: the provider is unwell
+
+
+async def test_reasoning_retry_counts_both_calls(client: httpx.AsyncClient):
+    """P29: the first, starved call was billed too; its tokens are in the usage."""
+    r = await engine_client.chat(
+        "https://good.fake/v1",
+        GOOD_KEY,
+        "think-model",
+        [{"role": "user", "content": "hi"}],
+        max_tokens=100,
+    )
+    assert r.reasoning_retry and r.content == "OK"
+    assert (r.usage.prompt, r.usage.completion, r.usage.cached) == (2000, 400, 800)
 
 
 async def test_missing_model_marked_stale_then_skipped(client: httpx.AsyncClient):

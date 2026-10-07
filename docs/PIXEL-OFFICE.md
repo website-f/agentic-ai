@@ -4,29 +4,44 @@ A live top-down pixel-art office where every agent is a character. It is the hom
 
 ## 1. Build vs fork
 
-Build our own on **Phaser 4 + Tiled**, porting patterns from two MIT repos:
+Built our own: a small **Canvas 2D** engine in `apps/web/src/office/` (no Phaser, no Tiled, no
+game framework), porting patterns from two MIT repos:
 
 | Repo | What we port |
 |---|---|
-| `geezerrrr/agent-town` (Next.js + Phaser 3 + Tiled) | Map loading, typed event bus between React and Phaser, "walk up to a worker and assign a task" interaction, task state badges |
-| `pablodelucca/pixel-agents` (Canvas 2D, MIT) | Character state machine, BFS pathfinding on a collision grid, adapter boundary between state source and renderer, layout-editor idea |
+| `geezerrrr/agent-town` (Next.js + Phaser 3 + Tiled) | Ideas only: "walk up to a worker and assign a task" interaction, task state badges, a typed bridge between React and the world |
+| `pablodelucca/pixel-agents` (Canvas 2D, MIT) | Character state machine, BFS pathfinding on a collision grid, adapter boundary between state source and renderer |
 
-Why not fork: pixel-agents is watch-only and tied to Claude Code hooks; Star-Office-UI art is non-commercial and the repo is stale; WorkAdventure is AGPL + Commons Clause and a full video platform; ai-town is bound to Convex; Claw3D is 3D and tied to OpenClaw.
+Why not fork: pixel-agents is watch-only and tied to Claude Code hooks; Star-Office-UI art is non-commercial and the repo is stale; WorkAdventure is AGPL + Commons Clause and a full video platform; ai-town is bound to Convex; Claw3D is 3D and tied to OpenClaw. Phaser 4 + Tiled was the original plan (sections 3 onwards still describe parts of that design); the shipped engine generates the office in code instead of loading Tiled maps.
 
-## 2. Package boundary
+## 2. Code boundary
 
-`packages/office` is a standalone TypeScript package (Phaser 4, no React inside). `apps/web` mounts it in a `<canvas>` host and talks to it through a typed bridge:
+There is no `packages/office`: the engine lives in `apps/web/src/office/`, framework-free
+TypeScript with no React inside:
+
+| File | Role |
+|---|---|
+| `engine.ts` | `createOffice(canvas, handlers)`: Canvas 2D renderer, camera (the shared `lib/viewport`), one state machine per agent |
+| `layout.ts` | builds the office (rooms, desks) from the branch's departments and agents |
+| `path.ts` | BFS pathfinding on the collision grid |
+| `art.ts` | pixel-art sprites and map tiles, drawn in code |
+| `types.ts` | `OfficeSnapshot`, `OfficeEvent`, agent states, zones |
+
+React mounts it on a `<canvas>` and talks to it through the `Office` interface:
 
 ```ts
 // apps/web -> office
-office.apply(event: OfficeEvent)        // agent.upsert, agent.status, agent.log, task.updated ...
-office.focus(agentId)                    // camera pans to agent
-office.setTheme("day" | "night")
+office.setData(snapshot)                 // the whole office from the API
+office.apply(event: OfficeEvent)         // agent.upsert, agent.status, task.updated ...
+office.focus(agentId) / office.follow(agentId | null)
+office.zoom(1 | -1) / office.fit()
+office.setTheme(dark: boolean)
+office.select(agentId | null)
 
-// office -> apps/web
-office.on("agent:tap", (agentId) => openAgentSheet(agentId))
-office.on("task:drop", ({ taskId, agentId }) => assignTask(taskId, agentId))
-office.on("desk:tap", (deskId) => openDeskInfo(deskId))
+// office -> apps/web (handlers passed to createOffice)
+onAgentTap(agentId)                      // open the agent sheet
+onTaskDrop(taskId, agentId)              // assign a task by dragging its card onto an agent
+onFollowChange(agentId | null)
 ```
 
 All panels, forms, logs and buttons are **DOM** (React), never drawn in the canvas. The canvas only shows the world.

@@ -16,7 +16,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import core as core_memory
@@ -42,6 +42,7 @@ class ToolContext:
     task: Task | None  # None in chat
     person: str | None = None  # in chat: the user id of the person talking to the agent
     session_id: str | None = None  # in chat: the conversation (expand_result's scope)
+    call_id: str | None = None  # P29: the tool call being run (idempotency keys)
 
 
 Handler = Callable[[ToolContext, dict[str, Any]], Awaitable[str]]
@@ -151,6 +152,13 @@ async def _team_directory(ctx: ToolContext, _: dict[str, Any]) -> str:
     )
     if branch is not None and branch.isolated:
         q = q.where(Agent.branch_id == branch.id)
+    else:  # P29: an isolated company's agents are not in anyone else's directory
+        walled = select(Branch.id).where(
+            Branch.workspace_id == ctx.agent.workspace_id, Branch.isolated.is_(True)
+        )
+        q = q.where(or_(Agent.branch_id.is_(None), Agent.branch_id.not_in(walled)))
+    # P29: someone's private assistant is never listed (only yourself).
+    q = q.where(or_(Agent.private.is_(False), Agent.id == ctx.agent.id))
     rows = (await ctx.db.execute(q.order_by(Agent.name))).all()
     lines = [
         f"- {a.name}: {a.role} ({dept or 'no department'})"

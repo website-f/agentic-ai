@@ -48,7 +48,26 @@ def _load() -> Any:
             except Exception:  # noqa: BLE001 - search degrades instead of failing
                 log.warning("embedding model unavailable; keyword search only", exc_info=True)
                 _failed = True
+            else:
+                _check_dims(_model)
     return _model
+
+
+def _check_dims(model: Any) -> None:
+    """P30: on first load (warm() runs it at startup), the model's vectors must fit the
+    EMBED_DIMS columns. If not, it says so once, clearly (knowledge.indexer.dims_ok), and
+    embeddings are switched off: keyword search keeps working, inserts never fail."""
+    global _model, _failed
+    from ..knowledge.indexer import dims_ok  # late: the indexer imports this module
+
+    try:
+        probe = [vec.tolist() for vec in model.embed(["dimension check"], batch_size=1)][0]
+    except Exception:  # noqa: BLE001 - a model that cannot embed is a model we do not use
+        log.warning("embedding model failed its first embedding; keyword search only")
+        _model, _failed = None, True
+        return
+    if not dims_ok(probe):
+        _model, _failed = None, True
 
 
 def available() -> bool:
