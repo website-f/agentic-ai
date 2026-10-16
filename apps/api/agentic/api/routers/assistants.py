@@ -1,5 +1,7 @@
 """Personal assistants (P16): a person's own private agents, Gmail connection, and the email
-drafts their assistants prepared, waiting to be approved and sent."""
+drafts their assistants prepared, waiting to be approved and sent. P34: Outlook drafts and
+calendar proposals (a person's own Outlook, shared mailboxes) are listed and approved here
+too (microsoft/approvals.py)."""
 
 import json
 import logging
@@ -10,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...assistants import calendar, gmail
@@ -22,16 +24,22 @@ from ...core.ids import new_id
 from ...core.security import can
 from ...i18n import tr
 from ...i18n.labels import decision_status_label, role_label
+from ...microsoft import access as ms_access
+from ...microsoft import approvals as ms_approvals
+from ...microsoft.errors import MicrosoftError
 from ...models import (
     Agent,
     Branch,
+    CalendarProposal,
     Channel,
     ChannelLink,
     EmailDraft,
     GoogleAccount,
     Integration,
     Membership,
+    SharedMailbox,
 )
+from ...services import audit
 from .. import paging
 from ..agent_schemas import AgentOut
 from ..deps import Principal, api_error, optional_principal, require
@@ -416,6 +424,10 @@ async def google_disconnect(
 
 
 # ---------------------------------------------------------------- email drafts
+#
+# Gmail drafts are the person's own (assistants.use). P34: Outlook drafts too: a person's own
+# Outlook (approved by them, twin owners included), and shared mailboxes (approved by the
+# mailbox's viewers who manage it: owner/admin, the company's branch managers).
 
 
 class DraftEditIn(BaseModel):
@@ -425,7 +437,18 @@ class DraftEditIn(BaseModel):
     body: str | None = Field(default=None, max_length=50_000)
 
 
-def _draft_out(d: EmailDraft, agent_name: str | None) -> dict[str, Any]:
+def _not_for_role(principal: Principal) -> None:
+    if not may_assist(principal.role):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "assistants_not_for_role",
+            "Personal assistants are for people who manage others. Your role ({role}) has "
+            "one personal AI: your AI twin, in My AI.",
+            role=role_label(principal.role),
+        )
+
+
+def _draft_out(d: EmailDraft, agent_name: str | None, box: Any = None) -> dict[str, Any]:
     return {
         "id": d.id,
         "status": d.status,
@@ -441,16 +464,47 @@ def _draft_out(d: EmailDraft, agent_name: str | None) -> dict[str, Any]:
         "error": d.error,
         "created_at": d.created_at,
         "decided_at": d.decided_at,
+        # P34: which mailbox it sits in.
+        "provider": d.provider or "google",
+        "mailbox_kind": "shared" if d.shared_mailbox_id else "personal",
+        "mailbox_id": d.shared_mailbox_id,
+        "mailbox_label": ms_access.label_of(box) if box is not None else None,
     }
+
+
+def _scope_kw(principal: Principal) -> dict[str, Any]:
+    return {
+        "workspace_id": principal.workspace_id,
+        "user_id": principal.user.id,
+        "role": principal.role,
+        "branch_id": principal.branch_id,
+    }
+
+
+async def _ms_draft(db: AsyncSession, principal: Principal, draft_id: str) -> tuple[Any, Any]:
+    """(Outlook draft, its mailbox) when the person may approve it, else (None, None)."""
+    d = await db.get(EmailDraft, draft_id)
+    if d is None or d.workspace_id != principal.workspace_id or d.provider != "microsoft":
+        return None, None
+    box = await ms_approvals.box_of(db, d)
+    if not await ms_approvals.may_approve(db, box, **_scope_kw(principal)):
+        return None, None
+    return d, box
 
 
 async def _my_draft(
     db: AsyncSession, principal: Principal, draft_id: str
 ) -> tuple[EmailDraft, GoogleAccount]:
+    _not_for_role(principal)
     d = await db.get(EmailDraft, draft_id)
-    if d is None or d.workspace_id != principal.workspace_id or d.user_id != principal.user.id:
+    if (
+        d is None
+        or d.workspace_id != principal.workspace_id
+        or d.user_id != principal.user.id
+        or (d.provider or "google") != "google"
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "draft_not_found", "That draft is not here.")
-    acct = await db.get(GoogleAccount, d.account_id)
+    acct = await db.get(GoogleAccount, d.account_id) if d.account_id else None
     if acct is None:
         raise api_error(status.HTTP_409_CONFLICT, "not_connected", "Connect Gmail again first.")
     return d, acct
@@ -465,14 +519,21 @@ async def list_drafts(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
+    """Newest first: the person's own drafts (Gmail, their Outlook) and the drafts of shared
+    mailboxes they approve. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
+    mine = EmailDraft.user_id == principal.user.id
+    shared = ms_access.approvable_where(
+        principal.workspace_id, principal.user.id, principal.role, principal.branch_id
+    )
+    who = (
+        or_(mine, EmailDraft.shared_mailbox_id.in_(select(SharedMailbox.id).where(shared)))
+        if shared is not None
+        else mine
+    )
     q = (
         select(EmailDraft, Agent.name)
         .outerjoin(Agent, Agent.id == EmailDraft.agent_id)
-        .where(
-            EmailDraft.workspace_id == principal.workspace_id,
-            EmailDraft.user_id == principal.user.id,
-        )
+        .where(EmailDraft.workspace_id == principal.workspace_id, who)
     )
     if status_ == "pending":
         q = q.where(EmailDraft.status == "pending")
@@ -485,22 +546,39 @@ async def list_drafts(
         response=response,
         rows=True,
     )
-    return [_draft_out(d, n) for d, n in rows]
+    out = []
+    for d, n in rows:
+        box = await ms_approvals.box_of(db, d) if d.provider == "microsoft" else None
+        out.append(_draft_out(d, n, box))
+    return out
+
+
+def _edit(d: EmailDraft, body: DraftEditIn) -> None:
+    if d.status != "pending":
+        raise api_error(status.HTTP_409_CONFLICT, "not_pending", "This draft was already handled.")
+    for f in ("to", "cc", "subject", "body"):
+        if (v := getattr(body, f)) is not None:
+            setattr(d, f, v.strip() if f != "body" else v)
 
 
 @router.patch("/email-drafts/{draft_id}")
 async def edit_draft(
     draft_id: str,
     body: DraftEditIn,
-    principal: Principal = Depends(assist_perm()),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    md, box = await _ms_draft(db, principal, draft_id)
+    if md is not None:
+        _edit(md, body)
+        try:
+            await ms_approvals.update_draft(db, md, box)
+        except MicrosoftError as e:
+            raise api_error(status.HTTP_502_BAD_GATEWAY, "outlook_failed", str(e)) from e
+        await db.commit()
+        return _draft_out(md, None, box)
     d, acct = await _my_draft(db, principal, draft_id)
-    if d.status != "pending":
-        raise api_error(status.HTTP_409_CONFLICT, "not_pending", "This draft was already handled.")
-    for f in ("to", "cc", "subject", "body"):
-        if (v := getattr(body, f)) is not None:
-            setattr(d, f, v.strip() if f != "body" else v)
+    _edit(d, body)
     original = None
     if d.in_reply_to:
         try:
@@ -520,10 +598,21 @@ async def edit_draft(
 @router.post("/email-drafts/{draft_id}/send")
 async def send_draft(
     draft_id: str,
-    principal: Principal = Depends(assist_perm()),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """The person approves: Gmail sends the draft from their mailbox."""
+    """The person approves: Gmail or Outlook sends the draft from its mailbox."""
+    md, box = await _ms_draft(db, principal, draft_id)
+    if md is not None:
+        if md.status != "pending":
+            raise api_error(
+                status.HTTP_409_CONFLICT, "not_pending", "This draft was already handled."
+            )
+        try:
+            await ms_approvals.send_draft(db, md, box, principal.actor)
+        except MicrosoftError as e:
+            raise api_error(status.HTTP_502_BAD_GATEWAY, "outlook_failed", str(e)) from e
+        return _draft_out(md, None, box)
     d, acct = await _my_draft(db, principal, draft_id)
     if d.status != "pending":
         raise api_error(status.HTTP_409_CONFLICT, "not_pending", "This draft was already handled.")
@@ -538,6 +627,14 @@ async def send_draft(
         await db.commit()
         raise api_error(status.HTTP_502_BAD_GATEWAY, "gmail_failed", str(e)) from e
     d.status, d.decided_at, d.error = "sent", datetime.now(UTC), None
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "email_draft.sent",
+        target=d.id,
+        after={"provider": "google", "to": d.to, "subject": d.subject[:200]},
+    )
     await db.commit()
     return _draft_out(d, None)
 
@@ -545,9 +642,13 @@ async def send_draft(
 @router.post("/email-drafts/{draft_id}/discard")
 async def discard_draft(
     draft_id: str,
-    principal: Principal = Depends(assist_perm()),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    md, box = await _ms_draft(db, principal, draft_id)
+    if md is not None:
+        await ms_approvals.discard_draft(db, md, box, principal.actor)
+        return _draft_out(md, None, box)
     d, acct = await _my_draft(db, principal, draft_id)
     if d.status == "pending":
         try:
@@ -564,6 +665,12 @@ async def discard_draft(
 
 def _proposal_out(p: dict[str, Any]) -> dict[str, Any]:
     body = p.get("body") or {}
+    microsoft = p.get("provider") == "microsoft"
+    guests = (
+        [str(a) for a in body.get("attendees") or []]
+        if microsoft
+        else [a.get("email", "") for a in body.get("attendees") or []]
+    )
     return {
         "id": p["id"],
         "status": p["status"],  # pending | done | discarded | failed | expired
@@ -572,8 +679,8 @@ def _proposal_out(p: dict[str, Any]) -> dict[str, Any]:
         "summary": p["summary"],
         "before": p.get("before", ""),
         "event_id": p.get("event_id", ""),
-        "attendees": [a.get("email", "") for a in body.get("attendees") or []],
-        "meet": "conferenceData" in body,
+        "attendees": guests,
+        "meet": bool(body.get("online_meeting")) if microsoft else "conferenceData" in body,
         "notify": bool(p.get("notify")),
         "agent_id": p.get("agent_id"),
         "agent_name": p.get("agent_name"),
@@ -581,14 +688,20 @@ def _proposal_out(p: dict[str, Any]) -> dict[str, Any]:
         "error": p.get("error"),
         "created_at": p["created_at"],
         "decided_at": p.get("decided_at"),
+        # P34: Google Calendar or Outlook, and which mailbox's calendar.
+        "provider": p.get("provider") or "google",
+        "mailbox_kind": "shared" if p.get("shared_mailbox_id") else "personal",
+        "mailbox_id": p.get("shared_mailbox_id"),
+        "mailbox_label": p.get("mailbox_label"),
     }
 
 
 async def _my_proposal(
     db: AsyncSession, principal: Principal, proposal_id: str
 ) -> tuple[dict[str, Any], GoogleAccount]:
+    _not_for_role(principal)
     p = await calendar.get(principal.workspace_id, principal.user.id, proposal_id)
-    if p is None:
+    if p is None or p.get("provider", "google") != "google":
         raise api_error(
             status.HTTP_404_NOT_FOUND, "proposal_not_found", "That calendar change is not here."
         )
@@ -605,25 +718,60 @@ async def _my_proposal(
     return p, acct
 
 
+async def _ms_proposal(db: AsyncSession, principal: Principal, proposal_id: str) -> tuple[Any, Any]:
+    """(Outlook proposal row, its mailbox) when the person may confirm it."""
+    row = await db.get(CalendarProposal, proposal_id)
+    if row is None or row.workspace_id != principal.workspace_id or row.provider != "microsoft":
+        return None, None
+    box = await ms_approvals.box_of(db, row)
+    if not await ms_approvals.may_approve(db, box, **_scope_kw(principal)):
+        return None, None
+    return row, box
+
+
 @router.get("/calendar-drafts")
 async def list_calendar_drafts(
     status_: str = Query(default="pending", alias="status", pattern="^(pending|all)$"),
     principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """Calendar changes the person's assistants proposed, waiting for their yes."""
-    rows = await calendar.listing(
-        principal.workspace_id, principal.user.id, pending_only=status_ == "pending"
+    """Calendar changes AI proposed, waiting for a yes: the person's own (Google, their
+    Outlook) and those of shared mailboxes they approve."""
+    pending_only = status_ == "pending"
+    rows = await calendar.listing(principal.workspace_id, principal.user.id, pending_only)
+    rows += await ms_approvals.shared_proposals(
+        db, pending_only=pending_only, **_scope_kw(principal)
     )
+    rows.sort(key=lambda p: p["created_at"], reverse=True)
     return [_proposal_out(p) for p in rows]
 
 
 @router.post("/calendar-drafts/{proposal_id}/confirm")
 async def confirm_calendar_draft(
     proposal_id: str,
-    principal: Principal = Depends(assist_perm()),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """The person says yes: only now does the Calendar API run (and invite the guests)."""
+    """The person says yes: only now does the calendar change (and invite the guests)."""
+    row, box = await _ms_proposal(db, principal, proposal_id)
+    if row is not None:
+        p = calendar._out(row, datetime.now(UTC))  # noqa: SLF001 - lapsed proposals read "expired"
+        if p["status"] != "pending":
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "not_pending",
+                "This was already {status}.",
+                status=decision_status_label(p["status"]),
+            )
+        if not await calendar.claim(p["id"]):
+            raise api_error(
+                status.HTTP_409_CONFLICT, "not_pending", "This is being handled already."
+            )
+        try:
+            return _proposal_out(await ms_approvals.confirm(db, row, box, principal.actor))
+        except MicrosoftError as e:
+            await calendar.release(p["id"])
+            raise api_error(status.HTTP_502_BAD_GATEWAY, "calendar_failed", str(e)) from e
     p, acct = await _my_proposal(db, principal, proposal_id)
     if p["status"] != "pending":
         raise api_error(
@@ -651,16 +799,30 @@ async def confirm_calendar_draft(
     if ev.get("id"):
         p["event_id"] = ev["id"]
     await calendar.save(p)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "calendar_proposal.confirmed",
+        target=p["id"],
+        after={"provider": "google", "action": p["action"], "title": p["title"][:200]},
+    )
+    await db.commit()
     return _proposal_out(p)
 
 
 @router.post("/calendar-drafts/{proposal_id}/discard")
 async def discard_calendar_draft(
     proposal_id: str,
-    principal: Principal = Depends(assist_perm()),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    row, _box = await _ms_proposal(db, principal, proposal_id)
+    if row is not None:
+        return _proposal_out(await ms_approvals.discard_proposal(db, row, principal.actor))
+    _not_for_role(principal)
     p = await calendar.get(principal.workspace_id, principal.user.id, proposal_id)
-    if p is None:
+    if p is None or p.get("provider", "google") != "google":
         raise api_error(
             status.HTTP_404_NOT_FOUND, "proposal_not_found", "That calendar change is not here."
         )

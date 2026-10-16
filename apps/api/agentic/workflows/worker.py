@@ -52,6 +52,7 @@ from .intake_activities import intake_fail, intake_finish, intake_pending, intak
 from .intake_workflows import IntakeWorkflow
 from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
+from .mail_workflows import MailPendingWorkflow, MailSyncTickWorkflow, mail_pending, mail_tick
 from .minutes_activities import (
     minutes_fail,
     minutes_prepare,
@@ -105,6 +106,8 @@ WORKFLOWS = [
     BuildFromDocsWorkflow,
     IntakeWorkflow,
     WhatsAppInboundWorkflow,
+    MailPendingWorkflow,
+    MailSyncTickWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -149,6 +152,8 @@ ACTIVITIES = [
     intake_read,
     intake_finish,
     intake_fail,
+    mail_pending,
+    mail_tick,
 ]
 
 
@@ -164,6 +169,9 @@ async def ensure_schedules(client: Client) -> None:
         ("minutes-purge", MinutesPurgeWorkflow.run, timedelta(hours=24)),
         # P21: relaunch runs whose workflow is gone, flag silent runs (teams/reconcile.py).
         ("liveness-reconcile", LivenessReconcileWorkflow.run, timedelta(minutes=10)),
+        # P34: Outlook mail: drain webhook work, renew subscriptions, poll every 3 min when
+        # webhooks are unavailable (microsoft/sync.py).
+        ("mail-sync", MailSyncTickWorkflow.run, timedelta(minutes=1)),
     ]
     for schedule_id, run, every in jobs:
         try:

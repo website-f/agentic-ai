@@ -13,6 +13,7 @@ import { myAiTab, type MyAiTab } from "@/lib/my-ai";
 import { twinQuery } from "@/lib/twin";
 import { cn } from "@/lib/utils";
 import { ComputersLink } from "@/pages/computers/indicator";
+import { OutlookLink } from "@/pages/mail/outlook";
 
 export function MyAiTabs({ className }: { className?: string }) {
   const t = useT();
@@ -46,7 +47,11 @@ export function MyAiTabs({ className }: { className?: string }) {
           { value: "profile", label: t("Profile"), icon: IdentificationBadgeIcon },
         ]}
       />
-      <ComputersLink className="shrink-0 self-start sm:self-auto sm:border-b sm:border-border sm:pb-1.5" />
+      {/* P34: the person's Outlook (Live / checks every 3 minutes / reconnect), when Microsoft 365 is set up. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 self-start sm:self-auto sm:border-b sm:border-border sm:pb-1.5">
+        <OutlookLink />
+        <ComputersLink />
+      </div>
     </div>
   );
 }

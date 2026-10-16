@@ -3,12 +3,12 @@
  * chase people and other agents on WhatsApp. Built phone-first. */
 import {
   CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon, ChatCircleDotsIcon,
-  EnvelopeSimpleIcon, GearSixIcon, VideoCameraIcon, LockSimpleIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon,
+  EnvelopeSimpleIcon, GearSixIcon, VideoCameraIcon, LockSimpleIcon, MicrosoftOutlookLogoIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon,
   WarningCircleIcon, WhatsappLogoIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -30,11 +30,13 @@ import { api, errorMessage } from "@/lib/api";
 import {
   assistantKeys, assistantsQuery, calendarDraftsQuery, draftsQuery, type AssistantsHome, type CalendarDraft, type EmailDraft, type Preset,
 } from "@/lib/assistants";
+import { microsoftAccountQuery, microsoftConfigQuery, providerOf } from "@/lib/microsoft";
 import { cn, timeAgo } from "@/lib/utils";
 import type { Agent } from "@/lib/work";
 import { ComputersLink } from "@/pages/computers/indicator";
+import { OutlookLink, OutlookRow, useMsReturn } from "@/pages/mail/outlook";
 
-import { assistantPrompts } from "./chat-extras";
+import { assistantPrompts, connectFooter } from "./chat-extras";
 
 type Tab = "chat" | "drafts" | "settings";
 
@@ -135,9 +137,11 @@ function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["k
 
 // ---------------------------------------------------------------- drafts
 
-function DraftCard({ d }: { d: EmailDraft }) {
+/** An email an assistant drafted (Gmail or, P34, Outlook). Exported for the Mail page. */
+export function DraftCard({ d }: { d: EmailDraft }) {
   const t = useT();
   const qc = useQueryClient();
+  const outlook = providerOf(d) === "microsoft";
   const [body, setBody] = useState(d.body);
   const [subject, setSubject] = useState(d.subject);
   const [discarding, setDiscarding] = useState(false);
@@ -145,7 +149,7 @@ function DraftCard({ d }: { d: EmailDraft }) {
   const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allDrafts }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
   const save = useMutation({
     mutationFn: () => api<EmailDraft>(`/api/email-drafts/${d.id}`, "PATCH", { body, subject }),
-    onSuccess: () => { refresh(); toast.success(t("Draft updated in Gmail.")); },
+    onSuccess: () => { refresh(); toast.success(outlook ? t("Draft updated in Outlook.") : t("Draft updated in Gmail.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const send = useMutation({
@@ -162,9 +166,9 @@ function DraftCard({ d }: { d: EmailDraft }) {
   });
   return (
     <Card>
-      <CardHeader icon={<IconTile icon={EnvelopeSimpleIcon} tone="info" size="sm" />}
+      <CardHeader icon={<IconTile icon={outlook ? MicrosoftOutlookLogoIcon : EnvelopeSimpleIcon} tone="info" size="sm" />}
         title={<span className="break-words">{t("To {to}", { to: d.to })}</span>}
-        description={[d.agent_name ? t("Drafted by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+        description={[outlook ? "Outlook" : "Gmail", d.agent_name ? t("Drafted by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
         actions={<Pill tone="warn">{t("Waiting for you")}</Pill>} />
       <CardBody className="grid gap-3">
         {d.is_reply && d.original_from ? (
@@ -184,7 +188,7 @@ function DraftCard({ d }: { d: EmailDraft }) {
         {d.error ? <p className="text-[12.5px] text-danger">{d.error}</p> : null}
       </CardBody>
       <ConfirmDialog open={discarding} onOpenChange={setDiscarding} title={t("Discard this draft?")} danger confirmLabel={t("Discard")}
-        body={t("It is removed from your Gmail drafts. Nothing was sent.")} onConfirm={async () => { await discard.mutateAsync(); }} />
+        body={outlook ? t("It is removed from your Outlook drafts. Nothing was sent.") : t("It is removed from your Gmail drafts. Nothing was sent.")} onConfirm={async () => { await discard.mutateAsync(); }} />
     </Card>
   );
 }
@@ -196,10 +200,11 @@ const CAL_LOOK: Record<CalendarDraft["action"], { icon: Icon; tone: Tone; verb: 
 };
 
 /** An event an assistant proposed. Nothing reaches Google (or the guests) until Confirm. */
-function CalendarDraftCard({ d }: { d: CalendarDraft }) {
+export function CalendarDraftCard({ d }: { d: CalendarDraft }) {
   const t = useT();
   const qc = useQueryClient();
   const look = CAL_LOOK[d.action];
+  const outlook = providerOf(d) === "microsoft";
   const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allCalendar }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
   const confirm = useMutation({
     mutationFn: () => api<CalendarDraft>(`/api/calendar-drafts/${d.id}/confirm`, "POST"),
@@ -215,14 +220,14 @@ function CalendarDraftCard({ d }: { d: CalendarDraft }) {
     <Card>
       <CardHeader icon={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
         title={<span className="break-words">{t(look.verb)}: {d.title}</span>}
-        description={[d.agent_name ? t("Proposed by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+        description={[outlook ? t("Outlook calendar") : null, d.agent_name ? t("Proposed by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
         actions={<Pill tone="warn">{t("Waiting for you")}</Pill>} />
       <CardBody className="grid gap-3">
         <p className="text-[13.5px] break-words">{d.summary}</p>
         {d.attendees.length || d.meet ? (
           <div className="flex flex-wrap gap-1.5">
             {d.attendees.map((a) => <span key={a} className="max-w-full truncate rounded-full border border-border px-2 py-0.5 text-[11.5px] text-muted">{a}</span>)}
-            {d.meet ? <Pill tone="info"><VideoCameraIcon size={12} /> Google Meet</Pill> : null}
+            {d.meet ? <Pill tone="info"><VideoCameraIcon size={12} /> {outlook ? "Microsoft Teams" : "Google Meet"}</Pill> : null}
           </div>
         ) : null}
         {d.notify ? <p className="text-[12px] text-muted">{d.action === "create" ? t("Guests get an invitation only when you confirm.") : t("Guests get an update only when you confirm.")}</p> : null}
@@ -247,11 +252,16 @@ function Drafts({ home }: { home: AssistantsHome }) {
   const [history, setHistory] = useState(false);
   const { data: all = [] } = useQuery({ ...draftsQuery("all"), enabled: history });
   const { data: allEvents = [] } = useQuery({ ...calendarDraftsQuery("all"), enabled: history });
-  if (!home.google.account && !events.length) {
-    return <EmptyState icon={EnvelopeSimpleIcon} title={t("Google isn't connected")} body={t("Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here.")} />;
+  const msConfig = useQuery(microsoftConfigQuery);
+  const ms = useQuery({ ...microsoftAccountQuery, enabled: !!msConfig.data?.configured });
+  if (!home.google.account && !ms.data?.connected && !events.length && !pending.length) {
+    return <EmptyState icon={EnvelopeSimpleIcon} title={msConfig.data?.configured ? t("No mailbox connected") : t("Google isn't connected")}
+      body={msConfig.data?.configured
+        ? t("Connect Gmail or Outlook in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here.")
+        : t("Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here.")} />;
   }
   const done = [
-    ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: `${d.subject} → ${d.to}`, at: d.decided_at ?? d.created_at })),
+    ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: providerOf(d) === "microsoft" ? MicrosoftOutlookLogoIcon : EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: `${d.subject} → ${d.to}`, at: d.decided_at ?? d.created_at })),
     ...allEvents.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: CAL_LOOK[d.action].icon, status: d.status, ok: d.status === "done", text: `${t(CAL_LOOK[d.action].verb)}: ${d.title}`, at: d.decided_at ?? d.created_at })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   return (
@@ -357,6 +367,7 @@ function Connections({ home }: { home: AssistantsHome }) {
             </>
           ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>{t("Connect Google")}</Button>
             : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">{t("Set up")}</Link></Button> : null)}
+        <OutlookRow />
         {row(CalendarBlankIcon, "accent", t("Calendar"),
           g.account?.calendar ? t("Your Google Calendar. Assistants read it and find free time; events they propose wait for you.")
             : g.account ? t("Connected before calendar access was added. Reconnect Google and tick the calendar box.")
@@ -446,12 +457,13 @@ export function AssistantsPage() {
   const navigate = useNavigate({ from: "/assistants" });
   const qc = useQueryClient();
   const { data: home, isLoading, error } = useQuery(assistantsQuery);
+  const { data: outlook } = useQuery(microsoftAccountQuery);
   const [creating, setCreating] = useState<Preset["key"] | null>(null);
   const tab: Tab = search.tab ?? "chat";
   const list = useMemo(() => home?.assistants ?? [], [home]);
   const agent = useMemo(() => list.find((a) => a.id === search.a) ?? list[0], [list, search.a]);
   const waiting = (home?.drafts_pending ?? 0) + (home?.calendar_pending ?? 0);
-  const go = (p: { a?: string; tab?: Tab }) => navigate({ search: (s) => ({ ...s, ...p, google: undefined, msg: undefined }), replace: true });
+  const go = (p: { a?: string; tab?: Tab }) => navigate({ search: (s) => ({ ...s, ...p, google: undefined, ms: undefined, msg: undefined }), replace: true });
   const viewTabs = (
     <Segmented<Tab> label={t("View")} value={tab} onChange={(v) => go({ tab: v })} className="w-full sm:w-fit lg:w-full [&>button]:flex-1 [&>button]:justify-center"
       options={[
@@ -469,6 +481,10 @@ export function AssistantsPage() {
     qc.invalidateQueries({ queryKey: assistantKeys.home });
     navigate({ search: (s) => ({ ...s, google: undefined, msg: undefined, tab: "settings" }), replace: true });
   }, [search.google, search.msg, navigate, qc, t]);
+
+  // Back from Microsoft sign-in (P34): a toast, then the Settings tab with the Outlook row.
+  const clearMs = useCallback(() => void navigate({ search: (s) => ({ ...s, ms: undefined, msg: undefined, tab: "settings" as const }), replace: true }), [navigate]);
+  useMsReturn(search, clearMs);
 
   return (
     // The chat itself opens full screen (/chat/$agentId); this page is its home: presets, drafts, settings.
@@ -526,6 +542,7 @@ export function AssistantsPage() {
                     {home.whatsapp.linked ? t("Your phone is linked") : t("Link your phone →")}
                   </button>
                 ) : null}
+                <OutlookLink className="-mx-1 justify-self-start" />
                 <ComputersLink className="-mx-1 justify-self-start" />
                 {waiting ? <button type="button" onClick={() => go({ tab: "drafts" })} className="flex items-center gap-2 text-left text-[12.5px] font-medium text-warn"><WarningCircleIcon size={15} weight="fill" /> {t("{n} waiting for you", { n: waiting })}</button> : null}
               </div>
@@ -535,9 +552,8 @@ export function AssistantsPage() {
               <div className="lg:hidden">{viewTabs}</div>
               {tab === "chat" ? (
                 <ChatLauncher key={agent.id} agent={agent} canWrite from={`/assistants?a=${encodeURIComponent(agent.id)}`}
-                  quickPrompts={assistantPrompts(home)} guide={{ root: "assistants.chat", quick: "assistants.quick" }}
-                  footer={!home.google.account ? <p className="text-[12px] text-muted">{t("Connect Google in Settings and I can read your inbox and calendar too.")}</p>
-                    : !home.google.account.calendar ? <p className="text-[12px] text-muted">{t("Reconnect Google in Settings to add your calendar.")}</p> : null} />
+                  quickPrompts={assistantPrompts(home, outlook)} guide={{ root: "assistants.chat", quick: "assistants.quick" }}
+                  footer={connectFooter(home, outlook, t)} />
               )
                 : tab === "drafts" ? <Drafts home={home} />
                 : <Settings key={agent.id + agent.soul.length} agent={agent} home={home} />}

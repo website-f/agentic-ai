@@ -66,6 +66,8 @@ import { useMedia } from "@/lib/use-media";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 
+import { MicrosoftCard } from "./microsoft";
+
 interface Device { id: string; label: string; created_at: string; last_ok_at: string | null; failures: number; service: string }
 interface TokenOut { id: string; name: string; prefix: string; scopes: string[]; created_at: string; created_by_name: string | null; expires_at: string | null; last_used_at: string | null; revoked: boolean }
 interface Ledger { counts: Record<string, number>; items: { id: string; channel: string; kind: string; state: string; attempts: number; last_error: string | null; created_at: string; sent_at: string | null; summary: string }[] }
@@ -1328,6 +1330,7 @@ export function ChannelsPage() {
       </div>
       <WhatsApp canManage={canManage} />
       <Gmail />
+      <MicrosoftCard canManage={canManage} />
       {canManage ? <Tokens /> : null}
       {canManage ? <DeliveryLedger /> : null}
     </Page>

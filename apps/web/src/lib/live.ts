@@ -11,6 +11,7 @@ import { t } from "@/i18n";
 import { brainKeys } from "./brain";
 import { deviceKeys } from "./devices";
 import { learningKeys } from "./learning";
+import { mailKeys } from "./microsoft";
 import { objectiveKeys } from "./objectives";
 import { keys } from "./queries";
 import { teamKeys } from "./teams";
@@ -101,6 +102,11 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   // given folders or unlinked (device.updated). A claimed link code's poll shares the key.
   "device.status": [deviceKeys.all],
   "device.updated": [deviceKeys.all],
+  // P34: a mail reached Outlook or a shared mailbox (and maybe became a task or a draft).
+  "mail.new": [mailKeys.all, ["email-drafts"], workKeys.tasks],
+  // Sorted / turned into a task / a draft or follow-up added; the daily report was written.
+  "mail.updated": [mailKeys.all, ["email-drafts"], ["calendar-drafts"], workKeys.tasks],
+  "mail.digest": [mailKeys.all, ["reports"]],
 };
 
 export function useLiveEvents() {

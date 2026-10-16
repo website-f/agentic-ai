@@ -21,6 +21,7 @@ import {
   ClockCounterClockwiseIcon,
   DeskIcon,
   DesktopTowerIcon,
+  EnvelopeSimpleIcon,
   EyeIcon,
   CpuIcon,
   ChartBarIcon,
@@ -70,6 +71,7 @@ export type AppPath =
   | "/tasks"
   | "/objectives"
   | "/approvals"
+  | "/mail"
   | "/chat"
   | "/meetings"
   | "/broadcasts"
@@ -151,6 +153,8 @@ export const NAV: NavSection[] = [
       { to: "/tasks", label: msg("Tasks"), icon: KanbanIcon, blurb: msg("A board of everything your agents are working on, from triage to done. Drag a card between columns to move it along.") },
       { to: "/forms", label: msg("Forms"), icon: NotepadIcon, blurb: msg("Claims, advances, monthly records and requests: download the blank, hand it in before the deadline, or let your AI worker fill it in. Managers see who handed in.") },
       { to: "/approvals", label: msg("Approvals"), icon: SealCheckIcon, blurb: msg("Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification.") },
+      // P34: what came into Outlook and the shared mailboxes, and what the AI did with each.
+      { to: "/mail", label: msg("Mail"), icon: EnvelopeSimpleIcon, perm: ["agents.own", "assistants.use", "channels.manage"], blurb: msg("Mail that reached your Outlook and the company's shared mailboxes, and what the AI did with each: the task it made, the file it saved, the reply it drafted for you.") },
       { to: "/chat", label: msg("Chat"), icon: ChatsCircleIcon, blurb: msg("Talk to any agent directly, by typing or with your voice, and pick up past conversations.") },
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
       { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },

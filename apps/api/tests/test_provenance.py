@@ -418,9 +418,7 @@ async def test_publish_research_saves_ai_document_and_company_library(client):
             {
                 "title": "QT123 technical research",
                 "body": "## Method\n\nUse a documented preventive-maintenance schedule.",
-                "sources": [
-                    {"title": "Official guide", "url": "https://example.gov.my/guide"}
-                ],
+                "sources": [{"title": "Official guide", "url": "https://example.gov.my/guide"}],
             },
         )
         assert "searchable in this company's Library" in out

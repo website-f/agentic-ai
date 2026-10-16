@@ -223,6 +223,9 @@ class Scope:
         reach only that person."""
         if type_ in PERSONAL_EVENTS:
             return bool(data.get("user_id")) and data.get("user_id") == self.user_id
+        if type_.startswith("mail."):  # P34: only who may see that mailbox (microsoft/access)
+            viewers = data.get("viewer_ids")
+            return isinstance(viewers, list) and self.user_id in viewers
         if type_ in KNOWLEDGE_EVENTS:
             return True
         if type_ in BRANCH_EVENTS:  # P24: a company's uploads reach the people of it

@@ -73,6 +73,9 @@ RAW_UPLOAD_PREFIXES: tuple[str, ...] = ("/api/devices/uploads/",)
 # P31: a PC authenticates with its link code or bearer token, not a session, so a stray
 # cookie never asks it for a CSRF token.
 DEVICE_PATHS = ("/api/devices/claim", "/api/devices/uploads/", "/api/devices/self/")
+# P34: Microsoft Graph's webhook. Its validation handshake is a text/plain POST, and Graph
+# never has a session; the clientState of each notification authenticates it.
+PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
 
 
 @asynccontextmanager
@@ -103,7 +106,11 @@ async def csrf_guard(request: Request, call_next):
     2. Double-submit token: the X-CSRF-Token header must match the agentic_csrf cookie.
     """
     path = request.url.path
-    if request.method in UNSAFE_METHODS and path.startswith("/api/"):
+    if (
+        request.method in UNSAFE_METHODS
+        and path.startswith("/api/")
+        and path not in PUBLIC_HOOK_PATHS
+    ):
         ctype = request.headers.get("content-type", "")
         raw_ok = (
             (path in RAW_UPLOAD_PATHS or path.startswith(RAW_UPLOAD_PREFIXES))
@@ -345,3 +352,9 @@ app.include_router(task_flow_router.router)
 from .routers import devices as devices_router  # noqa: E402
 
 app.include_router(devices_router.router)
+
+# P34: Microsoft 365 / Outlook through Microsoft Graph (the app, personal Outlook, shared
+# mailboxes, mail activity, the Graph webhook).
+from .routers import microsoft as microsoft_router  # noqa: E402
+
+app.include_router(microsoft_router.router)

@@ -8,11 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import String, cast, or_, select
+from sqlalchemy import String, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...models import Agent, Branch, Report, Task
+from ...microsoft.access import shared_where
+from ...models import Agent, Branch, Report, SharedMailbox, Task
 from .. import paging
 from ..deps import Principal, api_error, require
 
@@ -39,15 +40,24 @@ class ReportOut(BaseModel):
 
 
 def _scoped(q: Any, principal: Principal) -> Any:
+    """P34: a report for one person (their own mail digest) is theirs only, whatever the
+    role; a shared mailbox's digest is for the people who see that mailbox. The rest follow
+    the person's scope."""
     sc = principal.scope
+    own = Report.owner_user_id == principal.user.id
+    boxes = select(SharedMailbox.id).where(
+        shared_where(principal.workspace_id, principal.user.id, principal.role, principal.branch_id)
+    )
+    mailbox = and_(Report.owner_user_id.is_(None), Report.mailbox_id.in_(boxes))
+    plain = and_(Report.owner_user_id.is_(None), Report.mailbox_id.is_(None))
     cond = sc.agent_where()
     if cond is None:
-        return q
+        return q.where(or_(own, mailbox, plain))
     visible = select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
     parts: list[Any] = [Report.agent_id.in_(visible)]
     if sc.kind == "branch" and sc.branch_id:
         parts.append(Report.branch_id == sc.branch_id)
-    return q.where(or_(*parts))
+    return q.where(or_(own, mailbox, and_(plain, or_(*parts))))
 
 
 async def _out(db: AsyncSession, r: Report, full: bool) -> ReportOut:

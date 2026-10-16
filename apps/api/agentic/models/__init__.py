@@ -1150,6 +1150,12 @@ class Report(Base):
     tables: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # P34: a report only one person sees (their own mail digest), or only the people who may
+    # see one shared mailbox (microsoft/access.shared_where). Both None = the usual scope.
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="SET NULL")
+    )
 
 
 class Blueprint(Timestamps, Base):
@@ -1542,10 +1548,20 @@ class CalendarProposal(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # Who confirms it: the person (Google, or their own Outlook). None for a shared
+    # mailbox's calendar (P34): its approvers are owner/admin and the company's managers.
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(16), default="pending")
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # P34: google | microsoft, and which Outlook mailbox (a person's own, or a shared one).
+    provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
+    ms_account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("microsoft_accounts.id", ondelete="CASCADE")
+    )
+    shared_mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="CASCADE")
+    )
 
 
 class EmailDraft(Timestamps, Base):
@@ -1562,12 +1578,17 @@ class EmailDraft(Timestamps, Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ed"))
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # Who approves it: the person. None for a shared mailbox's draft (P34): owner/admin and
+    # the branch managers of the mailbox's company approve those.
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
-    account_id: Mapped[str] = mapped_column(ForeignKey("google_accounts.id", ondelete="CASCADE"))
-    gmail_draft_id: Mapped[str] = mapped_column(String(120))
-    thread_id: Mapped[str] = mapped_column(String(120), default="")
-    in_reply_to: Mapped[str] = mapped_column(String(120), default="")  # the Gmail message id
+    account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("google_accounts.id", ondelete="CASCADE")
+    )
+    # The draft's id in the mailbox (Gmail's draft id, or the Outlook draft message's id).
+    gmail_draft_id: Mapped[str] = mapped_column(String(400))
+    thread_id: Mapped[str] = mapped_column(String(400), default="")
+    in_reply_to: Mapped[str] = mapped_column(String(400), default="")  # the original's id
     to: Mapped[str] = mapped_column(Text, default="")
     cc: Mapped[str] = mapped_column(Text, default="")
     subject: Mapped[str] = mapped_column(String(400), default="")
@@ -1577,6 +1598,14 @@ class EmailDraft(Timestamps, Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     error: Mapped[str | None] = mapped_column(String(500))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P34: google | microsoft; for Outlook, the mailbox it sits in (one of the two).
+    provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
+    ms_account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("microsoft_accounts.id", ondelete="CASCADE")
+    )
+    shared_mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="CASCADE")
+    )
 
 
 class MeetingRecording(Timestamps, Base):
@@ -1826,6 +1855,153 @@ class DeviceLinkCode(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class MicrosoftAccount(Timestamps, Base):
+    """P34: a person's own Microsoft 365 mailbox and calendar, connected by them (OAuth with
+    PKCE, delegated permissions, Microsoft Graph only). One per person. Only that person and
+    their own AI (twin or private assistant) use it. The refresh token is encrypted at rest;
+    access tokens live in Valkey. Status: connected | reconnect_needed (Microsoft refused the
+    refresh token: syncing stops until they connect again) | error | disconnected."""
+
+    __tablename__ = "microsoft_accounts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_microsoft_accounts_user"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ma"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    ms_user_id: Mapped[str] = mapped_column(String(80), default="")  # Graph user id (oid)
+    tenant_id: Mapped[str] = mapped_column(String(80), default="")  # tid of their sign-in
+    email: Mapped[str] = mapped_column(String(254), default="")
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    scopes: Mapped[str] = mapped_column(Text, default="")
+    token_enc: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="connected")
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    # Mail sync: the inbox delta link (opaque Graph URL) and when it last ran.
+    delta_link: Mapped[str | None] = mapped_column(Text)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # What the AI does with their mail (microsoft/rules.personal_effective): digest, tasks
+    # (none by default), attachments, follow-up hours.
+    prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+
+    @property
+    def aad(self) -> str:
+        return f"microsoft_account:{self.id}"
+
+
+class SharedMailbox(Timestamps, Base):
+    """P34: a company mailbox (info@, accounts@...) read with the app's own permissions
+    (client credentials) in the customer's tenant. It belongs to a company (branch) and may
+    be assigned to one team agent. Seen only by owner/admin, that company's branch
+    managers, and the assigned agent's owner (microsoft/access.py). Status: active | paused |
+    error (last_error says why, e.g. Microsoft refused access)."""
+
+    __tablename__ = "shared_mailboxes"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "address", name="uq_shared_mailboxes_address"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mb"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    address: Mapped[str] = mapped_column(String(254))  # stored lowercased
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    tenant_id: Mapped[str] = mapped_column(String(80), default="")  # app-only token's tenant
+    branch_id: Mapped[str] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    rules: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    delta_link: Mapped[str | None] = mapped_column(Text)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class MailSubscription(Base):
+    """P34: one Graph change-notification subscription on a mailbox's inbox (created
+    messages). `id` is Graph's subscription id. The clientState Graph echoes back is kept
+    only as SHA-256. Exactly one of account_id / mailbox_id is set."""
+
+    __tablename__ = "mail_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "(account_id IS NULL) <> (mailbox_id IS NULL)", name="ck_mail_subscriptions_owner"
+        ),
+        Index("ix_mail_subscriptions_expires", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("microsoft_accounts.id", ondelete="CASCADE"), index=True
+    )
+    mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="CASCADE"), index=True
+    )
+    resource: Mapped[str] = mapped_column(String(400))
+    client_state_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MailItem(Base):
+    """P34: one message that arrived in a connected inbox. METADATA ONLY: bodies and
+    attachments are fetched from Graph on demand, never stored. `mailbox_ref` is the account
+    or shared mailbox id (unique with the Graph message id, so a sync is idempotent).
+    category stays null until the mail features classify it. status: new | processed |
+    ignored | failed, and pending (P34: not classified yet, the mailbox hit its hourly cap).
+    `actions`: what was done about it ([{"kind", "label", "task_id"?, "file_id"?}])."""
+
+    __tablename__ = "mail_items"
+    __table_args__ = (
+        UniqueConstraint("mailbox_ref", "graph_message_id", name="uq_mail_items_message"),
+        CheckConstraint("mailbox_kind IN ('personal', 'shared')", name="ck_mail_items_kind"),
+        CheckConstraint(
+            "status IN ('new', 'pending', 'processed', 'ignored', 'failed')",
+            name="ck_mail_items_status",
+        ),
+        Index("ix_mail_items_box_received", "mailbox_ref", "received_at"),
+        Index("ix_mail_items_box_status", "mailbox_ref", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mi"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    mailbox_kind: Mapped[str] = mapped_column(String(10))  # personal | shared
+    mailbox_ref: Mapped[str] = mapped_column(String(40))
+    account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("microsoft_accounts.id", ondelete="CASCADE")
+    )
+    mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="CASCADE")
+    )
+    graph_message_id: Mapped[str] = mapped_column(String(255))
+    conversation_id: Mapped[str] = mapped_column(String(255), default="")
+    internet_message_id: Mapped[str] = mapped_column(String(400), default="")
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    from_address: Mapped[str] = mapped_column(String(254), default="")
+    from_name: Mapped[str] = mapped_column(String(200), default="")
+    subject: Mapped[str] = mapped_column(String(400), default="")
+    has_attachments: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    category: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(16), default="new", server_default="new")
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, server_default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # What the AI understood (microsoft/features.py): a one-line summary, whether a person
+    # must look at it, a due date it mentions; when the mailbox answered the thread, and
+    # when a follow-up was made because nobody had.
+    summary: Mapped[str | None] = mapped_column(String(200))
+    needs_person: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    followed_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class DeviceActivity(Base):

@@ -78,6 +78,7 @@ const page = {
   objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
   computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
+  mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -188,10 +189,12 @@ const assistantsRoute = createRoute({
   beforeLoad: ({ context }) => {
     if (!canAssist(context.me.permissions)) throw redirect({ to: assistantsFallback(context.me.permissions) });
   },
-  validateSearch: (s: Record<string, unknown>): { a?: string; tab?: "chat" | "drafts" | "settings"; google?: string; msg?: string } => ({
+  // google / ms: back from Google or Microsoft (P34) sign-in, with msg as the detail.
+  validateSearch: (s: Record<string, unknown>): { a?: string; tab?: "chat" | "drafts" | "settings"; google?: string; ms?: string; msg?: string } => ({
     a: str(s.a),
     tab: s.tab === "drafts" || s.tab === "settings" || s.tab === "chat" ? s.tab : undefined,
     google: str(s.google),
+    ms: str(s.ms),
     msg: str(s.msg),
   }),
   component: page.assistants,
@@ -304,7 +307,13 @@ const brainRoute = createRoute({
   component: page.brain,
 });
 
-const channelsRoute = createRoute({ getParentRoute: () => appRoute, path: "/channels", component: page.channels });
+const channelsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/channels",
+  // P34: back from Microsoft's tenant-wide admin consent (ms_admin=ok|error, msg = the reason).
+  validateSearch: (s: Record<string, unknown>): { ms_admin?: string; msg?: string } => ({ ms_admin: str(s.ms_admin), msg: str(s.msg) }),
+  component: page.channels,
+});
 const approveRoute = createRoute({ getParentRoute: () => appRoute, path: "/approve/$approvalId", component: page.approve });
 
 const officeRoute = createRoute({
@@ -461,6 +470,8 @@ const welcomeRoute = createRoute({
 const myWorkerRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/my-worker",
+  // P34: back from Microsoft sign-in (ms=connected|error, msg = the detail).
+  validateSearch: (s: Record<string, unknown>): { ms?: string; msg?: string } => ({ ms: str(s.ms), msg: str(s.msg) }),
   // P30: My AI without a twin yet opens "Meet your AI twin" (its wizard).
   beforeLoad: async ({ context }) => {
     if (!context.me.permissions.includes("agents.own")) return;
@@ -556,6 +567,18 @@ const computersRoute = createRoute({
     if (!["agents.own", "assistants.use"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
   },
   component: page.computers,
+});
+
+// P34: mail that reached the person's Outlook and the shared mailboxes, and what the AI did with it.
+const mailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/mail",
+  // `mailbox` is what the server's follow-up notices link with; same as `box`.
+  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string } => ({ box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg) }),
+  beforeLoad: ({ context }) => {
+    if (!["agents.own", "assistants.use", "channels.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+  },
+  component: page.mail,
 });
 
 const objectivesRoute = createRoute({
@@ -657,6 +680,7 @@ const routeTree = rootRoute.addChildren([
     objectivesRoute,
     searchRoute,
     computersRoute,
+    mailRoute,
   ]),
 ]);
 

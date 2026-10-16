@@ -49,6 +49,11 @@ export interface EmailDraft {
   error: string | null;
   created_at: string;
   decided_at: string | null;
+  /** P34: which mailbox it lives in (absent on older servers = Google). */
+  provider?: "google" | "microsoft";
+  /** P34: a person's own Outlook, or a shared mailbox (approved by its managers). */
+  mailbox_kind?: "personal" | "shared";
+  mailbox_label?: string;
 }
 
 /** A calendar change an assistant proposed: nothing reaches Google until the person confirms. */
@@ -70,6 +75,10 @@ export interface CalendarDraft {
   error: string | null;
   created_at: string;
   decided_at: string | null;
+  /** P34: Google Calendar or Outlook (absent on older servers = Google). */
+  provider?: "google" | "microsoft";
+  mailbox_kind?: "personal" | "shared";
+  mailbox_label?: string;
 }
 
 export const assistantKeys = {

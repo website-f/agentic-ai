@@ -14,6 +14,7 @@ import { FORMS } from "./forms";
 import { GUIDE } from "./guide";
 import { KNOWLEDGE } from "./knowledge";
 import { LIBRARY } from "./library";
+import { MICROSOFT } from "./microsoft";
 import { MINUTES } from "./minutes";
 import { MY_AI } from "./my-ai";
 import { PEOPLE } from "./people";
@@ -47,4 +48,5 @@ export const MS: Record<string, string> = {
   ...MY_AI,
   ...COMPUTERS,
   ...PRIVACY,
+  ...MICROSOFT,
 };

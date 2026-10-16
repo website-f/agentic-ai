@@ -6,7 +6,8 @@ Order (first match wins):
 2. Tools the agent is never offered (P29, the same gating as runtime.offered_tools): a
    personal assistant's tools on any other agent, run_python without a sandbox, the browser
    without a browser service, the PC tools (P31) on anything but its person's own AI with a
-   linked computer. Naming one does not run it.
+   linked computer, the Outlook tools (P34) on an AI with no mailbox it may use. Naming one
+   does not run it.
 3. A "deny" a person set on the agent (before ALWAYS_ASK, so it raises no approval card).
 4. ALWAYS_ASK tools wait for a person.
 5. The agent's own mode for the tool: deny | ask | allow (tool default if unset).
@@ -25,6 +26,7 @@ from ..assistants.names import ASSISTANT_ONLY
 from ..core.config import settings
 from ..core.security import can
 from ..devices.core import PC_TOOLS, has_device, personal
+from ..microsoft.access import MAIL_TOOLS, has_mailbox
 from ..models import Agent, Membership
 from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
@@ -70,6 +72,10 @@ OUTSIDE_CONTENT = frozenset(
         "pc_find_files",
         "pc_list_folder",
         "pc_read_file",
+        # P34: mail and calendars from Outlook.
+        "outlook_search",
+        "outlook_read",
+        "outlook_calendar_agenda",
     }
 )
 
@@ -163,6 +169,11 @@ async def _evaluate(
     why = hidden(agent, tool_name)
     if not why and tool_name in PC_TOOLS and not await has_device(agent):
         why = "its person has no linked computer"
+    if not why and tool_name in MAIL_TOOLS and not await has_mailbox(agent):  # P34
+        why = (
+            "it may use no Outlook mailbox (only its person's own AI uses their Outlook, and only "
+            "a shared mailbox's assigned agent uses that mailbox)"
+        )
     if why:
         return Decision(
             "deny", f"hidden.{tool_name}", f"{agent.name} does not have {tool.label}: {why}."

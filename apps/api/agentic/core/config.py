@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     # Google OAuth app for Gmail (P16). Can also be set in the dashboard (Channels > Google).
     google_client_id: str = ""
     google_client_secret: str = ""
+    # P34 Microsoft 365 / Outlook through Microsoft Graph (never EWS). Can also be set in the
+    # dashboard (Channels > Microsoft 365). Tenant: "organizations" (any work or school
+    # tenant, the default) or one tenant's GUID or domain.
+    ms_client_id: str = ""
+    ms_client_secret: str = ""
+    ms_tenant: str = "organizations"
     # WhatsApp through WAHA (P16): the self-hosted gateway, and how it reaches our webhook.
     waha_url: str = "http://waha:3000"
     waha_api_key: str = ""

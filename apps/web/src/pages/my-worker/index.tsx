@@ -26,9 +26,9 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -62,12 +62,18 @@ import {
 } from "@/lib/staff";
 import { cn, timeAgo } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
+import { OutlookConnection, ReconnectBanner, useMsReturn } from "@/pages/mail/outlook";
 import { MyAiTabs } from "@/pages/my-ai/tabs";
 import { ChoiceCard, DutyForm, EMPTY_DUTY, HoursEditor, UrgentPill, useDutyReady, WeekTimeline } from "@/pages/welcome/parts";
 
 export function MyWorkerPage() {
   const t = useT();
   const { data, isLoading, error } = useQuery(workerQuery);
+  // P34: back from Microsoft sign-in (Connect Outlook): a toast, then a clean address.
+  const search = useSearch({ from: "/app/my-worker" });
+  const navigate = useNavigate({ from: "/my-worker" });
+  const clearMs = useCallback(() => void navigate({ search: {}, replace: true }), [navigate]);
+  useMsReturn(search, clearMs);
   if (isLoading) {
     return (
       <Page>
@@ -149,6 +155,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
         description={t("{name} works for you. Here is what it is doing, what needs you, and when it works.", { name: twin.name })}
       />
       <MyAiTabs />
+      <ReconnectBanner />
 
       <Card className="relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 top-0 h-24 opacity-[0.12]" style={{ background: twin.color }} />
@@ -284,6 +291,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
               <Link to="/schedules" className="inline-flex min-h-9 items-center gap-1 text-[13px] text-accent hover:underline">{t("Manage in Schedules")} <ArrowRightIcon size={13} /></Link>
             </div>
           </Card>
+          <OutlookConnection />
           <Card>
             <CardHeader
               title={t("Its job")}

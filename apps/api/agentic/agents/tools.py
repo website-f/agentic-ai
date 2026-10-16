@@ -1386,3 +1386,9 @@ TOOLS.update({t.name: t for t in FORM_TOOLS})
 from .pc_tools import PC_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in PC_TOOLS})
+
+# P34: Outlook (Microsoft Graph): a person's own mailbox for their own AI, a shared mailbox
+# for its assigned agent. Drafts and calendar changes wait for a person.
+from .mail_tools import MAIL_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in MAIL_TOOLS})
