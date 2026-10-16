@@ -291,13 +291,35 @@ services:
     restart: unless-stopped
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
-      BROWSER_MAX_SESSIONS: ${BROWSER_MAX_SESSIONS:-6}
+      # Each agent gets its OWN persistent "machine" (one Camoufox persistent-context browser
+      # keyed by agent id). At most this many run at once; a full pool evicts the least-recently
+      # -used idle machine. ~500-650 MB RAM per running Firefox under load; see mem_limit below.
+      BROWSER_MAX_LIVE: ${BROWSER_MAX_LIVE:-${BROWSER_MAX_SESSIONS:-6}}
+      # Each agent's profile (cookies/localStorage) lives here on a PERSISTENT volume (not
+      # tmpfs), so the agent stays signed in across tasks and restarts.
+      BROWSER_PROFILES_DIR: ${BROWSER_PROFILES_DIR:-/data/browser-profiles}
+      # A machine with no open tabs is stopped after this many seconds (its profile stays).
+      BROWSER_MACHINE_IDLE: ${BROWSER_MACHINE_IDLE:-600}
+      # Stable per-agent screen/OS/UA identity derived from the agent id (looks like the same
+      # computer each time); set 0 to disable the fingerprint spoof.
+      BROWSER_FINGERPRINT: ${BROWSER_FINGERPRINT:-true}
+      BROWSER_LOCALE: ${BROWSER_LOCALE:-en-US,en}
       # Dev only: the practice portal (profile demo). Empty in production.
       BROWSER_ALLOW_HOSTS: ${BROWSER_ALLOW_HOSTS:-}
-      # Humanized cursor: deadlocks with several agents clicking at once, so off by default.
-      BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-false}
-      # Agents per Firefox process: 3+ working at once in one process stall (measured).
-      BROWSER_PER_PROCESS: ${BROWSER_PER_PROCESS:-2}
+      # Camoufox's humanized cursor is now safe ON: a global gate serializes every click across
+      # machines so no two deadlock it (the old reason it was off).
+      BROWSER_HUMANIZE: ${BROWSER_HUMANIZE:-true}
+      # The Python human-interaction layer (Bezier cursor path, key-by-key typing, multi-step
+      # scroll) on top of humanize. Bounded; set to 0 to turn a piece off (tests do).
+      BROWSER_HUMAN_TYPING: ${BROWSER_HUMAN_TYPING:-true}
+      BROWSER_HUMAN_TYPE_MS_MIN: ${BROWSER_HUMAN_TYPE_MS_MIN:-60}
+      BROWSER_HUMAN_TYPE_MS_MAX: ${BROWSER_HUMAN_TYPE_MS_MAX:-160}
+      BROWSER_HUMAN_CLICK: ${BROWSER_HUMAN_CLICK:-true}
+      BROWSER_HUMAN_CLICK_DWELL_MS: ${BROWSER_HUMAN_CLICK_DWELL_MS:-120}
+      BROWSER_HUMAN_SCROLL: ${BROWSER_HUMAN_SCROLL:-true}
+      # Concurrent tabs per machine (one agent rarely browses several tasks at once); 3+ pages
+      # in one Firefox process stall (measured). Old name BROWSER_PER_PROCESS still works.
+      BROWSER_TABS_PER_MACHINE: ${BROWSER_TABS_PER_MACHINE:-${BROWSER_PER_PROCESS:-2}}
       # Gentle pacing on the site: a human gap between server-touching actions (clicks, form
       # posts, navigations) and a per-minute cap, so a portal does not see machine-speed
       # bursts. Reading the loaded page is never paced. Dial these up on a watched network.
@@ -307,22 +329,31 @@ services:
       BROWSER_PROXY: http://egress:3128
     depends_on:
       egress: { condition: service_healthy }
-    shm_size: 2gb  # Firefox, up to 3 processes
+    shm_size: 2gb  # Firefox, up to BROWSER_MAX_LIVE processes
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/healthz', timeout=3)"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    mem_limit: 3g  # up to 3 Firefox processes (2 agents each)
+    # Up to BROWSER_MAX_LIVE (6) persistent Firefoxes, one per agent, at ~500-650 MB each under
+    # load (measured ~3.7 GB for 6 idle machines), so 4g leaves no headroom and risks an OOM
+    # kill. 5g holds 6 with room for the service + /dev/shm spill. On a RAM-tight VPS (this box
+    # also runs other stacks), lower BROWSER_MAX_LIVE rather than this: e.g. MAX_LIVE 4 fits 4g.
+    mem_limit: 5g
     cpus: 3
     networks: [browser]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     read_only: true
+    # Each agent's profile (cookies/localStorage) persists here across tasks and restarts, on a
+    # real named volume (NOT tmpfs); initialised owned by uid 10001 by the Dockerfile.
+    volumes:
+      - "browserprofiles:/data/browser-profiles"
     tmpfs:
       - "/tmp:size=768m"
-      # Firefox writes these at launch; everything else stays read-only.
+      # Firefox writes these at launch; everything else stays read-only. ~/.camoufox is only a
+      # cache (safe on tmpfs); the signed-in PROFILE lives on the browserprofiles volume above.
       - "/home/app/.cache/camoufox/fontconfig:size=16m,uid=10001,gid=10001"
       - "/home/app/.cache/fontconfig:size=32m,uid=10001,gid=10001"
       - "/home/app/camoufox:size=64m,uid=10001,gid=10001"
@@ -747,6 +778,7 @@ volumes:
   valkeydata: {}
   vault: {}
   media: {}  # meeting recordings (minutes); not backed up: originals are transient
+  browserprofiles: {}  # one persistent Camoufox profile per agent (cookies/localStorage)
   backupwork: {}
   rustfsdata: {}
   clickhousedata: {}

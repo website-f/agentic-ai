@@ -1052,7 +1052,8 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
     (
         "browser_click",
         "Click in the browser",
-        "Click a link or button by its ref.",
+        "Click a link or button by its ref. To enter text in a field, call browser_type "
+        "directly (it focuses the field for you) - do not click the field first.",
         {"ref": _REF},
         ["ref"],
         "low",
@@ -1061,7 +1062,8 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
     (
         "browser_type",
         "Type in the browser",
-        "Type text into a field (replaces what is there).",
+        "Type text into a field (replaces what is there). This focuses the field itself, so "
+        "call it directly - you never need to click the field first.",
         {"ref": _REF, "text": {"type": "string"}},
         ["ref", "text"],
         "low",

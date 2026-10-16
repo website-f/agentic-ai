@@ -1,4 +1,26 @@
-"""The browser service: a real Camoufox (Firefox) that agents drive, one context per task.
+"""The browser service: a real Camoufox (Firefox) that agents drive, one persistent
+"machine" per agent.
+
+Each agent gets its OWN machine: one Camoufox persistent-context browser whose profile
+(cookies, localStorage, IndexedDB) lives on disk under BROWSER_PROFILES_DIR, keyed by the
+agent id, so the agent stays signed in across tasks and restarts, and whose screen/OS/UA are
+a stable identity derived from the agent id (it looks like the same computer every time). A
+pool keeps at most BROWSER_MAX_LIVE machines running at once; when it is full the
+least-recently-used idle machine is closed (its profile stays on disk) to make room, and if
+every running machine is busy the caller waits briefly then gets a clear "all browsers busy"
+error. A browsing task opens a tab (a page) in its agent's machine; closing a task closes
+the tab, not the machine, which stays warm for the agent's next task until it is idle-reaped
+(BROWSER_MACHINE_IDLE) or evicted. Idle tabs are reaped after BROWSER_IDLE_SECONDS unless a
+machine or tab is held for a pending approval (up to BROWSER_HOLD_MAX).
+
+Interactions are made to look human (the user's own authorized automation): clicks move a
+Bezier cursor path to the element with a slight overshoot and a short dwell on top of
+Camoufox's own humanized cursor, typing is key-by-key with a jittered cadence and the odd
+backspace-correct, and scrolling is done in several small steps. All of this is bounded and
+env-toggleable (off in tests). Because Camoufox's humanized cursor deadlocks once 3+ contexts
+click at the same instant, every real click across the whole pool is serialized by one global
+gate. None of this adds any anonymizer/Tor routing or anti-ban evasion: every host guard,
+egress hop, approval gate and secret protection below is unchanged.
 
 Only the worker can reach it (its own Docker network, token checked). That network is
 internal: the only way out is the egress proxy (apps/egress, BROWSER_PROXY), which refuses
@@ -33,12 +55,13 @@ encrypts it, this service never stores it.
 
 import asyncio
 import base64
+import hashlib
 import ipaddress
 import json
 import logging
 import os
-import re
 import random
+import re
 import secrets
 import socket
 import time
@@ -49,7 +72,6 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-
 from snapshot import (
     MARKS_JS,
     SNAPSHOT_JS,
@@ -70,27 +92,77 @@ from snapshot import find as find_nodes
 
 log = logging.getLogger("browser")
 TOKEN = os.environ.get("BROWSER_TOKEN", "dev-browser-token")
-MAX_SESSIONS = int(os.environ.get("BROWSER_MAX_SESSIONS", "6"))
+# How many agent "machines" (persistent-context Camoufox browsers) may RUN at once. A full
+# pool evicts the least-recently-used idle machine to make room. BROWSER_MAX_SESSIONS is kept
+# as a fallback name for the old env.
+BROWSER_MAX_LIVE = int(
+    os.environ.get("BROWSER_MAX_LIVE", os.environ.get("BROWSER_MAX_SESSIONS", "6"))
+)
 # Firefox stalls (clicks and page loads never finish) once 3 or more pages in one browser
-# process work at the same time (measured: 2 per process always fine, 3+ not), so agents
-# get their own processes, at most this many sessions each.
-PER_PROCESS = max(1, int(os.environ.get("BROWSER_PER_PROCESS", "2")))
+# process work at the same time (measured: 2 per process always fine, 3+ not). One agent
+# rarely browses several tasks at once, but we still cap concurrent tabs per machine at this;
+# a further tab for the same agent waits. BROWSER_PER_PROCESS is kept as the old env name.
+TABS_PER_MACHINE = max(
+    1, int(os.environ.get("BROWSER_TABS_PER_MACHINE", os.environ.get("BROWSER_PER_PROCESS", "2")))
+)
+# Where each agent's persistent profile lives (a real volume, NOT tmpfs): cookies/localStorage
+# so the agent stays signed in across tasks and restarts.
+PROFILES_DIR = os.environ.get("BROWSER_PROFILES_DIR", "/data/browser-profiles")
+# The browser language each machine reports (stable per machine, same for all by default).
+LOCALE = os.environ.get("BROWSER_LOCALE", "en-US,en")
+# A stable, per-agent screen/OS/UA identity derived from the agent id. On by default; a global
+# off switch for environments where the headless fingerprint spoof causes trouble.
+FINGERPRINT = os.environ.get("BROWSER_FINGERPRINT", "true").lower() in ("1", "true", "yes")
 IDLE_SECONDS = int(os.environ.get("BROWSER_IDLE_SECONDS", "600"))
-# A session held for an approval outlives IDLE_SECONDS, up to this long.
+# An idle machine with no open tabs is stopped after this (its profile stays on disk). The
+# agent's next task relaunches it from the same profile, signed in.
+MACHINE_IDLE = int(os.environ.get("BROWSER_MACHINE_IDLE", "600"))
+# A session/machine held for an approval outlives IDLE_SECONDS, up to this long.
 HOLD_MAX = int(os.environ.get("BROWSER_HOLD_MAX", "7200"))
 DOWNLOAD_MAX = 25 * 1024 * 1024  # one downloaded file
 DOWNLOADS_MAX = 80 * 1024 * 1024  # all files a session keeps until the worker collects them
 DOWNLOAD_WAIT = 25  # seconds an action waits for the downloads it started
 UPLOAD_MAX = 20 * 1024 * 1024  # one uploaded file
-VIEWPORT = {"width": 1280, "height": 800}
 TEXT_CHARS = 2500
 READ_CHARS = 12_000
 HTML_CHARS = 1_500_000
 STATE_BYTES = 512 * 1024  # an exported session bigger than this keeps its cookies only
 WAIT_MAX = 30
-# Camoufox's humanized cursor deadlocks once 3+ contexts click at the same time (helpers
-# working in parallel), so it is off unless asked for.
-HUMANIZE = os.environ.get("BROWSER_HUMANIZE", "false").lower() in ("1", "true", "yes")
+
+
+def _env_bool(name: str, default: str) -> bool:
+    return os.environ.get(name, default).lower() in ("1", "true", "yes")
+
+
+# Camoufox's humanized cursor deadlocks once 3+ contexts click at the same instant, so every
+# real click across the whole pool is serialized by _CLICK_GATE below; with that gate in place
+# the humanized cursor is safe to leave ON (it draws a realistic mouse path for free).
+HUMANIZE = _env_bool("BROWSER_HUMANIZE", "true")
+# The Python-side human-interaction layer (on top of Camoufox humanize). Bounded and
+# env-toggleable; tests set these to 0 for speed/determinism. No anti-ban/anonymiser logic,
+# just making the user's own authorized automation look like a person at the keyboard.
+HUMAN_TYPING = _env_bool("BROWSER_HUMAN_TYPING", "true")  # key-by-key typing
+TYPE_MS_MIN = max(0, int(os.environ.get("BROWSER_HUMAN_TYPE_MS_MIN", "60")))
+TYPE_MS_MAX = max(TYPE_MS_MIN, int(os.environ.get("BROWSER_HUMAN_TYPE_MS_MAX", "160")))
+# Chance per character of a small typo that is immediately backspaced and retyped (the final
+# text is always exact). 0 disables it.
+TYPO_RATE = max(0.0, min(0.3, float(os.environ.get("BROWSER_HUMAN_TYPO_RATE", "0.02"))))
+HUMAN_CLICK = _env_bool("BROWSER_HUMAN_CLICK", "true")  # Bezier cursor path + hover + dwell
+CLICK_DWELL_MS = max(0, int(os.environ.get("BROWSER_HUMAN_CLICK_DWELL_MS", "120")))
+HUMAN_SCROLL = _env_bool("BROWSER_HUMAN_SCROLL", "true")  # several small wheel steps
+# Serializes the actual click/cursor move of every machine so no two deadlock Camoufox's
+# humanized cursor. Created lazily on the running loop.
+_CLICK_GATE: asyncio.Lock | None = None
+_mouse_pos: dict[int, tuple[float, float]] = {}  # last cursor point per page, for the path
+
+
+def _click_gate() -> asyncio.Lock:
+    global _CLICK_GATE
+    if _CLICK_GATE is None:
+        _CLICK_GATE = asyncio.Lock()
+    return _CLICK_GATE
+
+
 # Gentle pacing: keep to a human speed on the site so a portal does not see a burst of
 # machine-speed requests from one session (every click on a server-form portal like
 # ePerolehan is a POST). A minimum gap between server-touching actions, plus a cap per
@@ -187,6 +259,18 @@ SUBMIT_JS = r"""(el) => {
   return {submit: submit || transaction, transaction, label};
 }"""
 
+# Is this element a text field the agent types into, and is it already focused? Lets `click`
+# no-op on a field that is already focused and tell the agent the field is ready for `type`,
+# so it stops re-clicking a field that showed no visible change (the reported robotic bug).
+FIELD_JS = r"""(el) => {
+  const tag = (el.tagName || '').toLowerCase();
+  const skip = ['button','submit','checkbox','radio','file','image','range','color','reset','hidden'];
+  const editable = tag === 'textarea'
+    || el.isContentEditable === true
+    || (tag === 'input' && !skip.includes((el.type || 'text').toLowerCase()));
+  return {editable: !!editable, focused: el === document.activeElement, tag};
+}"""
+
 
 def blocked_text(url: str, allowed: list[str]) -> str:
     host = urlparse(url).hostname or url
@@ -241,11 +325,15 @@ def _top_navigation(request: Any) -> bool:
         return False
 
 
-async def _route(route: Any, sess: "Session | None" = None) -> None:
+async def _route(route: Any, machine: "Machine") -> None:
+    # One route handler per machine (a shared persistent context): find the tab's session so
+    # that tab's allow-list is applied. The public-address guard applies to every request
+    # whether or not the owning session is known yet.
     u = urlparse(route.request.url)
     if u.scheme in ("data", "blob", "about"):
         await route.continue_()
     elif u.scheme in ("http", "https") and await host_ok(u.hostname):
+        sess = machine.session_for(route.request)
         if (
             sess is not None
             and sess.allowed
@@ -263,52 +351,144 @@ async def _route(route: Any, sess: "Session | None" = None) -> None:
 # ---------------------------------------------------------------- sessions
 
 
-class Slot:
-    """One Camoufox process, holding at most PER_PROCESS agents' sessions."""
+def _identity(agent_id: str) -> dict[str, Any]:
+    """A stable screen/OS/window identity for an agent, derived from its id, so the machine
+    looks like the same computer every time. Only the knobs Camoufox pins deterministically
+    (os, screen, window, locale); the per-launch anti-fingerprint noise stays random."""
+    seed = int.from_bytes(hashlib.sha256(agent_id.encode()).digest()[:8], "big")
+    rnd = random.Random(seed)
+    os_choice = rnd.choice(["windows", "windows", "windows", "macos", "linux"])
+    screen = rnd.choice(
+        [(1920, 1080), (1536, 864), (1366, 768), (1440, 900), (1600, 900), (2560, 1440)]
+    )
+    ww = min(screen[0], rnd.choice([1280, 1366, 1440, 1536, 1600, 1680, 1920]))
+    wh = min(screen[1] - 90, rnd.choice([720, 768, 800, 864, 900, 1040]))
+    return {"os": os_choice, "screen": screen, "window": (ww, max(600, wh))}
 
-    def __init__(self, n: int) -> None:
-        self.n, self.manager, self.browser = n, None, None
-        self.sessions: set[str] = set()
+
+def _profile_dir(agent_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", agent_id)[:80] or "agent"
+    path = os.path.join(PROFILES_DIR, safe)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+class Machine:
+    """One agent's persistent "computer": a Camoufox persistent-context browser whose profile
+    (cookies/localStorage) lives on disk, holding the agent's open tabs (sessions). A pool
+    keeps at most BROWSER_MAX_LIVE of these running at once. P31 PC machines (remote=True) are
+    externally driven and never enter the pool."""
+
+    def __init__(self, agent_id: str, *, remote: bool = False) -> None:
+        self.agent_id = agent_id
+        self.remote = remote
+        self.manager: Any = None  # AsyncCamoufox (None for a remote PC machine)
+        self.context: Any = None  # the persistent BrowserContext (our own or the PC's)
+        self.sessions: dict[str, Session] = {}  # open tabs, by session id
+        self.page_owner: dict[Any, Session] = {}  # page -> session, for route dispatch
         self.timeouts: list[float] = []
         self.starting = asyncio.Lock()
+        self.last = time.time()
+        self._ls_added: set[str] = set()  # localStorage origins already injected
 
-    async def get(self) -> Any:
+    def touch(self) -> None:
+        self.last = time.time()
+
+    def busy(self) -> bool:
+        """A machine in use: a tab running an action, or any tab held for an approval."""
+        now = time.time()
+        return any(s.running or now < s.hold_until for s in self.sessions.values())
+
+    def session_for(self, request: Any) -> "Session | None":
+        try:
+            return self.page_owner.get(request.frame.page)
+        except Exception:  # noqa: BLE001 - service-worker/detached requests have no page
+            return None
+
+    async def context_for(self) -> Any:
         async with self.starting:
-            if self.browser is None:
+            if self.context is None:
                 from camoufox.async_api import AsyncCamoufox
 
                 # block_webrtc: media.peerconnection.enabled=false, so no WebRTC (UDP/STUN)
                 # traffic, which would not go through the proxy.
-                extra: dict[str, Any] = {"firefox_user_prefs": dict(DOWNLOAD_PREFS)}
+                opts: dict[str, Any] = {
+                    "headless": True,
+                    "humanize": HUMANIZE,
+                    "block_webrtc": True,
+                    "i_know_what_im_doing": True,
+                    "persistent_context": True,
+                    "user_data_dir": _profile_dir(self.agent_id),
+                    "locale": LOCALE,
+                }
+                if FINGERPRINT:
+                    ident = _identity(self.agent_id)
+                    opts["os"] = ident["os"]
+                    opts["window"] = ident["window"]
+                    try:
+                        from browserforge.fingerprints import Screen
+
+                        opts["screen"] = Screen(
+                            max_width=ident["screen"][0], max_height=ident["screen"][1]
+                        )
+                    except Exception:  # noqa: BLE001 - window/os alone still pin the identity
+                        log.info("browserforge Screen unavailable; using window/os only")
                 if PROXY:
-                    extra = {
-                        "proxy": {"server": PROXY},
-                        "firefox_user_prefs": {**PROXY_PREFS, **DOWNLOAD_PREFS},
-                    }
-                self.manager = AsyncCamoufox(
-                    headless=True,
-                    humanize=HUMANIZE,
-                    block_webrtc=True,
-                    i_know_what_im_doing=True,
-                    **extra,
-                )
-                self.browser = await self.manager.__aenter__()
-        return self.browser
+                    opts["proxy"] = {"server": PROXY}
+                    opts["firefox_user_prefs"] = {**PROXY_PREFS, **DOWNLOAD_PREFS}
+                else:
+                    opts["firefox_user_prefs"] = dict(DOWNLOAD_PREFS)
+                self.manager = AsyncCamoufox(**opts)
+                self.context = await self.manager.__aenter__()
+                await self.context.route("**/*", lambda r: _route(r, self))
+            self.touch()
+        return self.context
+
+    async def apply_state(self, state: dict[str, Any] | None) -> None:
+        """Lay a saved login (P21) over the persistent profile: its cookies now, its
+        localStorage on the next load of each matching origin (best effort)."""
+        if not state or self.context is None:
+            return
+        cookies = state.get("cookies") or []
+        if cookies:
+            try:
+                await self.context.add_cookies(cookies)
+            except Exception:  # noqa: BLE001 - the profile on disk may already hold them
+                log.info("could not add restored cookies for %s", self.agent_id)
+        origins = [o for o in (state.get("origins") or []) if o.get("origin")]
+        fresh = [o for o in origins if o["origin"] not in self._ls_added]
+        if fresh:
+            self._ls_added.update(o["origin"] for o in fresh)
+            try:
+                await self.context.add_init_script(LS_INIT_JS + f"({json.dumps(fresh)})")
+            except Exception:  # noqa: BLE001 - localStorage is a nicety; cookies are the login
+                pass
 
     async def stop(self) -> None:
-        manager, self.manager, self.browser, self.timeouts = self.manager, None, None, []
+        """Close the running browser; the profile stays on disk. Not for remote PC machines."""
+        manager, self.manager, self.context, self.timeouts = self.manager, None, None, []
+        self.page_owner.clear()
         if manager is not None:
             try:
                 await asyncio.wait_for(manager.__aexit__(None, None, None), 20)
             except Exception:  # noqa: BLE001 - it is being replaced anyway
-                log.warning("browser %d did not close cleanly", self.n, exc_info=True)
+                log.warning("machine %s did not close cleanly", self.agent_id, exc_info=True)
+
+
+LS_INIT_JS = """(origins) => { try {
+  const o = origins.find(x => x.origin === location.origin);
+  if (!o) return;
+  for (const it of (o.localStorage || [])) { try { localStorage.setItem(it.name, it.value); } catch (e) {} }
+} catch (e) {} }"""
 
 
 class Session:
+    """One browsing tab (a page) in an agent's machine, owned by one task."""
+
     def __init__(
-        self, sid: str, owner: dict[str, Any], slot: Slot, allowed: list[str] | None
+        self, sid: str, owner: dict[str, Any], machine: Machine, allowed: list[str] | None
     ) -> None:
-        self.id, self.owner, self.slot = sid, owner, slot
+        self.id, self.owner, self.machine = sid, owner, machine
         self.context: Any = None
         self.page: Any = None
         self.allowed = [h.lower() for h in (allowed or []) if h] or None
@@ -316,6 +496,7 @@ class Session:
         self.unsafe: str | None = None
         self.history = History()
         self.last = time.time()
+        self.running = False  # an action is in flight (keeps the machine from being evicted)
         self.lock = asyncio.Lock()
         self.hold_until = 0.0  # an approval is waiting: the reaper keeps the session
         self.pages: list[Any] = []  # open tabs, oldest first; self.page is the one in use
@@ -371,10 +552,12 @@ async def _take_download(sess: Session, download: Any) -> None:
         sess.new_downloads.append(did)
 
 
-def _on_page(sess: Session, page: Any) -> None:
-    """Every tab in the context: watch its downloads; a tab the site opens becomes current."""
+def _attach_page(sess: Session, page: Any, *, opened: bool) -> None:
+    """Wire one tab to a session: own it on the machine (for route dispatch), watch its
+    downloads, and keep the session's current tab right when a tab the site opened closes."""
+    sess.machine.page_owner[page] = sess
     sess.pages.append(page)
-    if sess.page is not None:
+    if opened and sess.page is not None:
         sess.opened.append(page)
 
     def on_download(d: Any) -> None:
@@ -383,6 +566,7 @@ def _on_page(sess: Session, page: Any) -> None:
         t.add_done_callback(sess.pending.discard)
 
     def on_close(p: Any) -> None:
+        sess.machine.page_owner.pop(p, None)
         if p in sess.pages:
             sess.pages.remove(p)
         if p in sess.opened:
@@ -392,6 +576,14 @@ def _on_page(sess: Session, page: Any) -> None:
 
     page.on("download", on_download)
     page.on("close", on_close)
+
+
+def _wire_page(sess: Session, page: Any, *, opened: bool = False) -> None:
+    """A tab in one of OUR pool machines (a shared persistent context): popups it opens belong
+    to this same session, attributed by their opener (context.on('page') could not tell which
+    session's tab opened them)."""
+    _attach_page(sess, page, opened=opened)
+    page.on("popup", lambda p: _wire_page(sess, p, opened=True))
 
 
 PAGE_FETCH_JS = """async (url) => {
@@ -487,23 +679,49 @@ async def _settle(s: Session) -> str | None:
     return " ".join(notes) or None
 
 
-state: dict[str, Any] = {"slots": [], "sessions": {}, "restarts": 0}
+state: dict[str, Any] = {"machines": {}, "sessions": {}, "restarts": 0}
+_pool_lock = asyncio.Lock()
 
 
-def _slot_for_new() -> Slot | None:
-    """A browser process with room, preferring a running one; None when all are full."""
-    slots: list[Slot] = state["slots"]
-    running = [x for x in slots if x.browser is not None and len(x.sessions) < PER_PROCESS]
-    if running:
-        return min(running, key=lambda x: len(x.sessions))
-    idle = [x for x in slots if len(x.sessions) < PER_PROCESS]
-    if idle:
-        return idle[0]
-    if len(slots) * PER_PROCESS < MAX_SESSIONS:
-        slot = Slot(len(slots))
-        slots.append(slot)
-        return slot
-    return None
+class AllBrowsersBusy(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(503, "All browsers are busy. Try again shortly.")
+
+
+async def _acquire_machine(agent_id: str) -> Machine:
+    """The agent's running machine, launching it if needed. A full pool evicts the
+    least-recently-used idle machine; if every running machine is busy, 503 (the caller waits
+    and retries, then tells the agent all browsers are in use)."""
+    machines: dict[str, Machine] = state["machines"]
+    m = machines.get(agent_id)
+    if m is not None and m.context is not None:  # fast path: already running
+        if len(m.sessions) >= TABS_PER_MACHINE:
+            raise AllBrowsersBusy()  # this agent is already browsing as many tabs as allowed
+        m.touch()
+        return m
+    async with _pool_lock:
+        m = machines.get(agent_id)
+        if m is not None and m.context is not None:
+            if len(m.sessions) >= TABS_PER_MACHINE:
+                raise AllBrowsersBusy()
+            m.touch()
+            return m
+        if m is None:
+            m = Machine(agent_id)
+            machines[agent_id] = m
+        running = [x for x in machines.values() if x.context is not None]
+        if len(running) >= BROWSER_MAX_LIVE:
+            idle = [x for x in running if not x.busy()]
+            if not idle:
+                machines.pop(agent_id, None)  # we never launched it
+                raise AllBrowsersBusy()
+            await _stop_machine(min(idle, key=lambda x: x.last))
+        try:
+            await m.context_for()
+        except Exception:
+            machines.pop(agent_id, None)
+            raise
+        return m
 
 
 async def _reaper() -> None:
@@ -511,50 +729,69 @@ async def _reaper() -> None:
         await asyncio.sleep(30)
         now = time.time()
         for sid, sess in list(state["sessions"].items()):
-            if now - sess.last > IDLE_SECONDS and now > sess.hold_until:
+            if now - sess.last > IDLE_SECONDS and now > sess.hold_until and not sess.running:
                 await _close(sid)
+        for m in list(state["machines"].values()):
+            if (
+                m.context is not None
+                and not m.sessions
+                and not m.busy()
+                and now - m.last > MACHINE_IDLE
+            ):
+                await _stop_machine(m)
 
 
 async def _close(sid: str) -> None:
+    """Close a tab (session). The machine stays warm for the agent's next task."""
     sess = state["sessions"].pop(sid, None)
     if sess is None:
         return
-    sess.slot.sessions.discard(sid)
+    m = sess.machine
+    m.sessions.pop(sid, None)
     if sess.remote is not None:  # P31: let go of the person's browser (never close theirs)
         try:
             await asyncio.wait_for(sess.remote.close(), 15)
         except Exception:  # noqa: BLE001 - the relay may already be gone
             log.info("PC browser for %s already disconnected", sid)
         return
-    try:
-        await asyncio.wait_for(sess.context.close(), 15)
-    except Exception:  # noqa: BLE001
-        log.warning("could not close %s", sid, exc_info=True)
-    # Keep the first browser warm; stop the others when they empty (memory).
-    if not sess.slot.sessions and sess.slot.n > 0:
-        await sess.slot.stop()
+    for p in list(sess.pages):  # close this task's tab(s); the context (machine) persists
+        m.page_owner.pop(p, None)
+        try:
+            if not p.is_closed():
+                await asyncio.wait_for(p.close(), 10)
+        except Exception:  # noqa: BLE001 - the tab is going away anyway
+            pass
+    m.touch()
 
 
-async def _restart_slot(slot: Slot) -> None:
-    """Close the stuck browser's sessions and the browser; agents reopen on their next step."""
+async def _stop_machine(m: Machine) -> None:
+    """Close a whole machine (eviction, shutdown, or wedge restart). Its profile stays on
+    disk, so the agent's next task relaunches it signed in. Drops its tabs' sessions."""
+    for sid in list(m.sessions):
+        state["sessions"].pop(sid, None)
+    m.sessions.clear()
+    await m.stop()
+    state["machines"].pop(m.agent_id, None)
+
+
+async def _restart_machine(m: Machine) -> None:
+    """A stuck machine: stop it so the agent's next step opens a fresh one from its profile."""
     log.warning(
-        "browser %d looks stuck (%d timeouts in %ds): restarting it",
-        slot.n,
+        "machine %s looks stuck (%d timeouts in %ds): restarting it",
+        m.agent_id,
         WEDGE_TIMEOUTS,
         WEDGE_WINDOW,
     )
-    for sid in list(slot.sessions):
-        await _close(sid)
-    await slot.stop()
+    await _stop_machine(m)
     state["restarts"] += 1
 
 
 async def _note_timeout(sess: Session) -> None:
     now = time.time()
-    slot = sess.slot
-    slot.timeouts = [t for t in slot.timeouts if now - t < WEDGE_WINDOW] + [now]
-    if len(slot.timeouts) >= WEDGE_TIMEOUTS:
-        await _restart_slot(slot)
+    m = sess.machine
+    m.timeouts = [t for t in m.timeouts if now - t < WEDGE_WINDOW] + [now]
+    if len(m.timeouts) >= WEDGE_TIMEOUTS:
+        await _restart_machine(m)
 
 
 @asynccontextmanager
@@ -564,8 +801,8 @@ async def lifespan(_: FastAPI):
     task.cancel()
     for sid in list(state["sessions"]):
         await _close(sid)
-    for slot in state["slots"]:
-        await slot.stop()
+    for m in list(state["machines"].values()):
+        await m.stop()
     if state.get("pw") is not None:
         await state["pw"].stop()
 
@@ -651,13 +888,124 @@ async def _marked_frame(page: Any) -> str:
             pass
 
 
+# ---------------------------------------------------------------- the human-interaction layer
+
+
+def _type_delay(ch: str = "") -> float:
+    d = random.uniform(TYPE_MS_MIN, TYPE_MS_MAX) / 1000.0
+    if ch in " \t\n":  # a beat after a word
+        d += random.uniform(0.04, 0.12)
+    elif ch in ".,;:!?":  # a longer beat after punctuation
+        d += random.uniform(0.06, 0.18)
+    return d
+
+
+def _bezier(p0: tuple, p1: tuple, p2: tuple, p3: tuple, t: float) -> tuple[float, float]:
+    u = 1 - t
+    x = u**3 * p0[0] + 3 * u**2 * t * p1[0] + 3 * u * t**2 * p2[0] + t**3 * p3[0]
+    y = u**3 * p0[1] + 3 * u**2 * t * p1[1] + 3 * u * t**2 * p2[1] + t**3 * p3[1]
+    return x, y
+
+
+async def _human_mouse(page: Any, x: float, y: float) -> None:
+    """Move the cursor to (x, y) along a Bezier curve with a slight overshoot and correction,
+    like a hand on a mouse. Camoufox's own humanized cursor then runs the final click; this
+    just gives the approach a natural path. Caller holds the global click gate."""
+    key = id(page)
+    sx, sy = _mouse_pos.get(key, (x + random.uniform(-220, 220), y + random.uniform(-160, 160)))
+    jitter = lambda: random.uniform(-18, 18)  # noqa: E731
+    c1 = (sx + (x - sx) * 0.3 + jitter(), sy + (y - sy) * 0.3 + jitter())
+    c2 = (sx + (x - sx) * 0.7 + jitter(), sy + (y - sy) * 0.7 + jitter())
+    over = (x + random.uniform(-6, 6), y + random.uniform(-6, 6))  # slight overshoot
+    steps = random.randint(12, 22)
+    try:
+        for i in range(1, steps + 1):
+            bx, by = _bezier((sx, sy), c1, c2, over, i / steps)
+            await page.mouse.move(bx, by)
+            await asyncio.sleep(random.uniform(0.006, 0.02))
+        await page.mouse.move(x, y)  # correct onto the target
+    except Exception:  # noqa: BLE001 - cursor movement is a nicety; the click still runs
+        pass
+    _mouse_pos[key] = (x, y)
+
+
+async def _click(page: Any, loc: Any, *, hover: bool = True) -> None:
+    """One real click, serialized across the whole pool (Camoufox's humanized cursor deadlocks
+    when several contexts click at the same instant). With the human layer on: scroll into
+    view, move the cursor there, hover, dwell, then click."""
+    try:
+        await loc.scroll_into_view_if_needed(timeout=3000)
+    except Exception:  # noqa: BLE001 - click() scrolls too
+        pass
+    box = None
+    if HUMAN_CLICK:
+        try:
+            box = await loc.bounding_box()
+        except Exception:  # noqa: BLE001
+            box = None
+    async with _click_gate():
+        if HUMAN_CLICK and box:
+            await _human_mouse(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            if hover:
+                try:
+                    await loc.hover(timeout=3000)
+                except Exception:  # noqa: BLE001
+                    pass
+                dwell = random.uniform(CLICK_DWELL_MS * 0.5, CLICK_DWELL_MS * 1.5)
+                await asyncio.sleep(dwell / 1000)
+        await loc.click(timeout=10_000)
+
+
 async def _press(page: Any, loc: Any) -> None:
     """Click (Playwright waits for a page the click starts), then for that page to load."""
-    await loc.click(timeout=10_000)
+    await _click(page, loc)
     try:
         await page.wait_for_load_state("domcontentloaded", timeout=10_000)
     except Exception:  # noqa: BLE001 - not every click opens a page
         pass
+
+
+async def _human_type(loc: Any, text: str) -> None:
+    """Type key by key with a jittered cadence and the odd backspace-correct. Focuses the
+    field itself, so no pre-click is needed; the final text is always exactly `text`."""
+    try:
+        await loc.scroll_into_view_if_needed(timeout=3000)
+    except Exception:  # noqa: BLE001
+        pass
+    await loc.focus(timeout=10_000)
+    await loc.fill("")  # clear whatever was there, reliably
+    for ch in text:
+        if TYPO_RATE and ch not in " \t\n" and random.random() < TYPO_RATE:
+            await loc.press_sequentially(random.choice("asdfghjkleriou"), delay=0)
+            await asyncio.sleep(_type_delay())
+            await loc.press("Backspace")
+            await asyncio.sleep(_type_delay())
+        await loc.press_sequentially(ch, delay=0)
+        await asyncio.sleep(_type_delay(ch))
+
+
+async def _type_field(loc: Any, text: str) -> None:
+    """Enter text into a (non-secret) field, human cadence when enabled, else an instant fill.
+    Either way the field is focused by this call, so the agent never needs a pre-click."""
+    if HUMAN_TYPING:
+        await _human_type(loc, text)
+    else:
+        await loc.fill(text or "", timeout=10_000)
+
+
+async def _scroll(page: Any, dy: int) -> None:
+    """Scroll by dy, in several small steps when the human layer is on."""
+    if HUMAN_SCROLL and abs(dy) > 120:
+        n = random.randint(3, 6)
+        done = 0
+        for i in range(n):
+            step = dy - done if i == n - 1 else round(dy / n * random.uniform(0.7, 1.3))
+            done += step
+            await page.mouse.wheel(0, step)
+            await asyncio.sleep(random.uniform(0.05, 0.18))
+    else:
+        await page.mouse.wheel(0, dy)
+        await asyncio.sleep(0.4)
 
 
 def _target(body: Act) -> str | None:
@@ -808,12 +1156,16 @@ async def _observe(
 
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
+    machines = state["machines"]
     return {
         "ok": True,
         "sessions": len(state["sessions"]),
-        "processes": sum(1 for x in state["slots"] if x.browser is not None),
+        "machines": len(machines),
+        "running": sum(1 for x in machines.values() if x.context is not None),
+        "max_live": BROWSER_MAX_LIVE,
         "restarts": state["restarts"],
         "humanize": HUMANIZE,
+        "human_typing": HUMAN_TYPING,
         "snapshots": "a11y-refs",
     }
 
@@ -844,54 +1196,30 @@ async def open_session(
     for sess in state["sessions"].values():
         if sess.owner["task_id"] == body.task_id:
             sess.last = time.time()
+            sess.machine.touch()
             return {"id": sess.id, "restored": False, "reused": True}
     if body.cdp_url:
         return await _open_on_pc(body)
-    slot = _slot_for_new()
-    if slot is None:
-        # Full: free the longest-idle session, but never one used in the last minute.
-        idle = [
-            x
-            for x in state["sessions"].values()
-            if time.time() - x.last > 60 and time.time() > x.hold_until
-        ]
-        if not idle:
-            raise HTTPException(503, "All browsers are busy. Try again in a minute.")
-        await _close(min(idle, key=lambda x: x.last).id)
-        slot = _slot_for_new()
-        assert slot is not None
+    machine = await _acquire_machine(body.agent_id)  # may raise 503 (all browsers busy)
     sid = "bs_" + secrets.token_hex(8)
-    slot.sessions.add(sid)  # reserve the place before the (slow) launch
     restore = _clean_state(body.storage_state)
     sess = Session(
-        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts
+        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, machine, body.allowed_hosts
     )
+    machine.sessions[sid] = sess  # reserve the tab before opening it
+    sess.running = True  # busy while opening, so a concurrent acquire cannot evict the machine
     try:
-        browser = await slot.get()
-        kwargs: dict[str, Any] = {"viewport": VIEWPORT, "accept_downloads": True}
-        if restore:
-            kwargs["storage_state"] = restore
-        try:
-            sess.context = await browser.new_context(**kwargs)
-        except Exception:  # noqa: BLE001 - a damaged saved session: start clean
-            if not restore:
-                raise
-            log.warning("saved session for %s could not be loaded; starting clean", sid)
-            restore = None
-            sess.context = await browser.new_context(viewport=VIEWPORT, accept_downloads=True)
-
-        async def route(r: Any) -> None:
-            await _route(r, sess)
-
-        await sess.context.route("**/*", route)
-        sess.context.on("page", lambda p: _on_page(sess, p))
-        sess.page = await sess.context.new_page()
-        if sess.page not in sess.pages:
-            _on_page(sess, sess.page)
+        sess.context = machine.context
+        # A saved login (P21) laid over the agent's persistent profile.
+        await machine.apply_state(restore)
+        sess.page = await machine.context.new_page()
+        _wire_page(sess, sess.page)
         sess.opened.clear()
     except Exception:
-        slot.sessions.discard(sid)
+        machine.sessions.pop(sid, None)
         raise
+    finally:
+        sess.running = False
     state["sessions"][sid] = sess
     return {"id": sid, "restored": bool(restore), "reused": False}
 
@@ -906,14 +1234,15 @@ async def _playwright() -> Any:
 
 async def _open_on_pc(body: Open) -> dict[str, Any]:
     """P31: a session on the person's own Chrome/Edge (a visible window, its own Agent
-    profile, their own internet line). It takes no place in our browsers; the same page
-    guards (allowed hosts, private addresses, pacing) apply."""
+    profile, their own internet line). Its machine is a standalone, externally-driven one that
+    never enters the pool; the same page guards (allowed hosts, private addresses, pacing)
+    apply. A dedicated context holds one session, so new tabs are caught at the context."""
     if not CDP_RELAY.match(body.cdp_url or ""):
         raise HTTPException(422, "bad cdp_url")
     sid = "bs_" + secrets.token_hex(8)
-    slot = Slot(-1)  # this session's own, never one of state["slots"]
+    machine = Machine(body.agent_id, remote=True)  # never registered in state["machines"]
     sess = Session(
-        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, slot, body.allowed_hosts
+        sid, {"task_id": body.task_id, "agent_id": body.agent_id}, machine, body.allowed_hosts
     )
     pw = await _playwright()
     try:
@@ -922,9 +1251,10 @@ async def _open_on_pc(body: Open) -> dict[str, Any]:
         )
     except Exception as e:  # noqa: BLE001 - the PC went away or never connected
         raise HTTPException(502, "The browser on the person's computer did not connect.") from e
-    sess.remote = slot.browser = browser
+    sess.remote = browser
     try:
         ctx = browser.contexts[0] if browser.contexts else await browser.new_context()
+        machine.context = ctx
         restore = _clean_state(body.storage_state)
         if restore and restore.get("cookies"):
             try:
@@ -932,23 +1262,21 @@ async def _open_on_pc(body: Open) -> dict[str, Any]:
             except Exception:  # noqa: BLE001 - a damaged saved session: start clean
                 log.warning("saved session for %s could not be loaded on the PC", sid)
         sess.context = ctx
-
-        async def route(r: Any) -> None:
-            await _route(r, sess)
-
-        await ctx.route("**/*", route)
-        ctx.on("page", lambda p: _on_page(sess, p))
-        for p in ctx.pages:
-            _on_page(sess, p)
-        sess.page = ctx.pages[-1] if ctx.pages else await ctx.new_page()
+        await ctx.route("**/*", lambda r: _route(r, machine))
+        # A dedicated context for one session: catch every new tab at the context, and attach
+        # the existing pages (no per-page popup wiring, which is for shared pool contexts).
+        ctx.on("page", lambda p: _attach_page(sess, p, opened=True))
+        for p in list(ctx.pages):
+            _attach_page(sess, p, opened=False)
+        sess.page = sess.pages[-1] if sess.pages else await ctx.new_page()
         if sess.page not in sess.pages:
-            _on_page(sess, sess.page)
+            _attach_page(sess, sess.page, opened=False)
         sess.page = sess.pages[-1]
         sess.opened.clear()
     except Exception:
         await browser.close()
         raise
-    slot.sessions.add(sid)
+    machine.sessions[sid] = sess
     state["sessions"][sid] = sess
     # The person closed the window, the PC slept, or the relay ended: the next action reopens.
     browser.on("disconnected", lambda *_: asyncio.ensure_future(_close(sid)))
@@ -1086,6 +1414,28 @@ async def _do_wait(s: Session, body: Act) -> str | None:
     return None
 
 
+async def _do_click(page: Any, loc: Any, *, allow_submit: bool) -> dict[str, Any]:
+    """A click on a ref. Returns {} for an ordinary click, {"error": ...} when it would send a
+    form without approval, or {"focused": True, "note": ...} when the target is a text field:
+    the field is focused (one click, and only if it was not already) and the agent is told to
+    `type` next — so it does not keep re-clicking a field that showed no visible change."""
+    info = await loc.evaluate(SUBMIT_JS)
+    if info["submit"] and not allow_submit:
+        what = "changes external data" if info.get("transaction") else "sends the form"
+        return {"error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."}
+    field = await loc.evaluate(FIELD_JS)
+    if field.get("editable"):
+        if not field.get("focused"):  # de-dupe: an already-focused field is left alone
+            await _click(page, loc)
+        return {
+            "focused": True,
+            "note": "That field is focused now; call type to enter the text (do not click it "
+            "again).",
+        }
+    await _press(page, loc)
+    return {}
+
+
 @app.post("/sessions/{sid}/act")
 async def act(
     sid: str, body: Act, x_browser_token: str | None = Header(default=None)
@@ -1096,196 +1446,200 @@ async def act(
         raise HTTPException(404, "no such session (it may have closed after being idle)")
     async with s.lock:
         s.last = time.time()
-        await _pace(s, body.action)
-        page = s.page
-        point = None
-        note = None
+        s.running = True  # keeps the machine from being evicted/reaped mid-action
         try:
-            if body.action == "goto":
-                u = urlparse(body.url or "")
-                if u.scheme not in ("http", "https") or not await host_ok(u.hostname):
-                    return {"error": "That address is not allowed (only public http/https sites)."}
-                if s.allowed and not host_matches(body.url or "", s.allowed):
-                    return {"error": blocked_text(body.url or "", s.allowed)}
-                try:
-                    await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
-                except Exception as e:  # noqa: BLE001 - a link to a file downloads it instead
-                    if "Download is starting" not in str(e):
-                        raise
-            elif body.action == "verify":
-                # Is a restored session still signed in? Load its check page: it must stay on
-                # the login's hosts and show no sign-in or one-time-code form.
-                u = urlparse(body.url or "")
-                if u.scheme not in ("http", "https") or not host_matches(
-                    body.url or "", body.hosts
-                ):
-                    return {
-                        "error": "The check page is not on this login's site.",
-                        "verified": False,
-                    }
-                # Same public-address guard as goto: a login's hosts list is no reason to
-                # load an internal address.
-                if not await host_ok(u.hostname):
-                    return {
-                        "error": "That address is not allowed (only public http/https sites).",
-                        "verified": False,
-                    }
-                if s.allowed and not host_matches(body.url or "", s.allowed):
-                    return {"error": blocked_text(body.url or "", s.allowed), "verified": False}
-                await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=5000)
-                except Exception:  # noqa: BLE001
-                    pass
-                obs = await _observe(s, since=None, force_full=True)
-                obs["verified"] = host_matches(page.url, body.hosts) and not obs.get("auth_form")
-                return obs
-            elif body.action == "snapshot" or body.action == "look":
-                return await _do_snapshot(s, body)
-            elif body.action == "find":
-                return await _do_find(s, body)
-            elif body.action == "wait":
-                note = await _do_wait(s, body)
-            elif body.action == "login_submit":
-                # The sign-in button of the form that holds the saved password: the only
-                # submit that needs no person, because saving the login allowed it.
-                if not body.hosts or not host_matches(page.url, body.hosts):
-                    return {"error": "This saved login is not for this site."}
-                ref = _target(body)
-                loc = await _locate(page, ref) if ref else None
-                if loc is None:
-                    return {"error": _gone(ref)}
-                same_form = await loc.evaluate(
-                    "(el) => { const f = el.form || el.closest('form');"
-                    " return !!f && !!f.querySelector('input[type=password][data-agentic-secret]'); }"
-                )
-                if not same_form:
-                    return {"error": "That is not the sign-in button of the login form."}
-                box = await loc.bounding_box()
-                if box:
-                    point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
-                await _press(page, loc)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=6000)
-                except Exception:  # noqa: BLE001
-                    pass
-            elif body.action in ("click", "type", "select", "check"):
-                ref = _target(body)
-                loc = await _locate(page, ref) if ref else None
-                if loc is None:
-                    obs = await _observe(s, since=body.since)
-                    obs["error"] = _gone(ref)
-                    return obs
-                info = await loc.evaluate(SUBMIT_JS)
-                box = await loc.bounding_box()
-                if box:
-                    point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
-                if body.action == "click":
-                    if info["submit"] and not body.allow_submit:
-                        what = (
-                            "changes external data" if info.get("transaction") else "sends the form"
-                        )
-                        return {
-                            "error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."
-                        }
-                    await _press(page, loc)
-                elif body.action == "type":
-                    if body.secret:
-                        if not body.hosts or not host_matches(page.url, body.hosts):
-                            return {"error": "This saved login is not for this site."}
-                        if body.secret_kind == "password" and not await loc.evaluate(
-                            "(el) => el.tagName === 'INPUT' && el.type === 'password'"
-                        ):
-                            return {"error": "The password can only go into a password field."}
-                        await loc.evaluate("(el) => el.setAttribute('data-agentic-secret', '1')")
-                    await loc.fill(body.text or "", timeout=10_000)
-                    if body.key == "Enter":
-                        if not body.allow_submit:
-                            return {
-                                "error": "SUBMIT_NEEDS_APPROVAL: Enter would send the form. Use browser_submit."
-                            }
-                        await loc.press("Enter")
-                elif body.action == "select":
-                    try:
-                        await loc.select_option(label=body.text or "", timeout=5000)
-                    except Exception:  # noqa: BLE001 - try the value instead of the label
-                        await loc.select_option(value=body.text or "", timeout=5000)
-                else:
-                    await loc.set_checked(
-                        bool(body.text not in ("false", "off", "0")), timeout=5000
-                    )
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=4000)
-                except Exception:  # noqa: BLE001
-                    pass
-            elif body.action == "upload":
-                if not body.allow_submit:
-                    return {
-                        "error": "SUBMIT_NEEDS_APPROVAL: uploading sends a file. Use browser_upload."
-                    }
-                err, point = await _do_upload(s, body)
-                if err:
-                    obs = await _observe(s, since=body.since)
-                    obs["error"] = err
-                    return obs
-            elif body.action == "capture":
-                # The whole page as an image (Firefox cannot print to PDF); the worker turns it
-                # into a PDF. A print or offer view is usually one long page.
-                png = await page.screenshot(type="png", full_page=True, timeout=30_000)
-                obs = await _observe(s, since=body.since)
-                obs["capture_b64"] = base64.b64encode(png).decode()
-                return obs
-            elif body.action == "press":
-                if body.key == "Enter" and not body.allow_submit:
-                    return {
-                        "error": "SUBMIT_NEEDS_APPROVAL: Enter may send a form. Use browser_submit."
-                    }
-                await page.keyboard.press(body.key or "Tab")
-            elif body.action == "scroll":
-                await page.mouse.wheel(0, body.dy)
-                await asyncio.sleep(0.4)
-            elif body.action == "back":
-                went = await page.go_back(timeout=15_000)
-                if went is None and len(s.pages) > 1:
-                    # A tab the site opened, with nothing to go back to: close it.
-                    await page.close()
-                    s.page = s.pages[-1]
-                    note = "Closed that tab; back on the previous one."
-            elif body.action != "read":
-                return {"error": f"unknown action {body.action}"}
-        except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
-            err = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
-            if "Timeout" in e.__class__.__name__:
-                await _note_timeout(s)
-                if sid not in state["sessions"]:  # the browser was just restarted
-                    return {
-                        "error": f"{err}. The browser was stuck and has been restarted: open the page again."
-                    }
-            if s.blocked and s.allowed:
-                err = blocked_text(s.blocked, s.allowed)
-                s.blocked = None
+            return await _run_action(s, sid, body)
+        finally:
+            s.running = False
+            s.last = time.time()
+            s.machine.touch()
+
+
+async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
+    await _pace(s, body.action)
+    page = s.page
+    point = None
+    note = None
+    try:
+        if body.action == "goto":
+            u = urlparse(body.url or "")
+            if u.scheme not in ("http", "https") or not await host_ok(u.hostname):
+                return {"error": "That address is not allowed (only public http/https sites)."}
+            if s.allowed and not host_matches(body.url or "", s.allowed):
+                return {"error": blocked_text(body.url or "", s.allowed)}
             try:
-                obs = await asyncio.wait_for(_observe(s, since=body.since), 15)
-            except Exception:  # noqa: BLE001 - the page itself is unusable
-                return {"error": err}
-            obs["error"] = err
+                await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+            except Exception as e:  # noqa: BLE001 - a link to a file downloads it instead
+                if "Download is starting" not in str(e):
+                    raise
+        elif body.action == "verify":
+            # Is a restored session still signed in? Load its check page: it must stay on
+            # the login's hosts and show no sign-in or one-time-code form.
+            u = urlparse(body.url or "")
+            if u.scheme not in ("http", "https") or not host_matches(body.url or "", body.hosts):
+                return {
+                    "error": "The check page is not on this login's site.",
+                    "verified": False,
+                }
+            # Same public-address guard as goto: a login's hosts list is no reason to
+            # load an internal address.
+            if not await host_ok(u.hostname):
+                return {
+                    "error": "That address is not allowed (only public http/https sites).",
+                    "verified": False,
+                }
+            if s.allowed and not host_matches(body.url or "", s.allowed):
+                return {"error": blocked_text(body.url or "", s.allowed), "verified": False}
+            await page.goto(body.url, wait_until="domcontentloaded", timeout=30_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:  # noqa: BLE001
+                pass
+            obs = await _observe(s, since=None, force_full=True)
+            obs["verified"] = host_matches(page.url, body.hosts) and not obs.get("auth_form")
             return obs
-        if body.action in ("click", "upload", "press", "goto", "login_submit", "type"):
-            settled = await _settle(s)
-            note = " ".join(x for x in (note, settled) if x) or None
-        obs = await _observe(
-            s, point, read=body.action == "read", since=body.since, marks=body.marks
-        )
-        if note:
-            obs["error" if body.action == "wait" else "note"] = note
-        if s.new_downloads:
-            obs["downloads"] = [
-                {"id": d, "name": s.downloads[d]["name"], "size": len(s.downloads[d]["data"])}
-                for d in s.new_downloads
-                if d in s.downloads
-            ]
-            s.new_downloads = []
+        elif body.action == "snapshot" or body.action == "look":
+            return await _do_snapshot(s, body)
+        elif body.action == "find":
+            return await _do_find(s, body)
+        elif body.action == "wait":
+            note = await _do_wait(s, body)
+        elif body.action == "login_submit":
+            # The sign-in button of the form that holds the saved password: the only
+            # submit that needs no person, because saving the login allowed it.
+            if not body.hosts or not host_matches(page.url, body.hosts):
+                return {"error": "This saved login is not for this site."}
+            ref = _target(body)
+            loc = await _locate(page, ref) if ref else None
+            if loc is None:
+                return {"error": _gone(ref)}
+            same_form = await loc.evaluate(
+                "(el) => { const f = el.form || el.closest('form');"
+                " return !!f && !!f.querySelector('input[type=password][data-agentic-secret]'); }"
+            )
+            if not same_form:
+                return {"error": "That is not the sign-in button of the login form."}
+            box = await loc.bounding_box()
+            if box:
+                point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
+            await _press(page, loc)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=6000)
+            except Exception:  # noqa: BLE001
+                pass
+        elif body.action in ("click", "type", "select", "check"):
+            ref = _target(body)
+            loc = await _locate(page, ref) if ref else None
+            if loc is None:
+                obs = await _observe(s, since=body.since)
+                obs["error"] = _gone(ref)
+                return obs
+            box = await loc.bounding_box()
+            if box:
+                point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
+            if body.action == "click":
+                res = await _do_click(page, loc, allow_submit=body.allow_submit)
+                if res.get("error"):
+                    return {"error": res["error"]}
+                if res.get("note"):
+                    note = res["note"]
+            elif body.action == "type":
+                if body.secret:
+                    # Secrets keep the protected path: fill into the marked field, never
+                    # key-by-key (no char-timing side channel), guard stays.
+                    if not body.hosts or not host_matches(page.url, body.hosts):
+                        return {"error": "This saved login is not for this site."}
+                    if body.secret_kind == "password" and not await loc.evaluate(
+                        "(el) => el.tagName === 'INPUT' && el.type === 'password'"
+                    ):
+                        return {"error": "The password can only go into a password field."}
+                    await loc.evaluate("(el) => el.setAttribute('data-agentic-secret', '1')")
+                    await loc.fill(body.text or "", timeout=10_000)
+                else:
+                    # `type` focuses the field itself, so no pre-click is needed.
+                    await _type_field(loc, body.text or "")
+                if body.key == "Enter":
+                    if not body.allow_submit:
+                        return {
+                            "error": "SUBMIT_NEEDS_APPROVAL: Enter would send the form. Use browser_submit."
+                        }
+                    await loc.press("Enter")
+            elif body.action == "select":
+                try:
+                    await loc.select_option(label=body.text or "", timeout=5000)
+                except Exception:  # noqa: BLE001 - try the value instead of the label
+                    await loc.select_option(value=body.text or "", timeout=5000)
+            else:
+                await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=4000)
+            except Exception:  # noqa: BLE001
+                pass
+        elif body.action == "upload":
+            if not body.allow_submit:
+                return {
+                    "error": "SUBMIT_NEEDS_APPROVAL: uploading sends a file. Use browser_upload."
+                }
+            err, point = await _do_upload(s, body)
+            if err:
+                obs = await _observe(s, since=body.since)
+                obs["error"] = err
+                return obs
+        elif body.action == "capture":
+            # The whole page as an image (Firefox cannot print to PDF); the worker turns it
+            # into a PDF. A print or offer view is usually one long page.
+            png = await page.screenshot(type="png", full_page=True, timeout=30_000)
+            obs = await _observe(s, since=body.since)
+            obs["capture_b64"] = base64.b64encode(png).decode()
+            return obs
+        elif body.action == "press":
+            if body.key == "Enter" and not body.allow_submit:
+                return {
+                    "error": "SUBMIT_NEEDS_APPROVAL: Enter may send a form. Use browser_submit."
+                }
+            await page.keyboard.press(body.key or "Tab")
+        elif body.action == "scroll":
+            await _scroll(page, body.dy)
+        elif body.action == "back":
+            went = await page.go_back(timeout=15_000)
+            if went is None and len(s.pages) > 1:
+                # A tab the site opened, with nothing to go back to: close it.
+                await page.close()
+                s.page = s.pages[-1]
+                note = "Closed that tab; back on the previous one."
+        elif body.action != "read":
+            return {"error": f"unknown action {body.action}"}
+    except Exception as e:  # noqa: BLE001 - tell the agent what went wrong, keep the session
+        err = f"{e.__class__.__name__}: {str(e).splitlines()[0][:300]}"
+        if "Timeout" in e.__class__.__name__:
+            await _note_timeout(s)
+            if sid not in state["sessions"]:  # the browser was just restarted
+                return {
+                    "error": f"{err}. The browser was stuck and has been restarted: open the page again."
+                }
+        if s.blocked and s.allowed:
+            err = blocked_text(s.blocked, s.allowed)
+            s.blocked = None
+        try:
+            obs = await asyncio.wait_for(_observe(s, since=body.since), 15)
+        except Exception:  # noqa: BLE001 - the page itself is unusable
+            return {"error": err}
+        obs["error"] = err
         return obs
+    if body.action in ("click", "upload", "press", "goto", "login_submit", "type"):
+        settled = await _settle(s)
+        note = " ".join(x for x in (note, settled) if x) or None
+    obs = await _observe(s, point, read=body.action == "read", since=body.since, marks=body.marks)
+    if note:
+        obs["error" if body.action == "wait" else "note"] = note
+    if s.new_downloads:
+        obs["downloads"] = [
+            {"id": d, "name": s.downloads[d]["name"], "size": len(s.downloads[d]["data"])}
+            for d in s.new_downloads
+            if d in s.downloads
+        ]
+        s.new_downloads = []
+    return obs
 
 
 async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float] | None]:
@@ -1317,7 +1671,7 @@ async def _do_upload(s: Session, body: Act) -> tuple[str | None, dict[str, float
     else:
         try:
             async with page.expect_file_chooser(timeout=8000) as chooser:
-                await loc.click(timeout=10_000)
+                await _click(page, loc, hover=False)
             await (await chooser.value).set_files(files, timeout=15_000)
         except Exception as e:  # noqa: BLE001 - a styled button: the file field next to it
             if "Timeout" not in e.__class__.__name__:
@@ -1362,6 +1716,7 @@ async def hold(
         raise HTTPException(404, "no such session")
     s.hold_until = time.time() + min(body.seconds, HOLD_MAX) if body.seconds else 0.0
     s.last = time.time()
+    s.machine.touch()  # a held tab keeps its machine alive (busy() counts the hold)
     return {"ok": True, "until": s.hold_until}
 
 

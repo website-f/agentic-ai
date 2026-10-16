@@ -71,6 +71,9 @@ services:
     ports: !override ["127.0.0.1:${AGENTIC_PORT:-8500}:8080"]
 
   browser:
+    # The per-agent persistent profiles volume (browserprofiles -> /data/browser-profiles) and
+    # mem_limit: 4g for up to BROWSER_MAX_LIVE (6) Firefoxes come from docker-compose.yml, which
+    # this file overlays (deploy-vps.sh runs both with -f). Only pacing is tuned gentler here.
     environment:
       BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:?set AGENTIC_BROWSER_TOKEN in .env}
       # A datacenter IP is watched harder than a home/office line, so pace it gentler here

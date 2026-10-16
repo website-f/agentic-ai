@@ -12,7 +12,11 @@ RUN apt-get update \
  && python -m playwright install-deps firefox \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system --gid 10001 app \
- && useradd --system --uid 10001 --gid app --create-home --home-dir /home/app app
+ && useradd --system --uid 10001 --gid app --create-home --home-dir /home/app app \
+ # The per-agent persistent profiles live here (a named volume mounts over it at run time).
+ # Creating it owned by app means the named volume is initialised owned by uid 10001, so the
+ # non-root service can write profiles into it even with a read-only root filesystem.
+ && install -d -o 10001 -g 10001 /data/browser-profiles
 
 USER app
 # The browser binary lives in the app user's cache, baked in so it never downloads at run.

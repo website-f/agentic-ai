@@ -312,8 +312,17 @@ numbered elements; tools: `browser_open`, `_fill` (many fields, one call), `_typ
 `_select`, `_check`, `_click`, `_scroll`, `_back`, `_read` (with `focus`, long pages are
 condensed by the local model), `_submit` (high risk: a person approves, whatever the
 agent's autonomy), `_close`. All are hidden unless an agent is given them (the Web Operator
-template does). One session per task, closed when the task ends, idle sessions after 10
-minutes. Frames go worker -> Valkey -> `GET /api/browser/{session}/frame.jpg`.
+template does). Frames go worker -> Valkey -> `GET /api/browser/{session}/frame.jpg`.
+
+Since 2026-10, each agent has its OWN persistent "machine" (one Camoufox persistent-context
+browser keyed by agent id, its profile on a real volume) instead of a throwaway context per
+task: it stays signed in across tasks/restarts, has a stable per-agent screen/OS/UA identity,
+and a task opens a tab in it (closing the task closes the tab, not the machine). A pool runs at
+most `BROWSER_MAX_LIVE` (6) machines with LRU eviction and idle-reap, and interactions are made
+human (Bézier cursor path, key-by-key typing, multi-step scroll) with every real click
+serialized across the pool. Details, env knobs and the honest concurrency limit are in
+[BROWSER-MACHINES.md](BROWSER-MACHINES.md). The P31 "browse on my PC" path is unchanged and
+separate from the pool.
 
 **Colleagues.** `ask_colleague(agent, question, context)` works for every agent inside a
 task (depth below 3, at most 6 per task). The local model first checks whether the office
