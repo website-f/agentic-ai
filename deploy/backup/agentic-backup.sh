@@ -59,7 +59,12 @@ ensure_repo() {
   fi
 }
 
-fail() { log "backup FAILED: $*"; date +%s > "$LAST_FAIL" 2>/dev/null || true; return 1; }
+# Free the flock (close fd 9) so the next backup can take it. The nightly loop runs for the
+# container's whole life, so without this it would hold the lock forever after its first run
+# and every `exec`/`run --rm` backup (e.g. the pre-deploy one) would wait out BACKUP_LOCK_WAIT.
+release_lock() { exec 9>&- 2>/dev/null || true; }
+
+fail() { log "backup FAILED: $*"; date +%s > "$LAST_FAIL" 2>/dev/null || true; release_lock; return 1; }
 
 # One backup at a time across the nightly loop, `exec` and `run --rm` (they share /work).
 # busybox flock has no wait option: poll.
@@ -121,6 +126,7 @@ do_backup() {
   date +%s > "$LAST_OK" || fail "cannot write $LAST_OK" || return 1
   rm -f "$LAST_FAIL"
   log "backup done"
+  release_lock
 }
 
 do_restore() {
