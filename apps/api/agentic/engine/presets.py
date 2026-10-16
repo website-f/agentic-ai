@@ -3,6 +3,7 @@
 providers do move these, so the UI lets every field be edited."""
 
 from dataclasses import asdict, dataclass, field
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,12 @@ class Preset:
     # Tried in order when picking a model for the connection test.
     suggested_models: tuple[str, ...] = field(default_factory=tuple)
     notes: str = ""
+    # P33: what the provider does with what it is sent (static, honest, shown on the page),
+    # whether it starts trusted with Confidential companies, and whether zero data retention
+    # is asked for on every call (OpenRouter).
+    data_policy_note: str = "Check this provider's data policy."
+    trusted: bool = False
+    require_zdr: bool = False
 
     def public(self) -> dict:
         d = asdict(self)
@@ -38,6 +45,7 @@ PRESETS: tuple[Preset, ...] = (
         key_url="https://console.groq.com/keys",
         suggested_models=("llama-3.1-8b-instant", "llama-3.3-70b-versatile"),
         notes="Very fast. Free tier limits reset per minute and per day.",
+        data_policy_note="Check data retention on your plan.",
     ),
     Preset(
         id="openrouter",
@@ -49,6 +57,11 @@ PRESETS: tuple[Preset, ...] = (
         key_check="/key",
         suggested_models=("meta-llama/llama-3.3-70b-instruct:free", "openrouter/auto"),
         notes="One key for hundreds of models. Models ending in :free cost nothing.",
+        data_policy_note=(
+            "OpenRouter keeps no prompts; free endpoints may log or train - keep 'Require "
+            "zero data retention' on."
+        ),
+        require_zdr=True,
     ),
     Preset(
         id="mistral",
@@ -81,6 +94,10 @@ PRESETS: tuple[Preset, ...] = (
         key_url="https://platform.deepseek.com/api_keys",
         suggested_models=("deepseek-chat",),
         notes="Repeated prompt prefixes are cached automatically and billed lower.",
+        data_policy_note=(
+            "Processed and stored in China; trains on API data unless you opt out; no "
+            "zero-retention option."
+        ),
     ),
     Preset(
         id="openai",
@@ -91,6 +108,11 @@ PRESETS: tuple[Preset, ...] = (
         key_url="https://platform.openai.com/api-keys",
         suggested_models=("gpt-4o-mini", "gpt-4.1-mini"),
         notes="Prompts over 1,024 tokens are cached automatically.",
+        data_policy_note=(
+            "API data is not used for training by default; may be kept briefly for abuse "
+            "monitoring."
+        ),
+        trusted=True,
     ),
     Preset(
         id="anthropic",
@@ -101,6 +123,8 @@ PRESETS: tuple[Preset, ...] = (
         key_url="https://console.anthropic.com/settings/keys",
         suggested_models=("claude-haiku-4-5",),
         notes="Optional. Uses Anthropic's OpenAI-compatible endpoint.",
+        data_policy_note="API data is not used for training by default.",
+        trusted=True,
     ),
     Preset(
         id="gemini",
@@ -111,6 +135,9 @@ PRESETS: tuple[Preset, ...] = (
         key_url="https://aistudio.google.com/apikey",
         suggested_models=("gemini-2.5-flash",),
         notes="Optional. Uses Google's OpenAI-compatible endpoint.",
+        data_policy_note=(
+            "Free tier: Google uses prompts to improve its products; paid tier does not."
+        ),
     ),
 )
 
@@ -118,3 +145,25 @@ BY_ID = {p.id: p for p in PRESETS}
 
 # The six the workspace owner already uses; the page offers these first.
 PRIMARY = ("groq", "openrouter", "huggingface", "mistral", "deepseek", "openai")
+
+LOCAL_NOTE = "Runs on your own server; nothing leaves."
+UNKNOWN_NOTE = "Check this provider's data policy."
+
+
+def preset_of(preset_id: str | None, base_url: str = "") -> Preset | None:
+    """The preset a provider was made from, or the one whose address it uses (providers
+    added by hand keep the same data policy as their preset)."""
+    if preset_id and preset_id in BY_ID:
+        return BY_ID[preset_id]
+    host = urlparse(base_url).hostname or ""
+    for p in PRESETS:
+        if host and host == urlparse(p.base_url).hostname:
+            return p
+    return None
+
+
+def data_policy_note(preset_id: str | None, base_url: str, tier: str) -> str:
+    if tier == "local":
+        return LOCAL_NOTE
+    p = preset_of(preset_id, base_url)
+    return p.data_policy_note if p else UNKNOWN_NOTE

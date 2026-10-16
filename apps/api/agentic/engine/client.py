@@ -312,7 +312,10 @@ async def chat(
     timeout: float = 120,
     quirks: frozenset[str] = frozenset(),
     reasoning_effort: str | None = None,
+    extra_body: dict[str, Any] | None = None,
 ) -> ChatResult:
+    """`extra_body` adds provider-specific fields to the request (P33: OpenRouter's zero
+    data retention routing)."""
     q = set(quirks)
     cacheable = wants_cache_control(base_url, model)
 
@@ -342,6 +345,8 @@ async def chat(
         body["tools"] = sent_tools
         if tool_choice is not None:
             body["tool_choice"] = tool_choice
+    if extra_body:
+        body.update(extra_body)
 
     url = _url(base_url, "/chat/completions")
     call = await _request("POST", url, key, body, timeout)

@@ -51,6 +51,11 @@ class ProviderOut(BaseModel):
     last_test_result: dict[str, Any] | None
     model_count: int
     recent_checks: list[CheckOut]
+    # P33: may see Confidential companies' work; OpenRouter zero data retention; what the
+    # provider does with what it is sent.
+    trusted: bool = False
+    require_zdr: bool = False
+    data_policy_note: str = ""
 
 
 class AISettingsOut(BaseModel):
@@ -80,11 +85,63 @@ class ProviderUpdateIn(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
     tier: Tier | None = None
     enabled: bool | None = None
+    trusted: bool | None = None
+    require_zdr: bool | None = None
 
     @field_validator("base_url")
     @classmethod
     def _url(cls, v: str | None) -> str | None:
         return _clean_url(v) if v else v
+
+
+class PrivacyCategories(BaseModel):
+    ids: bool = True
+    people: bool = True
+    companies: bool = True
+    amounts: bool = False
+
+
+class PrivacyCategoriesIn(BaseModel):
+    ids: bool | None = None
+    people: bool | None = None
+    companies: bool | None = None
+    amounts: bool | None = None
+
+
+class PrivacyProviderUse(BaseModel):
+    provider_id: str | None
+    name: str
+    trusted: bool
+    calls: int
+    masked: int
+
+
+class PrivacyCompany(BaseModel):
+    branch_id: str
+    name: str
+    data_level: str
+    providers_30d: list[PrivacyProviderUse]
+
+
+class PrivacyOut(BaseModel):
+    masking: bool
+    categories: PrivacyCategories
+    companies: list[PrivacyCompany] = []
+
+
+class PrivacyUpdateIn(BaseModel):
+    masking: bool | None = None
+    categories: PrivacyCategoriesIn | None = None
+
+
+class PrivacyPreviewIn(BaseModel):
+    text: str = Field(max_length=20000)
+    branch_id: str | None = None
+
+
+class PrivacyPreviewOut(BaseModel):
+    masked: str
+    counts: dict[str, int]
 
 
 class OrderIn(BaseModel):

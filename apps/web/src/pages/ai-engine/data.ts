@@ -38,6 +38,12 @@ export interface Provider {
   last_test_result: { ok: boolean; summary: string; model: string | null; error_class: string | null } | null;
   model_count: number;
   recent_checks: { ts: string; ok: boolean; latency_ms: number | null }[];
+  /** P33: cleared for Confidential companies (no training, no retention, per the agreement). */
+  trusted?: boolean;
+  /** P33, OpenRouter only: route only to endpoints with zero data retention. */
+  require_zdr?: boolean;
+  /** P33: one line on what the provider does with prompts (training, retention, location). */
+  data_policy_note?: string;
 }
 
 export interface AISettings {

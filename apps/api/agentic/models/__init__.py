@@ -105,6 +105,11 @@ class Branch(Timestamps, Base):
     isolated: Mapped[bool] = mapped_column(Boolean, default=False)
     # P19: what the company does (e.g. "network", "engineering"): picks its starter team.
     industry: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    # P33: who may see this company's work. standard = any provider (masked when cloud);
+    # confidential = trusted providers only; local_only = this server's own model only.
+    data_level: Mapped[str] = mapped_column(
+        String(16), default="standard", server_default="standard"
+    )
 
     departments: Mapped[list["Department"]] = relationship(
         back_populates="branch",
@@ -178,6 +183,9 @@ class AIProvider(Timestamps, Base):
     health: Mapped[str] = mapped_column(String(16), default="unknown")  # unknown|ok|degraded|down
     last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_test_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # P33: may see Confidential companies' work; OpenRouter: zero-retention endpoints only.
+    trusted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    require_zdr: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     @property
     def aad(self) -> str:
@@ -253,6 +261,10 @@ class LLMCall(Base):
     error_detail: Mapped[str | None] = mapped_column(String(500))
     # P21: sha256 of the system message + tool schemas; a changing prefix breaks prompt caching.
     prefix_hash: Mapped[str | None] = mapped_column(String(16))
+    # P33: values replaced by placeholders in what the provider was sent; whose work it was.
+    masked: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    branch_id: Mapped[str | None] = mapped_column(String(40))
+    data_level: Mapped[str | None] = mapped_column(String(16))
 
 
 class ProviderCheck(Base):

@@ -417,6 +417,7 @@ async def suggest_names(db: AsyncSession, rec: MeetingRecording, vocab: str) -> 
                 accept=lambda raw: writer.loads(raw) is not None,
                 agent_id=rec.agent_id,
                 task_id=rec.task_id,
+                branch_id=rec.branch_id,
             )
             rec.cost_usd = round((rec.cost_usd or 0) + (r.cost_usd or 0), 6)
             heard = " ".join(p["text"] for p in rec.transcript or [])
@@ -578,6 +579,7 @@ async def transcribe_chunk(
             task="minutes.transcribe",
             agent_id=rec.agent_id,
             task_id=rec.task_id,
+            branch_id=rec.branch_id,
             prompt=transcript.context_prompt(previous, vocabulary=await vocabulary(db, rec)),
         )
     except gateway.MediaRejected as e:
@@ -633,6 +635,7 @@ async def _ask(
         accept=writer.usable_notes if notes else writer.usable,
         agent_id=rec.agent_id,
         task_id=rec.task_id,
+        branch_id=rec.branch_id,
     )
     rec.cost_usd = round((rec.cost_usd or 0) + (r.cost_usd or 0), 6)
     if notes:

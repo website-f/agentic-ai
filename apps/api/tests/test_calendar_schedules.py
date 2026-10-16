@@ -232,7 +232,9 @@ async def test_agenda_and_free_slots_in_the_workspace_time_zone(client, llm, tem
     ).say("Here is your day.")
     await _chat(client, a["id"], "What's on my calendar today?")
     agenda, free = _tool_results(llm)
-    assert "09:00-10:00 Weekly sync" in agenda and "with siti@maju.test" in agenda
+    # P33: the cloud model sees the attendee's email as a placeholder, never the address.
+    assert "09:00-10:00 Weekly sync" in agenda and "with [EMAIL_" in agenda
+    assert "siti@maju.test" not in agenda
     assert "13:00-14:30 Client call" in agenda and "Google Meet" in agenda
     assert "you declined" in agenda and "[e1]" in agenda and "Asia/Kuala_Lumpur" in agenda
     assert agenda.count("<<<") == 1  # event text is fenced as untrusted data

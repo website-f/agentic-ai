@@ -1199,4 +1199,17 @@ MS: dict[str, str] = {
     "Only your own AI (your twin or private assistant) can browse on your computer.": "Hanya AI anda sendiri (kembar atau pembantu peribadi anda) boleh melayari di komputer anda.",
     "{name} is paused.": "{name} dijeda.",
     "{name} is offline. Turn it on (the agent starts with it) and try again.": "{name} di luar talian. Hidupkannya (ejen bermula bersamanya) dan cuba lagi.",
+    # P33 privacy gateway: each company's data level (engine/privacy.py, engine/gateway.py)
+    "This company is set to Confidential: no trusted AI provider is available. Mark one as trusted on the AI Engine page or add one.": "Syarikat ini ditetapkan sebagai Sulit: tiada penyedia AI yang dipercayai tersedia. Tandakan satu sebagai dipercayai di halaman Enjin AI atau tambah satu.",
+    "This company is set to Local only: no AI model on this server is available for this job. Its data never goes to cloud AI providers.": "Syarikat ini ditetapkan sebagai Tempatan sahaja: tiada model AI di pelayan ini yang tersedia untuk kerja ini. Datanya tidak pernah dihantar kepada penyedia AI awan.",
+    "not trusted for this Confidential company": "tidak dipercayai untuk syarikat Sulit ini",
+    "cloud provider: this company is Local only": "penyedia awan: syarikat ini Tempatan sahaja",
+    "API data is not used for training by default.": "Data API tidak digunakan untuk latihan secara lalai.",
+    "API data is not used for training by default; may be kept briefly for abuse monitoring.": "Data API tidak digunakan untuk latihan secara lalai; mungkin disimpan seketika untuk pemantauan penyalahgunaan.",
+    "Processed and stored in China; trains on API data unless you opt out; no zero-retention option.": "Diproses dan disimpan di China; melatih model dengan data API melainkan anda memilih keluar; tiada pilihan simpanan sifar.",
+    "Free tier: Google uses prompts to improve its products; paid tier does not.": "Peringkat percuma: Google menggunakan gesaan untuk menambah baik produknya; peringkat berbayar tidak.",
+    "OpenRouter keeps no prompts; free endpoints may log or train - keep 'Require zero data retention' on.": "OpenRouter tidak menyimpan gesaan; titik akhir percuma mungkin merekod atau melatih - biarkan 'Wajibkan simpanan data sifar' dihidupkan.",
+    "Check data retention on your plan.": "Semak simpanan data pada pelan anda.",
+    "Runs on your own server; nothing leaves.": "Berjalan di pelayan anda sendiri; tiada apa yang keluar.",
+    "Check this provider's data policy.": "Semak dasar data penyedia ini.",
 }

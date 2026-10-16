@@ -537,7 +537,10 @@ async def test_reports_and_the_company_overview(client, llm, temporal):
     s = (await client.post("/api/overview/summary?days=7", json={}, headers=csrf(client))).json()
     assert "Maju" in s["text"] and s["cached"] is False
     prompt = llm.requests[-1]["messages"][1]["content"]
-    assert "Maju Sdn Bhd" in prompt and "tender 1" in prompt and "HYPERLINK" not in prompt
+    assert "tender 1" in prompt and "HYPERLINK" not in prompt
+    # P33: the cloud model gets the company as a placeholder (one of our own: OURCO); the
+    # summary comes back real.
+    assert "Maju Sdn Bhd" not in prompt and "[OURCO_" in prompt
     again = (
         await client.post("/api/overview/summary?days=7", json={}, headers=csrf(client))
     ).json()

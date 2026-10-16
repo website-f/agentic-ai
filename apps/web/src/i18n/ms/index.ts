@@ -17,6 +17,7 @@ import { LIBRARY } from "./library";
 import { MINUTES } from "./minutes";
 import { MY_AI } from "./my-ai";
 import { PEOPLE } from "./people";
+import { PRIVACY } from "./privacy";
 import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
 import { SEARCH } from "./search";
@@ -45,4 +46,5 @@ export const MS: Record<string, string> = {
   ...TASKS_FLOW,
   ...MY_AI,
   ...COMPUTERS,
+  ...PRIVACY,
 };

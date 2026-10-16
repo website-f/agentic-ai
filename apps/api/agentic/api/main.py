@@ -252,6 +252,7 @@ for r in (
     org.router,
     audit_log.router,
     ai_engine.router,
+    ai_engine.privacy_router,  # P33: /api/ai-engine/privacy
     agents.router,
     sops.router,
     tasks.router,

@@ -24,11 +24,22 @@ import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { SwitchField } from "@/components/ui/switch";
 import { msg, t as tr, useLang, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import {
+  DATA_LEVELS,
+  dataLevelOf,
+  LEVEL_HINT,
+  LEVEL_LABEL,
+  LOCAL_ONLY_LIMIT,
+  patchBranchDataLevel,
+  privacyKeys,
+  type DataLevel,
+} from "@/lib/privacy";
 import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import type { Branch, Department } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -248,6 +259,47 @@ function AddDepartment({ branchId }: { branchId: string }) {
   );
 }
 
+/**
+ * P33: which AI providers may see this company's work. Standard masks private details for any
+ * provider; Confidential keeps to trusted providers; Local only never leaves the server.
+ */
+function DataProtection({ branch, canManage }: { branch: Branch & { data_level?: DataLevel | null }; canManage: boolean }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: (level: DataLevel) => patchBranchDataLevel(branch.id, level),
+    onSuccess: (_r, level) => {
+      qc.invalidateQueries({ queryKey: keys.branches });
+      qc.invalidateQueries({ queryKey: privacyKeys.settings });
+      toast.success(t("{name} is now {level}.", { name: branch.name, level: t(LEVEL_LABEL[level]) }));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  // Older API builds do not send a data level: nothing to show yet.
+  if (!("data_level" in branch)) return null;
+  const level = save.isPending && save.variables ? save.variables : dataLevelOf(branch);
+  return (
+    <div className="grid gap-2 border-t border-border px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,15rem)] sm:items-start sm:gap-4 sm:px-5">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-[13.5px] font-medium">
+          <ShieldCheckIcon size={15} weight="duotone" className="shrink-0 text-accent" /> {t("Data protection")}
+        </p>
+        <p className="text-[12.5px] text-muted">{t(LEVEL_HINT[level])}</p>
+        {level === "local_only" ? <p className="mt-1 text-[12.5px] text-warn">{t(LOCAL_ONLY_LIMIT)}</p> : null}
+      </div>
+      <Select
+        size="sm"
+        label={t("Data protection for {name}", { name: branch.name })}
+        value={level}
+        disabled={!canManage || save.isPending}
+        onValueChange={(v) => v !== dataLevelOf(branch) && save.mutate(v as DataLevel)}
+        options={DATA_LEVELS.map((l) => ({ value: l, label: t(LEVEL_LABEL[l]), hint: t(LEVEL_HINT[l]) }))}
+        className="w-full"
+      />
+    </div>
+  );
+}
+
 function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: boolean; guide?: string }) {
   const t = useT();
   const [edit, setEdit] = useState(false);
@@ -279,6 +331,11 @@ function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: b
             ) : (
               <Pill>{t("Shared knowledge")}</Pill>
             )}
+            {dataLevelOf(branch) !== "standard" ? (
+              <Pill tone={dataLevelOf(branch) === "local_only" ? "warn" : "info"}>
+                <ShieldCheckIcon size={12} weight="bold" /> {t(LEVEL_LABEL[dataLevelOf(branch)])}
+              </Pill>
+            ) : null}
           </div>
         </div>
         {canManage ? (
@@ -305,6 +362,7 @@ function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: b
         {canManage ? <AddDepartment branchId={branch.id} /> : null}
         {!branch.departments.length && !canManage ? <p className="text-[13px] text-muted">{t("No departments yet.")}</p> : null}
       </div>
+      <DataProtection branch={branch} canManage={canManage} />
       {canManage ? (
         <p className="border-t border-border px-4 py-2 text-[12px] text-muted sm:px-5">
           <span className="[@media(hover:hover)]:hidden">{t("Tap the pencil to rename a department.")}</span>

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, media, store
+from . import client, media, privacy, store
 from .client import Usage
 from .errors import Failure
 
@@ -76,6 +76,57 @@ MODEL_SCOPED = frozenset({"forbidden", "rate_limited", "model_not_found"})
 TINY_TASKS = frozenset({"colleague.memory", "file.understand", "browser.digest"})
 
 
+@dataclass
+class _Guard:
+    """P33 for one gateway call: the company's data level and, when masking is on, the
+    detector. A cloud member gets masked messages; the masking of one call is done once and
+    reused by every cloud member it tries (placeholders are stable anyway)."""
+
+    level: str = "standard"
+    branch_id: str | None = None
+    detector: privacy.Detector | None = None
+    _masked: tuple[list[dict[str, Any]], privacy.Masker] | None = None
+
+    def masker(self) -> privacy.Masker | None:
+        return privacy.Masker(self.detector) if self.detector is not None else None
+
+    def masked(
+        self, p: AIProvider, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], privacy.Masker | None]:
+        if self.detector is None or privacy.is_local(p):
+            return messages, None
+        if self._masked is None:
+            m = privacy.Masker(self.detector)
+            out = m.messages(messages)
+            if m.total:  # something was hidden: tell the model how placeholders work
+                out = privacy.with_legend(out)
+            self._masked = (out, m)
+        return self._masked
+
+    def check(self, members: list[dict[str, Any]], providers: dict[str, AIProvider]) -> None:
+        """Raise when the company's level leaves no member that could take the job."""
+        if self.level == "standard":
+            return
+        for m in members:
+            p = providers.get(m["provider_id"])
+            if p is not None and p.enabled and p.api_key_enc and privacy.allowed(p, self.level):
+                return
+        raise GatewayUnavailable(privacy.BLOCKED[self.level], [])
+
+
+async def _guard_for(
+    db: AsyncSession,
+    workspace_id: str,
+    branch_id: str | None,
+    agent_id: str | None,
+    task_id: str | None,
+) -> _Guard:
+    level, branch = await privacy.resolve_level(db, workspace_id, branch_id, agent_id, task_id)
+    return _Guard(
+        level=level, branch_id=branch, detector=await privacy.detector_for(db, workspace_id)
+    )
+
+
 async def chat(
     db: AsyncSession,
     workspace_id: str,
@@ -91,11 +142,17 @@ async def chat(
     agent_id: str | None = None,
     task_id: str | None = None,
     reasoning_effort: str | None = None,
+    branch_id: str | None = None,
     _waited: float = 0.0,
     _skip: frozenset[tuple[str, str]] = frozenset(),
+    _guard: _Guard | None = None,
 ) -> GatewayReply:
     """`reasoning_effort` asks thinking models that support it to think less (or more);
-    background JSON jobs (BACKGROUND_TASKS) get "low" without asking."""
+    background JSON jobs (BACKGROUND_TASKS) get "low" without asking.
+
+    P33: `branch_id` (else the task's or the agent's company) sets the data level that
+    limits which members may be asked; a cloud member is sent masked messages and its reply
+    and tool calls come back with the real values. Callers only ever see real text."""
     if reasoning_effort is None and json_mode and task.startswith(BACKGROUND_TASKS):
         reasoning_effort = "low"
     # Default groups are created lazily; a fresh workspace may not have them yet.
@@ -125,6 +182,8 @@ async def chat(
             )
         ).all()
     }
+    guard = _guard or await _guard_for(db, workspace_id, branch_id, agent_id, task_id)
+    guard.check(g.members, providers)
 
     prefix = prefix_hash(messages, tools)
     attempts: list[dict[str, Any]] = []
@@ -139,6 +198,9 @@ async def chat(
             continue
         if p is None:
             attempts.append({"member": label, "skipped": "provider was removed"})
+            continue
+        if not privacy.allowed(p, guard.level):
+            attempts.append({"member": label, "skipped": privacy.SKIPPED[guard.level]})
             continue
         if not p.enabled:
             attempts.append({"member": label, "skipped": "provider is turned off"})
@@ -171,11 +233,13 @@ async def chat(
             client.thinks(model_id) or await store.is_reasoning(p.id, model_id)
         )
         budget = max(max_tokens, client.reasoning_floor(json_mode)) if thinker else max_tokens
+        # P33: a cloud member sees placeholders, never the real values.
+        sent, masker = guard.masked(p, messages)
         r = await client.chat(
             p.base_url,
             key,
             model_id,
-            messages,
+            sent,
             max_tokens=budget,
             temperature=temperature,
             json_mode=json_mode,
@@ -184,7 +248,10 @@ async def chat(
             reasoning_effort=reasoning_effort
             if thinker and client.takes_effort(model_id)
             else None,
+            extra_body=privacy.zdr_body() if p.require_zdr else None,
         )
+        if masker is not None:
+            privacy.unmask_result(r, masker.mapping, json_mode=json_mode)
         if r.quirks - known:
             await store.remember_quirks(p.id, model_id, r.quirks - known)
         if r.reasoning_retry:
@@ -221,7 +288,11 @@ async def chat(
             cost=cost,
             agent_id=agent_id,
             task_id=task_id,
-            prefix_hash=prefix,
+            # What the provider caches on is what it was sent (masked for a cloud member).
+            prefix_hash=prefix if masker is None else prefix_hash(sent, tools),
+            masked=masker.total if masker is not None else 0,
+            branch_id=guard.branch_id,
+            data_level=guard.level,
         )
         langfuse.generation(
             workspace_id=workspace_id,
@@ -302,8 +373,10 @@ async def chat(
             agent_id=agent_id,
             task_id=task_id,
             reasoning_effort=reasoning_effort,
+            branch_id=branch_id,
             _waited=_waited + pause,
             _skip=_skip | failed,
+            _guard=guard,
         )
     raise GatewayUnavailable(f"No model in the {g.label} group could answer.", attempts)
 
@@ -413,13 +486,19 @@ async def _walk(
     *,
     task: str,
     unconfigured: str,
-    attempt: Callable[[AIProvider, str, str], Awaitable[_Try]],
+    attempt: Callable[[AIProvider, str, str, privacy.Masker | None], Awaitable[_Try]],
     agent_id: str | None,
     task_id: str | None,
+    branch_id: str | None = None,
 ) -> tuple[_Try, AIProvider, str, list[dict[str, Any]]]:
     """The routing of chat(), for one-shot media calls: members in order, skipping providers
     that are off, keyless or cooling; a failure cools the provider and the next one is asked.
-    No waiting for rate limits: a person is usually waiting on the answer."""
+    No waiting for rate limits: a person is usually waiting on the answer.
+
+    P33: the company's data level limits the members exactly as in chat() (audio and
+    pictures cannot be masked, so a Confidential company's go to trusted providers only and
+    a Local-only company's never leave). `attempt` gets a Masker for a cloud member (None for
+    a local one) to mask the text it sends and unmask what comes back."""
     await store.ensure_default_groups(db, workspace_id)
     g = await db.scalar(
         select(ModelGroup).where(ModelGroup.workspace_id == workspace_id, ModelGroup.name == group)
@@ -437,6 +516,8 @@ async def _walk(
             )
         ).all()
     }
+    guard = await _guard_for(db, workspace_id, branch_id, agent_id, task_id)
+    guard.check(g.members, providers)
     attempts: list[dict[str, Any]] = []
     last = ""
     for member in g.members:
@@ -445,6 +526,9 @@ async def _walk(
         label = f"{p.name if p else 'removed provider'} / {model_id}"
         if p is None:
             attempts.append({"member": label, "skipped": "provider was removed"})
+            continue
+        if not privacy.allowed(p, guard.level):
+            attempts.append({"member": label, "skipped": privacy.SKIPPED[guard.level]})
             continue
         if not p.enabled:
             attempts.append({"member": label, "skipped": "provider is turned off"})
@@ -460,7 +544,8 @@ async def _walk(
         if row is not None and row.stale:
             attempts.append({"member": label, "skipped": "model no longer offered"})
             continue
-        t = await attempt(p, key, model_id)
+        masker = None if privacy.is_local(p) else guard.masker()
+        t = await attempt(p, key, model_id, masker)
         f = t.call.failure
         await store.record_call(
             workspace_id=workspace_id,
@@ -477,6 +562,9 @@ async def _walk(
             cost=t.cost if t.call.ok else None,
             agent_id=agent_id,
             task_id=task_id,
+            masked=masker.total if masker is not None else 0,
+            branch_id=guard.branch_id,
+            data_level=guard.level,
         )
         if t.call.ok:
             attempts.append({"member": label, "ok": True, "latency_ms": t.call.latency_ms})
@@ -515,6 +603,7 @@ async def transcribe(
     agent_id: str | None = None,
     task_id: str | None = None,
     prompt: str | None = None,
+    branch_id: str | None = None,
 ) -> Transcript:
     """Speech to text through the "transcribe" group. `seconds` is the length when the
     caller knows it (refused over 10 minutes; also priced by it when the provider is quiet).
@@ -529,7 +618,10 @@ async def transcribe(
         )
     filename = media.audio_filename(mime)
 
-    async def attempt(p: AIProvider, key: str, model_id: str) -> _Try:
+    async def attempt(
+        p: AIProvider, key: str, model_id: str, masker: privacy.Masker | None
+    ) -> _Try:
+        # The context prompt (earlier words, names) is text: a cloud model gets it masked.
         r = await client.transcribe(
             p.base_url,
             key,
@@ -538,8 +630,12 @@ async def transcribe(
             filename,
             media.bare_mime(mime),
             language,
-            prompt=prompt,
+            prompt=masker.text(prompt) if masker is not None and prompt else prompt,
         )
+        if masker is not None and masker.mapping:
+            r.text = privacy.unmask(r.text, masker.mapping)
+            for s in r.segments:
+                s["text"] = privacy.unmask(s["text"], masker.mapping)
         secs = r.seconds if r.seconds is not None else seconds
         return _Try(r.call, r.usage, media.transcribe_cost(model_id, secs, p.tier), r)
 
@@ -552,6 +648,7 @@ async def transcribe(
         attempt=attempt,
         agent_id=agent_id,
         task_id=task_id,
+        branch_id=branch_id,
     )
     r: client.TranscribeResult = t.value
     return Transcript(
@@ -588,9 +685,10 @@ async def generate_image(
     task: str = "image.generate",
     agent_id: str | None = None,
     task_id: str | None = None,
+    branch_id: str | None = None,
 ) -> Picture:
     """One picture through the "image" group. Raises MediaRejected, NotConfigured or
-    GatewayUnavailable."""
+    GatewayUnavailable. A cloud model gets the prompt masked (P33)."""
     prompt = prompt.strip()
     if not prompt:
         raise MediaRejected("Describe the picture to make.")
@@ -598,17 +696,21 @@ async def generate_image(
     full = prompt if not style or style in ("vivid", "natural") else f"{prompt}\n\nStyle: {style}"
     full = full[:4000]
 
-    async def attempt(p: AIProvider, key: str, model_id: str) -> _Try:
+    async def attempt(
+        p: AIProvider, key: str, model_id: str, masker: privacy.Masker | None
+    ) -> _Try:
         size = media.image_size(model_id, shape)
         r = await client.generate_image(
             p.base_url,
             key,
             model_id,
-            full,
+            masker.text(full) if masker is not None else full,
             size=size,
             quality=media.image_quality(model_id),
             style=style,
         )
+        if masker is not None and masker.mapping:
+            r.revised_prompt = privacy.unmask(r.revised_prompt, masker.mapping)
         if r.call.ok and not picture_type(r.image)[0]:
             r.call.ok = False
             r.call.failure = Failure("bad_response", "The picture came back unreadable.")
@@ -623,6 +725,7 @@ async def generate_image(
         attempt=attempt,
         agent_id=agent_id,
         task_id=task_id,
+        branch_id=branch_id,
     )
     r, size = t.value
     mime, ext = picture_type(r.image)

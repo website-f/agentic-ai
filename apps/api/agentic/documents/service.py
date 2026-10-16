@@ -591,6 +591,7 @@ async def understand(db: AsyncSession, f: DocFile, text: str, hint: str = "") ->
             json_mode=True,
             agent_id=f.agent_id,
             task_id=f.task_id,
+            branch_id=f.branch_id,
         )
     except gateway.GatewayUnavailable:
         return {}

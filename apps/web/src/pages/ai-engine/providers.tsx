@@ -2,6 +2,7 @@ import {
   CheckCircleIcon,
   CpuIcon,
   DotsThreeIcon,
+  HardDrivesIcon,
   ListBulletsIcon,
   PencilSimpleIcon,
   PlayIcon,
@@ -12,6 +13,7 @@ import {
   SnowflakeIcon,
   TrashIcon,
   WarningCircleIcon,
+  WarningIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,8 +28,10 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/compo
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { SwitchField } from "@/components/ui/switch";
 import { locale, msg, useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { isOpenRouter, patchProviderPrivacy, policyTone, privacyKeys } from "@/lib/privacy";
 import { keys } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -130,6 +134,82 @@ function TestDialog({ provider, open, onOpenChange }: { provider: Provider; open
   );
 }
 
+/** P33: what the provider does with prompts, one line under its name; risky policies read as a warning. */
+function PolicyNote({ provider }: { provider: Provider }) {
+  const note = provider.data_policy_note?.trim();
+  if (!note) return null;
+  const warn = policyTone(note, provider.preset) === "warn";
+  return (
+    <p className={cn("mt-1 flex items-start gap-1 text-[12px] break-words", warn ? "text-warn" : "text-muted")}>
+      {warn ? <WarningIcon size={13} weight="fill" className="mt-0.5 shrink-0" /> : null}
+      <span className="min-w-0">{note}</span>
+    </p>
+  );
+}
+
+/** P33: trust for Confidential companies, and OpenRouter's zero-data-retention routing. */
+function ProviderPrivacyControls({ provider, canManage }: { provider: Provider; canManage: boolean }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const patch = useMutation({
+    mutationFn: (body: { trusted?: boolean; require_zdr?: boolean }) => patchProviderPrivacy(provider.id, body),
+    onSuccess: (_r, body) => {
+      qc.invalidateQueries({ queryKey: aiKeys.providers });
+      qc.invalidateQueries({ queryKey: privacyKeys.settings });
+      if (body.trusted !== undefined) {
+        toast.success(
+          body.trusted
+            ? t("{name} can now handle confidential companies.", { name: provider.name })
+            : t("{name} will no longer get work from confidential companies.", { name: provider.name }),
+        );
+      } else {
+        toast.success(
+          body.require_zdr
+            ? t("{name} now routes only to zero-retention endpoints.", { name: provider.name })
+            : t("{name} may route to any endpoint again.", { name: provider.name }),
+        );
+      }
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  // Older API builds do not send the privacy fields: keep the card as it was.
+  if (provider.trusted === undefined && provider.require_zdr === undefined) return null;
+
+  if (provider.tier === "local") {
+    return (
+      <p className="mx-4 mb-3 flex items-start gap-1.5 rounded-sm bg-ok/10 px-2.5 py-1.5 text-[12.5px] text-ok">
+        <HardDrivesIcon size={14} className="mt-0.5 shrink-0" />
+        <span className="min-w-0">{t("Runs on this server. Nothing leaves, so nothing needs masking.")}</span>
+      </p>
+    );
+  }
+  const pending = patch.isPending ? patch.variables : undefined;
+  const trusted = pending?.trusted ?? !!provider.trusted;
+  const zdr = pending?.require_zdr ?? !!provider.require_zdr;
+  return (
+    <div className="grid gap-3 border-t border-border px-4 py-3">
+      <div title={t("No training and no retention, per your agreement with this provider")}>
+        <SwitchField
+          checked={trusted}
+          disabled={!canManage || patch.isPending}
+          onCheckedChange={(v) => patch.mutate({ trusted: v })}
+          label={t("Trusted for confidential data")}
+          hint={t("No training and no retention, per your agreement with this provider")}
+        />
+      </div>
+      {isOpenRouter(provider) ? (
+        <SwitchField
+          checked={zdr}
+          disabled={!canManage || patch.isPending}
+          onCheckedChange={(v) => patch.mutate({ require_zdr: v })}
+          label={t("Require zero data retention")}
+          hint={t("OpenRouter only sends your prompts to model hosts that keep nothing.")}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function ProviderCard({ provider, color, canManage }: { provider: Provider; color: string; canManage: boolean }) {
   const t = useT();
   const qc = useQueryClient();
@@ -165,6 +245,7 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
             {!provider.enabled ? <Pill>{t("Off")}</Pill> : null}
           </div>
           <p className="mt-0.5 truncate font-mono text-[12px] text-muted" title={provider.base_url}>{provider.base_url}</p>
+          <PolicyNote provider={provider} />
         </div>
         {canManage ? (
           <Menu>
@@ -222,6 +303,8 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
           <span className="min-w-0">{provider.last_test_result.summary}</span>
         </p>
       ) : null}
+
+      <ProviderPrivacyControls provider={provider} canManage={canManage} />
 
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border px-4 py-2.5">
         <span className="min-w-0 flex-1 text-[12px] text-muted">

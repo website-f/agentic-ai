@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
+from ...engine import privacy
 from ...models import Branch, Department
 from ...org import starter
 from ...services import audit, events
@@ -42,6 +43,7 @@ def _branch_out(b: Branch) -> BranchOut:
         created_at=b.created_at,
         departments=[_dept_out(d) for d in b.departments],
         industry=b.industry or "",
+        data_level=b.data_level or "standard",
     )
 
 
@@ -175,6 +177,7 @@ async def create_branch(
         after={"name": name, "departments": len(seeded), "industry": industry or None},
     )
     await db.commit()
+    privacy.invalidate(principal.workspace_id)  # the new company's name is masked at once
     if not body.starter_team:
         return _branch_out(await _reload(db, b.id))
     # The team goes in after the branch is saved, so the departments it reuses exist.
@@ -194,14 +197,21 @@ async def update_branch(
     db: AsyncSession = Depends(get_db),
 ) -> BranchOut:
     b = await _branch(db, principal.workspace_id, branch_id)
-    before = {"name": b.name, "color": b.color, "isolated": b.isolated}
+    before = {
+        "name": b.name,
+        "color": b.color,
+        "isolated": b.isolated,
+        "data_level": b.data_level,
+    }
     if body.name is not None:
         b.name = body.name.strip()
     if body.color is not None:
         b.color = body.color
     if body.isolated is not None:
         b.isolated = body.isolated
-    after = {"name": b.name, "color": b.color, "isolated": b.isolated}
+    if body.data_level is not None:
+        b.data_level = body.data_level  # P33: which AI providers may see its work
+    after = {"name": b.name, "color": b.color, "isolated": b.isolated, "data_level": b.data_level}
     await audit.record(
         db,
         principal.workspace_id,
@@ -212,6 +222,7 @@ async def update_branch(
         after=after,
     )
     await db.commit()
+    privacy.invalidate(principal.workspace_id)  # a renamed company is masked by its new name
     return _branch_out(await _reload(db, b.id))
 
 

@@ -114,6 +114,7 @@ async def _fill_local(db: AsyncSession, workspace_id: str, rows: list[ModelGroup
             tier="local",
             priority=990,
             enabled=True,
+            trusted=True,  # P33: nothing it is sent leaves this server
         )
         db.add(p)
         await db.flush()
@@ -164,6 +165,9 @@ async def record_call(
     agent_id: str | None = None,
     task_id: str | None = None,
     prefix_hash: str | None = None,
+    masked: int = 0,
+    branch_id: str | None = None,
+    data_level: str | None = None,
 ) -> None:
     """Own session, so a failed call is still logged even if the caller rolls back."""
     try:
@@ -189,6 +193,9 @@ async def record_call(
                     error_class=error_class,
                     error_detail=(error_detail or "")[:500] or None,
                     prefix_hash=prefix_hash,
+                    masked=masked,
+                    branch_id=branch_id,
+                    data_level=data_level,
                 )
             )
             await db.commit()

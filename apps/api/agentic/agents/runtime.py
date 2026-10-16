@@ -1067,6 +1067,7 @@ async def run_task_step(task_id: str) -> StepResult:
                     max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,
                     task_id=task.id,
+                    branch_id=task.branch_id or agent.branch_id,
                 )
             except gateway.GatewayUnavailable as e:
                 why = "; ".join(
@@ -1585,7 +1586,14 @@ async def _backup_reply(
     ]
     try:
         r = await gateway.chat(
-            db, ws.id, "local", msgs, task="agent.chat.backup", max_tokens=400, agent_id=agent.id
+            db,
+            ws.id,
+            "local",
+            msgs,
+            task="agent.chat.backup",
+            max_tokens=400,
+            agent_id=agent.id,
+            branch_id=agent.branch_id,
         )
     except gateway.GatewayUnavailable:
         return None
@@ -1730,6 +1738,7 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                 ),
                 max_tokens=1600 if last else 1200,
                 agent_id=agent.id,
+                branch_id=agent.branch_id,
             )
         except gateway.GatewayUnavailable:
             backup = await _backup_reply(db, ws, agent, history)
@@ -1869,6 +1878,7 @@ async def chat_once(db: AsyncSession, agent: Agent, convo: list[dict[str, Any]])
                 tools=offered_tools(agent),
                 max_tokens=1200,
                 agent_id=agent.id,
+                branch_id=agent.branch_id,
             )
         finally:
             await agent_thinking(agent, False)

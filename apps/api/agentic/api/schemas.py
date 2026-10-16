@@ -137,6 +137,8 @@ class BranchOut(BaseModel):
     created_at: datetime
     departments: list[DepartmentOut]
     industry: str = ""
+    # P33: standard | confidential | local_only (which AI providers may see its work).
+    data_level: str = "standard"
     # Set on create with starter_team: the agents added (org/starter.py StarterResult).
     starter: dict | None = None
 
@@ -159,6 +161,7 @@ class BranchUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     color: str | None = Field(default=None, pattern=HEX_COLOR)
     isolated: bool | None = None
+    data_level: Literal["standard", "confidential", "local_only"] | None = None
 
 
 class DepartmentCreateIn(BaseModel):

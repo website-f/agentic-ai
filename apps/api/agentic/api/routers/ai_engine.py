@@ -14,9 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import SessionLocal, get_db
 from ...core.ssrf import BlockedURL, guard_url
 from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
-from ...engine import cache_health, client, gateway, media, store, tester
-from ...engine.presets import BY_ID, PRESETS, PRIMARY
-from ...models import Agent, AIModel, AIProvider, LLMCall, ModelGroup, ProviderCheck, Workspace
+from ...engine import cache_health, client, gateway, media, privacy, store, tester
+from ...engine.presets import BY_ID, PRESETS, PRIMARY, data_policy_note, preset_of
+from ...i18n import tr
+from ...models import (
+    Agent,
+    AIModel,
+    AIProvider,
+    Branch,
+    LLMCall,
+    ModelGroup,
+    ProviderCheck,
+    Workspace,
+)
 from ...services import audit
 from ..ai_schemas import (
     AISettingsOut,
@@ -32,6 +42,13 @@ from ..ai_schemas import (
     PlaygroundIn,
     PlaygroundOut,
     PresetOut,
+    PrivacyCategories,
+    PrivacyCompany,
+    PrivacyOut,
+    PrivacyPreviewIn,
+    PrivacyPreviewOut,
+    PrivacyProviderUse,
+    PrivacyUpdateIn,
     ProviderCreateIn,
     ProviderOut,
     ProviderUpdateIn,
@@ -40,6 +57,9 @@ from ..ai_schemas import (
 from ..deps import Principal, api_error, require
 
 router = APIRouter(prefix="/api/ai", tags=["ai-engine"])
+# P33: the privacy settings live under /api/ai-engine/privacy (the web's contract); the same
+# endpoints answer under /api/ai/privacy too, next to the rest of the AI Engine.
+privacy_router = APIRouter(prefix="/api/ai-engine", tags=["ai-engine"])
 
 
 # ------------------------------------------------------------------ helpers
@@ -99,6 +119,9 @@ async def _provider_out(db: AsyncSession, p: AIProvider) -> ProviderOut:
         recent_checks=[
             CheckOut(ts=c.ts, ok=c.ok, latency_ms=c.latency_ms) for c in reversed(checks)
         ],
+        trusted=bool(p.trusted) or privacy.is_local(p),
+        require_zdr=bool(p.require_zdr),
+        data_policy_note=tr(data_policy_note(p.preset, p.base_url, p.tier)),
     )
 
 
@@ -193,6 +216,8 @@ async def create_provider(
 ) -> ProviderOut:
     await _guard(body.base_url)
     preset = BY_ID.get(body.preset or "")
+    # P33: trust and zero data retention start as the preset (or its address) says.
+    known = preset_of(body.preset, body.base_url)
     next_priority = (
         await db.scalar(
             select(func.max(AIProvider.priority)).where(
@@ -209,6 +234,8 @@ async def create_provider(
         tier=body.tier,
         enabled=body.enabled,
         priority=next_priority,
+        trusted=body.tier == "local" or bool(known and known.trusted),
+        require_zdr=bool(known and known.require_zdr),
     )
     db.add(p)
     await db.flush()  # assigns the id the key is bound to
@@ -250,6 +277,8 @@ async def update_provider(
         "tier": p.tier,
         "enabled": p.enabled,
         "key": p.key_hint,
+        "trusted": p.trusted,
+        "require_zdr": p.require_zdr,
     }
     new_key = (body.api_key or "").strip()
     if body.base_url and body.base_url != p.base_url:
@@ -276,12 +305,18 @@ async def update_provider(
         p.tier = body.tier
     if body.enabled is not None:
         p.enabled = body.enabled
+    if body.trusted is not None:
+        p.trusted = body.trusted
+    if body.require_zdr is not None:
+        p.require_zdr = body.require_zdr
     after = {
         "name": p.name,
         "base_url": p.base_url,
         "tier": p.tier,
         "enabled": p.enabled,
         "key": p.key_hint,
+        "trusted": p.trusted,
+        "require_zdr": p.require_zdr,
     }
     await audit.record(
         db,
@@ -770,3 +805,120 @@ async def cache_health_report(
         "flagged": sum(1 for g in groups if g["flags"]),
         "groups": groups,
     }
+
+
+# ------------------------------------------------------------------ privacy (P33)
+
+
+async def _privacy_out(db: AsyncSession, workspace_id: str) -> PrivacyOut:
+    ws = await _workspace(db, workspace_id)
+    s = privacy.privacy_settings(ws.settings)
+    since = datetime.now(UTC) - timedelta(days=30)
+    trusted = {
+        p.id: bool(p.trusted) or privacy.is_local(p)
+        for p in (
+            await db.scalars(select(AIProvider).where(AIProvider.workspace_id == workspace_id))
+        ).all()
+    }
+    use: dict[str, list[PrivacyProviderUse]] = {}
+    for r in await db.execute(
+        select(
+            LLMCall.branch_id,
+            LLMCall.provider_id,
+            LLMCall.provider_name,
+            func.count().label("calls"),
+            func.coalesce(func.sum(LLMCall.masked), 0).label("masked"),
+        )
+        .where(
+            LLMCall.workspace_id == workspace_id,
+            LLMCall.ts >= since,
+            LLMCall.branch_id.is_not(None),
+        )
+        .group_by(LLMCall.branch_id, LLMCall.provider_id, LLMCall.provider_name)
+        .order_by(func.count().desc())
+    ):
+        use.setdefault(r.branch_id, []).append(
+            PrivacyProviderUse(
+                provider_id=r.provider_id,
+                name=r.provider_name,
+                trusted=trusted.get(r.provider_id or "", False),
+                calls=int(r.calls),
+                masked=int(r.masked or 0),
+            )
+        )
+    branches = (
+        await db.scalars(
+            select(Branch).where(Branch.workspace_id == workspace_id).order_by(Branch.created_at)
+        )
+    ).all()
+    return PrivacyOut(
+        masking=s["masking"],
+        categories=PrivacyCategories(**s["categories"]),
+        companies=[
+            PrivacyCompany(
+                branch_id=b.id,
+                name=b.name,
+                data_level=b.data_level or "standard",
+                providers_30d=use.get(b.id, []),
+            )
+            for b in branches
+        ],
+    )
+
+
+async def get_privacy(
+    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+) -> PrivacyOut:
+    """Masking on/off, what is masked, and each company's data level with the providers that
+    did its work in the last 30 days."""
+    return await _privacy_out(db, principal.workspace_id)
+
+
+async def update_privacy(
+    body: PrivacyUpdateIn,
+    principal: Principal = Depends(require("engine.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> PrivacyOut:
+    ws = await _workspace(db, principal.workspace_id)
+    before = privacy.privacy_settings(ws.settings)
+    after = {"masking": before["masking"], "categories": dict(before["categories"])}
+    if body.masking is not None:
+        after["masking"] = body.masking
+    if body.categories is not None:
+        for k, v in body.categories.model_dump(exclude_none=True).items():
+            after["categories"][k] = v
+    ws.settings = {**(ws.settings or {}), "privacy": after}
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "ai.privacy_updated",
+        target=ws.id,
+        before=before,
+        after=after,
+    )
+    await db.commit()
+    privacy.invalidate(principal.workspace_id)
+    return await _privacy_out(db, principal.workspace_id)
+
+
+async def preview_privacy(
+    body: PrivacyPreviewIn,
+    principal: Principal = Depends(require("engine.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> PrivacyPreviewOut:
+    """What a cloud AI provider would be sent for this text."""
+    if body.branch_id:
+        b = await db.get(Branch, body.branch_id)
+        if b is None or b.workspace_id != principal.workspace_id:
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "branch_not_found", "That branch is not here."
+            )
+    masked, counts = await privacy.preview(db, principal.workspace_id, body.text)
+    return PrivacyPreviewOut(masked=masked, counts=counts)
+
+
+for _r in (router, privacy_router):
+    _r.add_api_route("/privacy", get_privacy, methods=["GET"])
+    _r.add_api_route("/privacy", update_privacy, methods=["PUT"])
+    _r.add_api_route("/privacy/preview", preview_privacy, methods=["POST"])

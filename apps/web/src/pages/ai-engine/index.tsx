@@ -11,18 +11,20 @@ import { meQuery } from "@/lib/queries";
 import { groupsQuery, providersQuery } from "./data";
 import { GroupsTab } from "./groups";
 import { PlaygroundTab } from "./playground";
+import { PrivacyTab } from "./privacy";
 import { ProvidersTab } from "./providers";
 import { SettingsTab } from "./settings";
 
 // Charts (Recharts) load only when the Usage tab is opened.
 const UsageTab = lazy(() => import("./usage").then((m) => ({ default: m.UsageTab })));
 
-export const AI_TABS = ["providers", "groups", "usage", "playground", "settings"] as const;
+export const AI_TABS = ["providers", "groups", "privacy", "usage", "playground", "settings"] as const;
 export type AITab = (typeof AI_TABS)[number];
 
 const LABELS: Record<AITab, string> = {
   providers: msg("Providers"),
   groups: msg("Model groups"),
+  privacy: msg("Privacy"),
   usage: msg("Usage"),
   playground: msg("Playground"),
   settings: msg("Settings"),
@@ -56,6 +58,7 @@ export function AIEnginePage() {
       <div role="tabpanel" aria-label={t(LABELS[tab])} className="min-w-0 outline-none">
         {tab === "providers" ? <ProvidersTab canManage={canManage} /> : null}
         {tab === "groups" ? <GroupsTab canManage={canManage} /> : null}
+        {tab === "privacy" ? <PrivacyTab canManage={canManage} canSetLevels={me.permissions.includes("org.manage")} /> : null}
         {tab === "usage" ? (
           <Suspense fallback={<Skeleton className="h-72 rounded-[var(--radius-md)]" />}>
             <UsageTab />
