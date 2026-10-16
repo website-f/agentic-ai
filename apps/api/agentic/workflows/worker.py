@@ -61,6 +61,7 @@ from .minutes_activities import (
     minutes_write,
 )
 from .minutes_workflows import MeetingMinutesWorkflow, MinutesPurgeWorkflow
+from .money_workflows import MoneyRemindersWorkflow, money_reminders
 from .reconcile_activities import liveness_reconcile
 from .reconcile_workflows import LivenessReconcileWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
@@ -108,6 +109,7 @@ WORKFLOWS = [
     WhatsAppInboundWorkflow,
     MailPendingWorkflow,
     MailSyncTickWorkflow,
+    MoneyRemindersWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -154,6 +156,7 @@ ACTIVITIES = [
     intake_fail,
     mail_pending,
     mail_tick,
+    money_reminders,
 ]
 
 
@@ -172,6 +175,8 @@ async def ensure_schedules(client: Client) -> None:
         # P34: Outlook mail: drain webhook work, renew subscriptions, poll every 3 min when
         # webhooks are unavailable (microsoft/sync.py).
         ("mail-sync", MailSyncTickWorkflow.run, timedelta(minutes=1)),
+        # P35: payment-reminder drafts for receivables on their reminder days (crm/reminders).
+        ("money-reminders", MoneyRemindersWorkflow.run, timedelta(hours=1)),
     ]
     for schedule_id, run, every in jobs:
         try:

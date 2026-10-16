@@ -23,6 +23,7 @@ from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
+from ..crm.access import MONEY_TOOLS, explicit_money, money_ready
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
 from ..engine import gateway
@@ -482,13 +483,16 @@ def offered_tools(
     mcp: bool = False,
     pc: bool = False,
     mail: bool = False,
+    finance: bool = False,
 ) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
     delegate only for orchestrators above their depth cap. The MCP bridge is shown only when
     the workspace has a connected MCP server, so offices that use none pay no prompt tokens.
     The PC tools (P31) only when `pc` (devices.core.pc_ready: the person's own AI, with a
     linked computer). The Outlook tools (P34) only when `mail` (microsoft.access.mail_ready:
-    its person's own Outlook, or a shared mailbox assigned to it)."""
+    its person's own Outlook, or a shared mailbox assigned to it). The money tools (P35)
+    only when `finance` (crm.access.money_ready: an agent in a finance department) or a
+    person gave the agent that tool on purpose."""
     out = []
     for n, mode in modes_for(agent).items():
         if mode == "deny" or n in GLOBAL_DENY:
@@ -504,6 +508,8 @@ def offered_tools(
         if n in PC_TOOLS and not (pc and pc_personal(agent)):  # their own computer (P31)
             continue
         if n in MAIL_TOOLS and not mail:  # a mailbox it may use (P34)
+            continue
+        if n in MONEY_TOOLS and not (finance or explicit_money(agent, n)):  # P35
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
@@ -1076,6 +1082,7 @@ async def run_task_step(task_id: str) -> StepResult:
                         mcp=await _has_mcp(db, ws.id),
                         pc=await pc_ready(db, agent),
                         mail=await mail_ready(db, agent),
+                        finance=await money_ready(db, agent),
                     ),
                     max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,
@@ -1751,6 +1758,7 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
                     mcp=await _has_mcp(db, ws.id),
                     pc=await pc_ready(db, agent),
                     mail=await mail_ready(db, agent),
+                    finance=await money_ready(db, agent),
                 ),
                 max_tokens=1600 if last else 1200,
                 agent_id=agent.id,
@@ -1891,7 +1899,7 @@ async def chat_once(db: AsyncSession, agent: Agent, convo: list[dict[str, Any]])
                 agent.model_group,
                 messages,
                 task="agent.api",
-                tools=offered_tools(agent),
+                tools=offered_tools(agent, finance=await money_ready(db, agent)),
                 max_tokens=1200,
                 agent_id=agent.id,
                 branch_id=agent.branch_id,

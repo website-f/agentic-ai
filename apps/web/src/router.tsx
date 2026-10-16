@@ -79,6 +79,10 @@ const page = {
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
   computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
+  contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
+  contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
+  deals: lazyRouteComponent(() => import("@/pages/deals"), "DealsPage"),
+  money: lazyRouteComponent(() => import("@/pages/money"), "MoneyPage"),
 };
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -581,6 +585,46 @@ const mailRoute = createRoute({
   component: page.mail,
 });
 
+// P35 Business: contacts (customers, suppliers), the sales pipeline, and money owed both ways.
+const CONTACT_ROLES = ["customer", "supplier", "partner", "lead"] as const;
+const contactsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts",
+  validateSearch: (s: Record<string, unknown>): { q?: string; role?: (typeof CONTACT_ROLES)[number]; new?: number; import?: number } => ({
+    q: str(s.q), role: CONTACT_ROLES.find((r) => r === s.role), new: num(s.new), import: num(s.import),
+  }),
+  component: page.contacts,
+});
+const CONTACT_TABS = ["overview", "timeline", "deals", "money"] as const;
+const contactDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/$partyId",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof CONTACT_TABS)[number] } => ({ tab: CONTACT_TABS.find((x) => x === s.tab) }),
+  component: page.contactDetail,
+});
+// deal opens one deal's sheet; new=1 (with party) opens the new-deal form.
+const dealsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/deals",
+  validateSearch: (s: Record<string, unknown>): { deal?: string; new?: number; party?: string } => ({ deal: str(s.deal), new: num(s.new), party: str(s.party) }),
+  component: page.deals,
+});
+// Needs finance.view. doc opens one invoice or bill; new=invoice|bill (with party) opens a form.
+const moneyRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/money",
+  validateSearch: (s: Record<string, unknown>): { tab?: "receivable" | "payable"; doc?: string; new?: "invoice" | "bill"; party?: string } => ({
+    tab: s.tab === "receivable" || s.tab === "payable" ? s.tab : undefined,
+    doc: str(s.doc),
+    new: s.new === "invoice" || s.new === "bill" ? s.new : undefined,
+    party: str(s.party),
+  }),
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("finance.view")) throw redirect({ to: "/contacts" });
+  },
+  component: page.money,
+});
+
 const objectivesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/objectives",
@@ -681,6 +725,10 @@ const routeTree = rootRoute.addChildren([
     searchRoute,
     computersRoute,
     mailRoute,
+    contactsRoute,
+    contactDetailRoute,
+    dealsRoute,
+    moneyRoute,
   ]),
 ]);
 

@@ -558,6 +558,7 @@ async def test_admin_consent_then_shared_mailbox_rbac_403(client, llm, temporal,
         "save_attachments": True,
         "digest": {"enabled": True, "time": "08:00"},
         "follow_up_hours": 48,
+        "capture_bills": True,
     }
     assert mb["webhooks"] == "polling" and mb["status"] == "active"
     async with SessionLocal() as db:

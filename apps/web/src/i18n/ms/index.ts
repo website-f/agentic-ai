@@ -8,6 +8,7 @@ import { BUILDERS } from "./builders";
 import { CHAT } from "./chat";
 import { COMMON } from "./common";
 import { COMPUTERS } from "./computers";
+import { CRM } from "./crm";
 import { DESK } from "./desk";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
@@ -49,4 +50,5 @@ export const MS: Record<string, string> = {
   ...COMPUTERS,
   ...PRIVACY,
   ...MICROSOFT,
+  ...CRM,
 };

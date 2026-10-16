@@ -9,9 +9,11 @@ import { create } from "zustand";
 import { t } from "@/i18n";
 
 import { brainKeys } from "./brain";
+import { dealKeys, partyKeys } from "./crm";
 import { deviceKeys } from "./devices";
 import { learningKeys } from "./learning";
 import { mailKeys } from "./microsoft";
+import { moneyKeys } from "./money";
 import { objectiveKeys } from "./objectives";
 import { keys } from "./queries";
 import { teamKeys } from "./teams";
@@ -107,6 +109,11 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   // Sorted / turned into a task / a draft or follow-up added; the daily report was written.
   "mail.updated": [mailKeys.all, ["email-drafts"], ["calendar-drafts"], workKeys.tasks],
   "mail.digest": [mailKeys.all, ["reports"]],
+  // P35: a contact changed (or its timeline grew); a deal moved; an invoice or bill changed
+  // (captured, approved, paid, voided). Contact pages show deals and balances, so they refresh too.
+  "party.updated": [partyKeys.all],
+  "deal.updated": [dealKeys.all, partyKeys.all],
+  "money.updated": [moneyKeys.all, partyKeys.all],
 };
 
 export function useLiveEvents() {

@@ -1,6 +1,7 @@
 """SQLAlchemy models. Every tenant-owned row carries workspace_id; queries filter on it."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -22,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from ..core.db import Base, Timestamps
@@ -110,6 +111,9 @@ class Branch(Timestamps, Base):
     data_level: Mapped[str] = mapped_column(
         String(16), default="standard", server_default="standard"
     )
+    # P35: payment reminders for this company's receivables (crm/reminders.py):
+    # {"enabled": bool, "days": [-3, 1, 7, 14, 30], "channel": "email"}. None = the defaults.
+    reminder_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     departments: Mapped[list["Department"]] = relationship(
         back_populates="branch",
@@ -2026,3 +2030,215 @@ class DeviceActivity(Base):
     ts: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# ---------------------------------------------------------------- P35 customers, deals, money
+
+
+class Party(Timestamps, Base):
+    """P35: a customer, supplier, partner or lead (a company or a person). branch_id None =
+    shared by every company of the workspace; else it belongs to that company. `name_key` is
+    the name normalised for matching (crm/service.name_key). `external` holds the ids an
+    accounting system knows it by ({"xero": "...", "bukku": ...})."""
+
+    __tablename__ = "parties"
+    __table_args__ = (
+        CheckConstraint("kind IN ('company', 'person')", name="ck_parties_kind"),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_parties_status"),
+        CheckConstraint(
+            "source IN ('manual', 'email', 'import', 'accounting')", name="ck_parties_source"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("pt"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(10), default="company")
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String(16)), default=list)
+    name: Mapped[str] = mapped_column(String(200))
+    name_key: Mapped[str] = mapped_column(String(200), default="")
+    legal_name: Mapped[str] = mapped_column(String(200), default="")
+    reg_no: Mapped[str] = mapped_column(String(60), default="")
+    tin: Mapped[str] = mapped_column(String(40), default="")
+    sst_no: Mapped[str] = mapped_column(String(40), default="")
+    industry: Mapped[str] = mapped_column(String(80), default="")
+    email: Mapped[str] = mapped_column(String(254), default="")
+    phone: Mapped[str] = mapped_column(String(60), default="")
+    website: Mapped[str] = mapped_column(String(200), default="")
+    # {"lines": [...], "city", "postcode", "state", "country"}
+    address: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    currency: Mapped[str] = mapped_column(String(3), default="MYR")
+    payment_terms_days: Mapped[int] = mapped_column(Integer, default=30)
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    source: Mapped[str] = mapped_column(String(12), default="manual")
+    external: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class PartyContact(Timestamps, Base):
+    """P35: a person at a party (the accounts clerk, the buyer)."""
+
+    __tablename__ = "party_contacts"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("pc"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(120), default="")
+    email: Mapped[str] = mapped_column(String(254), default="")
+    phone: Mapped[str] = mapped_column(String(60), default="")
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class Deal(Timestamps, Base):
+    """P35: a sale in the pipeline, from lead to won or lost."""
+
+    __tablename__ = "deals"
+    __table_args__ = (
+        CheckConstraint(
+            "stage IN ('lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost')",
+            name="ck_deals_stage",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dl"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(200))
+    value: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    currency: Mapped[str] = mapped_column(String(3), default="MYR")
+    stage: Mapped[str] = mapped_column(String(12), default="lead")
+    probability: Mapped[int] = mapped_column(Integer, default=10)
+    expected_close: Mapped[date | None] = mapped_column(Date)
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    source: Mapped[str] = mapped_column(String(40), default="")
+    next_step: Mapped[str] = mapped_column(String(300), default="")
+    next_step_due: Mapped[date | None] = mapped_column(Date)
+    lost_reason: Mapped[str] = mapped_column(String(300), default="")
+    position: Mapped[float] = mapped_column(Float, default=0)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class MoneyDoc(Timestamps, Base):
+    """P35: money owed to us (receivable: our invoice) or by us (payable: a supplier's bill),
+    for one of our companies (branch_id). "Overdue" is computed, never stored. Bills captured
+    from email wait for a person (awaiting_approval); `duplicate_of` points at the bill it
+    looks like. `reminders`: the payment reminders made for it ([{"step", "at", ...}])."""
+
+    __tablename__ = "money_docs"
+    __table_args__ = (
+        CheckConstraint("direction IN ('receivable', 'payable')", name="ck_money_docs_direction"),
+        CheckConstraint(
+            "status IN ('draft', 'awaiting_approval', 'approved', 'sent', 'partially_paid',"
+            " 'paid', 'void')",
+            name="ck_money_docs_status",
+        ),
+        CheckConstraint(
+            "source IN ('manual', 'document', 'email', 'upload', 'accounting')",
+            name="ck_money_docs_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("iv"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    branch_id: Mapped[str] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
+    direction: Mapped[str] = mapped_column(String(12))
+    number: Mapped[str] = mapped_column(String(60), default="")
+    reference: Mapped[str] = mapped_column(String(120), default="")
+    issue_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date)
+    currency: Mapped[str] = mapped_column(String(3), default="MYR")
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    tax_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    amount_paid: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    # [{"description", "qty", "unit_price", "tax_rate", "amount"}]
+    lines: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id", ondelete="SET NULL"))
+    mail_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("mail_items.id", ondelete="SET NULL")
+    )
+    source: Mapped[str] = mapped_column(String(12), default="manual")
+    external: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    approved_by: Mapped[str | None] = mapped_column(String(80))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duplicate_of: Mapped[str | None] = mapped_column(
+        ForeignKey("money_docs.id", ondelete="SET NULL")
+    )
+    # The approval task made for a captured bill (closed when it is approved or voided).
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    reminders: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class Payment(Base):
+    """P35: money that moved against a money doc (recorded by a person with finance.manage)."""
+
+    __tablename__ = "payments"
+    __table_args__ = (
+        CheckConstraint(
+            "method IN ('bank_transfer', 'duitnow', 'fpx', 'cash', 'cheque', 'card', 'online',"
+            " 'other')",
+            name="ck_payments_method",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("py"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    money_doc_id: Mapped[str] = mapped_column(
+        ForeignKey("money_docs.id", ondelete="CASCADE"), index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    paid_at: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(16), default="bank_transfer")
+    reference: Mapped[str] = mapped_column(String(120), default="")
+    recorded_by: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Interaction(Base):
+    """P35: one thing that happened with a party (an email, a note, a call, an invoice, a
+    payment, a deal move), newest first on its timeline. Links point at the row it is about;
+    `summary` is short and may be untrusted (an email's subject)."""
+
+    __tablename__ = "interactions"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('email_in', 'email_out', 'note', 'call', 'meeting', 'task', 'document',"
+            " 'invoice', 'payment', 'deal')",
+            name="ck_interactions_kind",
+        ),
+        Index("ix_interactions_party_at", "party_id", "at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(12))
+    mail_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("mail_items.id", ondelete="SET NULL"), index=True
+    )
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
+    document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    money_doc_id: Mapped[str | None] = mapped_column(
+        ForeignKey("money_docs.id", ondelete="SET NULL")
+    )
+    deal_id: Mapped[str | None] = mapped_column(ForeignKey("deals.id", ondelete="SET NULL"))
+    summary: Mapped[str] = mapped_column(String(500), default="")
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    actor: Mapped[str] = mapped_column(String(80))

@@ -5,6 +5,8 @@ The mail features read these; this part only validates and stores them:
 - save_attachments: keep attachments of those mails in the company's files
 - digest: a daily summary at `time` (the workspace's time zone)
 - follow_up_hours: chase mail nobody answered after this many hours (0 = never)
+- capture_bills (P35): a PDF or picture attached to an invoice mail becomes a supplier bill
+  waiting for approval (crm/capture.py)
 
 A person's own Outlook has the same keys in MicrosoftAccount.prefs (PersonalPrefs), with
 quieter defaults: no tasks and no saved attachments unless they turn them on.
@@ -35,6 +37,7 @@ class MailRules(BaseModel):
     save_attachments: bool = True
     digest: DigestRule = Field(default_factory=DigestRule)
     follow_up_hours: int = Field(default=48, ge=0, le=720)
+    capture_bills: bool = True
 
 
 class PersonalPrefs(BaseModel):

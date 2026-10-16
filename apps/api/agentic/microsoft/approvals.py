@@ -15,7 +15,7 @@ discard and confirm is audited.
 import html
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeGuard
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +38,7 @@ def text_to_html(text: str) -> str:
     return "<div>" + html.escape(text or "").replace("\n", "<br>") + "</div>"
 
 
-def is_personal(box: Box) -> bool:
+def is_personal(box: Box) -> TypeGuard[MicrosoftAccount]:
     return isinstance(box, MicrosoftAccount)
 
 
@@ -105,7 +105,7 @@ async def record_draft(
     db: AsyncSession,
     *,
     box: Box,
-    agent: Agent,
+    agent: Agent | None,
     draft: dict[str, Any],
     to: str,
     cc: str,
@@ -113,13 +113,15 @@ async def record_draft(
     body: str,
     original: dict[str, Any] | None = None,
     item: MailItem | None = None,
+    by: str | None = None,
 ) -> EmailDraft:
-    """An Outlook draft the AI made, recorded for approval; the approvers are notified."""
+    """An Outlook draft the AI made (or the office made, P35: a payment reminder; `by` names
+    who then), recorded for approval; the approvers are notified."""
     sender = ((original or {}).get("from") or {}).get("emailAddress") or {}
     row = EmailDraft(
         workspace_id=box.workspace_id,
         user_id=box.user_id if is_personal(box) else None,
-        agent_id=agent.id,
+        agent_id=agent.id if agent is not None else None,
         account_id=None,
         gmail_draft_id=str(draft.get("id") or "")[:400],
         thread_id=str(draft.get("conversationId") or (original or {}).get("conversationId") or "")[
@@ -146,7 +148,7 @@ async def record_draft(
     await _ask(
         db,
         box,
-        Msg("{name} drafted an email", name=agent.name),
+        Msg("{name} drafted an email", name=agent.name if agent is not None else (by or "")),
         Msg(
             "To {to}: {subject}\n\n{preview}\n\nApprove to send it.",
             to=to,

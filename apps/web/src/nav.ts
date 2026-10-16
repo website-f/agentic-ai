@@ -1,4 +1,5 @@
 import {
+  AddressBookIcon,
   BrainIcon,
   BooksIcon,
   BookOpenTextIcon,
@@ -27,11 +28,13 @@ import {
   ChartBarIcon,
   ChartLineUpIcon,
   ClipboardTextIcon,
+  CoinsIcon,
   LockKeyIcon,
   NotepadIcon,
   GaugeIcon,
   GearSixIcon,
   GraduationCapIcon,
+  HandshakeIcon,
   KanbanIcon,
   LightningIcon,
   PlugsConnectedIcon,
@@ -72,6 +75,9 @@ export type AppPath =
   | "/objectives"
   | "/approvals"
   | "/mail"
+  | "/contacts"
+  | "/deals"
+  | "/money"
   | "/chat"
   | "/meetings"
   | "/broadcasts"
@@ -159,6 +165,17 @@ export const NAV: NavSection[] = [
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
       { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
       { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
+    ],
+  },
+  // P35: customers and suppliers, deals in progress, and money owed both ways.
+  {
+    title: msg("Business"),
+    hint: msg("Your customers and suppliers, deals in progress, and the money owed to you and by you."),
+    open: "all",
+    items: [
+      { to: "/contacts", label: msg("Contacts"), icon: AddressBookIcon, blurb: msg("Customers, suppliers, partners and leads: their people, TIN and SSM, every mail, task, invoice and deal with them, and what they owe.") },
+      { to: "/deals", label: msg("Deals"), icon: HandshakeIcon, blurb: msg("The sales pipeline as a board, from lead to won or lost. Drag a deal along as it moves; each stage shows its count and value.") },
+      { to: "/money", label: msg("Money"), icon: CoinsIcon, perm: "finance.view", blurb: msg("Invoices customers owe you and bills you owe suppliers (captured from email), what is overdue, the cash coming in and going out, and payment reminders.") },
     ],
   },
   {

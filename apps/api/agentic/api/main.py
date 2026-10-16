@@ -67,6 +67,9 @@ CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
 # File uploads send raw bytes. A cross-site form cannot send octet-stream either, so the
 # JSON-only guarantee holds; the CSRF token is still checked.
 RAW_UPLOAD_PATHS = {"/api/files", "/api/transcribe"}
+# P35: uploads that may also come as a multipart form (a browser FormData). The CSRF token is
+# still checked on them (a cross-site form cannot set the header).
+MULTIPART_PATHS: set[str] = set()
 WEBHOOK_PREFIX = "/api/whatsapp/hook/"
 # P31: a PC posts file bytes here with its bearer token (never a session cookie).
 RAW_UPLOAD_PREFIXES: tuple[str, ...] = ("/api/devices/uploads/",)
@@ -116,6 +119,10 @@ async def csrf_guard(request: Request, call_next):
             (path in RAW_UPLOAD_PATHS or path.startswith(RAW_UPLOAD_PREFIXES))
             and request.method == "POST"
             and ctype.startswith("application/octet-stream")
+        ) or (
+            path in MULTIPART_PATHS
+            and request.method == "POST"
+            and ctype.startswith("multipart/form-data")
         )
         if not ctype.startswith("application/json") and not raw_ok:
             return _error(415, "json_required", tr("Send requests as application/json."))
@@ -358,3 +365,13 @@ app.include_router(devices_router.router)
 from .routers import microsoft as microsoft_router  # noqa: E402
 
 app.include_router(microsoft_router.router)
+
+# P35: customers and suppliers, the sales pipeline, money owed to and by the companies. A
+# party sheet arrives as raw bytes like /api/files.
+from .routers import money as money_router  # noqa: E402
+from .routers import parties as parties_router  # noqa: E402
+
+RAW_UPLOAD_PATHS.add(parties_router.IMPORT_PATH)
+MULTIPART_PATHS.add(parties_router.IMPORT_PATH)
+app.include_router(parties_router.router)
+app.include_router(money_router.router)

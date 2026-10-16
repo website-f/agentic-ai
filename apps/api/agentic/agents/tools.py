@@ -1392,3 +1392,11 @@ TOOLS.update({t.name: t for t in PC_TOOLS})
 from .mail_tools import MAIL_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in MAIL_TOOLS})
+
+# P35: customers, suppliers and deals (every agent, its own company's), and money (finance
+# agents only: crm/access.MONEY_TOOLS). Approving, paying and voiding are never tools.
+from .crm_tools import CRM_TOOLS  # noqa: E402
+from .money_tools import MONEY_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in CRM_TOOLS})
+TOOLS.update({t.name: t for t in MONEY_TOOLS})

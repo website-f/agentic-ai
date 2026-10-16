@@ -77,7 +77,13 @@ _ADMIN = {
     "channels.manage",
     "vault.manage",
     "assistants.use",
+    "finance.view",
+    "finance.manage",
 }
+
+# P35 "finance.view" / "finance.manage": money owed to and by the companies (invoices, bills,
+# payments, reminders). Owner and admin for the whole workspace; a branch manager for their
+# own company only (api/routers/money.py scopes it). Nobody else sees money.
 
 # P30 "assistants.use": private personal assistants (company pulse, team performance, Gmail,
 # calendar, chasing people) are for people who manage others: owner, admin, branch manager,
@@ -98,6 +104,8 @@ PERMISSIONS: dict[str, frozenset[str]] = {
             "vault.manage",
             "team.manage",
             "assistants.use",
+            "finance.view",
+            "finance.manage",
         }
     ),
     # The same within one department.

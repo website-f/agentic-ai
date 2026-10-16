@@ -1285,4 +1285,143 @@ MS: dict[str, str] = {
     "Newsletters": "Surat berita",
     "Other": "Lain-lain",
     "Not sorted yet": "Belum diisih",
+    # ------------------------------------------------------------ P35 customers, deals, money
+    # Terms as in the app (web i18n/ms/crm.ts): customer = pelanggan, supplier = pembekal,
+    # deal = urusan jualan, invoice = invois, bill = bil, overdue = tertunggak, void = batal.
+    "Find a customer or supplier": "Cari pelanggan atau pembekal",
+    "Read a customer or supplier": "Baca pelanggan atau pembekal",
+    "Add a customer or supplier": "Tambah pelanggan atau pembekal",
+    "Change a customer or supplier": "Ubah pelanggan atau pembekal",
+    "Add a note to a customer": "Tambah nota pada pelanggan",
+    "Log a call, meeting or email": "Rekod panggilan, mesyuarat atau e-mel",
+    "List deals": "Senarai urusan jualan",
+    "Create a deal": "Cipta urusan jualan",
+    "Update a deal": "Kemas kini urusan jualan",
+    "List invoices and bills": "Senarai invois dan bil",
+    "Money summary": "Ringkasan kewangan",
+    "Aging report": "Laporan umur hutang",
+    "Cash-flow forecast": "Ramalan aliran tunai",
+    "Draft an invoice": "Draf invois",
+    "Capture a supplier bill": "Ambil bil pembekal",
+    "Draft a payment reminder": "Draf peringatan bayaran",
+    "That invoice or bill is not here.": "Invois atau bil itu tiada di sini.",
+    "Pick the company this is for.": "Pilih syarikat untuk ini.",
+    "That customer or supplier is not here.": "Pelanggan atau pembekal itu tiada di sini.",
+    "That customer belongs to another company.": "Pelanggan itu milik syarikat lain.",
+    "Invoice {number} drafted: {amount}": "Invois {number} didraf: {amount}",
+    "Bill {number} recorded: {amount}": "Bil {number} direkodkan: {amount}",
+    "This file is held back for review, so it cannot be read.": (
+        "Fail ini ditahan untuk semakan, jadi tidak boleh dibaca."
+    ),
+    "Bills are read from a PDF or a picture.": "Bil dibaca daripada PDF atau gambar.",
+    "Only drafts and bills waiting for approval can be changed.": (
+        "Hanya draf dan bil yang menunggu kelulusan boleh diubah."
+    ),
+    "Set the amount before approving.": "Tetapkan jumlah sebelum meluluskan.",
+    "Approved by {name}.": "Diluluskan oleh {name}.",
+    "Bill {number} approved: {amount}": "Bil {number} diluluskan: {amount}",
+    "Invoice {number} approved: {amount}": "Invois {number} diluluskan: {amount}",
+    "Only an approved invoice can be marked as sent.": (
+        "Hanya invois yang diluluskan boleh ditanda sebagai dihantar."
+    ),
+    "Voided: {reason}": "Dibatalkan: {reason}",
+    "{number} voided: {reason}": "{number} dibatalkan: {reason}",
+    "Reminders are for approved invoices that are not paid yet.": (
+        "Peringatan hanya untuk invois yang diluluskan dan belum dibayar."
+    ),
+    "Column {letter}": "Lajur {letter}",
+    "Unknown columns: {names}": "Lajur tidak dikenali: {names}",
+    "Pick the column that holds the name.": "Pilih lajur yang mengandungi nama.",
+    "That deal is not here.": "Urusan jualan itu tiada di sini.",
+    "New deal: {title} ({amount}, {stage})": "Urusan jualan baharu: {title} ({amount}, {stage})",
+    "Deal {title} moved from {before} to {after}": (
+        "Urusan jualan {title} dipindah dari {before} ke {after}"
+    ),
+    "You cannot change this company's customers.": (
+        "Anda tidak boleh mengubah pelanggan syarikat ini."
+    ),
+    "That person is not a member.": "Orang itu bukan ahli.",
+    "Not a valid email address": "Bukan alamat e-mel yang sah",
+    "Only people who manage agents or the organisation can archive customers.": (
+        "Hanya orang yang mengurus ejen atau organisasi boleh mengarkibkan pelanggan."
+    ),
+    "That contact is not here.": "Orang hubungan itu tiada di sini.",
+    "No text could be read from {name}.": "Tiada teks yang dapat dibaca daripada {name}.",
+    "No AI model could read the bill: {error}": "Tiada model AI yang dapat membaca bil itu: {error}",
+    "{name} does not look like a bill.": "{name} tidak kelihatan seperti bil.",
+    "Bill {number} received: {amount}, due {date}": (
+        "Bil {number} diterima: {amount}, perlu dibayar {date}"
+    ),
+    "Review bill {number} from {supplier} {currency} {total} due {date} (possible duplicate of {other})": (
+        "Semak bil {number} daripada {supplier} {currency} {total} perlu dibayar {date} "
+        "(mungkin pendua {other})"
+    ),
+    "Review bill {number} from {supplier} {currency} {total} due {date}": (
+        "Semak bil {number} daripada {supplier} {currency} {total} perlu dibayar {date}"
+    ),
+    "Email to {mailbox}: {subject}": "E-mel ke {mailbox}: {subject}",
+    "An email reached {person}'s Outlook": "Satu e-mel sampai ke Outlook {person}",
+    "Sir/Madam": "Tuan/Puan",
+    "Payment reminder: invoice {number} is due on {date}": (
+        "Peringatan bayaran: invois {number} perlu dibayar pada {date}"
+    ),
+    "Dear {name},\n\nThis is a friendly reminder that invoice {number}, for {amount}, is due on {date}.\n\nIf you have already arranged payment, thank you, and please ignore this message.\n\nKind regards,\n{company}": (
+        "Kepada {name},\n\nIni peringatan mesra bahawa invois {number}, berjumlah {amount}, "
+        "perlu dibayar pada {date}.\n\nJika anda sudah membuat bayaran, terima kasih, dan "
+        "abaikan mesej ini.\n\nSekian, terima kasih,\n{company}"
+    ),
+    "Payment reminder: invoice {number} was due on {date}": (
+        "Peringatan bayaran: invois {number} sepatutnya dibayar pada {date}"
+    ),
+    "Dear {name},\n\nOur records show that invoice {number}, due on {date}, still has {amount} outstanding. We would be grateful if you could arrange payment at your earliest convenience.\n\nIf you have already paid, thank you, and please send us the payment details so we can update our records.\n\nKind regards,\n{company}": (
+        "Kepada {name},\n\nRekod kami menunjukkan invois {number}, yang perlu dibayar pada "
+        "{date}, masih berbaki {amount}. Kami amat menghargai jika bayaran dapat dibuat "
+        "secepat mungkin.\n\nJika anda sudah membayar, terima kasih, dan kirimkan butiran "
+        "bayaran supaya kami dapat mengemas kini rekod kami.\n\nSekian, terima kasih,\n{company}"
+    ),
+    "That customer is not here.": "Pelanggan itu tiada di sini.",
+    "The Money page": "Halaman Kewangan",
+    "The mailbox could not make the draft: {error}": "Peti mel tidak dapat membuat draf: {error}",
+    "{name} has no email address. Add one to the customer or a contact.": (
+        "{name} tiada alamat e-mel. Tambah satu pada pelanggan atau orang hubungan."
+    ),
+    "Payment reminder for invoice {number} drafted for approval": (
+        "Peringatan bayaran untuk invois {number} didraf untuk kelulusan"
+    ),
+    "Payment reminder for invoice {number} written up as a task": (
+        "Peringatan bayaran untuk invois {number} ditulis sebagai tugasan"
+    ),
+    "Payment reminder for invoice {number} written": (
+        "Peringatan bayaran untuk invois {number} ditulis"
+    ),
+    "No company mailbox could hold this reminder. Send it from the company's email, then mark this task done.": (
+        "Tiada peti mel syarikat untuk peringatan ini. Hantar dari e-mel syarikat, kemudian "
+        "tanda tugasan ini selesai."
+    ),
+    "Send a payment reminder to {name} for invoice {number}": (
+        "Hantar peringatan bayaran kepada {name} untuk invois {number}"
+    ),
+    "Each day must be between -60 and 365.": "Setiap hari mesti antara -60 dan 365.",
+    "Approve it before recording a payment.": "Luluskan dahulu sebelum merekod bayaran.",
+    "The amount must be more than zero.": "Jumlah mesti lebih daripada sifar.",
+    "That is more than the {amount} still owed.": "Itu lebih daripada baki {amount} yang belum dibayar.",
+    "Paid {amount} on bill {number}": "Bayar {amount} untuk bil {number}",
+    "Payment received: {amount} on invoice {number}": (
+        "Bayaran diterima: {amount} untuk invois {number}"
+    ),
+    "Paid in full.": "Dibayar sepenuhnya.",
+    # "This was already {status}." and timeline lines take these.
+    "draft|money status": "draf",
+    "awaiting approval|money status": "menunggu kelulusan",
+    "approved|money status": "diluluskan",
+    "sent|money status": "dihantar",
+    "partly paid|money status": "dibayar sebahagian",
+    "paid|money status": "dibayar",
+    "void|money status": "dibatalkan",
+    "lead|deal stage": "prospek",
+    "qualified|deal stage": "layak",
+    "proposal|deal stage": "cadangan",
+    "negotiation|deal stage": "rundingan",
+    "won|deal stage": "berjaya",
+    "lost|deal stage": "terlepas",
 }

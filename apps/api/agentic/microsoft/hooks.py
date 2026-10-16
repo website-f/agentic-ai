@@ -39,6 +39,9 @@ async def on_new_mail(item: MailItem) -> None:
     one cheap classification, tasks and attachments by the mailbox's rules, `mail.updated`).
     Never raises."""
     await _announce(item)
+    from ..crm import mail as crm_mail
+
+    await crm_mail.record(item.id)  # P35: a known party's email on its timeline (never raises)
     try:
         from . import features
 

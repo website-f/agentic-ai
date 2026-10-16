@@ -6,8 +6,9 @@ Order (first match wins):
 2. Tools the agent is never offered (P29, the same gating as runtime.offered_tools): a
    personal assistant's tools on any other agent, run_python without a sandbox, the browser
    without a browser service, the PC tools (P31) on anything but its person's own AI with a
-   linked computer, the Outlook tools (P34) on an AI with no mailbox it may use. Naming one
-   does not run it.
+   linked computer, the Outlook tools (P34) on an AI with no mailbox it may use, the money
+   tools (P35) on an agent outside a finance department that nobody gave them to. Naming
+   one does not run it.
 3. A "deny" a person set on the agent (before ALWAYS_ASK, so it raises no approval card).
 4. ALWAYS_ASK tools wait for a person.
 5. The agent's own mode for the tool: deny | ask | allow (tool default if unset).
@@ -25,6 +26,7 @@ from ..api.scope import Scope
 from ..assistants.names import ASSISTANT_ONLY
 from ..core.config import settings
 from ..core.security import can
+from ..crm.access import MONEY_TOOLS, has_money
 from ..devices.core import PC_TOOLS, has_device, personal
 from ..microsoft.access import MAIL_TOOLS, has_mailbox
 from ..models import Agent, Membership
@@ -173,6 +175,11 @@ async def _evaluate(
         why = (
             "it may use no Outlook mailbox (only its person's own AI uses their Outlook, and only "
             "a shared mailbox's assigned agent uses that mailbox)"
+        )
+    if not why and tool_name in MONEY_TOOLS and not await has_money(agent, tool_name):  # P35
+        why = (
+            "money is for agents in a finance department (finance, accounts, kewangan, akaun) "
+            "or ones a person gave this tool to"
         )
     if why:
         return Decision(

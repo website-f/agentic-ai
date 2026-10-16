@@ -86,7 +86,7 @@ def shared_where(
     owned_agents = select(Agent.id).where(
         Agent.workspace_id == workspace_id, Agent.owner_user_id == user_id
     )
-    parts = [SharedMailbox.agent_id.in_(owned_agents)]
+    parts: list[ColumnElement[bool]] = [SharedMailbox.agent_id.in_(owned_agents)]
     if role == "branch_manager" and branch_id:
         parts.append(SharedMailbox.branch_id == branch_id)
     return and_(in_ws, or_(*parts))

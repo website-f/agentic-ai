@@ -67,6 +67,8 @@ export interface MailboxRules {
   digest: { enabled: boolean; time: string };
   /** Remind when a thread waits this long for a reply (0 = off). */
   follow_up_hours: number;
+  /** P35, shared mailboxes: a PDF or picture on an invoice mail becomes a bill waiting for approval. */
+  capture_bills?: boolean;
 }
 
 /** active = being read; paused = stopped by an admin; error = Microsoft refused (see last_error). */
@@ -261,6 +263,7 @@ export function normalizeRules(r: Partial<MailboxRules> | null | undefined): Mai
     save_attachments: typeof r?.save_attachments === "boolean" ? r.save_attachments : DEFAULT_RULES.save_attachments,
     digest: { enabled: typeof r?.digest?.enabled === "boolean" ? r.digest.enabled : DEFAULT_RULES.digest.enabled, time },
     follow_up_hours: Number.isFinite(hours) && hours >= 0 ? Math.round(hours) : DEFAULT_RULES.follow_up_hours,
+    ...(typeof r?.capture_bills === "boolean" ? { capture_bills: r.capture_bills } : {}),
   };
 }
 
@@ -334,6 +337,7 @@ export function rulesSummary(rules: MailboxRules, t: Translate): string[] {
     ? t("Tasks: {list}", { list: r.create_tasks_for.map((c) => t(CATEGORY_LABEL[c]).toLowerCase()).join(", ") })
     : t("No tasks"));
   if (r.save_attachments) parts.push(t("Saves attachments"));
+  if (r.capture_bills) parts.push(t("Captures bills"));
   if (r.digest.enabled) parts.push(t("Digest {time}", { time: r.digest.time }));
   if (r.follow_up_hours > 0) parts.push(t("Follow up after {n}h", { n: r.follow_up_hours }));
   return parts;

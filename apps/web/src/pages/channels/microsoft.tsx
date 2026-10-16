@@ -538,6 +538,8 @@ function MailboxDialog({ box, onClose }: { box: SharedMailbox | null; onClose: (
         <div className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
           <SwitchField checked={rules.save_attachments} onCheckedChange={(v) => setRules((r) => ({ ...r, save_attachments: v }))}
             label={t("Save attachments to the Library")} hint={t("Into the company's folder, so agents and people can find them.")} />
+          <SwitchField checked={rules.capture_bills ?? true} onCheckedChange={(v) => setRules((r) => ({ ...r, capture_bills: v }))}
+            label={t("Turn supplier invoices into bills")} hint={t("The attached PDF or picture is read into Money > Payables, waiting for someone to approve it.")} />
           <SwitchField checked={rules.digest.enabled} onCheckedChange={(v) => setRules((r) => ({ ...r, digest: { ...r.digest, enabled: v } }))}
             label={t("Daily digest")} hint={t("One summary of the day's mail to the agent's people.")} />
           {rules.digest.enabled ? (

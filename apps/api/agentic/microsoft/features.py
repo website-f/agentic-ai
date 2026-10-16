@@ -13,7 +13,9 @@
    prefs, which by default make NO tasks): a task for the mailbox's agent (or the person's
    own AI) and the attachments saved through the normal upload path (secrets scan,
    quarantine, reading, indexing). Only mail received in the last FRESH hours gets actions;
-   older mail from a first sync is only sorted.
+   older mail from a first sync is only sorted. P35: in a shared mailbox whose rules keep
+   capture_bills on, each PDF / picture of an invoice mail becomes a supplier bill waiting
+   for approval, with one review task (crm/capture.py) instead of the plain invoice task.
 
 The body is never stored: it is fetched from Graph when needed. Everything here is
 idempotent (a per-item lock, status checks, actions keyed by attachment id) and never
@@ -441,6 +443,25 @@ async def act(
             got = await save_attachment(db, box, item.graph_message_id, att, g=g, item=item)
             if isinstance(got, DocFile):
                 saved.append(got)
+    if (
+        saved
+        and isinstance(box, SharedMailbox)
+        and item.category == "invoice"
+        and r.get("capture_bills", True)
+    ):
+        # P35: a bill per PDF / picture, waiting for approval, with ONE review task (it
+        # replaces the plain invoice task).
+        from ..crm import capture
+
+        item_id, box_id = item.id, box.id
+        await capture.from_mail(db, box, item, saved)
+        refreshed_item = await db.get(MailItem, item_id)
+        refreshed_box = await db.get(SharedMailbox, box_id)
+        if refreshed_item is None or refreshed_box is None:
+            return
+        item, box = refreshed_item, refreshed_box
+        agent = await target_agent(db, box) if wants_task else None
+        saved = [f for f in [await db.get(DocFile, f_id) for f_id in _saved_ids(item)] if f]
     if wants_task and agent is not None and item.task_id is None:
         await make_task(db, box, item, agent, saved)
 
@@ -453,6 +474,14 @@ def _file_attachments(msg: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         out.append(a)
     return out
+
+
+def _saved_ids(item: MailItem) -> list[str]:
+    return [
+        str(a["file_id"])
+        for a in item.actions or []
+        if a.get("kind") == "attachment_saved" and a.get("file_id")
+    ]
 
 
 def _already_saved(item: MailItem, attachment_id: str) -> bool:
