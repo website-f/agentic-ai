@@ -461,6 +461,9 @@ class Task(Timestamps, Base):
     goal_tries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # P31: which of the person's computers this task browses on (agents/pc_tools.py).
     device_id: Mapped[str | None] = mapped_column(String(40))
+    # P38: the model group this task runs on instead of its agent's (a person chose another
+    # AI on retry). Null = the agent's group.
+    model_group: Mapped[str | None] = mapped_column(String(40))
 
 
 class AgentMessage(Base):
@@ -1265,6 +1268,29 @@ class Workflow(Timestamps, Base):
 # ---------------------------------------------------------------- Document Studio (P10)
 
 
+class StorageTarget(Timestamps, Base):
+    """P40: a place company files are kept (documents/storage.py): this server's disk, an
+    S3-compatible bucket (Backblaze B2, AWS S3, R2, MinIO) or a WebDAV file server. The
+    primary one receives new files; any one can be a source imported into a company's
+    Library (`sync`). Secrets in `config` are encrypted (*_enc)."""
+
+    __tablename__ = "storage_targets"
+    __table_args__ = (
+        CheckConstraint("kind IN ('local', 's3', 'webdav')", name="ck_storage_targets_kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("st"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16))
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Import into the Library: {"enabled", "branch_id", "prefix", "last_sync", "imported",
+    # "error"}.
+    sync: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
 class DocFile(Timestamps, Base):
     """A file people uploaded (or the system generated, like a compiled pack). The bytes live
     here so the API and the worker both reach them and the database backup covers them. The
@@ -1289,7 +1315,9 @@ class DocFile(Timestamps, Base):
     mime: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
     size: Mapped[int] = mapped_column(Integer, default=0)
     sha256: Mapped[str] = mapped_column(String(64), default="")
-    data: Mapped[bytes] = deferred(mapped_column(LargeBinary))
+    # The bytes when kept in Postgres; None when they live in a storage target (P40). Read
+    # them with documents.storage.read(), never this column directly.
+    data: Mapped[bytes | None] = deferred(mapped_column(LargeBinary, nullable=True))
     status: Mapped[str] = mapped_column(String(16), default="reading")
     text: Mapped[str] = deferred(mapped_column(Text, default=""))
     pages: Mapped[int] = mapped_column(Integer, default=0)
@@ -1339,6 +1367,13 @@ class DocFile(Timestamps, Base):
     # company; a restricted one (money, contracts, HR records) only for the agents of its
     # department (never a staff member's AI) and for managers.
     restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P40: where the bytes live when not in `data` (documents/storage.py): a storage target
+    # and the file's key there (ours under agentic/, or the path in an imported source).
+    storage_id: Mapped[str | None] = mapped_column(
+        ForeignKey("storage_targets.id", ondelete="SET NULL")
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000))
+    storage_etag: Mapped[str | None] = mapped_column(String(200))
 
 
 class IntakeBatch(Timestamps, Base):
@@ -1890,6 +1925,10 @@ class Device(Base):
     folders: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     paused: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     browsers: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    # P42 remote view / control, two locks that must both allow it (off | view | control):
+    # what the person allowed on the computer itself, and on the web with their password.
+    remote_pc: Mapped[str] = mapped_column(String(8), default="off", server_default="off")
+    remote_allowed: Mapped[str] = mapped_column(String(8), default="off", server_default="off")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

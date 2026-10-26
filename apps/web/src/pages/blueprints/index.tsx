@@ -27,6 +27,8 @@ import { agentsQuery, sopsQuery, toolsQuery, workKeys, type ToolMode } from "@/l
 import { chatGroupsQuery } from "@/pages/ai-engine/data";
 import { ReviewPolicyCard } from "@/pages/tasks/accountable";
 
+import { RecruitButton } from "./recruit";
+
 const MODES: { value: ToolMode; label: string }[] = [
   { value: "allow", label: msg("Allow") },
   { value: "ask", label: msg("Ask me") },
@@ -290,7 +292,12 @@ export function BlueprintsPage() {
     <Page>
       <PageHeader title={t("Blueprints")}
         description={t("Reusable role packages — instructions, model, tool scope, SOPs and skills. Define a role once, then stamp it onto any agent so it starts as a trained specialist.")}
-        actions={canManage ? <Button data-guide="blueprints.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New blueprint")}</Button> : null} />
+        actions={canManage ? (
+          <>
+            {me.permissions.includes("agents.manage") ? <RecruitButton /> : null}
+            <Button data-guide="blueprints.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New blueprint")}</Button>
+          </>
+        ) : null} />
       {isLoading ? <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 rounded-[var(--radius-md)]" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
         : !blueprints.length ? (

@@ -1,39 +1,48 @@
 #!/bin/sh
-# Agentic Office PC agent: install and link this Mac (docs/PC-AGENT.md).
-# Run as:  curl -fsSL {{SERVER}}/i/{{CODE}}/mac | sh
-# No admin needed. Installs to ~/Library/Application Support/AgenticOffice (Node.js from
-# nodejs.org, checked against its SHA-256, and the agent from your office server), links with a
-# one-time code, and starts at login (a LaunchAgent: space.oriondesk.agentic.pc).
-# Remove it any time:  "$HOME/Library/Application Support/AgenticOffice/bin/agentic-pc" uninstall
+# Agentic Office PC agent: install and link this Mac or Linux computer (docs/PC-AGENT.md).
+# Run as:  curl -fsSL {{SERVER}}/i/{{CODE}}/mac | sh     (or .../linux | sh)
+# No admin needed. Installs to ~/Library/Application Support/AgenticOffice on a Mac, or
+# ~/.config/agentic-office on Linux (Node.js from nodejs.org, checked against its SHA-256, and
+# the agent from your office server), links with a one-time code, and starts at login (a
+# LaunchAgent on a Mac; a systemd user service, or desktop autostart, on Linux).
+# Remove it any time:  <that folder>/bin/agentic-pc uninstall
 set -eu
 
 SERVER='{{SERVER}}'
 CODE='{{CODE}}'
 NODE_MAJOR=22
-DIR="$HOME/Library/Application Support/AgenticOffice"
 LABEL=space.oriondesk.agentic.pc
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+UNIT=agentic-pc.service
 
 say() { printf '  %s\n' "$1"; }
 fail() { printf '\n%s\n' "$1" >&2; exit 1; }
-sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
-case "$(uname -s)" in Darwin) ;; *) fail "This installer is for macOS." ;; esac
-case "$(uname -m)" in arm64) ARCH=arm64 ;; x86_64) ARCH=x64 ;; *) fail "Unsupported Mac: $(uname -m)" ;; esac
+case "$(uname -s)" in
+  Darwin) OS=darwin; KIND=Mac; DIR="$HOME/Library/Application Support/AgenticOffice" ;;
+  Linux) OS=linux; KIND="Linux computer"; DIR="${XDG_CONFIG_HOME:-$HOME/.config}/agentic-office" ;;
+  *) fail "This installer is for macOS and Linux. On Windows use the PowerShell line." ;;
+esac
+case "$(uname -m)" in arm64|aarch64) ARCH=arm64 ;; x86_64|amd64) ARCH=x64 ;; *) fail "Unsupported computer: $(uname -m)" ;; esac
 
-printf '\nAgentic Office: linking this Mac to your AI\n'
+printf '\nAgentic Office: linking this %s to your AI\n' "$KIND"
 say "Server: $SERVER"
 mkdir -p "$DIR/agent" "$DIR/bin"
 chmod 700 "$DIR"
 
 # An agent already running (reinstall / relink): stop it first.
-launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+if [ "$OS" = darwin ]; then
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+else
+  systemctl --user stop "$UNIT" 2>/dev/null || true
+fi
 if [ -f "$DIR/agent.lock" ]; then kill "$(cat "$DIR/agent.lock")" 2>/dev/null || true; fi
 
 # 1. Node.js (the latest of the pinned LTS line), verified against nodejs.org's SHASUMS256.
 DIST="https://nodejs.org/dist/latest-v$NODE_MAJOR.x"
-LINE=$(curl -fsSL "$DIST/SHASUMS256.txt" | grep -E "node-v$NODE_MAJOR\.[0-9.]+-darwin-$ARCH\.tar\.gz\$" | head -n 1)
-[ -n "$LINE" ] || fail "Could not find Node.js $NODE_MAJOR for macOS $ARCH on nodejs.org."
+LINE=$(curl -fsSL "$DIST/SHASUMS256.txt" | grep -E "node-v$NODE_MAJOR\.[0-9.]+-$OS-$ARCH\.tar\.gz\$" | head -n 1)
+[ -n "$LINE" ] || fail "Could not find Node.js $NODE_MAJOR for $OS $ARCH on nodejs.org."
 WANT=$(printf '%s' "$LINE" | awk '{print $1}')
 TARBALL=$(printf '%s' "$LINE" | awk '{print $2}')
 if [ "$(cat "$DIR/node/.release" 2>/dev/null || true)" != "$TARBALL" ] || [ ! -x "$DIR/node/bin/node" ]; then
@@ -70,6 +79,43 @@ say "Linking ..."
 "$NODE" "$DIR/agent/agent.cjs" link "$CODE" --server "$SERVER" || fail "Linking did not work. Make a new code on the My computers page and try again."
 
 # 5. Start at login, and start now (restarted if it crashes; not after an unlink).
+if [ "$OS" = linux ]; then
+  CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+  if systemctl --user show-environment >/dev/null 2>&1; then
+    mkdir -p "$CONF/systemd/user"
+    cat > "$CONF/systemd/user/$UNIT" <<EOF
+[Unit]
+Description=Agentic Office PC agent
+After=graphical-session.target network-online.target
+
+[Service]
+ExecStart="$NODE" "$DIR/agent/agent.cjs" run
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+EOF
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$UNIT" >/dev/null
+  else
+    mkdir -p "$CONF/autostart"
+    cat > "$CONF/autostart/agentic-pc.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Agentic Office PC agent
+Exec="$NODE" "$DIR/agent/agent.cjs" run
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+    nohup "$NODE" "$DIR/agent/agent.cjs" run >/dev/null 2>>"$DIR/agent.err.log" &
+  fi
+  printf '\nLinked. Your AI can now use this computer (the folders you shared only).\n'
+  say "Shared folders, pause, remote, unlink and activity: the My computers page, or:"
+  say "  \"$DIR/bin/agentic-pc\" status | folders | remote | pause | resume | logs | unlink | uninstall"
+  printf '\n'
+  exit 0
+fi
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -90,5 +136,5 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 printf '\nLinked. Your AI can now use this Mac (the folders you shared only).\n'
 say "Shared folders, pause, unlink and activity: the My computers page, or:"
-say "  \"$DIR/bin/agentic-pc\" status | folders | pause | resume | logs | unlink | uninstall"
+say "  \"$DIR/bin/agentic-pc\" status | folders | remote | pause | resume | logs | unlink | uninstall"
 printf '\n'

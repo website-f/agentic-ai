@@ -202,12 +202,10 @@ async def preview(
     as plain text, and Word, Excel, PowerPoint (and anything else) as a PDF of its text."""
     f = await get_file(db, principal, file_id, library_ok=True)
     check_held_back(principal, f)
-    row = await db.scalar(
-        select(DocFile)
-        .where(DocFile.id == f.id)
-        .options(undefer(DocFile.data), undefer(DocFile.text))
-    )
-    data = bytes(row.data or b"") if row else b""
+    row = await db.scalar(select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.text)))
+    from ...documents import storage  # P40: the bytes may live outside the database
+
+    data = await storage.read_id(db, f.id)
     text = (row.text if row else "") or ""
     headers = {
         "Content-Disposition": f"inline; filename*=UTF-8''{quote(f.name)}",
@@ -338,7 +336,9 @@ async def archive(
         with zipfile.ZipFile(sink, "w", allowZip64=True) as zf:  # type: ignore[arg-type]
             for fid, arc in plan:
                 async with SessionLocal() as s:
-                    data = await s.scalar(select(DocFile.data).where(DocFile.id == fid))
+                    from ...documents import storage  # P40: wherever the bytes live
+
+                    data = await storage.read_id(s, fid)
                 info = zipfile.ZipInfo(arc, date_time=datetime.now(UTC).timetuple()[:6])
                 info.compress_type = (
                     zipfile.ZIP_STORED if arc.lower().endswith(STORED) else zipfile.ZIP_DEFLATED

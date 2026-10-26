@@ -457,7 +457,7 @@ async def test_research_follows_relevant_in_site_links_and_never_private_ones(si
 
 
 async def test_research_without_seeds_uses_web_search(site, monkeypatch):
-    async def fake_search(query, count=6):
+    async def fake_search(query, count=6, **kw):
         return "DuckDuckGo", [websearch.Result("Docs", "https://docs.fake/webhooks", "")]
 
     monkeypatch.setattr(websearch, "search", fake_search)

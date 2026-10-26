@@ -49,8 +49,15 @@ async def _get(
 
 
 async def _searxng(query: str, count: int) -> list[Result]:
+    # P39: our own private service on an internal network, set by the operator: called
+    # directly (the SSRF guard is for addresses that come from pages and models).
     base = settings.searxng_url.rstrip("/")
-    r = await _get(f"{base}/search", params={"q": query, "format": "json", "safesearch": "1"})
+    async with engine_client._client(timeout=20) as http:  # noqa: SLF001 - shared transport
+        r = await http.get(
+            f"{base}/search",
+            params={"q": query, "format": "json", "safesearch": "1"},
+            headers={"User-Agent": UA, "X-Real-IP": "127.0.0.1"},
+        )
     if r.status_code >= 400:
         raise SearchUnavailable(f"SearXNG answered {r.status_code}")
     out = []
@@ -145,8 +152,12 @@ def _backends() -> list[tuple[str, object]]:
     return chain
 
 
-async def search(query: str, count: int = 6) -> tuple[str, list[Result]]:
-    """(backend name, results). Raises SearchUnavailable only if every backend fails."""
+async def search(
+    query: str, count: int = 6, *, agent_id: str | None = None, task_id: str | None = None
+) -> tuple[str, list[Result]]:
+    """(backend name, results). Raises SearchUnavailable only if every backend fails.
+    P39: with an agent and a task, the last resort is a search page in the agent's own
+    browser (a real browser passes bot checks a script does not)."""
     count = max(1, min(MAX_RESULTS, count))
     errors = []
     for name, fn in _backends():
@@ -160,4 +171,18 @@ async def search(query: str, count: int = 6) -> tuple[str, list[Result]]:
         except Exception as e:  # noqa: BLE001 - try the next backend, never crash the tool
             log.warning("search backend %s failed: %s", name, e)
             errors.append(f"{name}: {e.__class__.__name__}")
+    if agent_id and task_id:
+        from . import browse_reader
+
+        if browse_reader.available():
+            try:
+                engine, found = await browse_reader.search(agent_id, task_id, query, count)
+            except Exception as e:  # noqa: BLE001 - the browser is a last resort
+                log.warning("browser search failed: %s", e)
+                engine, found = "", []
+            if found:
+                return f"your browser ({engine})", [
+                    Result(r["title"], r["url"], r["snippet"]) for r in found
+                ]
+            errors.append("your browser: no results")
     raise SearchUnavailable("; ".join(errors) or "no search backend available")

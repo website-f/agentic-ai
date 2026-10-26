@@ -387,9 +387,11 @@ async def template_from_docx(
     f = await get_file(db, principal, body.file_id)
     if "wordprocessingml" not in f.mime:
         raise api_error(status.HTTP_400_BAD_REQUEST, "not_docx", "Upload a Word (.docx) file.")
-    data = await db.scalar(select(DocFile.data).where(DocFile.id == f.id))
+    from ...documents import storage  # P40: the bytes may live outside the database
+
+    data = await storage.read_id(db, f.id)
     try:
-        keys = docx_template.scan(bytes(data or b""))
+        keys = docx_template.scan(data)
     except Exception as e:  # noqa: BLE001 - a broken file is reported
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "bad_docx", "That Word file could not be opened."

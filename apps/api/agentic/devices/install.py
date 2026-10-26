@@ -1,5 +1,5 @@
 """The one-line installers: `irm https://HOST/i/CODE/win | iex` and
-`curl -fsSL https://HOST/i/CODE/mac | sh`.
+`curl -fsSL https://HOST/i/CODE/mac | sh` (and /linux: the same script, it checks).
 
 The scripts are templates in apps/pc-agent/install/ (install.ps1, install.sh), read at request
 time, with `{{SERVER}}` and `{{CODE}}` filled in. Where they live: AGENTIC_PC_AGENT_DIR, else
@@ -10,7 +10,7 @@ import os
 import re
 from pathlib import Path
 
-TEMPLATES = {"win": "install.ps1", "mac": "install.sh"}
+TEMPLATES = {"win": "install.ps1", "mac": "install.sh", "linux": "install.sh"}
 _SAFE_SERVER = re.compile(r"^https?://[A-Za-z0-9.\-]+(:\d{1,5})?(/[A-Za-z0-9._~\-/]*)?$")
 
 

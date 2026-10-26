@@ -147,4 +147,74 @@ export const COMPUTERS: Record<string, string> = {
   "No Chrome or Edge on it": "Tiada Chrome atau Edge padanya",
   "Find a file on my computer": "Cari fail di komputer saya",
   "Find the file … on my computer and save it to my workspace.": "Cari fail … di komputer saya dan simpan ke meja kerja saya.",
+
+  // P42: Linux, and reaching the computer from the web
+  "Use the full path, e.g. C:\\Users\\you\\Documents on Windows, /Users/you/Documents on a Mac or /home/you/Documents on Linux.":
+    "Gunakan laluan penuh, cth. C:\\Users\\anda\\Documents pada Windows, /Users/anda/Documents pada Mac atau /home/anda/Documents pada Linux.",
+  "You downloaded a file from the web": "Anda memuat turun satu fail dari web",
+  "You viewed the screen from the web": "Anda melihat skrin dari web",
+  "You used the mouse and keyboard from the web": "Anda menggunakan tetikus dan papan kekunci dari web",
+  "No screen": "Tiada skrin",
+  "Open from the web": "Buka dari web",
+  "Tip: in a terminal, cd to the folder and run pwd.": "Petua: dalam terminal, cd ke folder itu dan jalankan pwd.",
+  "Open a terminal (Ctrl+Alt+T on most desktops), paste, press Enter.":
+    "Buka terminal (Ctrl+Alt+T pada kebanyakan desktop), tampal, tekan Enter.",
+  "It starts by itself when you sign in from now on. No sudo needed.":
+    "Ia bermula dengan sendiri apabila anda log masuk mulai sekarang. Tiada sudo diperlukan.",
+
+  // remote page
+  "{name} — from the web": "{name} — dari web",
+  "See how this computer is doing, open its shared folders, and — when you turn it on — watch its screen and use it, from anywhere.":
+    "Lihat keadaan komputer ini, buka folder yang dikongsinya, dan — apabila anda hidupkannya — tonton skrinnya serta gunakannya, dari mana-mana.",
+  "All computers": "Semua komputer",
+  "This computer is offline. It must be on, signed in, and connected for you to reach it. Last seen {when}.":
+    "Komputer ini luar talian. Ia mesti dihidupkan, dilog masuk dan bersambung untuk anda menghubunginya. Terakhir dilihat {when}.",
+  "This computer is paused. Resume it on the My computers page to reach it.":
+    "Komputer ini dijeda. Sambung semula di halaman Komputer saya untuk menghubunginya.",
+  "How it is doing": "Keadaannya",
+  "Asking the computer…": "Bertanya kepada komputer…",
+  Processor: "Pemproses",
+  "{n} cores": "{n} teras",
+  "Disk ({path})": "Cakera ({path})",
+  "Signed in as {user}": "Dilog masuk sebagai {user}",
+  "On for {time}": "Hidup selama {time}",
+  "{d}d {h}h": "{d}h {h}j",
+  "{h}h {m}m": "{h}j {m}m",
+  "{m}m": "{m}m",
+  "The same folders your AI may see. Open a folder, or search by name, then download what you need.":
+    "Folder yang sama yang boleh dilihat AI anda. Buka folder, atau cari ikut nama, kemudian muat turun apa yang anda perlukan.",
+  "Shared folders": "Folder dikongsi",
+  "Search files by name…": "Cari fail ikut nama…",
+  "No folders are shared on this computer yet.": "Belum ada folder dikongsi pada komputer ini.",
+  "No files match “{q}”.": "Tiada fail sepadan dengan “{q}”.",
+  "This folder is empty.": "Folder ini kosong.",
+  "Showing the first results. Search to narrow them.": "Menunjukkan hasil pertama. Cari untuk menyempitkannya.",
+  Screen: "Skrin",
+  "Watch the screen and use the mouse and keyboard. A notice shows on the computer while you do.":
+    "Tonton skrin dan gunakan tetikus serta papan kekunci. Satu notis muncul pada komputer semasa anda melakukannya.",
+  "Watch the screen live. A notice shows on the computer while you watch.":
+    "Tonton skrin secara langsung. Satu notis muncul pada komputer semasa anda menonton.",
+  "Turn on seeing this screen to watch it live from here.": "Hidupkan melihat skrin ini untuk menontonnya secara langsung dari sini.",
+  "Seeing the screen is off. Use the switches above to turn it on (you confirm with your password, and it must also be on with: agentic-pc remote view).":
+    "Melihat skrin dimatikan. Gunakan suis di atas untuk menghidupkannya (anda sahkan dengan kata laluan anda, dan ia juga mesti dihidupkan dengan: agentic-pc remote view).",
+  "Start watching": "Mula menonton",
+  "Click the screen to click. Type to send keys.": "Klik skrin untuk mengklik. Taip untuk menghantar kekunci.",
+  "Viewing only — turn on control to use the mouse and keyboard.":
+    "Menonton sahaja — hidupkan kawalan untuk menggunakan tetikus dan papan kekunci.",
+  "Remote screen — click and type to control": "Skrin jauh — klik dan taip untuk mengawal",
+  "The computer's screen": "Skrin komputer",
+  "Waiting for the first picture…": "Menunggu gambar pertama…",
+  "Press Start watching.": "Tekan Mula menonton.",
+  "Turn it on with the computer first: agentic-pc remote {level}":
+    "Hidupkannya pada komputer dahulu: agentic-pc remote {level}",
+  "See screen": "Lihat skrin",
+  "Full control": "Kawalan penuh",
+  "Allow full control from the web": "Benarkan kawalan penuh dari web",
+  "Allow seeing the screen from the web": "Benarkan melihat skrin dari web",
+  "You will be able to see this computer's screen and use its mouse and keyboard from any browser you are signed in on. The computer shows a notice while you do. Enter your password to confirm.":
+    "Anda akan dapat melihat skrin komputer ini dan menggunakan tetikus serta papan kekuncinya dari mana-mana pelayar yang anda log masuk. Komputer menunjukkan satu notis semasa anda melakukannya. Masukkan kata laluan anda untuk mengesahkan.",
+  "You will be able to watch this computer's screen from any browser you are signed in on. The computer shows a notice while you watch. Enter your password to confirm.":
+    "Anda akan dapat menonton skrin komputer ini dari mana-mana pelayar yang anda log masuk. Komputer menunjukkan satu notis semasa anda menonton. Masukkan kata laluan anda untuk mengesahkan.",
+  "Turn it on": "Hidupkannya",
+  "Your password": "Kata laluan anda",
 };

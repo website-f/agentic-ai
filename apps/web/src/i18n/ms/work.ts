@@ -1507,4 +1507,15 @@ export const WORK: Record<string, string> = {
   "Reach your office from your phone: notifications, Telegram, WhatsApp, Gmail, and apps that speak the OpenAI API.":
     "Hubungi pejabat anda dari telefon: pemberitahuan, Telegram, WhatsApp, Gmail, dan aplikasi yang menggunakan API OpenAI.",
   "Copied.": "Disalin.",
+
+  // P41: recruit an agent with the Recruiter
+  "Recruit with AI": "Ambil pekerja dengan AI",
+  "The Recruiter researches the job on the web and in your Library (duties, steps, laws, common mistakes) and drafts a blueprint: instructions, tools, starter skills and SOP drafts. You review it before any agent uses it.":
+    "Perekrut mengkaji kerja itu di web dan dalam Perpustakaan anda (tugas, langkah, undang-undang, kesilapan biasa) dan merangka pelan tugas: arahan, alat, kemahiran permulaan dan draf SOP. Anda menyemaknya sebelum mana-mana ejen menggunakannya.",
+  "The Recruiter is researching the job. The blueprint appears here when it is done.":
+    "Perekrut sedang mengkaji kerja itu. Pelan tugas muncul di sini apabila siap.",
+  "e.g. Purchasing officer for a construction company": "cth. Pegawai belian untuk syarikat pembinaan",
+  "What should it know? (optional)": "Apa yang perlu ia tahu? (pilihan)",
+  "e.g. We buy cement and steel weekly from three suppliers; orders above RM 5,000 need the director.":
+    "cth. Kami membeli simen dan besi setiap minggu daripada tiga pembekal; pesanan melebihi RM 5,000 perlukan kelulusan pengarah.",
 };

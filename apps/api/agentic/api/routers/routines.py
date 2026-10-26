@@ -142,7 +142,7 @@ async def summary(
     principal: Principal = Depends(require("office.view")), db: AsyncSession = Depends(get_db)
 ) -> SummaryOut:
     ws = await db.get(Workspace, principal.workspace_id)
-    rows = (
+    rows: list[Any] = (
         await db.execute(
             _scoped(
                 select(
@@ -155,7 +155,7 @@ async def summary(
                 principal,
             ).group_by(Routine.status)
         )
-    ).all()
+    ).all()  # type: ignore[assignment]
     by = {s: (int(n), int(u), int(ok), int(saved)) for s, n, u, ok, saved in rows}
     return SummaryOut(
         enabled=((ws.settings or {}).get("routines") or {}).get("enabled", True) if ws else True,

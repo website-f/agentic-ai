@@ -15,6 +15,9 @@ nothing will wake it. Runs every 10 minutes (the `liveness-reconcile` schedule, 
    receive the decision) is treated like 1: one relaunch (the new run waits on the same
    approval), then its owner.
 
+4. P38: a running task with no sign of life for 45 minutes (and no sub-task still open) is
+   stuck: its run is terminated and handled as in 1 (one relaunch, then its owner).
+
 Temporal unreachable: the run is skipped entirely (nothing is relaunched or blocked blind).
 """
 
@@ -31,6 +34,9 @@ log = logging.getLogger("agentic.teams.reconcile")
 
 ACTOR = "system:reconcile"
 SILENT_AFTER = timedelta(minutes=15)
+# P38: no sign of life at all for this long is a stuck run, not a slow one (a step times out
+# after 10 minutes and retries twice): it is stopped and started again.
+STUCK_AFTER = timedelta(minutes=45)
 # A run that just started may not have its workflow visible yet.
 GRACE = timedelta(minutes=3)
 STOPPED = "Stopped unexpectedly"
@@ -225,9 +231,35 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
         for t in alive:
             try:
                 totals["silent"] += int(await _mark_silent(db, t, now))
+                if await _stuck(db, t, now):
+                    totals["restarted"] = totals.get("restarted", 0) + 1
             except Exception:  # noqa: BLE001
                 log.warning("could not check %s for silence", t.id, exc_info=True)
     return totals
+
+
+async def _stuck(db: AsyncSession, t: Task, now: datetime) -> bool:
+    """P38: a run with no sign of life for STUCK_AFTER is stuck (a hung step, a lost
+    connection): stop it and start it again once; a second time, hand it to its owner."""
+    from ..agents import dispatch
+
+    since = await last_activity(db, t) or t.started_at or t.updated_at
+    if since is None or now - since < STUCK_AFTER or not t.workflow_id:
+        return False
+    # Waiting on its sub-tasks (one may wait days for a person's approval) is not stuck.
+    waiting = await db.scalar(
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.parent_task_id == t.id,
+            Task.status.in_(("triage", "ready", "running", "blocked", "review")),
+        )
+    )
+    if waiting:
+        return False
+    await dispatch.terminate_task(t.workflow_id, f"no progress for {STUCK_AFTER}")
+    await _gone(db, t)
+    return True
 
 
 async def _waiting_on_approval(db: AsyncSession, now: datetime) -> list[Task]:

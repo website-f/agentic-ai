@@ -54,6 +54,10 @@ x-app-env: &app-env
   AGENTIC_WAHA_URL: ${AGENTIC_WAHA_URL:-http://waha:3000}
   AGENTIC_WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:-dev-waha-key}
   AGENTIC_INTERNAL_API_URL: http://api:8501
+  # P39: the private metasearch for web_search and research_gather (worker only). Empty =
+  # Brave / Tavily keys if set, else DuckDuckGo (which often answers bots with a captcha).
+  AGENTIC_SEARXNG_URL: ${AGENTIC_SEARXNG_URL:-http://searxng:8080}
+  AGENTIC_FILES_DIR: /data/files
   # Traces (profile obs). Empty host = off.
   AGENTIC_LANGFUSE_HOST: ${AGENTIC_LANGFUSE_HOST:-}
   AGENTIC_LANGFUSE_PUBLIC_KEY: ${AGENTIC_LANGFUSE_PUBLIC_KEY:-pk-lf-agentic-dev}
@@ -212,6 +216,7 @@ services:
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
+      - "files:/data/files"  # P40: "this server's disk" file storage
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/readyz', timeout=3)"]
       interval: 10s
@@ -240,6 +245,7 @@ services:
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
+      - "files:/data/files"  # P40: "this server's disk" file storage
     depends_on:
       api: { condition: service_healthy }   # api runs the migrations first
       temporal: { condition: service_healthy }
@@ -252,7 +258,7 @@ services:
       start_period: 20s
     mem_limit: 1536m  # agent loops + the embedding model + OCR of uploads
     cpus: 1.0
-    networks: [data, edge, browser, sandbox, llm]
+    networks: [data, edge, browser, sandbox, llm, search]
     <<: [*app-hardening, *logging]
 
   web:
@@ -399,6 +405,29 @@ services:
     pids_limit: 64
     networks: [browser, egress-out]
     <<: [*app-hardening, *logging]
+
+  searxng:
+    # P39: private metasearch (SearXNG, AGPL-3.0, used unmodified as a separate service) for
+    # agents' research: one query asks Google, Bing, DuckDuckGo, Brave, Wikipedia... at once,
+    # so research does not stop when one engine shows a bot check. Reached only by the
+    # worker over the internal `search` network; goes out on `search-out`; never published.
+    image: searxng/searxng:2026.10.17-1c10abe2d
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-agentic-private-searxng-dev}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [search, search-out]
+    <<: [*logging]
 
   ollama:
     # The local backup brain (P14): one small model (qwen3:0.6b, ~0.8 GB RAM loaded) for a few
@@ -572,6 +601,7 @@ services:
       AGENTIC_MASTER_KEY: ${AGENTIC_MASTER_KEY:-}
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "files:/data/files"
       # WhatsApp sessions (root-owned but world-readable files), read-only: a move or restore
       # does not need a new QR scan. Restore unpacks to data/restore/waha (docs/RUNBOOK.md).
       - "wahadata:/data/waha:ro"
@@ -772,12 +802,16 @@ networks:
   llm:
     internal: true  # api/worker <-> ollama; NO internet
   llm-pull: {}  # ollama-pull only: downloads the model into the shared volume
+  search:
+    internal: true  # worker <-> searxng only
+  search-out: {}  # searxng's way out to the search engines; nothing else uses it
 
 volumes:
   pgdata: {}
   valkeydata: {}
   vault: {}
   media: {}  # meeting recordings (minutes); not backed up: originals are transient
+  files: {}  # P40: company files kept on this server's disk (backed up with the vault)
   browserprofiles: {}  # one persistent Camoufox profile per agent (cookies/localStorage)
   backupwork: {}
   rustfsdata: {}

@@ -49,27 +49,36 @@ async def test_backends_are_tried_in_order_and_fall_through(monkeypatch):
 
     async def fake_get(url, **kw):
         calls.append(url)
-        if "searxng" in url:
-            return _resp(status=502)  # SearXNG down -> fall through
         return _resp(text=DDG_HTML)
 
+    async def searxng_down(query, count):
+        calls.append("searxng")
+        raise websearch.SearchUnavailable("SearXNG answered 502")  # down -> fall through
+
     monkeypatch.setattr(websearch, "_get", fake_get)
+    monkeypatch.setattr(websearch, "_searxng", searxng_down)
     backend, results = await websearch.search("x", 3)
     assert backend == "DuckDuckGo" and results
-    assert any("searxng" in c for c in calls) and any("duckduckgo" in c for c in calls)
+    assert calls[0] == "searxng" and any("duckduckgo" in c for c in calls)
 
 
 async def test_searxng_json_is_used_when_configured(monkeypatch):
-    monkeypatch.setattr(websearch.settings, "searxng_url", "http://searxng.test")
+    # P39: our own SearXNG on a private network is called directly (no SSRF guard for it).
+    from agentic.engine import client as engine_client
 
-    async def fake_get(url, **kw):
-        assert "searxng" in url
-        return _resp(
-            json_body={"results": [{"title": "T", "url": "https://s.test/1", "content": "c"}]}
+    monkeypatch.setattr(websearch.settings, "searxng_url", "http://searxng:8080")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "searxng" and request.url.params["format"] == "json"
+        return httpx.Response(
+            200, json={"results": [{"title": "T", "url": "https://s.test/1", "content": "c"}]}
         )
 
-    monkeypatch.setattr(websearch, "_get", fake_get)
-    backend, results = await websearch.search("x", 3)
+    engine_client.use_transport(httpx.MockTransport(handler))
+    try:
+        backend, results = await websearch.search("x", 3)
+    finally:
+        engine_client.use_transport(None)
     assert backend == "SearXNG" and results[0].url == "https://s.test/1"
 
 
@@ -79,7 +88,7 @@ async def test_the_tool_formats_results(client, llm, temporal, monkeypatch):
     from agentic.core.db import SessionLocal
     from agentic.models import Agent, Workspace
 
-    async def fake_search(query, count=6):
+    async def fake_search(query, count=6, **kw):
         return "DuckDuckGo", [websearch.Result("Guide", "https://e.test/g", "how to")]
 
     monkeypatch.setattr(websearch, "search", fake_search)

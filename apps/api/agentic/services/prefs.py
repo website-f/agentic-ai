@@ -61,14 +61,23 @@ def _tutorial(sub: dict[str, Any]) -> dict[str, Any]:
 
 
 def _locale(sub: dict[str, Any]) -> dict[str, Any]:
-    """P22: the person's language for the app (and notices): en | ms."""
-    extra = set(sub) - {"language"}
+    """P22: the person's language for the app (and notices): en | ms. P37: `speech`, how
+    their AI speaks to them: "standard" or a style of i18n.dialects (pasar, kelantan...)."""
+    from ..i18n import dialects
+
+    extra = set(sub) - {"language", "speech"}
     if extra:
         raise PrefsError(f"locale does not keep {', '.join(sorted(extra))}.")
     v = sub.get("language")
     if v is not None and v not in ("en", "ms"):
         raise PrefsError("locale.language must be en or ms.")
-    return {"language": v}
+    out: dict[str, Any] = {"language": v} if "language" in sub else {}
+    if "speech" in sub:
+        sp = sub.get("speech")
+        if sp is not None and sp != "standard" and not dialects.known(sp):
+            raise PrefsError("locale.speech is not a known way of speaking.")
+        out["speech"] = None if sp == "standard" else sp
+    return out
 
 
 def saved_lang(user: User | None) -> str | None:
@@ -85,6 +94,18 @@ def lang_of(user: User | None) -> str:
 async def language(db: AsyncSession, user_id: str | None) -> str:
     """lang_of() by id; English for nobody."""
     return lang_of(await db.get(User, user_id)) if user_id else "en"
+
+
+def speech_of(user: User | None) -> str | None:
+    """P37: the dialect or casual style the person wants their AI to speak, if any."""
+    from ..i18n import dialects
+
+    v = (((user.prefs if user else None) or {}).get("locale") or {}).get("speech")
+    return v if dialects.known(v) else None
+
+
+async def speech(db: AsyncSession, user_id: str | None) -> str | None:
+    return speech_of(await db.get(User, user_id)) if user_id else None
 
 
 VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {

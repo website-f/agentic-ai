@@ -35,6 +35,7 @@ const page = {
   settings: lazyRouteComponent(() => import("@/pages/settings"), "SettingsPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
+  storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -79,6 +80,7 @@ const page = {
   objectives: lazyRouteComponent(() => import("@/pages/objectives"), "ObjectivesPage"),
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
   computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
+  remote: lazyRouteComponent(() => import("@/pages/computers/remote"), "RemotePage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
@@ -228,6 +230,8 @@ const membersRoute = createRoute({
 
 // P36: each person's daily AI allowance and what staff may use their AI for.
 const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
+// P40: where company files are kept, and storage that feeds the Library.
+const storageRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/storage", component: page.storage });
 
 const activityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -581,6 +585,15 @@ const computersRoute = createRoute({
   },
   component: page.computers,
 });
+// P42: one of the person's own computers, reached from the web (health, files, screen, control).
+const remoteRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/computers/$deviceId/remote",
+  beforeLoad: ({ context }) => {
+    if (!["agents.own", "assistants.use"].some((perm) => context.me.permissions.includes(perm))) throw redirect({ to: "/workspace" });
+  },
+  component: page.remote,
+});
 
 // P34: mail that reached the person's Outlook and the shared mailboxes, and what the AI did with it.
 const mailRoute = createRoute({
@@ -692,6 +705,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     membersRoute,
     aiUseRoute,
+    storageRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,
@@ -734,6 +748,7 @@ const routeTree = rootRoute.addChildren([
     objectivesRoute,
     searchRoute,
     computersRoute,
+    remoteRoute,
     mailRoute,
     contactsRoute,
     contactDetailRoute,

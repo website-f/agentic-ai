@@ -8,7 +8,6 @@ import asyncio
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import undefer
 
 from ..documents import provenance
 from ..documents import service as doc_service
@@ -29,9 +28,13 @@ async def _form(ctx: ToolContext, form_id: str) -> Form | str:
 async def _blank(ctx: ToolContext, f: Form) -> DocFile | None:
     if not f.file_id:
         return None
-    return await ctx.db.scalar(
-        select(DocFile).where(DocFile.id == f.file_id).options(undefer(DocFile.data))
-    )
+    return await ctx.db.scalar(select(DocFile).where(DocFile.id == f.file_id))
+
+
+async def _bytes(ctx: ToolContext, blank: DocFile) -> bytes:
+    from ..documents import storage  # P40: the bytes may live outside the database
+
+    return await storage.read(ctx.db, blank)
 
 
 async def _describe_form(ctx: ToolContext, args: dict[str, Any]) -> str:
@@ -50,7 +53,7 @@ async def _describe_form(ctx: ToolContext, args: dict[str, Any]) -> str:
             f"'{blank.id}' and prepare the filled version as a document (draft_document)."
         )
     try:  # P29: off the event loop (a big sheet takes a while), and refused when too big
-        return head + await asyncio.to_thread(describe, bytes(blank.data))
+        return head + await asyncio.to_thread(describe, await _bytes(ctx, blank))
     except Exception as e:  # noqa: BLE001 - a broken or oversized workbook
         return head + f"Error: could not read the form ({e.__class__.__name__}: {str(e)[:200]})."
 
@@ -71,10 +74,9 @@ async def _fill_form(ctx: ToolContext, args: dict[str, Any]) -> str:
     if not (cells or fields or rows):
         return "Error: give cells, fields or rows to write."
     try:
+        raw = await _bytes(ctx, blank)
         data, report = await asyncio.to_thread(
-            lambda: fill(
-                bytes(blank.data), cells=cells, fields=fields, rows=rows, sheet=args.get("sheet")
-            )
+            lambda: fill(raw, cells=cells, fields=fields, rows=rows, sheet=args.get("sheet"))
         )
     except Exception as e:  # noqa: BLE001 - a broken workbook or a bad value
         return f"Error: could not fill the form ({e.__class__.__name__}: {str(e)[:200]})."

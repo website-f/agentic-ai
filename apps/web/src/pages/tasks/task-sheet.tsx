@@ -57,6 +57,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
 
 import { TaskFiles } from "./task-files";
+import { RescueActions } from "./rescue";
 import { TaskFlowMenu } from "./task-flow";
 import { BlockersPanel, canWait, QuietBadge, ReviewRoundPill, ReviewTrail, statusLabel, waitingPath, type AccountableDetail, type TaskX } from "./accountable";
 
@@ -227,6 +228,7 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
       {s === "running" || s === "blocked" || s === "ready" || s === "triage" ? (
         <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate({ path: "cancel" })}><HandIcon size={14} /> {t("Cancel")}</Button>
       ) : null}
+      <RescueActions task={task} />
       <TaskFlowMenu task={task as TaskX} />
       {s === "done" || s === "failed" || s === "cancelled" ? (
         <Button size="sm" variant="ghost" className="text-muted hover:text-danger" disabled={act.isPending} onClick={() => setDeleting(true)}><TrashIcon size={14} /> {t("Delete")}</Button>

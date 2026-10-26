@@ -64,6 +64,7 @@ async def database():
 
 TABLES = (
     "routines",
+    "storage_targets",
     "intake_batches",
     "task_blockers",
     "objectives",

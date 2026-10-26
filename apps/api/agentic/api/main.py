@@ -385,3 +385,20 @@ app.include_router(allowances_router.router)
 from .routers import routines as routines_router  # noqa: E402
 
 app.include_router(routines_router.router)
+
+# P38: a person's way out of any stuck or failed task (stop now, finish by hand, retry on
+# another AI or agent).
+from .routers import task_rescue as task_rescue_router  # noqa: E402
+
+app.include_router(task_rescue_router.router)
+
+# P40: where company files are kept (the database, this server's disk, S3/B2 buckets, WebDAV
+# file servers), and storage imported into the Library.
+from .routers import storage as storage_router  # noqa: E402
+
+app.include_router(storage_router.router)
+
+# P42: the person's own computer from the web: health, files, the screen, mouse and keyboard.
+from .routers import remote as remote_router  # noqa: E402
+
+app.include_router(remote_router.router)

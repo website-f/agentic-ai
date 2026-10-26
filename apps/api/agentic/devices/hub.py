@@ -139,8 +139,10 @@ async def serve(ws: WebSocket) -> None:
             await _refuse(ws, "revoked", "This computer was unlinked. Link it again to use it.")
             return
         d.version = core.clip(hello.get("version"), 40) or d.version
-        if hello.get("os") in ("windows", "mac"):
+        if hello.get("os") in ("windows", "mac", "linux"):
             d.os = hello["os"]
+        if hello.get("remote") in core.REMOTE_LEVELS:  # P42: what the PC allows
+            d.remote_pc = hello["remote"]
         d.arch = core.clip(hello.get("arch"), 16) or d.arch
         d.hostname = core.clip(hello.get("hostname"), 120) or d.hostname
         if isinstance(hello.get("browsers"), list):
@@ -241,6 +243,9 @@ async def _state(conn: Connection, m: dict[str, Any]) -> None:
             d.folders = core.reported_folders(m["folders"])
         if isinstance(m.get("browsers"), list):
             d.browsers = core.short_list(m["browsers"])
+        if m.get("remote") in core.REMOTE_LEVELS and m["remote"] != d.remote_pc:
+            d.remote_pc = m["remote"]
+            await core.log_activity(db, d, "remote", {"by": "pc", "level": d.remote_pc})
         if isinstance(m.get("paused"), bool) and m["paused"] != d.paused:
             d.paused = m["paused"]
             await core.log_activity(db, d, "pause" if d.paused else "resume", {"by": "pc"})

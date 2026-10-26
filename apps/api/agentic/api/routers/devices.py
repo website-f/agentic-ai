@@ -107,6 +107,7 @@ async def link_code(
         "install": {
             "windows": f"irm {base}/i/{code}/win | iex",
             "mac": f"curl -fsSL {base}/i/{code}/mac | sh",
+            "linux": f"curl -fsSL {base}/i/{code}/linux | sh",
         },
         # The desktop app (Electron) only when a build is published (AGENTIC_PC_APP_*_URL);
         # otherwise the one-line installer is the way in.

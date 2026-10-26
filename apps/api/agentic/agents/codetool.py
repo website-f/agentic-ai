@@ -13,7 +13,6 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
-from sqlalchemy.orm import undefer
 
 from ..core.config import settings
 from ..documents import provenance
@@ -39,14 +38,18 @@ async def run_python(ctx: ToolContext, args: dict[str, Any]) -> str:
 
     files_in = []
     for fid in (args.get("file_ids") or [])[:MAX_IN_FILES]:
-        f = await ctx.db.scalar(
-            select(DocFile).where(DocFile.id == str(fid)).options(undefer(DocFile.data))
-        )
+        f = await ctx.db.scalar(select(DocFile).where(DocFile.id == str(fid)))
         if f is None or f.workspace_id != ctx.workspace.id:
             return f"Error: no such file {fid!r} for you."
         if f.quarantined:  # P24: held back for review (passwords or personal data)
             return f"Error: file {fid!r} is held back for review; a person must release it."
-        files_in.append({"name": f.name, "b64": base64.b64encode(bytes(f.data)).decode()})
+        from ..documents import storage  # P40: the bytes may live outside the database
+
+        try:
+            data = await storage.read(ctx.db, f)
+        except storage.StorageError as e:
+            return f"Error: {f.name}: {e}"
+        files_in.append({"name": f.name, "b64": base64.b64encode(data).decode()})
 
     payload = {"code": code, "files": files_in, "stdin": str(args.get("stdin") or "")}
     try:

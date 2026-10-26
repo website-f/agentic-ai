@@ -97,4 +97,31 @@ export const TASKS_FLOW: Record<string, string> = {
   "A fresh run starts with the new agent.": "Larian baharu bermula dengan ejen baharu.",
   "It waits until you start it.": "Ia menunggu sehingga anda memulakannya.",
   "It is still stopping. Try again in a moment.": "Ia masih sedang berhenti. Cuba lagi sebentar nanti.",
+
+  // P38: rescue a stuck or failed task (stop, finish by hand, retry on another AI)
+  Smart: "Pintar",
+  "Best quality": "Kualiti terbaik",
+  Fast: "Pantas",
+  "Quick and cheap": "Cepat dan murah",
+  Bulk: "Pukal",
+  "Free tiers first": "Peringkat percuma dahulu",
+  Reasoning: "Penaakulan",
+  "Thinks harder, slower": "Berfikir lebih mendalam, lebih perlahan",
+  "Stopped.": "Dihentikan.",
+  "Marked done with your result.": "Ditanda siap dengan hasil anda.",
+  "Started again.": "Dimulakan semula.",
+  "Stops the run at once, even in the middle of a long step": "Menghentikan larian serta-merta, walaupun di tengah langkah yang panjang",
+  "Stop now": "Hentikan sekarang",
+  "Try another AI": "Cuba AI lain",
+  "I'll finish it myself": "Saya akan selesaikannya sendiri",
+  "Finish it yourself": "Selesaikannya sendiri",
+  "The task is marked done with what you write here. Any run still going is stopped first, and work waiting on this task can go ahead.":
+    "Tugasan ini ditanda siap dengan apa yang anda tulis di sini. Mana-mana larian yang masih berjalan dihentikan dahulu, dan kerja yang menunggu tugasan ini boleh diteruskan.",
+  "What was done": "Apa yang telah dibuat",
+  "e.g. I called the supplier: delivery moved to Friday.": "cth. Saya telah menghubungi pembekal: penghantaran dipindahkan ke Jumaat.",
+  "Run it again on another AI": "Jalankannya semula pada AI lain",
+  "The current run is stopped and the same agent starts again from where it was, on the AI you pick. Useful when a provider is down or the answer was weak.":
+    "Larian semasa dihentikan dan ejen yang sama bermula semula dari tempat ia berhenti, pada AI yang anda pilih. Berguna apabila penyedia tergendala atau jawapannya lemah.",
+  "Start again": "Mula semula",
+  "AI to use": "AI untuk digunakan",
 };

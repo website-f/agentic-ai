@@ -218,9 +218,49 @@ async def fetch_url(url: str, *, accept: str = ACCEPT_PAGE, timeout: float = 15)
         if r.is_redirect and "location" in r.headers:
             url = str(httpx.URL(url).join(r.headers["location"]))
             continue
+        ctype = r.headers.get("content-type", "").lower()
+        if r.status_code < 400 and ("application/pdf" in ctype or r.content[:5] == b"%PDF-"):
+            # P39: a PDF is read as text (it used to come back as decoded bytes).
+            import asyncio
+
+            text = await asyncio.to_thread(pdf_text, r.content[:MAX_PDF_BYTES])
+            return Fetched(url, r.status_code, "text/plain; pdf", text)
         body = r.content[:MAX_FETCH_BYTES].decode(r.encoding or "utf-8", errors="replace")
-        return Fetched(url, r.status_code, r.headers.get("content-type", "").lower(), body)
+        return Fetched(url, r.status_code, ctype, body)
     return None
+
+
+MAX_PDF_BYTES = 15_000_000
+MAX_PDF_PAGES = 60
+
+
+def pdf_text(data: bytes) -> str:
+    """The text layer of a PDF, page by page ([page N] markers, as read_file shows). A scan
+    with no text layer gives a note instead (OCR is too slow for a web read)."""
+    try:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(data)
+    except Exception:  # noqa: BLE001 - a broken or encrypted file
+        return "(This PDF could not be opened: it may be damaged or password-protected.)"
+    parts = []
+    try:
+        for i in range(min(len(pdf), MAX_PDF_PAGES)):
+            page = pdf[i]
+            text = page.get_textpage().get_text_range().strip()
+            if text:
+                parts.append(f"[page {i + 1}]\n{text}")
+        more = len(pdf) - MAX_PDF_PAGES
+    finally:
+        pdf.close()
+    if not parts:
+        return (
+            "(This PDF has no text layer: it is a scan. Save it with the browser and read it "
+            "with read_file, which reads scans.)"
+        )
+    if more > 0:
+        parts.append(f"(… {more} more pages not read)")
+    return "\n\n".join(parts)
 
 
 def looks_like_html(body: str) -> bool:
@@ -295,6 +335,28 @@ def _as_int(value: Any, default: int = 0) -> int:
         return default
 
 
+MIN_READABLE_CHARS = 200  # less than this from a plain fetch is an empty JavaScript shell
+
+
+async def _read_in_browser(ctx: ToolContext, url: str) -> "CleanPage | None":
+    """P39: the page as the agent's own browser shows it, or None (no browser, busy, or
+    nothing readable there either)."""
+    from . import browse_reader
+
+    if ctx.task is None or ctx.agent is None or not browse_reader.available():
+        return None
+    try:
+        got = await browse_reader.read(ctx.agent.id, ctx.task.id, url)
+    except Exception:  # noqa: BLE001 - the browser is a fallback
+        return None
+    if not got:
+        return None
+    title, text = got
+    page = clean_page("text/plain", text, url)
+    page.title = page.title or title
+    return page if len(page.body.strip()) >= 40 else None
+
+
 async def _web_fetch(ctx: ToolContext, args: dict[str, Any]) -> str:
     url = str(args.get("url", ""))
     why = str(args.get("why", "")).strip()
@@ -305,9 +367,16 @@ async def _web_fetch(ctx: ToolContext, args: dict[str, Any]) -> str:
     got = await fetch_url(url)
     if got is None:
         return "Error: too many redirects."
-    if got.status >= 400:
-        return f"Error: the page answered {got.status}."
-    page = clean_page(got.content_type, got.body, got.url)
+    page = clean_page(got.content_type, got.body, got.url) if got.status < 400 else None
+    if page is None or len(page.body.strip()) < MIN_READABLE_CHARS or page.how == "raw":
+        # P39: refused to a script (403, a bot check) or built by JavaScript: read it in the
+        # agent's own browser instead.
+        seen = await _read_in_browser(ctx, url)
+        if seen is not None:
+            page = seen
+        elif got.status >= 400:
+            return f"Error: the page answered {got.status}."
+    assert page is not None
     total = len(page.body)
     if args.get("full"):
         start = max(0, min(total, _as_int(args.get("offset"))))
@@ -372,7 +441,12 @@ async def _web_search(ctx: ToolContext, args: dict[str, Any]) -> str:
     count = args.get("count")
     count = int(count) if isinstance(count, int | float) else 6
     try:
-        backend, results = await websearch.search(query, count)
+        backend, results = await websearch.search(
+            query,
+            count,
+            agent_id=ctx.agent.id if ctx.agent is not None else None,
+            task_id=ctx.task.id if ctx.task else None,
+        )
     except websearch.SearchUnavailable as e:
         return f"Error: web search did not work ({e})."
     if not results:
@@ -1400,3 +1474,8 @@ from .money_tools import MONEY_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in CRM_TOOLS})
 TOOLS.update({t.name: t for t in MONEY_TOOLS})
+
+# P41: the Recruiter drafts agent blueprints from its research.
+from .recruiter import DRAFT_BLUEPRINT  # noqa: E402
+
+TOOLS[DRAFT_BLUEPRINT.name] = DRAFT_BLUEPRINT

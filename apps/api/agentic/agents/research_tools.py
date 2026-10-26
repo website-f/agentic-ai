@@ -51,7 +51,7 @@ PASSAGES_PER_PAGE = 4
 PASSAGE_CHARS = 700
 OUTPUT_BUDGET = 7000
 _SKIP_EXT = re.compile(
-    r"\.(?:pdf|jpe?g|png|gif|webp|svg|ico|zip|rar|7z|gz|tgz|mp[34]|avi|mov|webm|docx?|xlsx?"
+    r"\.(?:jpe?g|png|gif|webp|svg|ico|zip|rar|7z|gz|tgz|mp[34]|avi|mov|webm|docx?|xlsx?"
     r"|pptx?|exe|dmg|apk|msi|css|js|json|xml|rss|woff2?|ttf)$",
     re.I,
 )
@@ -256,6 +256,7 @@ async def gather(question: str, seeds: list[str], max_pages: int) -> dict[str, A
     covered: set[str] = set()
     term_pages: Counter[str] = Counter()
     skipped: Counter[str] = Counter()
+    failed: list[str] = []
     fetched = 0
     stop = ""
     low_gain = 0
@@ -283,6 +284,8 @@ async def gather(question: str, seeds: list[str], max_pages: int) -> dict[str, A
                 fetched += 1
             if item.status != "ok" or item.page is None:
                 skipped[item.status] += 1
+                if item.status == "failed":
+                    failed.append(item.url)  # P39: the agent's browser may read it
                 continue
             if any(r.url == item.url for r in reads):
                 continue  # two links that redirect to the same page
@@ -319,10 +322,49 @@ async def gather(question: str, seeds: list[str], max_pages: int) -> dict[str, A
         "covered": covered,
         "confidence": _confidence(key, term_pages),
         "skipped": skipped,
+        "failed_urls": failed,
         "fetched": fetched,
         "stop": stop,
         "requests": crawler.requests,
     }
+
+
+BROWSER_PAGES = 3  # pages re-read in the agent's own browser when a plain fetch failed
+BROWSER_DEADLINE = 75.0
+
+
+async def read_failed_with_browser(
+    question: str, res: dict[str, Any], agent_id: str, task_id: str
+) -> int:
+    """P39: pages a plain fetch could not read (built by JavaScript, bot checks, 403) are
+    read in the agent's own browser instead, up to BROWSER_PAGES. Returns how many."""
+    from . import browse_reader
+
+    if not browse_reader.available():
+        return 0
+    key: list[str] = res["key"]
+    reads: list[_Read] = res["reads"]
+    added = 0
+    started = time.monotonic()
+    for url in res.get("failed_urls", [])[: BROWSER_PAGES * 2]:
+        if added >= BROWSER_PAGES or time.monotonic() - started > BROWSER_DEADLINE:
+            break
+        try:
+            got = await asyncio.wait_for(browse_reader.read(agent_id, task_id, url), 40)
+        except TimeoutError:
+            got = None
+        if not got:
+            continue
+        title, text = got
+        page = clean_page("text/plain", text, url)
+        if not page.body.strip() or any(r.url == url for r in reads):
+            continue
+        terms = {t for t in key if t in set(extract.tokens(page.body))}
+        res["covered"] |= terms
+        reads.append(_Read(len(reads) + 1, url, title[:150], page, terms))
+        res["skipped"]["failed"] -= 1
+        added += 1
+    return added
 
 
 def _passages(question: str, reads: list[_Read]) -> list[tuple[float, int, str]]:
@@ -384,7 +426,12 @@ async def _research_gather(ctx: ToolContext, args: dict[str, Any]) -> str:
         if not settings.web_search_enabled:
             return "Error: web search is turned off for this office; give seed_urls to start from."
         try:
-            backend, results = await websearch.search(question, 6)
+            backend, results = await websearch.search(
+                question,
+                6,
+                agent_id=ctx.agent.id if ctx.agent is not None else None,
+                task_id=ctx.task.id if ctx.task else None,
+            )
         except websearch.SearchUnavailable as e:
             return f"Error: web search did not work ({e}); give seed_urls to start from."
         seeds = [r.url for r in results]
@@ -392,6 +439,15 @@ async def _research_gather(ctx: ToolContext, args: dict[str, Any]) -> str:
         if not seeds:
             return f"No web results for {question!r}."
     res = await gather(question, seeds, max_pages)
+    if (
+        ctx.task is not None
+        and ctx.agent is not None
+        and len(res["reads"]) < 3
+        and res["failed_urls"]
+    ):
+        n = await read_failed_with_browser(question, res, ctx.agent.id, ctx.task.id)
+        if n:
+            found += f" Read {n} page(s) a plain fetch could not, in your own browser."
     reads: list[_Read] = res["reads"]
     key: list[str] = res["key"]
     covered: set[str] = res["covered"]

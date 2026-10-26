@@ -13,9 +13,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import undefer
 
 from ..core.fence import fence
+from ..core.ids import new_id
 from ..models import (
     Agent,
     Branch,
@@ -223,8 +223,9 @@ async def kit_logo(db: AsyncSession, branch_id: str | None) -> bytes | None:
     kit = await db.get(CompanyKit, branch_id)
     if not kit or not kit.logo_file_id:
         return None
-    data = await db.scalar(select(DocFile.data).where(DocFile.id == kit.logo_file_id))
-    return bytes(data) if data else None
+    from . import storage
+
+    return await storage.read_id(db, kit.logo_file_id) or None
 
 
 async def letterhead(db: AsyncSession, branch_id: str | None) -> render_pdf.Letterhead | None:
@@ -369,9 +370,11 @@ async def render(db: AsyncSession, doc: Document) -> Rendered:
     values = dict(doc.values or {})
     docx_bytes: bytes | None = None
     if tpl and tpl.docx_file_id and not doc.body.strip():
-        raw = await db.scalar(select(DocFile.data).where(DocFile.id == tpl.docx_file_id))
+        from . import storage
+
+        raw = await storage.read_id(db, tpl.docx_file_id)
         ctx, info = context(values, fields, kit, meta, today)
-        docx_bytes, missing = docx_template.fill(bytes(raw or b""), ctx, info.items, fields)
+        docx_bytes, missing = docx_template.fill(raw, ctx, info.items, fields)
         info.markdown = docx_template.text_of(docx_bytes)
         info.missing = missing
         filled = info
@@ -541,9 +544,9 @@ async def create_file(
         agent_id=agent_id,
         name=re.sub(r"[\\/\x00-\x1f]", "_", name).strip()[:200] or "file",
         mime=MIME.get(kind) or (mime or "application/octet-stream")[:120],
+        id=new_id("fl"),
         size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
-        data=data,
         status=status,
         text="",
         source=source,
@@ -568,6 +571,10 @@ async def create_file(
         from ..intake import scan
 
         scan.note(f, await asyncio.to_thread(scan.scan_bytes, data, f.name, f.mime))
+    # P40: the bytes go to the workspace's primary storage (Postgres when none is set).
+    from . import storage
+
+    await storage.store_new(db, f, data)
     db.add(f)
     await db.flush()
     return f
@@ -622,7 +629,7 @@ async def process_file(
     before the file is marked ready (intake sorts it there), with what the model said."""
     from ..intake import scan
 
-    f = await db.scalar(select(DocFile).where(DocFile.id == file_id).options(undefer(DocFile.data)))
+    f = await db.scalar(select(DocFile).where(DocFile.id == file_id))
     if f is None:
         return "missing"
     if after is None and f.batch_id:  # P24: a re-read intake file is sorted the same way
@@ -630,8 +637,17 @@ async def process_file(
 
         sorter = await Sorter.load(db, f.branch_id)
         hint, after = hint or sorter.hint(), sorter.apply
+    from . import storage
+
     try:
-        out = await asyncio.to_thread(extract, bytes(f.data), f.name, f.mime)
+        data = await storage.read(db, f)  # P40: wherever it lives
+        out = await asyncio.to_thread(extract, data, f.name, f.mime)
+    except storage.StorageError as e:
+        f.status, f.error = "failed", str(e)[:300]
+        if after is not None:
+            await after(db, f, {})
+        await db.commit()
+        return f.status
     except Exception as e:  # noqa: BLE001 - a broken file is reported, never crashes the worker
         log.warning("could not read %s: %s", f.id, e)
         f.status, f.error = "failed", f"Could not read this file ({e.__class__.__name__})."[:300]
@@ -647,8 +663,8 @@ async def process_file(
     # their raw parts (headers, footers, comments, text boxes, rows past what was read);
     # what the office made itself is scanned for the record but not held back.
     found = scan.scan(out.text)
-    if kind_of(f) in ("docx", "xlsx", "pptx"):
-        raw = await asyncio.to_thread(scan.office_text, bytes(f.data))
+    if sniff(data[:4096], f.name, f.mime) in ("docx", "xlsx", "pptx"):
+        raw = await asyncio.to_thread(scan.office_text, data)
         if raw:
             found.merge(await asyncio.to_thread(scan.scan, raw))
     if f.source in ("upload", "download"):
@@ -696,9 +712,10 @@ async def process_file(
     return f.status
 
 
-def kind_of(f: DocFile) -> str:
-    """pdf | docx | xlsx | pptx | ... for a stored file (its bytes must be loaded)."""
-    return sniff(bytes(f.data[:4096]) if f.data else b"", f.name, f.mime)
+def kind_of(f: DocFile, data: bytes | None = None) -> str:
+    """pdf | docx | xlsx | pptx | ... for a stored file (give its bytes, or load f.data)."""
+    raw = data if data is not None else (f.data or b"")
+    return sniff(bytes(raw[:4096]), f.name, f.mime)
 
 
 def file_line(f: DocFile, today: date | None = None) -> str:

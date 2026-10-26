@@ -305,6 +305,53 @@ async def _apply(db: AsyncSession, principal: Principal, bp: Blueprint, agent: A
     )
 
 
+class RecruitIn(BaseModel):
+    role: str = Field(min_length=3, max_length=160)
+    notes: str = Field(default="", max_length=2000)
+    branch_id: str | None = None
+
+
+@router.post("/recruit", status_code=status.HTTP_201_CREATED)
+async def recruit(
+    body: RecruitIn,
+    principal: Principal = Depends(require("agents.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """P41: the Recruiter researches the role and drafts a blueprint (a task you can watch)."""
+    from ...agents import launch, recruiter
+    from ...models import Branch
+
+    if body.branch_id:
+        b = await db.get(Branch, body.branch_id)
+        if b is None or b.workspace_id != principal.workspace_id:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a branch from here.")
+    try:
+        t = await recruiter.recruit(
+            db,
+            workspace_id=principal.workspace_id,
+            role=body.role.strip(),
+            notes=body.notes.strip(),
+            branch_id=body.branch_id or principal.branch_id,
+            actor=principal.actor,
+        )
+    except ValueError as e:
+        raise api_error(status.HTTP_409_CONFLICT, "no_place_for_recruiter", str(e)) from e
+    try:
+        await launch.launch(db, t, principal.actor)
+    except launch.LaunchError as e:
+        raise api_error(e.status, e.code, e.message) from e
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "blueprint.recruit",
+        target=t.id,
+        after={"role": body.role},
+    )
+    await db.commit()
+    return {"task_id": t.id, "agent_id": t.assignee_agent_id or ""}
+
+
 @router.post("/{blueprint_id}/apply")
 async def apply_blueprint(
     blueprint_id: str,

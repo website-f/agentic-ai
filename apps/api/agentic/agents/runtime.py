@@ -27,7 +27,7 @@ from ..crm.access import MONEY_TOOLS, explicit_money, money_ready
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
 from ..engine import acting, gateway
-from ..i18n import explicit_lang
+from ..i18n import dialects, explicit_lang
 from ..i18n import notes as lang_notes
 from ..microsoft.access import MAIL_TOOLS, mail_ready
 from ..models import (
@@ -345,11 +345,17 @@ def _parse_args(raw: Any) -> tuple[dict[str, Any] | None, str | None]:
     return (val, None) if isinstance(val, dict) else (None, "Tool arguments must be a JSON object.")
 
 
+# P39: research reads up to a dozen pages and may re-read failed ones in the agent's own
+# browser; web_fetch may fall back to the browser too.
+SLOW_TOOLS = {"research_gather": 150, "web_fetch": 90, "web_search": 90}
+
+
 async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
+    limit = SLOW_TOOLS.get(name, TOOL_TIMEOUT)
     try:
-        return pg_safe(await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=TOOL_TIMEOUT))
+        return pg_safe(await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=limit))
     except TimeoutError:
-        return f"Error: {TOOLS[name].label} took longer than {TOOL_TIMEOUT} s."
+        return f"Error: {TOOLS[name].label} took longer than {limit} s."
     except Exception as e:  # noqa: BLE001 - a broken tool must not kill the task
         log.warning("tool %s failed", name, exc_info=True)
         return f"Error: {TOOLS[name].label} failed ({e.__class__.__name__}: {e})."
@@ -577,6 +583,25 @@ async def _pending_calls(db: AsyncSession, history: list[AgentMessage]) -> list[
 DECIDED = ("approved", "denied", "answered", "expired")
 
 
+async def _known_link(db: AsyncSession, task: Task, url: str) -> bool:
+    """P39: did this exact link appear in a tool result of this task (search results, a page
+    it read)?"""
+    url = url.strip()
+    if not url.startswith(("http://", "https://")) or len(url) > 2000:
+        return False
+    pattern = "%" + url.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    hit = await db.scalar(
+        select(AgentMessage.id)
+        .where(
+            AgentMessage.task_id == task.id,
+            AgentMessage.role == "tool",
+            AgentMessage.content.like(pattern, escape="\\"),
+        )
+        .limit(1)
+    )
+    return hit is not None
+
+
 async def _resolve_calls(
     db: AsyncSession, ctx: ToolContext, task: Task, history: list[AgentMessage]
 ) -> StepResult | None:
@@ -628,6 +653,21 @@ async def _resolve_calls(
             )
 
         decision = await policy.evaluate(agent, name, args)
+        if (
+            decision.effect == "ask"
+            and name == "web_fetch"
+            and "web_fetch" not in (agent.tools or {})  # nobody chose "ask" for it on purpose
+            and await _known_link(db, task, str(args.get("url") or ""))
+        ):
+            # P39: opening a link this task's own search results or pages gave is reading,
+            # not sending: such a link cannot carry anything out. Research no longer waits on
+            # a person for every page. A link the model wrote itself still asks.
+            decision = policy.Decision(
+                "allow",
+                "web_fetch.known_link",
+                "the link came from this task's own search results or pages",
+                False,
+            )
         if name in TEAM_TOOLS and (
             decision.effect == "allow" or (approved_team and decision.effect != "deny")
         ):
@@ -1028,7 +1068,53 @@ async def _language_line(db: AsyncSession, task: Task) -> str:
     message only (never the system prompt, so the cached prefix stays the same)."""
     if not (task.created_by or "").startswith("user:"):
         return ""
-    return lang_notes.task_line(await prefs.language(db, task.created_by.removeprefix("user:")))
+    who = task.created_by.removeprefix("user:")
+    line = lang_notes.task_line(await prefs.language(db, who))
+    # P37: the final answer to the person in their style (reports stay standard Malay).
+    style = await prefs.speech(db, who)
+    if style:
+        text = f"{task.title}\n{task.brief}"
+        line += "\n\nWhen you answer the person directly: " + dialects.voice_note(style, text)
+        if g := dialects.gloss(style, text):
+            line += "\n" + g
+    return line
+
+
+# P38: when a task's group cannot answer at all (a provider outage, every key rate-limited or
+# out of credit), the task carries on with the office's other chat groups before it fails.
+# The local backup model is never a failover for agent work (too small).
+FAILOVER_GROUPS = ("smart", "fast", "bulk")
+
+
+async def _task_chat(
+    db: AsyncSession,
+    ws: Workspace,
+    t: Task,
+    group: str,
+    messages: list[dict[str, Any]],
+    **kw: Any,
+) -> gateway.GatewayReply:
+    """gateway.chat on `group`, then on the other chat groups (P38). `kw` as gateway.chat."""
+    try:
+        return await gateway.chat(db, ws.id, group, messages, **kw)
+    except gateway.GatewayUnavailable as first:
+        for other in FAILOVER_GROUPS:
+            if other == group:
+                continue
+            try:
+                reply = await gateway.chat(db, ws.id, other, messages, **kw)
+            except gateway.GatewayUnavailable:
+                continue
+            await task_event(
+                db,
+                t,
+                "failover",
+                "system",
+                f"the {group} models could not answer; carried on with the {other} group",
+                {"from": group, "to": other, "why": str(first)[:300]},
+            )
+            return reply
+        raise
 
 
 async def run_task_step(task_id: str) -> StepResult:
@@ -1105,24 +1191,26 @@ async def _run_task_step(task_id: str) -> StepResult:
             prompt = await system_prompt(db, agent, "task", task.memory_snapshot)
             messages = [{"role": "system", "content": prompt}]
             # P12: long runs send a checkpoint + recent turns, not the whole history.
+            group = task.model_group or agent.model_group  # P38: a person may pick another AI
             window = await context.plan(
                 db,
                 task,
                 history,
                 workspace_id=ws.id,
-                group=agent.model_group,
+                group=group,
                 pinned_first=True,
-                window=await context.group_window(db, ws.id, agent.model_group),
+                window=await context.group_window(db, ws.id, group),
                 agent_id=agent.id,
                 task_id=task.id,
             )
             messages += context.render(history, window, to_openai, pinned_first=True)
             await agent_thinking(agent, True)
             try:
-                reply = await gateway.chat(
+                reply = await _task_chat(
                     db,
-                    ws.id,
-                    agent.model_group,
+                    ws,
+                    task,
+                    group,
                     messages,
                     task="agent.task",
                     tools=offered_tools(
@@ -1449,6 +1537,7 @@ async def _finish(task_id: str, state: str, message: str | None) -> dict[str, An
                 finished_at=_now(),
                 blocked_reason=None,
             )
+            await _tell_owner_it_failed(db, task, agent, message)
         await agent_status(agent, "error" if state not in ("done", "cancelled") else "idle", task)
         # P21: act on a reviewer's verdict, and move on the work that waits for this task.
         try:
@@ -1457,6 +1546,37 @@ async def _finish(task_id: str, state: str, message: str | None) -> dict[str, An
             await blockers.on_finished(db, task)
         except Exception:  # noqa: BLE001 - the task itself is finished either way
             log.warning("follow-ups after %s failed", task.id, exc_info=True)
+
+
+async def _tell_owner_it_failed(
+    db: AsyncSession, task: Task, agent: Agent, message: str | None
+) -> None:
+    """P38: the person who gave a top-level task hears that it failed, on every channel they
+    set up, with what they can do (retry, another AI, another agent, finish it themselves)."""
+    if task.depth > 0 or not (task.created_by or "").startswith("user:"):
+        return
+    from ..channels import deliver  # late: channels import this module
+    from ..i18n import Msg
+
+    try:
+        await deliver.start(
+            await deliver.notify_user(
+                db,
+                task.workspace_id,
+                task.created_by.removeprefix("user:"),
+                Msg("Task failed: {title}", title=task.title[:100]),
+                Msg(
+                    "{agent} could not finish it: {why}. Open it to retry, try another AI or "
+                    "agent, or finish it yourself.",
+                    agent=agent.name,
+                    why=(message or "no reason given")[:200],
+                ),
+                f"/tasks?task={task.id}",
+                dedupe=f"failed:{task.id}:{task.run_count}",
+            )
+        )
+    except Exception:  # noqa: BLE001 - a notice must never change how the task ended
+        log.warning("could not tell the owner that %s failed", task.id, exc_info=True)
 
 
 async def apply_approval(approval_id: str) -> None:
@@ -1794,6 +1914,11 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
     # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
     lang = explicit_lang() or await prefs.language(db, session.user_id)
     note = lang_notes.chat_note(lang)
+    # P37: the person's dialect or casual style, and what their dialect words mean.
+    style = await prefs.speech(db, session.user_id)
+    if style:
+        extra = [dialects.voice_note(style, text), dialects.gloss(style, text)]
+        note = "\n".join([note, *[x for x in extra if x]])
     block = f"{block}\n\n{note}" if block else note
     ctx = ToolContext(
         db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id

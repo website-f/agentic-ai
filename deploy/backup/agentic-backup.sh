@@ -95,6 +95,11 @@ do_backup() {
     log "archiving the vault"
     tar -C /data/vault -cf "$WORK/vault/vault.tar" . || fail "vault archive" || return 1
   fi
+  # P40: company files kept on this server's disk (storage target "local").
+  if [ -d /data/files ] && [ -n "$(ls -A /data/files 2>/dev/null)" ]; then
+    log "archiving the files on disk"
+    tar -C /data/files -cf "$WORK/vault/files.tar" . || fail "files archive" || return 1
+  fi
   if [ -d /data/waha ] && [ -n "$(ls -A /data/waha 2>/dev/null)" ]; then
     # Copied while WAHA runs: its small SQLite store is normally consistent between writes;
     # if a restored session will not reconnect, scan the QR code again on the Channels page.
@@ -148,6 +153,11 @@ do_restore() {
     log "restoring the vault"
     find /data/vault -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     tar -C /data/vault -xf "$src/vault/vault.tar"
+  fi
+  if [ -f "$src/vault/files.tar" ] && [ -d /data/files ]; then
+    log "restoring the files on disk"
+    find /data/files -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    tar -C /data/files -xf "$src/vault/files.tar"
   fi
   if [ -f "$src/waha/waha.tar" ]; then
     # The live session volume is mounted read-only here: unpack next to the restore, then

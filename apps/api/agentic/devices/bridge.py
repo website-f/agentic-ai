@@ -188,7 +188,7 @@ async def call_here(
     conn = hub.connection(device_id)
     if conn is None:
         raise await failed("offline", "This computer is offline.")
-    if method == "files.upload":
+    if method in core.UPLOADS:
         params["upload_url"] = f"{conn.base}/api/devices/uploads/{call_id}"
     elif method == "files.save" and "download_url" not in params:
         oid = str(params.pop("download_id", "") or "")
@@ -231,6 +231,50 @@ async def fetch_file(
     timeout: float = 180.0,
 ) -> tuple[str, bytes]:
     """The PC uploads one file (files.upload); returns (name, bytes). Nothing is stored."""
+    name, raw, _ = await _with_upload(
+        device_id,
+        "files.upload",
+        {"path": path},
+        max_bytes=max_bytes,
+        kind=kind,
+        agent_id=agent_id,
+        task_id=task_id,
+        timeout=timeout,
+    )
+    return name or os.path.basename(path.replace("\\", "/")) or "file", raw
+
+
+async def fetch_screen(
+    device_id: str, max_width: int = 1600, quality: int = 65
+) -> tuple[bytes, dict]:
+    """P42: a JPEG of the computer's screen right now, and its size (width, height, the
+    screen's own pixels). Nothing is stored."""
+    _, raw, data = await _with_upload(
+        device_id,
+        "screen.capture",
+        {
+            "max_width": max(320, min(int(max_width), 3840)),
+            "quality": max(20, min(int(quality), 90)),
+        },
+        max_bytes=8 * 1024 * 1024,
+        kind="screen",
+        timeout=20.0,
+    )
+    return raw, data
+
+
+async def _with_upload(
+    device_id: str,
+    method: str,
+    params: dict[str, Any],
+    *,
+    max_bytes: int,
+    kind: str,
+    agent_id: str | None = None,
+    task_id: str | None = None,
+    timeout: float = 180.0,
+) -> tuple[str, bytes, dict[str, Any]]:
+    """A call whose result bytes the PC uploads over HTTPS: (name, bytes, the call's data)."""
     max_bytes = max(1, min(int(max_bytes), core.MAX_UPLOAD))
     call_id = new_call_id()
     await valkey().set(
@@ -241,8 +285,8 @@ async def fetch_file(
     try:
         data = await call(
             device_id,
-            "files.upload",
-            {"path": path, "max_bytes": max_bytes},
+            method,
+            {**params, "max_bytes": max_bytes},
             timeout,
             call_id=call_id,
             kind=kind,
@@ -255,14 +299,14 @@ async def fetch_file(
     sent_name = await valkey().getdel(_name_key(call_id))
     if raw is None:
         raise DeviceError("failed", "The PC did not send the file.")
-    name = str(data.get("name") or sent_name or os.path.basename(path.replace("\\", "/")))
+    name = str(data.get("name") or sent_name or "")
     want = str(data.get("sha256") or "").lower()
     if want:
         import hashlib
 
         if hashlib.sha256(raw).hexdigest() != want:
             raise DeviceError("failed", "The file changed on the way. Try again.")
-    return core.clip(name, 200) or "file", bytes(raw)
+    return core.clip(name, 200), bytes(raw), data
 
 
 async def pending_upload(call_id: str) -> dict[str, Any] | None:

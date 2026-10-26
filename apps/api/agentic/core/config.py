@@ -123,6 +123,8 @@ class Settings(BaseSettings):
     # api and worker, never Postgres). The original is deleted once its audio is extracted;
     # the small compressed audio is kept for the workspace's retention days, then purged.
     media_dir: str = "./data/media"
+    # P40: the "This server's disk" file storage (company files kept on the VPS disk).
+    files_dir: str = "./data/files"
     minutes_max_mb: int = Field(default=1024, ge=1, le=10_240)
     minutes_max_hours: float = Field(default=4.0, gt=0, le=12)
 

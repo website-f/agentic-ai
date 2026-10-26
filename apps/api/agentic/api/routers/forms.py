@@ -293,16 +293,16 @@ async def _share_template(
     )
     if mine is None or elsewhere:
         full = await db.scalar(
-            select(DocFile)
-            .where(DocFile.id == file.id)
-            .options(undefer(DocFile.data), undefer(DocFile.text))
+            select(DocFile).where(DocFile.id == file.id).options(undefer(DocFile.text))
         )
         assert full is not None
+        from ...documents import storage  # P40: the bytes may live outside the database
+
         copy = await service.create_file(
             db,
             workspace_id=principal.workspace_id,
             name=full.name,
-            data=bytes(full.data),
+            data=await storage.read(db, full),
             created_by=principal.actor,
             mime=full.mime,
             branch_id=branch_id,
@@ -528,19 +528,15 @@ async def download_blank(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     f = await _form(db, principal, form_id)
-    file = (
-        await db.scalar(
-            select(DocFile).where(DocFile.id == f.file_id).options(undefer(DocFile.data))
-        )
-        if f.file_id
-        else None
-    )
+    file = await db.get(DocFile, f.file_id) if f.file_id else None
     if file is None:
         raise api_error(
             status.HTTP_404_NOT_FOUND, "no_template", "This form has no file to download."
         )
+    from ...documents import storage  # P40: the bytes may live outside the database
+
     return Response(
-        content=bytes(file.data),
+        content=await storage.read(db, file),
         media_type=file.mime or "application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(file.name)}"},
     )

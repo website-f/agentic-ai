@@ -29,7 +29,7 @@ export function copyText(text: string) {
   void navigator.clipboard.writeText(text).then(done, blocked);
 }
 
-const OS_LABEL: Record<DeviceOs, string> = { windows: "Windows", mac: "Mac" };
+const OS_LABEL: Record<DeviceOs, string> = { windows: "Windows", mac: "Mac", linux: "Linux" };
 
 function Steps({ items }: { items: ReactNode[] }) {
   return (
@@ -148,10 +148,14 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
     </div>
   );
 
+  // The desktop app is for Windows and Mac; Linux installs with the one line.
+  const appOs: "windows" | "mac" = os === "linux" ? "windows" : os;
   const osPick = (
-    <Segmented label={t("Your computer")} value={os} onChange={setOs} size="sm"
-      options={[{ value: "windows", label: "Windows" }, { value: "mac", label: "Mac" }]} />
+    <Segmented label={t("Your computer")} value={tab === "app" ? appOs : os} onChange={setOs} size="sm"
+      options={[{ value: "windows", label: "Windows" }, { value: "mac", label: "Mac" },
+        ...(tab === "app" ? [] : [{ value: "linux" as const, label: "Linux" }])]} />
   );
+  const command = link ? (link.install[os] ?? link.install.mac) : "…";
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("Link a computer")}
@@ -175,7 +179,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
                     aria-disabled={!link || undefined}
                     className={cn(
                       "flex min-h-16 min-w-0 items-center gap-3 rounded-[var(--radius-md)] border px-4 py-3 transition-colors",
-                      os === o ? "border-accent bg-accent-soft/50" : "border-border bg-surface hover:border-accent/40",
+                      appOs === o ? "border-accent bg-accent-soft/50" : "border-border bg-surface hover:border-accent/40",
                       !link && "pointer-events-none opacity-60",
                     )}>
                     <OsIcon size={28} weight="fill" className="shrink-0 text-accent" />
@@ -197,7 +201,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
               <p className="text-[13px] text-muted">
                 {t("The app is not signed yet, so your computer asks once whether to trust it. This is what you will see:")}
               </p>
-              {os === "windows" ? (
+              {appOs === "windows" ? (
                 <>
                   <Steps items={[
                     t("Open the downloaded file."),
@@ -236,9 +240,9 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
                   "min-w-0 flex-1 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-[#0f172a] px-3.5 py-3 font-mono text-[13px] leading-relaxed text-[#e2e8f0]",
                   gone && "opacity-50",
                 )}>
-                  <code>{link ? link.install[os] : "…"}</code>
+                  <code>{command}</code>
                 </pre>
-                <Button className="h-auto" disabled={!link || gone} onClick={() => link && copyText(link.install[os])} aria-label={t("Copy the command")}>
+                <Button className="h-auto" disabled={!link || gone} onClick={() => link && copyText(command)} aria-label={t("Copy the command")}>
                   <CopyIcon size={16} /> <span className="max-sm:hidden">{t("Copy")}</span>
                 </Button>
               </div>
@@ -248,6 +252,10 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
               <span key="a" className="inline-flex flex-wrap items-center gap-1"><TerminalWindowIcon size={15} className="text-accent" /> {t("Press Start, type PowerShell, open it, paste, press Enter.")}</span>,
               t("Wait for “Linked” (about a minute: it downloads Node.js from nodejs.org and the agent)."),
               t("It starts by itself with your computer from now on. No admin rights needed."),
+            ] : os === "linux" ? [
+              <span key="a" className="inline-flex flex-wrap items-center gap-1"><TerminalWindowIcon size={15} className="text-accent" /> {t("Open a terminal (Ctrl+Alt+T on most desktops), paste, press Enter.")}</span>,
+              t("Wait for “Linked” (about a minute: it downloads Node.js from nodejs.org and the agent)."),
+              t("It starts by itself when you sign in from now on. No sudo needed."),
             ] : [
               <span key="a" className="inline-flex flex-wrap items-center gap-1"><TerminalWindowIcon size={15} className="text-accent" /> {t("Open Terminal (Spotlight → Terminal), paste, press Enter.")}</span>,
               t("Wait for “Linked” (about a minute: it downloads Node.js from nodejs.org and the agent)."),

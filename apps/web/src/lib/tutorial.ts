@@ -19,12 +19,17 @@ export interface TutorialProgress {
   dismissed: boolean;
 }
 
+/** P37: how a person's AI speaks to them (api i18n/dialects STYLES); "standard" = as written. */
+export type SpeechStyle =
+  | "standard" | "pasar" | "kelantan" | "terengganu" | "kedah" | "perak" | "pahang"
+  | "negeri_sembilan" | "melaka" | "johor" | "sabah" | "sarawak";
+
 /** The whitelisted prefs keys; each holds a small object. Others may add keys server-side. */
 export interface Prefs {
   tutorial: { done?: string[]; dismissed?: boolean; track?: Track };
   onboarding: Record<string, unknown>;
   /** P22: the app language this person chose. */
-  locale?: { language?: "en" | "ms" | null };
+  locale?: { language?: "en" | "ms" | null; speech?: SpeechStyle | null };
 }
 
 export const tutorialKeys = {

@@ -231,6 +231,24 @@ BOLD_ROWS_JS = """() => {
   return out;
 }"""
 
+# P39: every http(s) link with its visible text, in page order (search results pages).
+LINKS_JS = """() => {
+  const out = [];
+  const seen = new Set();
+  for (const a of document.querySelectorAll('a[href]')) {
+    const href = a.href || '';
+    const text = String(a.innerText || a.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+    if (!href.startsWith('http') || !text || seen.has(href)) continue;
+    seen.add(href);
+    let near = '';
+    const box = a.closest('li, article, div');
+    if (box) near = String(box.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 300);
+    out.push({text: text.slice(0, 200), href: href.slice(0, 1000), near});
+    if (out.length >= 300) break;
+  }
+  return out;
+}"""
+
 # The page's text, plus the text of same-origin iframes (their fields are in the snapshot).
 TEXT_JS = """() => {
   let t = document.body ? document.body.innerText : '';
@@ -835,7 +853,7 @@ CDP_RELAY = re.compile(
 
 class Act(BaseModel):
     # goto | click | type | select | check | press | scroll | back | read | look | snapshot |
-    # find | wait | verify | login_submit
+    # find | wait | verify | login_submit | links
     action: str
     url: str | None = None
     element: int | None = None  # an old numbered view: element 7 is ref e7
@@ -1500,6 +1518,14 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
             return obs
         elif body.action == "snapshot" or body.action == "look":
             return await _do_snapshot(s, body)
+        elif body.action == "links":
+            # P39: the page's links with their text (a search results page, for research).
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=8000)
+            except Exception:  # noqa: BLE001 - read what is there
+                pass
+            links = await page.evaluate(LINKS_JS)
+            return {"url": page.url, "title": await page.title(), "links": links[:300]}
         elif body.action == "find":
             return await _do_find(s, body)
         elif body.action == "wait":

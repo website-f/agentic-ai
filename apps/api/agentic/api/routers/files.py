@@ -15,7 +15,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import undefer
 
 from ...agents import dispatch
 from ...core.db import SessionLocal, get_db
@@ -566,7 +565,12 @@ async def download(
 ) -> Response:
     f = await get_file(db, principal, file_id, library_ok=True)
     check_held_back(principal, f)
-    data = await db.scalar(select(DocFile.data).where(DocFile.id == f.id))
+    from ...documents import storage  # P40: the bytes may live outside the database
+
+    try:
+        data = await storage.read(db, f)
+    except storage.StorageError as e:
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "storage_unavailable", str(e)) from e
     show = inline and f.mime in INLINE_SAFE
     mime = f.mime if show else (f.mime if f.mime in INLINE_SAFE else "application/octet-stream")
     disposition = "inline" if show else "attachment"
@@ -705,11 +709,15 @@ async def delete_file(
     from ...knowledge import indexer
 
     await indexer.remove(db, "file", f.id)  # P18: its library passages go with it
+    from ...documents import storage
+
+    await storage.forget(db, f)  # P40: its bytes in a bucket or on the disk go too
     await db.delete(f)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def load_bytes(db: AsyncSession, file_id: str) -> bytes:
-    f = await db.scalar(select(DocFile).where(DocFile.id == file_id).options(undefer(DocFile.data)))
-    return bytes(f.data) if f else b""
+    from ...documents import storage
+
+    return await storage.read_id(db, file_id)

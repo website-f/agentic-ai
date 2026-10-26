@@ -827,6 +827,9 @@ async def delete_recording(
         await indexer.remove(db, "file", rec.library_file_id)
         f = await db.get(DocFile, rec.library_file_id)
         if f is not None:
+            from ...documents import storage
+
+            await storage.forget(db, f)  # P40: its bytes in a bucket or on the disk too
             await db.delete(f)
     if rec.document_id:
         doc = await db.get(Document, rec.document_id)

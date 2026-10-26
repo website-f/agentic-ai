@@ -1,6 +1,6 @@
 # P31: the PC agent (a person's own computer, for their own AI)
 
-A small program on a person's Windows or Mac computer that lets **their own AI** (their twin,
+A small program on a person's Windows, Mac or Linux computer that lets **their own AI** (their twin,
 or their private assistant) find and read files in folders they chose, copy files into their
 workspace, and drive a real, visible browser window on their screen. It is installed in one of
 two ways, both ending in the same agent:
@@ -9,6 +9,8 @@ two ways, both ending in the same agent:
   web, with a one-time link code in it, so the PC is installed and linked in one paste.
   - Windows (PowerShell): `irm https://HOST/i/CODE/win | iex`
   - Mac (Terminal): `curl -fsSL https://HOST/i/CODE/mac | sh`
+  - Linux (terminal): `curl -fsSL https://HOST/i/CODE/linux | sh` (P42: the same `install.sh`;
+    it checks the system and installs a systemd user service, or desktop autostart)
 - **Desktop app** (download `.exe` / `.dmg`; NOT shipped yet: the link dialog offers it only
   when `AGENTIC_PC_APP_WINDOWS_URL` and `AGENTIC_PC_APP_MAC_URL` are both set): the same agent plus a tray icon and a window
   (status, folders, activity, pause, unlink). Unsigned for now: a one-time "Run anyway" /
@@ -142,8 +144,72 @@ Uninstall (`agentic-pc uninstall`): unlink, stop the agent, remove the `Run` ent
 entry, delete the config folder, then the program folder once node exits (a one-time `RunOnce`
 entry repeats that at the next sign-in in case it was cut short).
 
-CLI: `agentic-pc status | folders [add|remove] <path> | pause | resume | unlink | logs |
-uninstall | run | link <code> --server <url>`.
+CLI: `agentic-pc status | folders [add|remove] <path> | remote [off|view|control] | pause |
+resume | unlink | logs | uninstall | run | link <code> --server <url>`.
+
+## Linux (P42)
+
+`~/.config/agentic-office/` (`node/`, `agent/agent.cjs`, `bin/agentic-pc`, config and logs).
+Starts at sign-in through a systemd **user** service (`~/.config/systemd/user/agentic-pc.service`,
+`Restart=on-failure`), or `~/.config/autostart/agentic-pc.desktop` where there is no user
+systemd. No sudo. `agentic-pc uninstall` disables and removes both. Folders on Linux live under
+`/home/<you>/…`, `/mnt/…` or `/media/<you>/…`.
+
+## From the web, while away (P42)
+
+The person themselves (never an AI, never an admin) can reach their own computer from any
+browser they are signed in on: **My computers → Open from the web**
+(`/computers/<id>/remote`, `apps/web/src/pages/computers/remote.tsx`).
+
+| | What | Lock |
+|---|---|---|
+| Health | CPU busy %, memory, disks, uptime, who is signed in (`system.health`) | online and not paused |
+| Files | browse the shared folders, search by name, download (`files.list`, `files.search`, `files.upload`) | the same folders the AI may see |
+| Screen | a live view: one JPEG after another (`screen.capture`, uploaded like a file, never stored) | **view** |
+| Control | click, double click, right click, scroll, type text, named keys and combinations (`input.send`) | **control** |
+
+**Two locks, both needed** (`devices.remote_pc`, `devices.remote_allowed`; migration `0039`):
+
+1. On the computer: `agentic-pc remote off | view | control` (off by default). The agent reports
+   it in its hello and state messages; it also refuses `screen.capture` / `input.send` itself
+   when its own level is lower.
+2. On the web: the switch on the remote page, `PUT /api/devices/{id}/remote {level, password}`.
+   Turning **on** needs the person's password; turning off does not. Audited (`device.remote`).
+
+What works is the lower of the two (`core.remote_level`). The computer shows a **notification
+on its own screen** when a view or control session starts (again after two quiet minutes), and
+every session is in the activity log (screen and control rows at most once per five minutes;
+typed text is never logged, only that keys were sent).
+
+API (owner only, `devices._own`, 404 for anyone else):
+
+- `GET /api/devices/{id}/health`
+- `GET /api/devices/{id}/files?path=` (a folder) `| ?q=` (a search) `|` nothing (the shared folders)
+- `GET /api/devices/{id}/files/download?path=`
+- `PUT /api/devices/{id}/remote {level, password}`
+- `GET /api/devices/{id}/screen?w=&q=` → `image/jpeg`, `X-Screen-Width/Height`, `no-store`
+- `POST /api/devices/{id}/input {kind: mouse, x, y (0..1 of the screen), action, dy}` or
+  `{kind: key, text}` or `{kind: key, key: "ctrl+c" | "enter" | "alt+tab" | "f5" ...}`
+
+How each system does it (`apps/pc-agent/agent.cjs`):
+
+- **Windows**: a small helper program, `agentic-pc-helper-<hash>.exe`, compiled on first use by
+  the C# compiler that ships with Windows (.NET Framework 4, `csc.exe`) into
+  `%LOCALAPPDATA%\AgenticOffice\helper\`. It captures all monitors (`CopyFromScreen`, DPI
+  aware) and sends mouse (`SetCursorPos`/`mouse_event`) and keys (`SendKeys`). Its full
+  source is in agent.cjs and it is rebuilt when that changes. (A PowerShell script doing the
+  screen capture is blocked by Windows Defender as screen-grabbing malware; an ordinary
+  program is how remote-desktop tools do it.) Screen locked / nobody signed in: `no_screen`.
+- **Mac**: `screencapture` + `sips`; input through JXA (CoreGraphics mouse events, System
+  Events keystrokes). macOS asks once for **Screen Recording** and **Accessibility** for the
+  program that runs the agent.
+- **Linux**: `grim` (Wayland) or ImageMagick `import` (X11) for the screen; `xdotool` for input
+  (X11 sessions only).
+
+Not a full remote desktop protocol: frames are polled (about one to three a second, depending
+on the computer and the line), which is enough to check something, click through a program
+or type a short reply, and is what fits through the existing HTTPS connection with no extra
+port, relay or app.
 
 ## Desktop app
 

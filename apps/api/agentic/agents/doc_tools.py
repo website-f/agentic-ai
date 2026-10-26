@@ -523,7 +523,6 @@ async def _pack_attach(ctx: ToolContext, args: dict[str, Any]) -> str:
 
 
 async def _view_image(ctx: ToolContext, args: dict[str, Any]) -> str:
-    from sqlalchemy.orm import undefer
 
     from . import vision
 
@@ -534,10 +533,9 @@ async def _view_image(ctx: ToolContext, args: dict[str, Any]) -> str:
         return HELD_BACK.format(name="This file")
     if not f.mime.startswith("image/"):
         return f"Error: {f.name} is not an image. Use read_file for documents."
-    full = await ctx.db.scalar(
-        select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.data))
-    )
-    data = bytes(full.data) if full else b""
+    from ..documents import storage  # P40: the bytes may live outside the database
+
+    data = await storage.read_id(ctx.db, f.id)
     if not data or len(data) > vision.MAX_IMAGE_BYTES:
         return "Error: the image is empty or too large to view."
     question = str(args.get("question") or "").strip()

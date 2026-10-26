@@ -142,7 +142,11 @@ async def test_a_failed_blocker_routes_too_and_a_retry_releases_it(client, llm, 
     b = await _task(client, aina, "Reconcile", blocked_by=[a["id"]], start=True)
     await runtime.finish(a["id"], "failed", "The portal was down.")
     t = (await _get(client, b["id"]))["task"]
-    assert t["blocked_action"] == "A task it waits for was failed: decide" and len(notices) == 1
+    assert t["blocked_action"] == "A task it waits for was failed: decide"
+    # Two notices about two tasks (P38): the failed one (retry it, try another AI, or finish
+    # it yourself) and the one waiting on it (start it anyway, remove the wait, or cancel).
+    assert [n["url"] for n in notices] == [f"/tasks?task={a['id']}", f"/tasks?task={b['id']}"]
+    assert notices[0]["title"] == "Task failed: Pull the bank statement"
     await runtime.start_run(a["id"])  # the blocker is retried (P29: finish settles once)
     await runtime.finish(a["id"], "done", "Got it.")  # the retried blocker finishes
     assert _started(temporal, b["id"]) == [1]

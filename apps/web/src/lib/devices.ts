@@ -3,9 +3,15 @@
  * visitor's OS, the link-code countdown, "is this my own AI"). See docs/PC-AGENT.md. */
 import { queryOptions } from "@tanstack/react-query";
 
-import { api } from "./api";
+import { t } from "@/i18n";
 
-export type DeviceOs = "windows" | "mac";
+import { ApiError, api, langHeader } from "./api";
+
+export type DeviceOs = "windows" | "mac" | "linux";
+
+/** P42: seeing and using the computer from the web. Both locks must allow a level: the one
+ * set ON the computer (`agentic-pc remote ...`) and the one set here, with the password. */
+export type RemoteLevel = "off" | "view" | "control";
 
 /** One linked computer, as GET /api/devices lists it. */
 export interface Device {
@@ -30,6 +36,12 @@ export interface Device {
   /** Browsers the AI can drive on it: "chrome", "edge". */
   browsers: string[];
   created_at?: string;
+  /** What the computer itself allows (`agentic-pc remote ...`). */
+  remote_pc?: RemoteLevel;
+  /** What the person allowed here, with their password. */
+  remote_allowed?: RemoteLevel;
+  /** The lower of the two: what works now. */
+  remote?: RemoteLevel;
 }
 
 /** One thing the AI did on a PC (device_activity). */
@@ -57,7 +69,7 @@ export interface DeviceActivity {
 export interface LinkCode {
   code: string;
   expires_at: string;
-  install: { windows: string; mac: string };
+  install: { windows: string; mac: string; linux?: string };
   /** The desktop app builds; null until one is published (then only the one-line install). */
   downloads: { windows: string; mac: string } | null;
 }
@@ -87,6 +99,8 @@ export const deviceKeys = {
   list: ["devices", "list"] as const,
   activity: (id: string) => ["devices", "activity", id] as const,
   link: (code: string) => ["devices", "link", code] as const,
+  health: (id: string) => ["devices", "health", id] as const,
+  files: (id: string, path: string, q: string) => ["devices", "files", id, path, q] as const,
 };
 
 /** The list may come bare or wrapped ({items}); either way, an array. */
@@ -103,6 +117,127 @@ export const updateDevice = (id: string, patch: DevicePatch) => api<Device>(`/ap
 export const unlinkDevice = (id: string) => api<void>(`/api/devices/${encodeURIComponent(id)}`, "DELETE");
 export const deviceActivity = async (id: string) =>
   listOf(await api<DeviceActivity[] | { items?: DeviceActivity[] }>(`/api/devices/${encodeURIComponent(id)}/activity`));
+
+// ---------------------------------------------------------------- from the web, while away (P42)
+
+export interface DeviceHealth {
+  os: string;
+  os_version?: string;
+  hostname?: string;
+  version?: string;
+  uptime_s?: number;
+  cpu?: { model?: string; cores?: number; busy_pct?: number | null; load?: number[] | null };
+  memory?: { total: number; free: number };
+  disks?: { path: string; total: number; free: number }[];
+  user?: string;
+  paused?: boolean;
+  remote?: RemoteLevel;
+}
+
+export interface DeviceFile {
+  path: string;
+  name: string;
+  is_dir?: boolean;
+  size?: number;
+  modified?: string;
+}
+
+export interface DeviceFiles {
+  folder?: string;
+  folders?: string[];
+  items: DeviceFile[];
+  truncated?: boolean;
+}
+
+const dev = (id: string) => `/api/devices/${encodeURIComponent(id)}`;
+
+export const deviceHealth = (id: string) => api<DeviceHealth>(`${dev(id)}/health`);
+export const deviceFiles = (id: string, path: string, q: string) => {
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  else if (path) qs.set("path", path);
+  const query = qs.toString();
+  return api<DeviceFiles>(`${dev(id)}/files${query ? `?${query}` : ""}`);
+};
+export const setRemote = (id: string, level: RemoteLevel, password = "") => api<Device>(`${dev(id)}/remote`, "PUT", { level, password });
+
+export type InputBody =
+  | { kind: "mouse"; x: number; y: number; action: "move" | "click" | "double" | "right" | "scroll"; dy?: number }
+  | { kind: "key"; text?: string; key?: string };
+export const sendInput = (id: string, body: InputBody) => api<{ done: boolean }>(`${dev(id)}/input`, "POST", body);
+
+async function failure(res: Response): Promise<ApiError> {
+  const data = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
+  return new ApiError(res.status, data?.code ?? "http_error", data?.message ?? t("Request failed ({status}).", { status: res.status }));
+}
+
+/** One picture of the screen, and the real screen's size. */
+export async function screenFrame(id: string, width: number, quality: number, signal?: AbortSignal): Promise<{ blob: Blob; w: number; h: number }> {
+  let res: Response;
+  try {
+    res = await fetch(`${dev(id)}/screen?w=${width}&q=${quality}`, { credentials: "same-origin", headers: langHeader(), signal, cache: "no-store" });
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
+  }
+  if (!res.ok) throw await failure(res);
+  return { blob: await res.blob(), w: Number(res.headers.get("x-screen-width")) || 0, h: Number(res.headers.get("x-screen-height")) || 0 };
+}
+
+/** A file from the computer, saved by the browser. */
+export async function downloadFromDevice(id: string, path: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${dev(id)}/files/download?path=${encodeURIComponent(path)}`, { credentials: "same-origin", headers: langHeader() });
+  } catch {
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
+  }
+  if (!res.ok) throw await failure(res);
+  const m = /filename\*=UTF-8''([^;]+)/.exec(res.headers.get("content-disposition") ?? "");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = m ? decodeURIComponent(m[1]!) : (path.split(/[\\/]/).pop() || "file");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** 1.2 GB, 640 MB, 12 KB. */
+export function bytes(n: number | null | undefined): string {
+  const v = Number(n) || 0;
+  if (v >= 1024 ** 3) return `${(v / 1024 ** 3).toFixed(1)} GB`;
+  if (v >= 1024 ** 2) return `${Math.round(v / 1024 ** 2)} MB`;
+  return `${Math.max(1, Math.round(v / 1024))} KB`;
+}
+
+/** Why a remote level does not work yet: "pc" (allow it on the computer), "web" (allow it
+ * here), or null (it works). */
+export function remoteBlock(d: Pick<Device, "remote_pc" | "remote_allowed">, want: Exclude<RemoteLevel, "off">): "pc" | "web" | null {
+  const order: RemoteLevel[] = ["off", "view", "control"];
+  const rank = (l: RemoteLevel | undefined) => order.indexOf(l ?? "off");
+  if (rank(d.remote_pc) < rank(want)) return "pc";
+  if (rank(d.remote_allowed) < rank(want)) return "web";
+  return null;
+}
+
+const NAMED_KEYS: Record<string, string> = {
+  Enter: "enter", Tab: "tab", Escape: "esc", Backspace: "backspace", Delete: "delete",
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown",
+};
+
+/** The browser's key press as what the computer takes: one named key or combination
+ * ("ctrl+c", "shift+tab", "enter"), a character to type, or null (Shift on its own...). */
+export function keyOf(e: { key: string; ctrlKey: boolean; altKey: boolean; metaKey: boolean; shiftKey: boolean }): { key: string } | { text: string } | null {
+  const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.metaKey && "cmd"].filter((m): m is string => !!m);
+  let name = NAMED_KEYS[e.key] ?? (/^F([1-9]|1[0-2])$/.test(e.key) ? e.key.toLowerCase() : null);
+  if (!name && e.key.length === 1 && mods.length) name = /^[a-z0-9]$/i.test(e.key) ? e.key.toLowerCase() : null;
+  if (name) return { key: [...mods, ...(e.shiftKey && (mods.length || e.key.length > 1) ? ["shift"] : []), name].join("+") };
+  if (e.key.length === 1 && !mods.length) return { text: e.key };
+  return null;
+}
 
 /** The person's computers. Live via `device.status` (lib/live.ts), and every 30 s besides. */
 export const devicesQuery = queryOptions({
@@ -134,19 +269,21 @@ interface NavigatorLike {
   platform?: string;
 }
 
-/** Which install command to show first: the visitor's own system. Phones and Linux: "other". */
+/** Which install command to show first: the visitor's own system. Phones: "other". */
 export function detectOs(nav: NavigatorLike | undefined = typeof navigator === "undefined" ? undefined : (navigator as NavigatorLike)): DeviceOs | "other" {
   if (!nav) return "other";
   const hint = (nav.userAgentData?.platform ?? "").toLowerCase();
   if (hint) {
     if (hint.includes("win")) return "windows";
     if (hint.includes("mac")) return "mac";
+    if (hint.includes("linux") || hint.includes("chrome os")) return "linux";
     return "other";
   }
   const ua = `${nav.userAgent ?? ""} ${nav.platform ?? ""}`;
   if (/Windows|Win32|Win64/i.test(ua)) return "windows";
   if (/iPhone|iPad|iPod|Android/i.test(ua)) return "other";
   if (/Macintosh|Mac OS X|MacIntel/i.test(ua)) return "mac";
+  if (/Linux|X11|CrOS/i.test(ua)) return "linux";
   return "other";
 }
 
@@ -187,16 +324,18 @@ export function folderProblem(path: string, os: DeviceOs | null, existing: reado
   if (!path.trim()) return "empty";
   const kind = pathOs(path);
   if (!kind) return "not_absolute";
-  if (os && kind !== os) return "wrong_os";
+  if (os && kind !== (os === "linux" ? "mac" : os)) return "wrong_os"; // "mac" here: any /path
   const parts = path.split(/[\\/]+/).filter(Boolean);
   if (parts.some((s) => s === ".." || s === ".")) return "dots";
   if (kind === "windows") {
     if (parts.length < 2) return "too_wide"; // a whole drive (C:\)
   } else {
     // A Mac: inside the person's own folder (/Users/name/…) or an external disk (/Volumes/name).
-    const top = parts[0];
-    if (top !== "Users" && top !== "Volumes") return "not_absolute";
-    if (parts.length < 2 || (top === "Users" && parts[1] === "Shared" && parts.length < 3)) return "too_wide";
+    // Linux: /home/name/…, or a mounted disk (/mnt/x, /media/name/x).
+    const top = parts[0] ?? "";
+    const tops = os === "linux" ? ["home", "mnt", "media"] : os === "mac" ? ["Users", "Volumes"] : ["Users", "Volumes", "home", "mnt", "media"];
+    if (!tops.includes(top)) return "not_absolute";
+    if (parts.length < 2 || (top === "Users" && parts[1] === "Shared" && parts.length < 3) || (top === "media" && parts.length < 3)) return "too_wide";
   }
   if (parts.some((s) => BLOCKED_PARTS.includes(s.toLowerCase()))) return "blocked";
   const key = (p: string) => (kind === "windows" ? p.toLowerCase() : p);
@@ -252,11 +391,16 @@ export function prettyCode(code: string): string {
 
 // ---------------------------------------------------------------- activity
 
-export type ActivityKind = "search" | "list" | "read" | "copy" | "save" | "browse" | "settings" | "other";
+export type ActivityKind = "search" | "list" | "read" | "copy" | "save" | "download" | "browse" | "screen" | "control" | "settings" | "other";
 
 /** What kind of thing an activity row is, for its icon. */
 export function activityKind(kind: string): ActivityKind {
   const k = kind.toLowerCase();
+  // P42: the person themselves, from the web
+  if (k === "download") return "download";
+  if (k === "screen") return "screen";
+  if (k === "control") return "control";
+  if (k === "remote") return "settings";
   if (k.includes("search") || k.includes("find")) return "search";
   if (k.includes("list")) return "list";
   if (k.includes("upload") || k.includes("workspace")) return "copy";

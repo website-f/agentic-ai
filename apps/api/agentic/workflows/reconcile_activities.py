@@ -15,4 +15,13 @@ async def liveness_reconcile() -> dict[str, int]:
         out.update({f"library_{k}": v for k, v in caught.items()})
     except Exception:  # noqa: BLE001 - the liveness round already did its work
         activity.logger.warning("library catch-up failed", exc_info=True)
+    # P40: storage sources (B2, the server's disk, a file server) imported into the Library.
+    try:
+        from ..core.db import SessionLocal
+        from ..documents import sources
+
+        async with SessionLocal() as db:
+            out["sources_synced"] = await sources.sync_due(db)
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("storage source sync failed", exc_info=True)
     return out

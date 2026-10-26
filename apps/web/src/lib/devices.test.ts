@@ -11,7 +11,10 @@ import {
   detectOs,
   deviceKeys,
   devicesSummary,
+  bytes,
   folderName,
+  keyOf,
+  remoteBlock,
   folderProblem,
   isMyOwnAi,
   linkStatus,
@@ -94,8 +97,62 @@ describe("the visitor's system", () => {
     expect(detectOs({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" })).toBe("windows");
     expect(detectOs({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15" })).toBe("mac");
     expect(detectOs({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" })).toBe("other");
-    expect(detectOs({ userAgent: "Mozilla/5.0 (X11; Linux x86_64)" })).toBe("other");
+    expect(detectOs({ userAgent: "Mozilla/5.0 (X11; Linux x86_64)" })).toBe("linux");
+    expect(detectOs({ userAgentData: { platform: "Linux" } })).toBe("linux");
     expect(detectOs({})).toBe("other");
+  });
+});
+
+describe("remote (P42)", () => {
+  it("knows why a remote level is not ready", () => {
+    expect(remoteBlock({ remote_pc: "off", remote_allowed: "off" }, "view")).toBe("pc");
+    expect(remoteBlock({ remote_pc: "view", remote_allowed: "off" }, "view")).toBe("web");
+    expect(remoteBlock({ remote_pc: "view", remote_allowed: "view" }, "view")).toBeNull();
+    expect(remoteBlock({ remote_pc: "view", remote_allowed: "view" }, "control")).toBe("pc");
+    expect(remoteBlock({ remote_pc: "control", remote_allowed: "view" }, "control")).toBe("web");
+    expect(remoteBlock({ remote_pc: "control", remote_allowed: "control" }, "control")).toBeNull();
+  });
+
+  it("turns a browser key press into one key, a combination, typed text, or nothing", () => {
+    const base = { ctrlKey: false, altKey: false, metaKey: false, shiftKey: false };
+    expect(keyOf({ ...base, key: "a" })).toEqual({ text: "a" });
+    expect(keyOf({ ...base, key: "Enter" })).toEqual({ key: "enter" });
+    expect(keyOf({ ...base, ctrlKey: true, key: "c" })).toEqual({ key: "ctrl+c" });
+    expect(keyOf({ ...base, ctrlKey: true, shiftKey: true, key: "T" })).toEqual({ key: "ctrl+shift+t" });
+    expect(keyOf({ ...base, shiftKey: true, key: "Tab" })).toEqual({ key: "shift+tab" });
+    expect(keyOf({ ...base, metaKey: true, key: "c" })).toEqual({ key: "cmd+c" });
+    // A character typed with Shift is just that character, not shift+x.
+    expect(keyOf({ ...base, shiftKey: true, key: "A" })).toEqual({ text: "A" });
+    // A modifier on its own: nothing to send.
+    expect(keyOf({ ...base, key: "Shift" })).toBeNull();
+    expect(keyOf({ ...base, ctrlKey: true, key: "Control" })).toBeNull();
+  });
+
+  it("names the person's own remote actions", () => {
+    expect(activityKind("screen")).toBe("screen");
+    expect(activityKind("control")).toBe("control");
+    expect(activityKind("download")).toBe("download");
+    expect(activityKind("remote")).toBe("settings");
+  });
+
+  it("shows byte sizes", () => {
+    expect(bytes(512)).toBe("1 KB");
+    expect(bytes(12 * 1024)).toBe("12 KB");
+    expect(bytes(5 * 1024 * 1024)).toBe("5 MB");
+    expect(bytes(3 * 1024 ** 3)).toBe("3.0 GB");
+    expect(bytes(null)).toBe("1 KB");
+  });
+});
+
+describe("folders on Linux", () => {
+  it("accepts a Linux home or mounted disk, and rejects the wrong shape", () => {
+    expect(folderProblem("/home/aina/Documents", "linux")).toBeNull();
+    expect(folderProblem("/mnt/data/projects", "linux")).toBeNull();
+    expect(folderProblem("/media/aina/USB/work", "linux")).toBeNull();
+    expect(folderProblem("/home", "linux")).toBe("too_wide");
+    expect(folderProblem("/etc/secret", "linux")).toBe("not_absolute");
+    expect(folderProblem("C:\\Users\\aina", "linux")).toBe("wrong_os");
+    expect(folderProblem("/home/aina/.ssh", "linux")).toBe("blocked");
   });
 });
 

@@ -338,7 +338,10 @@ async def save_export(
         )
         f.document_id = doc.id
     else:
-        f.data, f.size, f.name = data, len(data), name
+        from . import storage  # P40: the new bytes go where the file lives
+
+        await storage.replace(db, f, data)
+        f.size, f.name = len(data), name
         f.sha256 = hashlib.sha256(data).hexdigest()
         f.updated_at = datetime.now(UTC)
     f.mime = mime
@@ -419,7 +422,10 @@ async def save_report(db: AsyncSession, r: Report) -> DocFile | None:
             )
             f.report_id = r.id
         else:
-            f.data, f.size, f.name = data, len(data), name
+            from . import storage  # P40: the new bytes go where the file lives
+
+            await storage.replace(db, f, data)
+            f.size, f.name = len(data), name
             f.sha256 = hashlib.sha256(data).hexdigest()
             f.updated_at = datetime.now(UTC)
         f.kind, f.title, f.text = "report", r.title[:200], md

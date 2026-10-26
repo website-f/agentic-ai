@@ -80,8 +80,8 @@ COPY --from=build --chown=app:app /app /app
 COPY --from=build /opt/models /opt/models
 # P31: the PC agent's install script templates (agentic/devices/install.py reads them here).
 COPY --chown=app:app apps/pc-agent/install /app/pc-agent/install
-# The vault and media volumes inherit this owner the first time Docker creates them.
-RUN mkdir -p /data/vault /data/media && chown app:app /data/vault /data/media
+# The vault, media and files (P40) volumes inherit this owner the first time Docker creates them.
+RUN mkdir -p /data/vault /data/media /data/files && chown app:app /data/vault /data/media /data/files
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -89,6 +89,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     AGENTIC_SPEAKER_MODELS=/opt/models/speakers \
     AGENTIC_VAULT_DIR=/data/vault \
     AGENTIC_MEDIA_DIR=/data/media \
+    AGENTIC_FILES_DIR=/data/files \
     HF_HUB_OFFLINE=1 \
     HF_HUB_DISABLE_TELEMETRY=1
 USER app

@@ -862,7 +862,10 @@ async def publish_library(db: AsyncSession, rec: MeetingRecording) -> DocFile | 
         )
         rec.library_file_id = f.id
     else:
-        f.data, f.size, f.name = data, len(data), name
+        from ..documents import storage  # P40: the new bytes go where the file lives
+
+        await storage.replace(db, f, data)
+        f.size, f.name = len(data), name
         f.sha256 = hashlib.sha256(data).hexdigest()
         f.branch_id = rec.branch_id
     f.mime = "text/markdown"

@@ -123,9 +123,13 @@ def pc_http() -> httpx.AsyncClient:
 class FakePC:
     """The PC agent: says hello, answers calls like the real one (files over HTTPS)."""
 
-    def __init__(self, token: str, files: dict[str, bytes] | None = None) -> None:
+    def __init__(
+        self, token: str, files: dict[str, bytes] | None = None, remote: str = "off"
+    ) -> None:
         self.token = token
         self.files = files or {}
+        self.remote = remote  # P42: what the computer itself allows
+        self.inputs: list[dict] = []  # P42: mouse/key calls it received
         self.saved: dict[str, bytes] = {}
         self.calls: list[dict] = []
         self.settings: list[dict] = []
@@ -141,13 +145,14 @@ class FakePC:
             {
                 "type": "hello",
                 "token": self.token,
-                "version": "0.1.0",
+                "version": "0.2.0",
                 "os": "windows",
                 "arch": "x64",
                 "hostname": "AINA-LAPTOP",
                 "folders": folders or ["C:\\Users\\aina\\Documents", "C:\\Users\\aina\\Desktop"],
                 "paused": False,
                 "browsers": ["chrome", "edge"],
+                "remote": self.remote,
             }
         )
         self.welcome = await self.ws.recv_json()
@@ -181,6 +186,41 @@ class FakePC:
 
     async def handle(self, method: str, params: dict) -> dict:
         auth = {"authorization": f"Bearer {self.token}"}
+        if method == "system.health":
+            return {
+                "os": "windows",
+                "os_version": "10.0.26200",
+                "hostname": "AINA-LAPTOP",
+                "version": "0.2.0",
+                "uptime_s": 3600,
+                "cpu": {"model": "Test CPU", "cores": 8, "busy_pct": 12, "load": None},
+                "memory": {"total": 16 * 1024**3, "free": 8 * 1024**3},
+                "disks": [{"path": "C:\\", "total": 500 * 1024**3, "free": 200 * 1024**3}],
+                "user": "aina",
+                "paused": False,
+                "remote": self.remote,
+            }
+        if method == "screen.capture":
+            jpeg = b"\xff\xd8\xff" + b"fake-jpeg" * 4  # looks like a JPEG; content is irrelevant
+            import hashlib
+
+            async with pc_http() as c:
+                r = await c.post(
+                    params["upload_url"],
+                    content=jpeg,
+                    headers={**auth, "content-type": "application/octet-stream"},
+                )
+                assert r.status_code == 200, r.text
+            return {
+                "name": "screen.jpg",
+                "size": len(jpeg),
+                "sha256": hashlib.sha256(jpeg).hexdigest(),
+                "screen_width": 1920,
+                "screen_height": 1080,
+            }
+        if method == "input.send":
+            self.inputs.append(params)
+            return {"done": True}
         if method == "files.search":
             words = params["query"].lower().split()
             items = [
@@ -305,6 +345,7 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
     assert len(code) == 8 and all(ch in core.CODE_ALPHABET for ch in code)
     assert body["install"]["windows"] == f"irm http://test/i/{code}/win | iex"
     assert body["install"]["mac"] == f"curl -fsSL http://test/i/{code}/mac | sh"
+    assert body["install"]["linux"] == f"curl -fsSL http://test/i/{code}/linux | sh"
     assert body["downloads"] is None  # no desktop app build published: the one line only
     # Behind nginx: the forwarded scheme and host.
     r = await client.post(
@@ -326,7 +367,10 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
         assert "expired" in bad.text and "throw" in bad.text and "{{" not in bad.text
         bad_sh = await pc.get("/api/install/ZZZZZZZZ/mac")
         assert bad_sh.text.startswith("#!/bin/sh") and "exit 1" in bad_sh.text
-        assert (await pc.get(f"/api/install/{code}/linux")).status_code == 404
+        # Linux installs with the same shell script (it detects the OS).
+        linux = await pc.get(f"/api/install/{code}/linux")
+        assert linux.status_code == 200 and f'CODE="{code}"' in linux.text
+        assert (await pc.get(f"/api/install/{code}/bsd")).status_code == 404
 
         r = await client.get(f"/api/devices/link-code/{code}/status")
         assert r.json()["claimed"] is False
@@ -372,7 +416,7 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
                 "edge",
             ]
         )
-        assert devs[0]["hostname"] == "AINA-LAPTOP" and devs[0]["version"] == "0.1.0"
+        assert devs[0]["hostname"] == "AINA-LAPTOP" and devs[0]["version"] == "0.2.0"
         # ping / pong
         await pc.ws.send_json({"type": "ping"})
         await asyncio.sleep(0.05)
@@ -808,3 +852,154 @@ async def test_desktop_app_links_only_when_published(client, llm, temporal, monk
         "windows": "https://example.com/a.exe",
         "mac": "https://example.com/a.dmg",
     }
+
+
+# ---------------------------------------------------------------- P42: from the web, while away
+
+
+async def test_health_files_and_download_from_the_web(client, llm, temporal):
+    """The owner reaches their own computer: how it is doing, its folders, and a file."""
+    await office(client)
+    dev = await link(client, "Mine")
+    pc = await FakePC(
+        dev["token"], files={"C:\\Users\\aina\\Documents\\q3.pdf": b"PDF-BYTES"}
+    ).start()
+    try:
+        did = dev["device_id"]
+        h = await client.get(f"/api/devices/{did}/health")
+        assert h.status_code == 200, h.text
+        body = h.json()
+        assert body["cpu"]["cores"] == 8 and body["memory"]["total"] == 16 * 1024**3
+        assert body["disks"][0]["path"] == "C:\\"
+
+        # No path: the shared folders are the starting points.
+        roots = await client.get(f"/api/devices/{did}/files")
+        assert roots.status_code == 200
+        assert roots.json()["folders"] == ["C:\\Users\\aina\\Documents", "C:\\Users\\aina\\Desktop"]
+
+        # A search reaches the PC.
+        found = await client.get(f"/api/devices/{did}/files", params={"q": "q3"})
+        assert found.status_code == 200
+        assert found.json()["items"][0]["name"] == "q3.pdf"
+
+        # The download streams the bytes with a filename.
+        d = await client.get(
+            f"/api/devices/{did}/files/download",
+            params={"path": "C:\\Users\\aina\\Documents\\q3.pdf"},
+        )
+        assert d.status_code == 200
+        assert d.content == b"PDF-BYTES"
+        assert "q3.pdf" in d.headers.get("content-disposition", "")
+    finally:
+        await pc.stop()
+
+
+async def test_screen_and_input_need_both_locks(client, llm, temporal):
+    """Seeing the screen and using it need the computer to allow it AND the web toggle (with
+    the password). Either one off means no."""
+    await office(client)
+    dev = await link(client, "Mine")
+    did = dev["device_id"]
+
+    # The computer allows control; the web side is still off, so both are refused.
+    pc = await FakePC(dev["token"], remote="control").start()
+    try:
+        assert (await client.get(f"/api/devices/{did}/screen")).status_code == 403
+        r = await client.post(
+            f"/api/devices/{did}/input",
+            json={"kind": "mouse", "x": 0.5, "y": 0.5, "action": "click"},
+            headers=csrf(client),
+        )
+        assert r.status_code == 403
+
+        # Turning it on needs the password.
+        bad = await client.put(
+            f"/api/devices/{did}/remote",
+            json={"level": "control", "password": "wrong"},
+            headers=csrf(client),
+        )
+        assert bad.status_code == 403
+        assert bad.json()["code"] == "password_required"
+
+        ok = await client.put(
+            f"/api/devices/{did}/remote",
+            json={"level": "control", "password": "correct-horse-battery"},
+            headers=csrf(client),
+        )
+        assert ok.status_code == 200
+        assert ok.json()["remote"] == "control"
+
+        # Now the screen and input work.
+        s = await client.get(f"/api/devices/{did}/screen", params={"w": 1280, "q": 60})
+        assert s.status_code == 200, s.text
+        assert s.headers["content-type"] == "image/jpeg"
+        assert s.content[:3] == b"\xff\xd8\xff"
+        assert s.headers.get("x-screen-width") == "1920"
+
+        click = await client.post(
+            f"/api/devices/{did}/input",
+            json={"kind": "mouse", "x": 0.25, "y": 0.5, "action": "click"},
+            headers=csrf(client),
+        )
+        assert click.status_code == 200
+        assert pc.inputs and pc.inputs[-1]["action"] == "click"
+
+        keys = await client.post(
+            f"/api/devices/{did}/input",
+            json={"kind": "key", "key": "ctrl+c"},
+            headers=csrf(client),
+        )
+        assert keys.status_code == 200
+        assert pc.inputs[-1]["key"] == "ctrl+c"
+
+        # Turning it off again needs no password.
+        off = await client.put(
+            f"/api/devices/{did}/remote", json={"level": "off"}, headers=csrf(client)
+        )
+        assert off.status_code == 200 and off.json()["remote"] == "off"
+    finally:
+        await pc.stop()
+
+
+async def test_web_cannot_exceed_what_the_pc_allows(client, llm, temporal):
+    """The computer allows only 'view'. The web may allow 'control', but the lower of the two
+    wins: the screen works, input does not."""
+    await office(client)
+    dev = await link(client, "Mine")
+    did = dev["device_id"]
+    pc = await FakePC(dev["token"], remote="view").start()
+    try:
+        await client.put(
+            f"/api/devices/{did}/remote",
+            json={"level": "control", "password": "correct-horse-battery"},
+            headers=csrf(client),
+        )
+        assert (await client.get(f"/api/devices/{did}/screen")).status_code == 200
+        r = await client.post(
+            f"/api/devices/{did}/input",
+            json={"kind": "mouse", "x": 0.5, "y": 0.5, "action": "click"},
+            headers=csrf(client),
+        )
+        assert r.status_code == 403  # control is not allowed on the computer
+    finally:
+        await pc.stop()
+
+
+async def test_remote_is_owner_only(client, llm, temporal):
+    o = await office(client)
+    dev = await link(client, "Mine")
+    did = dev["device_id"]
+    pc = await FakePC(dev["token"], remote="control").start()
+    admin = await as_role(client, "admin2@example.com", "admin", branch_id=o["branch"]["id"])
+    try:
+        assert (await admin.get(f"/api/devices/{did}/health")).status_code == 404
+        assert (await admin.get(f"/api/devices/{did}/screen")).status_code == 404
+        r = await admin.put(
+            f"/api/devices/{did}/remote",
+            json={"level": "view", "password": "whatever"},
+            headers=csrf(admin),
+        )
+        assert r.status_code == 404
+    finally:
+        await admin.aclose()
+        await pc.stop()

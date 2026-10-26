@@ -106,6 +106,10 @@ def temporal(monkeypatch):
     async def cancel_task(wid):
         calls["cancel"].append(wid)
 
+    async def terminate_task(wid, reason):
+        calls.setdefault("terminate", []).append((wid, reason))
+        return True
+
     async def start_broadcast_replies(bid, ids):
         calls["replies"].append((bid, ids))
 
@@ -127,6 +131,7 @@ def temporal(monkeypatch):
         ("start_task", start_task),
         ("signal_decision", signal_decision),
         ("cancel_task", cancel_task),
+        ("terminate_task", terminate_task),
         ("start_broadcast_replies", start_broadcast_replies),
         ("start_chat_learning", start_chat_learning),
         ("start_dream", start_dream),

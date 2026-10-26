@@ -273,9 +273,7 @@ async def item_pdf(
         return data, ""
     if item.get("file_id"):
         f = await db.scalar(
-            select(DocFile)
-            .where(DocFile.id == item["file_id"])
-            .options(undefer(DocFile.data), undefer(DocFile.text))
+            select(DocFile).where(DocFile.id == item["file_id"]).options(undefer(DocFile.text))
         )
         if f is None or (ws and f.workspace_id != ws):
             return None, "the file was deleted"
@@ -285,7 +283,12 @@ async def item_pdf(
             service.visible_files(select(DocFile.id).where(DocFile.id == f.id), principal)
         ):
             return None, "it is not a file you can open"
-        raw = bytes(f.data)
+        from . import storage  # P40: the bytes may live outside the database
+
+        try:
+            raw = await storage.read(db, f)
+        except storage.StorageError as e:
+            return None, str(e)
         kind = sniff(raw, f.name, f.mime)
         if kind == "pdf":
             try:

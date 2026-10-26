@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 process.env.AGENTIC_PC_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-pc-home-"));
+process.env.AGENTIC_PC_PROGRAM = process.env.AGENTIC_PC_HOME;
 const a = require("./agent.cjs");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-pc-"));
@@ -73,4 +74,58 @@ test("file bytes only travel to the linked server", () => {
   assert.ok(!a.sameServer("https://evil.example/api/devices/uploads/x", "https://agent.oriondesk.space"));
   assert.ok(!a.sameServer("http://agent.oriondesk.space/x", "https://agent.oriondesk.space"));
   assert.ok(a.sameServer("http://localhost:8500/x", "http://localhost:8500"));
+});
+
+// ---------------------------------------------------------------- P42 remote
+
+test("remote needs the level allowed on this computer", () => {
+  assert.throws(() => a.needRemote({}, "view"), (e) => e.code === "not_allowed");
+  assert.throws(() => a.needRemote({ remote: "view" }, "control"), (e) => e.code === "not_allowed");
+  assert.throws(() => a.needRemote({ remote: "everything" }, "view"), (e) => e.code === "not_allowed");
+  a.needRemote({ remote: "view" }, "view");
+  a.needRemote({ remote: "control" }, "view");
+  a.needRemote({ remote: "control" }, "control");
+});
+
+test("typed text is sent as text, never as SendKeys commands", () => {
+  assert.equal(a.sendKeysText("50% off (today) {x} a+b ^c ~"), "50{%} off {(}today{)} {{}x{}} a{+}b {^}c {~}");
+  assert.equal(a.sendKeysText("line1\nline2"), "line1{ENTER}line2");
+});
+
+test("key combinations map per system and refuse unknown keys", () => {
+  assert.equal(a.sendKeysCombo("ctrl+c"), "^c");
+  assert.equal(a.sendKeysCombo("ctrl+shift+esc"), "^+{ESC}");
+  assert.equal(a.sendKeysCombo("alt+f4"), "%{F4}");
+  assert.equal(a.sendKeysCombo("enter"), "{ENTER}");
+  assert.equal(a.xdoCombo("ctrl+alt+t"), "ctrl+alt+t");
+  assert.equal(a.xdoCombo("pagedown"), "Next");
+  assert.deepEqual(a.macCombo("cmd+c"), { code: null, char: "c", using: ["command down"] });
+  assert.deepEqual(a.macCombo("shift+tab"), { code: 48, char: null, using: ["shift down"] });
+  for (const bad of ["ctrl+", "hyper+c", "ctrl+cc", "rm -rf", "ctrl+{ENTER}"]) {
+    assert.throws(() => a.parseCombo(bad), (e) => e.code === "not_allowed", bad);
+  }
+  assert.throws(() => a.sendKeysCombo("cmd+r"), (e) => e.code === "not_allowed");
+});
+
+test("a share of the screen becomes a pixel on it", () => {
+  assert.equal(a.toPixel(0, 1920), 0);
+  assert.equal(a.toPixel(1, 1920), 1919);
+  assert.equal(a.toPixel(0.5, 1081), 540);
+  assert.equal(a.toPixel(2, 1920), 1919);
+  assert.equal(a.toPixel(-1, 1920, -1920), -1920);
+});
+
+test("health reports cpu, memory and disks", async () => {
+  const h = await a.health({ remote: "view" }, [shared]);
+  assert.ok(h.cpu.cores > 0 && h.memory.total > 0 && h.disks.length >= 1);
+  assert.equal(h.remote, "view");
+  assert.ok(h.disks[0].total >= h.disks[0].free);
+});
+
+test("on Windows the helper builds, and finds the pixel and the keys without touching anything", { skip: process.platform !== "win32" }, () => {
+  const m = a.runHelper(["mouse", "0", "0", "click", "0", "dry"], {}, 90_000);
+  assert.equal(m.status, 0, m.stderr);
+  assert.match(m.stdout.trim(), /^-?\d+ -?\d+$/);
+  const k = a.runHelper(["keys", "dry"], { AGENTIC_KEYS: "^c" });
+  assert.equal(k.stdout.trim(), "^c");
 });

@@ -1,9 +1,9 @@
 /** One linked computer: its name (rename in place), whether it is on, its browsers, pause,
  * the folders the AI may look in, what the AI did on it, and Unlink. */
 import {
-  AppleLogoIcon, BrowserIcon, CaretRightIcon, CheckIcon, FileArrowDownIcon, FileArrowUpIcon, FileTextIcon, FolderOpenIcon,
-  FolderPlusIcon, FolderSimpleIcon, GearSixIcon, GoogleChromeLogoIcon, LinkBreakIcon, MagnifyingGlassIcon,
-  PencilSimpleIcon, PlusIcon, PulseIcon, WindowsLogoIcon, XIcon, type Icon,
+  AppleLogoIcon, BrowserIcon, CaretRightIcon, CheckIcon, CursorClickIcon, DownloadSimpleIcon, FileArrowDownIcon, FileArrowUpIcon,
+  FileTextIcon, FolderOpenIcon, FolderPlusIcon, FolderSimpleIcon, GearSixIcon, GoogleChromeLogoIcon, LinkBreakIcon, LinuxLogoIcon,
+  MagnifyingGlassIcon, MonitorPlayIcon, PencilSimpleIcon, PlusIcon, PulseIcon, ScreencastIcon, WindowsLogoIcon, XIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -27,7 +27,7 @@ import { cn, timeAgo } from "@/lib/utils";
 
 const PROBLEM: Record<FolderProblem, string> = {
   empty: msg("Type or paste a folder."),
-  not_absolute: msg("Use the full path, e.g. C:\\Users\\you\\Documents on Windows or /Users/you/Documents on a Mac."),
+  not_absolute: msg("Use the full path, e.g. C:\\Users\\you\\Documents on Windows, /Users/you/Documents on a Mac or /home/you/Documents on Linux."),
   wrong_os: msg("That path is for the other kind of computer."),
   too_wide: msg("That is a whole disk. Pick a folder inside it."),
   dots: msg("Write the folder's full path without . or .."),
@@ -41,7 +41,10 @@ const KIND_ICON: Record<ActivityKind, Icon> = {
   read: FileTextIcon,
   copy: FileArrowUpIcon,
   save: FileArrowDownIcon,
+  download: DownloadSimpleIcon,
   browse: BrowserIcon,
+  screen: ScreencastIcon,
+  control: CursorClickIcon,
   settings: GearSixIcon,
   other: PulseIcon,
 };
@@ -52,7 +55,10 @@ const KIND_LABEL: Record<ActivityKind, string> = {
   read: msg("Read a file"),
   copy: msg("Copied a file to your workspace"),
   save: msg("Saved a file to the computer"),
+  download: msg("You downloaded a file from the web"),
   browse: msg("Browsed"),
+  screen: msg("You viewed the screen from the web"),
+  control: msg("You used the mouse and keyboard from the web"),
   settings: msg("Settings changed"),
   other: msg("Checked the computer"),
 };
@@ -67,6 +73,7 @@ const ERROR_LABEL: Record<string, string> = {
   offline: msg("Offline"),
   timeout: msg("No answer"),
   revoked: msg("Unlinked"),
+  no_screen: msg("No screen"),
   failed: msg("Failed"),
 };
 
@@ -109,7 +116,7 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
 
   const activity = useQuery({ ...activityQuery(device.id), enabled: showActivity });
 
-  const OsIcon = device.os === "mac" ? AppleLogoIcon : WindowsLogoIcon;
+  const OsIcon = device.os === "mac" ? AppleLogoIcon : device.os === "linux" ? LinuxLogoIcon : WindowsLogoIcon;
   const suggestions = defaultFolders(device).filter((f) => folderProblem(f, device.os, device.folders) === null);
 
   const rename = () => {
@@ -178,10 +185,14 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
             <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-muted">
               <Pill tone={state.tone} live={device.online && !device.paused}>{state.label}</Pill>
               {!device.online ? <span>{t("Last seen {when}", { when: timeAgo(device.last_seen_at) })}</span> : null}
-              <span>{device.os === "mac" ? "macOS" : "Windows"}{device.os_version ? ` ${device.os_version}` : ""}</span>
+              <span>{device.os === "mac" ? "macOS" : device.os === "linux" ? "Linux" : "Windows"}{device.os_version ? ` ${device.os_version}` : ""}</span>
               {device.version ? <span>{t("Agent {version}", { version: device.version })}</span> : null}
             </div>
           </div>
+          <Link to="/computers/$deviceId/remote" params={{ deviceId: device.id }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-border px-3 text-[13px] font-medium hover:border-accent/40 hover:text-accent">
+            <MonitorPlayIcon size={15} /> {t("Open from the web")}
+          </Link>
           <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setUnlinking(true)}>
             <LinkBreakIcon size={15} /> {t("Unlink")}
           </Button>
@@ -242,7 +253,7 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
               <div className="flex min-w-0 gap-2">
                 <Input id={`add-folder-${device.id}`} value={folder} className="min-w-0 font-mono text-[13px]"
                   onChange={(e) => { setFolder(e.target.value); setProblem(null); }}
-                  placeholder={device.os === "mac" ? "/Users/you/Projects" : "C:\\Users\\you\\Projects"}
+                  placeholder={device.os === "mac" ? "/Users/you/Projects" : device.os === "linux" ? "/home/you/Projects" : "C:\\Users\\you\\Projects"}
                   aria-invalid={problem ? true : undefined} spellCheck={false} autoCapitalize="off" autoCorrect="off" />
                 <Button type="submit" variant="outline" loading={save.isPending && !!folder}><PlusIcon size={15} /> {t("Add")}</Button>
               </div>
@@ -250,6 +261,7 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
                 <p className="text-[12px] text-muted">
                   {device.os === "mac"
                     ? t("Tip: in Finder, right-click the folder, hold Option and choose Copy as Pathname.")
+                    : device.os === "linux" ? t("Tip: in a terminal, cd to the folder and run pwd.")
                     : t("Tip: in File Explorer, right-click the folder and choose Copy as path.")}
                 </p>
               )}

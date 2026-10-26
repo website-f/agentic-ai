@@ -82,13 +82,14 @@ def _answered(raw: str) -> bool:
 async def file_text(db: AsyncSession, f: DocFile) -> str:
     """The file's text with secrets masked, read from its bytes (a freshly saved
     attachment has not been read by the worker yet)."""
+    from ..documents import storage  # P40: the bytes may live outside the database
     from ..documents.extract import extract
     from ..intake import scan
 
-    data = await db.scalar(select(DocFile.data).where(DocFile.id == f.id))
+    data = await storage.read_id(db, f.id)
     if not data:
         return ""
-    out = await asyncio.to_thread(extract, bytes(data), f.name, f.mime)
+    out = await asyncio.to_thread(extract, data, f.name, f.mime)
     text = out.text or ""
     found = scan.scan(text)
     return scan.mask(text, found)[:TEXT_CHARS]

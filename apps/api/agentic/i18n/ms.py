@@ -668,6 +668,7 @@ MS: dict[str, str] = {
     "Company details": "Butiran syarikat",
     "List document templates": "Senaraikan templat dokumen",
     "Draft a document": "Draf dokumen",
+    "Draft an agent blueprint": "Draf pelan tugas ejen",
     "Revise a document": "Pinda dokumen",
     "Check a document": "Semak dokumen",
     "Pack checklist": "Senarai semak pek",
@@ -1457,5 +1458,44 @@ MS: dict[str, str] = {
     "This login was saved with another key and cannot be read here. Enter both the username and the password to replace it.": (
         "Log masuk ini disimpan dengan kunci lain dan tidak boleh dibaca di sini. Masukkan nama "
         "pengguna dan kata laluan untuk menggantikannya."
+    ),
+    # ------------------------------------------------------------ P38 a stuck/failed task: notify, stop, finish, retry
+    "Task failed: {title}": "Tugasan gagal: {title}",
+    "{agent} could not finish it: {why}. Open it to retry, try another AI or agent, or finish it yourself.": (
+        "{agent} tidak dapat menyiapkannya: {why}. Buka untuk cuba semula, cuba AI atau ejen lain, "
+        "atau selesaikannya sendiri."
+    ),
+    "Only the person who gave this task or a manager of its agent can do this.": (
+        "Hanya orang yang memberi tugasan ini atau pengurus ejennya boleh melakukan ini."
+    ),
+    "This task is not running.": "Tugasan ini tidak sedang berjalan.",
+    "The worker service is not reachable, so the run could not be stopped. Try again in a moment.": (
+        "Perkhidmatan pekerja tidak dapat dihubungi, jadi larian tidak dapat dihentikan. Cuba lagi "
+        "sebentar nanti."
+    ),
+    "This task is finished.": "Tugasan ini sudah selesai.",
+    "Pick an AI group that has models.": "Pilih kumpulan AI yang mempunyai model.",
+    "Pick an agent.": "Pilih seorang ejen.",
+    # ------------------------------------------------------------ P42 reaching a computer from the web
+    "Remote {level} is off on the computer itself. On it, run: agentic-pc remote {level}": (
+        "Remote {level} dimatikan pada komputer itu sendiri. Padanya, jalankan: agentic-pc remote {level}"
+    ),
+    "Turn on remote {level} for this computer first (My computers).": (
+        "Hidupkan remote {level} untuk komputer ini dahulu (Komputer saya)."
+    ),
+    "Enter your password to allow seeing or using this computer from the web.": (
+        "Masukkan kata laluan anda untuk membenarkan melihat atau menggunakan komputer ini dari web."
+    ),
+    "Say where to point.": "Nyatakan ke mana hendak menuding.",
+    "Say what to type.": "Nyatakan apa hendak ditaip.",
+    # ------------------------------------------------------------ P40 file storage
+    "This kind of storage does not take {field}.": "Storan jenis ini tidak menerima {field}.",
+    "Pick the company whose Library these documents are for.": (
+        "Pilih syarikat yang Perpustakaannya dokumen-dokumen ini ditujukan."
+    ),
+    "That storage is not here.": "Storan itu tiada di sini.",
+    "{n} files are kept in this storage. Turn off its import and keep it until they are moved or deleted.": (
+        "{n} fail disimpan dalam storan ini. Matikan importnya dan simpan ia sehingga fail itu "
+        "dipindahkan atau dipadam."
     ),
 }

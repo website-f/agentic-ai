@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 
 from ..minutes import audio, service
-from ..models import DocFile, Document, MeetingRecording
+from ..models import Document, MeetingRecording
 from .tools import Tool, ToolContext
 
 MAX_RETURN_CHARS = 8000
@@ -67,7 +67,9 @@ async def _meeting_minutes(ctx: ToolContext, args: dict[str, Any]) -> str:
     )
     if rec is not None:
         return await _report(ctx, rec)
-    data = await ctx.db.scalar(select(DocFile.data).where(DocFile.id == f.id))
+    from ..documents import storage  # P40: the bytes may live outside the database
+
+    data = await storage.read_id(ctx.db, f.id)
     if not data:
         return f"Error: [{f.id}] {f.name} is empty."
     rec = MeetingRecording(

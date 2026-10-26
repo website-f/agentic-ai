@@ -25,6 +25,8 @@ import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
 import { SEARCH } from "./search";
 import { SHELL } from "./shell";
+import { SPEECH } from "./speech";
+import { STORAGE } from "./storage";
 import { TASKS_FLOW } from "./tasks-flow";
 import { WORK } from "./work";
 
@@ -53,4 +55,6 @@ export const MS: Record<string, string> = {
   ...MICROSOFT,
   ...CRM,
   ...AI_USE,
+  ...SPEECH,
+  ...STORAGE,
 };

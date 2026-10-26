@@ -66,6 +66,21 @@ async def cancel_task(workflow_id: str) -> None:
     await client.get_workflow_handle(workflow_id).signal(AgentTaskWorkflow.cancel)
 
 
+async def terminate_task(workflow_id: str, reason: str) -> bool:
+    """P38: stop a run now, even in the middle of a long step (cancel only takes effect
+    between steps). False when the run was already gone."""
+    from temporalio.service import RPCStatusCode
+
+    client = await temporal_client()
+    try:
+        await client.get_workflow_handle(workflow_id).terminate(reason=reason[:200])
+    except RPCError as e:
+        if e.status == RPCStatusCode.NOT_FOUND:
+            return False
+        raise
+    return True
+
+
 async def start_broadcast_replies(broadcast_id: str, agent_ids: list[str]) -> None:
     client = await temporal_client()
     await client.start_workflow(

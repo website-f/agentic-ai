@@ -1160,10 +1160,7 @@ UPLOAD_BYTES = 20 * 1024 * 1024
 
 async def upload_files(ctx: Any, ids: Any) -> tuple[list[Any], str | None]:
     """The company files an upload names, with their bytes; or an error for the agent."""
-    from sqlalchemy import select
-    from sqlalchemy.orm import undefer
 
-    from ..models import DocFile
     from .doc_tools import _file
 
     if isinstance(ids, str):
@@ -1177,10 +1174,7 @@ async def upload_files(ctx: Any, ids: Any) -> tuple[list[Any], str | None]:
             return [], f"No file {raw!r} for you. Use list_files or company_documents for ids."
         if f.quarantined:
             return [], f"{f.name} is held back (it may hold a secret); a person must release it."
-        f = await ctx.db.scalar(
-            select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.data))
-        )
-        if not f.data or f.size > UPLOAD_BYTES:
+        if not f.size or f.size > UPLOAD_BYTES:
             return [], f"{f.name} is empty or bigger than {UPLOAD_BYTES // (1024 * 1024)} MB."
         out.append(f)
     return out, None
@@ -1197,10 +1191,15 @@ async def browser_upload(ctx: Any, args: dict[str, Any]) -> str:
     if not t:
         return "Error: give ref, the file field or its choose-file button."
     then = ref_arg(args.get("then_ref"))
-    payload = [
-        {"name": f.name, "mime": f.mime, "b64": base64.b64encode(bytes(f.data)).decode()}
-        for f in files
-    ]
+    from ..documents import storage  # P40: the bytes may live outside the database
+
+    payload = []
+    for f in files:
+        try:
+            data = await storage.read(ctx.db, f)
+        except storage.StorageError as e:
+            return f"Error: {f.name}: {e}"
+        payload.append({"name": f.name, "mime": f.mime, "b64": base64.b64encode(data).decode()})
     obs = await _act(
         ctx,
         "upload",

@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
 import { LanguageSwitch } from "@/components/language-switch";
+import { SpeechStylePicker } from "@/components/speech-style";
 import { IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -91,6 +92,10 @@ export function SettingsPage() {
 
       <Section title={t("Language")} description={t("English or Bahasa Melayu. Saved to your profile, so it follows you to other devices.")}>
         <LanguageSwitch size="md" />
+      </Section>
+
+      <Section title={t("How your AI speaks to you")} description={t("Your AI can chat in casual Malay or your own state's dialect. Documents, letters and reports it writes stay in standard Malay.")}>
+        <SpeechStylePicker />
       </Section>
 
       <Section title={t("Appearance")} description={t("Saved on this device.")}>

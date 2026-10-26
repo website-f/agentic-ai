@@ -33,6 +33,7 @@ import {
   NotepadIcon,
   GaugeIcon,
   GearSixIcon,
+  HardDrivesIcon,
   GraduationCapIcon,
   HandshakeIcon,
   KanbanIcon,
@@ -97,6 +98,7 @@ export type AppPath =
   | "/settings"
   | "/settings/members"
   | "/settings/ai-use"
+  | "/settings/storage"
   | "/tutorial"
   | "/guide"
   | "/present";
@@ -231,6 +233,7 @@ export const NAV: NavSection[] = [
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
+      { to: "/settings/storage", label: msg("File storage"), icon: HardDrivesIcon, perm: "org.manage", blurb: msg("Where company files are kept: the database, this server's disk, a Backblaze B2 or S3 bucket, or your own file server, and what feeds the Library.") },
       { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
       { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },

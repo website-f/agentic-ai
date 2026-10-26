@@ -43,7 +43,17 @@ METHOD_KIND = {
     "files.save": "save",
     "browser.open": "browser_open",
     "browser.close": "browser_close",
+    # P42: the person themselves, from the web (never offered to an AI).
+    "system.health": "health",
+    "screen.capture": "screen",
+    "input.send": "control",
 }
+REMOTE_LEVELS = ("off", "view", "control")
+# Methods that carry bytes back over HTTPS (the socket only carries the call).
+UPLOADS = frozenset({"files.upload", "screen.capture"})
+# Logged at most once a few minutes per computer (a live view asks for a frame a second).
+QUIET_KINDS = frozenset({"screen", "control", "health"})
+QUIET_EVERY = 300
 METHODS = frozenset(METHOD_KIND)
 # The agent tools that use a person's PC (agents/pc_tools.py): offered and allowed only to
 # that person's own AI when they have a linked computer.
@@ -318,8 +328,15 @@ async def record(
     agent_id: str | None = None,
     task_id: str | None = None,
 ) -> None:
-    """One activity row in its own session. Never raises: the log must not break the call."""
+    """One activity row in its own session. Never raises: the log must not break the call.
+    P42: a live view or remote control is logged once per QUIET_EVERY (and every failure)."""
     try:
+        if ok and kind in QUIET_KINDS:
+            from ..core.valkey import valkey
+
+            key = f"device:quiet:{device_id}:{kind}"
+            if not await valkey().set(key, "1", nx=True, ex=QUIET_EVERY):
+                return
         async with SessionLocal() as db:
             d = await db.get(Device, device_id)
             if d is None:
@@ -400,4 +417,15 @@ def device_out(d: Device, online: bool) -> dict[str, Any]:
         "paused": d.paused,
         "browsers": list(d.browsers or []),
         "created_at": d.created_at,
+        "remote_pc": d.remote_pc,
+        "remote_allowed": d.remote_allowed,
+        "remote": remote_level(d),
     }
+
+
+def remote_level(d: Device) -> str:
+    """What may be done from the web now: the lower of the two locks."""
+    order = {lvl: i for i, lvl in enumerate(REMOTE_LEVELS)}
+    pc = order.get(d.remote_pc or "off", 0)
+    web = order.get(d.remote_allowed or "off", 0)
+    return REMOTE_LEVELS[min(pc, web)]

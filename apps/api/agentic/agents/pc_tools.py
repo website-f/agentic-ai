@@ -18,12 +18,10 @@ import asyncio
 import re
 from typing import Any
 
-from sqlalchemy import select
-
 from ..core.fence import fence
 from ..devices import bridge, core
 from ..devices.core import DeviceError
-from ..models import Device, DocFile
+from ..models import Device
 from .tools import Tool, ToolContext, _threat_note
 
 READ_CHARS = 12_000
@@ -316,7 +314,9 @@ async def _save_to_pc(ctx: ToolContext, args: dict[str, Any]) -> str:
     d = await _pick(ctx, args)
     if isinstance(d, str):
         return d
-    data = await ctx.db.scalar(select(DocFile.data).where(DocFile.id == f.id))
+    from ..documents import storage  # P40: the bytes may live outside the database
+
+    data = await storage.read_id(ctx.db, f.id)
     if not data:
         return "Error: that file has no content to save."
     oid = await bridge.offer_download(d.id, bytes(data), f.name)
