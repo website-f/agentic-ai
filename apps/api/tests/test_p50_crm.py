@@ -450,3 +450,36 @@ async def test_a_google_sheet_and_a_webhook(client, llm, temporal, shop):
     assert new_path != path
     assert (await client.post(path, json={"sku": "L3"}, headers=JSON)).status_code == 404
     assert (await client.post(new_path, json={"sku": "L3"}, headers=JSON)).json()["created"] == 1
+
+
+async def test_remove_a_list_or_start_over(client, llm, temporal):
+    o = await office(client)
+    await post(client, "/api/crm/templates/real_estate")
+    objs = {x["key"] for x in (await client.get("/api/crm")).json()["objects"]}
+    assert {"properties", "contacts"} <= objs
+    rec = await post(
+        client,
+        "/api/crm/objects/properties/records",
+        {"values": {"address": "Lot 7, Jalan Ampang"}},
+    )
+    assert rec.status_code == 201, rec.text
+
+    # The wrong list: remove it, add another.
+    r = await client.delete("/api/crm/objects/viewings", headers={**csrf(client), **JSON})
+    assert r.status_code == 204
+    assert "viewings" not in {x["key"] for x in (await client.get("/api/crm")).json()["objects"]}
+    assert (await post(client, "/api/crm/templates/clinic")).status_code == 201
+
+    staff = await as_role(client, "aina@example.com", "staff", branch_id=o["branch"]["id"])
+    try:
+        assert (await post(staff, "/api/crm/reset", {"confirm": True})).status_code == 403
+    finally:
+        await staff.aclose()
+    assert (await post(client, "/api/crm/reset", {})).status_code == 422  # must say so
+    r = await post(client, "/api/crm/reset", {"confirm": True})
+    assert r.status_code == 200 and r.json()["removed"] >= 4
+    after = (await client.get("/api/crm")).json()
+    assert after["objects"] == []
+    assert (await client.get("/api/crm/dashboard")).json()["widgets"] == []
+    # The office's own data is untouched: it can be added again at once.
+    assert (await post(client, "/api/crm/builtins/contacts")).status_code == 201

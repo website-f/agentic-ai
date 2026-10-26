@@ -52,6 +52,8 @@ class PersonAllowance(AllowanceOut):
 class PolicyIn(BaseModel):
     daily_tokens: int = Field(ge=0, le=allowance.MAX_DAILY_TOKENS)
     roles: list[str] = Field(default_factory=lambda: list(allowance.DEFAULT_ROLES))
+    # P51: the office's own pool (work nobody asked for). None keeps it as it is; 0 = no limit.
+    office_daily_tokens: int | None = Field(default=None, ge=0, le=allowance.MAX_DAILY_TOKENS * 10)
 
 
 class AllowancesOut(BaseModel):
@@ -125,7 +127,11 @@ async def list_allowances(
             )
         )
     people.sort(key=lambda p: (-(p.used or 0), p.name.lower()))
-    return AllowancesOut(policy=PolicyIn(daily_tokens=daily, roles=list(roles)), people=people)
+    office = allowance.office_limit(ws) or 0
+    return AllowancesOut(
+        policy=PolicyIn(daily_tokens=daily, roles=list(roles), office_daily_tokens=office),
+        people=people,
+    )
 
 
 @router.put("/allowances/policy")
@@ -136,7 +142,11 @@ async def set_policy(
 ) -> PolicyIn:
     ws = await _ws(db, principal)
     before = dict((ws.settings or {}).get("ai_allowance") or {})
-    value = {"daily_tokens": body.daily_tokens, "roles": _roles(body.roles)}
+    value: dict[str, Any] = {"daily_tokens": body.daily_tokens, "roles": _roles(body.roles)}
+    office = before.get("office_daily_tokens", allowance.DEFAULT_OFFICE_DAILY)
+    value["office_daily_tokens"] = (
+        body.office_daily_tokens if body.office_daily_tokens is not None else office
+    )
     _set(ws, "ai_allowance", value)
     await audit.record(
         db, ws.id, principal.actor, "allowance.policy", target=ws.id, before=before, after=value

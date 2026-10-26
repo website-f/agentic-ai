@@ -2,7 +2,7 @@
  * has (contacts, deals, invoices... found automatically, with how many of each). 2) A starter
  * for the kind of business. 3) A blank list for anything else. Other systems are one tap away
  * in Connections. */
-import { CheckCircleIcon, PlugsConnectedIcon, PlusIcon, SparkleIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon, CheckCircleIcon, PlugsConnectedIcon, PlusIcon, SparkleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -10,11 +10,12 @@ import { toast } from "sonner";
 
 import { Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, TextareaField } from "@/components/ui/field";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { addBuiltin, addObject, applyTemplate, crmKeys, type CrmOverview } from "@/lib/crm-hub";
+import { addBuiltin, addObject, applyTemplate, crmKeys, deleteObject, resetCrm, type CrmObject, type CrmOverview } from "@/lib/crm-hub";
 import { cn } from "@/lib/utils";
 
 import { crmIcon, PICKABLE } from "./icons";
@@ -115,8 +116,67 @@ export function CrmSetup({ overview, onOpenObject }: { overview: CrmOverview; on
         </div>
       </Section>
 
+      {!first ? <YourCrm objects={overview.objects.filter((o) => !o.archived)} /> : null}
+
       {blank ? <BlankListDialog onClose={(key) => { setBlank(false); if (key) onOpenObject(key); }} /> : null}
     </div>
+  );
+}
+
+/** What is in the CRM now: remove a list added by mistake, or start over. */
+function YourCrm({ objects }: { objects: CrmObject[] }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [removing, setRemoving] = useState<CrmObject | null>(null);
+  const [restart, setRestart] = useState(false);
+  const refresh = () => void qc.invalidateQueries({ queryKey: crmKeys.all });
+  const remove = useMutation({
+    mutationFn: (key: string) => deleteObject(key),
+    onSuccess: () => { refresh(); toast.success(t("Removed from the CRM.")); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const reset = useMutation({
+    mutationFn: resetCrm,
+    onSuccess: () => { refresh(); toast.success(t("Your CRM is empty again. Build it the way you want.")); void navigate({ to: "/crm", search: { tab: "setup" } as never }); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <Section title={t("Your CRM now")} description={t("Added something by mistake? Remove it here and add another. Your office's own data is never deleted.")}>
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {objects.map((o) => {
+          const Ico = crmIcon(o.icon);
+          return (
+            <li key={o.key} className="flex min-h-14 items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
+              <span className="grid size-9 shrink-0 place-items-center rounded-sm" style={{ background: `${o.color}1f`, color: o.color }}><Ico size={18} weight="duotone" /></span>
+              <span className="grid min-w-0 flex-1">
+                <span className="truncate text-[14px] font-medium">{o.name}</span>
+                <span className="truncate text-[12px] text-muted">
+                  {o.kind === "builtin" ? t("From your office") : o.kind === "synced" ? t("From another system") : t("Your own list")}
+                  {typeof o.count === "number" ? ` · ${t("{n} records", { n: o.count.toLocaleString() })}` : ""}
+                </span>
+              </span>
+              <Button size="sm" variant="ghost" className="min-h-10 shrink-0 text-danger" loading={remove.isPending && remove.variables === o.key} onClick={() => setRemoving(o)}>
+                <TrashIcon size={15} /> {t("Remove")}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-danger/25 bg-danger/5 px-3 py-2.5">
+        <p className="min-w-0 flex-1 text-[12.5px] text-muted">{t("Want a clean slate? Start over removes every list, the dashboard, the connections and the sharing.")}</p>
+        <Button size="sm" variant="outline" className="min-h-10 shrink-0" loading={reset.isPending} onClick={() => setRestart(true)}>
+          <ArrowCounterClockwiseIcon size={15} /> {t("Start over")}
+        </Button>
+      </div>
+      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} danger confirmLabel={t("Remove")}
+        title={removing ? t("Remove {name} from the CRM?", { name: removing.name }) : ""}
+        body={removing?.kind === "builtin" ? t("The office's own data stays where it is; only the fields you added in the CRM are removed.") : t("Its records and fields are removed for everyone. Download a CSV first if you may need them.")}
+        onConfirm={() => { if (removing) remove.mutate(removing.key); }} />
+      <ConfirmDialog open={restart} onOpenChange={setRestart} danger confirmLabel={t("Start over")} title={t("Start the CRM over?")}
+        body={t("Every list you made with its records, every tile, connection and share is removed. The office's own contacts, deals, invoices and tasks stay exactly as they are. This cannot be undone.")}
+        onConfirm={() => reset.mutate()} />
+    </Section>
   );
 }
 

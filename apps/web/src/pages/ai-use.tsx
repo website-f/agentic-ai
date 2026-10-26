@@ -69,8 +69,9 @@ function PolicyCard({ policy, canSet }: { policy: AllowancePolicy; canSet: boole
   const qc = useQueryClient();
   const [daily, setDaily] = useState(String(policy.daily_tokens));
   const [roles, setRoles] = useState<string[]>(policy.roles);
+  const [office, setOffice] = useState(String(policy.office_daily_tokens ?? 2_000_000));
   const save = useMutation({
-    mutationFn: () => api<AllowancePolicy>("/api/allowances/policy", "PUT", { daily_tokens: Number(daily) || 0, roles }),
+    mutationFn: () => api<AllowancePolicy>("/api/allowances/policy", "PUT", { daily_tokens: Number(daily) || 0, roles, office_daily_tokens: Number(office) || 0 }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: allowanceKeys.all });
       toast.success(t("Saved. It counts from now, for today too."));
@@ -97,6 +98,14 @@ function PolicyCard({ policy, canSet }: { policy: AllowancePolicy; canSet: boole
           <span className="text-[13px] font-medium">{t("Who it applies to")}</span>
           <RolesPicker value={roles} onChange={canSet ? setRoles : () => undefined} />
           <p className="text-[12px] text-muted">{t("The owner is never limited by this. Anyone can still get their own allowance below.")}</p>
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">{t("The office's own work, per day")}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input type="number" min={0} step={100000} value={office} disabled={!canSet} onChange={(e) => setOffice(e.target.value)} className="w-40 tabular" aria-label={t("The office's own work, per day")} />
+            <Button type="button" size="sm" variant={Number(office) === 0 ? "secondary" : "ghost"} disabled={!canSet} onClick={() => setOffice("0")}>{t("No limit")}</Button>
+          </div>
+          <p className="text-[12px] text-muted">{t("Work nobody asked for directly: shared mailbox rules and agents' own follow-ups. When it is used up, that work waits for a manager to approve more.")}</p>
         </div>
         <FormError message={save.error ? errorMessage(save.error) : null} />
         {canSet ? <div><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save allowance")}</Button></div> : null}

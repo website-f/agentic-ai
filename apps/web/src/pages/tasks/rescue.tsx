@@ -10,7 +10,7 @@ import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { msg, useT } from "@/i18n";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 import { workKeys, type Task } from "@/lib/work";
 
@@ -24,9 +24,9 @@ const GROUPS = [
 function useRescue(task: Task, done: () => void) {
   const t = useT();
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ path, body }: { path: "stop" | "finish" | "retry-with"; body?: unknown }) =>
-      api<Task>(`/api/tasks/${task.id}/${path}`, "POST", body ?? {}),
+  const m = useMutation({
+    mutationFn: ({ path, body, force }: { path: "stop" | "finish" | "retry-with"; body?: unknown; force?: boolean }) =>
+      api<Task>(`/api/tasks/${task.id}/${path}${force ? "?force=true" : ""}`, "POST", body ?? {}),
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: workKeys.tasks });
       qc.invalidateQueries({ queryKey: workKeys.task(task.id) });
@@ -34,7 +34,15 @@ function useRescue(task: Task, done: () => void) {
       toast.success({ stop: t("Stopped."), finish: t("Marked done with your result."), "retry-with": t("Started again.") }[v.path]);
       done();
     },
+    // P51: the worker service is down: the person can still end it (a run that wakes up later
+    // finds it closed and stops by itself).
+    onError: (e, v) => {
+      if (e instanceof ApiError && e.code === "temporal_unavailable" && v.path !== "retry-with") {
+        toast.error(e.message, { action: { label: t("End it anyway"), onClick: () => m.mutate({ ...v, force: true }) }, duration: 15_000 });
+      } else toast.error(errorMessage(e));
+    },
   });
+  return m;
 }
 
 export function RescueActions({ task }: { task: Task }) {

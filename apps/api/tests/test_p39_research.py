@@ -9,12 +9,13 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import undefer
 
 from agentic.agents import browse_reader, runtime, websearch
 from agentic.brain import learn
 from agentic.core.db import SessionLocal
 from agentic.engine import client as engine_client
-from agentic.models import AgentMessage, Approval, BrainPage, Task
+from agentic.models import Agent, AgentMessage, Approval, BrainFact, BrainPage, DocFile, Task
 
 from .test_agents import ScriptedLLM, new_agent, new_task, office, temporal  # noqa: F401
 
@@ -224,6 +225,49 @@ async def test_findings_become_a_shared_research_page(client, web, temporal):
     body = pages[0].body
     assert "## Findings" in body and "RM 4,120" in body
     assert "- https://mpob.example/prices" in body and "- https://b.example/x" in body
+
+
+async def test_a_persons_own_ai_keeps_its_research_in_their_workspace(client, web, temporal):
+    agent, task = await _ctx(client, web)
+    me = (await client.get("/api/auth/me")).json()["user"]["id"]
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent["id"])
+        a.owner_user_id, a.is_twin, a.private = me, True, True
+        t = await db.get(Task, task["id"])
+        t.status, t.result = "done", "CPO closed at RM 4,120 a tonne this week. " * 8
+        db.add(
+            AgentMessage(
+                workspace_id=t.workspace_id,
+                agent_id=agent["id"],
+                task_id=t.id,
+                role="tool",
+                name="research_gather",
+                tool_call_id="c1",
+                created_at=datetime.now(UTC),
+                content="Sources:\n[1] MPOB - https://mpob.example/prices",
+            )
+        )
+        await db.commit()
+    async with SessionLocal() as db:
+        await learn.learn_from_task(db, task["id"])
+        f = await db.scalar(
+            select(DocFile).where(DocFile.task_id == task["id"]).options(undefer(DocFile.text))
+        )
+        assert f is not None and f.owner_user_id == me
+        assert f.folder in ("My workspace/Research", "Meja kerja saya/Penyelidikan")
+        assert "RM 4,120" in f.text and "https://mpob.example/prices" in f.text
+        fact = await db.scalar(
+            select(BrainFact).where(
+                BrainFact.agent_id == agent["id"], BrainFact.text.like("%full report%")
+            )
+        )
+        assert fact is not None and f.id in fact.text
+        # A private assistant's research never goes to the shared wiki.
+        wiki = select(BrainPage).where(BrainPage.path.like("wiki/research/%"))
+        assert not (await db.scalars(wiki)).all()
+    # It shows on their desk, under My files.
+    desk = (await client.get("/api/desk")).json()
+    assert any(x["id"] == f.id for x in desk["files"])
 
 
 def test_search_result_links_are_unwrapped():

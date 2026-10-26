@@ -9,7 +9,12 @@ unless one was set for them. When it is used up:
 It resets at local midnight. Background learning (facts, skills) never counts: it is the
 company's investment, not the person's use.
 
-Workspace setting `ai_allowance`: {"daily_tokens": 50000, "roles": ["staff"]}.
+Workspace setting `ai_allowance`: {"daily_tokens": 50000, "roles": ["staff"],
+"office_daily_tokens": 2000000}.
+
+P51: work no person asked for (a shared mailbox's rules, an agent's own follow-ups) draws on
+one office pool per day (`office_daily_tokens`, 0 = no limit). When it is used up, that work
+stops and asks a manager, like a person's allowance.
 """
 
 from dataclasses import dataclass
@@ -26,6 +31,8 @@ from .budget import periods
 
 DEFAULT_DAILY_TOKENS = 50_000
 DEFAULT_ROLES = ("staff",)
+DEFAULT_OFFICE_DAILY = 2_000_000
+OFFICE = "office"  # the pool's id in approvals and grants
 MAX_DAILY_TOKENS = 50_000_000
 GRANT_SHARE = 0.5  # a manager approving more adds half the allowance again, for today
 # Learning and housekeeping the office does by itself: never charged to a person.
@@ -82,6 +89,15 @@ class Allowance:
         }
 
     def note(self, lang: str | None = None) -> str:
+        if self.user_id == OFFICE:
+            return tr(
+                "The office's AI work that nobody asked for directly (mail rules, follow-ups) "
+                "used today's limit ({used} of {limit} tokens). It resets at midnight, or a "
+                "manager can give more.",
+                lang,
+                used=f"{self.used:,}",
+                limit=f"{self.limit or 0:,}",
+            )
         return tr(
             "Your AI allowance for today is used up ({used} of {limit} tokens). It resets at "
             "midnight, or a manager can give you more.",
@@ -164,6 +180,46 @@ async def grant(db: AsyncSession, ws: Workspace, user_id: str) -> int:
     extra = int(base * GRANT_SHARE)
     day = periods(ws.timezone).day
     key = _grant_key(ws.id, user_id, day)
+    await valkey().incrby(key, extra)
+    await valkey().expire(key, 2 * 86400)
+    return extra
+
+
+def office_limit(ws: Workspace) -> int | None:
+    raw: dict[str, Any] = (ws.settings or {}).get("ai_allowance") or {}
+    try:
+        n = int(raw.get("office_daily_tokens", DEFAULT_OFFICE_DAILY))
+    except (TypeError, ValueError):
+        n = DEFAULT_OFFICE_DAILY
+    return max(0, min(MAX_DAILY_TOKENS * 10, n)) or None
+
+
+async def office_check(db: AsyncSession, ws: Workspace) -> Allowance | None:
+    """P51: the office pool when it is used up, else None."""
+    base = office_limit(ws)
+    if base is None:
+        return None
+    p = periods(ws.timezone)
+    q = select(func.coalesce(func.sum(LLMCall.prompt_tokens + LLMCall.completion_tokens), 0)).where(
+        LLMCall.workspace_id == ws.id, LLMCall.user_id.is_(None), LLMCall.ts >= p.day_start
+    )
+    for prefix in NOT_CHARGED:
+        q = q.where(~LLMCall.task.startswith(prefix))
+    used = int(await db.scalar(q) or 0)
+    extra = await _granted(ws.id, OFFICE, p.day)
+    if used < base + extra:
+        return None
+    resets = (p.day_start + timedelta(days=1)).isoformat()
+    return Allowance(OFFICE, used, base + extra, extra, p.day, resets)
+
+
+async def grant_office(db: AsyncSession, ws: Workspace) -> int:
+    """A manager approved more office work today: half the pool again."""
+    base = office_limit(ws)
+    if not base:
+        return 0
+    extra = int(base * GRANT_SHARE)
+    key = _grant_key(ws.id, OFFICE, periods(ws.timezone).day)
     await valkey().incrby(key, extra)
     await valkey().expire(key, 2 * 86400)
     return extra

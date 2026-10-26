@@ -24,7 +24,7 @@ from ...agents import runtime
 from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.security import can
-from ...engine import gateway
+from ...engine import acting, gateway
 from ...models import Agent, ApiToken, Membership, User, Workspace
 from ..scope import Scope
 
@@ -113,6 +113,31 @@ async def _agents(db: AsyncSession, t: ApiToken) -> list[Agent]:
     )
 
 
+PER_MINUTE = 30  # requests per token per minute
+
+
+async def _within_limits(db: AsyncSession, t: ApiToken) -> None:
+    """P51: a token cannot be used to spend without limit: at most PER_MINUTE requests a
+    minute, and never past its maker's daily AI allowance."""
+    from ...core.valkey import valkey
+    from ...teams import allowance
+
+    key = f"oai:{t.id}:{int(time.time() // 60)}"
+    n = await valkey().incr(key)
+    if n == 1:
+        await valkey().expire(key, 120)
+    if n > PER_MINUTE:
+        raise OpenAIError(
+            429,
+            "Too many requests. Wait a minute and try again.",
+            "rate_limit_error",
+            "rate_limited",
+        )
+    ws = await db.get(Workspace, t.workspace_id)
+    if ws is not None and (left := await allowance.check(db, ws, t.created_by)) is not None:
+        raise OpenAIError(429, left.note("en"), "insufficient_quota", "allowance_used")
+
+
 @router.get("/models")
 async def models(
     authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)
@@ -169,8 +194,11 @@ async def chat_completions(
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages:
             raise OpenAIError(400, "Send at least one message.")
+        await _within_limits(db, t)
         try:
-            reply = await runtime.chat_once(db, agent, messages)
+            # P51: billed to the person who made the token, within their daily AI allowance.
+            with acting.person(t.created_by):
+                reply = await runtime.chat_once(db, agent, messages)
         except ValueError as e:
             raise OpenAIError(400, str(e)) from e
         except gateway.GatewayUnavailable as e:

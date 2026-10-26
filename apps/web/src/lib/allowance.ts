@@ -26,6 +26,8 @@ export interface PersonAllowance extends Allowance {
 export interface AllowancePolicy {
   daily_tokens: number;
   roles: string[];
+  /** P51: the office's own daily pool, for work nobody asked for (0 = no limit). */
+  office_daily_tokens?: number;
 }
 
 export interface WorkScope {

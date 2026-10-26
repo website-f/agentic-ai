@@ -8,6 +8,7 @@ import {
   FlowArrowIcon,
   MagnifyingGlassIcon,
   PlayIcon,
+  SparkleIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -32,6 +33,8 @@ import { cn } from "@/lib/utils";
 import { NODE_COLOR, NODE_TYPES, type NodeType, type Workflow } from "@/lib/workflows";
 import { StartRunDialog } from "@/pages/workflows/run";
 
+import { HowDoI, useAskMyAi } from "./hub";
+
 export function hoursOf(t: (s: string) => string, p: Pick<DeskPerson, "work_hours">): string {
   return p.work_hours ? describeHours(p.work_hours) : t("Any time");
 }
@@ -41,6 +44,7 @@ export function WorkflowsTab({ desk }: { desk: Desk }) {
   const [view, setView] = useState<"workflows" | "sops">("workflows");
   return (
     <div data-guide="desk.procedures" className="grid min-w-0 gap-4">
+      <HowDoI desk={desk} compact />
       <Segmented
         label={t("Show")}
         value={view}
@@ -281,12 +285,18 @@ function WorkflowDetail({ wf, desk }: { wf: DeskWorkflow; desk: Desk }) {
   );
 }
 
+const SCOPES = ["department", "branch", "workspace", "library"] as const;
+
 function Sops({ desk }: { desk: Desk }) {
   const t = useT();
   const navigate = useNavigate();
+  const ask = useAskMyAi();
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const list = desk.procedures.sops.filter((s) => !needle || s.title.toLowerCase().includes(needle));
+  const scopeOf = (s: string) => (SCOPES.includes(s as (typeof SCOPES)[number]) ? s : "workspace");
+  const label = (s: string) => (s === "department" ? t("Your department") : s === "branch" ? t("Your company") : s === "library" ? t("Library") : t("Everyone"));
+  const groups = SCOPES.map((scope) => ({ scope, items: list.filter((s) => scopeOf(s.scope) === scope) })).filter((g) => g.items.length);
   return (
     <Card>
       <CardHeader
@@ -298,16 +308,32 @@ function Sops({ desk }: { desk: Desk }) {
       <div className="border-b border-border px-4 py-2.5 sm:px-5">
         <SearchInput value={q} onChange={setQ} placeholder={t("Search SOPs")} />
       </div>
-      {list.length ? (
-        <ListCard className="rounded-none border-0">
-          {list.map((s) => (
-            <ListRow key={s.id} onClick={() => void navigate({ href: s.url })}
-              leading={<IconTile icon={FileTextIcon} size="sm" tone="neutral" />}
-              title={s.title}
-              meta={s.scope === "department" ? t("Your department") : s.scope === "branch" ? t("Your company") : s.scope === "library" ? t("Library") : t("Everyone")}
-              trailing={<PinButton kind="sop" refId={s.id} title={s.title} />} />
-          ))}
-        </ListCard>
+      {groups.length ? (
+        groups.map((g) => (
+          <section key={g.scope} aria-label={label(g.scope)}>
+            <h3 className="flex items-center justify-between border-b border-border bg-surface-2/50 px-4 py-1.5 text-[12px] font-semibold text-muted sm:px-5">
+              {label(g.scope)} <span className="tabular">{g.items.length}</span>
+            </h3>
+            <ListCard className="rounded-none border-0">
+              {g.items.map((s) => (
+                <ListRow key={s.id} onClick={() => void navigate({ href: s.url })}
+                  leading={<IconTile icon={FileTextIcon} size="sm" tone="neutral" />}
+                  title={s.title}
+                  trailing={
+                    <>
+                      {desk.can_ask ? (
+                        <Button size="sm" variant="ghost" className="max-sm:px-2" disabled={ask.isPending} title={t("Ask my AI to walk me through it")}
+                          onClick={(e) => { e.stopPropagation(); ask.mutate({ text: t("Walk me through the SOP \"{title}\" step by step: what I do, what I need, who approves, and the deadlines.", { title: s.title }) }); }}>
+                          <SparkleIcon size={14} /> <span className="max-sm:hidden">{t("Explain")}</span>
+                        </Button>
+                      ) : null}
+                      <PinButton kind="sop" refId={s.id} title={s.title} />
+                    </>
+                  } />
+              ))}
+            </ListCard>
+          </section>
+        ))
       ) : (
         <CardBody className="flex items-center gap-2 text-[13px] text-muted"><MagnifyingGlassIcon size={15} /> {q ? t("Nothing matches.") : t("No SOPs for your job yet.")}</CardBody>
       )}

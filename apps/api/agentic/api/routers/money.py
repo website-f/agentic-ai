@@ -26,7 +26,7 @@ from ...crm import service as svc
 from ...i18n import tr
 from ...models import Branch, DocFile, Document, MoneyDoc, Party, Payment, Task
 from ...services import audit
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_allowance, require
 
 router = APIRouter(prefix="/api", tags=["money"])
 
@@ -492,6 +492,7 @@ async def capture_bill(
 ) -> dict[str, Any]:
     """A supplier bill read from a file in the office files (a PDF or a picture): saved as
     awaiting approval, with the supplier matched or added and a duplicate check."""
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     from ...crm import capture
     from ...documents import service as doc_service
 
@@ -537,6 +538,7 @@ async def upload_receipt(
     """P43: drop a receipt or bill (a photo or PDF) straight onto the Money page. It is kept in
     the company's "Bills and receipts" folder and read at once. `paid_by`: a member who paid
     it from their own money (an expense claim), so finance knows to pay them back."""
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     from ...crm import capture
     from ...documents import provenance
     from ...documents import service as doc_service

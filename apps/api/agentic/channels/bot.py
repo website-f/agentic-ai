@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import decisions, runtime
 from ..core.security import can
 from ..core.valkey import valkey
-from ..engine import gateway, media
+from ..engine import acting, gateway, media
 from ..i18n import Msg, current_lang, normalize, render, tr, use_lang
 from ..models import (
     Agent,
@@ -80,14 +80,27 @@ def binding_keys(chat: dict[str, Any]) -> list[str]:
     return [f"chat:{chat.get('id')}", kind]
 
 
-async def _bound_agent(db: AsyncSession, ch: Channel, chat: dict[str, Any]) -> Agent | None:
+async def _bound_agent(
+    db: AsyncSession, ch: Channel, chat: dict[str, Any], user_id: str | None = None
+) -> Agent | None:
+    """The agent bound to this chat. P51: only one the person writing may talk to (never
+    someone else's private assistant, or a twin they do not see), as on WhatsApp."""
+    from ..api.scope import member_sees_agent
+
     for key in binding_keys(chat):
         b = await db.scalar(
             select(Binding).where(Binding.channel_id == ch.id, Binding.match == key)
         )
         if b is not None:
             agent = await db.get(Agent, b.agent_id)
-            if agent is not None and agent.status == "active":
+            if (
+                agent is not None
+                and agent.status == "active"
+                and (
+                    user_id is None
+                    or await member_sees_agent(db, ch.workspace_id, user_id, agent.id)
+                )
+            ):
                 return agent
     return None
 
@@ -183,7 +196,8 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
     # A voice note becomes text first, then goes everywhere typed text would.
     heard = ""
     if not text and sound is not None:
-        heard, problem = await _hear(db, ch, sound)
+        with acting.person(link.user_id):  # P51: their voice note counts as their AI use
+            heard, problem = await _hear(db, ch, sound)
         if problem:
             await _reply(db, ch, chat_id, problem, uid)
             return
@@ -197,7 +211,7 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
             return
 
     if text in ("/help", "/whoami"):
-        agent = await _bound_agent(db, ch, chat)
+        agent = await _bound_agent(db, ch, chat, link.user_id)
         who = (
             tr("Messages here go to {name} ({role}).", name=agent.name, role=agent.role)
             if agent
@@ -216,7 +230,7 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
             await _reply(db, ch, chat_id, took.reply, uid)
             return
         text = took.chat or ""
-    agent = await _bound_agent(db, ch, chat)
+    agent = await _bound_agent(db, ch, chat, link.user_id)
     if agent is None:
         await _reply(
             db,

@@ -34,6 +34,7 @@ import { TASKS_FLOW } from "./tasks-flow";
 import { TIPS } from "./tips";
 import { WORK } from "./work";
 import { WORK_MORE } from "./work-more";
+import { WORKSPACE_HUB } from "./workspace-hub";
 
 export const MS: Record<string, string> = {
   ...COMMON,
@@ -67,4 +68,5 @@ export const MS: Record<string, string> = {
   ...CRM_HUB,
   ...CRM_BUILDER,
   ...CRM_CONNECTIONS,
+  ...WORKSPACE_HUB,
 };

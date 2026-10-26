@@ -5,6 +5,7 @@ Runs in the worker (Temporal activities), never in the request path.
 
 import logging
 import re
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,8 +46,13 @@ async def save_research(
     """P39: what an agent found on the web becomes a wiki page in the office's shared brain
     (wiki/research/...): the question, the findings and the sources. Every later task and
     chat recalls it (brain/recall.py), so the office does not research the same thing twice.
-    Returns the page path, or None when the task did no web research."""
-    if task.status not in ("review", "done") or agent.private:
+    P51: a person's own AI (their twin or private assistant) also keeps the report in that
+    person's workspace ("My workspace/Research") with a memory of where it is, so they can
+    open it and their AI builds on it next time. A private assistant's research stays there
+    only (never the shared wiki).
+    Returns the page path (or the file's folder for a private one), or None when the task did
+    no web research."""
+    if task.status not in ("review", "done"):
         return None
     findings = (task.result or "").strip()
     used = [m for m in msgs if m.role == "tool" and m.name in RESEARCH_TOOLS and m.content]
@@ -67,6 +73,15 @@ async def save_research(
     from ..services.text import slugify
 
     now = datetime.now(UTC)
+    kept: str | None = None
+    if agent.owner_user_id:
+        try:
+            kept = await _keep_for_owner(db, task, agent, findings, sources, now)
+        except Exception:  # noqa: BLE001 - the wiki page and the facts still happen
+            await db.rollback()
+            log.warning("could not keep research of %s in the workspace", task.id, exc_info=True)
+    if agent.private:
+        return kept
     path = f"wiki/research/{now:%Y-%m}-{slugify(task.title, 'research')[:60]}.md"
     own = await db.get(Branch, agent.branch_id) if agent.branch_id else None
     if own is not None and own.isolated:  # an isolated company keeps its research
@@ -87,6 +102,66 @@ async def save_research(
         f"Research: {task.title[:150]}",
     )
     return path
+
+
+RESEARCH_FOLDER = {"ms": "Meja kerja saya/Penyelidikan", "en": "My workspace/Research"}
+
+
+async def _keep_for_owner(
+    db: AsyncSession, task: Task, agent: Agent, findings: str, sources: list[str], now: Any
+) -> str:
+    """The report as a file in the owner's workspace, and a private memory of the agent that
+    points to it (what was found, where the full report is)."""
+    from ..core.redact import redact
+    from ..documents import provenance
+    from ..documents import service as doc_service
+    from ..services.text import slugify
+    from . import facts
+    from .scope import for_agent as viewer_of
+
+    lang = await provenance.folder_lang(db, task.workspace_id, agent.branch_id)
+    folder = RESEARCH_FOLDER.get(lang, RESEARCH_FOLDER["en"])
+    body = redact(
+        f"# {task.title.strip()}\n\n"
+        f"_Researched by {agent.name} on {now:%Y-%m-%d}._\n\n"
+        f"## Question\n\n{(task.brief or task.title).strip()[:2000]}\n\n"
+        f"## Findings\n\n{findings[:12000]}\n\n"
+        "## Sources\n\n" + "\n".join(f"- {u}" for u in sources[:MAX_SOURCES]) + "\n"
+    )
+    name = f"{now:%Y-%m-%d} {slugify(task.title, 'research')[:70]}.md"
+    f = await doc_service.create_file(
+        db,
+        workspace_id=task.workspace_id,
+        name=name,
+        data=body.encode(),
+        mime="text/markdown",
+        created_by=f"agent:{agent.id}",
+        branch_id=agent.branch_id,
+        task_id=task.id,
+        agent_id=agent.id,
+        source="generated",
+        status="ready",
+        folder=folder,
+        owner_user_id=agent.owner_user_id,
+    )
+    f.text = body
+    f.summary = f"Research: {task.title[:180]}"
+    first = " ".join(findings.split())[:280]
+    await facts.add(
+        db,
+        await viewer_of(db, agent),
+        f'I researched "{task.title[:120]}" on {now:%Y-%m-%d}: {first}. '
+        f"The full report with sources is in my owner's workspace: {folder}/{f.name} "
+        f"(file {f.id}); read it before researching this again.",
+        branch_id=agent.branch_id,
+        agent_id=agent.clone_of or agent.id,
+        source_kind="task",
+        created_by=f"agent:{agent.id}",
+        source_id=task.id,
+        source_label=f'research "{task.title[:120]}"',
+    )
+    await db.commit()
+    return folder
 
 
 async def learn_from_task(db: AsyncSession, task_id: str) -> facts.Learned | None:

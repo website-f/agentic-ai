@@ -790,7 +790,13 @@ def kit_brief(kit: dict[str, Any]) -> str:
     return "\n".join(f"{k}: {kit[k]}" for k in keys if kit.get(k))
 
 
-async def ai_rewrite(db: AsyncSession, workspace_id: str, passage: str, instruction: str) -> str:
+async def ai_rewrite(
+    db: AsyncSession,
+    workspace_id: str,
+    passage: str,
+    instruction: str,
+    branch_id: str | None = None,
+) -> str:
     from ..engine import gateway
 
     r = await gateway.chat(
@@ -805,6 +811,7 @@ async def ai_rewrite(db: AsyncSession, workspace_id: str, passage: str, instruct
             },
         ],
         task="document.rewrite",
+        branch_id=branch_id,  # P51: the company's data level (P33)
         max_tokens=1200,
         temperature=0.3,
     )
@@ -835,6 +842,7 @@ async def ai_fill(
     request: str,
     kit: dict[str, Any],
     reference: str = "",
+    branch_id: str | None = None,
 ) -> dict[str, Any]:
     from ..engine import gateway
 
@@ -848,6 +856,7 @@ async def ai_fill(
         "smart",
         [{"role": "system", "content": FILL_SYSTEM}, {"role": "user", "content": user}],
         task="document.fill",
+        branch_id=branch_id,
         max_tokens=3000,
         temperature=0,
         json_mode=True,
@@ -858,7 +867,12 @@ async def ai_fill(
 
 
 async def ai_write(
-    db: AsyncSession, workspace_id: str, request: str, kit: dict[str, Any], reference: str = ""
+    db: AsyncSession,
+    workspace_id: str,
+    request: str,
+    kit: dict[str, Any],
+    reference: str = "",
+    branch_id: str | None = None,
 ) -> str:
     from ..engine import gateway
 
@@ -871,6 +885,7 @@ async def ai_write(
         "smart",
         [{"role": "system", "content": WRITE_SYSTEM}, {"role": "user", "content": user}],
         task="document.write",
+        branch_id=branch_id,
         max_tokens=4000,
         temperature=0.3,
     )
@@ -878,7 +893,11 @@ async def ai_write(
 
 
 async def ai_review(
-    db: AsyncSession, workspace_id: str, markdown: str, kit: dict[str, Any]
+    db: AsyncSession,
+    workspace_id: str,
+    markdown: str,
+    kit: dict[str, Any],
+    branch_id: str | None = None,
 ) -> list[dict[str, str]]:
     from ..engine import gateway
 
@@ -894,6 +913,7 @@ async def ai_review(
             },
         ],
         task="document.review",
+        branch_id=branch_id,
         max_tokens=2500,
         temperature=0,
         json_mode=True,

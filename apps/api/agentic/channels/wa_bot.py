@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents import runtime
 from ..core.security import can
 from ..core.valkey import valkey
-from ..engine import gateway, media
+from ..engine import acting, gateway, media
 from ..i18n import Msg, tr, use_lang
 from ..models import Agent, Binding, Channel, ChannelLink, ChatSession, Membership, User
 from ..services import prefs
@@ -233,7 +233,8 @@ async def _handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
         return
     heard = ""
     if msg.audio is not None and not text:
-        heard, problem = await _hear(db, ch, msg, agent)
+        with acting.person(link.user_id):  # P51: their voice note counts as their AI use
+            heard, problem = await _hear(db, ch, msg, agent)
         if problem:
             await _reply(db, ch, msg.sender, problem, key)
             return

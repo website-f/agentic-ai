@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowClockwiseIcon, CaretRightIcon, EyeIcon, KanbanIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CaretRightIcon, EyeIcon, KanbanIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -301,7 +301,8 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
       className={cn(
         // Fills the screen below the toolbar; the cards scroll inside the column, header stays.
         "flex h-[var(--fill-h,24rem)] w-[84vw] max-w-[20rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-border/60 bg-surface-2/50 transition-[border-color,background-color,opacity,box-shadow] duration-150",
-        "sm:w-72 xl:w-auto xl:max-w-none xl:min-w-0",
+        // Trello-like: every column keeps its width on every screen; the board scrolls sideways.
+        "sm:w-[18.5rem] sm:max-w-none lg:w-[19.5rem]",
         dragFrom && allowed && "border-dashed border-accent/60",
         hovered && allowed && "border-solid border-accent bg-accent-soft/50 shadow-[0_0_0_3px_var(--accent-soft)]",
         hovered && home && sortable && "border-accent/50",
@@ -368,11 +369,29 @@ function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: T
   );
 }
 
+/** A fade at the board's edge with a round arrow, while more columns are that way. */
+function EdgeButton({ side, show, onClick }: { side: "left" | "right"; show: boolean; onClick: () => void }) {
+  const t = useT();
+  return (
+    <div aria-hidden={!show}
+      className={cn("pointer-events-none absolute inset-y-0 z-20 flex w-14 items-center transition-opacity duration-150",
+        side === "left" ? "left-0 justify-start bg-gradient-to-r from-bg to-transparent pl-1.5" : "right-0 justify-end bg-gradient-to-l from-bg to-transparent pr-1.5",
+        show ? "opacity-100" : "opacity-0")}>
+      <button type="button" tabIndex={show ? 0 : -1} onClick={onClick}
+        aria-label={side === "left" ? t("Scroll the board left") : t("Scroll the board right")}
+        className={cn("grid size-10 place-items-center rounded-full border border-border bg-surface text-fg shadow-[var(--shadow-soft)] hover:border-accent/50 hover:text-accent max-md:hidden",
+          show && "pointer-events-auto")}>
+        {side === "left" ? <ArrowLeftIcon size={16} weight="bold" /> : <ArrowRightIcon size={16} weight="bold" />}
+      </button>
+    </div>
+  );
+}
+
 function BoardSkeleton() {
   return (
     <div className="flex gap-3 overflow-hidden" aria-hidden>
       {[0, 1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="grid w-[84vw] max-w-[20rem] shrink-0 content-start gap-2 rounded-[var(--radius-md)] bg-surface-2/50 p-2 sm:w-72 xl:w-auto xl:flex-1">
+        <div key={i} className="grid w-[84vw] max-w-[20rem] shrink-0 content-start gap-2 rounded-[var(--radius-md)] bg-surface-2/50 p-2 sm:w-[18.5rem] sm:max-w-none lg:w-[19.5rem]">
           <Skeleton className="mx-1 my-1.5 h-8 w-2/3" />
           {Array.from({ length: 3 - (i % 3) }, (_, k) => <Skeleton key={k} className="h-24 rounded-[var(--radius-sm)]" />)}
         </div>
@@ -534,9 +553,27 @@ export function TasksPage() {
     scrollTo(status, true);
     revealTab(status);
   };
+  // Whether there is more board to either side: shown as a fade and an arrow button.
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measureEdges = () => {
+    const el = board.current;
+    if (!el) return;
+    const left = el.scrollLeft > 4;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  };
+  useEffect(() => {
+    const el = board.current;
+    if (!el) return;
+    measureEdges();
+    const ro = new ResizeObserver(measureEdges);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [anyTasks, isLoading]);
   // Swiping updates the column switcher (ignored while a tap-triggered scroll is animating).
   const onBoardScroll = () => {
     const el = board.current;
+    measureEdges();
     if (!el || Date.now() - jumpedAt.current < 600) return;
     const left = el.getBoundingClientRect().left + (parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0);
     let best: { s: TaskStatus; d: number } | null = null;
@@ -775,8 +812,8 @@ export function TasksPage() {
                 <XIcon size={13} className="shrink-0" />
               </button>
             ) : null}
-            {/* Column switcher for the swipeable board (and a drop target while dragging); wide screens see all six columns. */}
-            <div ref={tabs} className="min-w-0 xl:hidden">
+            {/* Column switcher for the sideways board (and a drop target while dragging). */}
+            <div ref={tabs} className="min-w-0">
               <div role="tablist" aria-label={t("Board columns")}
                 className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {COLUMNS.map((c) => (
@@ -786,12 +823,18 @@ export function TasksPage() {
               </div>
             </div>
           </Toolbar>
+          <div className="relative -mx-4 sm:-mx-6 lg:-mx-8">
+          {edges.right ? (
+            <p className="pointer-events-none absolute -top-6 right-4 hidden items-center gap-1 text-[12px] text-muted sm:right-6 md:flex lg:right-8">
+              {t("Scroll sideways to see every column")} <ArrowRightIcon size={13} />
+            </p>
+          ) : null}
           <div
             ref={board}
             data-guide="tasks.columns"
             onScroll={onBoardScroll}
             className={cn(
-              "-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-2 [scrollbar-width:thin] sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-8 lg:scroll-px-8 lg:px-8 xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0",
+              "flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-3 [scrollbar-color:var(--border)_transparent] sm:scroll-px-6 sm:px-6 md:snap-none lg:scroll-px-8 lg:px-8",
               // Snapping fights the edge auto-scroll while a card is held.
               active && "snap-none",
             )}
@@ -803,6 +846,11 @@ export function TasksPage() {
                   canWrite={canWrite} dragFrom={dragFrom} hovered={overStatus === c.status} drop={drop} sortable={sortable} companyOf={companyOf} guideFirst={c.status === firstBusy} />
               );
             })}
+            {/* Room after the last column, so it can scroll fully clear of the edge fade. */}
+            <span aria-hidden className="w-px shrink-0" />
+          </div>
+          <EdgeButton side="left" show={edges.left} onClick={() => board.current?.scrollBy({ left: -board.current.clientWidth * 0.8, behavior: reduce ? "auto" : "smooth" })} />
+          <EdgeButton side="right" show={edges.right} onClick={() => board.current?.scrollBy({ left: board.current.clientWidth * 0.8, behavior: reduce ? "auto" : "smooth" })} />
           </div>
           {createPortal(
             // On <body>: a transformed ancestor (page transitions) would offset a fixed overlay from the finger.

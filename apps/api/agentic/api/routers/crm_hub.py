@@ -7,7 +7,7 @@ Records and views: anyone with the object (edit grant to change records).
 
 GET  /api/crm                                   what this person sees, plus (owner) discovery
 POST /api/crm/templates/{key} | /builtins/{source} | /objects
-GET|PATCH|DELETE /api/crm/objects/{key}
+GET|PATCH|DELETE /api/crm/objects/{key}   POST /api/crm/reset (start over)
 POST /api/crm/objects/{key}/fields     PATCH|DELETE /api/crm/fields/{id}
 POST /api/crm/objects/{key}/query      GET /api/crm/objects/{key}/options
 POST /api/crm/objects/{key}/records    GET|PATCH|DELETE /api/crm/objects/{key}/records/{id}
@@ -368,6 +368,38 @@ async def remove_object(
     )
     await db.delete(obj)
     await db.commit()
+
+
+class ResetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: Literal[True]
+
+
+@router.post("/reset")
+async def reset_crm(
+    body: ResetIn, p: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, int]:
+    """Start over: every list with its records, fields and views, the dashboard, the
+    connections and the sharing. The office's own data (contacts, deals, invoices...) is
+    never touched: built-in lists only show it."""
+    _owner(await _access(db, p))
+    ws = p.workspace_id
+    lists = (
+        await db.scalar(
+            select(func.count()).select_from(CrmObject).where(CrmObject.workspace_id == ws)
+        )
+        or 0
+    )
+    await db.execute(delete(CrmWidget).where(CrmWidget.workspace_id == ws))
+    await db.execute(delete(CrmAccess).where(CrmAccess.workspace_id == ws))
+    await db.execute(delete(CrmView).where(CrmView.workspace_id == ws))
+    await db.execute(delete(CrmRecord).where(CrmRecord.workspace_id == ws))
+    await db.execute(delete(CrmField).where(CrmField.workspace_id == ws))
+    await db.execute(delete(CrmObject).where(CrmObject.workspace_id == ws))
+    await db.execute(delete(CrmConnector).where(CrmConnector.workspace_id == ws))
+    await audit.record(db, ws, p.actor, "crm.reset", target=ws, before={"lists": lists})
+    await db.commit()
+    return {"removed": lists}
 
 
 # ---------------------------------------------------------------- fields

@@ -18,6 +18,7 @@ import {
   FlowArrowIcon,
   HourglassIcon,
   KanbanIcon,
+  ListChecksIcon,
   MagnifyingGlassIcon,
   PaperPlaneTiltIcon,
   PlayIcon,
@@ -47,7 +48,9 @@ import { MadeBy, ReviewPill } from "@/components/provenance";
 import { Marked, TYPE_ICON, typeLabel, useOpenTarget } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,6 +77,7 @@ import type { Workflow } from "@/lib/workflows";
 import { StartRunDialog } from "@/pages/workflows/run";
 
 import { FormsDue } from "./forms";
+import { DeskShortcuts, HowDoI, useAskMyAi } from "./hub";
 import { AgentsTab } from "./agents";
 import { WorkflowsTab } from "./workflows";
 
@@ -165,10 +169,12 @@ function DeskView({ desk }: { desk: Desk }) {
       />
       {tab === "overview" ? (
         <>
+          {desk.can_ask ? <AskPanel /> : null}
+          <DeskShortcuts desk={desk} onTab={go} />
+          <HowDoI desk={desk} />
           {desk.can_ask && mainAgent ? (
             <GiveTaskPanel agent={mainAgent} guide="desk.give" title={mainAgent.is_twin ? t("Give my AI a task") : undefined} />
           ) : null}
-          {desk.can_ask ? <AskPanel /> : null}
           <AllowanceMeter />
           <StatGrid guide="desk.stats">
             <Stat label={t("Waiting for you")} value={waiting} icon={SealCheckIcon} tone={waiting ? "warn" : "ok"} hint={waiting ? t("Approvals, answers and reviews") : t("Nothing right now")} onClick={() => go("work")} />
@@ -482,6 +488,11 @@ function MyWork({ work }: { work: DeskWork[] }) {
         title={t("My work")}
         description={t("What you asked for and what your AI workers are doing, with everything they made.")}
         icon={<IconTile icon={KanbanIcon} size="sm" tone="info" />}
+        actions={
+          <Button size="sm" asChild>
+            <Link to="/tasks"><KanbanIcon size={15} /> {t("Open the task board")}</Link>
+          </Button>
+        }
       />
       <div className="border-b border-border px-4 py-2.5 sm:px-5">
         <Segmented size="sm" label={t("Show")} value={tab} onChange={setTab}
@@ -556,8 +567,20 @@ function MyFiles({ desk }: { desk: Desk }) {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const matching = desk.files.filter((f) => tab === "files" || (tab === "agent" ? f.origin === "agent" : f.origin === "uploaded"));
-  const files = all ? matching : matching.slice(0, FEW);
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const ask = useAskMyAi();
+  const hit = (text: string) => !needle || needle.split(/\s+/).every((w) => text.toLowerCase().includes(w));
+  const matching = desk.files.filter((f) => (tab === "files" || (tab === "agent" ? f.origin === "agent" : f.origin === "uploaded")) && hit(`${f.title} ${f.folder ?? ""}`));
+  const docs = desk.documents.filter((d) => hit(`${d.title} ${d.number ?? ""}`));
+  const files = all || needle ? matching : matching.slice(0, FEW);
+  const askAbout = (id: string, how: "summary" | "facts") =>
+    ask.mutate({
+      file_ids: [id],
+      text: how === "summary"
+        ? t("Summarize this file for me: the main points in plain words, then anything I must do.")
+        : t("From this file, list every date, deadline, amount, name and thing someone must do, with the page it is on."),
+    });
   return (
     <Card data-guide="desk.files">
       <CardHeader
@@ -573,7 +596,8 @@ function MyFiles({ desk }: { desk: Desk }) {
           </>
         }
       />
-      <div className="border-b border-border px-4 py-2.5 sm:px-5">
+      <div className="grid gap-2.5 border-b border-border px-4 py-2.5 sm:px-5">
+        <SearchInput value={q} onChange={setQ} placeholder={t("Search my files by name or folder")} />
         <Segmented size="sm" label={t("Show")} value={tab} onChange={setTab}
           options={[
             { value: "files", label: t("All files"), count: desk.file_counts.total },
@@ -582,10 +606,24 @@ function MyFiles({ desk }: { desk: Desk }) {
             { value: "documents", label: t("Documents"), count: desk.document_total },
           ]} />
       </div>
+      {needle ? (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2 text-[12.5px] text-muted sm:px-5">
+          <span>{t("Only the newest files of your workspace are here.")}</span>
+          <Link to="/search" search={{ q: q.trim() } as never} className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+            {t("Search every document for “{q}”", { q: q.trim() })} <ArrowRightIcon size={13} />
+          </Link>
+          {desk.can_ask ? (
+            <button type="button" className="font-medium text-accent hover:underline" disabled={ask.isPending}
+              onClick={() => ask.mutate({ text: t("Find the file or document about: {q}. Tell me where it is and what it says.", { q: q.trim() }) })}>
+              {t("Ask my AI to find it")}
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       {tab === "documents" ? (
-        desk.documents.length ? (
+        docs.length ? (
           <ListCard className="rounded-none border-0">
-            {(all ? desk.documents : desk.documents.slice(0, FEW)).map((d) => (
+            {(all || needle ? docs : docs.slice(0, FEW)).map((d) => (
               <ListRow key={d.id} onClick={() => void navigate({ href: d.url })}
                 leading={<IconTile icon={FileTextIcon} size="sm" tone="neutral" />}
                 title={d.title}
@@ -605,6 +643,19 @@ function MyFiles({ desk }: { desk: Desk }) {
               meta={<Meta items={[<MadeBy key="m" origin={f.origin} agentName={f.agent_name} size="sm" />, f.folder, fileSize(f.size), timeAgo(f.created_at)]} />}
               trailing={
                 <>
+                  {desk.can_ask && !f.quarantined ? (
+                    <Menu>
+                      <MenuTrigger asChild>
+                        <Button size="icon-sm" variant="ghost" title={t("Ask my AI about this file")} aria-label={t("Ask my AI about this file")} onClick={(e) => e.stopPropagation()}>
+                          <SparkleIcon size={15} />
+                        </Button>
+                      </MenuTrigger>
+                      <MenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <MenuItem icon={<SparkleIcon />} onSelect={() => askAbout(f.id, "summary")}>{t("Summarize it")}</MenuItem>
+                        <MenuItem icon={<ListChecksIcon />} onSelect={() => askAbout(f.id, "facts")}>{t("Pull out dates, amounts and to-dos")}</MenuItem>
+                      </MenuContent>
+                    </Menu>
+                  ) : null}
                   <PinButton kind="file" refId={f.id} title={f.title} />
                   {!f.quarantined ? (
                     <Button size="icon-sm" variant="ghost" asChild title={t("Download")} aria-label={t("Download")}>
@@ -615,7 +666,7 @@ function MyFiles({ desk }: { desk: Desk }) {
               } />
           ))}
           <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[12.5px]">
-            {matching.length > FEW ? (
+            {matching.length > FEW && !needle ? (
               <button type="button" onClick={() => setAll((v) => !v)} className="font-medium text-accent hover:underline">
                 {all ? t("Show fewer") : t("Show all ({n})", { n: matching.length })}
               </button>
@@ -624,7 +675,7 @@ function MyFiles({ desk }: { desk: Desk }) {
           </li>
         </ListCard>
       ) : (
-        <CardBody><p className="text-[13px] text-muted">{t("Nothing here yet. Upload your own files, or ask your AI worker: what it makes lands here.")}</p></CardBody>
+        <CardBody><p className="text-[13px] text-muted">{needle ? t("Nothing matches.") : t("Nothing here yet. Upload your own files, or ask your AI worker: what it makes lands here.")}</p></CardBody>
       )}
     </Card>
   );

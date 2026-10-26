@@ -36,7 +36,7 @@ from ...models import (
 )
 from ...services import audit, events
 from .. import paging
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_allowance, require
 from .files import check_branch, check_task, get_file
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -1329,9 +1329,12 @@ async def rewrite(
 ) -> TextOut:
     """Rewrite a selected passage (shorten, more formal, translate...). Nothing is saved:
     the editor shows it and the person accepts or discards it."""
-    await _get(db, principal, doc_id)
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
+    d = await _get(db, principal, doc_id)
     try:
-        text = await service.ai_rewrite(db, principal.workspace_id, body.text, body.instruction)
+        text = await service.ai_rewrite(
+            db, principal.workspace_id, body.text, body.instruction, branch_id=d.branch_id
+        )
     except gateway.GatewayUnavailable as e:
         raise _no_model(e) from e
     if not text:
@@ -1367,6 +1370,7 @@ async def ai_fill(
     db: AsyncSession = Depends(get_db),
 ) -> ValuesOut:
     """Fill the fields from a plain-language request (and files). Returned, not saved."""
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     d = await _get(db, principal, doc_id)
     r = await service.render(db, d)
     if not r.fields:
@@ -1376,7 +1380,7 @@ async def ai_fill(
     ref = await _reference(db, principal, body.file_ids)
     try:
         values = await service.ai_fill(
-            db, principal.workspace_id, r.fields, body.request, r.kit, ref
+            db, principal.workspace_id, r.fields, body.request, r.kit, ref, branch_id=d.branch_id
         )
     except gateway.GatewayUnavailable as e:
         raise _no_model(e) from e
@@ -1396,11 +1400,14 @@ async def ai_write(
     db: AsyncSession = Depends(get_db),
 ) -> TextOut:
     """Write a whole document from a request, for a new free-form document."""
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     await check_branch(db, principal, body.branch_id)
     kit = await service.kit_data(db, body.branch_id)
     ref = await _reference(db, principal, body.file_ids)
     try:
-        text = await service.ai_write(db, principal.workspace_id, body.request, kit, ref)
+        text = await service.ai_write(
+            db, principal.workspace_id, body.request, kit, ref, branch_id=body.branch_id
+        )
     except gateway.GatewayUnavailable as e:
         raise _no_model(e) from e
     return TextOut(text=text)
@@ -1416,10 +1423,13 @@ async def ai_review(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> IssuesOut:
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     d = await _get(db, principal, doc_id)
     r = await service.render(db, d)
     try:
-        issues = await service.ai_review(db, principal.workspace_id, r.filled.markdown, r.kit)
+        issues = await service.ai_review(
+            db, principal.workspace_id, r.filled.markdown, r.kit, branch_id=d.branch_id
+        )
     except gateway.GatewayUnavailable as e:
         raise _no_model(e) from e
     return IssuesOut(issues=issues)

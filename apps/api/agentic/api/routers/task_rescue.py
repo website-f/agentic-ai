@@ -11,7 +11,7 @@ effect between steps, and a stuck step can last minutes.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,18 +58,21 @@ async def _acting_task(db: AsyncSession, principal: Principal, task_id: str) -> 
     return t
 
 
-async def _end_run(db: AsyncSession, t: Task, why: str) -> None:
-    """Terminate the live run (if any) and close what it was waiting on."""
+async def _end_run(db: AsyncSession, t: Task, why: str, force: bool = False) -> None:
+    """Terminate the live run (if any) and close what it was waiting on. P51 `force`: the
+    worker service is down and the person ends it anyway; a run that wakes up later finds the
+    task closed and stops by itself (runtime._run_task_step)."""
     if t.status in RUNNING and t.workflow_id and not launch.restartable(t):
         try:
             await dispatch.terminate_task(t.workflow_id, why)
         except Exception as e:  # noqa: BLE001 - Temporal down: nothing stopped, say so
-            raise api_error(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "temporal_unavailable",
-                "The worker service is not reachable, so the run could not be stopped. Try "
-                "again in a moment.",
-            ) from e
+            if not force:
+                raise api_error(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "temporal_unavailable",
+                    "The worker service is not reachable, so the run could not be stopped. Try "
+                    "again in a moment, or end it anyway.",
+                ) from e
     for a in (
         await db.scalars(
             select(Approval).where(Approval.task_id == t.id, Approval.status == "pending")
@@ -85,13 +88,14 @@ async def _end_run(db: AsyncSession, t: Task, why: str) -> None:
 @router.post("/tasks/{task_id}/stop")
 async def stop_task(
     task_id: str,
+    force: bool = Query(default=False),
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     t = await _acting_task(db, principal, task_id)
     if t.status in ("done", "failed", "cancelled"):
         raise api_error(status.HTTP_409_CONFLICT, "not_running", "This task is not running.")
-    await _end_run(db, t, f"stopped by {principal.user.name}")
+    await _end_run(db, t, f"stopped by {principal.user.name}", force)
     await runtime.set_task_status(
         db,
         t,
@@ -113,13 +117,14 @@ async def stop_task(
 async def finish_by_hand(
     task_id: str,
     body: FinishIn,
+    force: bool = Query(default=False),
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     t = await _acting_task(db, principal, task_id)
     if t.status in ("done", "cancelled"):
         raise api_error(status.HTTP_409_CONFLICT, "already_finished", "This task is finished.")
-    await _end_run(db, t, f"finished by {principal.user.name}")
+    await _end_run(db, t, f"finished by {principal.user.name}", force)
     await runtime.set_task_status(
         db,
         t,

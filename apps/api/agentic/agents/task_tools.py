@@ -16,7 +16,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from ..models import Agent, Branch, Task
+from ..models import Agent, Branch, Task, TaskEvent
 from .tools import Tool, ToolContext
 
 MAX_PER_HOUR = 20
@@ -80,12 +80,17 @@ async def _create_task(ctx: ToolContext, args: dict[str, Any]) -> str:
     if isinstance(who, str):
         return who
     since = datetime.now(UTC) - timedelta(hours=1)
+    # What this agent lined up in the last hour, whoever the work is for (P51: its tasks carry
+    # their person in created_by; the "created" event always names the agent).
     made = (
         await db.scalar(
             select(func.count())
-            .select_from(Task)
+            .select_from(TaskEvent)
             .where(
-                Task.created_by == f"agent:{a.id}", Task.source == "agent", Task.created_at >= since
+                TaskEvent.actor == f"agent:{a.id}",
+                TaskEvent.kind == "created",
+                TaskEvent.text.startswith("lined up by"),  # not its delegations (own caps)
+                TaskEvent.ts >= since,
             )
         )
         or 0
@@ -106,6 +111,14 @@ async def _create_task(ctx: ToolContext, args: dict[str, Any]) -> str:
         await db.scalar(select(func.min(Task.position)).where(Task.workspace_id == a.workspace_id))
         or 0
     )
+    # Asked in chat: the person owns it (and decides if what it waits for fails). P51: lined
+    # up inside a task, it is still that task's person's work, so it counts against their
+    # daily AI allowance (and their own AI's mail and computer stay theirs).
+    person = ctx.person
+    if person is None and ctx.task is not None:
+        from ..teams import allowance
+
+        person = await allowance.person_of_task(db, ctx.task)
     t = Task(
         workspace_id=a.workspace_id,
         branch_id=who.branch_id,
@@ -113,8 +126,7 @@ async def _create_task(ctx: ToolContext, args: dict[str, Any]) -> str:
         brief=brief,
         priority=priority,
         assignee_agent_id=who.id,
-        # Asked in chat: the person owns it (and decides if what it waits for fails).
-        created_by=f"user:{ctx.person}" if ctx.person else f"agent:{a.id}",
+        created_by=f"user:{person}" if person else f"agent:{a.id}",
         source="agent",
         requires_review=True,
         status="ready",

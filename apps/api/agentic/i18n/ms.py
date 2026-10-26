@@ -1651,4 +1651,14 @@ MS: dict[str, str] = {
     "This is needed.": "Ini diperlukan.",
     "{field}: {why}": "{field}: {why}",
     "That is not something the office keeps.": "Itu bukan sesuatu yang disimpan oleh pejabat.",
+    # ------------------------------------------------------------ P51 safeguards
+    "The worker service is not reachable, so the run could not be stopped. Try again in a moment, or end it anyway.": (
+        "Perkhidmatan pekerja tidak dapat dihubungi, jadi larian tidak dapat dihentikan. Cuba "
+        "lagi sebentar lagi, atau tamatkan juga."
+    ),
+    "The office's AI work that nobody asked for directly (mail rules, follow-ups) used today's limit ({used} of {limit} tokens). It resets at midnight, or a manager can give more.": (
+        "Kerja AI pejabat yang tidak diminta terus oleh sesiapa (peraturan e-mel, susulan) telah "
+        "mencapai had hari ini ({used} daripada {limit} token). Ia ditetapkan semula pada tengah "
+        "malam, atau pengurus boleh beri lebih."
+    ),
 }

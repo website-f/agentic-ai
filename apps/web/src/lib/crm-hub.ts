@@ -171,6 +171,7 @@ export const addObject = (body: { name: string; singular?: string; description?:
   api<CrmObject>("/api/crm/objects", "POST", body);
 export const updateObject = (key: string, body: Partial<Pick<CrmObject, "name" | "singular" | "description" | "icon" | "color" | "title_field" | "position" | "archived">>) =>
   api<CrmObject>(`/api/crm/objects/${enc(key)}`, "PATCH", body);
+export const resetCrm = () => api<{ removed: number }>("/api/crm/reset", "POST", { confirm: true });
 export const deleteObject = (key: string) => api<void>(`/api/crm/objects/${enc(key)}`, "DELETE");
 
 export const addField = (key: string, body: { label: string; type: FieldType; options?: CrmField["options"]; required?: boolean }) =>

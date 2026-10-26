@@ -42,7 +42,7 @@ from ...models import (
     Workspace,
 )
 from ...services import audit, events
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_allowance, require
 from .library import Names
 
 router = APIRouter(prefix="/api/minutes", tags=["minutes"])
@@ -661,6 +661,7 @@ async def rewrite(
 ) -> RecordingDetail:
     """Write the minutes again from the saved transcript (e.g. in Bahasa Melayu). The current
     minutes stay as a version of the document."""
+    await ensure_allowance(db, principal)  # P51: AI work counts against the daily allowance
     rec = await _editable(db, principal, rec_id)
     if rec.status in service.ACTIVE:
         raise api_error(

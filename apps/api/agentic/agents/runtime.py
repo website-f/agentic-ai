@@ -350,8 +350,30 @@ def _parse_args(raw: Any) -> tuple[dict[str, Any] | None, str | None]:
 SLOW_TOOLS = {"research_gather": 150, "web_fetch": 90, "web_search": 90}
 
 
+async def owner_asks(
+    db: AsyncSession, agent: Agent, task: Task | None = None, person: str | None = None
+) -> bool:
+    """P51: a person's own AI (their twin or assistant) opens their mail and their computer
+    only for them. A manager who chats with a staff member's twin, or gives it a task, gets
+    its help but never that person's inbox or PC. The office's own work for it (its duties,
+    its own follow-ups) counts as its person's."""
+    if not agent.owner_user_id:
+        return True
+    if task is not None:
+        who = await allowance.person_of_task(db, task)
+        return who is None or who == agent.owner_user_id
+    return person == agent.owner_user_id
+
+
 async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
     limit = SLOW_TOOLS.get(name, TOOL_TIMEOUT)
+    if (name in PC_TOOLS or name in MAIL_TOOLS) and not await owner_asks(
+        ctx.db, ctx.agent, ctx.task, ctx.person
+    ):
+        return (
+            "Error: this is your person's own mail and computer; only they can ask you to use "
+            "them. Help with the rest, or say they must ask you themselves."
+        )
     try:
         return pg_safe(await asyncio.wait_for(TOOLS[name].handler(ctx, args), timeout=limit))
     except TimeoutError:
@@ -928,6 +950,32 @@ async def _budget_gate(
                 "allowance.limit",
             )
         )
+    if person is None and (pool := await allowance.office_check(db, ws)) is not None:
+        # P51: work nobody asked for draws on the office's daily pool.
+        call_id = f"office:{pool.day}:{pool.limit}"
+        prior = await db.scalar(
+            select(Approval)
+            .where(Approval.task_id == task.id, Approval.tool_call_id == call_id)
+            .order_by(Approval.created_at.desc())
+        )
+        if prior is not None and prior.status == "pending":
+            return _waiting(prior)
+        if prior is not None and prior.status in ("denied", "expired", "cancelled"):
+            return StepResult("failed", f"Stopped: {pool.note()}")
+        return _waiting(
+            await _create_approval(
+                db,
+                task,
+                agent,
+                "budget",
+                "budget",
+                call_id,
+                pool.dict(),
+                f"{pool.note()} Approve to give half of it again for today.",
+                "medium",
+                "allowance.office",
+            )
+        )
     st = await budget.state(db, agent, ws.timezone)
     if not st.over:
         await budget.alert_if_near(db, agent, ws, st)
@@ -1102,7 +1150,18 @@ async def _language_line(db: AsyncSession, task: Task) -> str:
 # P38: when a task's group cannot answer at all (a provider outage, every key rate-limited or
 # out of credit), the task carries on with the office's other chat groups before it fails.
 # The local backup model is never a failover for agent work (too small).
-FAILOVER_GROUPS = ("smart", "fast", "bulk")
+FAILOVER_GROUPS = ("smart", "fast", "bulk")  # dearest first
+
+
+def failover_order(group: str, agent: Agent | None) -> list[str]:
+    """P51: cheaper groups first; a dearer one only when the agent has a budget that caps it
+    (else the task stops and a person retries it with another AI by hand: P38 rescue)."""
+    rank = {g: i for i, g in enumerate(FAILOVER_GROUPS)}
+    here = rank.get(group, len(FAILOVER_GROUPS))
+    cheaper = [g for g in FAILOVER_GROUPS if rank[g] > here]
+    capped = agent is not None and bool(agent.budget_daily_tokens or agent.budget_monthly_usd)
+    dearer = [g for g in reversed(FAILOVER_GROUPS) if rank[g] < here] if capped else []
+    return cheaper + dearer
 
 
 async def _task_chat(
@@ -1117,9 +1176,8 @@ async def _task_chat(
     try:
         return await gateway.chat(db, ws.id, group, messages, **kw)
     except gateway.GatewayUnavailable as first:
-        for other in FAILOVER_GROUPS:
-            if other == group:
-                continue
+        agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
+        for other in failover_order(group, agent):
             try:
                 reply = await gateway.chat(db, ws.id, other, messages, **kw)
             except gateway.GatewayUnavailable:
@@ -1236,8 +1294,8 @@ async def _run_task_step(task_id: str) -> StepResult:
                         agent,
                         task,
                         mcp=await _has_mcp(db, ws.id),
-                        pc=await pc_ready(db, agent),
-                        mail=await mail_ready(db, agent),
+                        pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
+                        mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
                         finance=await money_ready(db, agent),
                     ),
                     max_tokens=TASK_REPLY_TOKENS,
@@ -1635,6 +1693,16 @@ async def _apply_decision(db: AsyncSession, a: Approval) -> None:
                 f"gave {extra:,} more AI tokens for today",
                 {"user_id": person, "extra": extra},
             )
+        elif a.status == "approved" and (a.tool_call_id or "").startswith("office:"):
+            extra = await allowance.grant_office(db, ws)
+            await task_event(
+                db,
+                task,
+                "budget",
+                a.decided_by or "system",
+                f"gave the office {extra:,} more AI tokens for today",
+                {"office": True, "extra": extra},
+            )
         elif a.status == "approved":
             await budget.grant(
                 db, agent, await budget.state(db, agent, ws.timezone), a.decided_by or "system"
@@ -1902,17 +1970,7 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         session.memory_snapshot = await core_memory.snapshot(db, agent)
     asked = _add(db, agent, "user", session_id=session.id, content=text)
     await db.commit()
-    # P36: staff use their AI for their work; anything else is refused before any work.
-    verdict = await scope_guard.check(db, ws, session.user_id, text, "chat")
-    if not verdict.ok:
-        note = scope_guard.refusal(
-            verdict.why, explicit_lang() or await prefs.language(db, session.user_id)
-        )
-        answer = _add(
-            db, agent, "assistant", session_id=session.id, content=note, meta={"scope": True}
-        )
-        await db.commit()
-        return ChatReply(note, "", "", [], answer.id)
+    # P51: limits first, so someone over theirs costs no model call (the scope check is one).
     st = await budget.state(db, agent, ws.timezone)
     left = await allowance.check(db, ws, session.user_id)
     if st.over or left is not None:
@@ -1923,6 +1981,17 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         )
         answer = _add(
             db, agent, "assistant", session_id=session.id, content=note, meta={"budget": True}
+        )
+        await db.commit()
+        return ChatReply(note, "", "", [], answer.id)
+    # P36: staff use their AI for their work; anything else is refused before any work.
+    verdict = await scope_guard.check(db, ws, session.user_id, text, "chat")
+    if not verdict.ok:
+        note = scope_guard.refusal(
+            verdict.why, explicit_lang() or await prefs.language(db, session.user_id)
+        )
+        answer = _add(
+            db, agent, "assistant", session_id=session.id, content=note, meta={"scope": True}
         )
         await db.commit()
         return ChatReply(note, "", "", [], answer.id)
@@ -1944,6 +2013,8 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
     )
     # A person who could approve this agent's requests asking it directly (policy.py).
     approver = await policy.chat_approver(db, agent, session.user_id)
+    # P51: their own AI opens their mail and computer only for them.
+    mine = await owner_asks(db, agent, person=session.user_id)
     used: list[str] = []
     # Outside text was read in this conversation (policy.OUTSIDE_CONTENT). P29: it persists
     # across turns (the text is still in the context); the person's own "yes" right after
@@ -1991,8 +2062,8 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
                 else offered_tools(
                     agent,
                     mcp=await _has_mcp(db, ws.id),
-                    pc=await pc_ready(db, agent),
-                    mail=await mail_ready(db, agent),
+                    pc=await pc_ready(db, agent) and mine,
+                    mail=await mail_ready(db, agent) and mine,
                     finance=await money_ready(db, agent),
                 ),
                 max_tokens=1600 if last else 1200,
