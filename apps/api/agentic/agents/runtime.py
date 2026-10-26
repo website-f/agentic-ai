@@ -354,14 +354,15 @@ async def owner_asks(
     db: AsyncSession, agent: Agent, task: Task | None = None, person: str | None = None
 ) -> bool:
     """P51: a person's own AI (their twin or assistant) opens their mail and their computer
-    only for them. A manager who chats with a staff member's twin, or gives it a task, gets
-    its help but never that person's inbox or PC. The office's own work for it (its duties,
-    its own follow-ups) counts as its person's."""
+    only for them, and only when they are the one who set the work going. A manager who chats
+    with a staff member's twin, gives it a task, or revises its work gets its help but never
+    that person's inbox, PC or Teams. Office/system work (e.g. a shared mailbox) does not
+    count as the person personally asking, so it gets no personal tools either."""
     if not agent.owner_user_id:
         return True
     if task is not None:
         who = await allowance.person_of_task(db, task)
-        return who is None or who == agent.owner_user_id
+        return who is not None and who == agent.owner_user_id
     return person == agent.owner_user_id
 
 

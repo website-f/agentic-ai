@@ -357,6 +357,67 @@ async def test_delete_task_only_when_finished(client: httpx.AsyncClient, llm, te
     assert (await client.get(f"/api/tasks/{t['id']}")).status_code == 404
 
 
+async def test_cancel_and_delete_cascade_to_open_sub_tasks(
+    client: httpx.AsyncClient, llm, temporal
+):
+    """A stopped task whose sub-task is still open can be cancelled (cascading to the
+    sub-task) and then deleted, or deleted with cascade=true in one step."""
+    o = await office(client)
+    faiz = await new_agent(client, o, "Faiz")
+    parent = await new_task(client, faiz, "Find: how to submit a tender")
+
+    async def with_child(parent_status: str) -> str:
+        async with SessionLocal() as db:
+            p = await db.get(Task, parent["id"])
+            p.status = parent_status
+            child = Task(
+                workspace_id=p.workspace_id,
+                branch_id=p.branch_id,
+                title="Sub-step",
+                created_by="agent:x",
+                status="running",
+                parent_task_id=p.id,
+                depth=1,
+            )
+            db.add(child)
+            await db.commit()
+            return child.id
+
+    # Stopped parent (failed), open child: delete refuses, then cascade cancels the child.
+    child_id = await with_child("failed")
+    r = await client.delete(f"/api/tasks/{parent['id']}", headers=csrf(client))
+    assert r.status_code == 409 and r.json()["code"] == "children_active"
+    r = await client.delete(f"/api/tasks/{parent['id']}?cascade=true", headers=csrf(client))
+    assert r.status_code == 204, r.text
+    async with SessionLocal() as db:
+        assert await db.get(Task, parent["id"]) is None
+        assert await db.get(Task, child_id) is None  # cancelled, then cascaded away
+
+    # Cancelling a task cancels its open sub-tasks, so nothing is left running.
+    parent2 = await new_task(client, faiz, "Another tender")
+    async with SessionLocal() as db:
+        p = await db.get(Task, parent2["id"])
+        p.status = "running"
+        grand = Task(
+            workspace_id=p.workspace_id,
+            branch_id=p.branch_id,
+            title="Deep step",
+            created_by="agent:x",
+            status="ready",
+            parent_task_id=p.id,
+            depth=1,
+        )
+        db.add(grand)
+        await db.commit()
+        grand_id = grand.id
+    r = await client.post(f"/api/tasks/{parent2['id']}/cancel", headers=csrf(client))
+    assert r.status_code == 200, r.text
+    async with SessionLocal() as db:
+        assert (await db.get(Task, grand_id)).status == "cancelled"
+    r = await client.delete(f"/api/tasks/{parent2['id']}", headers=csrf(client))
+    assert r.status_code == 204, r.text  # no open children left: deletes cleanly
+
+
 # ---------------------------------------------------------------- 7. delete workflows
 
 

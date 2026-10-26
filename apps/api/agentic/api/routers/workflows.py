@@ -85,6 +85,27 @@ async def out(db: AsyncSession, wf: Workflow) -> WorkflowOut:
     return _out(wf, await file_names(db, wf.workspace_id, list(wf.source_file_ids or [])))
 
 
+def _may_change(principal: Principal, branch_id: str | None, created_by: str | None = None) -> None:
+    """P52: a role scoped to one company changes only that company's workflows (a
+    workspace-wide one, branch_id None, is shared); someone without agents.manage (staff)
+    changes only the workflows they made themselves."""
+    sc = principal.scope
+    if not sc.everything and branch_id and branch_id != sc.branch_id:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "workflow_not_found", "That workflow is not here."
+        )
+    if (
+        created_by is not None
+        and "agents.manage" not in principal.permissions
+        and created_by != principal.actor
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "not_your_workflow",
+            "You can change only the workflows you made. Ask a manager for this one.",
+        )
+
+
 async def _get(db: AsyncSession, ws: str, workflow_id: str) -> Workflow:
     wf = await db.get(Workflow, workflow_id)
     if wf is None or wf.workspace_id != ws:
@@ -148,6 +169,7 @@ async def create_workflow(
     principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowOut:
+    _may_change(principal, body.branch_id)  # P52: only in their own company
     if await _name_taken(db, principal.workspace_id, body.name.strip()):
         raise api_error(status.HTTP_409_CONFLICT, "name_taken", "A workflow with that name exists.")
     wf = Workflow(
@@ -183,6 +205,7 @@ async def update_workflow(
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowOut:
     wf = await _get(db, principal.workspace_id, workflow_id)
+    _may_change(principal, wf.branch_id, wf.created_by)  # P52: theirs, in their company
     if body.name.strip() != wf.name and await _name_taken(
         db, principal.workspace_id, body.name.strip(), wf.id
     ):
@@ -216,6 +239,7 @@ async def delete_workflow(
     """Delete a workflow and its finished runs (no orphaned runs left behind; the tasks the
     runs created stay on the board). Refused while a run of it is still going."""
     wf = await _get(db, principal.workspace_id, workflow_id)
+    _may_change(principal, wf.branch_id, wf.created_by)  # P52: theirs, in their company
     active = await db.scalar(
         select(func.count())
         .select_from(WorkflowRun)

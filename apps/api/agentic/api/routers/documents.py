@@ -269,6 +269,18 @@ async def _tpl(db: AsyncSession, principal: Principal, template_id: str) -> DocT
     return t
 
 
+async def _may_change_tpl(db: AsyncSession, principal: Principal, t: DocTemplate) -> None:
+    """P52: a role scoped to one company changes only that company's templates, and only an
+    owner or admin changes the built-in starter templates every company starts from."""
+    await check_branch(db, principal, t.branch_id)
+    if t.builtin and "org.manage" not in principal.permissions:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "builtin_template",
+            "Only an owner or admin can change the built-in templates. Make a copy to edit.",
+        )
+
+
 async def _name_free(db: AsyncSession, ws: str, name: str, exclude: str = "") -> None:
     found = await db.scalar(
         select(DocTemplate.id).where(DocTemplate.workspace_id == ws, DocTemplate.name == name)
@@ -332,6 +344,7 @@ async def update_template(
     db: AsyncSession = Depends(get_db),
 ) -> TemplateOut:
     t = await _tpl(db, principal, template_id)
+    await _may_change_tpl(db, principal, t)  # P52: their company; built-ins admin only
     await _name_free(db, principal.workspace_id, body.name.strip(), t.id)
     t.name = body.name.strip()
     t.kind = body.kind.strip() or "custom"
@@ -354,6 +367,7 @@ async def delete_template(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     t = await _tpl(db, principal, template_id)
+    await _may_change_tpl(db, principal, t)  # P52: their company; built-ins admin only
     await db.delete(t)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

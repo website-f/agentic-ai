@@ -509,13 +509,14 @@ async def _team_agent(
         a is None
         or a.workspace_id != principal.workspace_id
         or a.private
+        or access.personal_ai(a)  # P51: a twin/assistant never runs a shared mailbox
         or a.status == "retired"
         or a.branch_id != branch_id
     ):
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "bad_agent",
-            "Pick a team agent of that company (not a personal assistant).",
+            "Pick a team agent of that company (not a personal assistant or AI twin).",
         )
     return a
 

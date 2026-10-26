@@ -41,7 +41,7 @@ async def test_their_own_ai_opens_their_mail_and_computer_only_for_them(client, 
             ctx = ToolContext(db=db, agent=a, workspace=ws, task=None, person=manager)
             out = await runtime.run_tool(ctx, tool, {"query": "resignation"})
             assert out.startswith("Error: this is your person's own mail and computer")
-        # In a task: the person it is for (or the office's own work for it).
+        # In a task: only when the owner themselves set it going.
         mine = Task(
             workspace_id=a.workspace_id, title="x", created_by=f"user:{me}", assignee_agent_id=a.id
         )
@@ -51,6 +51,8 @@ async def test_their_own_ai_opens_their_mail_and_computer_only_for_them(client, 
             created_by=f"user:{manager}",
             assignee_agent_id=a.id,
         )
+        # P51/P52: office or system work (a shared mailbox, an outside sender) is NOT the owner
+        # personally asking, so it gets no personal mail/PC/Teams.
         duty = Task(
             workspace_id=a.workspace_id, title="z", created_by="system:mail", assignee_agent_id=a.id
         )
@@ -58,7 +60,7 @@ async def test_their_own_ai_opens_their_mail_and_computer_only_for_them(client, 
         await db.flush()
         assert await runtime.owner_asks(db, a, mine)
         assert not await runtime.owner_asks(db, a, theirs)
-        assert await runtime.owner_asks(db, a, duty)
+        assert not await runtime.owner_asks(db, a, duty)
         # A company agent (nobody's own) is unaffected.
         plain = await db.get(Agent, (await new_agent(client, o, "Desk"))["id"])
         assert await runtime.owner_asks(db, plain, person=manager)

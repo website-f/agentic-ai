@@ -1668,4 +1668,34 @@ MS: dict[str, str] = {
     "List Teams chats": "Senaraikan sembang Teams",
     "Read a Teams chat": "Baca sembang Teams",
     "Send a Teams message": "Hantar mesej Teams",
+    # ------------------------------------------------------------ P52 security audit fixes
+    "Only an owner or admin can change the built-in templates. Make a copy to edit.": (
+        "Hanya pemilik atau pentadbir boleh mengubah templat terbina dalam. Buat salinan untuk "
+        "diubah."
+    ),
+    "Only a manager can open up a restricted document to everyone.": (
+        "Hanya pengurus boleh membuka dokumen terhad kepada semua orang."
+    ),
+    "Pick a team agent of that company (not a personal assistant or AI twin).": (
+        "Pilih ejen pasukan syarikat itu (bukan pembantu peribadi atau kembar AI)."
+    ),
+    "Changing the address needs the password or key typed again.": (
+        "Menukar alamat memerlukan kata laluan atau kunci ditaip semula."
+    ),
+    "Only the person this AI belongs to can set or change its instructions.": (
+        "Hanya orang yang memiliki AI ini boleh menetapkan atau mengubah arahannya."
+    ),
+    "A sub-task of this work is still open. Cancel it first, or delete with “also cancel its open sub-tasks”.": (
+        "Sub-tugasan kerja ini masih terbuka. Batalkannya dahulu, atau padam dengan “batal juga "
+        "sub-tugasan yang masih terbuka”."
+    ),
+    "Only the person this AI belongs to can change or run its schedules.": (
+        "Hanya orang yang memiliki AI ini boleh mengubah atau menjalankan jadualnya."
+    ),
+    "Changing the sites needs the password typed again.": (
+        "Menukar laman memerlukan kata laluan ditaip semula."
+    ),
+    "You can change only the workflows you made. Ask a manager for this one.": (
+        "Anda hanya boleh mengubah aliran kerja yang anda buat. Minta pengurus untuk yang ini."
+    ),
 }

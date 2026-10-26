@@ -20,7 +20,7 @@ from ...core.db import get_db
 from ...models import SOP, Agent, Blueprint, Skill
 from ...services import audit, events
 from ..deps import Principal, api_error, require
-from .agents import manage_perm, managed_agent
+from .agents import managed_agent
 
 router = APIRouter(prefix="/api/blueprints", tags=["blueprints"])
 
@@ -160,7 +160,7 @@ async def list_blueprints(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_blueprint(
     body: BlueprintIn,
-    principal: Principal = Depends(manage_perm()),
+    principal: Principal = Depends(require("agents.manage")),  # P52: managers only
     db: AsyncSession = Depends(get_db),
 ) -> BlueprintOut:
     _check_tools(body.tools)
@@ -207,7 +207,7 @@ async def create_blueprint(
 async def update_blueprint(
     blueprint_id: str,
     body: BlueprintIn,
-    principal: Principal = Depends(manage_perm()),
+    principal: Principal = Depends(require("agents.manage")),  # P52: managers only
     db: AsyncSession = Depends(get_db),
 ) -> BlueprintOut:
     bp = await _get(db, principal.workspace_id, blueprint_id)
@@ -239,7 +239,7 @@ async def update_blueprint(
 @router.delete("/{blueprint_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_blueprint(
     blueprint_id: str,
-    principal: Principal = Depends(manage_perm()),
+    principal: Principal = Depends(require("agents.manage")),  # P52: managers only
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     bp = await _get(db, principal.workspace_id, blueprint_id)
@@ -356,7 +356,7 @@ async def recruit(
 async def apply_blueprint(
     blueprint_id: str,
     body: ApplyIn,
-    principal: Principal = Depends(manage_perm()),
+    principal: Principal = Depends(require("agents.manage")),  # P52: managers only
     db: AsyncSession = Depends(get_db),
 ) -> BlueprintOut:
     bp = await _get(db, principal.workspace_id, blueprint_id)

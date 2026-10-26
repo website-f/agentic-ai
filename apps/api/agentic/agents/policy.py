@@ -34,7 +34,10 @@ from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
 # Outward actions a person signs off every time, whatever an agent's settings say.
-ALWAYS_ASK = frozenset({"browser_submit", "browser_upload", "pc_save_to_pc"})
+# P52: teams_send is here (not just default "ask") so an agent on "auto" cannot send a Teams
+# message to anyone without the person — its own description promises a person approves it,
+# and outside Teams/mail content could otherwise steer it into sending data out.
+ALWAYS_ASK = frozenset({"browser_submit", "browser_upload", "pc_save_to_pc", "teams_send"})
 # Tools whose approver is the person asking: when someone who could approve the agent's
 # requests asks for it directly in chat ("every Monday 9am send me the report"), that request
 # is the approval. Anywhere else (a task, an email the agent read) a person approves it,

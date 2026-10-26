@@ -175,6 +175,8 @@ async def chat_completions(
             body = await request.json()
         except ValueError as e:
             raise OpenAIError(400, "The body must be JSON.") from e
+        if not isinstance(body, dict):  # P52: [] or "x" used to raise a 500
+            raise OpenAIError(400, "The body must be a JSON object.")
         model = str(body.get("model") or "")
         slug = model.removeprefix("agent/")
         agent = await db.scalar(

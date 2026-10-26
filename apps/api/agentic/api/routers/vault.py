@@ -222,6 +222,14 @@ async def update_login(
     if body.hosts is not None:
         hosts = vault.clean_hosts(body.hosts)
         if hosts != c.hosts:
+            # P52: a saved password must never follow new sites it was not typed for (an agent
+            # would type it into them), as with AI provider keys and storage addresses.
+            if not body.password:
+                raise api_error(
+                    status.HTTP_400_BAD_REQUEST,
+                    "password_required_for_new_hosts",
+                    "Changing the sites needs the password typed again.",
+                )
             c.hosts = hosts
             changed.append("hosts")
     if body.agent_ids is not None:

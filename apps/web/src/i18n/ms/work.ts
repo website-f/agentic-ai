@@ -228,6 +228,10 @@ export const WORK: Record<string, string> = {
   Start: "Mula",
   Meeting: "Mesyuarat",
   "Delete this task?": "Padam tugasan ini?",
+  "Cancel its open sub-tasks and delete?": "Batal sub-tugasan yang masih terbuka dan padam?",
+  "Cancel sub-tasks and delete": "Batal sub-tugasan dan padam",
+  "This task started sub-tasks that are still open. Deleting it will cancel them first, then remove everything.":
+    "Tugasan ini memulakan sub-tugasan yang masih terbuka. Memadamnya akan membatalkannya dahulu, kemudian membuang semuanya.",
   "The task, its conversation, its history and any sub-tasks are removed for good. Reports and files it produced stay.":
     "Tugasan ini, perbualannya, sejarahnya dan semua sub-tugasan akan dipadam terus. Laporan dan fail yang dihasilkannya kekal.",
   "Part of {title}": "Sebahagian daripada {title}",

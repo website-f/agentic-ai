@@ -760,7 +760,9 @@ async def test_blueprint_applies_a_role_to_an_agent(client, llm, temporal):
         r = await staff.post(
             "/api/blueprints", json={"name": "Y", "role": "Z"}, headers=csrf(staff)
         )
-        assert r.status_code == 201  # staff manage their own agents, so may define blueprints
+        # P52: blueprints are company role packages a manager applies; staff authoring one
+        # could loosen their own twin's tools or rewrite one managers apply, so they cannot.
+        assert r.status_code == 403
     finally:
         await staff.aclose()
 

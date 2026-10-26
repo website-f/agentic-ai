@@ -283,9 +283,12 @@ async def add_one(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def add_member(
     body: MemberCreateIn,
+    response: Response,
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberCreateOut:
+    # P52: the temporary password is shown once: never cached (as with a password reset).
+    response.headers["Cache-Control"] = "no-store"
     m, password = await add_one(
         db,
         principal,

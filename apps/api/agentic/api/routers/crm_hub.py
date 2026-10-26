@@ -46,6 +46,7 @@ from ...models import (
     User,
 )
 from ...services import audit
+from ...services.text import csv_safe
 from ..deps import Principal, api_error, current_principal
 
 router = APIRouter(prefix="/api/crm", tags=["crm"])
@@ -889,9 +890,13 @@ async def export_csv(
     rows = await engine.all_rows(db, obj, fields)
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow([f.label for f in fields])
+    # P52: cells (and connector-made field names) that start like a formula are quoted, so a
+    # value sent in by a web form or another system cannot run when the file is opened.
+    w.writerow([csv_safe(f.label) for f in fields])
     for r in rows:
-        w.writerow([as_text(f.type, f.options or {}, r["data"].get(f.key)) for f in fields])
+        w.writerow(
+            [csv_safe(as_text(f.type, f.options or {}, r["data"].get(f.key))) for f in fields]
+        )
     return Response(
         content=buf.getvalue().encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",

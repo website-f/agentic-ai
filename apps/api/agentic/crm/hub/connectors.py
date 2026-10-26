@@ -25,7 +25,7 @@ import re
 import secrets as pysecrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from sqlalchemy import func, select
@@ -275,10 +275,19 @@ async def fetch(kind: str, config: dict[str, Any], secret: str) -> list[dict[str
             )
         elif ptype == "link":
             m = re.search(r'<([^>]+)>;\s*rel="?next"?', r.headers.get("link", ""))
-            next_url = m.group(1) if m else None
+            # P52: the next page must be on the same server; the stored key is sent with every
+            # page, so a "next" link to another host would hand it over. Stop paging instead.
+            nxt = urljoin(url, m.group(1)) if m else None
+            next_url = nxt if nxt and _same_origin(nxt, url) else None
         else:
             next_url = None
     return records[:MAX_RECORDS]
+
+
+def _same_origin(a: str, b: str) -> bool:
+    """Same scheme, host and port (a pagination link stays on the API's own server)."""
+    pa, pb = urlparse(a), urlparse(b)
+    return (pa.scheme, pa.hostname, pa.port) == (pb.scheme, pb.hostname, pb.port)
 
 
 def infer(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

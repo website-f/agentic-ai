@@ -51,7 +51,7 @@ import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
@@ -169,10 +169,16 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
   const [feedback, setFeedback] = useState("");
   const [revising, setRevising] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const remove = async () => {
+  const [cascadeAsk, setCascadeAsk] = useState(false);
+  const remove = async (cascade = false) => {
     try {
-      await api(`/api/tasks/${task.id}`, "DELETE");
+      await api(`/api/tasks/${task.id}${cascade ? "?cascade=true" : ""}`, "DELETE");
     } catch (e) {
+      // Sub-tasks still open: offer to cancel them and delete anyway.
+      if (e instanceof ApiError && e.code === "children_active" && !cascade) {
+        setCascadeAsk(true);
+        return;
+      }
       toast.error(errorMessage(e));
       return;
     }
@@ -236,7 +242,9 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
         <Button size="sm" variant="ghost" className="text-muted hover:text-danger" disabled={act.isPending} onClick={() => setDeleting(true)}><TrashIcon size={14} /> {t("Delete")}</Button>
       ) : null}
       <ConfirmDialog open={deleting} onOpenChange={setDeleting} title={t("Delete this task?")} danger confirmLabel={t("Delete")}
-        body={t("The task, its conversation, its history and any sub-tasks are removed for good. Reports and files it produced stay.")} onConfirm={remove} />
+        body={t("The task, its conversation, its history and any sub-tasks are removed for good. Reports and files it produced stay.")} onConfirm={() => remove()} />
+      <ConfirmDialog open={cascadeAsk} onOpenChange={setCascadeAsk} title={t("Cancel its open sub-tasks and delete?")} danger confirmLabel={t("Cancel sub-tasks and delete")}
+        body={t("This task started sub-tasks that are still open. Deleting it will cancel them first, then remove everything.")} onConfirm={() => remove(true)} />
     </>
   );
 }

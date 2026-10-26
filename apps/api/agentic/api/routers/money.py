@@ -184,8 +184,13 @@ def _not_found() -> Exception:
     )
 
 
-async def _doc(db: AsyncSession, principal: Principal, doc_id: str) -> MoneyDoc:
-    d = await db.get(MoneyDoc, doc_id)
+async def _doc(
+    db: AsyncSession, principal: Principal, doc_id: str, *, lock: bool = False
+) -> MoneyDoc:
+    # `lock`: for the endpoints that change money (approve, payment, void, sent, correct),
+    # hold a row lock so two concurrent requests cannot both pass the status check and, say,
+    # record the payment twice. The status is re-checked by the caller after the lock.
+    d = await db.get(MoneyDoc, doc_id, with_for_update=lock, populate_existing=lock)
     if d is None or d.workspace_id != principal.workspace_id:
         raise _not_found()
     if not access.finance_sees(principal, d.branch_id):
@@ -633,7 +638,7 @@ async def update_money(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Only a draft or a bill awaiting approval changes; after that, void it and start again."""
-    d = await _doc(db, principal, doc_id)
+    d = await _doc(db, principal, doc_id, lock=True)
     if d.status not in svc.EDITABLE:
         raise api_error(
             status.HTTP_409_CONFLICT,
@@ -673,7 +678,7 @@ async def approve(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """A person approves a bill (or finalises an invoice draft). Never an agent."""
-    d = await _doc(db, principal, doc_id)
+    d = await _doc(db, principal, doc_id, lock=True)
     if d.status not in svc.EDITABLE:
         raise api_error(
             status.HTTP_409_CONFLICT,
@@ -698,7 +703,7 @@ async def mark_sent(
 ) -> dict[str, Any]:
     """An invoice went out to the customer. A draft is finalised by the same step (the person
     marking it sent is the one who approves it); totals must be set."""
-    d = await _doc(db, principal, doc_id)
+    d = await _doc(db, principal, doc_id, lock=True)
     if d.direction != "receivable" or d.status not in ("draft", "approved"):
         raise api_error(
             status.HTTP_409_CONFLICT,
@@ -723,7 +728,7 @@ async def record_payment(
     principal: Principal = Depends(require("finance.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    d = await _doc(db, principal, doc_id)
+    d = await _doc(db, principal, doc_id, lock=True)
     on = await svc.today(db, principal.workspace_id)
     try:
         p = await svc.add_payment(
@@ -756,7 +761,7 @@ async def void(
     principal: Principal = Depends(require("finance.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    d = await _doc(db, principal, doc_id)
+    d = await _doc(db, principal, doc_id, lock=True)
     if d.status in ("paid", "void"):
         raise api_error(
             status.HTTP_409_CONFLICT,

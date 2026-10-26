@@ -188,3 +188,13 @@ test("a connection that hangs is cut, retried and reported; the status page need
     hang.close();
   }
 });
+
+test("linking refuses a plain http office address except on this same machine (P52)", async () => {
+  const lan = await a.linkWith("http://office.example.com", "ABCD2345");
+  assert.equal(lan.ok, false);
+  assert.match(lan.error, /https/);
+  // localhost is allowed over http (development); it then fails only because nothing answers.
+  const local = await a.linkWith("http://127.0.0.1:9", "ABCD2345");
+  assert.equal(local.ok, false);
+  assert.doesNotMatch(local.error, /https:\/\/ address/);
+});

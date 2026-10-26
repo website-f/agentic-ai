@@ -1,5 +1,6 @@
 """Tasks (the board) and approvals (decisions agents wait on)."""
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -229,6 +230,23 @@ def _check_share(principal: Principal, visibility: str | None) -> None:
             status.HTTP_403_FORBIDDEN,
             "cannot_share",
             "Only managers and owners choose who else may see a task.",
+        )
+
+
+def _guard_personal_instruction(principal: Principal, agent: Agent | None) -> None:
+    """P51: only the owner may put new instructions into their own AI (a twin or private
+    assistant), so a manager who can see the task cannot steer it into using the owner's
+    mail, PC or Teams. They can still see, cancel, reassign or delete the work."""
+    if (
+        agent is not None
+        and agent.owner_user_id
+        and (agent.is_twin or agent.private)
+        and agent.owner_user_id != principal.user.id
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "not_your_ai",
+            "Only the person this AI belongs to can set or change its instructions.",
         )
 
 
@@ -663,6 +681,10 @@ async def update_task(
 ) -> TaskOut:
     t = await _task(db, principal, task_id)
     changes = body.model_dump(exclude_unset=True)
+    if changes.get("brief") is not None or changes.get("title") is not None:
+        # P51: changing the brief/title re-instructs the agent; not into someone else's own AI.
+        cur = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
+        _guard_personal_instruction(principal, cur)
     if changes.get("visibility"):
         _check_share(principal, "shared" if changes["visibility"] != t.visibility else None)
         t.visibility = changes["visibility"]
@@ -865,15 +887,44 @@ async def retry_failed(
     return {"retried": len(retried), "retried_ids": retried, "skipped": skipped}
 
 
+async def _cancel_open_descendants(db: AsyncSession, root: Task, actor: str) -> int:
+    """Cancel every still-open sub-task below `root` (its whole subtree, however deep), so a
+    stopped or cancelled parent leaves nothing running. Stops each live run best-effort, then
+    marks the row cancelled either way, so the subtree is terminal. Returns how many."""
+    frontier, seen, n = [root.id], {root.id}, 0
+    while frontier:
+        kids = (await db.scalars(select(Task).where(Task.parent_task_id.in_(frontier)))).all()
+        frontier = []
+        for k in kids:
+            if k.id in seen:
+                continue
+            seen.add(k.id)
+            frontier.append(k.id)
+            if k.status in FINISHED:
+                continue
+            if k.workflow_id and not launch.restartable(k):
+                with contextlib.suppress(Exception):  # stop the live run; the DB is set below
+                    await dispatch.cancel_task(k.workflow_id)
+            await _stop_reviews(db, k)
+            await runtime.set_task_status(
+                db, k, "cancelled", actor=actor, note="its parent task was cancelled"
+            )
+            await blockers.on_finished(db, k)  # P21: work waiting for it goes to its owner
+            n += 1
+    return n
+
+
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     task_id: str,
+    cascade: bool = Query(default=False),
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Remove finished work for good: its conversation, events, approvals and sub-tasks go
     with it (database cascades). Whoever can see the task in their scope may delete it: the
-    person who asked for it, the owner of the assistant that did it, or a manager over it."""
+    person who asked for it, the owner of the assistant that did it, or a manager over it.
+    `cascade=true`: cancel any sub-tasks still open first, so a stopped task can be removed."""
     t = await _task(db, principal, task_id)
     if t.status not in FINISHED:
         raise api_error(
@@ -881,7 +932,9 @@ async def delete_task(
             "not_finished",
             "Only done, failed or cancelled work can be deleted. Cancel it first.",
         )
-    # Sub-tasks cascade with it: none of them may still be working.
+    # Sub-tasks cascade with it: none of them may still be working (cancel them with cascade).
+    if cascade:
+        await _cancel_open_descendants(db, t, principal.actor)
     frontier, seen = [t.id], {t.id}
     while frontier:
         kids = (
@@ -891,7 +944,8 @@ async def delete_task(
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "children_active",
-                "A sub-task of this work is still open. Let it finish or cancel it first.",
+                "A sub-task of this work is still open. Cancel it first, or delete with "
+                "“also cancel its open sub-tasks”.",
             )
         frontier = [k for k, _ in kids if k not in seen]
         seen.update(frontier)
@@ -938,6 +992,9 @@ async def cancel_task(
             db, t, "cancelled", actor=principal.actor, note="cancelled the task"
         )
         await blockers.on_finished(db, t)  # P21: work waiting for it goes to its owner
+    # Cancelling a task cancels the sub-tasks it started, so nothing is left running (and the
+    # task can then be deleted).
+    await _cancel_open_descendants(db, t, principal.actor)
     await db.refresh(t)
     return await task_out(db, t)
 
@@ -997,6 +1054,7 @@ async def revise_task(
     agent = await db.get(Agent, t.assignee_agent_id) if t.assignee_agent_id else None
     if agent is None:
         raise api_error(status.HTTP_400_BAD_REQUEST, "no_assignee", "Assign an agent first.")
+    _guard_personal_instruction(principal, agent)  # P51: no injecting into someone's own AI
     await _stop_reviews(db, t)
     t.review_round = 0  # P21: a person's feedback starts a fresh review cycle
     try:

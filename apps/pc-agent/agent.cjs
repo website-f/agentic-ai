@@ -892,7 +892,8 @@ async function run() {
     },
     reconnect: () => reconnect("reconnect asked on the status page"),
     pause: (on) => { writeConfig({ ...readConfig(), paused: on }); },
-    link: (server, code) => linkWith(server, code, { remote: remoteOf(readConfig()) }),
+    // No remote carried over: linkWith keeps it only for the same server (P52).
+    link: (server, code) => linkWith(server, code),
   });
   setStatus(control ? { control_port: control.port, control_key: control.key } : {});
 
@@ -1181,6 +1182,13 @@ async function linkWith(serverIn, codeIn, opts = {}) {
   let server = String(serverIn || "").trim().replace(/\/+$/, "");
   if (server && !/^https?:\/\//.test(server)) server = `https://${server}`;
   if (!code || !/^https?:\/\/[^\s/]+/.test(server)) return { ok: false, error: "Give the office address and the code from the My computers page." };
+  // P52: the device token must never travel unencrypted: https, except on this same machine.
+  let host = "";
+  try { host = new URL(server).hostname; } catch { /* checked below */ }
+  const loopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
+  if (server.startsWith("http://") && !loopback) {
+    return { ok: false, error: "Use the office's https:// address (a plain http:// address is not safe for linking)." };
+  }
   let r;
   try {
     r = await fetch(`${server}/api/devices/claim`, {
@@ -1201,7 +1209,10 @@ async function linkWith(serverIn, codeIn, opts = {}) {
   // P42: seeing and using this computer from the web, if the person chose it when linking
   // (the install line they ran here says so); otherwise what it was, else off.
   const asked = String(opts.remote || "");
-  const remote = REMOTE_LEVELS.includes(asked) ? asked : remoteOf(old);
+  // P52: moving to another office server starts with remote off (unless the install line for
+  // that server asked for it), so remote control never carries over to a server nobody chose.
+  const sameServer = old.server && old.server.replace(/\/+$/, "") === server;
+  const remote = REMOTE_LEVELS.includes(asked) ? asked : sameServer ? remoteOf(old) : "off";
   const { link_error: _gone, ...kept } = old;
   writeConfig({ ...kept, server, token: body.token, device_id: body.device_id, name: body.name, folders: old.folders?.length ? old.folders : defaultFolders(), paused: false, remote, linked_code: code });
   log(`linked as "${body.name}" to ${server}`);
@@ -1543,6 +1554,7 @@ async function main(argv) {
 module.exports = {
   denied, allowedPath, inside, safeName, sameServer, searchFiles, listFolder, matcher, NO_SAVE_EXTS, AgentError, VERSION,
   needRemote, parseCombo, sendKeysText, sendKeysCombo, xdoCombo, macCombo, toPixel, health, runHelper,
+  linkWith,
 };
 
 if (require.main === module || SEA) {

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import get_db
 from ...microsoft.access import shared_where
 from ...models import Agent, Branch, Report, SharedMailbox, Task
+from ...services.text import csv_safe
 from .. import paging
 from ..deps import Principal, api_error, require
 
@@ -167,10 +168,10 @@ async def table_csv(
         raise api_error(status.HTTP_404_NOT_FOUND, "no_table", "That table is not here.")
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(tables[n]["columns"])
+    w.writerow([csv_safe(c) for c in tables[n]["columns"]])
     for row in tables[n]["rows"]:
         # Cells that start like a formula are quoted so spreadsheets do not run them.
-        w.writerow(["'" + c if isinstance(c, str) and c[:1] in "=+-@" else c for c in row])
+        w.writerow([csv_safe(c) for c in row])
     name = "".join(ch if ch.isalnum() else "-" for ch in r.title.lower())[:60] or "report"
     return Response(
         "﻿" + buf.getvalue(),

@@ -203,6 +203,20 @@ async def update_target(
         t.name = body.name.strip()
     if body.config is not None:
         fresh = _clean(t.kind, body.config)
+        old = t.config or {}
+        # P52: a saved password or key must never follow a new address it was not typed for
+        # (it would be sent to that host on the next check), as with AI provider keys.
+        for addr in ("endpoint", "url"):
+            moved = addr in fresh and str(fresh.get(addr) or "").rstrip("/") != str(
+                old.get(addr) or ""
+            ).rstrip("/")
+            had = any(old.get(f"{k}_enc") for k in storage.SECRET_FIELDS)
+            if moved and had and not any(fresh.get(k) for k in storage.SECRET_FIELDS):
+                raise api_error(
+                    status.HTTP_400_BAD_REQUEST,
+                    "secret_required_for_new_address",
+                    "Changing the address needs the password or key typed again.",
+                )
         merged = {k: v for k, v in (t.config or {}).items()}
         merged.update(storage.seal_config(t.id, fresh))
         t.config = merged

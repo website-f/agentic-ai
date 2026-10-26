@@ -143,6 +143,23 @@ async def _seen_agent(db: AsyncSession, principal: Principal, agent_id: str | No
     return a
 
 
+async def _guard_schedule_owner(db: AsyncSession, principal: Principal, s: Schedule) -> None:
+    """P51: only the owner may edit or run a schedule that drives their own AI (a twin or
+    private assistant), so a manager cannot make it act with the owner's mail, PC or Teams."""
+    a = await db.get(Agent, s.agent_id) if s.agent_id else None
+    if (
+        a is not None
+        and a.owner_user_id
+        and (a.is_twin or a.private)
+        and a.owner_user_id != principal.user.id
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "not_your_ai",
+            "Only the person this AI belongs to can change or run its schedules.",
+        )
+
+
 async def _schedulable_agent(db: AsyncSession, principal: Principal, agent_id: str | None) -> Agent:
     """P30: who may put an agent on a schedule. Staff (scope "own") only their own AI twin,
     never a leftover agent or an assistant; nobody a dormant assistant (assistants/access)."""
@@ -458,6 +475,7 @@ async def update_schedule(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     s = await _schedule(db, principal, schedule_id)
+    await _guard_schedule_owner(db, principal, s)  # P51: not someone else's own AI
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
     if "agent_id" in changes:
         await _schedulable_agent(db, principal, changes["agent_id"])
@@ -512,6 +530,7 @@ async def run_now(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     s = await _schedule(db, principal, schedule_id)
+    await _guard_schedule_owner(db, principal, s)  # P51: not someone else's own AI
     try:
         await dispatch.run_schedule_now(s.id)
     except Exception as e:
