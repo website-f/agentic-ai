@@ -189,15 +189,18 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
         yield {"type": "done", "ok": False, "models": ids}
         return
     yield _event("chat", label, "running", model=model)
+    # P52: tested the way the gateway uses it (the local model with thinking off).
+    local = client.local_quirks(target.tier, model)
     reply = await client.chat(
         target.base_url,
         target.key,
         model,
         [{"role": "user", "content": "Reply with the word OK and nothing else."}],
         # A known thinking model would come back empty at 16 and need a second call.
-        max_tokens=client.REASONING_FLOOR if client.thinks(model) else 16,
+        max_tokens=client.REASONING_FLOOR if client.thinks(model) and not local else 16,
         temperature=0,
-        reasoning_effort="low" if client.takes_effort(model) else None,
+        reasoning_effort="low" if client.takes_effort(model) and not local else None,
+        quirks=local,
     )
     model_row = await store.model_row(db, pid, model) if db and pid else None
     cost = store.cost_usd(model_row, reply.usage, target.tier)
@@ -341,8 +344,9 @@ async def _json_probe(
 ) -> tuple[bool, str, int]:
     """A tiny JSON-mode call shaped like the background jobs: thinking models get the same
     budget and reasoning_effort the gateway would give them. Returns (ok, why not, ms)."""
-    thinker = chat.reasoning_retry or client.thinks(model)
-    if pid and not thinker:
+    local = client.local_quirks(target.tier, model)
+    thinker = not local and (chat.reasoning_retry or client.thinks(model))
+    if pid and not thinker and not local:
         thinker = await store.is_reasoning(pid, model)
     r = await client.chat(
         target.base_url,
@@ -352,7 +356,7 @@ async def _json_probe(
         max_tokens=client.JSON_REASONING_FLOOR if thinker else 60,
         temperature=0,
         json_mode=True,
-        quirks=chat.quirks,
+        quirks=chat.quirks | local,
         reasoning_effort="low" if thinker and client.takes_effort(model) else None,
     )
     ok = r.call.ok and r.finish_reason != "length" and parses_as_object(r.content)

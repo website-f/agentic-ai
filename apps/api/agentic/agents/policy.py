@@ -28,7 +28,7 @@ from ..core.config import settings
 from ..core.security import can
 from ..crm.access import MONEY_TOOLS, has_money
 from ..devices.core import PC_TOOLS, has_device, personal
-from ..microsoft.access import MAIL_TOOLS, has_mailbox
+from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, has_mailbox, has_teams
 from ..models import Agent, Membership
 from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
@@ -46,6 +46,9 @@ PERSON_APPROVES = frozenset({"schedule_task"})
 # the person's own confirmation in their next message.
 OUTSIDE_CONTENT = frozenset(
     {
+        # P52: other people's Teams messages.
+        "teams_chats",
+        "teams_read_chat",
         "email_read",
         "email_search",
         "web_fetch",
@@ -175,6 +178,10 @@ async def _evaluate(
         why = (
             "it may use no Outlook mailbox (only its person's own AI uses their Outlook, and only "
             "a shared mailbox's assigned agent uses that mailbox)"
+        )
+    if not why and tool_name in TEAMS_TOOLS and not await has_teams(agent):  # P52
+        why = (
+            "only its person's own AI uses their Teams, through their own Microsoft 365 connection"
         )
     if not why and tool_name in MONEY_TOOLS and not await has_money(agent, tool_name):  # P35
         why = (

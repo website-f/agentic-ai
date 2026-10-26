@@ -56,6 +56,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
 import { accountMeta, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
+import { TeamsPanel } from "./teams";
 
 const ACTION_ICON: Record<MailActionKind, Icon> = {
   task: KanbanIcon,
@@ -100,12 +101,14 @@ export function MailPage() {
   const shown = filter === "all" ? items : items.filter((m) => m.status === filter);
 
   const options = [{ value: "personal", label: t("My Outlook") }, ...shared.map((b) => ({ value: b.id, label: b.display_name || b.address }))];
+  const app = search.app === "teams" ? "teams" : "mail";
+  const setApp = (v: "mail" | "teams") => void navigate({ search: (s) => ({ ...s, app: v === "teams" ? "teams" : undefined }), replace: true });
 
   return (
     <Page>
       <PageHeader
-        title={t("Mail")}
-        description={t("What reached your Outlook and the company's shared mailboxes, and what the AI did with each.")}
+        title={t("Microsoft 365")}
+        description={t("Your own Outlook mail, calendar and Teams chats, and the company's shared mailboxes: what reached you and what your AI did with each. Your connection is yours alone.")}
         actions={ready ? (
           <Button variant="outline" size="sm" loading={activity.isFetching && !activity.isLoading} onClick={() => void activity.refetch()}>
             <ArrowsClockwiseIcon size={15} /> {t("Refresh")}
@@ -123,6 +126,9 @@ export function MailPage() {
             action={config.data?.can_configure ? <Button asChild><Link to="/channels">{t("Open Channels")}</Link></Button> : undefined} />
         ) : (
           <>
+            <Segmented label={t("Microsoft 365")} value={app} onChange={setApp} className="w-full sm:w-fit [&>button]:flex-1"
+              options={[{ value: "mail", label: t("Outlook mail") }, { value: "teams", label: "Teams" }]} />
+            {app === "teams" ? <TeamsPanel /> : <>
             {options.length > 1 ? (
               options.length <= 4 ? (
                 <Segmented label={t("Mailbox")} value={box} onChange={setBox} className="w-full sm:w-fit" options={options} />
@@ -161,7 +167,8 @@ export function MailPage() {
               </Section>
             )}
 
-            {!shared.length && canManage ? (
+            </>}
+            {!shared.length && canManage && app === "mail" ? (
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
                 <UsersFourIcon size={15} className="shrink-0" /> {t("Shared mailboxes (accounts@, tender@) are added on Channels > Microsoft 365.")}
                 <Link to="/channels" className="font-medium text-accent hover:underline">{t("Open Channels")}</Link>

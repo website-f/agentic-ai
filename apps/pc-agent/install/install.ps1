@@ -98,6 +98,7 @@
   Write-Host ''
   Write-Host 'Linked. Your AI can now use this computer (the folders you shared only).' -ForegroundColor Green
   Say 'Shared folders, pause, unlink and activity: the My computers page, or the agentic-pc command:'
-  Say '  agentic-pc status | folders | pause | resume | logs | unlink | uninstall'
+  Say '  agentic-pc status | doctor | open | folders | pause | resume | logs | unlink | uninstall'
+  Say 'If it ever shows Offline: agentic-pc doctor (checks and restarts it), or agentic-pc open.'
   Write-Host ''
 }

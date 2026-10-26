@@ -64,6 +64,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --reinstall-package agentic
 
 
+# P52: the Windows PC agent as one program (AgenticOfficePC.exe): the official node.exe of this
+# stage's Node version (checked against nodejs.org) with agent.cjs embedded. Rebuilt only when
+# the agent or the build script changes.
+FROM node:22-bookworm-slim AS pcexe
+WORKDIR /pc
+COPY apps/pc-agent/agent.cjs apps/pc-agent/build-exe.cjs ./
+RUN node build-exe.cjs /pc/out
+
+
 FROM python:3.12-slim-trixie AS runtime
 # Document Studio needs OCR for scans and photos (Tesseract, English + Malay) and a
 # TrueType sans (Liberation) so generated PDFs print any Latin text. Meeting minutes need
@@ -80,6 +89,7 @@ COPY --from=build --chown=app:app /app /app
 COPY --from=build /opt/models /opt/models
 # P31: the PC agent's install script templates (agentic/devices/install.py reads them here).
 COPY --chown=app:app apps/pc-agent/install /app/pc-agent/install
+COPY --from=pcexe --chown=app:app /pc/out/AgenticOfficePC.exe /pc/out/AgenticOfficePC.exe.sha256 /app/pc-agent/
 # The vault, media and files (P40) volumes inherit this owner the first time Docker creates them.
 RUN mkdir -p /data/vault /data/media /data/files && chown app:app /data/vault /data/media /data/files
 ENV PATH="/app/.venv/bin:$PATH" \

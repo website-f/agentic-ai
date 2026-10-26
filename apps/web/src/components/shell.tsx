@@ -37,7 +37,7 @@ import { useSignOut } from "@/lib/use-sign-out";
 import { ROLE_INFO } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
-import { ALL_NAV, HELP_SECTION, NAV, TAB_BAR, type NavItem, type NavSection } from "@/nav";
+import { ALL_NAV, HELP_SECTION, hubOf, NAV, sidebarItems, TAB_BAR, type NavItem, type NavSection } from "@/nav";
 
 import { CommandPalette } from "./command-palette";
 import { openTaskComposer } from "./task-composer/store";
@@ -91,7 +91,9 @@ function useVisibleNav() {
     () =>
       NAV.map((s) => ({
         ...s,
-        items: s.items.filter((i) => !i.hidden && allowedItem(i, me.permissions) && (showAll || !i.advanced || isActive(pathname, i.to))),
+        // P52: a hub's pages are one entry (its tabs); hidden pages of a hub can lead it.
+        items: sidebarItems(s.items.filter((i) => (!i.hidden || hubOf(i.to)) && allowedItem(i, me.permissions)), me.permissions)
+          .filter((i) => showAll || !i.advanced || isActive(pathname, i.to)),
       })).filter((s) => s.items.length),
     [me.permissions, showAll, pathname],
   );
@@ -100,7 +102,7 @@ function useVisibleNav() {
 /** How many advanced pages this person could also open ("Show all pages (6 more)"). */
 function useHiddenCount() {
   const { data: me } = useSuspenseQuery(meQuery);
-  return ALL_NAV.filter((i) => i.advanced && !i.hidden && allowedItem(i, me.permissions)).length;
+  return ALL_NAV.filter((i) => i.advanced && !i.hidden && !hubOf(i.to) && allowedItem(i, me.permissions)).length;
 }
 
 /** P49: find a page by name or what it is for; no match offers to ask the AI. */
@@ -185,7 +187,12 @@ function useOpenGroups() {
 }
 
 /** Tutorial, Guide and Present: never permission-gated, always reachable. */
-const HELP_ITEMS: NavItem[] = NAV.find((s) => s.title === HELP_SECTION)?.items ?? [];
+const HELP_RAW: NavItem[] = NAV.find((s) => s.title === HELP_SECTION)?.items ?? [];
+/** The Help group as listed (P52: Tutorial, Guide and Present are one "Learn" entry). */
+function useHelpItems(): NavItem[] {
+  const { data: me } = useSuspenseQuery(meQuery);
+  return useMemo(() => sidebarItems(HELP_RAW.filter((i) => allowedItem(i, me.permissions)), me.permissions), [me.permissions]);
+}
 
 function matches(pathname: string, to: string) {
   return to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
@@ -193,7 +200,8 @@ function matches(pathname: string, to: string) {
 
 function isActive(pathname: string, to: string) {
   const item = ALL_NAV.find((n) => n.to === to);
-  return matches(pathname, to) || !!item?.also?.some((a) => matches(pathname, a));
+  const tabs = hubOf(to)?.tabs ?? [];
+  return matches(pathname, to) || !!item?.also?.some((a) => matches(pathname, a)) || tabs.some((a) => a !== "/" && matches(pathname, a));
 }
 
 function PhaseTag({ phase }: { phase: string }) {
@@ -208,6 +216,7 @@ function PhaseTag({ phase }: { phase: string }) {
 function HelpFooter({ pathname }: { pathname: string }) {
   const t = useT();
   const ask = useHelpAsk((s) => s.ask);
+  const helpItems = useHelpItems();
   return (
     <nav aria-label={t("Help")} className="shrink-0 border-t border-border px-3 py-2.5">
       <p className="hidden px-2.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
@@ -220,7 +229,7 @@ function HelpFooter({ pathname }: { pathname: string }) {
         <span className="hidden xl:inline">{t("Ask how")}</span>
       </button>
       <ul className="grid gap-0.5 xl:grid-cols-3 xl:gap-1">
-        {HELP_ITEMS.map((item) => {
+        {helpItems.map((item) => {
           const active = isActive(pathname, item.to);
           const IconCmp = item.icon;
           return (
@@ -662,6 +671,7 @@ function MobileTabBar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const approvals = useApprovalCount();
   const sections = useVisibleNav();
+  const helpItems = useHelpItems();
   const askHelp = useHelpAsk((s) => s.ask);
   const [more, setMore] = useState(false);
   const tabs = TAB_BAR.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
@@ -715,7 +725,7 @@ function MobileTabBar() {
             </button>
             <div onClick={() => setMore(false)} className="mb-3 empty:hidden"><SetupCard always /></div>
             <div className="mb-4 grid grid-cols-3 gap-2" role="list" aria-label={t("Help")}>
-              {HELP_ITEMS.map((item) => {
+              {helpItems.map((item) => {
                 const IconCmp = item.icon;
                 const active = isActive(pathname, item.to);
                 return (

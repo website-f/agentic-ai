@@ -51,6 +51,26 @@ def script(kind: str, server: str, code: str, remote: str = "off") -> str | None
     )
 
 
+# P52: the Windows agent as one program (apps/pc-agent/build-exe.cjs, built into the image).
+EXE_NAME = "AgenticOfficePC.exe"
+TRAILER_START = b"\n#AGENTIC-OFFICE-LINK#"
+TRAILER_END = b"#END#"
+
+
+def exe_path() -> Path | None:
+    p = agent_dir() / EXE_NAME
+    return p if p.is_file() else None
+
+
+def exe_trailer(server: str, code: str, remote: str) -> bytes:
+    """The link the .exe reads from its own last bytes when double-clicked (agent.cjs
+    readTrailer). After the program's last section, so Windows ignores it."""
+    import json
+
+    data = {"server": server.rstrip("/"), "code": code, "remote": remote}
+    return TRAILER_START + json.dumps(data).encode() + TRAILER_END
+
+
 def _quote_ps(text: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 

@@ -418,6 +418,7 @@ async def test_connect_is_bound_to_the_starting_session(client, llm, temporal, m
         "status": "connected",
         "mail_ok": True,
         "calendar_ok": True,
+        "teams_ok": False,  # P52: connected before Teams was granted (GRANTED has no Chat.Read)
         "last_sync_at": None,
         "webhooks": "polling",
         "last_error": None,

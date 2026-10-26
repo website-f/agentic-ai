@@ -1011,3 +1011,37 @@ async def test_remote_is_owner_only(client, llm, temporal):
     finally:
         await admin.aclose()
         await pc.stop()
+
+
+async def test_the_windows_program_comes_with_its_code_inside(
+    client, llm, temporal, monkeypatch, tmp_path
+):
+    """P52: /i/CODE/exe is the Windows program with the one-time code and the office address
+    added to its end; an expired or unknown code still gets the plain program."""
+    await office(client)
+    monkeypatch.setenv("AGENTIC_PC_AGENT_DIR", str(tmp_path))
+    r = await client.post("/api/devices/link-code", json={}, headers=csrf(client))
+    assert r.json()["exe"] is None  # no build on this server
+    program = b"MZ" + b"\0" * 5000
+    (tmp_path / "AgenticOfficePC.exe").write_bytes(program)
+    r = await client.post("/api/devices/link-code", json={}, headers=csrf(client))
+    code = r.json()["code"]
+    assert r.json()["exe"] == {
+        "off": f"http://test/i/{code}/exe",
+        "control": f"http://test/i/{code}/exe/control",
+    }
+    async with pc_http() as pc:
+        got = await pc.get(f"/api/install/{code}/exe/control")
+        assert got.status_code == 200
+        assert got.headers["content-disposition"] == 'attachment; filename="AgenticOfficePC.exe"'
+        assert got.content.startswith(program)
+        tail = got.content[len(program) :]
+        assert tail.startswith(b"\n#AGENTIC-OFFICE-LINK#") and tail.endswith(b"#END#")
+        link = json.loads(tail[len(b"\n#AGENTIC-OFFICE-LINK#") : -len(b"#END#")])
+        assert link == {"server": "http://test", "code": code, "remote": "control"}
+        assert int(got.headers["content-length"]) == len(got.content)
+        plain = await pc.get("/api/install/ZZZZZZZZ/exe")
+        assert plain.status_code == 200 and plain.content == program
+        # Fetching it does not use the code up.
+        r = await pc.post("/api/devices/claim", json={"code": code, "os": "windows"})
+        assert r.status_code == 200, r.text

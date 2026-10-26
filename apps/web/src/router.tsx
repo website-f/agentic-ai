@@ -636,7 +636,7 @@ const mailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/mail",
   // `mailbox` is what the server's follow-up notices link with; same as `box`.
-  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string } => ({ box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg) }),
+  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string; app?: "teams" } => ({ box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg), app: s.app === "teams" ? "teams" : undefined }),
   beforeLoad: ({ context }) => {
     if (!["agents.own", "assistants.use", "channels.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
   },

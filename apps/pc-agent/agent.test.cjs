@@ -129,3 +129,62 @@ test("on Windows the helper builds, and finds the pixel and the keys without tou
   const k = a.runHelper(["keys", "dry"], { AGENTIC_KEYS: "^c" });
   assert.equal(k.stdout.trim(), "^c");
 });
+
+// ---------------------------------------------------------------- P52: never stuck offline
+
+const http = require("node:http");
+const { spawn } = require("node:child_process");
+
+const waitFor = async (check, ms) => {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const v = check();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return null;
+};
+
+test("a connection that hangs is cut, retried and reported; the status page needs its key", async () => {
+  // A "server" that accepts the connection and never answers (what a stuck network looks like).
+  const sockets = [];
+  const hang = http.createServer(() => {});
+  hang.on("upgrade", (_req, socket) => { socket.on("error", () => {}); sockets.push(socket); });
+  await new Promise((r) => hang.listen(0, "127.0.0.1", r));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-pc-run-"));
+  fs.writeFileSync(path.join(home, "config.json"), JSON.stringify({ server: `http://127.0.0.1:${hang.address().port}`, token: "t", folders: [] }));
+  const child = spawn(process.execPath, [path.join(__dirname, "agent.cjs"), "run"], {
+    env: { ...process.env, AGENTIC_PC_HOME: home, AGENTIC_PC_PROGRAM: home, AGENTIC_PC_CONNECT_TIMEOUT: "700" },
+    stdio: "ignore",
+  });
+  try {
+    const read = (f) => { try { return fs.readFileSync(path.join(home, f), "utf8"); } catch { return ""; } };
+    const offline = await waitFor(() => { try { const s = JSON.parse(read("status.json")); return s.state === "offline" ? s : null; } catch { return null; } }, 8000);
+    assert.ok(offline, "reported offline");
+    assert.match(offline.last_error, /no answer from the office server/);
+    assert.ok(offline.next_try);
+    assert.ok(await waitFor(() => (read("agent.log").match(/trying again in/g) || []).length >= 2, 10000), "kept retrying");
+    // The status page: only with its key, only for 127.0.0.1.
+    const base = `http://127.0.0.1:${offline.control_port}`;
+    assert.equal((await fetch(`${base}/state`)).status, 403);
+    const st = await fetch(`${base}/state`, { headers: { "X-Key": offline.control_key } });
+    assert.equal(st.status, 200);
+    const body = await st.json();
+    assert.equal(body.linked, true);
+    assert.equal((await fetch(`${base}/?k=${offline.control_key}`)).headers.get("x-frame-options"), "DENY");
+    const other = await new Promise((resolve) => {
+      http.get({ host: "127.0.0.1", port: offline.control_port, path: `/state?k=${offline.control_key}`, headers: { Host: "evil.example" } }, (res) => { res.resume(); resolve(res.statusCode); }).on("error", () => resolve(0));
+    });
+    assert.equal(other, 403);
+    // Reconnect now: tries again at once.
+    const before = (read("agent.log").match(/disconnected:/g) || []).length;
+    const r = await fetch(`${base}/reconnect`, { method: "POST", headers: { "X-Key": offline.control_key } });
+    assert.equal(r.status, 200);
+    assert.ok(await waitFor(() => (read("agent.log").match(/disconnected:/g) || []).length > before, 4000));
+  } finally {
+    child.kill();
+    await new Promise((r) => child.once("exit", r));
+    for (const s of sockets) s.destroy();
+    hang.close();
+  }
+});

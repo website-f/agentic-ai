@@ -217,6 +217,50 @@ on the computer and the line), which is enough to check something, click through
 or type a short reply, and is what fits through the existing HTTPS connection with no extra
 port, relay or app.
 
+## Always back online, the Windows program, the status page (P52)
+
+**Never stuck offline.** Before 0.3.0 a reconnect attempt that hung (the office server
+restarting during an update, Wi-Fi changing) could wait forever while the agent looked
+running. Now:
+
+- every connection attempt is given up after 20 s and retried (2 s, doubling to 60 s, with
+  jitter); every retry is logged with a plain reason;
+- after the computer sleeps (the clock jumps more than 30 s between 5-second ticks) it
+  reconnects at once;
+- `status.json` (next to `config.json`) says `online | connecting | offline | not_linked`,
+  since when, the last reason and the next try.
+
+**Status page.** The running agent serves a page on `http://127.0.0.1:47615` (the next five
+ports if taken): connected or not and why, *Reconnect now*, *Pause / Let the AI use it again*,
+what to do when offline, and a form to link with a code. Only this computer can open it, only
+with the key the agent writes to `status.json` (a new one each start), only with a `Host` of
+127.0.0.1 or localhost (no DNS rebinding), POSTs only from its own origin, framing denied.
+
+**Commands.** `agentic-pc doctor` checks linked, server reachable, running (starts it if not),
+online, paused, starts with Windows. `agentic-pc open` opens the status page. `agentic-pc
+start` starts it in the background.
+
+**Windows program.** `AgenticOfficePC.exe` is the agent as one file (a Node single executable
+application, built by `apps/pc-agent/build-exe.cjs` in the API image: the official `node.exe`
+of the build's Node version, checked against nodejs.org, its signature removed, `agent.cjs`
+embedded, marked as a windowed program so no console window ever opens). On *Link a
+computer*, Windows people get *Download for Windows (.exe)*: `GET /i/CODE/exe` (or
+`/i/CODE/exe/control`) streams the program with a newline and
+`#AGENTIC-OFFICE-LINK#{"server", "code", "remote"}#END#` appended (after the last section, Windows ignores it). Double-clicked, it:
+
+1. copies itself to `%LOCALAPPDATA%\AgenticOffice\AgenticOfficePC.exe`;
+2. starts with Windows (`HKCU\...\Run`, `"...AgenticOfficePC.exe" run`: no script host, so it
+   keeps working as Windows retires VBScript), adds itself to Settings > Apps (uninstall there)
+   and to the Start menu (*Agentic Office*, opens the status page);
+3. links with the code inside (once; the code works once and for 10 minutes, after that the
+   page asks for a new one);
+4. starts the agent (an older one running is replaced) and opens the status page.
+
+It is not code-signed, so SmartScreen asks once (*More info > Run anyway*). Sign it with a
+certificate (`signtool`) to remove that warning. The one-line installers stay for Mac, Linux
+and anyone who prefers them; both installs share the same configuration and only one agent
+runs at a time.
+
 ## Desktop app
 
 Electron, wrapping the same core. Tray icon (online / paused / offline), a window with status,

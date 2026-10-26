@@ -49,7 +49,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
   const t = useT();
   const qc = useQueryClient();
   // The one line is the way in; the desktop app only once a build is published (P31).
-  const [pickedTab, setTab] = useState<"app" | "command">("command");
+  const [pickedTab, setTab] = useState<"app" | "command" | null>(null);
   const [os, setOs] = useState<DeviceOs>(() => {
     const mine = detectOs();
     return mine === "other" ? "windows" : mine;
@@ -66,8 +66,10 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
     make.mutate();
   }, [make]);
   const link: LinkCode | undefined = make.data;
-  const hasApp = !!link?.downloads;
-  const tab = hasApp ? pickedTab : "command";
+  // P52: on Windows the .exe (with the code inside) is the easy way; the one line stays.
+  const hasExe = !!link?.exe;
+  const hasApp = !!link?.downloads || hasExe;
+  const tab = hasApp ? (pickedTab ?? (hasExe && os === "windows" ? "app" : "command")) : "command";
   const left = link ? secondsLeft(link.expires_at, now) : 0;
   const expired = !!link && left <= 0;
 
@@ -157,6 +159,13 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
       options={[{ value: "windows", label: "Windows" }, { value: "mac", label: "Mac" },
         ...(tab === "app" ? [] : [{ value: "linux" as const, label: "Linux" }])]} />
   );
+  const remoteSwitch = (
+    <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-3.5 py-3">
+      <SwitchField checked={remote} onCheckedChange={setRemote}
+        label={t("Also let me see and use this computer from the web")}
+        hint={t("For when you are away: watch its screen and use its mouse and keyboard from My computers. You still turn it on there with your password, and the computer shows a notice while you use it.")} />
+    </div>
+  );
   // P42: the same line, also allowing this computer to be seen and used from the web.
   const lines = remote && link?.install_control ? link.install_control : link?.install;
   const command = lines ? (lines[os] ?? lines.mac) : "…";
@@ -170,7 +179,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
         <FormError message={make.error ? errorMessage(make.error) : null} />
         {hasApp ? (
           <Segmented label={t("How to install")} value={tab} onChange={setTab} className="w-full [&>button]:flex-1 [&>button]:justify-center"
-            options={[{ value: "app", label: t("Download the app") }, { value: "command", label: t("Install with one command — no warnings") }]} />
+            options={[{ value: "app", label: hasExe && !link?.downloads ? t("Download for Windows (.exe)") : t("Download the app") }, { value: "command", label: t("Install with one command — no warnings") }]} />
         ) : null}
 
         {tab === "app" ? (
@@ -178,8 +187,10 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(["windows", "mac"] as const).map((o) => {
                 const OsIcon = o === "windows" ? WindowsLogoIcon : AppleLogoIcon;
+                const href = o === "windows" && link?.exe ? (remote ? link.exe.control : link.exe.off) : link?.downloads?.[o];
+                if (!href && link) return null;
                 return (
-                  <a key={o} href={link?.downloads?.[o] ?? "#"} onClick={(e) => { if (!link) e.preventDefault(); setOs(o); }}
+                  <a key={o} href={href ?? "#"} onClick={(e) => { if (!link) e.preventDefault(); setOs(o); }}
                     aria-disabled={!link || undefined}
                     className={cn(
                       "flex min-h-16 min-w-0 items-center gap-3 rounded-[var(--radius-md)] border px-4 py-3 transition-colors",
@@ -196,6 +207,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
                 );
               })}
             </div>
+            {hasExe ? remoteSwitch : null}
             {codeRow}
             <div className="grid min-w-0 gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -207,7 +219,11 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
               </p>
               {appOs === "windows" ? (
                 <>
-                  <Steps items={[
+                  <Steps items={hasExe ? [
+                    t("Open the downloaded file (AgenticOfficePC.exe)."),
+                    t("If you see “Windows protected your PC”, click More info → Run anyway."),
+                    t("It links itself (the code is inside the download) and opens a page that says Online. It starts with Windows from now on; find it in Start → Agentic Office."),
+                  ] : [
                     t("Open the downloaded file."),
                     t("If you see “Windows protected your PC”, click More info → Run anyway."),
                     t("Paste the code in the app and click Link."),
@@ -252,11 +268,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
               </div>
               <p className="text-[12px] text-muted">{t("The code inside works once and expires in 10 minutes.")}</p>
             </div>
-            <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-3.5 py-3">
-              <SwitchField checked={remote} onCheckedChange={setRemote}
-                label={t("Also let me see and use this computer from the web")}
-                hint={t("For when you are away: watch its screen and use its mouse and keyboard from My computers. You still turn it on there with your password, and the computer shows a notice while you use it.")} />
-            </div>
+            {remoteSwitch}
             <Steps items={os === "windows" ? [
               <span key="a" className="inline-flex flex-wrap items-center gap-1"><TerminalWindowIcon size={15} className="text-accent" /> {t("Press Start, type PowerShell, open it, paste, press Enter.")}</span>,
               t("Wait for “Linked” (about a minute: it downloads Node.js from nodejs.org and the agent)."),

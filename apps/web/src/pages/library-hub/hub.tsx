@@ -11,6 +11,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/page";
+import { SearchField } from "@/components/search-box";
 import { msg, useT } from "@/i18n";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,14 @@ export function LibraryHeader({ tab, actions }: { tab: LibraryPath; actions?: Re
   return (
     <div className="grid min-w-0 gap-4">
       <PageHeader title={t("Library")} eyebrow={false} icon={here.icon} description={t(here.description)} actions={actions} />
+      {/* P52: one box that searches the whole Library (names and the words inside every file,
+          SOP, document and template), on every tab, instead of browsing folder by folder. */}
+      {tab !== "/search" ? (
+        <div className="grid min-w-0 gap-1.5" data-guide="library.search">
+          <SearchField variant="page" />
+          <p className="text-[12px] text-muted">{t("Searches everything in the Library: names, and the words inside files, SOPs, documents and templates. Press Enter for every result.")}</p>
+        </div>
+      ) : null}
       <LibraryTabs />
     </div>
   );

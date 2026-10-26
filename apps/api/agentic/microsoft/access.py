@@ -198,6 +198,34 @@ async def mail_ready(db: AsyncSession, agent: Agent | None) -> bool:
     return bool(await boxes_for_ai(db, agent))
 
 
+# P52: Microsoft Teams, through the same personal connection: only a person's own AI (twin or
+# private assistant), only its owner's chats. A shared mailbox never gives Teams.
+TEAMS_TOOLS = frozenset({"teams_chats", "teams_read_chat", "teams_send"})
+
+
+async def teams_account(db: AsyncSession, agent: Agent | None) -> MicrosoftAccount | None:
+    if agent is None or agent.status == "retired" or not personal_ai(agent):
+        return None
+    acct = await personal_account_of(db, agent.workspace_id, agent.owner_user_id or "")
+    if acct is None or acct.status not in USABLE_ACCOUNT or not ai_may_use_personal(agent, acct):
+        return None
+    return acct
+
+
+async def teams_ready(db: AsyncSession, agent: Agent | None) -> bool:
+    return await teams_account(db, agent) is not None
+
+
+async def has_teams(agent: Agent | None) -> bool:
+    """teams_ready on its own session (policy.evaluate has none)."""
+    from ..core.db import SessionLocal
+
+    if agent is None:
+        return False
+    async with SessionLocal() as db:
+        return await teams_ready(db, agent)
+
+
 async def has_mailbox(agent: Agent | None) -> bool:
     """mail_ready on its own session (policy.evaluate has none)."""
     from ..core.db import SessionLocal

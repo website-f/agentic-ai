@@ -32,9 +32,13 @@ LOGIN = "https://login.microsoftonline.com"
 MULTI_TENANT = frozenset({"organizations", "common"})
 DEFAULT_TENANT = "organizations"
 # Delegated: a person's own mailbox and calendar. offline_access gives the refresh token.
+# P52: and their own Teams chats (read, send), teams and channels. All of these a person may
+# consent to themselves (no admin consent needed).
 DELEGATED_SCOPES = (
     "openid profile email offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite"
+    " Chat.Read ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All"
 )
+TEAMS_SCOPES = ("Chat.Read", "ChatMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All")
 APP_SCOPE = "https://graph.microsoft.com/.default"  # app-only: whatever the admin granted
 
 CALLBACK_PATH = "/api/integrations/microsoft/callback"

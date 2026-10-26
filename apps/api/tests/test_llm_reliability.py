@@ -185,8 +185,25 @@ async def test_rejected_reasoning_effort_is_dropped_and_remembered(client, fake)
     await ask(ws)
     assert "no_reasoning_effort" in await store.quirks(p["id"], "gpt-5-mini")
     before = len(fake.bodies)
-    await ask(ws)
+    await ask(ws, task="brain.extract.again")  # another job: the answer cache must not answer it
     assert len(fake.bodies) == before + 1  # learned: no second 400
+
+
+async def test_an_exact_repeat_of_a_background_job_is_answered_from_the_cache(client, fake):
+    """P52: the same background job with the same input comes back from the cache (free and
+    instant); agent work and anything with tools never does."""
+    await setup_owner(client)
+    p = await add_provider(client, "Proxy", "good.fake")
+    await set_group(client, "fast", [(p["id"], "gpt-5-mini")])
+    ws = await workspace_of(p["id"])
+    first = await ask(ws)
+    sent = len(fake.bodies)
+    again = await ask(ws)
+    assert len(fake.bodies) == sent and again.content == first.content
+    assert again.provider_name == "cache" and again.usage.prompt == 0
+    await ask(ws, task="agent.task", json_mode=False)
+    await ask(ws, task="agent.task", json_mode=False)
+    assert len(fake.bodies) == sent + 2  # agent work is always asked
 
 
 async def test_groq_out_of_tokens_400_retries_with_room(client, fake):

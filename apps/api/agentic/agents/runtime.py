@@ -29,7 +29,7 @@ from ..devices.core import personal as pc_personal
 from ..engine import acting, gateway
 from ..i18n import dialects, explicit_lang
 from ..i18n import notes as lang_notes
-from ..microsoft.access import MAIL_TOOLS, mail_ready
+from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, mail_ready, teams_ready
 from ..models import (
     Agent,
     AgentMessage,
@@ -367,7 +367,7 @@ async def owner_asks(
 
 async def run_tool(ctx: ToolContext, name: str, args: dict[str, Any]) -> str:
     limit = SLOW_TOOLS.get(name, TOOL_TIMEOUT)
-    if (name in PC_TOOLS or name in MAIL_TOOLS) and not await owner_asks(
+    if (name in PC_TOOLS or name in MAIL_TOOLS or name in TEAMS_TOOLS) and not await owner_asks(
         ctx.db, ctx.agent, ctx.task, ctx.person
     ):
         return (
@@ -513,6 +513,7 @@ def offered_tools(
     pc: bool = False,
     mail: bool = False,
     finance: bool = False,
+    teams: bool = False,
 ) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
     delegate only for orchestrators above their depth cap. The MCP bridge is shown only when
@@ -537,6 +538,8 @@ def offered_tools(
         if n in PC_TOOLS and not (pc and pc_personal(agent)):  # their own computer (P31)
             continue
         if n in MAIL_TOOLS and not mail:  # a mailbox it may use (P34)
+            continue
+        if n in TEAMS_TOOLS and not teams:  # its person's own Teams (P52)
             continue
         if n in MONEY_TOOLS and not (finance or explicit_money(agent, n)):  # P35
             continue
@@ -1296,6 +1299,7 @@ async def _run_task_step(task_id: str) -> StepResult:
                         mcp=await _has_mcp(db, ws.id),
                         pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
                         mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
+                        teams=await teams_ready(db, agent) and await owner_asks(db, agent, task),
                         finance=await money_ready(db, agent),
                     ),
                     max_tokens=TASK_REPLY_TOKENS,
@@ -2064,6 +2068,7 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
                     mcp=await _has_mcp(db, ws.id),
                     pc=await pc_ready(db, agent) and mine,
                     mail=await mail_ready(db, agent) and mine,
+                    teams=await teams_ready(db, agent) and mine,
                     finance=await money_ready(db, agent),
                 ),
                 max_tokens=1600 if last else 1200,

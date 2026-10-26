@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, status
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,6 +115,13 @@ async def link_code(
             "mac": f"curl -fsSL {base}/i/{code}/mac/control | sh",
             "linux": f"curl -fsSL {base}/i/{code}/linux/control | sh",
         },
+        # P52: the Windows program with this code inside (double-click: installs, links, starts
+        # with Windows). None when this server has no build of it.
+        "exe": (
+            {"off": f"{base}/i/{code}/exe", "control": f"{base}/i/{code}/exe/control"}
+            if install.exe_path() is not None
+            else None
+        ),
         # The desktop app (Electron) only when a build is published (AGENTIC_PC_APP_*_URL);
         # otherwise the one-line installer is the way in.
         "downloads": (
@@ -159,9 +166,7 @@ _NO_INSTALLER_LINES = [
 
 
 @router.get("/api/install/{code}/{kind}/{remote}")
-async def install_script_remote(
-    code: str, kind: str, remote: str, request: Request
-) -> PlainTextResponse:
+async def install_script_remote(code: str, kind: str, remote: str, request: Request) -> Response:
     """P42: the same, with seeing and using the computer from the web allowed at once
     (/i/{code}/win/control): the person chose it when making the code, and running the line
     on the computer is their consent there."""
@@ -171,12 +176,12 @@ async def install_script_remote(
 
 
 @router.get("/api/install/{code}/{kind}")
-async def install_script(
-    code: str, kind: str, request: Request, remote: str = "off"
-) -> PlainTextResponse:
+async def install_script(code: str, kind: str, request: Request, remote: str = "off") -> Response:
     """GET /i/{code}/win | /i/{code}/mac (nginx maps /i/ here). Does not use the code up.
     An unknown or expired code still answers a script (200) that prints why and stops:
     `curl -f` and `irm` would hide our message behind a bare 404."""
+    if kind == "exe":
+        return await _exe_download(code, request, remote)
     if kind not in install.TEMPLATES:
         return PlainTextResponse("Use /i/CODE/win or /i/CODE/mac.\n", status_code=404)
     headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
@@ -196,6 +201,43 @@ async def install_script(
     if text is None:
         return PlainTextResponse(install.error_script(kind, _NO_INSTALLER_LINES), headers=headers)
     return PlainTextResponse(text, headers=headers)
+
+
+async def _exe_download(code: str, request: Request, remote: str) -> Response:
+    """P52: GET /i/{code}/exe: the Windows program, with this one-time code (and the office
+    address) added to its end, so a double-click installs, links and starts it. An expired or
+    unknown code still gets the program: it then asks for a code on its own page."""
+    path = install.exe_path()
+    if path is None:
+        return PlainTextResponse("\n".join(_NO_INSTALLER_LINES) + "\n", status_code=404)
+    trailer = b""
+    if core.valid_code(code):
+        async with SessionLocal() as db:
+            row = await db.get(DeviceLinkCode, core.code_hash(code))
+        if row is not None and row.used_at is None and row.expires_at > core.now():
+            base = core.public_base(request.headers, request.url.scheme)
+            if not install.safe_server(base):
+                base = settings.public_url.rstrip("/")
+            level = remote if remote in core.REMOTE_LEVELS else "off"
+            trailer = install.exe_trailer(base, core.norm_code(code), level)
+    size = path.stat().st_size
+
+    def chunks():
+        with path.open("rb") as f:
+            while block := f.read(1 << 20):
+                yield block
+        yield trailer
+
+    return StreamingResponse(
+        chunks(),
+        media_type="application/vnd.microsoft.portable-executable",
+        headers={
+            "Content-Disposition": f'attachment; filename="{install.EXE_NAME}"',
+            "Content-Length": str(size + len(trailer)),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # ---------------------------------------------------------------- claim (the PC)

@@ -37,6 +37,18 @@ def _bare(model: str) -> str:
     return model.lower().rsplit("/", 1)[-1].split(":", 1)[0]
 
 
+def local_quirks(tier: str | None, model: str) -> frozenset[str]:
+    """P52: the local backup model (Ollama on the office's own CPU) never thinks out loud:
+    measured on the server, qwen3:0.6b answers "OK" in 0.5 s with thinking off and 21-35 s
+    with it on (80-130 hidden tokens at ~4 tokens a second). The gateway, the connection test
+    and the scheduled health check all use this."""
+    return (
+        frozenset({"no_think"})
+        if tier == "local" and model.lower().startswith("qwen3")
+        else frozenset()
+    )
+
+
 def thinks(model: str) -> bool:
     """Known reasoning model, before it has had a chance to run out of tokens."""
     return bool(_THINKS.search(_bare(model)))

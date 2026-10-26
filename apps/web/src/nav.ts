@@ -172,7 +172,7 @@ export const NAV: NavSection[] = [
       { to: "/approvals", label: msg("Approvals"), icon: SealCheckIcon, blurb: msg("Decisions agents are waiting on. Approve once, always, or deny, from here or from a phone notification.") },
       { to: "/chat", label: msg("Chat"), icon: ChatsCircleIcon, blurb: msg("Talk to any agent directly, by typing or with your voice, and pick up past conversations.") },
       // P34: what came into Outlook and the shared mailboxes, and what the AI did with each.
-      { to: "/mail", label: msg("Mail"), icon: EnvelopeSimpleIcon, perm: ["agents.own", "assistants.use", "channels.manage"], blurb: msg("Mail that reached your Outlook and the company's shared mailboxes, and what the AI did with each: the task it made, the file it saved, the reply it drafted for you.") },
+      { to: "/mail", label: msg("Microsoft 365"), icon: EnvelopeSimpleIcon, perm: ["agents.own", "assistants.use", "channels.manage"], blurb: msg("Your own Outlook mail, calendar and Teams chats, and the company's shared mailboxes: what reached you and what your AI did with each, from your own connection.") },
       { to: "/forms", label: msg("Forms"), icon: NotepadIcon, blurb: msg("Claims, advances, monthly records and requests: download the blank, hand it in before the deadline, or let your AI worker fill it in. Managers see who handed in.") },
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
       { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
@@ -259,6 +259,54 @@ export const NAV: NavSection[] = [
 export const ALL_NAV: NavItem[] = NAV.flatMap((s) => s.items);
 
 /** Phone bottom bar: the four things you reach for one-handed, plus More. */
+/** P52: pages that belong together share one sidebar entry and show as tabs on each other's
+ * page (components/hub-tabs.tsx), so the menu stays short. Each page keeps its own address.
+ * The sidebar shows the first tab the person may open, under the hub's name. (The Library is
+ * its own hub: pages/library-hub.) */
+export interface Hub {
+  label: string;
+  tabs: AppPath[];
+}
+
+export const HUBS: Hub[] = [
+  { label: msg("Command center"), tabs: ["/", "/impact"] },
+  { label: msg("My AI"), tabs: ["/my-worker", "/assistants", "/computers"] },
+  { label: msg("Forms & reports"), tabs: ["/forms", "/reports"] },
+  { label: msg("Workflows & goals"), tabs: ["/workflows", "/objectives"] },
+  { label: msg("Customers"), tabs: ["/contacts", "/deals"] },
+  { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/office", "/meetings", "/broadcasts"] },
+  { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
+  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/ai-use", "/settings/approval-limits"] },
+  { label: msg("Settings"), tabs: ["/settings", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
+  { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
+];
+
+/** The hub a nav entry is a tab of, if any. */
+export function hubOf(to: string): Hub | undefined {
+  return HUBS.find((h) => h.tabs.includes(to as AppPath));
+}
+
+const navAllowed = (i: NavItem, perms: string[]) => !i.perm || [i.perm].flat().some((p) => perms.includes(p));
+
+/** The hub's tabs this person may open, in order. */
+export function hubTabs(hub: Hub, perms: string[]): NavItem[] {
+  return hub.tabs.map((to) => ALL_NAV.find((n) => n.to === to)).filter((i): i is NavItem => !!i && navAllowed(i, perms));
+}
+
+/** A section's items as the sidebar lists them: each hub once (its first tab the person may
+ * open, named after the hub, active on any of its tabs), other items as they are. */
+export function sidebarItems(items: NavItem[], perms: string[]): NavItem[] {
+  const out: NavItem[] = [];
+  for (const i of items) {
+    const hub = hubOf(i.to);
+    if (!hub) { out.push(i); continue; }
+    const first = hubTabs(hub, perms)[0];
+    if (!first || first.to !== i.to) continue;
+    out.push({ ...i, label: hub.label, hidden: false, advanced: false, also: [...(i.also ?? []), ...hub.tabs.filter((t) => t !== i.to)] });
+  }
+  return out;
+}
+
 /** The Help group: pinned at the foot of the sidebar and at the top of the phone More sheet. */
 export const HELP_SECTION = "Help";
 

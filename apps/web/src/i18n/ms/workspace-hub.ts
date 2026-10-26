@@ -79,6 +79,58 @@ export const WORKSPACE_HUB: Record<string, string> = {
     "Kerja yang tidak diminta terus oleh sesiapa: peraturan peti mel kongsi dan susulan ejen sendiri. Apabila habis, kerja itu menunggu pengurus meluluskan lebih.",
   "End it anyway": "Tamatkan juga",
 
+  // P52 computers: always back online, the Windows program
+  "Is it switched on, awake and on the internet? A computer that sleeps shows Offline, and comes back by itself within a minute after it wakes.":
+    "Adakah ia dihidupkan, tidak tidur dan bersambung ke internet? Komputer yang tidur menunjukkan Luar talian, dan kembali sendiri dalam masa seminit selepas ia bangun.",
+  "On that computer, open Start → Agentic Office: it shows whether it is connected and has a Reconnect now button.":
+    "Pada komputer itu, buka Start → Agentic Office: ia menunjukkan sama ada ia bersambung dan ada butang Sambung semula sekarang.",
+  "On that computer, run agentic-pc doctor in a terminal: it checks everything and starts the agent if it stopped.":
+    "Pada komputer itu, jalankan agentic-pc doctor dalam terminal: ia menyemak semuanya dan menghidupkan agen jika ia berhenti.",
+  "Restart the computer: the agent starts by itself when you sign in.":
+    "Mulakan semula komputer: agen bermula sendiri apabila anda log masuk.",
+  "Still offline? Press Link a computer above and install again on that computer: the new install replaces this one.":
+    "Masih luar talian? Tekan Pautkan komputer di atas dan pasang semula pada komputer itu: pemasangan baharu menggantikan yang ini.",
+  "It shows Offline: what to do": "Ia menunjukkan Luar talian: apa perlu dibuat",
+  "This computer runs an older agent ({version}) that can stay offline after the office server restarts. Install it again (Link a computer) to get the version that always reconnects.":
+    "Komputer ini menjalankan agen versi lama ({version}) yang boleh kekal luar talian selepas pelayan pejabat dimulakan semula. Pasang semula (Pautkan komputer) untuk mendapat versi yang sentiasa bersambung semula.",
+  "Download for Windows (.exe)": "Muat turun untuk Windows (.exe)",
+  "Open the downloaded file (AgenticOfficePC.exe).": "Buka fail yang dimuat turun (AgenticOfficePC.exe).",
+  "It links itself (the code is inside the download) and opens a page that says Online. It starts with Windows from now on; find it in Start → Agentic Office.":
+    "Ia memautkan dirinya sendiri (kod ada di dalam muat turun) dan membuka halaman yang menyatakan Dalam talian. Ia bermula bersama Windows mulai sekarang; cari di Start → Agentic Office.",
+
+  // P52 a shorter menu (hubs), Library search, Microsoft 365 and Teams
+  "Microsoft 365": "Microsoft 365",
+  "Your own Outlook mail, calendar and Teams chats, and the company's shared mailboxes: what reached you and what your AI did with each, from your own connection.":
+    "E-mel Outlook, kalendar dan sembang Teams anda sendiri, serta peti mel kongsi syarikat: apa yang sampai kepada anda dan apa yang AI anda buat dengan setiap satu, melalui sambungan anda sendiri.",
+  "Forms & reports": "Borang & laporan",
+  "Workflows & goals": "Aliran kerja & matlamat",
+  "Knowledge & skills": "Pengetahuan & kemahiran",
+  "Organization & people": "Organisasi & orang",
+  "Learn": "Belajar",
+  "Searches everything in the Library: names, and the words inside files, SOPs, documents and templates. Press Enter for every result.":
+    "Mencari semua dalam Perpustakaan: nama, dan perkataan di dalam fail, SOP, dokumen dan templat. Tekan Enter untuk semua hasil.",
+  "Your own Outlook mail, calendar and Teams chats, and the company's shared mailboxes: what reached you and what your AI did with each. Your connection is yours alone.":
+    "E-mel Outlook, kalendar dan sembang Teams anda sendiri, serta peti mel kongsi syarikat: apa yang sampai kepada anda dan apa yang AI anda buat dengan setiap satu. Sambungan anda milik anda seorang.",
+  "Outlook mail": "E-mel Outlook",
+  "Connect your Microsoft 365": "Sambungkan Microsoft 365 anda",
+  "Your Outlook mail, calendar and Teams chats, in one connection that is yours alone. Your AI reads them for you; it never sends anything until you approve it.":
+    "E-mel Outlook, kalendar dan sembang Teams anda, dalam satu sambungan milik anda seorang. AI anda membacanya untuk anda; ia tidak menghantar apa-apa sehingga anda meluluskannya.",
+  "Connect Microsoft 365": "Sambungkan Microsoft 365",
+  "Allow Teams once": "Benarkan Teams sekali",
+  "Your connection was made before Teams was added. Reconnect once and Microsoft asks you to allow reading and sending your Teams chats.":
+    "Sambungan anda dibuat sebelum Teams ditambah. Sambung semula sekali dan Microsoft akan meminta kebenaran untuk membaca dan menghantar sembang Teams anda.",
+  "Reconnect Microsoft 365": "Sambung semula Microsoft 365",
+  "No Teams chats yet": "Belum ada sembang Teams",
+  "Chats you have in Microsoft Teams show here.": "Sembang anda dalam Microsoft Teams dipaparkan di sini.",
+  "Only your own chats, from your own connection. Your AI can read them and draft answers that you approve.":
+    "Hanya sembang anda sendiri, daripada sambungan anda sendiri. AI anda boleh membacanya dan mendraf jawapan yang anda luluskan.",
+  "Teams chat": "Sembang Teams",
+  "Read my Teams chat \"{title}\" (chat {id}) with teams_read_chat and tell me what needs my attention, what was decided and what I should answer.":
+    "Baca sembang Teams saya \"{title}\" (sembang {id}) dengan teams_read_chat dan beritahu saya apa yang perlu perhatian saya, apa yang telah diputuskan dan apa yang patut saya jawab.",
+  "Ask my AI about it": "Tanya AI saya tentangnya",
+  "Open in Teams": "Buka dalam Teams",
+  "No messages.": "Tiada mesej.",
+
   // task board
   "Scroll the board left": "Tatal papan ke kiri",
   "Scroll the board right": "Tatal papan ke kanan",

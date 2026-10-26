@@ -489,6 +489,40 @@ class Graph:
 
     # ------------------------------------------------------------ change notifications
 
+    # ------------------------------------------------------------ Teams (P52, delegated only)
+
+    async def list_chats(self, top: int = 20) -> list[dict[str, Any]]:
+        """The person's chats (one-to-one, group, meeting), most recent first, with who is in
+        them and the last message's preview."""
+        body = await self._get(
+            "/me/chats",
+            **{
+                "$expand": "members,lastMessagePreview",
+                "$orderby": "lastMessagePreview/createdDateTime desc",
+                "$top": max(1, min(top, 50)),
+            },
+        )
+        return list(body.get("value") or [])
+
+    async def chat_messages(self, chat_id: str, top: int = 20) -> list[dict[str, Any]]:
+        """A chat's latest messages, newest first."""
+        body = await self._get(
+            f"/me/chats/{_q(chat_id)}/messages",
+            **{"$top": max(1, min(top, 50)), "$orderby": "createdDateTime desc"},
+        )
+        return list(body.get("value") or [])
+
+    async def send_chat_message(self, chat_id: str, text: str) -> dict[str, Any]:
+        return await self.request(
+            "POST",
+            f"/chats/{_q(chat_id)}/messages",
+            json={"body": {"contentType": "text", "content": text}},
+        )
+
+    async def joined_teams(self) -> list[dict[str, Any]]:
+        body = await self._get("/me/joinedTeams", **{"$select": "id,displayName,description"})
+        return list(body.get("value") or [])
+
     async def create_subscription(
         self,
         resource: str,

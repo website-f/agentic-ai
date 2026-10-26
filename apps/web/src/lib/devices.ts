@@ -74,6 +74,9 @@ export interface LinkCode {
   install_control?: { windows: string; mac: string; linux?: string };
   /** The desktop app builds; null until one is published (then only the one-line install). */
   downloads: { windows: string; mac: string } | null;
+  /** P52: the Windows program with this code inside (double-click: installs, links, starts with
+   * Windows); `control` also allows seeing and using it from the web. Null without a build. */
+  exe?: { off: string; control: string } | null;
 }
 
 export interface LinkStatus {

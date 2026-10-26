@@ -1,13 +1,14 @@
 /** One linked computer: its name (rename in place), whether it is on, its browsers, pause,
  * the folders the AI may look in, what the AI did on it, and Unlink. */
 import {
+  WarningCircleIcon,
   AppleLogoIcon, BrowserIcon, CaretRightIcon, CheckIcon, CursorClickIcon, DownloadSimpleIcon, FileArrowDownIcon, FileArrowUpIcon,
   FileTextIcon, FolderOpenIcon, FolderPlusIcon, FolderSimpleIcon, GearSixIcon, GoogleChromeLogoIcon, LinkBreakIcon, LinuxLogoIcon,
   MagnifyingGlassIcon, MonitorPlayIcon, PencilSimpleIcon, PlusIcon, PulseIcon, ScreencastIcon, WindowsLogoIcon, XIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { IconTile } from "@/components/page";
@@ -199,6 +200,7 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 p-4 sm:p-5">
+          {!device.online ? <OfflineHelp device={device} /> : null}
           {/* ---- pause + browsers */}
           <div className="grid min-w-0 gap-4 md:grid-cols-2">
             <SwitchField checked={device.paused} onCheckedChange={(paused) => save.mutate({ paused })} disabled={save.isPending}
@@ -330,4 +332,42 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
       </Card>
     </div>
   );
+}
+
+/** P52: what to do when a computer shows Offline, in order, for its kind of computer. */
+function OfflineHelp({ device }: { device: Device }) {
+  const t = useT();
+  const old = !device.version || newer("0.3.0", device.version);
+  const steps: ReactNode[] = [
+    t("Is it switched on, awake and on the internet? A computer that sleeps shows Offline, and comes back by itself within a minute after it wakes."),
+    device.os === "windows"
+      ? t("On that computer, open Start → Agentic Office: it shows whether it is connected and has a Reconnect now button.")
+      : t("On that computer, run agentic-pc doctor in a terminal: it checks everything and starts the agent if it stopped."),
+    t("Restart the computer: the agent starts by itself when you sign in."),
+    t("Still offline? Press Link a computer above and install again on that computer: the new install replaces this one."),
+  ];
+  return (
+    <section className="grid min-w-0 gap-2 rounded-[var(--radius-md)] border border-warn/30 bg-warn/5 p-3.5" aria-label={t("It shows Offline: what to do")}>
+      <h3 className="flex items-center gap-1.5 text-[13.5px] font-semibold"><WarningCircleIcon size={16} className="text-warn" /> {t("It shows Offline: what to do")}</h3>
+      {old ? (
+        <p className="text-[12.5px]">
+          {t("This computer runs an older agent ({version}) that can stay offline after the office server restarts. Install it again (Link a computer) to get the version that always reconnects.", { version: device.version || "?" })}
+        </p>
+      ) : null}
+      <ol className="grid gap-1.5 pl-5 text-[12.5px] [&>li]:list-decimal">
+        {steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
+      {device.os !== "windows" ? <code className="justify-self-start rounded-sm bg-surface-2 px-2 py-1 font-mono text-[12px]">agentic-pc doctor</code> : null}
+    </section>
+  );
+}
+
+/** a > b for dotted versions ("0.3.0" > "0.2.9"). */
+function newer(a: string, b: string): boolean {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
 }

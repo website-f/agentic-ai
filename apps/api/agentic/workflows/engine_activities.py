@@ -1,15 +1,36 @@
 """Activities for AI Engine background work. Runs in the worker, outside the sandbox."""
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio import activity
 
 from ..core.db import SessionLocal
 from ..engine import store, tester
-from ..models import AIProvider
+from ..models import AIProvider, LLMCall
 
 log = logging.getLogger("agentic.worker.engine")
+
+
+RECENT = timedelta(hours=2)
+
+
+async def _used_lately(db: AsyncSession, provider_id: str) -> bool:
+    since = datetime.now(UTC) - RECENT
+    return (
+        await db.scalar(
+            select(LLMCall.id)
+            .where(
+                LLMCall.provider_id == provider_id,
+                LLMCall.status == "ok",
+                LLMCall.task != "engine.test",
+                LLMCall.ts >= since,
+            )
+            .limit(1)
+        )
+    ) is not None
 
 
 @activity.defn
@@ -25,10 +46,23 @@ async def check_all_providers() -> dict[str, int]:
         ).all()
 
     ok = failed = 0
+    local_done: set[str] = set()
     for pid in ids:
         async with SessionLocal() as db:
             p = await db.get(AIProvider, pid)
             if p is None:
+                continue
+            # P52: the local backup model is one Ollama on this server, registered in every
+            # workspace: check it once a round, not once per workspace (each check holds its
+            # single CPU worker while real work waits).
+            if p.tier == "local":
+                if p.base_url in local_done:
+                    continue
+                local_done.add(p.base_url)
+            # P52: real work answered by it lately proves it works: no test call (these were
+            # ~11,000 calls a month, paid models included).
+            if await _used_lately(db, p.id):
+                ok += 1
                 continue
             key = store.provider_key(p)
             if not key:

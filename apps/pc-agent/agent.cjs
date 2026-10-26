@@ -7,8 +7,14 @@
  * "Agent" profile. Node 22+, no npm dependencies: one file the server serves at
  * /downloads/pc-agent/agent.cjs.
  *
- *   agentic-pc status | folders [add|remove <path>] | remote [off|view|control] | pause | resume | unlink | logs
- *            | uninstall | run | link <CODE> --server <URL> [--name <name>] | version
+ *   agentic-pc status | doctor | open | start | folders [add|remove <path>] | remote [off|view|control] | pause
+ *            | resume | unlink | logs | uninstall | run | link <CODE> --server <URL> [--name <name>] | version
+ *
+ * P52: it always finds its way back (a connection attempt that hangs is cut after 20 s, waking
+ * from sleep reconnects at once, every retry is logged), writes how it is doing to status.json,
+ * and serves a small status page on this computer only (http://127.0.0.1:47615, with a key).
+ * On Windows it is also built as AgenticOfficePC.exe (Node single executable): double-click to
+ * install, link and start with Windows; no console window, no script host.
  */
 "use strict";
 
@@ -16,10 +22,13 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
+const http = require("node:http");
 const crypto = require("node:crypto");
 const { spawn, spawnSync } = require("node:child_process");
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
+// P52: running as AgenticOfficePC.exe (a Node single executable application).
+const SEA = (() => { try { return require("node:sea").isSea(); } catch { return false; } })();
 const IS_WIN = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
 const OS_NAME = IS_WIN ? "windows" : IS_MAC ? "mac" : process.platform;
@@ -39,9 +48,15 @@ const PROFILE = path.join(CONFIG_DIR, "browser-profile");
 const MAC_PLIST = path.join(HOME, "Library", "LaunchAgents", "space.oriondesk.agentic.pc.plist");
 const WIN_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const WIN_RUN_NAME = "AgenticOfficePC";
+const WIN_UNINSTALL_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AgenticOfficePC";
+const STATUS = path.join(CONFIG_DIR, "status.json");
+const EXE_NAME = "AgenticOfficePC.exe";
+const CONTROL_PORT = 47615; // the status page, on 127.0.0.1 only (the next few if taken)
 
 const PING_EVERY = 25_000;
 const SILENCE = 70_000; // the server pongs every ping; this long without a word = reconnect
+const CONNECT_TIMEOUT = Number(process.env.AGENTIC_PC_CONNECT_TIMEOUT) || 20_000; // P52: a hanging attempt is cut and retried
+const SLEPT = 30_000; // P52: the clock jumped this much between ticks: the computer slept
 const MAX_MESSAGE = 256 * 1024;
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const SEARCH_MAX_ENTRIES = 50_000;
@@ -814,25 +829,83 @@ function detailOf(method, p) {
   return out;
 }
 
+// ---------------------------------------------------------------- how it is doing (P52)
+
+function readStatus() {
+  try { return JSON.parse(fs.readFileSync(STATUS, "utf8")); } catch { return {}; }
+}
+
+let statusNow = {};
+function setStatus(patch) {
+  const changed = patch.state && patch.state !== statusNow.state;
+  statusNow = { ...statusNow, ...patch, ...(changed ? { since: new Date().toISOString() } : {}) };
+  try {
+    ensureDir(CONFIG_DIR);
+    fs.writeFileSync(STATUS, JSON.stringify({ ...statusNow, pid: process.pid, version: VERSION, at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  } catch { /* best effort */ }
+}
+
+/** Why a connection ended, in words a person understands. */
+function plainWhy(why) {
+  const code = Number(String(why).split(" ")[0]);
+  if (code === 1012) return "the office server restarted (an update); it reconnects by itself";
+  if (code === 1006) return "the connection dropped (no internet, Wi-Fi changed, or the server is unreachable)";
+  if (code === 1000 || code === 1001) return "the connection was closed";
+  if (code === 1008 || code === 4401 || code === 4403) return "the office server refused this computer";
+  return String(why);
+}
+
 async function run() {
   let cfg = readConfig();
-  if (!cfg.token || !cfg.server) {
+  if (!SEA && (!cfg.token || !cfg.server)) {
     console.error("This computer is not linked yet. Copy the install line from the My computers page.");
     process.exit(1);
   }
   if (!takeLock()) { console.error("The agent is already running."); process.exit(0); }
-  const wsBase = wsBaseOf(cfg.server);
   let delay = 2000;
-  let stopping = false;
+  let stopping = false; // the agent is shutting down
+  let unlinked = false; // this session ended because the computer was unlinked
   let current = null;
-  log(`agent ${VERSION} starting for ${cfg.server}`);
+  let kickSleep = null;
+  statusNow = { state: "starting", since: new Date().toISOString() };
+  log(`agent ${VERSION} starting${cfg.server ? ` for ${cfg.server}` : ""}${SEA ? " (exe)" : ""}`);
+
+  // Reconnect now: from the status page, or after the computer woke up.
+  const reconnect = (why) => {
+    log(why);
+    delay = 2000;
+    try { if (current && current.readyState !== WebSocket.CLOSED) current.close(); } catch { /* closing */ }
+    kickSleep?.();
+  };
+  let lastTick = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    if (now - lastTick > SLEPT) reconnect("woke up after sleep: reconnecting");
+    lastTick = now;
+  }, 5000);
+
+  // P52: the status page on this computer.
+  const control = await startControl({
+    state: () => {
+      const c = readConfig();
+      return { ...statusNow, version: VERSION, linked: !!c.token, name: c.name || "", server: c.server || "", paused: !!c.paused, folders: c.folders || [], remote: remoteOf(c) };
+    },
+    reconnect: () => reconnect("reconnect asked on the status page"),
+    pause: (on) => { writeConfig({ ...readConfig(), paused: on }); },
+    link: (server, code) => linkWith(server, code, { remote: remoteOf(readConfig()) }),
+  });
+  setStatus(control ? { control_port: control.port, control_key: control.key } : {});
 
   // Changes made with the CLI (pause, folders) while this runs: tell the server.
   const stateOf = (c) => JSON.stringify({ f: c.folders, p: !!c.paused, r: remoteOf(c) });
   let lastState = stateOf(cfg);
   fs.watchFile(CONFIG, { interval: 2000 }, () => {
     const next = readConfig();
-    if (!next.token) { log("unlinked on this computer: stopping"); stopping = true; try { current?.close(); } catch { /* */ } process.exit(0); }
+    if (!next.token) {
+      if (cfg.token) { log("unlinked on this computer"); unlinked = true; cfg = { ...cfg, token: undefined }; try { current?.close(); } catch { /* */ } kickSleep?.(); }
+      if (!SEA) { stopping = true; releaseLock(); process.exit(0); }
+      return;
+    }
     const st = stateOf(next);
     cfg = { ...cfg, folders: next.folders, paused: !!next.paused, remote: remoteOf(next) };
     if (st !== lastState && current?.readyState === WebSocket.OPEN) {
@@ -842,16 +915,41 @@ async function run() {
     }
   });
 
-  const connect = () => new Promise((resolve) => {
-    const ws = new WebSocket(`${wsBase}/api/devices/connect`);
+  /** One connection, until it ends. Resolves with why it ended, always (P52: also when the
+   * attempt hangs, so the agent can never be stuck offline). */
+  const connect = (wsBase) => new Promise((resolve) => {
+    let ws;
+    let done = false;
+    let opened = false;
+    let timer = null;
+    let opening = null;
+    const finish = (why) => {
+      if (done) return;
+      done = true;
+      clearInterval(timer);
+      clearTimeout(opening);
+      log("disconnected:", why);
+      resolve(why);
+    };
+    try {
+      ws = new WebSocket(`${wsBase}/api/devices/connect`);
+    } catch (e) {
+      finish(`could not start a connection: ${e && e.message ? e.message : e}`);
+      return;
+    }
     current = ws;
     let lastHeard = Date.now();
-    let timer = null;
-    const finish = (why) => { clearInterval(timer); log("disconnected:", why); resolve(); };
+    opening = setTimeout(() => {
+      if (opened) return;
+      finish(`no answer from the office server in ${CONNECT_TIMEOUT / 1000} s`); // first: close() reports 1006 at once
+      try { ws.close(); } catch { /* never opened */ }
+    }, CONNECT_TIMEOUT);
     ws.onopen = () => {
+      opened = true;
+      clearTimeout(opening);
       ws.send(JSON.stringify(hello(cfg)));
       timer = setInterval(() => {
-        if (Date.now() - lastHeard > SILENCE) { try { ws.close(); } catch { /* */ } return; }
+        if (Date.now() - lastHeard > SILENCE) { finish("the office server went quiet"); try { ws.close(); } catch { /* */ } return; }
         try { ws.send('{"type":"ping"}'); } catch { /* closing */ }
       }, PING_EVERY);
     };
@@ -867,6 +965,7 @@ async function run() {
         cfg = { ...cfg, device_id: m.device_id, name: m.name, folders: Array.isArray(s.folders) && s.folders.length ? s.folders : cfg.folders, paused: !!s.paused };
         writeConfig({ ...readConfig(), device_id: cfg.device_id, name: cfg.name, folders: cfg.folders, paused: cfg.paused });
         lastState = stateOf(cfg);
+        setStatus({ state: "online", last_error: null, next_try: null });
         log(`linked as "${m.name}"; folders: ${(cfg.folders || []).join(", ")}${cfg.paused ? " (paused)" : ""}`);
       } else if (m.type === "settings") {
         cfg = { ...cfg, folders: Array.isArray(m.folders) ? m.folders : cfg.folders, paused: !!m.paused };
@@ -877,8 +976,9 @@ async function run() {
       } else if (m.type === "error") {
         log("server refused:", m.code, m.message || "");
         if (m.code === "bad_token" || m.code === "revoked") {
-          stopping = true;
+          unlinked = true;
           const c = readConfig(); delete c.token; writeConfig(c);
+          cfg = { ...cfg, token: undefined };
           console.error(m.message || "This computer was unlinked.");
         }
       } else if (m.type === "call" && typeof m.id === "string") {
@@ -900,19 +1000,152 @@ async function run() {
     ws.onclose = (ev) => finish(`${ev.code}${ev.reason ? " " + ev.reason : ""}`);
   });
 
-  const shutdown = () => { stopping = true; closeBrowserSession("agent stopped"); try { current?.close(); } catch { /* */ } releaseLock(); process.exit(0); };
+  const shutdown = () => {
+    stopping = true;
+    closeBrowserSession("agent stopped");
+    try { current?.close(); } catch { /* */ }
+    setStatus({ state: "stopped" });
+    releaseLock();
+    process.exit(0);
+  };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
   while (!stopping) {
-    await connect();
+    cfg = readConfig();
+    if (!cfg.token || !cfg.server) {
+      if (!SEA) break; // the command-line agent stops; the exe waits to be linked on its page
+      setStatus({ state: "not_linked", last_error: unlinked ? "This computer was unlinked from the office." : cfg.link_error || null });
+      await new Promise((r) => { kickSleep = r; setTimeout(r, 3000); });
+      kickSleep = null;
+      continue;
+    }
+    unlinked = false;
+    lastState = stateOf(cfg);
+    setStatus({ state: statusNow.state === "online" ? "online" : "connecting", server: cfg.server });
+    const why = await connect(wsBaseOf(cfg.server));
     if (stopping) break;
+    if (unlinked) continue;
     const wait = delay + Math.floor(Math.random() * 1000);
     delay = Math.min(delay * 2, 60_000);
-    await new Promise((r) => setTimeout(r, wait));
+    setStatus({ state: "offline", last_error: plainWhy(why), next_try: new Date(Date.now() + wait).toISOString() });
+    log(`offline: ${plainWhy(why)}; trying again in ${Math.round(wait / 1000)} s`);
+    await new Promise((r) => { kickSleep = r; setTimeout(r, wait); });
+    kickSleep = null;
   }
+  setStatus({ state: unlinked ? "not_linked" : "stopped" });
   releaseLock();
   process.exit(0); // 0: launchd's KeepAlive does not restart an unlinked agent
+}
+
+// ---------------------------------------------------------------- the status page (P52)
+
+const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agentic Office on this computer</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14171f;--muted:#5d6472;--line:#e3e6eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--accent:#2f6db5}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--fg:#e8eaee;--muted:#9aa1ad;--line:#2a2f38}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:24px 16px 48px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}
+.state{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:600}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}.ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}
+button,input{font:inherit}button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);margin-top:4px}
+label{display:block;margin-top:10px;font-size:13px;font-weight:600}ol{margin:0;padding-left:20px}li{margin:6px 0}
+.err{color:var(--bad);font-size:13px;margin-top:8px}code{font-size:13px}
+</style></head><body><main>
+<div><h1>Agentic Office on this computer</h1><p class="muted">Lets your own AI use the folders you chose on this computer. Only you see this page.</p></div>
+<div class="card" id="status"><div class="state"><span class="dot warn"></span>Checking…</div></div>
+<div class="card" id="help" hidden></div>
+<div class="card" id="link" hidden><h2>Link this computer</h2>
+<p class="muted">On the web, open <b>My computers</b>, press <b>Link a computer</b>, and copy the code.</p>
+<label>Office address<input id="server" placeholder="https://your-office.example" autocomplete="off"></label>
+<label>Code<input id="code" placeholder="ABCD1234" autocomplete="off"></label>
+<div class="row"><button class="primary" id="doLink">Link</button></div><div class="err" id="linkErr"></div></div>
+<p class="muted" id="foot"></p>
+</main><script>
+const key=new URLSearchParams(location.search).get("k")||"";
+const api=(p,b)=>fetch(p,{method:b?"POST":"GET",headers:{"X-Key":key,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||("Error "+r.status));return j});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ago=t=>{if(!t)return"";const s=Math.round((Date.now()-new Date(t))/1000);return s<60?s+" s ago":s<3600?Math.round(s/60)+" min ago":Math.round(s/3600)+" h ago"};
+async function act(p,b){try{await api(p,b||{});}catch(e){alert(e.message)}load()}
+async function load(){let s;try{s=await api("/state")}catch(e){document.getElementById("status").innerHTML='<div class="state"><span class="dot bad"></span>Cannot reach the agent</div><p class="muted">Close this page and open Agentic Office from the Start menu again.</p>';return}
+const st=document.getElementById("status"),help=document.getElementById("help"),link=document.getElementById("link");
+link.hidden=s.linked;help.hidden=true;
+if(!s.linked){st.innerHTML='<div class="state"><span class="dot warn"></span>Not linked yet</div>'+(s.last_error?'<p class="err">'+esc(s.last_error)+'</p>':'');if(s.server&&!document.getElementById("server").value)document.getElementById("server").value=s.server;}
+else if(s.state==="online"){st.innerHTML='<div class="state"><span class="dot ok"></span>Online</div><p class="muted">Linked as <b>'+esc(s.name)+'</b> to '+esc(s.server)+' · since '+ago(s.since)+'</p><p class="muted">'+(s.paused?"<b>Paused:</b> the AI cannot use this computer.":"The AI can use: "+esc((s.folders||[]).join(", ")||"no folders"))+'</p><div class="row">'+(s.paused?'<button class="primary" onclick="act(\\'/resume\\')">Let the AI use it again</button>':'<button onclick="act(\\'/pause\\')">Pause the AI</button>')+'</div>';}
+else{st.innerHTML='<div class="state"><span class="dot bad"></span>'+(s.state==="connecting"?"Connecting…":"Offline")+'</div><p class="muted">'+esc(s.last_error||"")+(s.next_try?' · next try '+new Date(s.next_try).toLocaleTimeString():"")+'</p><div class="row"><button class="primary" onclick="act(\\'/reconnect\\')">Reconnect now</button></div>';
+help.hidden=false;help.innerHTML='<h2>If it stays offline</h2><ol><li>Check this computer is on the internet: open any website.</li><li>Press <b>Reconnect now</b>. It also retries by itself every minute.</li><li>If you use a VPN or office firewall, make sure <code>'+esc(s.server)+'</code> is allowed.</li><li>Restart the computer. It starts by itself when you sign in.</li><li>Still offline? On the web, open <b>My computers</b>: if this computer is not listed, link it again with a new code.</li></ol>';}
+document.getElementById("foot").textContent="Agent "+s.version+(s.at?"":"");}
+document.getElementById("doLink").onclick=async()=>{const e=document.getElementById("linkErr");e.textContent="";try{await api("/link",{server:document.getElementById("server").value.trim(),code:document.getElementById("code").value.trim()});load()}catch(x){e.textContent=x.message}};
+load();setInterval(load,3000);
+</script></body></html>`;
+
+/** The status page: 127.0.0.1 only, and only with this run's key (no other website or
+ * program can read it or press its buttons). Returns { port, key }, or null if no port. */
+async function startControl(api) {
+  const key = crypto.randomBytes(18).toString("base64url");
+  const send = (res, status, body, type = "application/json") => {
+    res.writeHead(status, {
+      "Content-Type": `${type}; charset=utf-8`, "Cache-Control": "no-store", "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'",
+    });
+    res.end(type === "application/json" ? JSON.stringify(body) : body);
+  };
+  const server = http.createServer((req, res) => {
+    const host = String(req.headers.host || "");
+    if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) return send(res, 403, { error: "Not here." });
+    const url = new URL(req.url || "/", `http://${host}`);
+    const given = url.searchParams.get("k") || String(req.headers["x-key"] || "");
+    const sameKey = given.length === key.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(key));
+    if (!sameKey) return send(res, 403, "Open this page from the Agentic Office shortcut in the Start menu.", "text/plain");
+    if (req.method === "GET" && url.pathname === "/") return send(res, 200, PAGE, "text/html");
+    if (req.method === "GET" && url.pathname === "/state") return send(res, 200, api.state());
+    if (req.method !== "POST") return send(res, 404, { error: "Not here." });
+    const origin = req.headers.origin;
+    if (origin && origin !== `http://${host}`) return send(res, 403, { error: "Not here." });
+    let raw = "";
+    req.on("data", (c) => { raw += c; if (raw.length > 4096) req.destroy(); });
+    req.on("end", async () => {
+      let body = {};
+      try { body = raw ? JSON.parse(raw) : {}; } catch { return send(res, 400, { error: "Bad request." }); }
+      try {
+        if (url.pathname === "/reconnect") { api.reconnect(); return send(res, 200, { ok: true }); }
+        if (url.pathname === "/pause") { api.pause(true); return send(res, 200, { ok: true }); }
+        if (url.pathname === "/resume") { api.pause(false); return send(res, 200, { ok: true }); }
+        if (url.pathname === "/link") {
+          const r = await api.link(String(body.server || ""), String(body.code || ""));
+          if (!r.ok) return send(res, 400, { error: r.error });
+          api.reconnect();
+          return send(res, 200, { ok: true, name: r.name });
+        }
+      } catch (e) {
+        return send(res, 500, { error: String(e && e.message || e) });
+      }
+      return send(res, 404, { error: "Not here." });
+    });
+  });
+  for (let port = CONTROL_PORT; port < CONTROL_PORT + 6; port++) {
+    const ok = await new Promise((resolve) => {
+      server.once("error", () => resolve(false));
+      server.listen(port, "127.0.0.1", () => resolve(true));
+    });
+    if (ok) return { port, key };
+  }
+  log("status page: no free port");
+  return null;
+}
+
+/** Open a web address in the person's browser. */
+function openUrl(url) {
+  if (IS_WIN) spawn("rundll32.exe", ["url.dll,FileProtocolHandler", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  else if (IS_MAC) spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+  else spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
 }
 
 function pidAlive(pid) {
@@ -942,31 +1175,47 @@ function arg(args, name) {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-async function link(args) {
-  const code = String(args[0] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const server = String(arg(args, "--server") || "").replace(/\/+$/, "");
-  if (!code || !/^https?:\/\//.test(server)) {
-    console.error("Use: agentic-pc link <CODE> --server https://your-office");
-    process.exit(1);
+/** Link with a one-time code. Returns { ok, name } or { ok: false, error } (never exits). */
+async function linkWith(serverIn, codeIn, opts = {}) {
+  const code = String(codeIn || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let server = String(serverIn || "").trim().replace(/\/+$/, "");
+  if (server && !/^https?:\/\//.test(server)) server = `https://${server}`;
+  if (!code || !/^https?:\/\/[^\s/]+/.test(server)) return { ok: false, error: "Give the office address and the code from the My computers page." };
+  let r;
+  try {
+    r = await fetch(`${server}/api/devices/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, name: String(opts.name || ""), os: OS_NAME, arch: process.arch, version: VERSION }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    return { ok: false, error: `Could not reach ${server}. Check the address and that this computer is on the internet.` };
   }
-  const r = await fetch(`${server}/api/devices/claim`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, name: String(arg(args, "--name") || ""), os: OS_NAME, arch: process.arch, version: VERSION }),
-  });
   let body = {};
   try { body = await r.json(); } catch { /* not json */ }
   if (!r.ok || !body.token) {
-    console.error(body?.error?.message || body?.detail || `Could not link this computer (${r.status}).`);
-    process.exit(1);
+    return { ok: false, error: body?.message || body?.error?.message || body?.detail || `Could not link this computer (${r.status}). Make a new code on the My computers page.` };
   }
   const old = readConfig();
   // P42: seeing and using this computer from the web, if the person chose it when linking
   // (the install line they ran here says so); otherwise what it was, else off.
-  const asked = String(arg(args, "--remote") || "");
+  const asked = String(opts.remote || "");
   const remote = REMOTE_LEVELS.includes(asked) ? asked : remoteOf(old);
-  writeConfig({ server, token: body.token, device_id: body.device_id, name: body.name, folders: old.folders?.length ? old.folders : defaultFolders(), paused: false, remote });
-  console.log(`Linked as "${body.name}".`);
+  const { link_error: _gone, ...kept } = old;
+  writeConfig({ ...kept, server, token: body.token, device_id: body.device_id, name: body.name, folders: old.folders?.length ? old.folders : defaultFolders(), paused: false, remote, linked_code: code });
+  log(`linked as "${body.name}" to ${server}`);
+  return { ok: true, name: body.name, remote };
+}
+
+async function link(args) {
+  const r = await linkWith(arg(args, "--server"), args[0], { name: arg(args, "--name"), remote: arg(args, "--remote") });
+  if (!r.ok) {
+    console.error(r.error === "Give the office address and the code from the My computers page." ? "Use: agentic-pc link <CODE> --server https://your-office" : r.error);
+    process.exit(1);
+  }
+  const remote = r.remote;
+  console.log(`Linked as "${r.name}".`);
   if (remote !== "off") {
     console.log(remote === "control"
       ? "Remote control is on: you can see this screen and use it from the web. Turn it off any time: agentic-pc remote off"
@@ -980,7 +1229,12 @@ function status() {
   console.log(`Agentic Office PC agent ${VERSION}`);
   if (!c.token) { console.log("Not linked. Copy the install line from the My computers page."); return; }
   console.log(`Linked as:  ${c.name || "?"}  (${c.server})`);
-  console.log(`Running:    ${running ? "yes" : "no"}`);
+  console.log(`Running:    ${running ? "yes" : "no (start it: agentic-pc start)"}`);
+  const s = readStatus();
+  if (running && s.state) {
+    const since = s.since ? ` since ${s.since.replace("T", " ").slice(0, 19)}` : "";
+    console.log(`Connection: ${s.state}${since}${s.state !== "online" && s.last_error ? ` (${s.last_error})` : ""}`);
+  }
   console.log(`Paused:     ${c.paused ? "yes (the AI cannot use this computer)" : "no"}`);
   console.log("Folders the AI may see:");
   for (const f of c.folders || []) console.log(`  ${f}`);
@@ -1067,6 +1321,8 @@ async function uninstall() {
   if (pidAlive(pid)) { try { process.kill(pid); } catch { /* gone */ } }
   if (IS_WIN) {
     spawnSync("reg", ["delete", WIN_RUN_KEY, "/v", WIN_RUN_NAME, "/f"], { stdio: "ignore" });
+    spawnSync("reg", ["delete", WIN_UNINSTALL_KEY, "/f"], { stdio: "ignore", windowsHide: true }); // P52: the .exe's Apps entry
+    try { fs.unlinkSync(path.join(process.env.APPDATA || "", "Microsoft", "Windows", "Start Menu", "Programs", "Agentic Office.lnk")); } catch { /* none */ }
     const bin = path.join(PROGRAM_DIR, "bin");
     const ps = `$p=[Environment]::GetEnvironmentVariable('Path','User'); if ($p) { [Environment]::SetEnvironmentVariable('Path', (($p -split ';') | Where-Object { $_ -and $_ -ne '${bin.replace(/'/g, "''")}' }) -join ';', 'User') }`;
     spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { stdio: "ignore", windowsHide: true });
@@ -1091,14 +1347,184 @@ async function uninstall() {
     spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
     fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
   }
+  if (SEA && IS_WIN) {
+    // Removed from Settings > Apps: no console to print to (and no log folder any more).
+    const ps = "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('Agentic Office was removed from this computer. Your AI can no longer reach it.', 'Agentic Office') | Out-Null";
+    spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return;
+  }
   console.log("Uninstalled: unlinked, stopped, removed from startup, and its files are deleted.");
+}
+
+// ---------------------------------------------------------------- start, open, doctor (P52)
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const installedExe = () => path.join(PROGRAM_DIR, EXE_NAME);
+
+/** Start the background agent if it is not running (how depends on how it was installed). */
+function startAgent() {
+  if (pidAlive(lockPid())) return false;
+  const exe = installedExe();
+  if (IS_WIN && fs.existsSync(exe)) {
+    spawn(exe, ["run"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  } else if (IS_MAC && fs.existsSync(MAC_PLIST)) {
+    spawnSync("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/space.oriondesk.agentic.pc`], { stdio: "ignore" });
+  } else if (!IS_WIN && !IS_MAC && spawnSync("systemctl", ["--user", "start", "agentic-pc.service"], { stdio: "ignore" }).status === 0) {
+    // systemd user service started
+  } else {
+    const args = SEA ? ["run"] : [__filename, "run"];
+    spawn(process.execPath, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  }
+  return true;
+}
+
+/** Wait for the running agent to report its status page, up to `ms`. */
+async function waitForPage(ms) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const s = readStatus();
+    if (s.control_port && s.control_key && pidAlive(s.pid) && s.pid === lockPid()) return s;
+    await sleep(300);
+  }
+  return null;
+}
+
+async function openPage() {
+  if (startAgent()) await sleep(500);
+  const s = await waitForPage(10_000);
+  if (!s) { console.error("The agent did not start. Run: agentic-pc doctor"); process.exitCode = 1; return; }
+  const url = `http://127.0.0.1:${s.control_port}/?k=${s.control_key}`;
+  openUrl(url);
+  console.log(`Opened the status page: ${url}`);
+}
+
+async function start() {
+  if (!startAgent()) { console.log("The agent is already running."); return; }
+  const s = await waitForPage(10_000);
+  console.log(s ? "Started. It connects to your office in a few seconds." : "It did not start. Run: agentic-pc doctor");
+}
+
+/** Check everything a person can check, in order, and fix what can be fixed here. */
+async function doctor() {
+  const c = readConfig();
+  const say = (ok, text) => console.log(`${ok ? " ok " : " !! "} ${text}`);
+  console.log(`Agentic Office PC agent ${VERSION}\n`);
+  if (!c.token || !c.server) {
+    say(false, "This computer is not linked. On the web: My computers > Link a computer, then run the line it shows (or the .exe).");
+    return;
+  }
+  say(true, `Linked as "${c.name || "?"}" to ${c.server}`);
+  let reach = false;
+  try {
+    const r = await fetch(`${c.server}/readyz`, { signal: AbortSignal.timeout(10_000) });
+    reach = r.status < 500;
+  } catch { /* unreachable */ }
+  say(reach, reach ? "The office server answers." : `Cannot reach ${c.server}: check the internet, a VPN or a firewall.`);
+  if (!pidAlive(lockPid())) {
+    say(false, "The agent was not running: starting it now ...");
+    startAgent();
+    await waitForPage(10_000);
+  }
+  const running = pidAlive(lockPid());
+  say(running, running ? "The agent is running." : "The agent does not start. Reinstall it from the My computers page.");
+  if (running) {
+    await sleep(3000);
+    const s = readStatus();
+    say(s.state === "online", s.state === "online" ? "Online: your AI can reach this computer." : `Not online yet: ${s.last_error || s.state || "connecting"}. It retries by itself; or: agentic-pc open, then Reconnect now.`);
+  }
+  if (c.paused) say(false, "Paused: the AI cannot use this computer. Resume: agentic-pc resume");
+  if (IS_WIN) {
+    const q = spawnSync("reg", ["query", WIN_RUN_KEY, "/v", WIN_RUN_NAME], { encoding: "utf8", windowsHide: true });
+    say(q.status === 0, q.status === 0 ? "It starts by itself when you sign in to Windows." : "It does not start with Windows: reinstall it from the My computers page.");
+  }
+}
+
+// ---------------------------------------------------------------- the Windows .exe (P52)
+
+const TRAILER_START = "\n#AGENTIC-OFFICE-LINK#";
+const TRAILER_END = "#END#";
+
+/** The link the office server added to the end of this .exe when it was downloaded:
+ * { server, code, remote }, or null. */
+function readTrailer(file) {
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      const n = Math.min(4096, size);
+      const buf = Buffer.alloc(n);
+      fs.readSync(fd, buf, 0, n, size - n);
+      const text = buf.toString("latin1");
+      const at = text.lastIndexOf(TRAILER_START);
+      const end = text.lastIndexOf(TRAILER_END);
+      if (at < 0 || end < at) return null;
+      const data = JSON.parse(text.slice(at + TRAILER_START.length, end));
+      return typeof data.server === "string" && typeof data.code === "string" ? data : null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+function regAdd(key, name, value) {
+  spawnSync("reg", ["add", key, "/v", name, "/t", "REG_SZ", "/d", value, "/f"], { stdio: "ignore", windowsHide: true });
+}
+
+/** Double-clicked: install into the program folder, start with Windows, show in Settings >
+ * Apps (to remove it there), link with the code it came with, start, open the status page. */
+async function exeSetup() {
+  const target = installedExe();
+  ensureDir(PROGRAM_DIR);
+  const trailer = readTrailer(process.execPath);
+  if (norm(process.execPath) !== norm(target)) {
+    const pid = lockPid();
+    if (pidAlive(pid)) { try { process.kill(pid); } catch { /* gone */ } await sleep(1200); }
+    for (let i = 0; i < 10; i++) {
+      try { fs.copyFileSync(process.execPath, target); break; } catch (e) { if (i === 9) throw e; await sleep(500); }
+    }
+  }
+  if (!process.env.AGENTIC_PC_NO_AUTOSTART) {
+    regAdd(WIN_RUN_KEY, WIN_RUN_NAME, `"${target}" run`);
+    regAdd(WIN_UNINSTALL_KEY, "DisplayName", "Agentic Office (your AI on this computer)");
+    regAdd(WIN_UNINSTALL_KEY, "DisplayVersion", VERSION);
+    regAdd(WIN_UNINSTALL_KEY, "Publisher", "Agentic Office");
+    regAdd(WIN_UNINSTALL_KEY, "DisplayIcon", target);
+    regAdd(WIN_UNINSTALL_KEY, "UninstallString", `"${target}" uninstall`);
+    spawnSync("reg", ["add", WIN_UNINSTALL_KEY, "/v", "NoModify", "/t", "REG_DWORD", "/d", "1", "/f"], { stdio: "ignore", windowsHide: true });
+    // A Start menu shortcut that opens the status page.
+    const lnk = path.join(process.env.APPDATA || "", "Microsoft", "Windows", "Start Menu", "Programs", "Agentic Office.lnk");
+    const ps = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${lnk.replace(/'/g, "''")}'); $s.TargetPath='${target.replace(/'/g, "''")}'; $s.Arguments='open'; $s.Description='Agentic Office: your AI on this computer'; $s.Save()`;
+    spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { stdio: "ignore", windowsHide: true });
+  }
+  const c = readConfig();
+  if (trailer && !(c.token && c.linked_code === trailer.code.toUpperCase().replace(/[^A-Z0-9]/g, ""))) {
+    const r = await linkWith(trailer.server, trailer.code, { remote: trailer.remote });
+    if (!r.ok) {
+      log("linking from the download failed:", r.error);
+      // Shown on the status page, where a new code can be pasted.
+      writeConfig({ ...readConfig(), ...(c.token ? {} : { server: trailer.server.replace(/\/+$/, "") }), link_error: r.error });
+    }
+  }
+  // Restart on the installed copy (a newer version replaces a running older one).
+  const pid = lockPid();
+  const s = readStatus();
+  if (pidAlive(pid) && s.version !== VERSION) { try { process.kill(pid); } catch { /* gone */ } await sleep(1200); }
+  if (!pidAlive(lockPid())) spawn(target, ["run"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  const page = await waitForPage(12_000);
+  if (page && !process.env.AGENTIC_PC_NO_BROWSER) openUrl(`http://127.0.0.1:${page.control_port}/?k=${page.control_key}`);
 }
 
 async function main(argv) {
   const [cmd, ...rest] = argv;
+  if (SEA && IS_WIN && (cmd === undefined || cmd === "install")) return exeSetup();
   switch (cmd) {
     case "link": return link(rest);
     case "run": return run();
+    case "start": return start();
+    case "open": return openPage();
+    case "doctor": return doctor();
     case "status": case undefined: return status();
     case "folders": return folders(rest);
     case "remote": return remote(rest);
@@ -1109,7 +1535,7 @@ async function main(argv) {
     case "uninstall": return uninstall();
     case "version": case "--version": console.log(VERSION); return undefined;
     default:
-      console.log("agentic-pc status | folders [add|remove <path>] | remote [off|view|control] | pause | resume | unlink | logs | uninstall | run | version");
+      console.log("agentic-pc status | doctor | open | start | folders [add|remove <path>] | remote [off|view|control] | pause | resume | unlink | logs | uninstall | run | version");
       return undefined;
   }
 }
@@ -1119,6 +1545,14 @@ module.exports = {
   needRemote, parseCombo, sendKeysText, sendKeysCombo, xdoCombo, macCombo, toPixel, health, runHelper,
 };
 
-if (require.main === module) {
-  main(process.argv.slice(2)).catch((e) => { console.error(e && e.message ? e.message : e); process.exit(1); });
+if (require.main === module || SEA) {
+  let argv = process.argv.slice(2);
+  if (SEA) {
+    // The .exe has no console window: what it would print goes to its log. In a single
+    // executable, argv[1] may repeat the program's own path.
+    argv = process.argv.slice(process.argv[1] && norm(process.argv[1]) === norm(process.execPath) ? 2 : 1);
+    console.log = (...a) => log(...a);
+    console.error = (...a) => log(...a);
+  }
+  main(argv).catch((e) => { console.error(e && e.message ? e.message : e); process.exit(1); });
 }

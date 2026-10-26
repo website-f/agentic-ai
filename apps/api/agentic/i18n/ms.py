@@ -1661,4 +1661,11 @@ MS: dict[str, str] = {
         "mencapai had hari ini ({used} daripada {limit} token). Ia ditetapkan semula pada tengah "
         "malam, atau pengurus boleh beri lebih."
     ),
+    # ------------------------------------------------------------ P52 Microsoft 365 and Teams
+    "Connect your Microsoft 365 account first.": "Sambungkan akaun Microsoft 365 anda dahulu.",
+    "Reconnect Microsoft 365 once to allow Teams.": "Sambung semula Microsoft 365 sekali untuk membenarkan Teams.",
+    "Chat": "Sembang",
+    "List Teams chats": "Senaraikan sembang Teams",
+    "Read a Teams chat": "Baca sembang Teams",
+    "Send a Teams message": "Hantar mesej Teams",
 }

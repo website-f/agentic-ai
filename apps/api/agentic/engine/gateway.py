@@ -8,6 +8,7 @@ provider no longer has is marked stale and skipped. Every attempt is logged to l
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
@@ -127,7 +128,7 @@ async def _guard_for(
     )
 
 
-async def chat(
+async def _chat(
     db: AsyncSession,
     workspace_id: str,
     group: str,
@@ -226,9 +227,7 @@ async def chat(
             attempts.append({"member": label, "skipped": "model no longer offered"})
             continue
 
-        known = await store.quirks(p.id, model_id)
-        if p.tier == "local" and model_id.lower().startswith("qwen3"):
-            known = known | {"no_think"}  # thinking off: measured 120 -> 3 tokens for "OK"
+        known = await store.quirks(p.id, model_id) | client.local_quirks(p.tier, model_id)
         thinker = "no_think" not in known and (
             client.thinks(model_id) or await store.is_reasoning(p.id, model_id)
         )
@@ -359,7 +358,7 @@ async def chat(
     if waits and _waited + min(waits) <= MAX_WAIT:
         pause = min(waits) + 0.5
         await asyncio.sleep(pause)
-        return await chat(
+        return await _chat(
             db,
             workspace_id,
             group,
@@ -403,6 +402,95 @@ LOCAL_MAX_CHARS = 8000
 def cheap_groups(*texts: str) -> tuple[str, ...]:
     """Side jobs: the free local model first when the prompt fits it, else straight to fast."""
     return ("local", "fast") if sum(map(len, texts)) <= LOCAL_MAX_CHARS else ("fast",)
+
+
+# ---------------------------------------------------------------- the answer cache (P52)
+
+# Background jobs that often see the very same input again (the same email, file, fact or
+# skill test): an exact repeat is answered from the cache instead of a model. Never agent
+# work, chat or anything with tools; per workspace; a week at most.
+CACHED_TASKS = (
+    "brain.extract",
+    "brain.reconcile",
+    "skill.eval",
+    "file.understand",
+    "colleague.memory",
+    "vision.describe",
+    "document.review",
+)
+CACHE_TTL = 7 * 86400
+CACHE_MAX_CHARS = 60_000
+
+
+def _cache_key(
+    workspace_id: str, group: str, task: str, messages: list[dict[str, Any]], kw: dict[str, Any]
+) -> str | None:
+    temperature = kw.get("temperature", 0.2)
+    if (
+        not task.startswith(CACHED_TASKS)
+        or kw.get("tools")
+        or (temperature is not None and temperature > 0.3)
+        or any(k in kw for k in ("_waited", "_skip", "_guard"))
+    ):
+        return None
+    raw = json.dumps(
+        [group, task, kw.get("json_mode", False), kw.get("max_tokens", 800), messages],
+        sort_keys=True,
+        default=str,
+    )
+    if len(raw) > CACHE_MAX_CHARS * 4:
+        return None
+    return f"llmcache:{workspace_id}:{hashlib.sha256(raw.encode()).hexdigest()}"
+
+
+async def chat(
+    db: AsyncSession,
+    workspace_id: str,
+    group: str,
+    messages: list[dict[str, Any]],
+    *,
+    task: str,
+    **kw: Any,
+) -> GatewayReply:
+    """The gateway (see _chat). P52: an exact repeat of a cached background job comes back
+    from the cache, free and instant."""
+    from ..core.valkey import valkey
+
+    key = _cache_key(workspace_id, group, task, messages, kw)
+    if key is not None:
+        try:
+            hit = await valkey().get(key)
+        except Exception:  # noqa: BLE001 - no cache: ask a model
+            hit = None
+        if hit:
+            data = json.loads(hit)
+            accept = kw.get("accept")
+            if accept is None or accept(data["content"]):
+                with contextlib.suppress(Exception):
+                    await valkey().incr(f"llmcache:hits:{workspace_id}")
+                return GatewayReply(
+                    content=data["content"],
+                    provider_id="",
+                    provider_name="cache",
+                    model=data.get("model", ""),
+                    usage=Usage(),
+                    latency_ms=0,
+                    cost_usd=0.0,
+                    attempts=[{"member": "cache", "ok": True}],
+                )
+    reply = await _chat(db, workspace_id, group, messages, task=task, **kw)
+    if (
+        key is not None
+        and reply.content
+        and not reply.tool_calls
+        and not reply.truncated
+        and len(reply.content) <= CACHE_MAX_CHARS
+    ):
+        with contextlib.suppress(Exception):  # no cache: the answer is still good
+            await valkey().set(
+                key, json.dumps({"content": reply.content, "model": reply.model}), ex=CACHE_TTL
+            )
+    return reply
 
 
 async def chat_first(

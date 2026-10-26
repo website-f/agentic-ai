@@ -236,6 +236,7 @@ async def microsoft_account(
             "status": "disconnected",
             "mail_ok": False,
             "calendar_ok": False,
+            "teams_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -247,10 +248,97 @@ async def microsoft_account(
         "status": acct.status,
         "mail_ok": auth.has_scope(acct.scopes, "Mail.ReadWrite"),
         "calendar_ok": auth.has_scope(acct.scopes, "Calendars.ReadWrite"),
+        # P52: Teams needs a reconnect for connections made before Teams was added.
+        "teams_ok": auth.has_scope(acct.scopes, "Chat.Read"),
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,
     }
+
+
+# ---------------------------------------------------------------- Teams (P52): your own chats
+
+
+async def _my_graph(db: AsyncSession, principal: Principal) -> graph.Graph:
+    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
+    if acct is None or acct.status not in access.USABLE_ACCOUNT:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "microsoft_not_connected",
+            "Connect your Microsoft 365 account first.",
+        )
+    return await graph.for_account(db, acct)
+
+
+def _teams_fail(e: MicrosoftError) -> Exception:
+    if getattr(e, "status", 0) == 403:
+        return api_error(
+            status.HTTP_409_CONFLICT,
+            "teams_not_allowed",
+            "Reconnect Microsoft 365 once to allow Teams.",
+        )
+    return api_error(status.HTTP_502_BAD_GATEWAY, "microsoft_error", _say(e))
+
+
+@router.get(f"{BASE}/teams/chats")
+async def teams_chats(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """Your own Teams chats (never anyone else's), most recent first."""
+    from ...agents.teams_tools import plain
+
+    g = await _my_graph(db, principal)
+    try:
+        me = (await g.me()).get("displayName") or ""
+        chats = await g.list_chats(30)
+    except MicrosoftError as e:
+        raise _teams_fail(e) from e
+    out = []
+    for c in chats:
+        last = c.get("lastMessagePreview") or {}
+        names = [
+            m.get("displayName")
+            for m in c.get("members") or []
+            if m.get("displayName") and m.get("displayName") != me
+        ]
+        out.append(
+            {
+                "id": c.get("id"),
+                "title": c.get("topic") or ", ".join(names[:5]) or tr("Chat"),
+                "kind": c.get("chatType") or "",
+                "people": len(c.get("members") or []),
+                "last_at": last.get("createdDateTime"),
+                "last_from": ((last.get("from") or {}).get("user") or {}).get("displayName"),
+                "last_text": plain((last.get("body") or {}).get("content"))[:200],
+                "url": c.get("webUrl"),
+            }
+        )
+    return out
+
+
+@router.get(f"{BASE}/teams/chats/{{chat_id}}/messages")
+async def teams_chat_messages(
+    chat_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    from ...agents.teams_tools import plain
+
+    g = await _my_graph(db, principal)
+    try:
+        msgs = await g.chat_messages(chat_id, 40)
+    except MicrosoftError as e:
+        raise _teams_fail(e) from e
+    return [
+        {
+            "id": m.get("id"),
+            "at": m.get("createdDateTime"),
+            "from": ((m.get("from") or {}).get("user") or {}).get("displayName") or "",
+            "text": plain((m.get("body") or {}).get("content"))[:4000],
+        }
+        for m in reversed(msgs)
+        if m.get("messageType") in (None, "message")
+    ]
 
 
 @router.get(f"{BASE}/account/prefs")

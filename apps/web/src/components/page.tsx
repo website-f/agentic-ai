@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { guidePageFor } from "@/guide/lookup";
+import { HubTabs } from "./hub-tabs";
 import { PageTips, ShowTipsButton } from "@/components/page-tips";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,8 @@ export function PageHeader({
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap gap-2 max-sm:[&>*]:flex-1">{actions}</div> : null}
     </div>
+    {/* P52: the other pages of this page's hub, as tabs */}
+    <HubTabs />
     {/* P48: what this page is for and what to do next, for this person */}
     {entry ? <PageTips path={entry.to} /> : null}
     </>

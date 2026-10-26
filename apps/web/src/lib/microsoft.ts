@@ -51,6 +51,8 @@ export interface MicrosoftAccount {
   status: "connected" | "reconnect_needed" | "disconnected" | "error";
   mail_ok: boolean;
   calendar_ok: boolean;
+  /** P52: the connection allows Teams (made after Teams was added; else reconnect once). */
+  teams_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */
@@ -408,3 +410,37 @@ export function actionLink(a: MailAction, canAssist: boolean):
 
 /** Drafts and proposed events from before P34 have no provider: they are Google's. */
 export const providerOf = (d: { provider?: "google" | "microsoft" | null }) => (d.provider === "microsoft" ? "microsoft" : "google");
+
+// ---------------------------------------------------------------- Teams (P52): your own chats
+
+export interface TeamsChat {
+  id: string;
+  title: string;
+  kind: string;
+  people: number;
+  last_at: string | null;
+  last_from: string | null;
+  last_text: string;
+  url: string | null;
+}
+
+export interface TeamsMessage { id: string; at: string | null; from: string; text: string }
+
+export const teamsKeys = {
+  chats: ["microsoft", "teams", "chats"] as const,
+  chat: (id: string) => ["microsoft", "teams", "chat", id] as const,
+};
+
+export const teamsChatsQuery = queryOptions({
+  queryKey: teamsKeys.chats,
+  queryFn: () => api<TeamsChat[]>("/api/integrations/microsoft/teams/chats"),
+  retry: false,
+  refetchInterval: 60_000,
+});
+
+export const teamsChatQuery = (id: string) =>
+  queryOptions({
+    queryKey: teamsKeys.chat(id),
+    queryFn: () => api<TeamsMessage[]>(`/api/integrations/microsoft/teams/chats/${encodeURIComponent(id)}/messages`),
+    retry: false,
+  });

@@ -1467,6 +1467,11 @@ from .mail_tools import MAIL_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in MAIL_TOOLS})
 
+# P52: Microsoft Teams, a person's own chats for their own AI.
+from .teams_tools import TEAMS_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in TEAMS_TOOLS})
+
 # P35: customers, suppliers and deals (every agent, its own company's), and money (finance
 # agents only: crm/access.MONEY_TOOLS). Approving, paying and voiding are never tools.
 from .crm_tools import CRM_TOOLS  # noqa: E402
