@@ -32,4 +32,12 @@ async def liveness_reconcile() -> dict[str, int]:
             out["day_reports"] = await timetable.day_reports(db)
     except Exception:  # noqa: BLE001
         activity.logger.warning("day reports failed", exc_info=True)
+    try:  # P50: CRM integrations whose time has come
+        from ..core.db import SessionLocal
+        from ..crm.hub import connectors
+
+        async with SessionLocal() as db:
+            out["crm_synced"] = await connectors.sync_due(db)
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("crm sync failed", exc_info=True)
     return out

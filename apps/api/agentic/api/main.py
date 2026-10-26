@@ -76,6 +76,7 @@ RAW_UPLOAD_PREFIXES: tuple[str, ...] = ("/api/devices/uploads/",)
 # P31: a PC authenticates with its link code or bearer token, not a session, so a stray
 # cookie never asks it for a CSRF token.
 DEVICE_PATHS = ("/api/devices/claim", "/api/devices/uploads/", "/api/devices/self/")
+CRM_HOOK_PREFIX = "/api/crm/hooks/"
 # P34: Microsoft Graph's webhook. Its validation handshake is a text/plain POST, and Graph
 # never has a session; the clientState of each notification authenticates it.
 PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
@@ -128,7 +129,10 @@ async def csrf_guard(request: Request, call_next):
             return _error(415, "json_required", tr("Send requests as application/json."))
         # Signed webhooks (WhatsApp) never use the session cookie, so CSRF does not apply.
         exempt = (
-            path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX) or path.startswith(DEVICE_PATHS)
+            path in CSRF_EXEMPT
+            or path.startswith(WEBHOOK_PREFIX)
+            or path.startswith(DEVICE_PATHS)
+            or path.startswith(CRM_HOOK_PREFIX)  # P50: another system, its token is the key
         )
         if not exempt and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
@@ -187,7 +191,17 @@ async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
     lang = request_lang(request)
     if isinstance(detail, dict) and "code" in detail:
         message = render(detail.get("message", ""), lang)
-        return _error(exc.status_code, str(detail["code"]), message)
+        fields = detail.get("fields")  # P50: which inputs were wrong, each in the person's language
+        if isinstance(fields, dict):
+            fields = {
+                str(k): render(v if isinstance(v, str) else str(v), lang) for k, v in fields.items()
+            }
+        return _error(
+            exc.status_code,
+            str(detail["code"]),
+            message,
+            fields if isinstance(fields, dict) else None,
+        )
     return _error(exc.status_code, "http_error", render(str(exc.detail), lang))
 
 
@@ -418,3 +432,14 @@ app.include_router(approval_limits_router.router)
 from .routers import needs as needs_router  # noqa: E402
 
 app.include_router(needs_router.router)
+
+# P49: "Ask how": a person asks how to do something; plain steps with links to their pages.
+from .routers import help as help_router  # noqa: E402
+
+app.include_router(help_router.router)
+
+
+# P50: the universal CRM (owner's; shared per object). Webhooks from other systems post here.
+from .routers import crm_hub as crm_hub_router  # noqa: E402
+
+app.include_router(crm_hub_router.router)

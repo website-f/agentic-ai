@@ -9,7 +9,8 @@ export type Track = "owner" | "management" | "staff" | "approver";
 export type Signal =
   | "provider" | "model_group" | "company" | "people" | "blueprint" | "workflow" | "autopilot" | "sop"
   | "agent" | "budget" | "task_created" | "task_done" | "reviewed" | "approved" | "workflow_run"
-  | "schedule" | "library" | "chat" | "twin" | "work_hours" | "assistant" | "gmail" | "whatsapp" | "push";
+  | "schedule" | "library" | "chat" | "twin" | "work_hours" | "assistant" | "gmail" | "whatsapp" | "push"
+  | "telegram" | "office_channel" | "device" | "mailbox" | "outlook";
 
 export interface TutorialProgress {
   role: string;

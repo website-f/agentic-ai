@@ -3,6 +3,7 @@ import {
   BuildingsIcon,
   CaretDownIcon,
   CaretUpDownIcon,
+  ChatCircleDotsIcon,
   CheckIcon,
   CommandIcon,
   DotsThreeIcon,
@@ -13,6 +14,7 @@ import {
   MoonIcon,
   PlusIcon,
   SignOutIcon,
+  SquaresFourIcon,
   SunIcon,
 } from "@phosphor-icons/react";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
@@ -21,8 +23,10 @@ import { Command } from "cmdk";
 import { Popover } from "radix-ui";
 import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "vaul";
+import { create } from "zustand";
 
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
+import { SetupCard } from "@/pages/start";
 import { useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { useBranch, usePalette, useTheme, type ThemePref } from "@/lib/stores";
@@ -40,6 +44,7 @@ import { openTaskComposer } from "./task-composer/store";
 import { TaskComposerHost } from "./task-composer/task-composer";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
+import { HelpAskSheet, useHelpAsk } from "./help-ask";
 import { NeedsBell } from "./needs-bell";
 import { Button } from "./ui/button";
 import {
@@ -55,15 +60,97 @@ import {
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+/** P49: "Show all pages": advanced pages (few people need them) are listed only when on. */
+const SHOW_ALL_KEY = "agentic.nav.all";
+const useShowAll = create<{ on: boolean; toggle: () => void }>((set, get) => ({
+  on: (() => {
+    try {
+      return localStorage.getItem(SHOW_ALL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  })(),
+  toggle: () => {
+    const on = !get().on;
+    try {
+      localStorage.setItem(SHOW_ALL_KEY, on ? "1" : "0");
+    } catch {
+      /* private mode: it lasts until the page reloads */
+    }
+    set({ on });
+  },
+}));
+
+const allowedItem = (i: NavItem, perms: string[]) => !i.perm || [i.perm].flat().some((p) => perms.includes(p));
+
 function useVisibleNav() {
   const { data: me } = useSuspenseQuery(meQuery);
+  const showAll = useShowAll((s) => s.on);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   return useMemo(
     () =>
       NAV.map((s) => ({
         ...s,
-        items: s.items.filter((i) => !i.hidden && (!i.perm || [i.perm].flat().some((p) => me.permissions.includes(p)))),
+        items: s.items.filter((i) => !i.hidden && allowedItem(i, me.permissions) && (showAll || !i.advanced || isActive(pathname, i.to))),
       })).filter((s) => s.items.length),
-    [me.permissions],
+    [me.permissions, showAll, pathname],
+  );
+}
+
+/** How many advanced pages this person could also open ("Show all pages (6 more)"). */
+function useHiddenCount() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  return ALL_NAV.filter((i) => i.advanced && !i.hidden && allowedItem(i, me.permissions)).length;
+}
+
+/** P49: find a page by name or what it is for; no match offers to ask the AI. */
+function NavSearch() {
+  const t = useT();
+  const navigate = useNavigate();
+  const ask = useHelpAsk((s) => s.ask);
+  const { data: me } = useSuspenseQuery(meQuery);
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const hits = needle.length < 2 ? [] : ALL_NAV.filter((i) => allowedItem(i, me.permissions))
+    .map((i) => ({ i, label: t(i.label), about: t(i.blurb) }))
+    .filter((x) => x.label.toLowerCase().includes(needle) || x.about.toLowerCase().includes(needle) || x.i.to.includes(needle))
+    .sort((a, b) => Number(b.label.toLowerCase().includes(needle)) - Number(a.label.toLowerCase().includes(needle)))
+    .slice(0, 7);
+  const open = (to: string) => { setQ(""); void navigate({ to }); };
+  return (
+    <div className="relative mx-3 mb-2 hidden xl:block">
+      <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted" />
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Find a page or ask…")} aria-label={t("Find a page or ask")}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setQ("");
+          if (e.key === "Enter") {
+            if (hits[0]) open(hits[0].i.to);
+            else if (q.trim().length > 2) { ask(q.trim()); setQ(""); }
+          }
+        }}
+        className="h-9 w-full rounded-sm border border-border bg-bg pr-2 pl-8 text-[13px] focus-visible:border-accent focus-visible:outline-none" />
+      {needle.length >= 2 ? (
+        <div className="absolute inset-x-0 top-10 z-40 grid gap-0.5 rounded-[var(--radius-md)] border border-border bg-surface p-1 shadow-[var(--shadow-pop)]">
+          {hits.map(({ i, label, about }) => {
+            const Ico = i.icon;
+            return (
+              <button key={i.to} type="button" onClick={() => open(i.to)}
+                className="flex min-w-0 items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-surface-2">
+                <Ico size={16} className="mt-0.5 shrink-0 text-accent" />
+                <span className="grid min-w-0">
+                  <span className="truncate text-[13px] font-medium">{label}</span>
+                  <span className="line-clamp-1 text-[11.5px] text-muted">{about}</span>
+                </span>
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => { ask(q.trim()); setQ(""); }}
+            className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] font-medium text-accent hover:bg-accent-soft/50">
+            <ChatCircleDotsIcon size={16} className="shrink-0" /> <span className="min-w-0 truncate">{t("Ask AI: {q}", { q: q.trim() })}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -120,11 +207,18 @@ function PhaseTag({ phase }: { phase: string }) {
 /** Pinned under the scrolling nav so help is never below the fold. */
 function HelpFooter({ pathname }: { pathname: string }) {
   const t = useT();
+  const ask = useHelpAsk((s) => s.ask);
   return (
     <nav aria-label={t("Help")} className="shrink-0 border-t border-border px-3 py-2.5">
       <p className="hidden px-2.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
         {t(HELP_SECTION)}
       </p>
+      {/* P49: ask the AI how to do something, in your own words */}
+      <button type="button" onClick={() => ask()} title={t("Ask how to do something")}
+        className="mb-1 flex h-9 w-full items-center justify-center gap-2 rounded-sm bg-accent-soft/60 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft xl:justify-start xl:px-2.5">
+        <ChatCircleDotsIcon size={19} weight="fill" />
+        <span className="hidden xl:inline">{t("Ask how")}</span>
+      </button>
       <ul className="grid gap-0.5 xl:grid-cols-3 xl:gap-1">
         {HELP_ITEMS.map((item) => {
           const active = isActive(pathname, item.to);
@@ -154,6 +248,8 @@ function HelpFooter({ pathname }: { pathname: string }) {
 function Sidebar() {
   const t = useT();
   const sections = useVisibleNav().filter((s) => s.title !== HELP_SECTION);
+  const showAll = useShowAll();
+  const more = useHiddenCount();
   const groups = useOpenGroups();
   const waiting = useWaiting();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -167,6 +263,8 @@ function Sidebar() {
           <Wordmark className="hidden xl:flex" />
         </Link>
       </div>
+      <NavSearch />
+      <SetupCard />
       <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4" aria-label={t("Main")}>
         {sections.map((section) => {
           const here = section.items.some((i) => isActive(pathname, i.to));
@@ -225,6 +323,13 @@ function Sidebar() {
             </div>
           );
         })}
+        {more ? (
+          <button type="button" onClick={showAll.toggle}
+            className="mt-3 hidden w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-surface-2 hover:text-fg xl:flex">
+            <SquaresFourIcon size={15} />
+            {showAll.on ? t("Show fewer pages") : t("Show all pages ({n} more)", { n: more })}
+          </button>
+        ) : null}
       </nav>
       <HelpFooter pathname={pathname} />
     </aside>
@@ -557,6 +662,7 @@ function MobileTabBar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const approvals = useApprovalCount();
   const sections = useVisibleNav();
+  const askHelp = useHelpAsk((s) => s.ask);
   const [more, setMore] = useState(false);
   const tabs = TAB_BAR.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
   const moreActive = !tabs.some((tab) => isActive(pathname, tab.to));
@@ -602,6 +708,12 @@ function MobileTabBar() {
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 [-webkit-overflow-scrolling:touch]"
               style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
             >
+            {/* P49: on a phone too: ask how, and the setup steps until they are done */}
+            <button type="button" onClick={() => { setMore(false); askHelp(); }}
+              className="mb-3 flex min-h-12 w-full items-center gap-2.5 rounded-[var(--radius-md)] bg-accent-soft/60 px-3.5 text-left text-[14px] font-medium text-accent">
+              <ChatCircleDotsIcon size={20} weight="fill" /> {t("Ask how to do something")}
+            </button>
+            <div onClick={() => setMore(false)} className="mb-3 empty:hidden"><SetupCard always /></div>
             <div className="mb-4 grid grid-cols-3 gap-2" role="list" aria-label={t("Help")}>
               {HELP_ITEMS.map((item) => {
                 const IconCmp = item.icon;
@@ -697,6 +809,7 @@ export function AppShell() {
       <MobileTabBar />
       <CommandPalette />
       <TaskComposerHost />
+      <HelpAskSheet />
     </div>
   );
 }

@@ -38,6 +38,8 @@ const page = {
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
   approvalLimits: lazyRouteComponent(() => import("@/pages/approval-limits"), "ApprovalLimitsPage"),
   timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
+  start: lazyRouteComponent(() => import("@/pages/start"), "StartPage"),
+  crm: lazyRouteComponent(() => import("@/pages/crm"), "CrmPage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -245,6 +247,21 @@ const timetableRoute = createRoute({
     agent: typeof s.agent === "string" ? s.agent : undefined,
   }),
   component: page.timetable,
+});
+// P49: the few steps that make the office work, ticked from real data.
+const startRoute = createRoute({ getParentRoute: () => appRoute, path: "/start", component: page.start });
+// P50: the CRM (the owner's; others see what the owner shared, the API decides).
+const CRM_TABS = ["dashboard", "connections", "sharing", "setup"] as const;
+const crmRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/crm",
+  validateSearch: (s: Record<string, unknown>): { o?: string; v?: string; r?: string; tab?: (typeof CRM_TABS)[number] } => ({
+    o: str(s.o),
+    v: str(s.v),
+    r: str(s.r),
+    tab: CRM_TABS.find((x) => x === s.tab),
+  }),
+  component: page.crm,
 });
 
 const activityRoute = createRoute({
@@ -727,6 +744,8 @@ const routeTree = rootRoute.addChildren([
     storageRoute,
     approvalLimitsRoute,
     timetableRoute,
+    startRoute,
+    crmRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,

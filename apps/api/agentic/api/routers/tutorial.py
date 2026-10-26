@@ -28,12 +28,15 @@ from ...models import (
     Channel,
     ChannelLink,
     ChatSession,
+    Device,
     DocFile,
     GoogleAccount,
     Membership,
+    MicrosoftAccount,
     ModelGroup,
     PushSubscription,
     Schedule,
+    SharedMailbox,
     Task,
     User,
     Workflow,
@@ -142,6 +145,18 @@ async def progress(
         .where(ChannelLink.channel_id == Channel.id),
         "push": exists().where(
             PushSubscription.workspace_id == ws, PushSubscription.user_id == uid
+        ),
+        # P49: the setup steps (sidebar "Get set up") need these too.
+        "telegram": exists()
+        .where(ChannelLink.user_id == uid, Channel.kind == "telegram", Channel.workspace_id == ws)
+        .where(ChannelLink.channel_id == Channel.id),
+        "office_channel": exists().where(Channel.workspace_id == ws),
+        "device": exists().where(
+            Device.workspace_id == ws, Device.user_id == uid, Device.revoked_at.is_(None)
+        ),
+        "mailbox": exists().where(SharedMailbox.workspace_id == ws),
+        "outlook": exists().where(
+            MicrosoftAccount.workspace_id == ws, MicrosoftAccount.user_id == uid
         ),
     }
     row = (await db.execute(select(*(c.label(k) for k, c in checks.items())))).one()

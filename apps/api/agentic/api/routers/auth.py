@@ -52,8 +52,24 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
         ),
         workspace=WorkspaceOut(id=ws.id, name=ws.name, slug=ws.slug, timezone=ws.timezone),
         role=role,  # type: ignore[arg-type]
-        permissions=sorted(PERMISSIONS[role]),
+        permissions=sorted(PERMISSIONS[role] | await _extra_permissions(db, ws.id, user.id, role)),
     )
+
+
+async def _extra_permissions(
+    db: AsyncSession, workspace_id: str, user_id: str, role: str
+) -> set[str]:
+    """P50: the CRM is the owner's, and anyone the owner shared part of it with."""
+    from ...models import CrmAccess
+
+    if role == "owner":
+        return {"crm.access"}
+    shared = await db.scalar(
+        select(CrmAccess.id)
+        .where(CrmAccess.workspace_id == workspace_id, CrmAccess.user_id == user_id)
+        .limit(1)
+    )
+    return {"crm.access"} if shared else set()
 
 
 @router.get("/setup-status")

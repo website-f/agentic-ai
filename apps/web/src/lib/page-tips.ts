@@ -178,6 +178,32 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       ],
     },
   },
+  "/crm": {
+    staff: {
+      what: msg("The parts of the company's CRM the owner shared with you."),
+      steps: [
+        msg("Pick a list from the tabs at the top; tap a row to see everything about it."),
+        msg("Use Search and Filter to find what you need."),
+      ],
+    },
+    manager: {
+      what: msg("Everything about your business in one place, built the way you work."),
+      steps: [
+        msg("Tap Add to CRM: add what the office already has, or a starter for your kind of business."),
+        msg("Make your own list for anything else, then add the fields you want."),
+        msg("Connect your other systems in Connections, and share parts with your team in Sharing."),
+      ],
+    },
+  },
+  "/start": {
+    manager: {
+      what: msg("The few things to set up so the office works for you, in order."),
+      steps: [
+        msg("Do the first step that is not ticked yet; each one opens the right page."),
+        msg("Steps tick themselves when they are done."),
+      ],
+    },
+  },
   "/contacts": {
     staff: {
       what: msg("Customers and suppliers, with everything that happened with each."),

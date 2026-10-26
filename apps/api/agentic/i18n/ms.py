@@ -1600,4 +1600,55 @@ MS: dict[str, str] = {
         "{n} fail disimpan dalam storan ini. Matikan importnya dan simpan ia sehingga fail itu "
         "dipindahkan atau dipadam."
     ),
+    # ------------------------------------------------------------ P49 help, P50 the CRM
+    "No AI model could answer right now. The guide has every page explained.": (
+        "Tiada model AI dapat menjawab sekarang. Panduan menerangkan setiap halaman."
+    ),
+    "The CRM is the owner's. Ask the owner to share it with you.": (
+        "CRM ini milik pemilik. Minta pemilik berkongsinya dengan anda."
+    ),
+    "Only the owner can change how the CRM is set up.": "Hanya pemilik boleh mengubah susunan CRM.",
+    "That is not in your CRM.": "Itu tiada dalam CRM anda.",
+    "You can look at this but not change it.": "Anda boleh melihat ini tetapi tidak boleh mengubahnya.",
+    "There is no such template.": "Templat itu tiada.",
+    "A CRM can hold up to {n} kinds of things.": "CRM boleh menyimpan sehingga {n} jenis perkara.",
+    "That field is not on this object.": "Medan itu tiada pada senarai ini.",
+    "An object can have up to {n} fields.": "Satu senarai boleh mempunyai sehingga {n} medan.",
+    "Pick what it links to.": "Pilih apa yang dipautkannya.",
+    "That field is not here.": "Medan itu tiada di sini.",
+    "This comes from the office's own data; hide it instead.": (
+        "Ini datang daripada data pejabat sendiri; sembunyikan sahaja."
+    ),
+    "This is the name of each record; pick another one first.": (
+        "Ini nama setiap rekod; pilih medan lain dahulu."
+    ),
+    "That record is not here.": "Rekod itu tiada di sini.",
+    "Add these on their own page; the CRM shows them as they are.": (
+        "Tambah ini di halamannya sendiri; CRM menunjukkannya seperti sedia ada."
+    ),
+    "Remove these on their own page.": "Buang ini di halamannya sendiri.",
+    "That view is not here.": "Paparan itu tiada di sini.",
+    "Pick what the tile counts.": "Pilih apa yang dikira oleh jubin ini.",
+    "Pick count, total or average.": "Pilih bilangan, jumlah atau purata.",
+    "A dashboard can hold up to {n} tiles.": "Papan pemuka boleh memuatkan sehingga {n} jubin.",
+    "That tile is not here.": "Jubin itu tiada di sini.",
+    "That connection is not here.": "Sambungan itu tiada di sini.",
+    "This one is sent records by the other system; nothing to fetch.": (
+        "Sambungan ini menerima rekod yang dihantar oleh sistem lain; tiada apa untuk diambil."
+    ),
+    "Not found.": "Tidak dijumpai.",
+    "Send at most 2 MB at a time.": "Hantar paling banyak 2 MB pada satu masa.",
+    "Send JSON.": "Hantar JSON.",
+    "An owner already sees the whole CRM.": "Pemilik sudah melihat seluruh CRM.",
+    "Use a number.": "Gunakan nombor.",
+    "Use a date like 2026-10-27.": "Gunakan tarikh seperti 2026-10-27.",
+    "Use a date and time like 2026-10-27 14:30.": "Gunakan tarikh dan masa seperti 2026-10-27 14:30.",
+    "Use a phone number, like +60 12-345 6789.": "Gunakan nombor telefon, seperti +60 12-345 6789.",
+    "Use an email address.": "Gunakan alamat e-mel.",
+    "Use a web address, like https://example.com.": "Gunakan alamat web, seperti https://example.com.",
+    "Use 0 to {top}.": "Gunakan 0 hingga {top}.",
+    '"{value}" is not one of the choices.': '"{value}" bukan salah satu pilihan.',
+    "This is needed.": "Ini diperlukan.",
+    "{field}: {why}": "{field}: {why}",
+    "That is not something the office keeps.": "Itu bukan sesuatu yang disimpan oleh pejabat.",
 }

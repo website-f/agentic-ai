@@ -10,6 +10,9 @@ import { CHAT } from "./chat";
 import { COMMON } from "./common";
 import { COMPUTERS } from "./computers";
 import { CRM } from "./crm";
+import { CRM_BUILDER } from "./crm-builder";
+import { CRM_CONNECTIONS } from "./crm-connections";
+import { CRM_HUB } from "./crm-hub";
 import { DESK } from "./desk";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
@@ -61,4 +64,7 @@ export const MS: Record<string, string> = {
   ...STORAGE,
   ...TIPS,
   ...WORK_MORE,
+  ...CRM_HUB,
+  ...CRM_BUILDER,
+  ...CRM_CONNECTIONS,
 };

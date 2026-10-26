@@ -2371,3 +2371,163 @@ class Interaction(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     actor: Mapped[str] = mapped_column(String(80))
+
+
+# ---------------------------------------------------------------- P50 the universal CRM
+
+
+class CrmObject(Timestamps, Base):
+    """P50: one thing a business tracks in its CRM: a custom object (Projects, Properties,
+    Patients...), a built-in one shown from the office's own data (contacts, deals, invoices,
+    tasks... `source`), or one synced from another system (`connector_id`). Its fields are
+    CrmField rows; its records CrmRecord rows (for a built-in object: only the values of the
+    extra fields people added)."""
+
+    __tablename__ = "crm_objects"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "key", name="uq_crm_objects_key"),
+        CheckConstraint("kind IN ('custom', 'builtin', 'synced')", name="ck_crm_objects_kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("co"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(60))
+    name: Mapped[str] = mapped_column(String(80))
+    singular: Mapped[str] = mapped_column(String(80), default="")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    icon: Mapped[str] = mapped_column(String(40), default="cube")
+    color: Mapped[str] = mapped_column(String(20), default="#13895f")
+    kind: Mapped[str] = mapped_column(String(10), default="custom")
+    source: Mapped[str | None] = mapped_column(String(40))  # builtin: parties | deals | ...
+    connector_id: Mapped[str | None] = mapped_column(String(40))
+    title_field: Mapped[str] = mapped_column(String(60), default="name")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # counters for auto-number fields and small per-object settings
+    meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CrmField(Timestamps, Base):
+    """P50: a column of a CRM object. `type`: text | long_text | number | money | percent |
+    date | datetime | checkbox | select | multi_select | email | phone | url | rating | person |
+    relation | file | auto. `options`: choices [{value, label, color}], currency, relation
+    target object key, rating max... `builtin`: maps to the office's own data (read only).
+    `source_path`: where a synced record keeps it (a.b.c)."""
+
+    __tablename__ = "crm_fields"
+    __table_args__ = (UniqueConstraint("object_id", "key", name="uq_crm_fields_key"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cf"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(60))
+    label: Mapped[str] = mapped_column(String(80))
+    type: Mapped[str] = mapped_column(String(20), default="text")
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    source_path: Mapped[str | None] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CrmRecord(Timestamps, Base):
+    """P50: one row of a CRM object: `data` holds its values by field key. `external_id`: the
+    office row it belongs to (a built-in object's extra fields) or the other system's id (a
+    synced record)."""
+
+    __tablename__ = "crm_records"
+    __table_args__ = (
+        UniqueConstraint("object_id", "external_id", name="uq_crm_records_external"),
+        Index("ix_crm_records_object", "object_id", "updated_at"),
+        Index("ix_crm_records_data", "data", postgresql_using="gin"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    title: Mapped[str] = mapped_column(String(300), default="")
+    external_id: Mapped[str | None] = mapped_column(String(200))
+    created_by: Mapped[str] = mapped_column(String(80))
+    updated_by: Mapped[str] = mapped_column(String(80), default="")
+
+
+class CrmView(Timestamps, Base):
+    """P50: a saved way to look at an object: table | board | calendar | cards, with its
+    columns, filters, sort, board grouping and date field (`config`)."""
+
+    __tablename__ = "crm_views"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cv"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(10), default="table")
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CrmWidget(Timestamps, Base):
+    """P50: a dashboard tile: number | bar | pie | line | list, over one object (`config`:
+    object key, metric count|sum|avg, field, group_by, date field and period, filters)."""
+
+    __tablename__ = "crm_widgets"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cw"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(10), default="number")
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    size: Mapped[str] = mapped_column(String(6), default="sm")  # sm | md | lg
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CrmConnector(Timestamps, Base):
+    """P50: another system the CRM reads from: rest (a JSON API), csv (a CSV address, e.g. a
+    published Google Sheet) or webhook (the other system sends records here). Secrets in
+    `config` are encrypted (*_enc). Its records land in one synced object."""
+
+    __tablename__ = "crm_connectors"
+    __table_args__ = (
+        CheckConstraint("kind IN ('rest', 'csv', 'webhook')", name="ck_crm_connectors_kind"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cc"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(10))
+    preset: Mapped[str | None] = mapped_column(String(40))
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    object_id: Mapped[str | None] = mapped_column(ForeignKey("crm_objects.id", ondelete="SET NULL"))
+    every_minutes: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    webhook_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[str] = mapped_column(String(10), default="never")  # never | ok | error
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    stats: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
+class CrmAccess(Timestamps, Base):
+    """P50: the CRM is the owner's; a grant lets one person see (or change) one object,
+    without the fields listed in `hidden_fields`. `object_id` null: the dashboard."""
+
+    __tablename__ = "crm_access"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", "object_id", name="uq_crm_access"),
+        CheckConstraint("level IN ('view', 'edit')", name="ck_crm_access_level"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ca"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    object_id: Mapped[str | None] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
+    level: Mapped[str] = mapped_column(String(6), default="view")
+    hidden_fields: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    granted_by: Mapped[str] = mapped_column(String(80))
