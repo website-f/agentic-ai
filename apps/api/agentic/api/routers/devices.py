@@ -10,6 +10,7 @@ Personal like a private assistant: only the device's own person sees or changes 
 anyone else, admins included).
 """
 
+import hashlib
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -225,22 +226,58 @@ async def _exe_download(code: str, request: Request, remote: str) -> Response:
             level = remote if remote in core.REMOTE_LEVELS else "off"
             trailer = install.exe_trailer(base, core.norm_code(code), level)
     size = path.stat().st_size
+    total = size + len(trailer)
+    # P52: byte ranges, so a download cut short (a proxy, a flaky line) resumes where it
+    # stopped. The ETag covers the program and its link: a different link is a new file.
+    stamp = f"{path.stat().st_mtime_ns}:{size}".encode()
+    etag = '"' + hashlib.sha256(stamp + trailer).hexdigest()[:32] + '"'
+    start, end = 0, total - 1
+    rng = request.headers.get("range", "")
+    if_range = request.headers.get("if-range")
+    partial = False
+    if rng.startswith("bytes=") and (if_range is None or if_range == etag):
+        first = rng[6:].split(",")[0].strip()
+        a, _, b = first.partition("-")
+        try:
+            if a:
+                start, end = int(a), (int(b) if b else total - 1)
+            elif b:
+                start, end = max(0, total - int(b)), total - 1
+            partial = True
+        except ValueError:
+            partial = False
+        if partial and (start > end or start >= total):
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+        end = min(end, total - 1)
 
     def chunks():
+        pos = start
         with path.open("rb") as f:
-            while block := f.read(1 << 20):
+            f.seek(min(pos, size))
+            while pos <= end and pos < size:
+                block = f.read(min(1 << 20, size - pos, end - pos + 1))
+                if not block:
+                    break
+                pos += len(block)
                 yield block
-        yield trailer
+        if pos <= end:
+            yield trailer[pos - size : end - size + 1]
 
+    headers = {
+        "Content-Disposition": f'attachment; filename="{install.EXE_NAME}"',
+        "Content-Length": str(end - start + 1),
+        "Accept-Ranges": "bytes",
+        "ETag": etag,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if partial:
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
     return StreamingResponse(
         chunks(),
+        status_code=206 if partial else 200,
         media_type="application/vnd.microsoft.portable-executable",
-        headers={
-            "Content-Disposition": f'attachment; filename="{install.EXE_NAME}"',
-            "Content-Length": str(size + len(trailer)),
-            "Cache-Control": "no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
+        headers=headers,
     )
 
 

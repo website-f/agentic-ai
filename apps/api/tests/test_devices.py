@@ -1040,6 +1040,27 @@ async def test_the_windows_program_comes_with_its_code_inside(
         link = json.loads(tail[len(b"\n#AGENTIC-OFFICE-LINK#") : -len(b"#END#")])
         assert link == {"server": "http://test", "code": code, "remote": "control"}
         assert int(got.headers["content-length"]) == len(got.content)
+        # A download cut short resumes where it stopped (byte ranges, also across the link).
+        whole = got.content
+        etag = got.headers["etag"]
+        assert got.headers["accept-ranges"] == "bytes"
+        part = await pc.get(
+            f"/api/install/{code}/exe/control", headers={"Range": "bytes=4000-", "If-Range": etag}
+        )
+        assert part.status_code == 206 and part.content == whole[4000:]
+        assert part.headers["content-range"] == f"bytes 4000-{len(whole) - 1}/{len(whole)}"
+        mid = await pc.get(
+            f"/api/install/{code}/exe/control", headers={"Range": f"bytes=4990-{len(program) + 9}"}
+        )
+        assert mid.status_code == 206 and mid.content == whole[4990 : len(program) + 10]
+        stale = await pc.get(
+            f"/api/install/{code}/exe/control", headers={"Range": "bytes=10-", "If-Range": '"old"'}
+        )
+        assert stale.status_code == 200 and stale.content == whole  # another file: start again
+        bad = await pc.get(
+            f"/api/install/{code}/exe/control", headers={"Range": f"bytes={len(whole) + 5}-"}
+        )
+        assert bad.status_code == 416
         plain = await pc.get("/api/install/ZZZZZZZZ/exe")
         assert plain.status_code == 200 and plain.content == program
         # Fetching it does not use the code up.
