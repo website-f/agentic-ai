@@ -31,7 +31,7 @@ from ..models import (
     User,
 )
 from ..services import prefs
-from . import deliver, telegram, voice
+from . import deliver, receipts, telegram, voice
 
 log = logging.getLogger("agentic.channels.bot")
 
@@ -151,7 +151,8 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
     sound = msg.get("voice") or msg.get("audio")  # a voice note or audio file (P18)
     if not isinstance(sound, dict) or not sound.get("file_id"):
         sound = None
-    if not chat or (not text and sound is None):
+    sent = _sent_file(msg)  # P43: a photo or PDF (a receipt, usually)
+    if not chat or (not text and sound is None and sent is None):
         return
     chat_id, from_id = str(chat.get("id")), str(sender.get("id"))
 
@@ -189,7 +190,7 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
         text = heard
 
     # Replying to a question notification answers it.
-    if (to := msg.get("reply_to_message")) and to.get("message_id"):
+    if text and (to := msg.get("reply_to_message")) and to.get("message_id"):
         answered = await _answer_question(db, ch, chat_id, int(to["message_id"]), text, link, role)
         if answered:
             await _reply(db, ch, chat_id, answered, uid)
@@ -209,6 +210,12 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
     if not can(role, "work.write"):
         await _reply(db, ch, chat_id, tr("Your role can read but not instruct agents."), uid)
         return
+    if sent is not None:
+        took = await _take_file(db, ch, sent, link.user_id)
+        if took.reply is not None:
+            await _reply(db, ch, chat_id, took.reply, uid)
+            return
+        text = took.chat or ""
     agent = await _bound_agent(db, ch, chat)
     if agent is None:
         await _reply(
@@ -231,6 +238,50 @@ async def _handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) 
     await _reply(db, ch, chat_id, f"{said}{agent.name}: {answer}", uid)
     if reply is not None and reply.message_id is not None:
         await deliver.learn_from_chat(reply.message_id)
+
+
+def _sent_file(msg: dict[str, Any]) -> dict[str, Any] | None:
+    """P43: {file_id, name, mime, caption} for a photo or a PDF/picture document, else None."""
+    caption = str(msg.get("caption") or "")
+    photos = [p for p in msg.get("photo") or [] if isinstance(p, dict) and p.get("file_id")]
+    if photos:
+        fits = [p for p in photos if int(p.get("file_size") or 0) <= receipts.MAX_BYTES]
+        best = max(fits or photos, key=lambda p: int(p.get("file_size") or 0))
+        return {"file_id": best["file_id"], "name": "", "mime": "image/jpeg", "caption": caption}
+    doc = msg.get("document")
+    if isinstance(doc, dict) and doc.get("file_id"):
+        mime = str(doc.get("mime_type") or "")
+        if receipts.wanted(mime):
+            return {
+                "file_id": doc["file_id"],
+                "name": str(doc.get("file_name") or ""),
+                "mime": mime,
+                "caption": caption,
+            }
+    return None
+
+
+async def _take_file(
+    db: AsyncSession, ch: Channel, sent: dict[str, Any], user_id: str
+) -> receipts.Outcome:
+    try:
+        data = await telegram.download_file(
+            deliver.channel_token(ch), str(sent["file_id"]), receipts.MAX_BYTES
+        )
+    except telegram.TelegramError as e:
+        if e.status == 413:
+            return receipts.Outcome(Msg("That file is too large. Send a file up to 15 MB."))
+        return receipts.Outcome(Msg("The file could not be downloaded. Send it again."))
+    except Exception:  # noqa: BLE001 - Telegram unreachable
+        log.info("telegram file download failed on %s", ch.id, exc_info=True)
+        return receipts.Outcome(Msg("The file could not be downloaded. Send it again."))
+    return await receipts.take(
+        db,
+        ch.workspace_id,
+        user_id,
+        receipts.Sent(data, sent["name"], sent["mime"], sent["caption"]),
+        via="telegram",
+    )
 
 
 async def _hear(db: AsyncSession, ch: Channel, sound: dict[str, Any]) -> tuple[str, str | None]:

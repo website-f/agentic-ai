@@ -668,6 +668,25 @@ async def _resolve_calls(
                 "the link came from this task's own search results or pages",
                 False,
             )
+        if (
+            decision.effect == "ask"
+            and not decision.hardline
+            and name not in (agent.tools or {})  # nobody chose "ask" for it on purpose
+        ):
+            from ..crm import limits
+
+            why = await limits.allows_tool(db, agent.workspace_id, name, args)
+            if why:
+                # P46: a small routine money step under the owner's approval limit.
+                decision = policy.Decision("allow", f"approval_limit.{name}", why, False)
+                await task_event(
+                    db,
+                    task,
+                    "auto_approved",
+                    limits.ACTOR,
+                    f"went ahead without asking: {why}",
+                    {"tool": name, "rule": decision.rule},
+                )
         if name in TEAM_TOOLS and (
             decision.effect == "allow" or (approved_team and decision.effect != "deny")
         ):

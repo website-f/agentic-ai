@@ -91,6 +91,29 @@ def _eval_brief(ev: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+@router.get("/learning/week")
+async def learning_week(
+    week: str | None = Query(default=None, max_length=10, pattern=r"^\d{4}-[Ww]\d{2}$"),
+    principal: Principal = Depends(require("office.view")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P45: what each agent (that the person may see) learned in one week: this week, or
+    `week` ("2026-W43"). Built from what the office keeps; no model call."""
+    from ...brain import weekly
+    from ...crm.service import today
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    now_day = await today(db, ws.id)
+    monday = weekly.parse_week(week, now_day)
+    out = await weekly.gather(db, ws, monday, principal.scope.agent_where())
+    this = weekly.week_of(now_day)[0]
+    out["this_week"] = weekly.week_label(this)
+    out["previous"] = weekly.week_label(monday - timedelta(days=7))
+    out["next"] = weekly.week_label(monday + timedelta(days=7)) if monday < this else None
+    return out
+
+
 @router.get("/learning/overview")
 async def overview(
     days: int = Query(30, ge=1, le=180),

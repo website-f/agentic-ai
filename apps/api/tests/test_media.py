@@ -339,12 +339,15 @@ async def test_whatsapp_voice_note_is_heard_and_answered(client, net, temporal, 
 def test_waha_voice_payloads_parse_safely():
     ok = whatsapp.parse_waha(_voice_msg("60123@c.us", "v9"))
     assert ok[0].audio is not None and ok[0].audio.ref == "/api/files/default/v9.oga"
-    # A picture is not a voice note; a media URL outside WAHA's files is ignored.
+    # A picture is not a voice note (P43: it is a file, a receipt usually); a media URL
+    # outside WAHA's files is ignored.
     pic = _voice_msg("60123@c.us", "p1")
     pic["payload"]["media"]["mimetype"] = "image/jpeg"
     odd = _voice_msg("60123@c.us", "p2")
     odd["payload"]["media"]["url"] = "http://evil.example/api/sessions/default/logout"
-    assert whatsapp.parse_waha(pic) == [] and whatsapp.parse_waha(odd) == []
+    got = whatsapp.parse_waha(pic)
+    assert got[0].audio is None and got[0].file is not None
+    assert whatsapp.parse_waha(odd) == []
 
 
 async def test_meta_voice_note_downloads_with_the_token_only_from_meta():

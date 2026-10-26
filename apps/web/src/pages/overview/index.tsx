@@ -258,10 +258,10 @@ function BranchTable({ o }: { o: Overview }) {
     return sort.desc ? -c : c;
   });
   return (
-    <Card data-guide="overview.branches" aria-label={t("Branches compared")} className="overflow-hidden">
+    <Card data-guide="overview.branches" aria-label={t("Companies compared")} className="overflow-hidden">
       <CardHeader
         icon={<IconTile icon={TableIcon} tone="violet" size="sm" />}
-        title={t("Branches compared")}
+        title={t("Companies compared")}
         description={t("Sort by any column. Open a branch to see its office.")}
       />
       <div className="overflow-x-auto">
@@ -417,7 +417,7 @@ export function OverviewPage() {
           {t("Could not load the overview.")} {errorMessage(error)}
         </p>
       ) : !o.branches.length ? (
-        <EmptyState icon={BuildingsIcon} title={t("No branches yet")} body={t("Create a branch in Organization, add agents, and their work shows here.")} />
+        <EmptyState icon={BuildingsIcon} title={t("No companies yet")} body={t("Add a company in Organization, add agents, and their work shows here.")} />
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
           <Kpis o={o} />

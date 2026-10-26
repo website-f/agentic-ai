@@ -595,6 +595,67 @@ async def add_payment(
     return p
 
 
+PAYMENT_METHODS = ("bank_transfer", "duitnow", "fpx", "cash", "cheque", "card", "online", "other")
+
+
+async def approve(
+    db: AsyncSession, doc: MoneyDoc, *, actor: str, by_name: str, why: str = ""
+) -> Payment | None:
+    """A bill or invoice draft becomes approved, the same way whoever approves it: a person
+    (Money page) or, P46, the company's approval limit. The caller has checked the status
+    and the total, and commits. P43: a receipt that says it was paid (and nobody is owed it
+    back) has its payment recorded at once, on the receipt's date."""
+    from ..services import audit
+
+    doc.status, doc.approved_by, doc.approved_at = "approved", actor, now()
+    lang = await company_lang(db, doc.workspace_id, doc.branch_id)
+    result = (
+        tr("Approved by {name}: {why}", lang, name=by_name, why=why)
+        if why
+        else tr("Approved by {name}.", lang, name=by_name)
+    )
+    await close_task(db, doc, "done", result)
+    await log(
+        db,
+        doc.workspace_id,
+        doc.party_id,
+        "invoice",
+        tr(
+            "Bill {number} approved: {amount}"
+            if doc.direction == "payable"
+            else "Invoice {number} approved: {amount}",
+            lang,
+            number=doc.number or "-",
+            amount=amount_text(doc.currency, doc.total),
+        ),
+        actor,
+        money_doc_id=doc.id,
+    )
+    await audit.record(
+        db,
+        doc.workspace_id,
+        actor,
+        "money.approved",
+        target=doc.id,
+        after={"direction": doc.direction, "number": doc.number, "total": str(doc.total)},
+        note=why or None,
+    )
+    info = (doc.external or {}).get("capture") or {}
+    if doc.direction != "payable" or not info.get("paid") or info.get("paid_by_user"):
+        return None
+    method = str(info.get("method") or "")
+    method = method if method in PAYMENT_METHODS else "other"
+    return await add_payment(
+        db,
+        doc,
+        amount=outstanding(doc),
+        paid_at=doc.issue_date,
+        method=method,
+        reference=tr("Paid at the till (receipt)", lang),
+        actor=actor,
+    )
+
+
 # ---------------------------------------------------------------- balances and reports
 
 

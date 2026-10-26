@@ -141,6 +141,7 @@ def test_clean_validates_and_normalises():
         "end": "17:30",
         "breaks": [],
         "urgent_anytime": False,
+        "day_report": False,  # P47
     }
     assert wh.clean(None, "UTC") is None
     bad = [

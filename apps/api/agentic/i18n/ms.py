@@ -1494,6 +1494,108 @@ MS: dict[str, str] = {
         "Pilih syarikat yang Perpustakaannya dokumen-dokumen ini ditujukan."
     ),
     "That storage is not here.": "Storan itu tiada di sini.",
+    # ------------------------------------------------------------ P43 receipts and bills from photos and phones
+    "That person is not here.": "Orang itu tiada di sini.",
+    "That file is too large. Send a file up to 15 MB.": "Fail itu terlalu besar. Hantar fail sehingga 15 MB.",
+    "The file could not be downloaded. Send it again.": "Fail itu tidak dapat dimuat turun. Hantar semula.",
+    "I can take photos and PDF files. Send the receipt as a photo or PDF.": (
+        "Saya boleh terima gambar dan fail PDF. Hantar resit sebagai gambar atau PDF."
+    ),
+    "That is a lot of files for one day. Upload the rest on the web.": (
+        "Banyak fail untuk sehari. Muat naik selebihnya di web."
+    ),
+    "Saved {name} in your workspace. Your account is not placed in a company yet, so finance cannot get it: ask your manager to set your company.": (
+        "{name} disimpan di meja kerja anda. Akaun anda belum diletakkan dalam syarikat, jadi "
+        "kewangan tidak dapat menerimanya: minta pengurus anda tetapkan syarikat anda."
+    ),
+    "Saved {name} in your workspace, but it could not be read as a bill or receipt: {why} Upload a clearer photo, or tell me what to do with it.": (
+        "{name} disimpan di meja kerja anda, tetapi tidak dapat dibaca sebagai bil atau resit: "
+        "{why} Muat naik gambar yang lebih jelas, atau beritahu saya apa perlu dibuat dengannya."
+    ),
+    "Saved {name} in your workspace. Reading it as a receipt did not work this time; finance can still capture it on the Money page.": (
+        "{name} disimpan di meja kerja anda. Membacanya sebagai resit tidak berjaya kali ini; "
+        "kewangan masih boleh merekodkannya di halaman Wang."
+    ),
+    "Got it: {supplier}, {amount} on {date}. It looks like one already sent, so finance will check it before approving.": (
+        "Diterima: {supplier}, {amount} pada {date}. Ia nampak sama seperti yang sudah dihantar, "
+        "jadi kewangan akan menyemaknya sebelum meluluskan."
+    ),
+    "Got it: {supplier}, {amount} on {date}. Sent to finance as your claim: you will be paid back once it is approved.": (
+        "Diterima: {supplier}, {amount} pada {date}. Dihantar ke kewangan sebagai tuntutan anda: "
+        "wang anda dibayar balik selepas diluluskan."
+    ),
+    "Got it: {supplier}, {amount} on {date}. It waits for approval on the Money page.": (
+        "Diterima: {supplier}, {amount} pada {date}. Ia menunggu kelulusan di halaman Wang."
+    ),
+    "{name} could not be read: the picture is unclear, or no AI model that reads pictures is set up (AI Engine > Vision).": (
+        "{name} tidak dapat dibaca: gambarnya kabur, atau belum ada model AI yang membaca gambar "
+        "(Enjin AI > Penglihatan)."
+    ),
+    "{name} does not look like a bill or receipt.": "{name} tidak nampak seperti bil atau resit.",
+    "{name} is held for a security check. Release it first.": (
+        "{name} ditahan untuk semakan keselamatan. Lepaskannya dahulu."
+    ),
+    "Paid by {name} from their own money: reimburse them once approved.": (
+        "Dibayar oleh {name} dengan wang sendiri: bayar balik selepas diluluskan."
+    ),
+    "Already paid ({method}): approving it records the payment.": (
+        "Sudah dibayar ({method}): meluluskannya merekodkan bayaran."
+    ),
+    "Already paid: approving it records the payment.": (
+        "Sudah dibayar: meluluskannya merekodkan bayaran."
+    ),
+    "Review receipt {number} from {supplier} {currency} {total}": (
+        "Semak resit {number} daripada {supplier} {currency} {total}"
+    ),
+    "(possible duplicate of {other})": "(mungkin sama dengan {other})",
+    "Approved by {name}: {why}": "Diluluskan oleh {name}: {why}",
+    "Paid at the till (receipt)": "Dibayar di kaunter (resit)",
+    # ------------------------------------------------------------ P44 inbox rules
+    "Connect your Outlook first (My AI or My assistants).": (
+        "Sambungkan Outlook anda dahulu (AI saya atau Pembantu saya)."
+    ),
+    "That rule is not here.": "Peraturan itu tiada di sini.",
+    "A mailbox can have up to {n} rules.": "Satu peti mel boleh ada sehingga {n} peraturan.",
+    # ------------------------------------------------------------ P45 what the AI team learned
+    "This week the AI team finished {done} tasks, learned {facts} facts and {lessons} lessons, proposed {skills} skills and learned {routines} routines. Routines ran {runs} times and saved about {saved} tokens.": (
+        "Minggu ini pasukan AI menyiapkan {done} tugasan, belajar {facts} fakta dan {lessons} "
+        "pengajaran, mencadangkan {skills} kemahiran dan belajar {routines} rutin. Rutin berjalan "
+        "{runs} kali dan menjimatkan kira-kira {saved} token."
+    ),
+    "{n} routines are still learning. Trust the good ones on the Learning page so they start saving tokens now.": (
+        "{n} rutin masih belajar. Percayai yang baik di halaman Pembelajaran supaya ia mula "
+        "menjimatkan token sekarang."
+    ),
+    "{n} skill proposals wait for a decision.": "{n} cadangan kemahiran menunggu keputusan.",
+    "What the AI team learned: week of {date}": "Apa yang dipelajari pasukan AI: minggu {date}",
+    "Per agent": "Setiap ejen",
+    "Agent": "Ejen",
+    "Tasks done": "Tugasan siap",
+    "Facts": "Fakta",
+    "Lessons": "Pengajaran",
+    "Skills proposed": "Kemahiran dicadangkan",
+    "Routines learned": "Rutin dipelajari",
+    "Routine runs": "Larian rutin",
+    "Tokens saved": "Token dijimatkan",
+    "What the AI team learned last week": "Apa yang dipelajari pasukan AI minggu lepas",
+    "See what each agent learned, and trust the routines that are ready.": (
+        "Lihat apa yang dipelajari setiap ejen, dan percayai rutin yang sudah sedia."
+    ),
+    # ------------------------------------------------------------ P46 approval limits
+    "the approval limit": "had kelulusan",
+    "under the RM {max} limit, from a supplier approved before": (
+        "di bawah had RM {max}, daripada pembekal yang pernah diluluskan"
+    ),
+    # ------------------------------------------------------------ P47 the working day
+    "{name} finished {done} tasks today. {failed} failed, {blocked} wait for a person and {asking} approvals are open.": (
+        "{name} menyiapkan {done} tugasan hari ini. {failed} gagal, {blocked} menunggu seseorang "
+        "dan {asking} kelulusan masih terbuka."
+    ),
+    "{name}'s day: {date}": "Hari {name}: {date}",
+    "Finished today": "Siap hari ini",
+    "Task": "Tugasan",
+    "Finished": "Siap",
+    "{name}'s day": "Hari {name}",
     "{n} files are kept in this storage. Turn off its import and keep it until they are moved or deleted.": (
         "{n} fail disimpan dalam storan ini. Matikan importnya dan simpan ia sehingga fail itu "
         "dipindahkan atau dipadam."

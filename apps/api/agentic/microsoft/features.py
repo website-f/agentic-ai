@@ -432,8 +432,19 @@ async def act(
     received = item.received_at or item.created_at or now()
     if now() - received > FRESH:
         return
+    # P44: the people's own inbox rules first; "ignore" stops everything else.
+    from . import rules_engine
+
+    item_id, box_id, box_type = item.id, box.id, type(box)
+    done = await rules_engine.apply(db, box, item, msg, g)
+    if "ignored" in done:
+        return
+    fresh, fresh_box = await db.get(MailItem, item_id), await db.get(box_type, box_id)
+    if fresh is None or fresh_box is None:
+        return
+    item, box = fresh, fresh_box
     r = rules_of(box)
-    wants_task = item.category in (r.get("create_tasks_for") or [])
+    wants_task = item.category in (r.get("create_tasks_for") or []) and "task" not in done
     agent = await target_agent(db, box) if wants_task else None
     saved: list[DocFile] = []
     if r.get("save_attachments") and item.has_attachments and item.category in KEEP_ATTACHMENTS_OF:
@@ -594,12 +605,15 @@ async def save_attachment(
     item: MailItem | None = None,
     agent: Agent | None = None,
     task_id: str | None = None,
+    folder: str | None = None,
 ) -> DocFile | str:
     """One attachment into the office files, through the usual upload path: stored, then
     read in the background (secrets scan and quarantine first, then text, summary and
-    search). A shared mailbox's go to the company's "Email attachments/<address>/"; a
-    person's to their own "My workspace/Email attachments/". Returns the file, or a
-    sentence saying why not."""
+    search). A shared mailbox's go to the company's "Email attachments/<address>/" and, P44,
+    into its Library (an invoice's restricted to the mailbox agent's department: money stays
+    with finance); a person's to their own "My workspace/Email attachments/". `folder`
+    (an inbox rule's): that Library folder, or "My workspace/<folder>" for a person. Returns
+    the file, or a sentence saying why not."""
     from ..agents.pc_tools import _start_reading
     from ..documents import service as doc_service
 
@@ -620,6 +634,19 @@ async def save_attachment(
     personal = isinstance(box, MicrosoftAccount)
     branch = await branch_of(db, box)
     subject = item.subject if item is not None else ""
+    if folder:
+        clean = "/".join(
+            p.strip()
+            for p in folder.replace("\\", "/").split("/")
+            if p.strip() not in ("", ".", "..")
+        )[:200]
+        if personal:
+            root = (await attachment_folder(db, box)).split("/")[0]
+            where = f"{root}/{clean}" if clean else await attachment_folder(db, box)
+        else:
+            where = clean or await attachment_folder(db, box)
+    else:
+        where = await attachment_folder(db, box)
     f = await doc_service.create_file(
         db,
         workspace_id=box.workspace_id,
@@ -631,7 +658,7 @@ async def save_attachment(
         task_id=task_id,
         agent_id=None,  # company files stay company work (not the agent owner's desk)
         source="upload",
-        folder=await attachment_folder(db, box),
+        folder=where,
         source_path=f"{access.address_of(box)}: {subject}"[:500],
         origin="uploaded",
         owner_user_id=box.user_id if personal else None,
@@ -639,6 +666,12 @@ async def save_attachment(
     f.agent_id = agent.id if agent is not None else None
     if not personal:
         f.owner_user_id = None
+        # P44: what the switch says: the company's Library (read and indexed once checked).
+        f.library = True
+        if item is not None and item.category == "invoice":
+            box_agent = await db.get(Agent, box.agent_id) if box.agent_id else None
+            f.restricted = True
+            f.department_id = box_agent.department_id if box_agent is not None else None
     if item is not None:
         _add_action(
             item,

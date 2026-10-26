@@ -8,6 +8,7 @@ import {
   EnvelopeSimpleIcon,
   FileTextIcon,
   PaperclipIcon,
+  PencilSimpleIcon,
   PaperPlaneTiltIcon,
   ProhibitIcon,
   SealCheckIcon,
@@ -37,6 +38,7 @@ import {
   moneyDocQuery,
   moneyKeys,
   PAYMENT_METHODS,
+  paymentNote,
   recordPayment,
   remindMoney,
   STATUS_LABEL,
@@ -45,6 +47,8 @@ import {
   type MoneyDocDetail,
 } from "@/lib/money";
 import { LoadError, useFormat } from "@/pages/contacts/bits";
+
+import { NewInvoiceDialog } from "./new-invoice";
 
 function useRefresh() {
   const qc = useQueryClient();
@@ -72,11 +76,13 @@ export function DocSheet({ id, canManage, onClose, onOpen }: { id: string; canMa
 
 function Summary({ d }: { d: MoneyDocDetail }) {
   const t = useT();
+  const note = paymentNote(d);
   const late = d.overdue && d.status !== "paid" && d.status !== "void";
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <Pill>{d.direction === "receivable" ? t("Invoice") : t("Bill")}</Pill>
+      <Pill>{d.direction === "receivable" ? t("Invoice") : d.capture?.kind === "receipt" ? t("Receipt") : t("Bill")}</Pill>
       <Pill tone={STATUS_TONE[d.status]}>{t(STATUS_LABEL[d.status])}</Pill>
+      {note ? <Pill tone={note.tone}>{t(note.label, { name: d.capture?.paid_by_name ?? "" })}</Pill> : null}
       {late ? <Pill tone="danger">{d.days_overdue === 1 ? t("1 day overdue") : t("{n} days overdue", { n: d.days_overdue })}</Pill> : null}
       {d.party_id ? (
         <Link to="/contacts/$partyId" params={{ partyId: d.party_id }} className="inline-flex min-w-0 items-center gap-1 text-accent hover:underline">
@@ -204,10 +210,17 @@ function Actions({ d }: { d: MoneyDocDetail }) {
   const can = actionsFor(d);
   const [paying, setPaying] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const editable = d.status === "draft" || d.status === "awaiting_approval";
   const [text, setText] = useState<string | null>(null);
   const approve = useMutation({
     mutationFn: () => approveMoney(d.id),
-    onSuccess: () => { toast.success(t("Bill approved.")); refresh(); },
+    onSuccess: (r) => {
+      toast.success(r?.status === "paid" ? t("Approved and recorded as paid.")
+        : d.capture?.paid_by_user ? t("Approved. Pay {name} back, then record the payment.", { name: d.capture.paid_by_name ?? "" })
+        : t("Bill approved."));
+      refresh();
+    },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const send = useMutation({
@@ -227,16 +240,18 @@ function Actions({ d }: { d: MoneyDocDetail }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const markSent = d.direction === "receivable" && (d.status === "draft" || d.status === "approved");
-  if (!can.approve && !can.pay && !can.void && !can.remind && !markSent) return null;
+  if (!can.approve && !can.pay && !can.void && !can.remind && !markSent && !editable) return null;
   return (
     <>
       {can.approve ? <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate()}><SealCheckIcon size={15} /> {t("Approve")}</Button> : null}
+      {editable ? <Button size="sm" variant="outline" onClick={() => setEditing(true)}><PencilSimpleIcon size={15} /> {d.direction === "payable" ? t("Correct") : t("Edit")}</Button> : null}
       {markSent ? <Button size="sm" variant="outline" loading={send.isPending} onClick={() => send.mutate()}><PaperPlaneTiltIcon size={15} /> {t("Mark as sent")}</Button> : null}
       {can.pay ? <Button size="sm" variant={can.approve ? "outline" : "primary"} onClick={() => setPaying(true)}><WalletIcon size={15} /> {t("Record payment")}</Button> : null}
       {can.remind ? <Button size="sm" variant="outline" loading={remind.isPending} onClick={() => remind.mutate()}><BellRingingIcon size={15} /> {t("Send reminder")}</Button> : null}
       {can.void ? <Button size="sm" variant="ghost" onClick={() => setVoiding(true)}><ProhibitIcon size={15} /> {t("Void")}</Button> : null}
       {paying ? <PaymentDialog d={d} onClose={() => setPaying(false)} /> : null}
       {voiding ? <VoidDialog d={d} onClose={() => setVoiding(false)} /> : null}
+      {editing ? <NewInvoiceDialog open editing={d} onOpenChange={setEditing} /> : null}
       <ReminderText text={text} onClose={() => setText(null)} />
     </>
   );

@@ -1,7 +1,7 @@
 /** Money (P35, finance.view): what customers owe the company (receivables) and what it owes
  * suppliers (payables, often bills captured from emailed PDFs). Totals, how late things are, the
  * cash expected each week, every invoice and bill, and payment reminders. */
-import { ArrowDownLeftIcon, ArrowUpRightIcon, ClockIcon, CoinsIcon, PlusIcon, ScanIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
+import { ArrowDownLeftIcon, ArrowUpRightIcon, CaretDownIcon, ClockIcon, CoinsIcon, FolderOpenIcon, PencilSimpleLineIcon, PlusIcon, ReceiptIcon, SealCheckIcon, WarningIcon } from "@phosphor-icons/react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -13,6 +13,7 @@ import { EmptyState, Page, PageHeader } from "@/components/page";
 import { PageTabs } from "@/components/page-tabs";
 import { Button } from "@/components/ui/button";
 import { Toolbar } from "@/components/ui/card";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
@@ -24,6 +25,7 @@ import { isMissingApi, partyKeys } from "@/lib/crm";
 import {
   balanceOf,
   captureBill,
+  paymentNote,
   MONEY_STATUSES,
   moneyKeys,
   moneyListQuery,
@@ -42,6 +44,7 @@ import { CompanySelect, LoadError, MissingBusiness, useCompanyFilter, useFormat 
 import { AgingCard, ForecastCard } from "./charts";
 import { DocSheet } from "./doc-sheet";
 import { NewInvoiceDialog } from "./new-invoice";
+import { ReceiptsDialog } from "./receipts";
 import { RemindersCard } from "./reminders";
 
 const ALL = "all";
@@ -66,10 +69,18 @@ export function MoneyPage() {
   const needle = useDebounced(q.trim());
   const [invoicingOn, setInvoicingOn] = useState(false);
   const [capturingOn, setCapturingOn] = useState(false);
+  const [receiptsOn, setReceiptsOn] = useState(false);
+  const [billing, setBilling] = useState(false);
 
   // Links like /money?new=invoice&party=… or ?new=bill open the form; closing it drops the flag.
+  // P43: ?new=bill opens the receipts drop (what people mean by "add a bill" now).
   const invoicing = invoicingOn || (search.new === "invoice" && canManage);
-  const capturing = capturingOn || (search.new === "bill" && canManage);
+  const capturing = capturingOn;
+  const receipting = receiptsOn || (search.new === "bill" && canManage);
+  const setReceipting = (o: boolean) => {
+    setReceiptsOn(o);
+    if (!o && search.new) void navigate({ search: (x) => ({ ...x, new: undefined }), replace: true });
+  };
   const setInvoicing = (o: boolean) => {
     setInvoicingOn(o);
     if (!o && (search.new || search.party)) void navigate({ search: (x) => ({ ...x, new: undefined, party: undefined }), replace: true });
@@ -111,8 +122,17 @@ export function MoneyPage() {
         description={t("What customers owe you and what you owe suppliers: what is overdue, what is due soon, and the cash coming in and going out.")}
         actions={canManage ? (
           <>
-            <Button variant="outline" loading={capture.isPending} onClick={() => setCapturing(true)}><ScanIcon size={16} /> {t("Capture bill from a file")}</Button>
-            <Button onClick={() => setInvoicing(true)}><PlusIcon size={16} weight="bold" /> {t("New invoice")}</Button>
+            <Button variant={recv ? "outline" : "primary"} onClick={() => setReceipting(true)}><ReceiptIcon size={16} /> {t("Upload receipts and bills")}</Button>
+            <Menu>
+              <MenuTrigger asChild>
+                <Button variant={recv ? "primary" : "outline"} loading={capture.isPending}><PlusIcon size={16} weight="bold" /> {t("New")} <CaretDownIcon size={13} /></Button>
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuItem icon={<PlusIcon />} onSelect={() => setInvoicing(true)}>{t("New invoice (to a customer)")}</MenuItem>
+                <MenuItem icon={<PencilSimpleLineIcon />} onSelect={() => setBilling(true)}>{t("Type in a bill (from a supplier)")}</MenuItem>
+                <MenuItem icon={<FolderOpenIcon />} onSelect={() => setCapturing(true)}>{t("Read a bill already in the Library")}</MenuItem>
+              </MenuContent>
+            </Menu>
           </>
         ) : null} />
 
@@ -167,10 +187,10 @@ export function MoneyPage() {
               ) : (
                 <EmptyState icon={CoinsIcon} title={recv ? t("No invoices yet") : t("No bills yet")}
                   body={recv ? t("Invoices you raise here, or that agents draft from quotes and orders, show here until they are paid.")
-                    : t("Supplier bills that reach your mailboxes are read and listed here for approval. You can also capture one from a file.")}
+                    : t("Supplier bills and receipts are read and listed here for approval: from your mailboxes, photos staff send on WhatsApp or Telegram, or files you upload here.")}
                   action={canManage ? (recv
                     ? <Button onClick={() => setInvoicing(true)}><PlusIcon size={16} weight="bold" /> {t("New invoice")}</Button>
-                    : <Button onClick={() => setCapturing(true)}><ScanIcon size={16} /> {t("Capture bill from a file")}</Button>) : undefined} />
+                    : <Button onClick={() => setReceipting(true)}><ReceiptIcon size={16} /> {t("Upload receipts and bills")}</Button>) : undefined} />
               )
             ) : (
               <div className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
@@ -195,6 +215,14 @@ export function MoneyPage() {
       ) : null}
       <FilePicker open={capturing} onOpenChange={setCapturing} branchId={company.branchId} title={t("Capture a bill")}
         onPick={(f) => capture.mutate(f.id)} />
+      {receipting ? (
+        <ReceiptsDialog open={receipting} onOpenChange={setReceipting} branchId={company.branchId}
+          onOpenDoc={(id) => void navigate({ search: (x) => ({ ...x, tab: "payable", new: undefined, doc: id }) })} />
+      ) : null}
+      {billing ? (
+        <NewInvoiceDialog open={billing} direction="payable" onOpenChange={setBilling}
+          onCreated={(d) => d.id && void navigate({ search: (x) => ({ ...x, tab: "payable", doc: d.id }) })} />
+      ) : null}
     </Page>
   );
 }
@@ -203,6 +231,7 @@ function DocRow({ d, onOpen }: { d: MoneyDoc; onOpen: () => void }) {
   const t = useT();
   const { money, day } = useFormat();
   const bal = balanceOf(d);
+  const note = paymentNote(d);
   const late = d.overdue && d.status !== "paid" && d.status !== "void";
   return (
     <li>
@@ -212,6 +241,7 @@ function DocRow({ d, onOpen }: { d: MoneyDoc; onOpen: () => void }) {
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="truncate text-[14px] font-medium">{d.party_name || t("No contact linked")}</span>
             {d.duplicate_of ? <Pill tone="warn">{t("Possible duplicate")}</Pill> : null}
+            {note ? <Pill tone={note.tone}>{t(note.label, { name: d.capture?.paid_by_name ?? "" })}</Pill> : null}
           </span>
           <span className="truncate text-[12.5px] text-muted">{[d.number || t("(no number)"), d.reference].filter(Boolean).join(" · ")}</span>
         </span>

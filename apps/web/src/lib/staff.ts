@@ -19,6 +19,8 @@ export interface WorkHours {
   end: string;
   breaks: Break[];
   urgent_anytime: boolean;
+  /** P47: a short summary when its working day ends. */
+  day_report?: boolean;
 }
 
 export interface Duty {

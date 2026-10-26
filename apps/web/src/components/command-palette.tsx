@@ -124,12 +124,17 @@ export function CommandPalette() {
                     {t("New task")}
                   </Item>
                 ) : null}
-                <Item icon={<PlusIcon />} onSelect={() => run(() => navigate({ to: "/organization", search: { new: 1 } }))}>
-                  {t("New branch")}
-                </Item>
-                <Item icon={<UserPlusIcon />} onSelect={() => run(() => navigate({ to: "/settings/members", search: { add: 1 } }))}>
-                  {t("Add member")}
-                </Item>
+                {/* P48: only what this person may open (staff were sent back to their workspace) */}
+                {me?.permissions.includes("org.manage") ? (
+                  <Item icon={<PlusIcon />} onSelect={() => run(() => navigate({ to: "/organization", search: { new: 1 } }))}>
+                    {t("New company")}
+                  </Item>
+                ) : null}
+                {me?.permissions.includes("members.manage") || me?.permissions.includes("team.manage") ? (
+                  <Item icon={<UserPlusIcon />} onSelect={() => run(() => navigate({ to: "/settings/members", search: { add: 1 } }))}>
+                    {t("Add member")}
+                  </Item>
+                ) : null}
                 <Item icon={<SunIcon />} onSelect={() => run(() => setTheme("light"))}>{t("Light theme")}</Item>
                 <Item icon={<MoonIcon />} onSelect={() => run(() => setTheme("dark"))}>{t("Dark theme")}</Item>
                 <Item icon={<MonitorIcon />} onSelect={() => run(() => setTheme("system"))}>{t("Match system theme")}</Item>

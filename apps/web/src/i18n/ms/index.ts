@@ -28,7 +28,9 @@ import { SHELL } from "./shell";
 import { SPEECH } from "./speech";
 import { STORAGE } from "./storage";
 import { TASKS_FLOW } from "./tasks-flow";
+import { TIPS } from "./tips";
 import { WORK } from "./work";
+import { WORK_MORE } from "./work-more";
 
 export const MS: Record<string, string> = {
   ...COMMON,
@@ -57,4 +59,6 @@ export const MS: Record<string, string> = {
   ...AI_USE,
   ...SPEECH,
   ...STORAGE,
+  ...TIPS,
+  ...WORK_MORE,
 };

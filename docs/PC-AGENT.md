@@ -172,11 +172,17 @@ browser they are signed in on: **My computers → Open from the web**
 
 1. On the computer: `agentic-pc remote off | view | control` (off by default). The agent reports
    it in its hello and state messages; it also refuses `screen.capture` / `input.send` itself
-   when its own level is lower.
+   when its own level is lower. Easiest when linking: tick **Also let me see and use this
+   computer from the web** in the link dialog; the install line then ends in `/control`
+   (`irm https://HOST/i/CODE/win/control | iex`, `/i/{code}/{kind}/{view|control}`) and the
+   agent links with `--remote control`. Running that line on the computer is the consent.
+   Do it before travelling: from far away it can only be turned off, never on.
 2. On the web: the switch on the remote page, `PUT /api/devices/{id}/remote {level, password}`.
    Turning **on** needs the person's password; turning off does not. Audited (`device.remote`).
 
-What works is the lower of the two (`core.remote_level`). The computer shows a **notification
+What works is the lower of the two (`core.remote_level`). The remote page shows both as two
+numbered steps with their state (live: the page updates the moment the computer reports in),
+and only shows the Off / See screen / Full control switch once both are done. The computer shows a **notification
 on its own screen** when a view or control session starts (again after two quiet minutes), and
 every session is in the activity log (screen and control rows at most once per five minutes;
 typed text is never logged, only that keys were sent).

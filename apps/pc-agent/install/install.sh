@@ -10,6 +10,7 @@ set -eu
 
 SERVER='{{SERVER}}'
 CODE='{{CODE}}'
+REMOTE='{{REMOTE}}'  # P42: off | view | control, chosen on the web when linking
 NODE_MAJOR=22
 LABEL=space.oriondesk.agentic.pc
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
@@ -76,7 +77,7 @@ chmod 755 "$DIR/bin/agentic-pc"
 
 # 4. Link with the one-time code.
 say "Linking ..."
-"$NODE" "$DIR/agent/agent.cjs" link "$CODE" --server "$SERVER" || fail "Linking did not work. Make a new code on the My computers page and try again."
+"$NODE" "$DIR/agent/agent.cjs" link "$CODE" --server "$SERVER" --remote "$REMOTE" || fail "Linking did not work. Make a new code on the My computers page and try again."
 
 # 5. Start at login, and start now (restarted if it crashes; not after an unlink).
 if [ "$OS" = linux ]; then

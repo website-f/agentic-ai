@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
+import { SwitchField } from "@/components/ui/switch";
 import { t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import {
@@ -54,6 +55,7 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
     return mine === "other" ? "windows" : mine;
   });
   const [now, setNow] = useState(() => Date.now());
+  const [remote, setRemote] = useState(false); // P42: allow seeing / using it from the web
 
   // ---- the code (asked for once on open; React's dev double-mount must not ask twice)
   const make = useMutation({ mutationFn: createLinkCode });
@@ -155,7 +157,9 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
       options={[{ value: "windows", label: "Windows" }, { value: "mac", label: "Mac" },
         ...(tab === "app" ? [] : [{ value: "linux" as const, label: "Linux" }])]} />
   );
-  const command = link ? (link.install[os] ?? link.install.mac) : "…";
+  // P42: the same line, also allowing this computer to be seen and used from the web.
+  const lines = remote && link?.install_control ? link.install_control : link?.install;
+  const command = lines ? (lines[os] ?? lines.mac) : "…";
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("Link a computer")}
@@ -247,6 +251,11 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
                 </Button>
               </div>
               <p className="text-[12px] text-muted">{t("The code inside works once and expires in 10 minutes.")}</p>
+            </div>
+            <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-3.5 py-3">
+              <SwitchField checked={remote} onCheckedChange={setRemote}
+                label={t("Also let me see and use this computer from the web")}
+                hint={t("For when you are away: watch its screen and use its mouse and keyboard from My computers. You still turn it on there with your password, and the computer shows a notice while you use it.")} />
             </div>
             <Steps items={os === "windows" ? [
               <span key="a" className="inline-flex flex-wrap items-center gap-1"><TerminalWindowIcon size={15} className="text-accent" /> {t("Press Start, type PowerShell, open it, paste, press Enter.")}</span>,

@@ -28,7 +28,9 @@ from .test_agents import llm, office, temporal  # noqa: F401
 from .test_office_roles import as_role
 
 JSON = {"content-type": "application/json"}
-TEMPLATE_PS1 = "$Server = '{{SERVER}}'\n$Code = '{{CODE}}'\nWrite-Host 'install'\n"
+TEMPLATE_PS1 = (
+    "$Server = '{{SERVER}}'\n$Code = '{{CODE}}'\n$Remote = '{{REMOTE}}'\nWrite-Host 'install'\n"
+)
 TEMPLATE_SH = '#!/bin/sh\nSERVER="{{SERVER}}"\nCODE="{{CODE}}"\necho install\n'
 
 
@@ -346,6 +348,7 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
     assert body["install"]["windows"] == f"irm http://test/i/{code}/win | iex"
     assert body["install"]["mac"] == f"curl -fsSL http://test/i/{code}/mac | sh"
     assert body["install"]["linux"] == f"curl -fsSL http://test/i/{code}/linux | sh"
+    assert body["install_control"]["windows"] == f"irm http://test/i/{code}/win/control | iex"
     assert body["downloads"] is None  # no desktop app build published: the one line only
     # Behind nginx: the forwarded scheme and host.
     r = await client.post(
@@ -367,6 +370,11 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
         assert "expired" in bad.text and "throw" in bad.text and "{{" not in bad.text
         bad_sh = await pc.get("/api/install/ZZZZZZZZ/mac")
         assert bad_sh.text.startswith("#!/bin/sh") and "exit 1" in bad_sh.text
+        # P42: a line that also allows seeing and using the computer from the web.
+        assert "$Remote = 'off'" in win.text
+        ctl = await pc.get(f"/api/install/{code}/win/control")
+        assert ctl.status_code == 200 and "$Remote = 'control'" in ctl.text
+        assert (await pc.get(f"/api/install/{code}/win/everything")).status_code == 404
         # Linux installs with the same shell script (it detects the OS).
         linux = await pc.get(f"/api/install/{code}/linux")
         assert linux.status_code == 200 and f'CODE="{code}"' in linux.text

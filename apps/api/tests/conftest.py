@@ -63,6 +63,7 @@ async def database():
 
 
 TABLES = (
+    "mail_rules",
     "routines",
     "storage_targets",
     "intake_batches",

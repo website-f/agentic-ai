@@ -70,6 +70,8 @@ export interface LinkCode {
   code: string;
   expires_at: string;
   install: { windows: string; mac: string; linux?: string };
+  /** P42: the same lines that also allow seeing and using the computer from the web. */
+  install_control?: { windows: string; mac: string; linux?: string };
   /** The desktop app builds; null until one is published (then only the one-line install). */
   downloads: { windows: string; mac: string } | null;
 }

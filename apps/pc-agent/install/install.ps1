@@ -11,6 +11,7 @@
 
   $Server = '{{SERVER}}'
   $Code = '{{CODE}}'
+  $Remote = '{{REMOTE}}'  # P42: off | view | control, chosen on the web when linking
   $NodeMajor = '22'
   $Prog = Join-Path $env:LOCALAPPDATA 'AgenticOffice'
   $Conf = Join-Path $env:APPDATA 'AgenticOffice'
@@ -86,7 +87,7 @@
 
   # 4. Link with the one-time code.
   Say 'Linking ...'
-  & $node $agent link $Code --server $Server
+  & $node $agent link $Code --server $Server --remote $Remote
   if ($LASTEXITCODE -ne 0) { throw 'Linking did not work. Make a new code on the My computers page and try again.' }
 
   # 5. Start with Windows, and start now.

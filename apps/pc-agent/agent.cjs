@@ -961,8 +961,17 @@ async function link(args) {
     process.exit(1);
   }
   const old = readConfig();
-  writeConfig({ server, token: body.token, device_id: body.device_id, name: body.name, folders: old.folders?.length ? old.folders : defaultFolders(), paused: false });
+  // P42: seeing and using this computer from the web, if the person chose it when linking
+  // (the install line they ran here says so); otherwise what it was, else off.
+  const asked = String(arg(args, "--remote") || "");
+  const remote = REMOTE_LEVELS.includes(asked) ? asked : remoteOf(old);
+  writeConfig({ server, token: body.token, device_id: body.device_id, name: body.name, folders: old.folders?.length ? old.folders : defaultFolders(), paused: false, remote });
   console.log(`Linked as "${body.name}".`);
+  if (remote !== "off") {
+    console.log(remote === "control"
+      ? "Remote control is on: you can see this screen and use it from the web. Turn it off any time: agentic-pc remote off"
+      : "Remote view is on: you can see this screen from the web. Turn it off any time: agentic-pc remote off");
+  }
 }
 
 function status() {

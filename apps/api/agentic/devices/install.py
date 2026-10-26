@@ -30,8 +30,10 @@ def safe_server(server: str) -> bool:
     return bool(_SAFE_SERVER.match(server or ""))
 
 
-def script(kind: str, server: str, code: str) -> str | None:
-    """The filled-in installer, or None when the template is not on this server."""
+def script(kind: str, server: str, code: str, remote: str = "off") -> str | None:
+    """The filled-in installer, or None when the template is not on this server. `remote`:
+    P42, what the person chose for seeing and using this computer from the web (off | view |
+    control); running the line on the computer is their consent there."""
     name = TEMPLATES.get(kind)
     if name is None:
         return None
@@ -40,7 +42,13 @@ def script(kind: str, server: str, code: str) -> str | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    return text.replace("{{SERVER}}", server.rstrip("/")).replace("{{CODE}}", code)
+    if remote not in ("off", "view", "control"):
+        remote = "off"
+    return (
+        text.replace("{{SERVER}}", server.rstrip("/"))
+        .replace("{{CODE}}", code)
+        .replace("{{REMOTE}}", remote)
+    )
 
 
 def _quote_ps(text: str) -> str:

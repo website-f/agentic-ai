@@ -8,7 +8,7 @@ from sqlalchemy import select
 from temporalio import activity
 
 from ..agents import runtime
-from ..brain import dream, learn
+from ..brain import dream, learn, weekly
 from ..core.config import settings
 from ..core.db import SessionLocal
 from ..models import BrainDream, Task, Workspace
@@ -66,6 +66,12 @@ async def brain_dream_tick() -> int:
             if done is None:
                 await dream.run_dream(db, ws, local.date())
                 ran += 1
+    # P45: Monday morning, last week's "what the AI team learned" report.
+    try:
+        async with SessionLocal() as db:
+            await weekly.tick(db, now)
+    except Exception:  # noqa: BLE001 - the weekly report must never stop the dream tick
+        logging.getLogger("agentic.brain").warning("weekly learning report failed", exc_info=True)
     return ran
 
 

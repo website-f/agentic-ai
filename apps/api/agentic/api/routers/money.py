@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -525,6 +525,95 @@ async def capture_bill(
     return await detail(db, principal, d)
 
 
+@router.post("/money/receipts", status_code=status.HTTP_201_CREATED)
+async def upload_receipt(
+    request: Request,
+    name: str = Query(min_length=1, max_length=200),
+    branch_id: str | None = Query(default=None, max_length=40),
+    paid_by: str | None = Query(default=None, max_length=40),
+    principal: Principal = Depends(require("finance.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P43: drop a receipt or bill (a photo or PDF) straight onto the Money page. It is kept in
+    the company's "Bills and receipts" folder and read at once. `paid_by`: a member who paid
+    it from their own money (an expense claim), so finance knows to pay them back."""
+    from ...crm import capture
+    from ...documents import provenance
+    from ...documents import service as doc_service
+    from ...models import Membership, User
+    from .files import start_reading
+
+    branch = await _branch(db, principal, branch_id)
+    payer: User | None = None
+    if paid_by:
+        member = await db.scalar(
+            select(Membership).where(
+                Membership.workspace_id == principal.workspace_id, Membership.user_id == paid_by
+            )
+        )
+        payer = await db.get(User, paid_by) if member is not None else None
+        if payer is None:
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "member_not_found", "That person is not here."
+            )
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > doc_service.MAX_FILE_BYTES:
+            raise api_error(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                "file_too_large",
+                "Files can be up to {mb} MB.",
+                mb=doc_service.MAX_FILE_BYTES // (1024 * 1024),
+            )
+    if not data:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "empty_file", "That file is empty.")
+    lang = await provenance.folder_lang(db, principal.workspace_id, branch)
+    f = await doc_service.create_file(
+        db,
+        workspace_id=principal.workspace_id,
+        name=name,
+        data=bytes(data),
+        created_by=principal.actor,
+        mime=request.headers.get("x-file-type", "")[:120],
+        branch_id=branch,
+        folder="Bil dan resit" if lang == "ms" else "Bills and receipts",
+    )
+    if not capture.capturable(f):
+        await db.rollback()
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "not_a_bill_file",
+            "Bills are read from a PDF or a picture.",
+        )
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "file.uploaded",
+        target=f.id,
+        after={"name": f.name, "size": f.size, "as": "receipt"},
+    )
+    await db.commit()
+    file_id = f.id
+    await start_reading(file_id)
+    f = await db.get(DocFile, file_id)
+    if f is None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "file_not_found", "That file is not here.")
+    await db.refresh(f)
+    try:
+        d = await capture.capture(
+            db, f=f, branch_id=branch, actor=principal.actor, paid_by=payer, source="upload"
+        )
+    except capture.CaptureFailed as e:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "capture_failed",
+            e.message,
+        ) from e
+    return await detail(db, principal, d)
+
+
 @router.get("/money/{doc_id}")
 async def get_money(
     doc_id: str,
@@ -594,33 +683,7 @@ async def approve(
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "no_total", "Set the amount before approving."
         )
-    d.status, d.approved_by, d.approved_at = "approved", principal.actor, svc.now()
-    lang = await _lang(db, d)
-    await svc.close_task(db, d, "done", tr("Approved by {name}.", lang, name=principal.user.name))
-    await svc.log(
-        db,
-        principal.workspace_id,
-        d.party_id,
-        "invoice",
-        tr(
-            "Bill {number} approved: {amount}"
-            if d.direction == "payable"
-            else "Invoice {number} approved: {amount}",
-            lang,
-            number=d.number or "-",
-            amount=svc.amount_text(d.currency, d.total),
-        ),
-        principal.actor,
-        money_doc_id=d.id,
-    )
-    await audit.record(
-        db,
-        principal.workspace_id,
-        principal.actor,
-        "money.approved",
-        target=d.id,
-        after={"direction": d.direction, "number": d.number, "total": str(d.total)},
-    )
+    await svc.approve(db, d, actor=principal.actor, by_name=principal.user.name)
     await db.commit()
     return await detail(db, principal, d)
 

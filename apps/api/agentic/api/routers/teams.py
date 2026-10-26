@@ -775,3 +775,26 @@ async def budgets(
         st = await budget.state(db, a, ws.timezone)
         out.append({"agent_id": a.id, "name": a.name, "color": a.color, **st.dict()})
     return out
+
+
+# ---------------------------------------------------------------- P47 the working day
+
+
+@router.get("/timetable")
+async def timetable_day(
+    day: str | None = Query(default=None, alias="date", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Every agent the person may see, on one day (today in the workspace by default): its
+    working hours, breaks and duties at their times. Staff see their own AI only."""
+    from datetime import date as _date
+
+    from ...crm.service import today
+    from ...teams import timetable
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    on = _date.fromisoformat(day) if day else await today(db, ws.id)
+    agents = await timetable.office_day(db, ws, on, principal.scope.agent_where())
+    return {"date": on.isoformat(), "tz": ws.timezone, "agents": agents}

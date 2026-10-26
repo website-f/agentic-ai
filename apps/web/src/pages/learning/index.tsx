@@ -31,6 +31,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 
 import { IconTile, Page, PageHeader, type Tone } from "@/components/page";
+import { PageTabs } from "@/components/page-tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -61,6 +62,7 @@ import { ProposalSheet } from "@/pages/skills/proposal-sheet";
 import { SkillSheet } from "@/pages/skills/skill-sheet";
 
 import { LearnSourceDialog } from "./learn-source-dialog";
+import { WeekView } from "./week";
 
 const KPI_GRID = "sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6";
 const KIND_LOOK: Record<ProposalKind, { icon: Icon; tone: Tone }> = {
@@ -410,10 +412,13 @@ export function LearningPage() {
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
   const canExport = me.role === "owner" || me.role === "admin";
-  const search = useSearch({ strict: false }) as { days?: number };
+  const search = useSearch({ strict: false }) as { days?: number; tab?: "week" | "overview"; week?: string };
   const navigate = useNavigate();
   const days: LearningRange = LEARNING_RANGES.find((r) => r === search.days) ?? 30;
-  const { data: o, isLoading, error } = useQuery(learningOverviewQuery(days));
+  // P45: the week per agent first: what each one learned and what waits for a manager.
+  const tab = search.tab === "overview" ? "overview" : "week";
+  const canManageRoutines = ["brain.manage", "agents.manage", "team.manage"].some((p) => me.permissions.includes(p));
+  const { data: o, isLoading, error } = useQuery({ ...learningOverviewQuery(days), enabled: tab === "overview" });
   const [teaching, setTeaching] = useState(0);
   const [proposal, setProposal] = useState<string | null>(null);
   const [skill, setSkill] = useState<string | null>(null);
@@ -440,10 +445,22 @@ export function LearningPage() {
         }
       />
 
+      <PageTabs<"week" | "overview"> label={t("What to show")} value={tab}
+        onChange={(v) => navigate({ to: "/learning", search: { tab: v === "week" ? undefined : v }, replace: true })}
+        tabs={[
+          { value: "week", label: t("Week by agent"), icon: GraduationCapIcon },
+          { value: "overview", label: t("Overview and autopilot"), icon: ChartLineIcon },
+        ]} />
+
+      {tab === "week" ? (
+        <WeekView week={search.week} canManage={canManageRoutines}
+          onWeek={(w) => navigate({ to: "/learning", search: { week: w }, replace: true })} />
+      ) : (
+      <>
       <Segmented
         label={t("Period")}
         value={String(days)}
-        onChange={(v) => navigate({ to: "/learning", search: { days: Number(v) }, replace: true })}
+        onChange={(v) => navigate({ to: "/learning", search: { tab: "overview", days: Number(v) }, replace: true })}
         options={LEARNING_RANGES.map((r) => ({ value: String(r), label: t("{n} days", { n: r }) }))}
         className="w-fit max-sm:w-full max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center"
       />
@@ -475,6 +492,8 @@ export function LearningPage() {
             <TopSkills o={o} onOpen={setSkill} />
           </div>
         </div>
+      )}
+      </>
       )}
 
       {proposal ? <ProposalSheet key={proposal} id={proposal} canDecide={canDecide} canWrite={canWrite} onClose={() => setProposal(null)} /> : null}

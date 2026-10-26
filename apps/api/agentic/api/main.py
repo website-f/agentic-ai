@@ -375,6 +375,7 @@ RAW_UPLOAD_PATHS.add(parties_router.IMPORT_PATH)
 MULTIPART_PATHS.add(parties_router.IMPORT_PATH)
 app.include_router(parties_router.router)
 app.include_router(money_router.router)
+RAW_UPLOAD_PATHS.add("/api/money/receipts")  # P43: receipts dropped on the Money page
 
 # P36: each person's daily AI allowance and the work-scope guard (the owner's controls).
 from .routers import allowances as allowances_router  # noqa: E402
@@ -402,3 +403,18 @@ app.include_router(storage_router.router)
 from .routers import remote as remote_router  # noqa: E402
 
 app.include_router(remote_router.router)
+
+# P44: inbox rules on a person's Outlook or a shared mailbox.
+from .routers import mail_rules as mail_rules_router  # noqa: E402
+
+app.include_router(mail_rules_router.router)
+
+# P46: approval limits by amount (small routine money steps go through on their own).
+from .routers import approval_limits as approval_limits_router  # noqa: E402
+
+app.include_router(approval_limits_router.router)
+
+# P48: everything waiting on this person, in one place (the bell).
+from .routers import needs as needs_router  # noqa: E402
+
+app.include_router(needs_router.router)

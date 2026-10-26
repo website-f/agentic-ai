@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { guidePageFor } from "@/guide/lookup";
+import { PageTips, ShowTipsButton } from "@/components/page-tips";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { NAV } from "@/nav";
@@ -85,6 +86,7 @@ export function PageHeader({
   const IconCmp = icon === undefined ? entry?.icon : icon;
   const kicker = eyebrow ?? (entry ? t(entry.section) : undefined);
   return (
+    <>
     <div className="flex flex-col gap-4 pb-1 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 items-start gap-3.5">
         {IconCmp ? <IconTile icon={IconCmp} size="lg" className="hidden sm:grid" /> : null}
@@ -96,6 +98,7 @@ export function PageHeader({
             <h1 className="min-w-0 text-[22px] leading-tight font-semibold tracking-tight text-balance break-words sm:text-[26px]">
               {title}
             </h1>
+            {entry ? <ShowTipsButton path={entry.to} /> : null}
             {guide ? (
               <Link
                 to="/guide/$page"
@@ -113,6 +116,9 @@ export function PageHeader({
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap gap-2 max-sm:[&>*]:flex-1">{actions}</div> : null}
     </div>
+    {/* P48: what this page is for and what to do next, for this person */}
+    {entry ? <PageTips path={entry.to} /> : null}
+    </>
   );
 }
 

@@ -117,6 +117,8 @@ def clean(wh: dict[str, Any] | None, default_tz: str) -> dict[str, Any] | None:
         "end": end,
         "breaks": breaks,
         "urgent_anytime": bool(wh.get("urgent_anytime", False)),
+        # P47: at the end of each working day, a short summary of what it did (no model).
+        "day_report": bool(wh.get("day_report", False)),
     }
 
 

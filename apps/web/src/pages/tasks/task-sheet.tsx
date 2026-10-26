@@ -162,6 +162,8 @@ function Timeline({ events }: { events: TaskEvent[] }) {
 }
 
 function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean; onDeleted: () => void }) {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const canMeet = me.permissions.includes("office.view"); // P48: no dead end for staff
   const t = useT();
   const qc = useQueryClient();
   const [feedback, setFeedback] = useState("");
@@ -220,7 +222,7 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
           <PlayIcon size={14} weight="fill" /> {s === "failed" ? t("Retry") : t("Start")}
         </Button>
       ) : null}
-      {s !== "done" && s !== "cancelled" ? (
+      {canMeet && s !== "done" && s !== "cancelled" ? (
         <Button size="sm" variant="outline" asChild>
           <Link to="/meetings" search={{ new: 1, task: task.id }}><UsersThreeIcon size={14} /> {t("Meeting")}</Link>
         </Button>

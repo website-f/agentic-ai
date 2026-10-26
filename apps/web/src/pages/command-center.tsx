@@ -2,7 +2,6 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   ClipboardTextIcon,
-  CpuIcon,
   HandIcon,
   HeartbeatIcon,
   LightningIcon,
@@ -291,9 +290,6 @@ export function CommandCenterPage() {
           </Link>
         ))}
       </nav>
-      <p className="flex items-center gap-1.5 text-[12px] text-muted">
-        <CpuIcon size={14} className="shrink-0" /> {t("Temporal UI for workflow debugging runs at localhost:8502.")}
-      </p>
     </Page>
   );
 }

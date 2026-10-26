@@ -12,7 +12,7 @@
  * assistants.use, and the API refuses anyone but the computer's own person.
  */
 import {
-  ArrowClockwiseIcon, ArrowLeftIcon, CaretRightIcon, CpuIcon, CursorClickIcon, DownloadSimpleIcon, FileIcon,
+  ArrowClockwiseIcon, ArrowLeftIcon, CaretRightIcon, CheckCircleIcon, CopyIcon, CpuIcon, CursorClickIcon, DownloadSimpleIcon, FileIcon,
   FolderSimpleIcon, HardDriveIcon, HouseIcon, KeyboardIcon, LockKeyIcon, MemoryIcon, MonitorPlayIcon,
   WarningIcon,
 } from "@phosphor-icons/react";
@@ -27,7 +27,7 @@ import { Card } from "@/components/ui/card";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { useT } from "@/i18n";
+import { msg, useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
 import {
   bytes, deviceFiles, deviceHealth, deviceKeys, devicesQuery, downloadFromDevice, keyOf, remoteBlock,
@@ -322,19 +322,14 @@ function ScreenCard({ device }: { device: Device }) {
     send({ kind: "mouse", x: 0.5, y: 0.5, action: "scroll", dy: e.deltaY > 0 ? 1 : -1 });
   };
 
+  const ready = canView;
   return (
     <Section title={t("Screen")}
-      description={canControl
-        ? t("Watch the screen and use the mouse and keyboard. A notice shows on the computer while you do.")
-        : canView ? t("Watch the screen live. A notice shows on the computer while you watch.")
-        : t("Turn on seeing this screen to watch it live from here.")}
-      actions={<RemoteToggles device={device} />}>
-      {!canView ? (
-        <Card className="flex items-center gap-3 px-4 py-6 text-[13.5px] text-muted">
-          <LockKeyIcon size={20} weight="duotone" className="shrink-0" />
-          <span>{t("Seeing the screen is off. Use the switches above to turn it on (you confirm with your password, and it must also be on with: agentic-pc remote view).")}</span>
-        </Card>
-      ) : (
+      description={!ready ? t("Watch this computer's screen live from anywhere, and use its mouse and keyboard. Two quick steps turn it on.")
+        : canControl ? t("Watch the screen and use the mouse and keyboard. A notice shows on the computer while you do.")
+        : t("Watch the screen live. A notice shows on the computer while you watch.")}
+      actions={ready ? <RemoteSwitch device={device} /> : null}>
+      {!ready ? <RemoteSetup device={device} /> : (
         <div className="grid gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => { setErr(null); setLive((v) => !v); }} variant={live ? "outline" : "primary"}>
@@ -343,7 +338,7 @@ function ScreenCard({ device }: { device: Device }) {
             {canControl ? (
               <span className="inline-flex items-center gap-1.5 text-[12.5px] text-muted"><CursorClickIcon size={14} /> {t("Click the screen to click. Type to send keys.")}</span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[12.5px] text-muted">{t("Viewing only — turn on control to use the mouse and keyboard.")}</span>
+              <span className="inline-flex items-center gap-1.5 text-[12.5px] text-muted">{t("Viewing only. Choose Full control above to use the mouse and keyboard.")}</span>
             )}
             {live ? <Pill tone="ok" live className="ml-auto">{t("Live")}</Pill> : null}
           </div>
@@ -354,7 +349,7 @@ function ScreenCard({ device }: { device: Device }) {
             ref={surface}
             tabIndex={canControl ? 0 : -1}
             role={canControl ? "application" : undefined}
-            aria-label={canControl ? t("Remote screen — click and type to control") : undefined}
+            aria-label={canControl ? t("Remote screen: click and type to control") : undefined}
             onClick={(e) => onClick(e, "click")}
             onDoubleClick={(e) => onClick(e, "double")}
             onContextMenu={(e) => onClick(e, "right")}
@@ -389,14 +384,15 @@ function ScreenCard({ device }: { device: Device }) {
   );
 }
 
-// ---------------------------------------------------------------- the two switches
+// ---------------------------------------------------------------- turning it on (two locks)
 
-function RemoteToggles({ device }: { device: Device }) {
-  const t = useT();
+const LEVEL_LABEL: Record<RemoteLevel, string> = { off: msg("Off"), view: msg("See screen"), control: msg("Full control") };
+
+/** Turning a level on here asks for the person's password; turning it off never does. */
+function useRemoteChange(device: Device) {
   const qc = useQueryClient();
   const [ask, setAsk] = useState<Exclude<RemoteLevel, "off"> | null>(null);
   const [password, setPassword] = useState("");
-
   const change = useMutation({
     mutationFn: ({ level, pw }: { level: RemoteLevel; pw: string }) => setRemote(device.id, level, pw),
     onSuccess: (next) => {
@@ -406,48 +402,143 @@ function RemoteToggles({ device }: { device: Device }) {
       setPassword("");
     },
   });
-
-  const current = device.remote_allowed ?? "off";
-  // Enabling a level needs the password; turning everything off does not.
   const choose = (level: RemoteLevel) => {
     if (level === "off") change.mutate({ level, pw: "" });
     else setAsk(level);
   };
+  return { ask, setAsk, password, setPassword, change, choose };
+}
 
-  const blocked = (want: Exclude<RemoteLevel, "off">) => remoteBlock(device, want) === "pc";
+function PasswordDialog({ state }: { state: ReturnType<typeof useRemoteChange> }) {
+  const t = useT();
+  const { ask, setAsk, password, setPassword, change } = state;
+  const close = () => { setAsk(null); setPassword(""); change.reset(); };
+  return (
+    <ResponsiveDialog open={!!ask} onOpenChange={(o) => { if (!o) close(); }}
+      title={ask === "control" ? t("Allow full control from the web") : t("Allow seeing the screen from the web")}
+      description={ask === "control"
+        ? t("You will be able to see this computer's screen and use its mouse and keyboard from any browser you are signed in on. The computer shows a notice while you do. Enter your password to confirm.")
+        : t("You will be able to watch this computer's screen from any browser you are signed in on. The computer shows a notice while you watch. Enter your password to confirm.")}
+      footer={<>
+        <Button variant="outline" onClick={close}>{t("Cancel")}</Button>
+        <Button loading={change.isPending} disabled={!password}
+          onClick={() => ask && change.mutate({ level: ask, pw: password })}>{t("Turn it on")}</Button>
+      </>}>
+      <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (ask && password) change.mutate({ level: ask, pw: password }); }}>
+        <Field label={t("Your password")} type="password" autoFocus value={password} autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)} />
+        <FormError message={change.error ? (change.error instanceof ApiError ? change.error.message : errorMessage(change.error)) : null} />
+      </form>
+    </ResponsiveDialog>
+  );
+}
 
+/** Once both steps are done: switch between off, seeing and full control (up to what the
+ * computer allows). */
+function RemoteSwitch({ device }: { device: Device }) {
+  const t = useT();
+  const state = useRemoteChange(device);
+  const current = device.remote_allowed ?? "off";
+  const allows = (lvl: RemoteLevel) => remoteBlock(device, lvl === "off" ? "view" : lvl) !== "pc" || lvl === "off";
   return (
     <>
-      <div className="flex items-center gap-1.5 rounded-full border border-border bg-surface p-0.5">
-        {(["off", "view", "control"] as const).map((lvl) => (
-          <button key={lvl} type="button" onClick={() => choose(lvl)}
-            disabled={change.isPending || (lvl !== "off" && blocked(lvl))}
-            title={lvl !== "off" && blocked(lvl) ? t("Turn it on with the computer first: agentic-pc remote {level}", { level: lvl }) : undefined}
-            className={cn(
-              "min-h-8 rounded-full px-3 text-[12.5px] font-medium transition-colors disabled:opacity-40",
-              current === lvl ? "bg-accent text-accent-fg" : "text-muted hover:text-fg",
-            )}>
-            {lvl === "off" ? t("Off") : lvl === "view" ? t("See screen") : t("Full control")}
+      <div role="radiogroup" aria-label={t("Remote access")} className="flex items-center gap-1 rounded-full border border-border bg-surface p-0.5">
+        {(["off", "view", "control"] as const).filter(allows).map((lvl) => (
+          <button key={lvl} type="button" role="radio" aria-checked={current === lvl} onClick={() => current !== lvl && state.choose(lvl)}
+            disabled={state.change.isPending}
+            className={cn("min-h-8 rounded-full px-3 text-[12.5px] font-medium transition-colors",
+              current === lvl ? "bg-accent text-accent-fg" : "text-muted hover:text-fg")}>
+            {t(LEVEL_LABEL[lvl])}
           </button>
         ))}
       </div>
-
-      <ResponsiveDialog open={!!ask} onOpenChange={(o) => { if (!o) { setAsk(null); setPassword(""); } }}
-        title={ask === "control" ? t("Allow full control from the web") : t("Allow seeing the screen from the web")}
-        description={ask === "control"
-          ? t("You will be able to see this computer's screen and use its mouse and keyboard from any browser you are signed in on. The computer shows a notice while you do. Enter your password to confirm.")
-          : t("You will be able to watch this computer's screen from any browser you are signed in on. The computer shows a notice while you watch. Enter your password to confirm.")}
-        footer={<>
-          <Button variant="outline" onClick={() => { setAsk(null); setPassword(""); }}>{t("Cancel")}</Button>
-          <Button loading={change.isPending} disabled={!password}
-            onClick={() => ask && change.mutate({ level: ask, pw: password })}>{t("Turn it on")}</Button>
-        </>}>
-        <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (ask && password) change.mutate({ level: ask, pw: password }); }}>
-          <Field label={t("Your password")} type="password" autoFocus value={password} autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)} />
-          <FormError message={change.error ? (change.error instanceof ApiError ? change.error.message : errorMessage(change.error)) : null} />
-        </form>
-      </ResponsiveDialog>
+      <PasswordDialog state={state} />
     </>
+  );
+}
+
+/** Not on yet: the two steps, each with where it stands and what to do. The first is done on
+ * the computer itself, on purpose: a stolen password alone must never be enough to watch
+ * someone's screen. */
+function RemoteSetup({ device }: { device: Device }) {
+  const t = useT();
+  const state = useRemoteChange(device);
+  const pc = device.remote_pc ?? "off";
+  const web = device.remote_allowed ?? "off";
+  const pcDone = pc !== "off";
+  const shell = device.os === "windows" ? t("PowerShell (press Start, type PowerShell)") : t("Terminal");
+  return (
+    <Card className="grid gap-0 overflow-hidden p-0">
+      <ol className="grid divide-y divide-border">
+        <li className="grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)] sm:p-5">
+          <StepMark n={1} done={pcDone} />
+          <div className="grid min-w-0 gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[14.5px] font-semibold">{t("Allow it on the computer (once)")}</h3>
+              <Pill tone={pcDone ? "ok" : "warn"}>{pcDone ? t("Allowed: {level}", { level: t(LEVEL_LABEL[pc]) }) : t("Not allowed yet")}</Pill>
+            </div>
+            {pcDone ? (
+              <p className="text-[13px] text-muted">{t("Done. To take it back, run agentic-pc remote off on the computer.")}</p>
+            ) : (
+              <>
+                <p className="text-[13px] text-muted">
+                  {t("On {name}, open {shell} and run this line. Do it before you travel: it stays on until you turn it off.", { name: device.name, shell })}
+                </p>
+                <CommandLine text="agentic-pc remote control" />
+                <p className="text-[12.5px] text-muted">
+                  {t("Only want to watch, never click? Use agentic-pc remote view instead. If the computer says it does not know agentic-pc, close and reopen the window and try again.")}
+                </p>
+                <div className="flex items-start gap-2 rounded-sm border border-info/30 bg-info/8 px-3 py-2 text-[12.5px]">
+                  <LockKeyIcon size={15} weight="duotone" className="mt-0.5 shrink-0 text-info" />
+                  <span>{t("Why on the computer? So that someone who learns your password still cannot watch your screen. This page ticks itself the moment the computer says yes.")}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </li>
+        <li className={cn("grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)] sm:p-5", !pcDone && "opacity-60")}>
+          <StepMark n={2} done={web !== "off"} />
+          <div className="grid min-w-0 gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[14.5px] font-semibold">{t("Turn it on here")}</h3>
+              <Pill tone={web !== "off" ? "ok" : "neutral"}>{web !== "off" ? t("On: {level}", { level: t(LEVEL_LABEL[web]) }) : t("Off")}</Pill>
+            </div>
+            <p className="text-[13px] text-muted">{t("Choose what you want to do from the web. You confirm with your password.")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={!pcDone} onClick={() => state.choose("view")}>
+                <MonitorPlayIcon size={15} /> {t("See the screen")}
+              </Button>
+              <Button disabled={pc !== "control"} onClick={() => state.choose("control")}>
+                <CursorClickIcon size={15} /> {t("See and use it (full control)")}
+              </Button>
+            </div>
+            {pcDone && pc === "view" ? <p className="text-[12.5px] text-muted">{t("Full control needs agentic-pc remote control on the computer.")}</p> : null}
+          </div>
+        </li>
+      </ol>
+      <PasswordDialog state={state} />
+    </Card>
+  );
+}
+
+function StepMark({ n, done }: { n: number; done: boolean }) {
+  return done ? (
+    <CheckCircleIcon size={28} weight="fill" className="text-ok" aria-hidden />
+  ) : (
+    <span aria-hidden className="grid size-7 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent tabular">{n}</span>
+  );
+}
+
+function CommandLine({ text }: { text: string }) {
+  const t = useT();
+  const copy = () => {
+    if (!navigator.clipboard) return toast.error(t("Copy blocked by the browser."));
+    void navigator.clipboard.writeText(text).then(() => toast.success(t("Copied.")), () => toast.error(t("Copy blocked by the browser.")));
+  };
+  return (
+    <div className="flex min-w-0 items-stretch gap-2">
+      <pre className="min-w-0 flex-1 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-[#0f172a] px-3.5 py-2.5 font-mono text-[13px] text-[#e2e8f0]"><code>{text}</code></pre>
+      <Button variant="outline" className="h-auto" onClick={copy} aria-label={t("Copy the command")}><CopyIcon size={15} /> <span className="max-sm:hidden">{t("Copy")}</span></Button>
+    </div>
   );
 }

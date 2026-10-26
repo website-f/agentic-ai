@@ -22,7 +22,7 @@ from ..engine import gateway, media
 from ..i18n import Msg, tr, use_lang
 from ..models import Agent, Binding, Channel, ChannelLink, ChatSession, Membership, User
 from ..services import prefs
-from . import deliver, voice, whatsapp
+from . import deliver, receipts, voice, whatsapp
 from .bot import link_lang
 from .whatsapp import Inbound
 
@@ -139,6 +139,29 @@ async def _hear(
     )
 
 
+async def _take_file(db: AsyncSession, ch: Channel, msg: Inbound, user_id: str) -> receipts.Outcome:
+    """P43: download the photo or PDF and keep it (and read it as a receipt)."""
+    assert msg.file is not None
+    cfg = whatsapp.Config.load(deliver.channel_token(ch))
+    try:
+        data = await whatsapp.download_media(cfg, msg.file.ref, receipts.MAX_BYTES)
+    except whatsapp.WhatsAppError as e:
+        if e.status == 413:
+            return receipts.Outcome(Msg("That file is too large. Send a file up to 15 MB."))
+        log.info("file download failed on %s: %s", ch.id, e)
+        return receipts.Outcome(Msg("The file could not be downloaded. Send it again."))
+    except Exception:  # noqa: BLE001 - WAHA or Meta unreachable
+        log.info("file download failed on %s", ch.id, exc_info=True)
+        return receipts.Outcome(Msg("The file could not be downloaded. Send it again."))
+    return await receipts.take(
+        db,
+        ch.workspace_id,
+        user_id,
+        receipts.Sent(data, msg.file.name, msg.file.mime, msg.text),
+        via="whatsapp",
+    )
+
+
 async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
     """One inbound message, answered in the linked person's language (English for a code
     from someone not linked yet: _link answers in the person the code belongs to)."""
@@ -190,6 +213,13 @@ async def _handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
     if not can(role, "work.write"):
         await _reply(db, ch, msg.sender, tr("Your role can read but not instruct agents."), key)
         return
+    text = msg.text
+    if msg.file is not None:
+        took = await _take_file(db, ch, msg, link.user_id)
+        if took.reply is not None:
+            await _reply(db, ch, msg.sender, took.reply, key)
+            return
+        text = took.chat or ""
     if agent is None:
         await _reply(
             db,
@@ -201,7 +231,7 @@ async def _handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
             key,
         )
         return
-    text, heard = msg.text, ""
+    heard = ""
     if msg.audio is not None and not text:
         heard, problem = await _hear(db, ch, msg, agent)
         if problem:

@@ -289,9 +289,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
             ) : (
               <CardBody><p className="text-[13px] text-muted">{t("No duties yet. Add one, like \"every Monday at 9am, the weekly aging report\".")}</p></CardBody>
             )}
-            <div className="border-t border-border px-4 py-2.5 sm:px-5">
-              <Link to="/schedules" className="inline-flex min-h-9 items-center gap-1 text-[13px] text-accent hover:underline">{t("Manage in Schedules")} <ArrowRightIcon size={13} /></Link>
-            </div>
+            {/* P48: My AI is for staff, who have no Schedules page: duties are added above. */}
           </Card>
           <OutlookConnection />
           <Card>

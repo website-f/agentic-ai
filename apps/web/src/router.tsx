@@ -36,6 +36,8 @@ const page = {
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
+  approvalLimits: lazyRouteComponent(() => import("@/pages/approval-limits"), "ApprovalLimitsPage"),
+  timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -232,6 +234,18 @@ const membersRoute = createRoute({
 const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
 // P40: where company files are kept, and storage that feeds the Library.
 const storageRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/storage", component: page.storage });
+// P46: small routine money steps that go through without a person.
+const approvalLimitsRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/approval-limits", component: page.approvalLimits });
+// P47: every agent's working day (hours, breaks, duties), like a staff rota.
+const timetableRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/timetable",
+  validateSearch: (s: Record<string, unknown>): { date?: string; agent?: string } => ({
+    date: typeof s.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : undefined,
+    agent: typeof s.agent === "string" ? s.agent : undefined,
+  }),
+  component: page.timetable,
+});
 
 const activityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -358,7 +372,12 @@ const skillsRoute = createRoute({
 const learningRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/learning",
-  validateSearch: (s: Record<string, unknown>): { days?: number } => ({ days: [7, 30, 90].find((d) => d === Number(s.days)) }),
+  // P45: tab=week (the default: per agent) | overview; week=2026-W43.
+  validateSearch: (s: Record<string, unknown>): { days?: number; tab?: "week" | "overview"; week?: string } => ({
+    days: [7, 30, 90].find((d) => d === Number(s.days)),
+    tab: s.tab === "overview" || s.tab === "week" ? s.tab : undefined,
+    week: typeof s.week === "string" && /^\d{4}-W\d{2}$/i.test(s.week) ? s.week.toUpperCase() : undefined,
+  }),
   component: page.learning,
 });
 
@@ -706,6 +725,8 @@ const routeTree = rootRoute.addChildren([
     membersRoute,
     aiUseRoute,
     storageRoute,
+    approvalLimitsRoute,
+    timetableRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,

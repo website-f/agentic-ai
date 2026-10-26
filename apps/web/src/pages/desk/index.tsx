@@ -41,6 +41,7 @@ import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/
 import { GiveTaskPanel } from "@/components/task-composer/quick-kinds";
 import { AllowanceMeter } from "@/components/allowance-meter";
 import { PageTabs } from "@/components/page-tabs";
+import { TutorialBanner } from "@/pages/tutorial/banner";
 import { PinButton } from "@/components/pin-button";
 import { MadeBy, ReviewPill } from "@/components/provenance";
 import { Marked, TYPE_ICON, typeLabel, useOpenTarget } from "@/components/search-box";
@@ -147,6 +148,8 @@ function DeskView({ desk }: { desk: Desk }) {
         eyebrow={where || t("Home")}
         description={t("Your desk: what you pinned, the procedures for your job, your AI workers, the work you gave and everything it produced. Ask here and your AI worker finds it for you.")}
       />
+      {/* P48: staff never open the Command center, so the tutorial nudge lives here too. */}
+      <TutorialBanner />
       <PageTabs
         label={t("My workspace")}
         guide="desk.tabs"

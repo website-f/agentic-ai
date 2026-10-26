@@ -2100,6 +2100,43 @@ class MailItem(Base):
     followed_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class MailRule(Timestamps, Base):
+    """P44: a person's own inbox rule (on their Outlook) or a shared mailbox's (set by people
+    who manage it). Checked in order on every new mail, without a model (microsoft/rules_engine).
+
+    `when`: {"from": "a@x.com, @supplier.com", "subject": "invoice, quotation", "categories":
+    ["invoice"], "has_attachments": true | null}: every part given must match (words in a
+    part: any one).
+    `then`: {"draft_reply": "how to answer" | "", "save_attachments": "folder" | "",
+    "make_task": bool, "ignore": bool, "stop": bool}."""
+
+    __tablename__ = "mail_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "(account_id IS NULL) <> (mailbox_id IS NULL)", name="ck_mail_rules_one_box"
+        ),
+        Index("ix_mail_rules_account", "account_id", "position"),
+        Index("ix_mail_rules_mailbox", "mailbox_id", "position"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mr"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("microsoft_accounts.id", ondelete="CASCADE")
+    )
+    mailbox_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shared_mailboxes.id", ondelete="CASCADE")
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    when: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    then: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    matched: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(80))
+
+
 class DeviceActivity(Base):
     """P31: one thing done on a person's computer (search, read, save, browser...). `detail`
     holds the path, url or query, never file contents."""

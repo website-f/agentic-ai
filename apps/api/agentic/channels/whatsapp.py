@@ -276,12 +276,22 @@ class Audio:
 
 
 @dataclass
+class Media:
+    """P43: a photo or document (a receipt, usually). `ref` as for Audio."""
+
+    ref: str
+    mime: str
+    name: str = ""
+
+
+@dataclass
 class Inbound:
     message_id: str
     sender: str  # the chat to answer: 60123456789@c.us (WAHA) or 60123456789 (Meta)
     name: str
-    text: str
+    text: str  # with a photo or document: its caption
     audio: Audio | None = None
+    file: Media | None = None
 
 
 def _same_number(a: str, b: str) -> bool:
@@ -298,9 +308,10 @@ def parse_waha(payload: dict[str, Any]) -> list[Inbound]:
     text = str(p.get("body") or "").strip()
     if MARK in text:
         return []  # a message we sent
-    audio = None if text else _waha_audio(p)
-    if not text and audio is None:
-        return []  # empty, or media other than a voice note
+    file = _waha_file(p)
+    audio = None if text or file else _waha_audio(p)
+    if not text and audio is None and file is None:
+        return []  # empty, or media other than a voice note, a photo or a PDF
     me = payload.get("me") or {}
     sender = str(p.get("from") or "")
     if p.get("fromMe"):
@@ -318,7 +329,7 @@ def parse_waha(payload: dict[str, Any]) -> list[Inbound]:
         or me.get("pushName")
         or ""
     )
-    return [Inbound(str(p.get("id") or ""), sender, name, text, audio)]
+    return [Inbound(str(p.get("id") or ""), sender, name, text, audio, file)]
 
 
 def _seconds(*values: Any) -> float | None:
@@ -329,6 +340,21 @@ def _seconds(*values: Any) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _waha_file(p: dict[str, Any]) -> Media | None:
+    """P43: a photo or PDF WAHA already downloaded (served under /api/files/ only)."""
+    from .receipts import wanted
+
+    m = p.get("media") or {}
+    if not p.get("hasMedia") or not isinstance(m, dict) or not m.get("url"):
+        return None
+    mime = str(m.get("mimetype") or "")
+    u = urlparse(str(m["url"]))
+    path = u.path + (f"?{u.query}" if u.query else "")
+    if not wanted(mime) or not path.startswith("/api/files/"):
+        return None
+    return Media(path, mime, str(m.get("filename") or ""))
 
 
 def _waha_audio(p: dict[str, Any]) -> Audio | None:
@@ -359,22 +385,29 @@ def parse_meta(payload: dict[str, Any]) -> list[Inbound]:
             }
             for m in value.get("messages") or []:
                 sender = str(m.get("from") or "")
-                audio = None
-                if m.get("type") == "audio" and (m.get("audio") or {}).get("id"):
+                audio = file = None
+                text = str((m.get("text") or {}).get("body") or "").strip()
+                kind = m.get("type")
+                if kind == "audio" and (m.get("audio") or {}).get("id"):
                     a = m["audio"]
                     audio = Audio(str(a["id"]), str(a.get("mime_type") or "audio/ogg"))
-                elif m.get("type") != "text":
+                elif kind in ("image", "document") and (m.get(kind) or {}).get("id"):
+                    from .receipts import wanted
+
+                    d = m[kind]
+                    mime = str(d.get("mime_type") or ("image/jpeg" if kind == "image" else ""))
+                    if not wanted(mime):
+                        continue
+                    file = Media(str(d["id"]), mime, str(d.get("filename") or ""))
+                    text = str(d.get("caption") or "").strip()
+                elif kind != "text":
                     continue
                 out.append(
                     Inbound(
-                        str(m.get("id") or ""),
-                        sender,
-                        names.get(sender, ""),
-                        str((m.get("text") or {}).get("body") or "").strip(),
-                        audio,
+                        str(m.get("id") or ""), sender, names.get(sender, ""), text, audio, file
                     )
                 )
-    return [m for m in out if (m.text or m.audio) and m.sender]
+    return [m for m in out if (m.text or m.audio or m.file) and m.sender]
 
 
 # ---------------------------------------------------------------- voice notes (P18)
@@ -386,30 +419,36 @@ META_MEDIA_HOSTS = (".fbsbx.com", ".facebook.com", ".whatsapp.net")
 async def _fetch(c: httpx.AsyncClient, url: str, headers: dict[str, str], max_bytes: int) -> bytes:
     async with c.stream("GET", url, headers=headers) as r:
         if r.status_code >= 400:
-            raise WhatsAppError(f"The voice note could not be downloaded ({r.status_code}).")
+            raise WhatsAppError(f"The file could not be downloaded ({r.status_code}).")
         data = bytearray()
         async for chunk in r.aiter_bytes():
             data.extend(chunk)
             if len(data) > max_bytes:
-                raise WhatsAppError("The voice note is too large.", 413)
+                raise WhatsAppError("The file is too large.", 413)
     return bytes(data)
 
 
 async def download_audio(cfg: Config, audio: Audio, max_bytes: int) -> bytes:
-    """The voice note's bytes, from WAHA (X-Api-Key) or from Meta (media id -> URL)."""
+    """The voice note's bytes (P18)."""
+    return await download_media(cfg, audio.ref, max_bytes)
+
+
+async def download_media(cfg: Config, ref: str, max_bytes: int) -> bytes:
+    """A voice note's, photo's or document's bytes, from WAHA (X-Api-Key) or from Meta (media
+    id -> a URL on Meta's own hosts)."""
     async with _client(timeout=60) as c:
         if cfg.provider == "meta":
             auth = {"Authorization": f"Bearer {cfg.token}"}
-            r = await c.get(f"{GRAPH}/{audio.ref}", headers=auth)
+            r = await c.get(f"{GRAPH}/{ref}", headers=auth)
             if r.status_code >= 400:
-                raise WhatsAppError(f"Meta answered {r.status_code} for the voice note.")
+                raise WhatsAppError(f"Meta answered {r.status_code} for the file.")
             info = r.json()
             url = str(info.get("url") or "")
             host = (urlparse(url).hostname or "").lower()
             if urlparse(url).scheme != "https" or not host.endswith(META_MEDIA_HOSTS):
-                raise WhatsAppError("Meta gave an unexpected address for the voice note.")
+                raise WhatsAppError("Meta gave an unexpected address for the file.")
             if int(info.get("file_size") or 0) > max_bytes:
-                raise WhatsAppError("The voice note is too large.", 413)
+                raise WhatsAppError("The file is too large.", 413)
             return await _fetch(c, url, auth, max_bytes)
         headers = {"X-Api-Key": cfg.api_key} if cfg.api_key else {}
-        return await _fetch(c, cfg.base_url.rstrip("/") + audio.ref, headers, max_bytes)
+        return await _fetch(c, cfg.base_url.rstrip("/") + ref, headers, max_bytes)

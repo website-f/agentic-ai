@@ -70,7 +70,7 @@ export function BrainPage() {
     <Page className="max-w-7xl">
       <PageHeader
         title={t("Brain")}
-        description={t("What the office knows: facts agents learned, wiki pages, and a nightly dream that keeps it tidy. Stored as markdown in a git vault that also opens in Obsidian.")}
+        description={t("What the office knows: facts agents learned, wiki pages, and a nightly tidy-up that merges and corrects them.")}
         actions={canManage ? (
           <>
             <Button variant="outline" size="sm" className="max-sm:h-9" loading={sync.isPending} onClick={() => sync.mutate()}><ArrowsClockwiseIcon size={15} /> {t("Sync vault")}</Button>

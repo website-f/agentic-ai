@@ -109,6 +109,12 @@ async def link_code(
             "mac": f"curl -fsSL {base}/i/{code}/mac | sh",
             "linux": f"curl -fsSL {base}/i/{code}/linux | sh",
         },
+        # P42: the same lines that also allow seeing and using the computer from the web.
+        "install_control": {
+            "windows": f"irm {base}/i/{code}/win/control | iex",
+            "mac": f"curl -fsSL {base}/i/{code}/mac/control | sh",
+            "linux": f"curl -fsSL {base}/i/{code}/linux/control | sh",
+        },
         # The desktop app (Electron) only when a build is published (AGENTIC_PC_APP_*_URL);
         # otherwise the one-line installer is the way in.
         "downloads": (
@@ -152,8 +158,22 @@ _NO_INSTALLER_LINES = [
 ]
 
 
+@router.get("/api/install/{code}/{kind}/{remote}")
+async def install_script_remote(
+    code: str, kind: str, remote: str, request: Request
+) -> PlainTextResponse:
+    """P42: the same, with seeing and using the computer from the web allowed at once
+    (/i/{code}/win/control): the person chose it when making the code, and running the line
+    on the computer is their consent there."""
+    if remote not in core.REMOTE_LEVELS:
+        return PlainTextResponse("Use /i/CODE/win/view or /i/CODE/win/control.\n", 404)
+    return await install_script(code, kind, request, remote)
+
+
 @router.get("/api/install/{code}/{kind}")
-async def install_script(code: str, kind: str, request: Request) -> PlainTextResponse:
+async def install_script(
+    code: str, kind: str, request: Request, remote: str = "off"
+) -> PlainTextResponse:
     """GET /i/{code}/win | /i/{code}/mac (nginx maps /i/ here). Does not use the code up.
     An unknown or expired code still answers a script (200) that prints why and stops:
     `curl -f` and `irm` would hide our message behind a bare 404."""
@@ -172,7 +192,7 @@ async def install_script(code: str, kind: str, request: Request) -> PlainTextRes
     base = core.public_base(request.headers, request.url.scheme)
     if not install.safe_server(base):
         base = settings.public_url.rstrip("/")
-    text = install.script(kind, base, core.norm_code(code))
+    text = install.script(kind, base, core.norm_code(code), remote)
     if text is None:
         return PlainTextResponse(install.error_script(kind, _NO_INSTALLER_LINES), headers=headers)
     return PlainTextResponse(text, headers=headers)

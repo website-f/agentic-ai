@@ -272,7 +272,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
         prefill.onCreated(r);
         return;
       }
-      if (r.kind === "schedule") void navigate({ to: "/schedules" });
+      if (r.kind === "schedule") void navigate({ to: me.permissions.includes("office.view") ? "/schedules" : "/my-worker" });
       else if (r.kind === "run") void navigate({ to: "/workflows", search: { run: r.run.id } });
       else void navigate({ to: "/tasks", search: { task: r.task.id } });
     },

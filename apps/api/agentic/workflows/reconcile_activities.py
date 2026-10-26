@@ -24,4 +24,12 @@ async def liveness_reconcile() -> dict[str, int]:
             out["sources_synced"] = await sources.sync_due(db)
     except Exception:  # noqa: BLE001
         activity.logger.warning("storage source sync failed", exc_info=True)
+    try:  # P47: a short summary when an agent's working day ends (if asked for)
+        from ..core.db import SessionLocal
+        from ..teams import timetable
+
+        async with SessionLocal() as db:
+            out["day_reports"] = await timetable.day_reports(db)
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("day reports failed", exc_info=True)
     return out

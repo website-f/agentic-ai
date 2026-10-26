@@ -1,5 +1,6 @@
 import {
   AddressBookIcon,
+  CalendarDotsIcon,
   BrainIcon,
   BooksIcon,
   BookOpenTextIcon,
@@ -34,6 +35,7 @@ import {
   GaugeIcon,
   GearSixIcon,
   HardDrivesIcon,
+  ScalesIcon,
   GraduationCapIcon,
   HandshakeIcon,
   KanbanIcon,
@@ -99,6 +101,8 @@ export type AppPath =
   | "/settings/members"
   | "/settings/ai-use"
   | "/settings/storage"
+  | "/settings/approval-limits"
+  | "/timetable"
   | "/tutorial"
   | "/guide"
   | "/present";
@@ -209,6 +213,7 @@ export const NAV: NavSection[] = [
       { to: "/agents", label: msg("Agents"), icon: UsersThreeIcon, perm: "office.view", blurb: msg("Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom.") },
       { to: "/office", label: msg("Office floor"), icon: BuildingsIcon, perm: "office.view", blurb: msg("A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you.") },
       { to: "/monitor", label: msg("Monitor"), icon: EyeIcon, perm: "office.view", blurb: msg("Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen.") },
+      { to: "/timetable", label: msg("Timetable"), icon: CalendarDotsIcon, perm: "office.view", blurb: msg("Each agent's working day, like a staff rota: its hours, its daily duties, and what waits for its next shift.") },
       { to: "/meetings", label: msg("Meetings"), icon: UsersIcon, perm: "office.view", blurb: msg("Watch agents discuss a decision with each other, interject, and read the outcome they agree on.") },
       { to: "/broadcasts", label: msg("Broadcasts"), icon: BroadcastIcon, perm: "office.view", blurb: msg("Message everyone, a branch, a department or picked agents, and see who acknowledged it.") },
     ],
@@ -218,7 +223,7 @@ export const NAV: NavSection[] = [
     hint: msg("What your agents know and learn: the brain, the skills they learned, how learning went, and reusable role packages."),
     open: "managers",
     items: [
-      { to: "/brain", label: msg("Brain"), icon: BrainIcon, perm: "office.view", blurb: msg("What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian.") },
+      { to: "/brain", label: msg("Brain"), icon: BrainIcon, perm: "office.view", blurb: msg("What the office knows: facts agents learned, wiki pages, and a nightly tidy-up that keeps them correct.") },
       { to: "/skills", label: msg("Skills"), icon: LightningIcon, perm: "office.view", blurb: msg("Procedures agents have learned. Review what they propose before it becomes part of how they work.") },
       { to: "/learning", label: msg("Learning"), icon: GraduationCapIcon, perm: "office.view", blurb: msg("What your agents learned, how each change was tested, what went live by itself, and what learning cost.") },
       { to: "/blueprints", label: msg("Blueprints"), icon: BlueprintIcon, perm: "agents.manage", blurb: msg("Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists.") },
@@ -233,12 +238,13 @@ export const NAV: NavSection[] = [
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
+      { to: "/settings/approval-limits", label: msg("Approval limits"), icon: ScalesIcon, perm: "org.manage", blurb: msg("Let small, routine money steps go through without waiting for you: bills under an amount from known suppliers, small invoice drafts.") },
       { to: "/settings/storage", label: msg("File storage"), icon: HardDrivesIcon, perm: "org.manage", blurb: msg("Where company files are kept: the database, this server's disk, a Backblaze B2 or S3 bucket, or your own file server, and what feeds the Library.") },
       { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
       { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },
       { to: "/schedules", label: msg("Schedules"), icon: CalendarCheckIcon, perm: "office.view", blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
-      { to: "/mcp-servers", label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect external tool servers (MCP) — a tracker, CRM, or a company's own server. Agents reach them through a search-and-call bridge, every call approved.") },
+      { to: "/mcp-servers", label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect tools from other systems (MCP): a tracker, a CRM, or your own server. Agents ask before every call.") },
       { to: "/activity", label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
     ],
   },

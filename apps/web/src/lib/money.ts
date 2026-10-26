@@ -9,9 +9,9 @@
  */
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from "@tanstack/react-query";
 
-import { locale, msg, useLang, type Lang } from "@/i18n";
+import { locale, msg, t, useLang, type Lang } from "@/i18n";
 
-import { api } from "./api";
+import { api, ApiError, langHeader, readCookie } from "./api";
 import { asList, parseDay, query, retryUnlessMissing, type ListParams, type ListResult } from "./crm";
 
 // ------------------------------------------------------------------------------------- types
@@ -55,6 +55,18 @@ export interface MoneyDoc {
   /** Another bill or invoice this one looks the same as (same supplier, number or amount). */
   duplicate_of: string | null;
   notes: string;
+  /** P43: what reading the file learned about payment (a receipt, already paid, a claim). */
+  capture: CaptureInfo | null;
+}
+
+/** P43: a bill or receipt read from a file: was it paid, how, and by whom. */
+export interface CaptureInfo {
+  kind: "invoice" | "receipt";
+  paid: boolean;
+  method: string;
+  /** The person who paid it from their own money (an expense claim): owed back. */
+  paid_by_user: string | null;
+  paid_by_name: string | null;
 }
 
 export interface Payment {
@@ -73,6 +85,8 @@ export interface MoneyDocIn {
   direction: MoneyDirection;
   branch_id: string;
   party_id: string | null;
+  /** A bill's own number (the supplier's); invoices are numbered by the server. */
+  number?: string;
   issue_date: string;
   due_date: string;
   currency: string;
@@ -265,7 +279,63 @@ export function normalizeDoc<T extends Partial<MoneyDoc>>(d: T): T & MoneyDoc {
     source: d.source ?? "",
     duplicate_of: d.duplicate_of ?? null,
     notes: d.notes ?? "",
+    capture: captureOf(d),
   };
+}
+
+function captureOf(d: Partial<MoneyDoc> & { external?: { capture?: Partial<CaptureInfo> } }): CaptureInfo | null {
+  const c = d.capture ?? d.external?.capture;
+  if (!c || typeof c !== "object") return null;
+  return {
+    kind: c.kind === "receipt" ? "receipt" : "invoice",
+    paid: !!c.paid,
+    method: c.method ?? "",
+    paid_by_user: c.paid_by_user ?? null,
+    paid_by_name: c.paid_by_name ?? null,
+  };
+}
+
+/** P43: what the money doc's payment situation is, for one pill: a claim to reimburse, a
+ * receipt already paid, or nothing to say. */
+export function paymentNote(d: Pick<MoneyDoc, "capture" | "status">): { label: string; tone: "info" | "warn" } | null {
+  const c = d.capture;
+  if (!c) return null;
+  if (c.paid_by_user) return { label: msg("Claim: reimburse {name}"), tone: d.status === "paid" ? "info" : "warn" };
+  if (c.kind === "receipt" || c.paid) return { label: msg("Receipt, already paid"), tone: "info" };
+  return null;
+}
+
+export const MAX_RECEIPT_MB = 15;
+
+/** P43: one receipt or bill (a photo or PDF) dropped on the Money page: kept in the company's
+ * "Bills and receipts" folder and read at once into a bill awaiting approval. `paidBy`: the
+ * member who paid it from their own money (an expense claim). */
+export async function uploadReceipt(file: File, branchId: string, paidBy?: string | null): Promise<MoneyDoc> {
+  if (file.size > MAX_RECEIPT_MB * 1024 * 1024) {
+    throw new ApiError(413, "file_too_large", t("{name} is over {mb} MB.", { name: file.name, mb: MAX_RECEIPT_MB }));
+  }
+  const q = new URLSearchParams({ name: file.name });
+  if (branchId) q.set("branch_id", branchId);
+  if (paidBy) q.set("paid_by", paidBy);
+  let res: Response;
+  try {
+    res = await fetch(`/api/money/receipts?${q}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-csrf-token": readCookie("agentic_csrf"),
+        "x-file-type": file.type || "",
+        ...langHeader(),
+      },
+      body: file,
+    });
+  } catch {
+    throw new ApiError(0, "network", t("Could not reach the server. Check that the stack is running."));
+  }
+  const data = (await res.json().catch(() => null)) as (MoneyDoc & { code?: string; message?: string }) | null;
+  if (!res.ok) throw new ApiError(res.status, data?.code ?? "http_error", data?.message ?? t("Upload failed ({status}).", { status: res.status }));
+  return normalizeDoc(data ?? {});
 }
 
 // ------------------------------------------------------------------------------------- labels

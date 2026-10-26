@@ -40,6 +40,7 @@ import { openTaskComposer } from "./task-composer/store";
 import { TaskComposerHost } from "./task-composer/task-composer";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
+import { NeedsBell } from "./needs-bell";
 import { Button } from "./ui/button";
 import {
   Menu,
@@ -512,14 +513,19 @@ function Header() {
       >
         <CommandIcon size={18} />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t("Broadcast a message")}
-        onClick={() => navigate({ to: "/broadcasts" })}
-      >
-        <MegaphoneIcon size={18} />
-      </Button>
+      {/* P48: everything waiting on this person, one click away. */}
+      <NeedsBell />
+      {me.permissions.includes("office.view") ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="max-sm:hidden"
+          aria-label={t("Broadcast a message")}
+          onClick={() => navigate({ to: "/broadcasts" })}
+        >
+          <MegaphoneIcon size={18} />
+        </Button>
+      ) : null}
       <ThemeMenu />
       <UserMenu />
     </header>
