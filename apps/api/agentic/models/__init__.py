@@ -74,6 +74,9 @@ class Membership(Timestamps, Base):
     department_id: Mapped[str | None] = mapped_column(
         ForeignKey("departments.id", ondelete="SET NULL")
     )
+    # P36: this person's AI tokens per day (teams/allowance.py). None = the workspace default
+    # for their role; 0 = no limit.
+    ai_daily_tokens: Mapped[int | None] = mapped_column(Integer)
 
     user: Mapped[User] = relationship(lazy="joined")
 
@@ -269,6 +272,8 @@ class LLMCall(Base):
     masked: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     branch_id: Mapped[str | None] = mapped_column(String(40))
     data_level: Mapped[str | None] = mapped_column(String(16))
+    # P36: the person the work was for (engine/acting.py), for their daily AI allowance.
+    user_id: Mapped[str | None] = mapped_column(String(40))
 
 
 class ProviderCheck(Base):
@@ -835,6 +840,50 @@ class SkillEvalCase(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class Routine(Timestamps, Base):
+    """P36: a job the office learned to do without the paid model (skills/routines.py). The
+    tool calls of finished work, with the values that change from job to job as slots; a
+    later task that matches runs them as they are, and only the final write-up (if any)
+    goes to the cheapest model. Learned from one task as a candidate, active once a second
+    task was done the same way (or a person trusts it)."""
+
+    __tablename__ = "routines"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('candidate', 'active', 'paused', 'retired')", name="ck_routines_status"
+        ),
+        Index("ix_routines_ws_status", "workspace_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("rt"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    # An isolated company's routines stay with it; null = every company.
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    example: Mapped[str] = mapped_column(Text, default="")  # the task it was learned from
+    embedding: Mapped[Any] = mapped_column(Vector(EMBED_DIMS), nullable=True)
+    # [{"name", "description", "example"}]
+    slots: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # [{"tool", "args": {...templates with {{slot}} and {{answer}}}}]
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # {"mode": "template" | "compose", "text": template or what to write}
+    answer: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    tools: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="candidate")
+    source_task_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    agent_id: Mapped[str | None] = mapped_column(String(40))
+    baseline_tokens: Mapped[int | None] = mapped_column(Integer)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    successes: Mapped[int] = mapped_column(Integer, default=0)
+    failures: Mapped[int] = mapped_column(Integer, default=0)
+    failure_streak: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_saved: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_by: Mapped[str | None] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(String(300))
+
+
 # ---------------------------------------------------------------- P6 channels
 
 
@@ -1286,6 +1335,10 @@ class DocFile(Timestamps, Base):
     report_id: Mapped[str | None] = mapped_column(
         ForeignKey("reports.id", ondelete="SET NULL"), index=True
     )
+    # P36 one library: every company document is in the library for every agent of the
+    # company; a restricted one (money, contracts, HR records) only for the agents of its
+    # department (never a staff member's AI) and for managers.
+    restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class IntakeBatch(Timestamps, Base):

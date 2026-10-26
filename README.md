@@ -45,6 +45,8 @@ or from your phone (installable PWA).
 - P26: **My workspace**, each person's own desk; agents conclude instead of searching forever; per-company document language.
 - P27: company forms with deadlines and AI form filling, member import from Excel, file attachments, simpler navigation.
 - P28: tender preparation by agents (ePerolehan), browser downloads and uploads, one file store, gentle browser pacing, egress upstream routing.
+- P29 to P35: one task flow, My AI for staff, the PC agent, browser machines, the privacy gateway, Microsoft 365, contacts, deals and money (see git history and their docs).
+- P36: staff keep to their own work (one guard for the sidebar and every page), a daily AI allowance per person, a work-scope check, one library for every agent (restricted files stay with their department), routines that repeat learned work without the paid model, and a setup that works in five steps for 17 industries (docs/P36-ALLOWANCE-SCOPE-LIBRARY-ROUTINES.md).
 
 Summary of P19 to P28: docs/P19-P28-OVERVIEW.md. Still open: CI (none is set up), TOTP / two-factor sign-in, OIDC.
 

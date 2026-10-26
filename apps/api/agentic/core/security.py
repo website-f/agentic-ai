@@ -65,6 +65,7 @@ SCOPED_ROLES = frozenset({"branch_manager", "hod", "supervisor", "staff"})
 
 _ADMIN = {
     "read",
+    "office.view",
     "org.read",
     "members.manage",
     "org.manage",
@@ -80,6 +81,10 @@ _ADMIN = {
     "finance.view",
     "finance.manage",
 }
+
+# P36 "office.view": the office beyond your own work (the command center, every agent, the
+# brain, skills, schedules, the company overview, setup pages). Everyone but staff, who
+# keep to their own desk, their own AI and the work and files they are part of.
 
 # P35 "finance.view" / "finance.manage": money owed to and by the companies (invoices, bills,
 # payments, reminders). Owner and admin for the whole workspace; a branch manager for their
@@ -98,6 +103,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "branch_manager": frozenset(
         {
             "read",
+            "office.view",
             "work.write",
             "approvals.decide",
             "agents.manage",
@@ -112,6 +118,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "hod": frozenset(
         {
             "read",
+            "office.view",
             "work.write",
             "approvals.decide",
             "agents.manage",
@@ -121,13 +128,15 @@ PERMISSIONS: dict[str, frozenset[str]] = {
         }
     ),
     # Runs the department's work day to day, but does not change agents.
-    "supervisor": frozenset({"read", "work.write", "approvals.decide", "assistants.use"}),
+    "supervisor": frozenset(
+        {"read", "office.view", "work.write", "approvals.decide", "assistants.use"}
+    ),
     # Has one personal agent, their AI twin: gives it work, decides what it asks. No private
     # assistants (assistants.use): those are for people who manage others.
     "staff": frozenset({"read", "work.write", "approvals.decide", "agents.own", "vault.own"}),
-    "operator": frozenset({"read", "org.read", "work.write"}),
-    "approver": frozenset({"read", "org.read", "approvals.decide"}),
-    "viewer": frozenset({"read", "org.read"}),
+    "operator": frozenset({"read", "office.view", "org.read", "work.write"}),
+    "approver": frozenset({"read", "office.view", "org.read", "approvals.decide"}),
+    "viewer": frozenset({"read", "office.view", "org.read"}),
 }
 
 

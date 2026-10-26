@@ -166,7 +166,8 @@ async def test_office_roles_keep_files_inside_what_they_manage(
         assert (await move(bm, department_id=ops)).status_code == 200  # inside their company
 
         # Moving a guideline rebuilds its passages with the new audience.
-        g = await guideline(client, "refunds.txt", REFUNDS, department_id=fin)
+        # P36: only a restricted guideline is kept to its department's audience.
+        g = await guideline(client, "refunds.txt", REFUNDS, department_id=fin, restricted=True)
         r = await client.patch(
             f"/api/files/{g['id']}", json={"department_id": ops}, headers=csrf(client)
         )
@@ -256,7 +257,10 @@ async def test_agents_keep_out_of_personal_and_private_work(
             )
         ).json()
         company = (await upload(client, "price list.txt", b"price list", branch_id=bid)).json()
-        fin_rule = await guideline(client, "finance rule.txt", "Finance rule", department_id=fin)
+        # P36: a restricted Finance document (an ordinary one is for every agent now).
+        fin_rule = await guideline(
+            client, "finance rule.txt", "Finance rule", department_id=fin, restricted=True
+        )
         ops = await new_agent(client, o, "Ops", "Operations")
         twin = await new_agent(client, o, "Siti twin", "Operations")
         pa = await private_assistant(client, o, siti, "Siti PA")

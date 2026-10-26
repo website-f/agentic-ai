@@ -51,7 +51,7 @@ from ...models import (
 from ...search import vocab
 from ...search.viewer import for_person
 from ...services import audit, events
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_work_scope, require
 from .files import check_branch, file_out, start_reading, visible_files
 
 router = APIRouter(prefix="/api/desk", tags=["desk"])
@@ -858,6 +858,7 @@ async def ask(
             "You have no AI worker yet. Hire one in My AI, or pick an agent.",
         )
     text = body.text.strip()
+    await ensure_work_scope(db, principal, text)
     title = " ".join(text.split())
     title = tr("Find: {what}", what=title[:150] + ("…" if len(title) > 150 else ""))
     t = Task(

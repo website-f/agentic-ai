@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BuildingOfficeIcon, CheckCircleIcon, KeyIcon, MonitorIcon, MoonIcon, SunIcon, UsersIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, BuildingOfficeIcon, CheckCircleIcon, CoinsIcon, KeyIcon, MonitorIcon, MoonIcon, SunIcon, UsersIcon } from "@phosphor-icons/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
@@ -37,6 +37,7 @@ export function SettingsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { pref, setPref } = useTheme();
   const role = ROLE_INFO[me.role];
+  const managesPeople = ["members.manage", "team.manage"].some((p) => me.permissions.includes(p));
   return (
     <Page className="max-w-3xl">
       <PageHeader title={t("Settings")} description={t("Your account, this workspace, and how the app looks on this device.")} />
@@ -78,7 +79,12 @@ export function SettingsPage() {
 
       <Section title={t("People and account")}>
         <div className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-          <LinkRow to="/settings/members" icon={UsersIcon} tone="info" title={t("Members and roles")} body={t("Add teammates and decide what each one can do.")} />
+          {managesPeople ? (
+            <>
+              <LinkRow to="/settings/members" icon={UsersIcon} tone="info" title={t("Members and roles")} body={t("Add teammates and decide what each one can do.")} />
+              <LinkRow to="/settings/ai-use" icon={CoinsIcon} tone="accent" title={t("AI use and limits")} body={t("Each person's daily AI allowance, what staff may use their AI for, and what was refused.")} />
+            </>
+          ) : null}
           <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Signs out your other devices.")} />
         </div>
       </Section>

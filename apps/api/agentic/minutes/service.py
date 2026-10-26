@@ -872,6 +872,9 @@ async def publish_library(db: AsyncSession, rec: MeetingRecording) -> DocFile | 
     f.summary = str((rec.minutes or {}).get("summary") or "")[:1000]
     f.status, f.error = "ready", None
     f.library, f.department_id = True, rec.department_id
+    # P36: a department's meeting decisions stay with that department's agents and managers
+    # (every other library document is for the whole company).
+    f.restricted = rec.department_id is not None
     rec.published_at = datetime.now(UTC)
     await db.commit()
     try:

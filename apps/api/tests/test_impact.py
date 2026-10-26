@@ -31,7 +31,9 @@ async def test_catalog_lists_each_industry_and_its_team(client):
     await setup_owner(client)
     cat = (await client.get("/api/branches/starter-teams")).json()
     by = {i["key"]: i for i in cat}
-    assert set(by) == {"general", "network", "engineering", "trading", "professional", "security"}
+    assert {"general", "network", "engineering", "trading", "professional", "security"} <= set(by)
+    # P36: every kind of business has a team that fits.
+    assert {"fnb", "healthcare", "education", "logistics", "manufacturing", "property"} <= set(by)
     assert len(by["general"]["agents"]) == 5
     roles = {a["role"] for a in by["network"]["agents"]}
     assert {"Network Operations (NOC) Assistant", "IT Helpdesk Officer"} <= roles

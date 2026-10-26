@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.security import PERMISSIONS, can, new_token, token_hash
+from ..engine import acting
 from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
 from ..i18n.labels import role_label
 from ..models import AuthSession, Membership, User
@@ -189,6 +190,8 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         )
     user, m = row
     _remember_lang(request, user)
+    # P36: model calls this request makes are this person's (their daily AI allowance).
+    acting.set_person(user.id)
     return Principal(
         user=user,
         workspace_id=session.workspace_id,
@@ -241,3 +244,40 @@ def require(permission: str):
         return principal
 
     return checker
+
+
+async def ensure_allowance(db: AsyncSession, principal: Principal) -> None:
+    """P36: refuse a direct AI feature (a voice note, a summary) once the person used their
+    daily AI allowance."""
+    from ..models import Workspace
+    from ..teams import allowance
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    left = await allowance.check(db, ws, principal.user.id) if ws is not None else None
+    if left is not None:
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "allowance_used",
+            "Your AI allowance for today is used up ({used} of {limit} tokens). It resets at "
+            "midnight, or a manager can give you more.",
+            used=f"{left.used:,}",
+            limit=f"{left.limit or 0:,}",
+        )
+
+
+async def ensure_work_scope(db: AsyncSession, principal: Principal, text: str) -> None:
+    """P36: refuse work a staff member gives their AI that is not about their job."""
+    from ..agents import scope_guard
+    from ..models import Workspace
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    if ws is None:
+        return
+    v = await scope_guard.check(db, ws, principal.user.id, text, "task")
+    if not v.ok:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "out_of_scope",
+            "That looks outside your work here, so it was not started. If it is for work, say "
+            "how it connects to your job.",
+        )

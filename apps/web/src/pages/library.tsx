@@ -7,6 +7,7 @@ import {
   MagnifyingGlassIcon,
   QuotesIcon,
   StackIcon,
+  LockSimpleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -33,6 +34,7 @@ import {
   librarySearchQuery,
   reindexLibrary,
   setLibrary,
+  setRestricted,
   type LibraryPassage,
   type LibrarySource,
 } from "@/lib/library";
@@ -179,6 +181,16 @@ export function LibraryPage() {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const { data: me } = useQuery(meQuery);
+  const canRestrict = !!data?.can_edit && !!me?.permissions.includes("office.view");
+  const restrict = useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) => setRestricted(id, on),
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: libraryKeys.all });
+      toast.success(v.on ? tr("Restricted: only its department's agents and managers read it now.") : tr("Open to every agent of the company now."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const takeOut = useMutation({
     mutationFn: (id: string) => setLibrary(id, false),
     onSuccess: () => {
@@ -248,7 +260,13 @@ export function LibraryPage() {
                   s.indexed_at ? t("indexed {when}", { when: timeAgo(s.indexed_at).toLowerCase() }) : "",
                 ]} />}
                 trailing={<>
+                  {s.restricted ? <Pill tone="warn"><LockSimpleIcon size={12} weight="bold" /> {t("Restricted")}</Pill> : null}
                   <LibraryStatusPill status={s.status} passages={s.passages} />
+                  {s.kind === "file" && canRestrict ? (
+                    <Button size="sm" variant="ghost" disabled={restrict.isPending} onClick={() => restrict.mutate({ id: s.id, on: !s.restricted })}>
+                      {s.restricted ? t("Open to all agents") : t("Restrict")}
+                    </Button>
+                  ) : null}
                   {s.kind === "file" && data?.can_edit ? (
                     <Button size="sm" variant="ghost" onClick={() => setRemoving(s)}>{t("Take out")}</Button>
                   ) : null}

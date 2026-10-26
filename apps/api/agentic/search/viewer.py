@@ -132,10 +132,12 @@ def library_scope(r: library.Reader) -> ColumnElement[bool]:
     )
     if r.all_departments:
         return branch
+    # P36: the department is a filing label; only a restricted file is kept to its
+    # department (and never shown to staff).
     dept = (
-        or_(DocFile.department_id.is_(None), DocFile.department_id == r.department_id)
-        if r.department_id
-        else DocFile.department_id.is_(None)
+        or_(DocFile.restricted.is_(False), DocFile.department_id == r.department_id)
+        if r.department_id and not r.personal
+        else DocFile.restricted.is_(False)
     )
     return and_(branch, dept)
 

@@ -416,8 +416,13 @@ async def release(
         "reviewed_at": _now(),
         "review_reason": body.reason.strip(),
     }
-    if f.batch_id and f.kind in sort.HOW_TO and f.status == "ready":
+    if f.batch_id and f.status == "ready":  # P36: every company document is in the library
         f.library = True
+        f.restricted = (
+            f.restricted
+            or f.kind in sort.RESTRICTED
+            or sort.sensitive_words(f.kind, f.name, f.folder, f.title)
+        )
     await audit.record(
         db,
         principal.workspace_id,

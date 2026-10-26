@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import get_db
 from ...core.valkey import valkey
 from ...engine import client, gateway, media
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_allowance, require
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -55,6 +55,7 @@ async def transcribe(
             "too_many_recordings",
             "That is a lot of recordings in a short time. Wait a few minutes and try again.",
         )
+    await ensure_allowance(db, principal)
     data = bytearray()
     async for chunk in request.stream():
         data.extend(chunk)

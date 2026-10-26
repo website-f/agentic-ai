@@ -60,6 +60,8 @@ class LibrarySource(BaseModel):
     passages: int
     indexed_at: datetime | None
     updated_at: datetime
+    # P36: only its department's agents and managers read it.
+    restricted: bool = False
 
 
 class LibraryOut(BaseModel):
@@ -123,7 +125,8 @@ async def list_library(
         )
     out: list[LibrarySource] = []
     for f in (await db.scalars(q.order_by(DocFile.created_at.desc()))).all():
-        if not library.sees(reader, f.branch_id, f.department_id):
+        # P36: a department is a filing label; only a restricted file is kept to it.
+        if not library.sees(reader, f.branch_id, f.department_id if f.restricted else None):
             continue
         n, _ = counts.get(("file", f.id), (0, None))
         scope, label = names.scope(f.branch_id, f.department_id)
@@ -144,6 +147,7 @@ async def list_library(
                 passages=n,
                 indexed_at=f.indexed_at,
                 updated_at=f.updated_at,
+                restricted=f.restricted,
             )
         )
     sops = (
@@ -153,7 +157,7 @@ async def list_library(
     ).all()
     for s in sops:
         bid, did = await indexer.sop_scope(db, s)
-        if not library.sees(reader, bid, did):
+        if not library.sees(reader, bid, None):  # P36: every SOP of the company
             continue
         n, last = counts.get(("sop", s.id), (0, None))
         scope, label = names.scope(bid, did)
@@ -190,6 +194,9 @@ class LibraryIn(BaseModel):
     library: bool
     branch_id: str | None = None
     department_id: str | None = None
+    # P36: only the department's own agents and managers may read it (never a staff
+    # member's AI). Unset keeps what it was.
+    restricted: bool | None = None
 
 
 async def _check_scope(
@@ -251,7 +258,21 @@ async def set_library(
     elif f.library:
         # Taking a file out is allowed to whoever could put it there.
         await _check_scope(db, principal, f.branch_id, f.department_id)
+    if body.library and not f.library and body.restricted is None:
+        # P36: confidential by its name or kind (pay, personnel, contracts): restricted until a
+        # manager opens it up.
+        from ...intake.sort import sensitive_words
+
+        f.restricted = sensitive_words(f.kind, f.name, f.folder, f.title)
     f.library = body.library
+    if body.restricted is not None and body.restricted != f.restricted:
+        if not can(principal.role, "office.view"):
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "forbidden",
+                "Only managers can restrict who reads a document.",
+            )
+        f.restricted = body.restricted
     if body.library:
         f.branch_id, f.department_id = branch_id, department_id
     else:
@@ -264,7 +285,12 @@ async def set_library(
         "file.library",
         target=f.id,
         before=before,
-        after={"library": f.library, "branch_id": f.branch_id, "department_id": f.department_id},
+        after={
+            "library": f.library,
+            "branch_id": f.branch_id,
+            "department_id": f.department_id,
+            "restricted": f.restricted,
+        },
     )
     await db.commit()
     if f.library and f.status == "ready":

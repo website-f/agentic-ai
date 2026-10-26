@@ -39,6 +39,7 @@ import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { GiveTaskPanel } from "@/components/task-composer/quick-kinds";
+import { AllowanceMeter } from "@/components/allowance-meter";
 import { PageTabs } from "@/components/page-tabs";
 import { PinButton } from "@/components/pin-button";
 import { MadeBy, ReviewPill } from "@/components/provenance";
@@ -165,6 +166,7 @@ function DeskView({ desk }: { desk: Desk }) {
             <GiveTaskPanel agent={mainAgent} guide="desk.give" title={mainAgent.is_twin ? t("Give my AI a task") : undefined} />
           ) : null}
           {desk.can_ask ? <AskPanel /> : null}
+          <AllowanceMeter />
           <StatGrid guide="desk.stats">
             <Stat label={t("Waiting for you")} value={waiting} icon={SealCheckIcon} tone={waiting ? "warn" : "ok"} hint={waiting ? t("Approvals, answers and reviews") : t("Nothing right now")} onClick={() => go("work")} />
             <Stat label={t("In progress")} value={open} icon={HourglassIcon} tone="info" hint={t("Work you gave or your AI does")} onClick={() => go("work")} />

@@ -450,6 +450,7 @@ async def test_zip_upload_is_unpacked_read_scanned_sorted_and_reported(
     report = detail["report"]
     assert report["by_kind"]["sop"] == 1 and sum(report["by_kind"].values()) == 5
     assert report["by_department"][ops_dept] == 5
+    # P36 one library: every document that is not held back joins it.
     assert report["library"] == 4 and report["held_back"] == 1
     assert [f["name"] for f in report["flagged"]] == ["Contoh Surat Amaran.docx"]
     assert report["flagged"][0]["reasons"] == ["personal_ids"]
@@ -466,10 +467,14 @@ async def test_zip_upload_is_unpacked_read_scanned_sorted_and_reported(
     assert tender["Carta Alir Tender.png"]["folder"] == "TENDER/CARTA ALIR"
     assert tender["Carta Alir Tender.png"]["kind"] == "flowchart"
     assert tender["Sijil SSM.pdf"]["kind"] == "certificate"
-    assert tender["Sijil SSM.pdf"]["library"] is False  # company file, not how-to
+    # P36 one library: company files join it too; money and contracts are restricted.
+    assert tender["Sijil SSM.pdf"]["library"] is True
+    assert tender["Sijil SSM.pdf"]["restricted"] is False
     assert tender["Kontrak Perkhidmatan.xlsx"]["kind"] == "contract"
+    assert tender["Kontrak Perkhidmatan.xlsx"]["restricted"] is True
     bank = tender["Penyata Bank.csv"]
     assert bank["kind"] == "financial" and bank["quarantined"] is False
+    assert bank["library"] is True and bank["restricted"] is True
     assert bank["sensitive"]["personal_kinds"] == {"bank_account": 1}
 
     # Secret values are stored nowhere but in the file itself.
@@ -839,7 +844,10 @@ async def test_agents_see_a_catalog_and_never_held_back_files(
         ctx = ToolContext(db=db, agent=a, workspace=ws, task=None)  # type: ignore[arg-type]
 
         cat = await _company_documents(ctx, {})
-        assert "Company documents of Maju Sdn Bhd: 8 file(s)" in cat and "2 held back" in cat
+        # P36: the catalog is what read_file may open: the bank statement is restricted to
+        # Finance, so an Operations agent does not even see its name.
+        assert "Company documents of Maju Sdn Bhd: 7 file(s)" in cat and "2 held back" in cat
+        assert "Penyata Bank" not in cat
         assert "- OPERASI/SOP — 1: sop 1" in cat
         assert f"[{sop['id']}] OPERASI/SOP/SOP Kawalan Pintu Masuk.pdf — sop · Operations" in cat
         assert "2 file(s) held back for review" in cat

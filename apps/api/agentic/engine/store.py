@@ -12,7 +12,7 @@ from ..core import crypto
 from ..core.db import SessionLocal
 from ..core.valkey import valkey
 from ..models import AIModel, AIProvider, LLMCall, ModelGroup
-from . import media
+from . import acting, media
 from .client import Usage
 
 log = logging.getLogger("agentic.engine")
@@ -88,6 +88,42 @@ async def ensure_default_groups(db: AsyncSession, workspace_id: str) -> list[Mod
         await media.fill_groups(db, workspace_id, new_rows)
     await _fill_local(db, workspace_id, rows)
     return rows
+
+
+# P36: the chat models a known provider's key works with straight away (smart, fast). A new
+# office connects one key and its agents can work, instead of an empty Smart group failing
+# every task until someone fills the groups by hand. Only EMPTY groups are filled.
+CHAT_DEFAULTS: dict[str, tuple[str, str]] = {
+    "groq": ("llama-3.3-70b-versatile", "llama-3.1-8b-instant"),
+    "openrouter": (
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ),
+    "mistral": ("mistral-small-latest", "open-mistral-nemo"),
+    "huggingface": ("Qwen/Qwen2.5-7B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"),
+    "deepseek": ("deepseek-chat", "deepseek-chat"),
+    "openai": ("gpt-4.1-mini", "gpt-4o-mini"),
+    "anthropic": ("claude-haiku-4-5", "claude-haiku-4-5"),
+    "gemini": ("gemini-2.5-flash", "gemini-2.5-flash"),
+}
+
+
+async def fill_chat_groups(db: AsyncSession, provider: AIProvider) -> list[str]:
+    """Give the empty smart, fast and bulk groups this provider's default chat models.
+    Returns the groups it filled."""
+    pair = CHAT_DEFAULTS.get(provider.preset or "")
+    if pair is None:
+        return []
+    smart, fast = pair
+    want = {"smart": smart, "fast": fast, "bulk": fast}
+    filled = []
+    for g in await ensure_default_groups(db, provider.workspace_id):
+        if g.name in want and not g.members:
+            g.members = [{"provider_id": provider.id, "model_id": want[g.name]}]
+            filled.append(g.name)
+    if filled:
+        await db.commit()
+    return filled
 
 
 LOCAL_PROVIDER = "Local backup"
@@ -196,6 +232,7 @@ async def record_call(
                     masked=masked,
                     branch_id=branch_id,
                     data_level=data_level,
+                    user_id=acting.current(),
                 )
             )
             await db.commit()

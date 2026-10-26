@@ -55,9 +55,13 @@ def channel_token(ch: Channel) -> str:
     return crypto.decrypt(ch.config_enc, f"channel:{ch.id}")
 
 
-async def deciders(db: AsyncSession, workspace_id: str, agent: Agent | None = None) -> list[User]:
+async def deciders(
+    db: AsyncSession, workspace_id: str, agent: Agent | None = None, *, budget: bool = False
+) -> list[User]:
     """People who may decide; given the asking agent, only those whose scope covers it (a
-    staff member hears about their own agents, a HOD about the department's)."""
+    staff member hears about their own agents, a HOD about the department's). P36: more
+    budget or allowance only managers (agents.decisions.GRANTERS)."""
+    from ..agents.decisions import GRANTERS  # late: decisions imports this package
     from ..api.scope import Scope
 
     rows = (
@@ -71,6 +75,7 @@ async def deciders(db: AsyncSession, workspace_id: str, agent: Agent | None = No
         u
         for u, m in rows
         if can(m.role, "approvals.decide")
+        and (not budget or any(can(m.role, p) for p in GRANTERS))
         and (
             agent is None or Scope.of(m.role, u.id, m.branch_id, m.department_id).sees_agent(agent)
         )
@@ -143,7 +148,7 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     )
     now = datetime.now(UTC)
     ids: list[str] = []
-    for user in await deciders(db, a.workspace_id, agent):
+    for user in await deciders(db, a.workspace_id, agent, budget=a.kind == "budget"):
         lang = prefs.lang_of(user)  # the recipient's language, not the agent's or the asker's
         title, body = render(title_msg, lang), render(body_msg, lang)
         subs = (

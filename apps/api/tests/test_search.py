@@ -138,6 +138,7 @@ async def add_file(
     name=None,
     pages=None,
     folder="",
+    restricted=False,
 ):
     async with SessionLocal() as db:
         f = DocFile(
@@ -159,6 +160,7 @@ async def add_file(
             quarantined=quarantined,
             department_id=department_id,
             folder=folder,
+            restricted=restricted,
         )
         db.add(f)
         await db.commit()
@@ -385,13 +387,15 @@ async def test_scope_staff_branch_managers_drafts_and_held_back(client):
     sug = (await client.get("/api/search/suggest", params={"q": "zebr"})).json()["suggestions"]
     assert not [s for s in sug if s["kind"] != "recent"]
 
-    # Department guidelines and SOPs: the HOD of that department only (as in the library).
+    # Department SOPs and restricted guidelines: the HOD of that department only (P36: an
+    # ordinary guideline filed under a department is for the whole company).
     fin, ops = o["depts"]["Finance"], o["depts"]["Operations"]
     claim = await add_file(
         o["ws"],
         o["owner"],
         title="Polisi Tuntutan Hotel",
         library=True,
+        restricted=True,
         branch_id=o["a"],
         department_id=fin,
         body="[page 1]\nHad tuntutan hotel RM250 semalam.",

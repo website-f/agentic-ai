@@ -16,12 +16,15 @@ from ...core.db import get_db
 from ...core.temporal import temporal_client
 from ...core.valkey import valkey
 from ...models import (
+    SOP,
     Agent,
     AIProvider,
     Approval,
     Branch,
     Department,
+    DocFile,
     Membership,
+    ModelGroup,
     SkillProposal,
     Task,
 )
@@ -172,6 +175,33 @@ async def system_status(
         or 0,
         # P25: documents agents made that wait for this person (scoped like Documents).
         "documents_review": await _documents_review(db, principal),
+        # P36 setup steps: models agents can chat with, the company's documents in the
+        # library, and the first work given.
+        "chat_models": len(
+            await db.scalar(
+                select(ModelGroup.members).where(
+                    ModelGroup.workspace_id == ws, ModelGroup.name == "smart"
+                )
+            )
+            or []
+        ),
+        "library": (
+            await db.scalar(
+                select(func.count())
+                .select_from(DocFile)
+                .where(DocFile.workspace_id == ws, DocFile.library.is_(True))
+            )
+            or 0
+        )
+        + (
+            await db.scalar(
+                select(func.count())
+                .select_from(SOP)
+                .where(SOP.workspace_id == ws, SOP.status == "active")
+            )
+            or 0
+        ),
+        "tasks": await count(Task),
     }
     return SystemStatusOut(
         ok=all(c.ok for c in components), version=__version__, components=components, counts=counts

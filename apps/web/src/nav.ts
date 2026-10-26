@@ -96,6 +96,7 @@ export type AppPath =
   | "/activity"
   | "/settings"
   | "/settings/members"
+  | "/settings/ai-use"
   | "/tutorial"
   | "/guide"
   | "/present";
@@ -138,8 +139,8 @@ export const NAV: NavSection[] = [
     open: "all",
     items: [
       { to: "/workspace", label: msg("My workspace"), short: msg("My desk"), icon: DeskIcon, blurb: msg("Your own desk: ask or search anything, your pinned SOPs and workflows, your AI workers, the work you gave and every file it produced.") },
-      { to: "/", label: msg("Command center"), icon: GaugeIcon, also: ["/overview"], blurb: msg("Today at a glance: system health, organization and what to do next.") },
-      { to: "/overview", label: msg("Company overview"), icon: ChartBarIcon, hidden: true, blurb: msg("Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing.") },
+      { to: "/", label: msg("Command center"), icon: GaugeIcon, perm: "office.view", also: ["/overview"], blurb: msg("Today at a glance: system health, organization and what to do next.") },
+      { to: "/overview", label: msg("Company overview"), icon: ChartBarIcon, perm: "office.view", hidden: true, blurb: msg("Every branch side by side: work by type, what is failing or waiting, and spend, with an AI briefing.") },
       // P30: one entry for a person's one personal AI, their twin. Today (/my-worker) and its
       // chat, tasks, memory, teaching and profile (/twin) are tabs of it.
       { to: "/my-worker", label: msg("My AI"), icon: UserFocusIcon, perm: "agents.own", also: ["/twin"], blurb: msg("Your AI twin, the one AI that works for you: what it is doing today, chat with it, its tasks, what it knows, teaching it and its profile.") },
@@ -163,7 +164,7 @@ export const NAV: NavSection[] = [
       { to: "/mail", label: msg("Mail"), icon: EnvelopeSimpleIcon, perm: ["agents.own", "assistants.use", "channels.manage"], blurb: msg("Mail that reached your Outlook and the company's shared mailboxes, and what the AI did with each: the task it made, the file it saved, the reply it drafted for you.") },
       { to: "/chat", label: msg("Chat"), icon: ChatsCircleIcon, blurb: msg("Talk to any agent directly, by typing or with your voice, and pick up past conversations.") },
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
-      { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
+      { to: "/objectives", label: msg("Objectives"), icon: TargetIcon, perm: "office.view", blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
       { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
     ],
   },
@@ -203,11 +204,11 @@ export const NAV: NavSection[] = [
     hint: msg("Who your AI agents are, watching them work, and letting them meet."),
     open: "managers",
     items: [
-      { to: "/agents", label: msg("Agents"), icon: UsersThreeIcon, blurb: msg("Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom.") },
-      { to: "/office", label: msg("Office floor"), icon: BuildingsIcon, blurb: msg("A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you.") },
-      { to: "/monitor", label: msg("Monitor"), icon: EyeIcon, blurb: msg("Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen.") },
-      { to: "/meetings", label: msg("Meetings"), icon: UsersIcon, blurb: msg("Watch agents discuss a decision with each other, interject, and read the outcome they agree on.") },
-      { to: "/broadcasts", label: msg("Broadcasts"), icon: BroadcastIcon, blurb: msg("Message everyone, a branch, a department or picked agents, and see who acknowledged it.") },
+      { to: "/agents", label: msg("Agents"), icon: UsersThreeIcon, perm: "office.view", blurb: msg("Create agents by hand, place them in a department, give them skills and SOPs, and see who reports to whom.") },
+      { to: "/office", label: msg("Office floor"), icon: BuildingsIcon, perm: "office.view", blurb: msg("A live pixel-art office per branch. Every agent sits at a desk in its department and walks to the podium when it needs you.") },
+      { to: "/monitor", label: msg("Monitor"), icon: EyeIcon, perm: "office.view", blurb: msg("Watch any agent work live: its thinking, every tool it uses, questions to colleagues, and its browser screen.") },
+      { to: "/meetings", label: msg("Meetings"), icon: UsersIcon, perm: "office.view", blurb: msg("Watch agents discuss a decision with each other, interject, and read the outcome they agree on.") },
+      { to: "/broadcasts", label: msg("Broadcasts"), icon: BroadcastIcon, perm: "office.view", blurb: msg("Message everyone, a branch, a department or picked agents, and see who acknowledged it.") },
     ],
   },
   {
@@ -215,10 +216,10 @@ export const NAV: NavSection[] = [
     hint: msg("What your agents know and learn: the brain, the skills they learned, how learning went, and reusable role packages."),
     open: "managers",
     items: [
-      { to: "/brain", label: msg("Brain"), icon: BrainIcon, blurb: msg("What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian.") },
-      { to: "/skills", label: msg("Skills"), icon: LightningIcon, blurb: msg("Procedures agents have learned. Review what they propose before it becomes part of how they work.") },
-      { to: "/learning", label: msg("Learning"), icon: GraduationCapIcon, blurb: msg("What your agents learned, how each change was tested, what went live by itself, and what learning cost.") },
-      { to: "/blueprints", label: msg("Blueprints"), icon: BlueprintIcon, perm: ["agents.manage", "agents.own"], blurb: msg("Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists.") },
+      { to: "/brain", label: msg("Brain"), icon: BrainIcon, perm: "office.view", blurb: msg("What the office knows: facts agents learned, wiki pages and the nightly dream, in a vault that also opens in Obsidian.") },
+      { to: "/skills", label: msg("Skills"), icon: LightningIcon, perm: "office.view", blurb: msg("Procedures agents have learned. Review what they propose before it becomes part of how they work.") },
+      { to: "/learning", label: msg("Learning"), icon: GraduationCapIcon, perm: "office.view", blurb: msg("What your agents learned, how each change was tested, what went live by itself, and what learning cost.") },
+      { to: "/blueprints", label: msg("Blueprints"), icon: BlueprintIcon, perm: "agents.manage", blurb: msg("Reusable role packages — instructions, model, tool scope, SOPs and skills — you apply to agents so they start as specialists.") },
     ],
   },
   {
@@ -226,12 +227,14 @@ export const NAV: NavSection[] = [
     hint: msg("One-time setup and records: companies, people, AI models, channels and logins. Usually the admin's job."),
     open: "none",
     items: [
-      { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, blurb: msg("Branches (one per company) and the departments inside them.") },
+      { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, perm: "office.view", blurb: msg("Branches (one per company) and the departments inside them.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
+      { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
+      { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
       { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
       { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },
-      { to: "/schedules", label: msg("Schedules"), icon: CalendarCheckIcon, blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
+      { to: "/schedules", label: msg("Schedules"), icon: CalendarCheckIcon, perm: "office.view", blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
       { to: "/mcp-servers", label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect external tool servers (MCP) — a tracker, CRM, or a company's own server. Agents reach them through a search-and-call bridge, every call approved.") },
       { to: "/activity", label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
     ],
@@ -255,3 +258,28 @@ export const ALL_NAV: NavItem[] = NAV.flatMap((s) => s.items);
 export const HELP_SECTION = "Help";
 
 export const TAB_BAR: AppPath[] = ["/workspace", "/tasks", "/approvals", "/chat"];
+
+/** The navigation entry a path belongs to (its own page, a tab of it, or a page under it). */
+export function navItemFor(pathname: string): NavItem | undefined {
+  const hit = (to: string) => (to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`));
+  // The longest match wins; at the same length a page's own entry beats a tab of another.
+  let best: NavItem | undefined;
+  let bestScore = -1;
+  for (const item of ALL_NAV) {
+    for (const to of [item.to, ...(item.also ?? [])]) {
+      const score = to.length * 2 + (to === item.to ? 1 : 0);
+      if (hit(to) && score > bestScore) {
+        best = item;
+        bestScore = score;
+      }
+    }
+  }
+  return best;
+}
+
+/** May someone with these permissions open this path? The same rule as the sidebar, so a
+ * page that is not in someone's navigation cannot be reached by typing its address either. */
+export function pathAllowed(pathname: string, permissions: string[]): boolean {
+  const item = navItemFor(pathname);
+  return !item?.perm || [item.perm].flat().some((p) => permissions.includes(p));
+}

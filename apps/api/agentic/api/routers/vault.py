@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import vault
+from ...core import crypto
 from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import can
@@ -227,8 +228,21 @@ async def update_login(
         c.agent_ids = await _check_agents(db, principal, body.agent_ids)
         changed.append("agents")
     if body.username is not None or body.password is not None:
-        user, pw = vault.reveal(c)
-        vault.seal(c, body.username or user, body.password or pw)
+        user, pw = body.username, body.password
+        if not (user and pw):
+            # Only one of the two changed: the other comes from the stored secret, which a
+            # server with another master key (e.g. a restored copy) cannot read.
+            try:
+                old_user, old_pw = vault.reveal(c)
+            except crypto.DecryptError:
+                raise api_error(
+                    status.HTTP_409_CONFLICT,
+                    "login_unreadable",
+                    "This login was saved with another key and cannot be read here. "
+                    "Enter both the username and the password to replace it.",
+                ) from None
+            user, pw = user or old_user, pw or old_pw
+        vault.seal(c, user, pw)
         changed.append("secret")
     if {"hosts", "secret"} & set(changed) and await vault.forget_state(db, c.id):
         # A session saved for other sites or another account must not be reused.

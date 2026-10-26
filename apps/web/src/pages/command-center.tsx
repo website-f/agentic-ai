@@ -124,34 +124,45 @@ function Step({ n, done, title, body, to, cta, soon }: { n: number; done: boolea
 
 function GettingStarted({ counts }: { counts: Record<string, number> | undefined }) {
   const t = useT();
+  // P36: in the order that gets an office working: AI first (nothing works without it),
+  // then the company with its ready-made AI team, its documents, its people, the first job.
   const steps = [
     {
-      done: (counts?.branches ?? 0) > 0,
-      title: t("Create a branch for each company"),
-      body: t("Departments (Finance, Research, Operations and more) are added for you."),
-      to: "/organization",
-      cta: t("Add branch"),
-    },
-    {
-      done: (counts?.members ?? 0) > 1,
-      title: t("Invite your team"),
-      body: t("Give each person a role: operators run work, approvers decide on it."),
-      to: "/settings/members",
-      cta: t("Add member"),
-    },
-    {
-      done: (counts?.providers ?? 0) > 0,
-      title: t("Connect AI providers"),
-      body: t("Paste your Groq, OpenRouter, Mistral, HuggingFace, DeepSeek or OpenAI keys and test them."),
+      done: (counts?.providers ?? 0) > 0 && (counts?.chat_models ?? 0) > 0,
+      title: t("Connect an AI provider"),
+      body: (counts?.providers ?? 0) > 0
+        ? t("A key is in, but the Smart group has no model yet. Pick one in Model groups.")
+        : t("Paste one key (Groq and OpenRouter are free) and test it. Its models are set up for your agents straight away."),
       to: "/ai-engine",
       cta: t("Connect"),
     },
     {
-      done: (counts?.agents ?? 0) > 0,
-      title: t("Create your first agent"),
-      body: t("Place it in a department, give it SOPs and permissions, then give it a task."),
-      to: "/agents/new",
-      cta: t("New agent"),
+      done: (counts?.branches ?? 0) > 0 && (counts?.agents ?? 0) > 0,
+      title: t("Add your company and its AI team"),
+      body: t("Name it and pick your industry: departments and a ready-made team of AI agents are created for you."),
+      to: "/organization",
+      cta: t("Add company"),
+    },
+    {
+      done: (counts?.library ?? 0) > 0,
+      title: t("Put your SOPs and documents in the Library"),
+      body: t("Drop a zip or folders of procedures, policies, forms and templates. Every agent reads and searches them."),
+      to: "/files",
+      cta: t("Upload"),
+    },
+    {
+      done: (counts?.members ?? 0) > 1,
+      title: t("Add your staff and their daily AI allowance"),
+      body: t("Each person gets their own AI and a daily allowance you set. Staff see only their own work."),
+      to: "/settings/members",
+      cta: t("Add people"),
+    },
+    {
+      done: (counts?.tasks ?? 0) > 0,
+      title: t("Give the first task"),
+      body: t("Say what you need in plain words and pick an agent. Jobs it repeats are learned and later cost almost nothing."),
+      to: "/tasks",
+      cta: t("New task"),
     },
   ];
   const finished = steps.filter((s) => s.done).length;

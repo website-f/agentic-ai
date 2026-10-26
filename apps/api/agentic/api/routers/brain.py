@@ -326,9 +326,17 @@ async def _check_page_write(
     if not await _readable_page(db, principal, path, branch_id):
         raise _not_found()
     is_agent, a = await _page_agent(db, principal.workspace_id, path)
-    if not is_agent:
-        return None
     perms = PERMISSIONS.get(principal.role, frozenset())
+    if not is_agent:
+        # P36: shared pages feed every agent's recall; people who manage agents or the brain
+        # change them, staff only read them (their own AI's memory is theirs to change).
+        if not perms & {"brain.manage", "agents.manage", "team.manage"}:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "forbidden",
+                "Only managers can change the office's shared pages.",
+            )
+        return None
     allowed = (
         can_manage(principal, a)
         if a is not None

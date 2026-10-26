@@ -375,3 +375,13 @@ RAW_UPLOAD_PATHS.add(parties_router.IMPORT_PATH)
 MULTIPART_PATHS.add(parties_router.IMPORT_PATH)
 app.include_router(parties_router.router)
 app.include_router(money_router.router)
+
+# P36: each person's daily AI allowance and the work-scope guard (the owner's controls).
+from .routers import allowances as allowances_router  # noqa: E402
+
+app.include_router(allowances_router.router)
+
+# P36: routines, jobs the office repeats without the paid model.
+from .routers import routines as routines_router  # noqa: E402
+
+app.include_router(routines_router.router)

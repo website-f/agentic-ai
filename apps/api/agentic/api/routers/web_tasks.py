@@ -24,7 +24,7 @@ from ...i18n.labels import agent_status_label
 from ...models import Device, Task
 from ...services import audit, events
 from ..agent_schemas import TaskOut
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_work_scope, require
 from .agents import can_manage, get_agent
 from .tasks import clean_labels, task_out
 
@@ -306,6 +306,7 @@ async def web_task(
         or 0
     )
     title = (body.title or "").strip() or body.instructions.strip().splitlines()[0][:120]
+    await ensure_work_scope(db, principal, f"{title}\n{body.instructions}")
     brief = brief_for(body)
     if device is not None:
         brief += (

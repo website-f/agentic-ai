@@ -182,10 +182,15 @@ class Sorter:
             )
         if not f.title:
             f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
-        # How-to material joins the library (indexed once the file is ready); certificates,
-        # contracts and accounts stay company files. Held-back files never join it.
-        if s.kind in sort.HOW_TO and not f.quarantined and f.status != "failed":
+        # P36 one library: every company document joins it (indexed once the file is ready)
+        # so every agent of the company can search it; money and contracts are restricted to
+        # their department's agents and managers. Held-back files never join it.
+        if not f.quarantined and f.status != "failed":
             f.library = True
+            if s.kind in sort.RESTRICTED or sort.sensitive_words(
+                str(info.get("kind") or ""), f.name, f.folder, f.title
+            ):
+                f.restricted = True
 
 
 # ---------------------------------------------------------------- the worker's steps

@@ -31,6 +31,26 @@ KINDS = (
 )
 # How-to material: goes into the knowledge library so agents can search and cite it.
 HOW_TO = frozenset({"sop", "guide", "checklist", "flowchart", "policy", "template", "form"})
+# P36: kept to their department's agents and managers (never a staff member's AI).
+RESTRICTED = frozenset({"financial", "contract"})
+# P36: words that make a document confidential whatever its kind: pay, personnel records,
+# contracts, bank and medical matters (English and Malay). Such a file stays with its
+# department's agents and managers. Migration 0036 uses the same pattern (keep in step).
+SENSITIVE_PATTERN = (
+    r"\m(salary|salaries|payroll|payslips?|wages?|gaji|upah|bonus|epf|kwsp|socso|perkeso"
+    r"|employee data|employee records?|personnel|maklumat pekerja|rekod pekerja"
+    r"|appraisals?|penilaian prestasi|disciplinary|tatatertib|medical|perubatan"
+    r"|contracts?|kontrak|agreements?|perjanjian|bank|penyata|statements? of account"
+    r"|financial|kewangan|accounts?|akaun|ledger|budget|bajet|invoices?|invois"
+    r"|mykad|ic numbers?|passports?|pasport)\M"
+)
+_SENSITIVE = re.compile(SENSITIVE_PATTERN.replace(r"\m", r"\b").replace(r"\M", r"\b"), re.I)
+
+
+def sensitive_words(*texts: str) -> bool:
+    """Does the kind, name, folder or title say this is confidential?"""
+    return bool(_SENSITIVE.search(" ".join(t for t in texts if t)))
+
 
 # kind -> words (lower case; matched as whole words, spaces flexible). Malay and English.
 _WORDS: dict[str, tuple[str, ...]] = {

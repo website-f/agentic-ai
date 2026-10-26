@@ -1424,4 +1424,38 @@ MS: dict[str, str] = {
     "negotiation|deal stage": "rundingan",
     "won|deal stage": "berjaya",
     "lost|deal stage": "terlepas",
+    # ------------------------------------------------------------ P36 allowance, work scope, routines
+    "Only a manager can give more AI budget or allowance.": (
+        "Hanya pengurus boleh beri lebih bajet atau elaun AI."
+    ),
+    "That looks outside your work here, so I will not do it. I am for your work at the company: its customers, documents, procedures and your own tasks. If it is for work, say how it connects to your job and ask again.": (
+        "Itu nampaknya di luar kerja anda di sini, jadi saya tidak akan buat. Saya untuk kerja "
+        "anda di syarikat: pelanggannya, dokumen, prosedur dan tugasan anda sendiri. Jika ia "
+        "untuk kerja, terangkan kaitannya dengan tugas anda dan tanya semula."
+    ),
+    "Your AI allowance for today is used up ({used} of {limit} tokens). It resets at midnight, or a manager can give you more.": (
+        "Elaun AI anda untuk hari ini sudah habis ({used} daripada {limit} token). Ia diset "
+        "semula pada tengah malam, atau pengurus boleh beri lebih."
+    ),
+    "That looks outside your work here, so it was not started. If it is for work, say how it connects to your job.": (
+        "Itu nampaknya di luar kerja anda di sini, jadi ia tidak dimulakan. Jika ia untuk "
+        "kerja, terangkan kaitannya dengan tugas anda."
+    ),
+    "You cannot change your own AI allowance. Ask an owner or admin.": (
+        "Anda tidak boleh menukar elaun AI anda sendiri. Minta pemilik atau admin."
+    ),
+    "There is no role called {role}.": "Tiada peranan bernama {role}.",
+    "Only managers can change the office's shared pages.": (
+        "Hanya pengurus boleh menukar halaman kongsi pejabat."
+    ),
+    "Only managers can restrict who reads a document.": (
+        "Hanya pengurus boleh mengehadkan siapa yang membaca dokumen."
+    ),
+    "That routine is not here.": "Rutin itu tiada di sini.",
+    "This routine is {status} already.": "Rutin ini sudah {status}.",
+    "Only managers can change routines.": "Hanya pengurus boleh menukar rutin.",
+    "This login was saved with another key and cannot be read here. Enter both the username and the password to replace it.": (
+        "Log masuk ini disimpan dengan kunci lain dan tidak boleh dibaca di sini. Masukkan nama "
+        "pengguna dan kata laluan untuk menggantikannya."
+    ),
 }

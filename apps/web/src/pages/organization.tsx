@@ -82,7 +82,9 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
   const editing = !!branch;
   const [name, setName] = useState(branch?.name ?? "");
   const [color, setColor] = useState(branch?.color ?? SWATCHES[0]!);
-  const [seed, setSeed] = useState(true);
+  // P36: the ready-made team brings the departments it works in; the generic set on top of
+  // it only added empty departments (where sorted documents were then out of every agent's reach).
+  const [seed, setSeed] = useState(false);
   const [isolated, setIsolated] = useState(branch?.isolated ?? false);
   // P19: what the company does, and a ready-made AI team for it (on by default).
   const [industry, setIndustry] = useState("general");
@@ -101,7 +103,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
             industry,
             starter_team: team,
           }),
-    editing ? t("Branch updated.") : undefined,
+    editing ? t("Company updated.") : undefined,
   );
   const create = () =>
     save.mutate(undefined, {
@@ -112,7 +114,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
         if (made.starter) {
           qc.invalidateQueries({ queryKey: workKeys.agents });
           toast.success(t("{name} created. {team}", { name: made.name, team: teamToast(made.starter, made.name) }));
-        } else toast.success(t("Branch created."));
+        } else toast.success(t("Company created."));
       },
     });
   const fieldError = save.error instanceof ApiError ? save.error.fields.name : undefined;
@@ -121,8 +123,8 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
     <ResponsiveDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editing ? t("Edit branch") : t("New branch")}
-      description={editing ? undefined : t("One branch per company. Its agents, office and knowledge live under it.")}
+      title={editing ? t("Edit company") : t("New company")}
+      description={editing ? undefined : t("Each company has its own departments, AI team, office and knowledge. Pick what it does and a team that fits is hired for you.")}
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -133,7 +135,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
             disabled={!name.trim()}
             onClick={create}
           >
-            {editing ? t("Save") : t("Create branch")}
+            {editing ? t("Save") : t("Create company")}
           </Button>
         </>
       }
@@ -157,7 +159,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
           </div>
         </fieldset>
         {!editing ? (
-          <SwitchField checked={seed} onCheckedChange={setSeed} label={t("Add standard departments")} hint={t("Management, Finance, Research, Operations, Data and Writing. You can rename or remove them later.")} />
+          <SwitchField checked={seed} onCheckedChange={setSeed} label={t("Also add the standard departments")} hint={t("Management, Finance, Research, Operations, Data and Writing. Not needed with a ready-made team: it brings its own departments.")} />
         ) : null}
         {!editing ? <StarterTeamFields industry={industry} onIndustry={setIndustry} enabled={team} onEnabled={setTeam} /> : null}
         <SwitchField checked={isolated} onCheckedChange={setIsolated} label={t("Keep this company's knowledge private")} hint={t("Agents in other branches will not see this branch's SOPs, facts or notes.")} />

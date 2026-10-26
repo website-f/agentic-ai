@@ -30,9 +30,10 @@ import { LearnSourceDialog } from "@/pages/learning/learn-source-dialog";
 
 import { SuiteBadge } from "./eval-results";
 import { ProposalSheet } from "./proposal-sheet";
+import { RoutinesPanel } from "./routines";
 import { SkillSheet } from "./skill-sheet";
 
-export const SKILL_TABS = ["library", "proposals", "history"] as const;
+export const SKILL_TABS = ["library", "routines", "proposals", "history"] as const;
 export type SkillTab = (typeof SKILL_TABS)[number];
 export interface SkillsSearch {
   tab?: SkillTab;
@@ -40,7 +41,7 @@ export interface SkillsSearch {
   proposal?: string;
 }
 
-const TAB_LABEL: Record<SkillTab, string> = { library: msg("Library"), proposals: msg("Proposals"), history: msg("History") };
+const TAB_LABEL: Record<SkillTab, string> = { library: msg("Library"), routines: msg("Routines"), proposals: msg("Proposals"), history: msg("History") };
 const STATUS_LABEL: Record<Proposal["status"], string> = { pending: msg("pending"), approved: msg("approved"), rejected: msg("rejected"), superseded: msg("superseded") };
 const DECIDED_BY: Record<Proposal["status"], string> = { pending: msg("pending, {name}"), approved: msg("approved by {name}"), rejected: msg("rejected by {name}"), superseded: msg("superseded by {name}") };
 const TRUST_TONE = { trusted: "info", official: "accent", builtin: "neutral" } as const;
@@ -258,6 +259,8 @@ export function SkillsPage() {
               </ListCard>
             )}
           </>
+        ) : tab === "routines" ? (
+          <RoutinesPanel />
         ) : tab === "proposals" ? (
           pending.length ? (
             <>

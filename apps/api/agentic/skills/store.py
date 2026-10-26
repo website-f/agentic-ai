@@ -6,6 +6,7 @@
   new version, a row in skill_versions and a git commit in the vault.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -32,6 +33,8 @@ from ..models import (
 from ..services import audit, events
 from . import format as fmt
 from .scan import blocked, scan
+
+log = logging.getLogger("agentic.skills")
 
 PATCH_SIMILARITY = 0.8  # above this, a "new" skill must be a patch of the existing one
 INDEX_LIMIT = 40
@@ -451,6 +454,29 @@ async def index_for(db: AsyncSession, agent: Agent) -> str:
     )
 
 
+# P36: a task this close in meaning to a skill is told about it up front, so the agent loads
+# the proven procedure first instead of working it out again (local embeddings: free).
+HINT_SIMILARITY = 0.55
+
+
+async def hint_for(db: AsyncSession, agent: Agent, text: str) -> str:
+    """One line naming the skill that fits this task best, or ""."""
+    try:
+        near = await nearest(db, agent.workspace_id, await embed.embed_one(text[:2000]))
+    except Exception:  # noqa: BLE001 - a hint is a nicety
+        log.debug("no skill hint", exc_info=True)
+        return ""
+    if near is None or near[1] < HINT_SIMILARITY:
+        return ""
+    skill = near[0]
+    if skill.name not in {s.name for s in await visible(db, agent)}:
+        return ""
+    return (
+        f"\n\nA proven procedure fits this task: call use_skill(name='{skill.name}') first "
+        "and follow it."
+    )
+
+
 async def find(db: AsyncSession, workspace_id: str, name: str) -> Skill | None:
     return await db.scalar(
         select(Skill).where(Skill.workspace_id == workspace_id, Skill.name == fmt.slug(name))
@@ -511,7 +537,23 @@ async def task_tokens(db: AsyncSession, task_id: str) -> int:
 
 async def settle(db: AsyncSession, task_id: str, outcome: str) -> None:
     """Record how a task that used skills ended: accepted | sent_back | failed. A send-back is
-    provisional: when the reworked task is finally accepted (or fails), that is the outcome."""
+    provisional: when the reworked task is finally accepted (or fails), that is the outcome.
+    P36: the routine it followed and the routines it taught hear about it too."""
+    from . import routines  # late: routines reach the runtime, which imports this module
+
+    try:
+        await routines.settle(db, task_id, outcome)
+    except Exception:  # noqa: BLE001 - a routine's tally must not stop the task settling
+        await db.rollback()
+        log.warning("routine settle failed for %s", task_id, exc_info=True)
+    if outcome == "accepted":
+        from . import autopilot  # late: the autopilot imports this module
+
+        try:
+            await autopilot.reconsider_for(db, task_id)
+        except Exception:  # noqa: BLE001 - the skill waits for the nightly round instead
+            await db.rollback()
+            log.warning("could not reconsider skills learned from %s", task_id, exc_info=True)
     uses = (
         await db.scalars(
             select(SkillUse).where(

@@ -10,7 +10,7 @@ import re
 from collections import Counter
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from ..core.fence import fence
 from ..models import Branch, Department, DocFile
@@ -37,6 +37,8 @@ def _kinds(c: Counter[str]) -> str:
 
 
 async def _company_documents(ctx: ToolContext, args: dict[str, Any]) -> str:
+    from ..documents.service import agent_files  # late: documents import the agent tools
+
     folder = _folder_arg(args.get("folder"))
     kind = str(args.get("kind") or "").strip().lower()
     query = str(args.get("query") or "").strip().lower()
@@ -54,11 +56,9 @@ async def _company_documents(ctx: ToolContext, args: dict[str, Any]) -> str:
         DocFile.quarantined,
         DocFile.status,
     ).where(DocFile.workspace_id == ctx.workspace.id, DocFile.source == "upload")
-    q = q.where(
-        or_(DocFile.branch_id == branch_id, DocFile.branch_id.is_(None))
-        if branch_id
-        else DocFile.branch_id.is_(None)
-    )
+    # P36: the same files read_file may open (no other department's restricted files, no
+    # private assistant's work, no one's own desk), not every upload of the company.
+    q = q.where(agent_files(ctx.agent, ctx.task.id if ctx.task else None))
     rows = (await ctx.db.execute(q.order_by(DocFile.folder, DocFile.name).limit(MAX_ROWS))).all()
     b = await ctx.db.get(Branch, branch_id) if branch_id else None
     company = b.name if b else "the office"

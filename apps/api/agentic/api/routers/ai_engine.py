@@ -260,6 +260,8 @@ async def create_provider(
     await db.refresh(p)
     # Groq / OpenAI bring speech and picture models: fill those groups while still empty.
     await media.fill_after_new_provider(db, p)
+    # P36: and the chat groups, so agents work as soon as the first key is in.
+    await store.fill_chat_groups(db, p)
     return await _provider_out(db, p)
 
 
@@ -614,7 +616,9 @@ async def update_group(
 @router.post("/playground")
 async def playground(
     body: PlaygroundIn,
-    principal: Principal = Depends(require("work.write")),
+    # P36: raw model access is for the people who run the AI engine, not for everyone who
+    # can give work (it skips agents, rules and budgets).
+    principal: Principal = Depends(require("engine.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> PlaygroundOut:
     messages = ([{"role": "system", "content": body.system}] if body.system else []) + [

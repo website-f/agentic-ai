@@ -57,6 +57,14 @@ async def _search_documents(ctx: ToolContext, args: dict[str, Any]) -> str:
     k = int(top_k) if isinstance(top_k, int | float) else DEFAULT_TOP_K
     k = max(1, min(MAX_TOP_K, k))
     kind = str(args.get("kind") or "").strip().lower() or None
+    # P36: what was added or changed since the last search is found too (the person's
+    # search already did this; agents' searches did not, so a new upload stayed invisible).
+    from ..search import index as search_index  # late: search imports the documents
+
+    try:
+        await search_index.sync(ctx.db, ctx.workspace.id)
+    except Exception:  # noqa: BLE001 - a stale index still answers
+        await ctx.db.rollback()
     res = await engine.search(
         ctx.db, for_agent(ctx.agent), query, engine.Filters(kind=kind), limit=k
     )

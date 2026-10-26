@@ -31,7 +31,7 @@ from ...models import (
 from ...services import audit, events
 from ...teams import budget, meetings, schedules
 from .. import paging
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_work_scope, require
 
 router = APIRouter(prefix="/api", tags=["teams"])
 
@@ -417,6 +417,7 @@ async def create_schedule(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     agent = await _schedulable_agent(db, principal, body.agent_id)
+    await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
     tz = body.timezone or (await _ws(db, principal.workspace_id)).timezone
     try:
         schedules.next_runs(body.cron, tz)

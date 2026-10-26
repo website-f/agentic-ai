@@ -4,6 +4,7 @@
  * term for the same thing everywhere (see ./glossary.ts).
  */
 import { ADMIN } from "./admin";
+import { AI_USE } from "./ai-use";
 import { BUILDERS } from "./builders";
 import { CHAT } from "./chat";
 import { COMMON } from "./common";
@@ -51,4 +52,5 @@ export const MS: Record<string, string> = {
   ...PRIVACY,
   ...MICROSOFT,
   ...CRM,
+  ...AI_USE,
 };

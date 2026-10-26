@@ -60,6 +60,8 @@ class FileOut(BaseModel):
     # P18 knowledge library: agents search and cite it; scoped to branch_id + department_id.
     library: bool = False
     department_id: str | None = None
+    # P36: only its department's agents and managers read it (never a staff member's AI).
+    restricted: bool = False
     indexed_at: datetime | None = None
     # P24 company documents: where it sits, the upload it came from, what the scan found.
     folder: str = ""
@@ -145,6 +147,7 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         text_length=len(body) if body is not None else None,
         library=f.library,
         department_id=f.department_id,
+        restricted=f.restricted,
         indexed_at=f.indexed_at,
         folder=f.folder or "",
         source_path=f.source_path or "",

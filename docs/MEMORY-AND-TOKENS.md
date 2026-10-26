@@ -103,7 +103,7 @@ Ranked by payoff vs effort. Figures are from provider docs and published benchma
 | 4 | **Routing and cascades** | 40-85 % | `fast` / `bulk` groups start on free Groq / OpenRouter / Mistral tiers or local Ollama, escalate only on failed validation |
 | 5 | **Shorter outputs** | 20-60 % of output spend | JSON schema outputs, `max_tokens` per tool, "no preamble" rule in `AGENTS.md`, capped reasoning effort |
 | 6 | **Local models** | ~100 % for that slice | Embeddings (fastembed, always local), classification, summarisation, dream jobs on Ollama |
-| 7 | **Exact-match response cache** | 0-40 % | Valkey cache keyed on (model, normalized prompt hash) for deterministic single-turn calls only |
+| 7 | **Learned routines** (P36) | ~100 % of the thinking for a repeated job | Not built as a response cache (never was). Instead: the tool calls of accepted work replay as they were, with the changing values as slots; only the final write-up, if any, goes to the cheapest model. See docs/P36-ALLOWANCE-SCOPE-LIBRARY-ROUTINES.md |
 | 8 | **Prompt compression** | 2-5x on long contexts | LLMLingua-2 only where caching is impossible (later) |
 | 9 | **Distil a small model** | 70-95 % for one narrow task | After 1-5k accepted examples exist (post v1) |
 
@@ -140,6 +140,10 @@ prompt_tokens, completion_tokens, cached_tokens, reasoning_tokens,
 cost_usd, latency_ms, ttft_ms, status, error_class, cache_hit_local,
 request_ref, response_ref        -- pointers to redacted bodies in rustfs (retention 30 days)
 ```
+
+As built (models `LLMCall`): no session_id, ttft_ms, cache_hit_local or body refs; it has
+error_detail, prefix_hash (P21), masked, branch_id and data_level (P33), and user_id (P36: the
+person the work was for, for their daily AI allowance).
 
 - Bodies are redacted (keys, tokens, emails optional) before storage and kept 30 days by default (setting).
 - Aggregates roll up nightly into `llm_usage_daily` for fast charts.

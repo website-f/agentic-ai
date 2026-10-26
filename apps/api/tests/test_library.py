@@ -242,6 +242,14 @@ async def test_agents_and_people_only_see_their_scope(
         client, "fin.txt", "Uniform policy: Finance wears a tie.", department_id=a_fin
     )
     assert fin["branch_id"] == a_branch  # a department sits in its company
+    # P36: a department is where a document is filed; only a restricted one stays with it.
+    tie = await guideline(
+        client,
+        "tie.txt",
+        "Uniform policy: Finance directors wear a gold tie.",
+        department_id=a_fin,
+        restricted=True,
+    )
 
     ops = await new_agent(client, o, "Ops", "Operations")
     finance = await new_agent(client, o, "Fin", "Finance")
@@ -255,14 +263,14 @@ async def test_agents_and_people_only_see_their_scope(
                 db, library.for_agent(ops_agent), "uniform policy", limit=10
             )
         }
-        assert seen == {shared["id"], mine["id"]}
+        assert seen == {shared["id"], mine["id"], fin["id"]}
         seen = {
             h.source_id
             for h in await library.search(
                 db, library.for_agent(fin_agent), "uniform policy", limit=10
             )
         }
-        assert seen == {shared["id"], mine["id"], fin["id"]}
+        assert seen == {shared["id"], mine["id"], fin["id"], tie["id"]}
 
     # A branch manager of the other company sees the shared guideline and their own.
     bm = await as_role(client, "bm@example.com", "branch_manager", branch_id=b2["id"])

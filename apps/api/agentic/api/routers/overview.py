@@ -32,7 +32,7 @@ from ...models import (
     Workspace,
 )
 from ...teams import objectives
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_allowance, require
 
 router = APIRouter(prefix="/api/overview", tags=["overview"])
 
@@ -338,7 +338,7 @@ async def build(db: AsyncSession, principal: Principal, days: int) -> dict[str, 
 @router.get("")
 async def overview(
     days: int = Query(default=7, ge=1, le=90),
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     return await build(db, principal, days)
@@ -387,7 +387,7 @@ def _facts(o: dict[str, Any]) -> str:
 async def summary(
     days: int = Query(default=7, ge=1, le=90),
     fresh: bool = False,
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> SummaryOut:
     o = await build(db, principal, days)
@@ -406,6 +406,7 @@ async def summary(
                 cached=True,
                 generated_at=datetime.fromisoformat(d["at"]),
             )
+    await ensure_allowance(db, principal)
     messages = [
         {
             "role": "system",

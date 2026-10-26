@@ -28,6 +28,8 @@ export interface LibrarySource {
   passages: number;
   indexed_at: string | null;
   updated_at: string;
+  /** P36: only its department's agents and managers read it (never a staff member's AI). */
+  restricted?: boolean;
 }
 
 export interface Library {
@@ -89,5 +91,9 @@ export interface LibraryScopeIn {
 
 export const setLibrary = (fileId: string, library: boolean, scope?: LibraryScopeIn) =>
   api<LibraryFile>(`/api/files/${fileId}/library`, "PATCH", { library, ...(scope ?? {}) });
+
+/** P36: keep a document to its department's agents and managers, or open it to all. */
+export const setRestricted = (fileId: string, restricted: boolean) =>
+  api<LibraryFile>(`/api/files/${fileId}/library`, "PATCH", { library: true, restricted });
 
 export const reindexLibrary = () => api<{ state: "queued" | "done" }>("/api/library/reindex", "POST");

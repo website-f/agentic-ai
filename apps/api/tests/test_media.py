@@ -256,7 +256,9 @@ async def test_groq_and_openai_fill_the_voice_and_picture_groups(client, net):
         "whisper-large-v3-turbo",
         "whisper-large-v3",
     ]
-    assert groups["image"]["members"] == [] and groups["smart"]["members"] == []
+    assert groups["image"]["members"] == []
+    # P36: the chat groups get Groq's default chat models too, so agents work straight away.
+    assert [m["model_id"] for m in groups["smart"]["members"]] == ["llama-3.3-70b-versatile"]
 
     openai = await _provider(client, "OpenAI", "good.fake", "paid", preset="openai")
     groups = {g["name"]: g for g in (await client.get("/api/ai/groups")).json()}

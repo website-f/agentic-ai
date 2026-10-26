@@ -12,9 +12,10 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.security import can
 from ..i18n import Msg
 from ..i18n.labels import decision_status_label
-from ..models import Approval, Task
+from ..models import Approval, Membership, Task
 from ..services import audit, events
 from . import dispatch
 
@@ -49,6 +50,12 @@ async def decide(
             409,
             "already_decided",
             Msg("This was already {status}.", status=decision_status_label(a.status)),
+        )
+    if a.kind == "budget" and not await _may_grant(db, a, actor):
+        raise DecisionError(
+            403,
+            "manager_decides",
+            Msg("Only a manager can give more AI budget or allowance."),
         )
     answer = (answer or "").strip() or None
     if a.kind == "question":
@@ -101,6 +108,25 @@ async def decide(
                 ),
             ) from e
     return await _resolved(a, via)
+
+
+# P36: more budget or more of a person's daily AI allowance is a manager's call, never the
+# call of the person it is for (staff decide what their own AI asks, but not this).
+GRANTERS = ("org.manage", "team.manage", "agents.manage")
+
+
+async def _may_grant(db: AsyncSession, a: Approval, actor: str) -> bool:
+    if not actor.startswith("user:"):
+        return False
+    user_id = actor.removeprefix("user:")
+    if user_id == str((a.args or {}).get("user_id") or ""):
+        return False
+    role = await db.scalar(
+        select(Membership.role).where(
+            Membership.workspace_id == a.workspace_id, Membership.user_id == user_id
+        )
+    )
+    return role is not None and any(can(role, p) for p in GRANTERS)
 
 
 async def _resolved(a: Approval, via: str) -> Approval:

@@ -147,7 +147,9 @@ async def index_file(db: AsyncSession, file_id: str) -> int:
             f.indexed_at = None
         await db.commit()
         return 0
-    scope = (f.branch_id, f.department_id, file_title(f))
+    # P36 one library: the department is where a file is filed, not who may read it; only a
+    # restricted file keeps it on its passages (knowledge.search.scope_where).
+    scope = (f.branch_id, f.department_id if f.restricted else None, file_title(f))
     for _ in range(3):
         n = await _write(
             db,
@@ -169,6 +171,7 @@ async def index_file(db: AsyncSession, file_id: str) -> int:
                     DocFile.status,
                     DocFile.branch_id,
                     DocFile.department_id,
+                    DocFile.restricted,
                     DocFile.title,
                     DocFile.name,
                 )
@@ -182,7 +185,7 @@ async def index_file(db: AsyncSession, file_id: str) -> int:
             return 0
         fresh = (
             now.branch_id,
-            now.department_id,
+            now.department_id if now.restricted else None,
             (now.title or now.name or "Untitled file").strip(),
         )
         if fresh == scope:
@@ -223,14 +226,16 @@ async def _index_sop(db: AsyncSession, sop_id: str) -> int:
         await remove(db, "sop", sop_id)
         await db.commit()
         return 0
-    branch_id, department_id = await sop_scope(db, s)
+    # P36: a department's SOP is that department's procedure, but every agent of the company
+    # may look up how something is done there (find_sop, search_library).
+    branch_id, _ = await sop_scope(db, s)
     n = await _write(
         db,
         workspace_id=s.workspace_id,
         kind="sop",
         source_id=s.id,
         branch_id=branch_id,
-        department_id=department_id,
+        department_id=None,
         title=s.title,
         body=s.body or s.title,
     )
@@ -274,6 +279,58 @@ async def reindex_workspace(db: AsyncSession, workspace_id: str) -> dict[str, in
     for sid in sop_ids:
         passages += await index_sop(db, sid)
     return {"files": len(file_ids), "sops": len(sop_ids), "passages": passages}
+
+
+# P36: library files whose indexing never finished (the worker was down, the embedding model
+# was loading, an error) are retried by the liveness reconciler, a few at a time, so a file
+# never sits "ready" but unsearchable. A file that keeps failing is left after MAX_TRIES.
+CATCH_UP = 25
+MAX_TRIES = 5
+
+
+async def catch_up(limit: int = CATCH_UP) -> dict[str, int]:
+    from ..core.db import SessionLocal
+    from ..core.valkey import valkey
+
+    out = {"indexed": 0, "failed": 0}
+    async with SessionLocal() as db:
+        ids = list(
+            (
+                await db.scalars(
+                    select(DocFile.id)
+                    .where(
+                        DocFile.library.is_(True),
+                        DocFile.status == "ready",
+                        DocFile.quarantined.is_(False),
+                        DocFile.indexed_at.is_(None),
+                    )
+                    .order_by(DocFile.created_at)
+                    .limit(limit * 2)
+                )
+            ).all()
+        )
+        for fid in ids:
+            if out["indexed"] + out["failed"] >= limit:
+                break
+            key = f"library:catchup:{fid}"
+            try:
+                if int(await valkey().get(key) or 0) >= MAX_TRIES:
+                    continue
+            except Exception:  # noqa: BLE001 - no Valkey: try it anyway
+                log.debug("no catch-up counter for %s", fid)
+            try:
+                await index_file(db, fid)
+                out["indexed"] += 1
+            except Exception:  # noqa: BLE001 - one broken file must not stop the rest
+                await db.rollback()
+                out["failed"] += 1
+                log.warning("catch-up could not index file %s", fid, exc_info=True)
+                try:
+                    await valkey().incr(key)
+                    await valkey().expire(key, 7 * 86400)
+                except Exception:  # noqa: BLE001
+                    log.debug("could not count the failure of %s", fid)
+    return out
 
 
 async def passage_counts(

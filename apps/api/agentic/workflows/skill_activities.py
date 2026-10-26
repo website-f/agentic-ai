@@ -9,7 +9,7 @@ from ..agents import runtime
 from ..core.db import SessionLocal
 from ..models import Skill, SkillEvalCase, SkillProposal, Task, Workspace
 from ..services import events
-from ..skills import autopilot, evals, optimize, reflect
+from ..skills import autopilot, evals, optimize, reflect, routines
 from ..skills.store import SkillError
 
 log = logging.getLogger("agentic.worker.skills")
@@ -17,6 +17,12 @@ log = logging.getLogger("agentic.worker.skills")
 
 @activity.defn
 async def skill_reflect(task_id: str) -> str | None:
+    # P36: first, can the office repeat this job without the paid model next time?
+    async with SessionLocal() as db:
+        try:
+            await routines.learn(db, task_id)
+        except Exception:  # noqa: BLE001 - a routine is extra; skills are learned regardless
+            activity.logger.warning("routine learning failed for %s", task_id, exc_info=True)
     async with SessionLocal() as db:
         p = await reflect.reflect_on_task(db, task_id)
         if p is None:

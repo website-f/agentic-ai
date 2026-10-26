@@ -39,7 +39,7 @@ from ..agent_schemas import (
     TaskOut,
     TaskUpdateIn,
 )
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_work_scope, require
 from .files import FileOut, file_out
 
 router = APIRouter(prefix="/api", tags=["tasks"])
@@ -436,6 +436,7 @@ async def create_task(
 ) -> TaskOut:
     _check_share(principal, body.visibility)
     agent = await _assignee(db, principal, body.assignee_agent_id)
+    await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
     brief, labels = body.brief, list(body.labels)
     if body.workflow_id:
         brief = await _with_workflow(db, principal, body.workflow_id, brief)

@@ -46,10 +46,18 @@ class Reader:
     branch_id: str | None = None
     department_id: str | None = None
     all_departments: bool = False  # a branch manager: every department of the branch
+    # P36: a staff member, or a staff member's AI twin: never restricted documents (only
+    # restricted passages carry a department, see knowledge.indexer.index_file).
+    personal: bool = False
 
 
 def for_agent(agent: Agent) -> Reader:
-    return Reader(agent.workspace_id, branch_id=agent.branch_id, department_id=agent.department_id)
+    return Reader(
+        agent.workspace_id,
+        branch_id=agent.branch_id,
+        department_id=agent.department_id,
+        personal=bool(getattr(agent, "is_twin", False)),
+    )
 
 
 def for_person(principal: Any) -> Reader:
@@ -58,7 +66,12 @@ def for_person(principal: Any) -> Reader:
         return Reader(principal.workspace_id, everything=True)
     if sc.kind == "branch":
         return Reader(principal.workspace_id, branch_id=sc.branch_id, all_departments=True)
-    return Reader(principal.workspace_id, branch_id=sc.branch_id, department_id=sc.department_id)
+    return Reader(
+        principal.workspace_id,
+        branch_id=sc.branch_id,
+        department_id=sc.department_id,
+        personal=sc.kind == "own",
+    )
 
 
 def scope_where(r: Reader) -> Any:
@@ -70,7 +83,9 @@ def scope_where(r: Reader) -> Any:
     if not r.all_departments:
         dept = KnowledgeChunk.department_id
         conds.append(
-            or_(dept.is_(None), dept == r.department_id) if r.department_id else dept.is_(None)
+            or_(dept.is_(None), dept == r.department_id)
+            if r.department_id and not r.personal
+            else dept.is_(None)
         )
     return and_(*conds)
 
@@ -81,7 +96,11 @@ def sees(r: Reader, branch_id: str | None, department_id: str | None) -> bool:
         return True
     if branch_id is not None and branch_id != r.branch_id:
         return False
-    return r.all_departments or department_id is None or department_id == r.department_id
+    return (
+        r.all_departments
+        or department_id is None
+        or (department_id == r.department_id and not r.personal)
+    )
 
 
 # P29: HNSW returns ef_search candidates, THEN the WHERE (workspace, company, department)

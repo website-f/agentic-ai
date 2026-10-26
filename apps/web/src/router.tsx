@@ -20,7 +20,7 @@ import { ApiError, errorMessage } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
 import { assistantsFallback, canAssist, TWIN_TABS, type TwinTab } from "@/lib/my-ai";
 import { staffOnly, twinQuery } from "@/lib/twin";
-import { ALL_NAV, type AppPath } from "@/nav";
+import { ALL_NAV, pathAllowed, type AppPath } from "@/nav";
 import type { Me } from "@/lib/types";
 import { NotFoundPage, PlaceholderPage } from "@/pages/placeholder";
 
@@ -34,6 +34,7 @@ const page = {
   organization: lazyRouteComponent(() => import("@/pages/organization"), "OrganizationPage"),
   settings: lazyRouteComponent(() => import("@/pages/settings"), "SettingsPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
+  aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -180,6 +181,11 @@ const appRoute = createRoute({
   beforeLoad: async ({ context, location }) => {
     const me = await loadMe(context.queryClient, location);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    // P36: one guard for every page, the same rule as the sidebar: staff keep to their own
+    // desk, their AI and the work they are part of. Their AI's profile is My AI.
+    if (!pathAllowed(location.pathname, me.permissions)) {
+      throw redirect({ to: location.pathname.startsWith("/agents/") && staffOnly(me.permissions) ? "/my-worker" : "/workspace" });
+    }
     return { me };
   },
   component: AppShell,
@@ -219,6 +225,9 @@ const membersRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { add?: number } => ({ add: s.add ? Number(s.add) : undefined }),
   component: page.members,
 });
+
+// P36: each person's daily AI allowance and what staff may use their AI for.
+const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
 
 const activityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -330,7 +339,7 @@ const officeRoute = createRoute({
   component: page.office,
 });
 
-const SKILL_TABS = ["library", "proposals", "history"] as const;
+const SKILL_TABS = ["library", "routines", "proposals", "history"] as const;
 const skillsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/skills",
@@ -682,6 +691,7 @@ const routeTree = rootRoute.addChildren([
     organizationRoute,
     settingsRoute,
     membersRoute,
+    aiUseRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,

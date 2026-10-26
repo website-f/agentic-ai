@@ -32,6 +32,7 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AllowanceMeter } from "@/components/allowance-meter";
 import { chatRoute } from "@/components/chat/links";
 import { GiveTaskPanel } from "@/components/task-composer/quick-kinds";
 import { openTaskComposer } from "@/components/task-composer/store";
@@ -156,6 +157,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
       />
       <MyAiTabs />
       <ReconnectBanner />
+      <AllowanceMeter />
 
       <Card className="relative overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 top-0 h-24 opacity-[0.12]" style={{ background: twin.color }} />

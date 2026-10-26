@@ -154,10 +154,16 @@ def agent_files(agent: Any, task_id: str | None = None) -> ColumnElement[bool]:
         if agent.branch_id
         else DocFile.branch_id.is_(None)
     )
+    # P36 one library: every company document is for every agent of the company, except a
+    # restricted one (money, contracts, HR records): only the agents of its department, and
+    # never a staff member's AI twin.
     dept = or_(
-        DocFile.library.is_(False),
-        DocFile.department_id.is_(None),
-        *([DocFile.department_id == agent.department_id] if agent.department_id else []),
+        DocFile.restricted.is_(False),
+        *(
+            [DocFile.department_id == agent.department_id]
+            if agent.department_id and not getattr(agent, "is_twin", False)
+            else []
+        ),
     )
     own = [agent.id] + ([agent.clone_of] if getattr(agent, "clone_of", None) else [])
     private = select(Agent.id).where(
@@ -661,6 +667,12 @@ async def process_file(
         f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
     if after is not None:
         await after(db, f, info)
+    # P36: a library document that reads as confidential (pay, personnel, contracts, bank)
+    # stays with its department's agents and managers, whoever filed it.
+    if f.library and not f.restricted:
+        from ..intake.sort import sensitive_words
+
+        f.restricted = sensitive_words(f.kind, f.name, f.folder, f.title)
     f.status = "ready"
     await db.commit()
     if f.quarantined:  # P24: held back files are never searchable

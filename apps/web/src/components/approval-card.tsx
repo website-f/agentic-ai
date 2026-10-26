@@ -1,12 +1,12 @@
 import { CheckIcon, ClockIcon, CoinsIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { keys } from "@/lib/queries";
+import { keys, meQuery } from "@/lib/queries";
 import { tokensShort } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
 import { workKeys, type Approval } from "@/lib/work";
@@ -59,6 +59,20 @@ function ArgsPreview({ a }: { a: Approval }) {
 export function BudgetUsage({ args }: { args: Record<string, unknown> }) {
   const t = useT();
   const n = (k: string) => (typeof args[k] === "number" ? (args[k] as number) : null);
+  if (typeof args.user_id === "string") {
+    // P36: a person's daily AI allowance, not the agent's budget.
+    const ratio = n("limit") ? (n("used") ?? 0) / (n("limit") ?? 1) : 1;
+    return (
+      <div className="grid gap-1.5">
+        <div className="h-2 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label={t("AI allowance used")}>
+          <div className="h-full rounded-full bg-danger" style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+        </div>
+        <p className="text-[12.5px] text-muted tabular">
+          {t("{person}: {used} of {limit} tokens today", { person: String(args.person || t("This person")), used: tokensShort(n("used")), limit: tokensShort(n("limit")) })}
+        </p>
+      </div>
+    );
+  }
   const daily = (n("token_ratio") ?? 0) >= (n("usd_ratio") ?? 0) && n("token_limit") !== null;
   const ratio = daily ? n("token_ratio") ?? 0 : n("usd_ratio") ?? 0;
   // P21: an objective's budget is for the objective, not a month.
@@ -133,6 +147,9 @@ export function ApprovalCard({
   });
   const question = a.kind === "question";
   const budget = a.kind === "budget";
+  // P36: more budget or allowance is a manager's call (agents/decisions.py GRANTERS).
+  const { data: me } = useQuery(meQuery);
+  const grants = !!me && ["org.manage", "team.manage", "agents.manage"].some((p) => me.permissions.includes(p));
   const options = Array.isArray(a.args.options) ? (a.args.options as unknown[]).map(String).filter(Boolean).slice(0, 6) : [];
   const pending = a.status === "pending";
   const expiresIn = timeAgo(a.expires_at);
@@ -144,7 +161,7 @@ export function ApprovalCard({
         <div className="min-w-0 flex-1">
           <p className="text-[14px] leading-snug break-words">
             <span className="font-semibold">{a.agent_name}</span>{" "}
-            <span className="text-muted">{question ? t("has a question") : budget ? t("is over budget and paused") : t("wants to use {tool}", { tool: a.tool_label })}</span>
+            <span className="text-muted">{question ? t("has a question") : budget ? (typeof a.args.user_id === "string" ? t("is paused: the AI allowance for today is used up") : t("is over budget and paused")) : t("wants to use {tool}", { tool: a.tool_label })}</span>
           </p>
           {showTask ? (
             <Link to="/tasks" search={{ task: a.task_id }} className="mt-0.5 block truncate text-[12.5px] text-accent hover:underline" title={a.task_title}>{a.task_title}</Link>
@@ -204,6 +221,8 @@ export function ApprovalCard({
               <Button type="button" size="sm" variant="ghost" onClick={() => setDenying(false)}>{t("Back")}</Button>
             </div>
           </form>
+        ) : budget && !grants ? (
+          <p className="text-[12.5px] text-muted">{t("A manager decides on more AI budget. They have been told.")}</p>
         ) : budget ? (
           <div data-guide={guideActions} className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> {t("Allow more")}</Button>

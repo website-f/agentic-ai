@@ -13,6 +13,10 @@ Modes (workspace setting `skill_learning.mode`):
              were written by the same model that wrote it, so passing them proves little),
              and so does a change to a skill whose live text no person approved.
 - auto       also approve changes with no test cases, if the scan is clean
+
+P36: in auto_safe, a brand-new skill also goes live by itself once the work it was learned
+from was accepted by a person (and its scan is clean and it passes its tests): the person's
+acceptance is the review, so learning does not stall until someone opens the queue.
 """
 
 import logging
@@ -23,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain import store as brain_store
-from ..models import Skill, SkillProposal, SkillVersion, Workspace
+from ..models import Skill, SkillProposal, SkillVersion, Task, Workspace
 from ..services import audit, events
 from .scan import blocked
 from .store import SkillError, approve
@@ -50,6 +54,7 @@ def verdict(p: SkillProposal, how: str) -> tuple[bool, str]:
         return False, "retiring a skill is always a person's call"
     if how == "auto_safe" and p.kind == "new":
         return False, "a brand-new skill is always checked by a person first"
+    # "proven" (P36): a new skill whose source work a person accepted; tests still required.
     if blocked(p.scan or []):
         return False, "the safety scan blocked it"
     if any(f.get("level") == "warn" for f in p.scan or []):
@@ -80,7 +85,11 @@ async def consider(db: AsyncSession, ws: Workspace, p: SkillProposal) -> Skill |
         return None
     how = mode(ws)
     ok, why = verdict(p, how)
-    if ok and how == "auto_safe" and not await _person_approved(db, p):
+    if not ok and how == "auto_safe" and p.kind == "new" and await _source_accepted(db, p):
+        ok, why = verdict(p, "proven")
+        if ok:
+            why = f"a person accepted the work it was learned from, and it {why}"
+    if ok and how == "auto_safe" and p.kind != "new" and not await _person_approved(db, p):
         ok, why = False, "the live skill was not approved by a person"
     if not ok:
         p.decision_note = f"Waiting for a person: {why}."[:2000]
@@ -108,6 +117,34 @@ async def consider(db: AsyncSession, ws: Workspace, p: SkillProposal) -> Skill |
         ws.id, "skill.updated", {"skill_id": skill.id, "name": skill.name, "auto": True}
     )
     return skill
+
+
+async def _source_accepted(db: AsyncSession, p: SkillProposal) -> bool:
+    """P36: the task this skill was learned from was accepted (done, by a person's review or
+    with no review asked for)."""
+    if not p.source_task_id:
+        return False
+    t = await db.get(Task, p.source_task_id)
+    return t is not None and t.status == "done" and t.run_count <= 1
+
+
+async def reconsider_for(db: AsyncSession, task_id: str) -> int:
+    """A task was accepted: the new skills learned from it may go live now."""
+    rows = (
+        await db.scalars(
+            select(SkillProposal).where(
+                SkillProposal.source_task_id == task_id,
+                SkillProposal.status == "pending",
+                SkillProposal.kind == "new",
+            )
+        )
+    ).all()
+    n = 0
+    for p in rows:
+        ws = await db.get(Workspace, p.workspace_id)
+        if ws is not None and await consider(db, ws, p):
+            n += 1
+    return n
 
 
 async def _person_approved(db: AsyncSession, p: SkillProposal) -> bool:

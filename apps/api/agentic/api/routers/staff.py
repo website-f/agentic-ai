@@ -48,7 +48,7 @@ from ...models import (
 )
 from ...services import audit, events, prefs
 from ...teams import schedules, when
-from ..deps import Principal, api_error, require
+from ..deps import Principal, api_error, ensure_work_scope, require
 from .agents import agent_out, clean_hours
 
 router = APIRouter(prefix="/api/me", tags=["staff"])
@@ -355,6 +355,7 @@ async def add_duty(
 ) -> dict[str, Any]:
     ws = await _ws(db, principal)
     a = await _my_twin(db, principal)
+    await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
     tz = _tz(ws, a)
     w = _parse_duty(body, tz)
     s = await _add_duty(db, principal, a, body, w, tz)

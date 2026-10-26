@@ -26,7 +26,7 @@ from ..core.workspace_settings import max_task_model_calls
 from ..crm.access import MONEY_TOOLS, explicit_money, money_ready
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
-from ..engine import gateway
+from ..engine import acting, gateway
 from ..i18n import explicit_lang
 from ..i18n import notes as lang_notes
 from ..microsoft.access import MAIL_TOOLS, mail_ready
@@ -42,9 +42,10 @@ from ..models import (
     Workspace,
 )
 from ..services import events, prefs
+from ..skills import routines
 from ..skills import store as skills_store
-from ..teams import budget, colleague, delegation, meetings, objectives
-from . import compress, context, goals, policy, verify
+from ..teams import allowance, budget, colleague, delegation, meetings, objectives
+from . import compress, context, goals, policy, scope_guard, verify
 from .prompt import system_prompt
 from .tools import GLOBAL_DENY, TOOLS, ToolContext, modes_for
 
@@ -837,7 +838,37 @@ async def _team_call(
 async def _budget_gate(
     db: AsyncSession, task: Task, agent: Agent, ws: Workspace
 ) -> StepResult | None:
-    """Over budget: stop and ask a person for more. Near it: warn once."""
+    """Over budget: stop and ask a person for more. Near it: warn once. P36: the daily AI
+    allowance of the person the task is for comes first; a manager decides on more."""
+    person = acting.current()
+    if (left := await allowance.check(db, ws, person)) is not None:
+        call_id = f"allowance:{left.day}:{left.limit}"
+        prior = await db.scalar(
+            select(Approval)
+            .where(Approval.task_id == task.id, Approval.tool_call_id == call_id)
+            .order_by(Approval.created_at.desc())
+        )
+        if prior is not None and prior.status == "pending":
+            return _waiting(prior)
+        if prior is not None and prior.status in ("denied", "expired", "cancelled"):
+            return StepResult("failed", f"Stopped: {left.note()}")
+        who = await db.get(User, person) if person else None
+        return _waiting(
+            await _create_approval(
+                db,
+                task,
+                agent,
+                "budget",
+                "budget",
+                call_id,
+                {**left.dict(), "user_id": person, "person": who.name if who else ""},
+                f"{who.name if who else 'This person'} used today's AI allowance "
+                f"({left.used:,} of {left.limit or 0:,} tokens). Approve to give half of it "
+                "again for today.",
+                "medium",
+                "allowance.limit",
+            )
+        )
     st = await budget.state(db, agent, ws.timezone)
     if not st.over:
         await budget.alert_if_near(db, agent, ws, st)
@@ -1001,6 +1032,15 @@ async def _language_line(db: AsyncSession, task: Task) -> str:
 
 
 async def run_task_step(task_id: str) -> StepResult:
+    """One step of a task, its model calls logged against the person it is for (P36)."""
+    async with SessionLocal() as db:
+        task = await db.get(Task, task_id)
+        person = await allowance.person_of_task(db, task) if task is not None else None
+    with acting.person(person):
+        return await _run_task_step(task_id)
+
+
+async def _run_task_step(task_id: str) -> StepResult:
     async with SessionLocal() as db:
         task, agent, ws = await _load(db, task_id)
         if task.status in ("done", "cancelled", "failed"):
@@ -1012,6 +1052,7 @@ async def run_task_step(task_id: str) -> StepResult:
             content += await objectives.why_line(db, task)  # P21: why this work matters
             content += await _language_line(db, task)  # P22: report in the asker's language
             content += await _attached_files_note(db, task, ws.timezone)
+            content += await skills_store.hint_for(db, agent, f"{task.title}\n{task.brief}")
             if task.output_schema:
                 content += "\n\n" + delegation.schema_note(task.output_schema)
             block, n_facts, n_pages = await recall_block(
@@ -1040,6 +1081,14 @@ async def run_task_step(task_id: str) -> StepResult:
         pending = await _resolve_calls(db, ctx, task, history)
         if pending:
             return pending
+        # P36: a job the office learned is done its learned way, without the paid model; any
+        # trouble hands it to the agent below with everything done so far.
+        gate = await _budget_gate(db, task, agent, ws)
+        if gate:
+            return gate
+        routine = await routines.step(db, ctx, task, agent, ws, await _history(db, task_id=task.id))
+        if routine is not None:
+            return routine
 
         task_call_limit = max_task_model_calls(ws.settings)
         for _ in range(MAX_CALLS_PER_STEP):
@@ -1280,7 +1329,16 @@ async def _keep_working(
 
 async def finish(task_id: str, state: str, message: str | None) -> dict[str, Any] | None:
     """Settle a run. Returns CONTINUE when the self-check or the goal judge sends the work
-    back: the task stays running and the same workflow continues (P29). Safe to retry."""
+    back: the task stays running and the same workflow continues (P29). Safe to retry.
+    P36: the self-check and the goal judge are part of the person's work."""
+    async with SessionLocal() as db:
+        task = await db.get(Task, task_id)
+        person = await allowance.person_of_task(db, task) if task is not None else None
+    with acting.person(person):
+        return await _finish(task_id, state, message)
+
+
+async def _finish(task_id: str, state: str, message: str | None) -> dict[str, Any] | None:
     from ..teams import blockers, review  # late: they import this module
     from . import browser_tools  # late: it imports this module
 
@@ -1427,7 +1485,18 @@ async def _apply_decision(db: AsyncSession, a: Approval) -> None:
         return
     if a.kind == "budget":
         # No tool message: the next step re-checks the budget (and fails if denied).
-        if a.status == "approved":
+        if a.status == "approved" and (a.tool_call_id or "").startswith("allowance:"):
+            person = str((a.args or {}).get("user_id") or "")
+            extra = await allowance.grant(db, ws, person) if person else 0
+            await task_event(
+                db,
+                task,
+                "budget",
+                a.decided_by or "system",
+                f"gave {extra:,} more AI tokens for today",
+                {"user_id": person, "extra": extra},
+            )
+        elif a.status == "approved":
             await budget.grant(
                 db, agent, await budget.state(db, agent, ws.timezone), a.decided_by or "system"
             )
@@ -1681,16 +1750,38 @@ async def _confirms(db: AsyncSession, session_id: str, asked_id: int, text: str)
 
 async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
-    outright are executed; anything needing approval is declined with a pointer to tasks."""
+    outright are executed; anything needing approval is declined with a pointer to tasks.
+    P36: billed to the person talking, within their daily AI allowance."""
+    with acting.person(session.user_id):
+        return await _chat_turn(db, agent, session, text)
+
+
+async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     ws = await db.get(Workspace, agent.workspace_id)
     assert ws is not None
     if session.memory_snapshot is None:  # frozen for the conversation, like a task run
         session.memory_snapshot = await core_memory.snapshot(db, agent)
     asked = _add(db, agent, "user", session_id=session.id, content=text)
     await db.commit()
+    # P36: staff use their AI for their work; anything else is refused before any work.
+    verdict = await scope_guard.check(db, ws, session.user_id, text, "chat")
+    if not verdict.ok:
+        note = scope_guard.refusal(
+            verdict.why, explicit_lang() or await prefs.language(db, session.user_id)
+        )
+        answer = _add(
+            db, agent, "assistant", session_id=session.id, content=note, meta={"scope": True}
+        )
+        await db.commit()
+        return ChatReply(note, "", "", [], answer.id)
     st = await budget.state(db, agent, ws.timezone)
-    if st.over:
-        note = over_budget_reply(st)
+    left = await allowance.check(db, ws, session.user_id)
+    if st.over or left is not None:
+        note = (
+            left.note(explicit_lang() or await prefs.language(db, session.user_id))
+            if left is not None
+            else over_budget_reply(st)
+        )
         answer = _add(
             db, agent, "assistant", session_id=session.id, content=note, meta={"budget": True}
         )
