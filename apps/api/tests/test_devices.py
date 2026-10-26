@@ -1027,8 +1027,8 @@ async def test_the_windows_program_comes_with_its_code_inside(
     r = await client.post("/api/devices/link-code", json={}, headers=csrf(client))
     code = r.json()["code"]
     assert r.json()["exe"] == {
-        "off": f"http://test/i/{code}/exe",
-        "control": f"http://test/i/{code}/exe/control",
+        "off": f"http://test/api/install/{code}/exe",
+        "control": f"http://test/api/install/{code}/exe/control",
     }
     async with pc_http() as pc:
         got = await pc.get(f"/api/install/{code}/exe/control")

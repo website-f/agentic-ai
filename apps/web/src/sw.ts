@@ -19,7 +19,8 @@ precacheAndRoute(self.__WB_MANIFEST);
 // Client-side routes load the cached shell; API calls always go to the network.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("/index.html"), {
-    denylist: [/^\/api\//, /^\/readyz/, /^\/healthz/],
+    // /i/ (installers, the Windows program) and /downloads/ are files from the server, never app pages.
+    denylist: [/^\/api\//, /^\/readyz/, /^\/healthz/, /^\/i\//, /^\/downloads\//],
   }),
 );
 

@@ -190,7 +190,8 @@ export function LinkDialog({ onClose, onLinked }: { onClose: () => void; onLinke
                 const href = o === "windows" && link?.exe ? (remote ? link.exe.control : link.exe.off) : link?.downloads?.[o];
                 if (!href && link) return null;
                 return (
-                  <a key={o} href={href ?? "#"} onClick={(e) => { if (!link) e.preventDefault(); setOs(o); }}
+                  <a key={o} href={href ?? "#"} download={o === "windows" && link?.exe ? "AgenticOfficePC.exe" : undefined}
+                    onClick={(e) => { if (!link) e.preventDefault(); setOs(o); }}
                     aria-disabled={!link || undefined}
                     className={cn(
                       "flex min-h-16 min-w-0 items-center gap-3 rounded-[var(--radius-md)] border px-4 py-3 transition-colors",

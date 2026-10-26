@@ -118,7 +118,11 @@ async def link_code(
         # P52: the Windows program with this code inside (double-click: installs, links, starts
         # with Windows). None when this server has no build of it.
         "exe": (
-            {"off": f"{base}/i/{code}/exe", "control": f"{base}/i/{code}/exe/control"}
+            # Under /api/: the web app's offline worker never answers those with an app page.
+            {
+                "off": f"{base}/api/install/{code}/exe",
+                "control": f"{base}/api/install/{code}/exe/control",
+            }
             if install.exe_path() is not None
             else None
         ),
