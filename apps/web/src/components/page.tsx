@@ -7,7 +7,7 @@ import { HubTabs } from "./hub-tabs";
 import { PageTips, ShowTipsButton } from "@/components/page-tips";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { NAV } from "@/nav";
+import { hubOf, NAV, navItemFor } from "@/nav";
 
 /** The nav entry (and its section) for the current page, so every header gets its icon. */
 function useNavEntry() {
@@ -127,12 +127,18 @@ export function PageHeader({
 
 /** Every page: centred column, phone gutters, and one vertical rhythm between its blocks. */
 export function Page({ children, className, wide }: { children: ReactNode; className?: string; wide?: boolean }) {
+  // P52: the pages of one hub (tabs of one sidebar entry) share one width, so moving between
+  // tabs never makes the page jump.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const entry = navItemFor(pathname);
+  const inHub = !!entry && !!hubOf(entry.to);
   return (
     <div
       className={cn(
         "mx-auto flex w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
-        wide ? "max-w-[96rem]" : "max-w-6xl",
+        wide || inHub ? "max-w-[96rem]" : "max-w-6xl",
         className,
+        inHub && "max-w-[96rem]", // a page's own narrower width gives way inside a hub
       )}
     >
       {children}
