@@ -61,6 +61,7 @@ export type AppPath =
   | "/twin"
   | "/my-worker"
   | "/computers"
+  | "/staff-computers"
   | "/workspace"
   | "/forms"
   | "/overview"
@@ -230,6 +231,7 @@ export const NAV: NavSection[] = [
     open: "none",
     items: [
       { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, perm: "office.view", blurb: msg("Branches (one per company) and the departments inside them.") },
+      { to: "/staff-computers", label: msg("Staff computers"), icon: DesktopTowerIcon, perm: ["members.manage", "team.manage"], blurb: msg("Every company computer your staff linked: who has which, online or not, the folders it shares. Open one to see its screen and fetch files, and turn on a company backup of those folders.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
@@ -276,7 +278,7 @@ export const HUBS: Hub[] = [
   { label: msg("Customers"), tabs: ["/contacts", "/deals"] },
   { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/meetings", "/broadcasts"] },
   { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
-  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/ai-use", "/settings/approval-limits"] },
+  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/staff-computers", "/settings/ai-use", "/settings/approval-limits"] },
   { label: msg("Settings"), tabs: ["/settings", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
   { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
 ];

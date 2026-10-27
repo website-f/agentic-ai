@@ -23,10 +23,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...assistants.access import may_assist
 from ...core.config import settings
 from ...core.db import SessionLocal, get_db
+from ...core.security import can
 from ...core.valkey import valkey
-from ...devices import bridge, core, hub, install, relay
+from ...devices import backup, bridge, core, hub, install, relay
 from ...devices.core import DeviceError
-from ...models import Agent, Device, DeviceActivity, DeviceLinkCode, Membership, User
+from ...i18n.labels import role_label
+from ...models import (
+    Agent,
+    Branch,
+    Device,
+    DeviceActivity,
+    DeviceLinkCode,
+    Membership,
+    StorageTarget,
+    User,
+    Workspace,
+)
+from ...services import audit
 from ..deps import Principal, api_error, client_ip, current_principal
 
 router = APIRouter(tags=["devices"])
@@ -488,6 +501,18 @@ async def list_devices(
     return [core.device_out(d, d.id in online) for d in rows]
 
 
+@router.get("/api/devices/{device_id}")
+async def get_device(
+    device_id: str,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """One computer: the caller's own, or (P53) a company computer of someone they manage."""
+    d = await _managed_device(db, principal, device_id)
+    online = await core.online_ids([d.id])
+    return core.device_out(d, d.id in online)
+
+
 @router.patch("/api/devices/{device_id}")
 async def update_device(
     device_id: str,
@@ -537,7 +562,7 @@ async def device_activity(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     rows = (
         await db.execute(
             select(DeviceActivity, Agent.name)
@@ -560,6 +585,166 @@ async def device_activity(
         }
         for a, agent_name in rows
     ]
+
+
+# ------------------------------------------------- the owner's view of company computers (P53)
+
+
+def _manages_computers(principal: Principal) -> bool:
+    return can(principal.role, "members.manage") or can(principal.role, "team.manage")
+
+
+async def _managed_device(db: AsyncSession, principal: Principal, device_id: str) -> Device:
+    """A computer the caller may reach from the web: their own, or — for a manager — a company
+    computer of someone they manage (owner/admin: all; a branch/department manager: their
+    own branch/department). Company-owned machines, so a manager can see and fetch from them;
+    the two remote locks and the on-screen notice on the computer still apply."""
+    d = await db.get(Device, device_id)
+    if (
+        d is None
+        or d.workspace_id != principal.workspace_id
+        or d.revoked_at is not None
+        or (d.user_id != principal.user.id and not _can_see_device(principal, None))
+    ):
+        raise api_error(status.HTTP_404_NOT_FOUND, "device_not_found", "That computer is not here.")
+    if d.user_id == principal.user.id:
+        return d
+    m = await db.get(Membership, (principal.workspace_id, d.user_id))
+    if not _can_see_device(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "device_not_found", "That computer is not here.")
+    return d
+
+
+def _can_see_device(principal: Principal, m: Membership | None) -> bool:
+    """Whether a manager's scope covers the person who owns a computer (m None is a pre-check)."""
+    if not _manages_computers(principal):
+        return False
+    sc = principal.scope
+    if sc.everything:
+        return True
+    if m is None:  # the id-only pre-check: a scoped manager may still reach some device
+        return True
+    if sc.kind == "branch":
+        return m.branch_id == sc.branch_id
+    if sc.kind == "department":
+        return m.department_id == sc.department_id
+    return False
+
+
+@router.get("/api/org/computers")
+async def org_computers(
+    q: str = Query(default="", max_length=120),
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Every linked company computer the manager may oversee, with who linked it and where,
+    for the Staff computers page. Owner/admin: all; a branch or department manager: their own."""
+    if not _manages_computers(principal):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Your role ({role}) cannot oversee staff computers.",
+            role=role_label(principal.role),
+        )
+    sc = principal.scope
+    query = (
+        select(Device, User.name, User.email, Membership.branch_id, Membership.role)
+        .join(User, User.id == Device.user_id)
+        .join(
+            Membership,
+            (Membership.user_id == Device.user_id)
+            & (Membership.workspace_id == Device.workspace_id),
+        )
+        .where(Device.workspace_id == principal.workspace_id, Device.revoked_at.is_(None))
+    )
+    if not sc.everything:
+        query = query.where(Membership.branch_id == sc.branch_id)
+        if sc.kind == "department":
+            query = query.where(Membership.department_id == sc.department_id)
+    rows = (await db.execute(query.order_by(User.name, Device.created_at.desc()))).all()
+    online = await core.online_ids(d.id for d, *_ in rows)
+    branches = {
+        b.id: b.name
+        for b in (
+            await db.scalars(select(Branch).where(Branch.workspace_id == principal.workspace_id))
+        ).all()
+    }
+    needle = q.strip().lower()
+    out = []
+    for d, name, email, branch_id, role in rows:
+        company = branches.get(branch_id or "", "")
+        if needle and needle not in f"{name} {email} {d.name} {d.hostname} {company}".lower():
+            continue
+        out.append(
+            {
+                **core.device_out(d, d.id in online),
+                "person": {"id": d.user_id, "name": name, "email": email, "role": role},
+                "company": company,
+                "branch_id": branch_id,
+            }
+        )
+    return {"computers": out, "can_backup": can(principal.role, "org.manage")}
+
+
+class BackupIn(BaseModel):
+    enabled: bool
+    target_id: str = Field(default="", max_length=40)
+    every_hours: int = Field(default=backup.EVERY_HOURS_DEFAULT, ge=1, le=168)
+
+
+@router.get("/api/org/computers/backup")
+async def get_backup(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    if not can(principal.role, "org.manage"):
+        raise api_error(status.HTTP_403_FORBIDDEN, "forbidden", "Only the owner sets up backup.")
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    pol = backup.policy(ws)
+    targets = (
+        await db.scalars(
+            select(StorageTarget).where(StorageTarget.workspace_id == principal.workspace_id)
+        )
+    ).all()
+    return {
+        "enabled": pol.enabled,
+        "target_id": pol.target_id,
+        "every_hours": pol.every_hours,
+        "targets": [{"id": t.id, "name": t.name, "kind": t.kind} for t in targets],
+    }
+
+
+@router.put("/api/org/computers/backup")
+async def set_backup(
+    body: BackupIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    if not can(principal.role, "org.manage"):
+        raise api_error(status.HTTP_403_FORBIDDEN, "forbidden", "Only the owner sets up backup.")
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    if body.enabled:
+        t = await db.get(StorageTarget, body.target_id) if body.target_id else None
+        if t is None or t.workspace_id != principal.workspace_id:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "no_target",
+                "Choose where to keep the backup first (Settings > Storage).",
+            )
+    before = backup.policy(ws).__dict__
+    backup.save_policy(ws, backup.Policy(body.enabled, body.target_id, body.every_hours))
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "devices.backup",
+        target=principal.workspace_id,
+        before=before,
+        after={"enabled": body.enabled, "target_id": body.target_id},
+    )
+    await db.commit()
+    return await get_backup(principal, db)
 
 
 # ---------------------------------------------------------------- inside the stack

@@ -104,6 +104,7 @@ export const deviceKeys = {
   list: ["devices", "list"] as const,
   activity: (id: string) => ["devices", "activity", id] as const,
   link: (code: string) => ["devices", "link", code] as const,
+  one: (id: string) => ["devices", "one", id] as const,
   health: (id: string) => ["devices", "health", id] as const,
   files: (id: string, path: string, q: string) => ["devices", "files", id, path, q] as const,
 };
@@ -118,6 +119,9 @@ export const listDevices = async () => listOf(await api<Device[] | { items?: Dev
 export const createLinkCode = () => api<LinkCode>("/api/devices/link-code", "POST", {});
 export const linkStatus = async (code: string) =>
   toLinkStatus(await api<LinkStatusWire>(`/api/devices/link-code/${encodeURIComponent(code)}/status`));
+/** One computer by id (the caller's own, or — for a manager — a company computer, P53). */
+export const deviceQuery = (id: string) =>
+  queryOptions({ queryKey: deviceKeys.one(id), queryFn: () => api<Device>(`/api/devices/${encodeURIComponent(id)}`), enabled: !!id });
 export const updateDevice = (id: string, patch: DevicePatch) => api<Device>(`/api/devices/${encodeURIComponent(id)}`, "PATCH", patch);
 export const unlinkDevice = (id: string) => api<void>(`/api/devices/${encodeURIComponent(id)}`, "DELETE");
 export const deviceActivity = async (id: string) =>
@@ -450,3 +454,34 @@ export function devicesSummary(devices: readonly Pick<Device, "online" | "paused
     paused: devices.filter((d) => d.paused).length,
   };
 }
+
+// ---------------------------------------------------------------- the owner's view (P53)
+
+/** A linked company computer as the owner sees it on the Staff computers page. */
+export interface StaffComputer extends Device {
+  person: { id: string; name: string; email: string; role: string };
+  company: string;
+  branch_id?: string | null;
+}
+
+export interface BackupSettings {
+  enabled: boolean;
+  target_id: string;
+  every_hours: number;
+  targets: { id: string; name: string; kind: string }[];
+}
+
+export const orgComputersQuery = (q = "") =>
+  queryOptions({
+    queryKey: ["org", "computers", q] as const,
+    queryFn: () => api<{ computers: StaffComputer[]; can_backup: boolean }>(`/api/org/computers${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    refetchInterval: 30_000,
+  });
+
+export const backupSettingsQuery = queryOptions({
+  queryKey: ["org", "computers", "backup"] as const,
+  queryFn: () => api<BackupSettings>("/api/org/computers/backup"),
+});
+
+export const setBackup = (body: { enabled: boolean; target_id: string; every_hours: number }) =>
+  api<BackupSettings>("/api/org/computers/backup", "PUT", body);

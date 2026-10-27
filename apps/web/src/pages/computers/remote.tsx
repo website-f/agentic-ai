@@ -17,7 +17,7 @@ import {
   WarningIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -30,7 +30,7 @@ import { Pill } from "@/components/ui/pill";
 import { msg, useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
 import {
-  bytes, deviceFiles, deviceHealth, deviceKeys, devicesQuery, downloadFromDevice, keyOf, remoteBlock,
+  bytes, deviceFiles, deviceHealth, deviceKeys, deviceQuery, devicesQuery, downloadFromDevice, keyOf, remoteBlock,
   screenFrame, sendInput, setRemote, type Device, type DeviceFile, type RemoteLevel,
 } from "@/lib/devices";
 import { cn, timeAgo } from "@/lib/utils";
@@ -40,20 +40,27 @@ export function RemotePage() {
   const navigate = useNavigate();
   const { deviceId } = useParams({ from: "/app/computers/$deviceId/remote" });
   const { data: devices } = useSuspenseQuery(devicesQuery);
-  const device = devices.find((d) => d.id === deviceId);
+  const search = useSearch({ strict: false }) as { staff?: string };
+  // The person's own computer is in their list; a staff computer (P53, from the roster) is
+  // fetched on its own, since it is not one of the viewer's own.
+  const staff = search.staff === "1";
+  const mine = devices.find((d) => d.id === deviceId);
+  const one = useQuery({ ...deviceQuery(deviceId), enabled: staff && !mine });
+  const device = mine ?? one.data;
+  const back = staff ? "/staff-computers" : "/computers";
 
   useEffect(() => {
-    if (devices.length && !device) void navigate({ to: "/computers", replace: true });
-  }, [devices.length, device, navigate]);
+    if (!staff && devices.length && !mine) void navigate({ to: "/computers", replace: true });
+  }, [staff, devices.length, mine, navigate]);
 
   if (!device) return null;
 
   return (
     <Page wide>
-      <PageHeader icon={MonitorPlayIcon} eyebrow={t("My computers")}
+      <PageHeader icon={MonitorPlayIcon} eyebrow={staff ? t("Staff computers") : t("My computers")}
         title={t("{name} — from the web", { name: device.name })}
         description={t("See how this computer is doing, open its shared folders, and — when you turn it on — watch its screen and use it, from anywhere.")}
-        actions={<Button variant="outline" asChild><Link to="/computers"><ArrowLeftIcon size={15} /> {t("All computers")}</Link></Button>} />
+        actions={<Button variant="outline" asChild><Link to={back}><ArrowLeftIcon size={15} /> {staff ? t("All staff computers") : t("All computers")}</Link></Button>} />
 
       {!device.online ? (
         <Card className="flex items-center gap-3 px-4 py-3.5 text-[13.5px]">

@@ -40,4 +40,12 @@ async def liveness_reconcile() -> dict[str, int]:
             out["crm_synced"] = await connectors.sync_due(db)
     except Exception:  # noqa: BLE001
         activity.logger.warning("crm sync failed", exc_info=True)
+    try:  # P53: company backup of the folders staff computers share
+        from ..core.db import SessionLocal
+        from ..devices import backup
+
+        async with SessionLocal() as db:
+            out["computers_backed_up"] = await backup.backup_due(db)
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("computer backup failed", exc_info=True)
     return out

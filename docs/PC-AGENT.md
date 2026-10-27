@@ -269,3 +269,24 @@ the code). It starts with the computer (`setLoginItemSettings`) and, when it sta
 the command-line autostart so the two never run at once (one lock file in the config folder).
 Builds: Windows NSIS `.exe`, Mac `.dmg` (ad-hoc signed, not notarised), published as GitHub
 release assets; the server's `/downloads/app/windows` and `/downloads/app/mac` redirect there.
+
+## Staff computers, for the owner (P53, company-owned)
+
+Company-owned computers staff have linked are overseen on **Staff computers** (owner/admins;
+a branch or department manager sees their own people). `GET /api/org/computers` lists every
+linked computer with who linked it, the company, online state, the folders it shares and the
+remote state; it is searchable.
+
+- **Reach one**: the owner opens a staff computer's screen and fetches files through the same
+  two remote locks as the person (`devices._managed_device`, so a manager — not only the
+  owner — may reach a company computer). The viewer turns on web remote with their OWN
+  password, the computer's own `agentic-pc remote` lock still applies, and the computer still
+  shows a notice while it is watched. Changing a computer's shared folders, pausing it or
+  unlinking it stays with the person who linked it.
+- **Company backup** (`devices/backup.py`, owner only): off until turned on with a destination
+  (a storage target, documents/storage). When on, the liveness round copies each computer's
+  shared folders to that place, incrementally (a per-computer manifest; unchanged files
+  skipped) and bounded per run (200 files / 500 MB). Only the shared folders, never the whole
+  disk and never the files the agent already refuses (passwords, keys, browser data). Every
+  run is in the computer's activity log, which the staff member sees.
+

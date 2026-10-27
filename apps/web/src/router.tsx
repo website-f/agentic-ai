@@ -85,6 +85,7 @@ const page = {
   search: lazyRouteComponent(() => import("@/pages/search"), "SearchPage"),
   computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
   remote: lazyRouteComponent(() => import("@/pages/computers/remote"), "RemotePage"),
+  staffComputers: lazyRouteComponent(() => import("@/pages/computers/staff"), "StaffComputersPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
@@ -625,10 +626,23 @@ const computersRoute = createRoute({
 const remoteRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/computers/$deviceId/remote",
+  validateSearch: (s: Record<string, unknown>): { staff?: string } => ({ staff: s.staff === "1" ? "1" : undefined }),
   beforeLoad: ({ context }) => {
-    if (!["agents.own", "assistants.use"].some((perm) => context.me.permissions.includes(perm))) throw redirect({ to: "/workspace" });
+    // P53: a manager may open a staff computer's remote page too (?staff=1 on the roster).
+    if (!["agents.own", "assistants.use", "members.manage", "team.manage"].some((perm) => context.me.permissions.includes(perm))) throw redirect({ to: "/workspace" });
   },
   component: page.remote,
+});
+
+// P53: company-owned staff computers the owner/managers oversee.
+const staffComputersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/staff-computers",
+  beforeLoad: ({ context }) => {
+    if (!["members.manage", "team.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+  },
+  validateSearch: (s: Record<string, unknown>): { q?: string } => ({ q: str(s.q) }),
+  component: page.staffComputers,
 });
 
 // P34: mail that reached the person's Outlook and the shared mailboxes, and what the AI did with it.
@@ -788,6 +802,7 @@ const routeTree = rootRoute.addChildren([
     objectivesRoute,
     searchRoute,
     computersRoute,
+    staffComputersRoute,
     remoteRoute,
     mailRoute,
     contactsRoute,

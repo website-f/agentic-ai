@@ -1,10 +1,11 @@
 """P42: a person's own linked computer, used directly from the web while they are away: its
 health, its shared folders (browse, download), its screen live, and mouse and keyboard.
 
-Only the computer's owner (devices._own), never an AI. Screen and input need two locks:
-`agentic-pc remote view|control` run ON the computer (remote_pc), and the same level allowed
-on the web with the person's password (remote_allowed). The computer shows a notification
-when a remote session starts, and every session is in its activity log.
+The computer's owner, or (P53, company-owned computers) a manager who oversees it
+(devices._managed_device), never an AI. Screen and input need two locks: `agentic-pc remote
+view|control` run ON the computer (remote_pc), and the same level allowed on the web with the
+viewer's own password (remote_allowed). The computer shows a notification when a remote
+session starts, whoever is viewing, and every session is in its activity log.
 
 - GET  /api/devices/{id}/health
 - GET  /api/devices/{id}/files?path=  |  ?q=        list a shared folder, or search
@@ -29,7 +30,7 @@ from ...devices.core import DeviceError
 from ...models import Device
 from ...services import audit
 from ..deps import Principal, api_error, current_principal
-from .devices import _own
+from .devices import _managed_device
 
 router = APIRouter(tags=["devices"])
 
@@ -74,7 +75,7 @@ async def health(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     try:
         return await bridge.call(d.id, "system.health", {}, 20.0)
     except DeviceError as e:
@@ -90,7 +91,7 @@ async def files(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """A shared folder's contents (no path: the shared folders), or a search in them."""
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     if not path and not q:
         return {"folders": list(d.folders or []), "items": []}
     try:
@@ -108,7 +109,7 @@ async def download(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     try:
         name, data = await bridge.fetch_file(d.id, path, kind="download", timeout=110.0)
     except DeviceError as e:
@@ -136,7 +137,7 @@ async def set_remote(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     if body.level != "off" and not verify_password(principal.user.password_hash, body.password):
         raise api_error(
             status.HTTP_403_FORBIDDEN,
@@ -170,7 +171,7 @@ async def screen(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     _need(d, "view")
     try:
         raw, info = await bridge.fetch_screen(d.id, w, q)
@@ -206,7 +207,7 @@ async def send_input(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    d = await _own(db, principal, device_id)
+    d = await _managed_device(db, principal, device_id)
     _need(d, "control")
     if body.kind == "mouse" and (body.x is None or body.y is None):
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "where", "Say where to point.")

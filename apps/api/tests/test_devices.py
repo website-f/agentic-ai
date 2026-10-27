@@ -696,22 +696,30 @@ async def test_only_the_persons_own_ai_gets_the_pc_tools(client, llm, temporal):
     await again.stop()
 
 
-async def test_only_the_owner_sees_or_changes_a_device(client, llm, temporal):
+async def test_only_the_owner_changes_a_device_but_a_manager_may_oversee(client, llm, temporal):
     o = await office(client)
     dev = await link(client, "Mine")
     admin = await as_role(client, "admin2@example.com", "admin", branch_id=o["branch"]["id"])
+    staff = await as_role(client, "aina@example.com", "staff", branch_id=o["branch"]["id"])
     try:
-        assert (await admin.get("/api/devices")).json() == []
         did = dev["device_id"]
-        assert (await admin.get(f"/api/devices/{did}/activity")).status_code == 404
+        # My own list is only mine; the staff computer page is where a manager sees others'.
+        assert (await admin.get("/api/devices")).json() == []
+        # P53: a manager (admin: all) may oversee a company computer — see its activity.
+        assert (await admin.get(f"/api/devices/{did}/activity")).status_code == 200
+        # But only the owner changes its folders, pauses it or unlinks it.
         r = await admin.patch(f"/api/devices/{did}", json={"paused": True}, headers=csrf(admin))
         assert r.status_code == 404
         assert (
             await admin.delete(f"/api/devices/{did}", headers=JSON | csrf(admin))
         ).status_code == 404
         assert (await admin.get(f"/api/devices/link-code/{dev['code']}/status")).status_code == 404
+        # A staff member (not a manager) cannot reach someone else's computer at all.
+        assert (await staff.get(f"/api/devices/{did}/activity")).status_code == 404
+        assert (await staff.get("/api/org/computers")).status_code == 403
     finally:
         await admin.aclose()
+        await staff.aclose()
     # Folders are checked: absolute paths, at most 20, each up to 400 characters.
     did = dev["device_id"]
     r = await client.patch(
@@ -993,23 +1001,38 @@ async def test_web_cannot_exceed_what_the_pc_allows(client, llm, temporal):
         await pc.stop()
 
 
-async def test_remote_is_owner_only(client, llm, temporal):
+async def test_remote_reaches_a_company_computer_for_a_manager(client, llm, temporal):
+    """P53: a manager may see and use a company computer, with the viewer's own password and
+    the computer's own lock still required, and the on-screen notice still fires."""
     o = await office(client)
     dev = await link(client, "Mine")
     did = dev["device_id"]
     pc = await FakePC(dev["token"], remote="control").start()
     admin = await as_role(client, "admin2@example.com", "admin", branch_id=o["branch"]["id"])
+    outsider = await as_role(client, "aina@example.com", "staff", branch_id=o["branch"]["id"])
     try:
-        assert (await admin.get(f"/api/devices/{did}/health")).status_code == 404
-        assert (await admin.get(f"/api/devices/{did}/screen")).status_code == 404
-        r = await admin.put(
+        # The admin reaches its health; the screen waits until web remote is turned on.
+        assert (await admin.get(f"/api/devices/{did}/health")).status_code == 200
+        assert (await admin.get(f"/api/devices/{did}/screen")).status_code == 403
+        # Turning it on needs the admin's OWN password (not the owner's).
+        bad = await admin.put(
             f"/api/devices/{did}/remote",
             json={"level": "view", "password": "whatever"},
             headers=csrf(admin),
         )
-        assert r.status_code == 404
+        assert bad.status_code == 403 and bad.json()["code"] == "password_required"
+        ok = await admin.put(
+            f"/api/devices/{did}/remote",
+            json={"level": "view", "password": "a-long-new-password-2026"},
+            headers=csrf(admin),
+        )
+        assert ok.status_code == 200
+        assert (await admin.get(f"/api/devices/{did}/screen")).status_code == 200
+        # A non-manager cannot reach it at all.
+        assert (await outsider.get(f"/api/devices/{did}/health")).status_code == 404
     finally:
         await admin.aclose()
+        await outsider.aclose()
         await pc.stop()
 
 

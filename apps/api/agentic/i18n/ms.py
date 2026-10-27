@@ -1698,4 +1698,12 @@ MS: dict[str, str] = {
     "You can change only the workflows you made. Ask a manager for this one.": (
         "Anda hanya boleh mengubah aliran kerja yang anda buat. Minta pengurus untuk yang ini."
     ),
+    # ------------------------------------------------------------ P53 staff computers
+    "Your role ({role}) cannot oversee staff computers.": (
+        "Peranan anda ({role}) tidak boleh menyelia komputer staf."
+    ),
+    "Only the owner sets up backup.": "Hanya pemilik yang menyediakan sandaran.",
+    "Choose where to keep the backup first (Settings > Storage).": (
+        "Pilih tempat untuk menyimpan sandaran dahulu (Tetapan > Storan)."
+    ),
 }
