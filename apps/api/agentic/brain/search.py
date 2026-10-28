@@ -4,9 +4,10 @@
 Filtering by workspace, branch and agent happens in SQL, never in the model.
 """
 
+import math
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, func, literal, or_, select
@@ -19,6 +20,7 @@ from .pages import TIER, UNSEARCHED, snippet
 from .scope import Viewer
 
 RRF_K = 60
+FRESH_DAYS = 180  # how fast a fact's freshness bonus fades
 POOL = 30
 RELATIVE_MARGIN = 0.15
 
@@ -259,12 +261,19 @@ async def search_facts(
         f.id: f for f in (await db.scalars(select(BrainFact).where(BrainFact.id.in_(fused)))).all()
     }
     kw_set, vec_set = set(kw), set(vec)
+    now = datetime.now(UTC)
     scored = []
     for fid, s in fused.items():
         f = facts.get(fid)
         if f is None:
             continue
         s *= 0.7 + 0.3 * f.confidence
+        # Fresher first among equals: a fact learned this month beats one from a year ago
+        # (prices and contacts drift), but never drops below 80%. Not last_used_at: being
+        # recalled must not keep an old fact looking new.
+        if f.valid_from is not None:
+            age = max(0.0, (now - f.valid_from).total_seconds() / 86400)
+            s *= 0.8 + 0.2 * math.exp(-age / FRESH_DAYS)
         if f.valid_to is not None:
             s *= 0.5
         via = (["keyword"] if fid in kw_set else []) + (["meaning"] if fid in vec_set else [])

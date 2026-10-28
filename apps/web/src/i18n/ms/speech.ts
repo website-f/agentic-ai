@@ -3,8 +3,8 @@
  * descriptions become Malay. */
 export const SPEECH: Record<string, string> = {
   "How your AI speaks to you": "Cara AI anda bercakap dengan anda",
-  "Your AI can chat in casual Malay or your own state's dialect. Documents, letters and reports it writes stay in standard Malay.":
-    "AI anda boleh berbual dalam bahasa Melayu santai atau loghat negeri anda sendiri. Dokumen, surat dan laporan yang ditulisnya kekal dalam bahasa Melayu baku.",
+  "When you write in Malay, your AI can answer in casual Malay or your own state's dialect. When you write in English, it answers in English. Documents, letters and reports it writes stay in standard Malay.":
+    "Apabila anda menulis dalam bahasa Melayu, AI anda boleh menjawab dalam bahasa Melayu santai atau loghat negeri anda sendiri. Apabila anda menulis dalam bahasa Inggeris, ia menjawab dalam bahasa Inggeris. Dokumen, surat dan laporan yang ditulisnya kekal dalam bahasa Melayu baku.",
   "Saved. Your AI speaks this way from your next message.":
     "Disimpan. AI anda bercakap begini mulai mesej anda yang seterusnya.",
 

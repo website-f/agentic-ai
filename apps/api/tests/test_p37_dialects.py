@@ -79,3 +79,104 @@ async def test_my_ai_speaks_my_dialect(client, llm, temporal):
     )
     sent = "\n".join(str(m.get("content")) for m in llm.requests[-1]["messages"])
     assert "Speak Sabah" not in sent
+    assert "even if earlier replies in this conversation used a dialect" in sent
+
+
+async def test_writing_in_english_gets_english_whatever_the_dialect(client, llm, temporal):
+    """A person with Sabah set who switches the app to English and writes English gets
+    plain English back, not Sabah (the dialect is for when they write Malay)."""
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    await client.put("/api/me/prefs", json={"locale": {"speech": "sabah"}}, headers=csrf(client))
+    await client.put("/api/me/prefs", json={"locale": {"language": "en"}}, headers=csrf(client))
+    llm.say("Sure, here it is.")
+    r = await client.post(
+        f"/api/agents/{agent['id']}/chat",
+        json={"message": "Can you check the sales report from last week?"},
+        headers={**csrf(client), "X-Lang": "en"},
+    )
+    assert r.status_code == 200, r.text
+    sent = "\n".join(str(m.get("content")) for m in llm.requests[-1]["messages"])
+    assert "Speak Sabah" not in sent and "even if earlier replies" in sent
+    # Writing Malay again brings the dialect back.
+    llm.say("Bah, ok.")
+    await client.post(
+        f"/api/agents/{agent['id']}/chat",
+        json={"message": "Tolong semak invois yang belum bayar"},
+        headers={**csrf(client), "X-Lang": "en"},
+    )
+    sent = "\n".join(str(m.get("content")) for m in llm.requests[-1]["messages"])
+    assert "Speak Sabah Malay" in sent
+
+
+def test_how_to_speak_is_a_setting_never_a_memory():
+    from agentic.brain import core
+
+    assert dialects.about_speech("Fitri prefers replies in Sabah dialect (bah, sia, nda).")
+    assert dialects.about_speech("Ahmad suka bercakap loghat Kelantan")
+    # Facts that merely mention a place or a language are kept.
+    assert not dialects.about_speech("Customer ABC Sdn Bhd is based in Sabah, pays in 60 days.")
+    assert not dialects.about_speech("Invoices to LHDN use standard Malay.")
+    assert core.refused(["Always speak to Fitri in Sabahan slang"])
+    assert core.refused(["Fitri's company is in Kota Kinabalu, Sabah"]) is None
+
+
+async def test_a_chat_answer_shows_what_it_remembered(client, llm, temporal):
+    """The answer keeps which facts it recalled (shown under it, with "Not right"), a short
+    follow-up still recalls what the conversation is about, and a dialect note left in
+    memory never reaches the prompt."""
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    fact = (
+        await client.post(
+            "/api/brain/facts",
+            json={"text": "Maju Trading invoices on net-45 terms."},
+            headers=csrf(client),
+        )
+    ).json()
+    llm.say("Maju Trading pays in 45 days.")
+    r = await client.post(
+        f"/api/agents/{agent['id']}/chat",
+        json={"message": "What payment terms does Maju Trading have with us?"},
+        headers=csrf(client),
+    )
+    sid = r.json()["session_id"]
+    msgs = (await client.get(f"/api/chat/sessions/{sid}/messages")).json()
+    recalled = msgs[-1]["meta"]["recalled"]
+    assert recalled[0] == {"kind": "fact", "id": fact["id"], "text": fact["text"]}
+    # A follow-up that names nothing still finds it, through the message before it.
+    llm.say("Yes.")
+    await client.post(
+        f"/api/agents/{agent['id']}/chat",
+        json={"message": "and is that net?", "session_id": sid},
+        headers=csrf(client),
+    )
+    msgs = (await client.get(f"/api/chat/sessions/{sid}/messages")).json()
+    assert msgs[-1]["meta"]["recalled"][0]["id"] == fact["id"]
+    # "Not right" ends it: the next answer does not lean on it.
+    await client.post(f"/api/brain/facts/{fact['id']}/forget", json={}, headers=csrf(client))
+    llm.say("I am not sure.")
+    await client.post(
+        f"/api/agents/{agent['id']}/chat",
+        json={"message": "What payment terms does Maju Trading have with us?"},
+        headers=csrf(client),
+    )
+    sent = "\n".join(str(m.get("content")) for m in llm.requests[-1]["messages"])
+    assert "net-45" not in sent.split("What payment terms")[-1]
+
+
+async def test_old_dialect_notes_in_core_memory_never_reach_the_prompt(client, llm, temporal):
+    from agentic.agents.prompt import system_prompt
+    from agentic.core.db import SessionLocal
+    from agentic.models import Agent
+
+    o = await office(client)
+    agent = await new_agent(client, o, "Aina")
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent["id"])
+        snap = (
+            "About the people you work for:\n- Always speak to Fitri in Sabah dialect\n"
+            "- Fitri runs the Kota Kinabalu office"
+        )
+        p = await system_prompt(db, a, "chat", snap)
+    assert "Sabah dialect" not in p and "Kota Kinabalu office" in p

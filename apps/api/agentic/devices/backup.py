@@ -16,6 +16,7 @@ Runs on the liveness round (workflows/reconcile_activities), like storage-source
 """
 
 import contextlib
+import hashlib
 import json
 import logging
 import posixpath
@@ -104,8 +105,14 @@ def _manifest_key(ws_id: str, device_id: str) -> str:
     return f"{KEY_ROOT}/{ws_id}/{device_id}/_manifest.json"
 
 
-def _file_key(ws_id: str, device_id: str, folder_i: int, rel: str) -> str:
-    return f"{KEY_ROOT}/{ws_id}/{device_id}/{folder_i}/{rel}"
+def _folder_tag(folder: str) -> str:
+    """A short, stable name for a shared folder: removing or reordering the computer's
+    folders never moves another folder's backup onto old keys."""
+    return hashlib.sha256(folder.encode()).hexdigest()[:12]
+
+
+def _file_key(ws_id: str, device_id: str, folder: str, rel: str) -> str:
+    return f"{KEY_ROOT}/{ws_id}/{device_id}/{_folder_tag(folder)}/{rel}"
 
 
 async def _load_manifest(target: StorageTarget, ws_id: str, device_id: str) -> dict[str, Any]:
@@ -145,7 +152,7 @@ async def run_once(db: AsyncSession, device: Device, target: StorageTarget) -> S
     folders = list(device.folders or [])
     walked = 0
 
-    for i, folder in enumerate(folders):
+    for folder in folders:
         queue = [folder]
         while queue:
             if st.files >= MAX_FILES_PER_RUN or st.bytes >= MAX_BYTES_PER_RUN:
@@ -171,7 +178,7 @@ async def run_once(db: AsyncSession, device: Device, target: StorageTarget) -> S
                 rel = _rel(folder, path)
                 if not rel:
                     continue
-                key = _file_key(ws_id, device.id, i, rel)
+                key = _file_key(ws_id, device.id, folder, rel)
                 seen.add(key)
                 prev = manifest.get(key)
                 if (
@@ -202,8 +209,9 @@ async def run_once(db: AsyncSession, device: Device, target: StorageTarget) -> S
         if st.hit_cap:
             break
 
-    # Drop files that are gone from the computer (only when the whole tree was walked).
-    if not st.hit_cap:
+    # Drop files that are gone from the computer: only when the whole tree was walked and
+    # every listing worked (a folder that failed to list once must not be copied anew).
+    if not st.hit_cap and not st.errors:
         for key in [
             k
             for k in manifest
@@ -282,8 +290,12 @@ async def backup_due(db: AsyncSession) -> int:
             if await _too_soon(key, pol.every_hours):
                 continue
             try:
-                await run_once(db, d, target)
+                st = await run_once(db, d, target)
                 done += 1
+                if st.hit_cap:
+                    # More to copy (a first backup of a big folder): carry on next round
+                    # instead of waiting a whole interval.
+                    continue
             except storage.StorageError as e:
                 log.warning("pc backup to storage failed for %s: %s", d.id, e)
             except Exception:  # noqa: BLE001 - one computer must not stop the round

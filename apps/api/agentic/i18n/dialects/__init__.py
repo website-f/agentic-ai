@@ -260,6 +260,77 @@ def gloss(code: str | None, text: str) -> str:
     )
 
 
+# Everyday words that tell Malay from English in a message (standard, casual and dialect).
+_MS_WORDS = frozenset(
+    "saya aku kami kita awak kau anda dia mereka dorang korang ini itu ni tu yang dan atau "
+    "dengan untuk pada dalam dari kepada ke di ada tak tidak tiada takde nda ndak sik bukan "
+    "sudah dah belum boleh bulih nak mahu hendak mau perlu kena mesti apa apo gapo ape kenapa "
+    "mengapa bakpo awat ngape macam mana camne bagaimana guane berapa bila siapa sini sana "
+    "lagi juga pun je jak saja sahaja la lah kan ke kah bah ka tolong terima kasih buat bikin "
+    "polah tengok tingu nangga cari hantar beri bagi minta semak sila hari esok semalam minggu "
+    "bulan tahun jam pukul baru lama banyak sikit sedikit semua orang kerja syarikat pelanggan "
+    "harga duit bayar ambo demo mung hang depa teman kome den ekau kamek kitak sia ko".split()
+)
+_EN_WORDS = frozenset(
+    "i me my we our you your he she it they them this that these those the a an and or but "
+    "with for on in at from to of is are was were be been have has had do does did not no "
+    "can could will would should please what why how when where who which there here thanks "
+    "thank help make send check find show tell give get need want let can't don't i'm it's".split()
+)
+
+# A memory about how to speak to someone: the "How your AI speaks to you" setting decides that,
+# so a saved fact or note must never keep a dialect (or a language) after the person changed it.
+_SPEECH_STYLE = re.compile(
+    r"\b(english|malay|melayu|bahasa|dialect|dialek|loghat|slang|pasar|kelantan|kelate|"
+    r"terengganu|ganu|kedah|utara|perak|pahang|nogori|negeri sembilan|melaka|johor|sabah|"
+    r"sabahan|sarawak|sarawakian|manglish|rojak)\b",
+    re.I,
+)
+_SPEECH_ACT = re.compile(
+    r"\b(speak\w*|spoken|repl\w*|respond\w*|chat\w*|talk\w*|answer\w*|communicat\w*|language|"
+    r"dialect|dialek|loghat|slang|tone|style|cakap|bercakap|balas|jawab|bahasa|sembang)\b",
+    re.I,
+)
+_SPEECH_WANT = re.compile(
+    r"\b(prefer\w*|want\w*|like[sd]?|ask\w*|should|always|please|use[sd]?|usually|"
+    r"suka|mahu|nak|guna|minta|selalu|gemar)\b",
+    re.I,
+)
+
+
+def about_speech(text: str) -> bool:
+    """A memory that says which language, dialect or style to speak to someone in."""
+    t = text or ""
+    return bool(_SPEECH_STYLE.search(t) and _SPEECH_ACT.search(t) and _SPEECH_WANT.search(t))
+
+
+def writes_malay(text: str, lang: str | None) -> bool:
+    """Whether this message is in Malay (any style). An unclear one (a name, a number, "ok")
+    follows the language the person chose in the app."""
+    words = WORD.findall((text or "").lower())
+    ms = sum(1 for w in words if w in _MS_WORDS)
+    en = sum(1 for w in words if w in _EN_WORDS)
+    if ms != en:
+        return ms > en
+    return lang == "ms"
+
+
+def style_for(code: str | None, lang: str | None, text: str) -> str | None:
+    """The style to speak this turn: the person's dialect only when they write in Malay.
+    Writing in English gets plain English back, whatever the setting says."""
+    return code if known(code) and writes_malay(text, lang) else None
+
+
+def plain_note(lang: str | None) -> str:
+    """When no dialect applies this turn: earlier replies in a dialect must not carry on."""
+    tongue = "standard Malay" if lang == "ms" else "plain language"
+    return (
+        "(Style: reply in "
+        f"{tongue} that matches the language the person writes in now, even if earlier "
+        "replies in this conversation used a dialect or casual slang.)"
+    )
+
+
 def options() -> list[dict[str, str]]:
     """For the settings page: code, English label, region."""
     return [{"code": s.code, "label": s.label, "region": s.region} for s in STYLES.values()]

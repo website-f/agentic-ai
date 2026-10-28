@@ -9,15 +9,17 @@ or also change (edit) one object, minus the fields it hides; a grant with no obj
 see the dashboard (only tiles over objects they may see).
 """
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...i18n import lookup
-from ...models import CrmAccess, CrmField, CrmObject, CrmRecord
+from ...models import CrmAccess, CrmField, CrmObject, CrmRecord, Workspace
 from . import builtins
 from .fields import NUMERIC, FieldError, as_text, coerce
 
@@ -160,6 +162,8 @@ def _row(
 async def all_rows(
     db: AsyncSession, obj: CrmObject, fields: list[CrmField]
 ) -> list[dict[str, Any]]:
+    ws = await db.get(Workspace, obj.workspace_id)
+    _ZONE.set((ws.timezone if ws else None) or "UTC")
     by_key = {f.key: f for f in fields}
     if obj.kind == "builtin" and obj.source in builtins.SOURCES:
         src = builtins.SOURCES[obj.source]
@@ -201,13 +205,32 @@ async def all_rows(
     ]
 
 
+# The company's time zone for "today", "this week" and which day a time falls on. all_rows
+# sets it (every filter and tile starts there), so a Malaysian office before 8am is not
+# looking at yesterday.
+_ZONE: ContextVar[str] = ContextVar("crm_zone", default="UTC")
+
+
+def _zone() -> ZoneInfo:
+    try:
+        return ZoneInfo(_ZONE.get())
+    except (KeyError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def today_here() -> date:
+    return datetime.now(_zone()).date()
+
+
 def _as_date(v: Any) -> date | None:
     if not v:
         return None
     try:
-        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).date()
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
     except ValueError:
         return None
+    # A time with a zone is that day where the company is; a plain date is just the date.
+    return d.astimezone(_zone()).date() if d.tzinfo else d.date()
 
 
 def _match(f: CrmField | None, v: Any, op: str, want: Any, today: date) -> bool:
@@ -259,6 +282,8 @@ def _match(f: CrmField | None, v: Any, op: str, want: Any, today: date) -> bool:
     hit_exact = w in {str(x).lower() for x in raw} or text == w
     if ftype == "checkbox":
         hit_exact = bool(v) == (w in ("1", "true", "yes", "ya"))
+    if ftype in ("date", "datetime") and op in ("is", "is_not") and not empty:
+        hit_exact = _as_date(v) == _as_date(want)  # a picked day matches any time on it
     if op == "is":
         return hit_exact
     if op == "is_not":
@@ -279,7 +304,7 @@ def apply(
     today: date | None = None,
 ) -> list[dict[str, Any]]:
     by_key = {f.key: f for f in fields}
-    today = today or date.today()
+    today = today or today_here()
     out = rows
     if q.strip():
         needle = q.strip().lower()

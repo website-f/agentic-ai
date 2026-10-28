@@ -7,7 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/page";
@@ -33,6 +33,8 @@ import { FieldsSheet } from "./fields";
 import { RecordSheet } from "./record";
 
 const PAGE = 100;
+/** A board or calendar shows every record (up to this many), not only the first page. */
+const WHOLE = 2000;
 const KIND_ICON: Record<ViewKind, typeof TableIcon> = { table: TableIcon, cards: SquaresFourIcon, board: KanbanIcon, calendar: CalendarBlankIcon };
 
 export function ObjectPage({ objectKey, isOwner }: { objectKey: string; isOwner: boolean }) {
@@ -71,6 +73,11 @@ export function ObjectPage({ objectKey, isOwner }: { objectKey: string; isOwner:
   const list = rows.data?.pages.flatMap((p) => p.rows) ?? [];
   const refs = Object.assign({}, ...(rows.data?.pages.map((p) => p.refs) ?? [])) as Record<string, string>;
   const total = rows.data?.pages[0]?.total ?? 0;
+  // Columns and days count every record: a board or calendar loads the rest by itself.
+  const whole = shown === "board" || shown === "calendar";
+  useEffect(() => {
+    if (whole && rows.hasNextPage && !rows.isFetchingNextPage && list.length < WHOLE) void rows.fetchNextPage();
+  }, [whole, rows, list.length]);
 
   const setView = (id: string) => void navigate({ to: "/crm", search: (s: Record<string, unknown>) => ({ ...s, v: id, r: undefined }) as never, replace: true });
   const openRecord = (id: string) => void navigate({ to: "/crm", search: (s: Record<string, unknown>) => ({ ...s, r: id }) as never });
@@ -264,6 +271,7 @@ function BoardView({ obj, fields, rows, refs, groupBy, onOpen }: {
   if (!g) return <p className="text-[13px] text-muted">{t("A board needs a field with choices, such as Status. Add one in Fields.")}</p>;
   const canMove = obj.can_edit && !g.builtin;
   const cols = [...(g.options.choices ?? []).map((c) => ({ key: c.value, label: c.label, color: c.color })), { key: "", label: t("(empty)"), color: "gray" }];
+  const known = new Set((g.options.choices ?? []).map((c) => c.value));
   const show = summaryFields(fields, obj.title_field, 3).filter((f) => f.key !== g.key);
   const drop = (e: DragEvent, to: string) => {
     e.preventDefault();
@@ -273,7 +281,11 @@ function BoardView({ obj, fields, rows, refs, groupBy, onOpen }: {
   return (
     <div className="flex snap-x gap-3 overflow-x-auto pb-2">
       {cols.map((c) => {
-        const items = rows.filter((r) => String(r.data[g.key] ?? "") === c.key);
+        // A value whose choice was removed shows under "(empty)", so no record goes missing.
+        const items = rows.filter((r) => {
+          const v = String(r.data[g.key] ?? "");
+          return c.key === "" ? !known.has(v) : v === c.key;
+        });
         if (!items.length && c.key === "") return null;
         return (
           <section key={c.key || "_"} onDragOver={(e) => { if (canMove) { e.preventDefault(); setOver(c.key); } }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(e, c.key)}

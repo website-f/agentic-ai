@@ -94,7 +94,7 @@ export function SettingsPage() {
         <LanguageSwitch size="md" />
       </Section>
 
-      <Section title={t("How your AI speaks to you")} description={t("Your AI can chat in casual Malay or your own state's dialect. Documents, letters and reports it writes stay in standard Malay.")}>
+      <Section title={t("How your AI speaks to you")} description={t("When you write in Malay, your AI can answer in casual Malay or your own state's dialect. When you write in English, it answers in English. Documents, letters and reports it writes stay in standard Malay.")}>
         <SpeechStylePicker />
       </Section>
 

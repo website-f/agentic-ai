@@ -59,4 +59,9 @@ export const CHAT: Record<string, string> = {
   "Checked the time": "Menyemak masa",
   "Thought it through": "Memikirkannya dengan teliti",
   "Used a skill": "Menggunakan kemahiran",
+  // What it remembered for an answer (components/chat/remembered.tsx)
+  "What it remembered ({n})": "Apa yang diingatinya ({n})",
+  "Not right": "Tidak betul",
+  "Forgotten. Your AI stops using it; Brain can bring it back.":
+    "Dilupakan. AI anda berhenti menggunakannya; Otak boleh mengembalikannya.",
 };

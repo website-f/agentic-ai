@@ -323,7 +323,8 @@ def _value(f: CrmField, raw: Any) -> Any:
             raw if isinstance(raw, list) else ([raw] if f.type == "select" else str(raw).split(","))
         )
         choices = list((f.options or {}).get("choices") or [])
-        known = {c["value"].lower() for c in choices}
+        # A renamed choice keeps its value: the new label is known too (no duplicate).
+        known = {str(c.get(k) or "").lower() for c in choices for k in ("value", "label")}
         for item in items:
             s = str(item).strip()[:60]
             if s and s.lower() not in known and len(choices) < 60:
@@ -381,6 +382,8 @@ async def upsert(
     }
     created = updated = 0
     title_f = next((f for f in fields if f.key == obj.title_field), None)
+    synced = {f.key for f in by_path.values()}
+    autos = [f for f in fields if f.type == "auto" and not f.builtin]
     for raw, row in zip(records, flat, strict=False):
         rid = at_path(raw, id_path) if id_path else None
         ext = (
@@ -399,13 +402,25 @@ async def upsert(
         rec = existing.get(ext)
         title = str(data.get(title_f.key, "")) if title_f else ""
         if rec is None:
+            if autos:  # numbered like a record added by hand (engine.save)
+                meta = dict(obj.meta or {})
+                for f in autos:
+                    n = int(meta.get(f"auto:{f.key}") or 0) + 1
+                    meta[f"auto:{f.key}"] = n
+                    data[f.key] = n
+                obj.meta = meta
             rec = CrmRecord(workspace_id=obj.workspace_id, object_id=obj.id, external_id=ext[:200], data=data,
                             title=title[:300], created_by=actor, updated_by=actor)  # fmt: skip
             db.add(rec)
             existing[ext] = rec
             created += 1
-        elif rec.data != data:
-            rec.data, rec.title, rec.updated_by = data, title[:300], actor
+            continue
+        # Only the synced fields change: what people added in the CRM (a follow-up note,
+        # an owner, the auto-number) stays.
+        merged = {k: v for k, v in (rec.data or {}).items() if k not in synced} | data
+        if rec.data != merged:
+            title = str(merged.get(title_f.key, "")) if title_f else ""
+            rec.data, rec.title, rec.updated_by = merged, title[:300], actor
             rec.updated_at = datetime.now(UTC)
             updated += 1
     await db.flush()

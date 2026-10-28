@@ -1161,6 +1161,7 @@ MS: dict[str, str] = {
     "Only the people who manage this agent can change its memory.": "Hanya orang yang mengurus ejen ini boleh mengubah memorinya.",
     "Not saved. Core memory cannot change the rules, approvals or SOPs.": "Tidak disimpan. Memori teras tidak boleh mengubah peraturan, kelulusan atau SOP.",
     "Not saved. Never keep passwords, keys, card or IC numbers in memory.": "Tidak disimpan. Jangan simpan kata laluan, kunci, nombor kad atau IC dalam memori.",
+    "Not saved. How your AI speaks to you is set in Settings, not in memory.": "Tidak disimpan. Cara AI anda bercakap dengan anda ditetapkan dalam Tetapan, bukan dalam memori.",
     "Only an owner or admin can publish a skill for the whole workspace; a manager can publish one only for the agents they manage.": "Hanya pemilik atau admin boleh menerbitkan kemahiran untuk seluruh ruang kerja; pengurus hanya boleh menerbitkannya untuk ejen yang diurusnya.",
     "Sign in first, then connect Gmail again from Assistants.": "Log masuk dahulu, kemudian sambung Gmail semula daripada Pembantu.",
     "This Google sign-in was started by someone else or in another browser. Start again from your own Assistants page.": "Log masuk Google ini dimulakan oleh orang lain atau dalam pelayar lain. Mulakan semula daripada halaman Pembantu anda sendiri.",

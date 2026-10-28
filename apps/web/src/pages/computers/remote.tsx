@@ -404,7 +404,10 @@ function useRemoteChange(device: Device) {
     mutationFn: ({ level, pw }: { level: RemoteLevel; pw: string }) => setRemote(device.id, level, pw),
     onSuccess: (next) => {
       qc.setQueryData<Device[]>(deviceKeys.list, (list) => list?.map((d) => (d.id === next.id ? { ...d, ...next } : d)));
+      // A staff computer (Staff computers) is read one by one, not from my own list.
+      qc.setQueryData<Device>(deviceKeys.one(next.id), (d) => (d ? { ...d, ...next } : next));
       void qc.invalidateQueries({ queryKey: deviceKeys.list });
+      void qc.invalidateQueries({ queryKey: ["org", "computers", "list"] });
       setAsk(null);
       setPassword("");
     },

@@ -496,3 +496,47 @@ async def test_remove_a_list_or_start_over(client, llm, temporal):
     assert (await client.get("/api/crm/dashboard")).json()["widgets"] == []
     # The office's own data is untouched: it can be added again at once.
     assert (await post(client, "/api/crm/builtins/contacts")).status_code == 201
+
+
+async def test_a_sync_keeps_what_people_added_and_numbers_new_records(client, llm, temporal):
+    """A synced list: fields people added in the CRM survive the next sync, and new records
+    get the auto-number."""
+    await office(client)
+    r = await post(client, "/api/crm/connectors", {"name": "Leads in", "kind": "webhook",
+                                                   "config": {"id_path": "sku"}, "object_name": "Leads"})  # fmt: skip
+    assert r.status_code == 201, r.text
+    path = r.json()["webhook_path"]
+    await client.post(path, json={"sku": "L1", "name": "Ahmad", "stage": "Lead"}, headers=JSON)
+    note = (
+        await post(client, "/api/crm/objects/leads/fields", {"label": "Follow up", "type": "text"})
+    ).json()["key"]
+    num = (
+        await post(client, "/api/crm/objects/leads/fields", {"label": "No", "type": "auto"})
+    ).json()["key"]
+    rid = (await query(client, "leads"))["rows"][0]["id"]
+    r = await patch(
+        client, f"/api/crm/objects/leads/records/{rid}", {"values": {note: "Call on Friday"}}
+    )
+    assert r.status_code == 200, r.text
+    again = await client.post(
+        path, json={"sku": "L1", "name": "Ahmad bin Ali", "stage": "Lead"}, headers=JSON
+    )
+    assert again.json()["updated"] == 1
+    await client.post(path, json={"sku": "L2", "name": "Siti"}, headers=JSON)
+    rows = {x["data"]["name"]: x["data"] for x in (await query(client, "leads"))["rows"]}
+    assert rows["Ahmad bin Ali"][note] == "Call on Friday"  # kept through the sync
+    assert isinstance(rows["Siti"].get(num), int)  # numbered like one added by hand
+    assert rows["Siti"][num] != rows["Ahmad bin Ali"].get(num)
+
+
+def test_a_renamed_choice_is_not_added_again():
+    from agentic.crm.hub.connectors import _value
+    from agentic.models import CrmField
+
+    f = CrmField(key="stage", label="Stage", type="select",
+                 options={"choices": [{"value": "Lead", "label": "New lead", "color": "blue"}]})  # fmt: skip
+    _value(f, "New lead")
+    _value(f, "lead")
+    assert len(f.options["choices"]) == 1
+    _value(f, "Won")
+    assert [c["value"] for c in f.options["choices"]] == ["Lead", "Won"]

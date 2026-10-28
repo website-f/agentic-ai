@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..assistants.names import ASSISTANT_ONLY
@@ -1140,11 +1140,13 @@ async def _language_line(db: AsyncSession, task: Task) -> str:
     if not (task.created_by or "").startswith("user:"):
         return ""
     who = task.created_by.removeprefix("user:")
-    line = lang_notes.task_line(await prefs.language(db, who))
-    # P37: the final answer to the person in their style (reports stay standard Malay).
-    style = await prefs.speech(db, who)
+    lang = await prefs.language(db, who)
+    line = lang_notes.task_line(lang)
+    # P37: the final answer to the person in their style (reports stay standard Malay), when
+    # the brief is in Malay.
+    text = f"{task.title}\n{task.brief}"
+    style = dialects.style_for(await prefs.speech(db, who), lang, text)
     if style:
-        text = f"{task.title}\n{task.brief}"
         line += "\n\nWhen you answer the person directly: " + dialects.voice_note(style, text)
         if g := dialects.gloss(style, text):
             line += "\n" + g
@@ -1960,6 +1962,30 @@ async def _confirms(db: AsyncSession, session_id: str, asked_id: int, text: str)
     return held is not None
 
 
+RECALLED_SHOWN = 8
+SNAPSHOT_IDLE = timedelta(hours=1)
+FOLLOW_UP_WORDS = 8
+
+
+async def _recall_query(db: AsyncSession, session_id: str, asked_id: int, text: str) -> str:
+    """What to search memory for this turn. A short follow-up ("what about his price?",
+    "ok send it") says too little on its own, so the person's message before it rides
+    along: memory then finds the customer or job the conversation is about."""
+    if len(text.split()) >= FOLLOW_UP_WORDS:
+        return text
+    before = await db.scalar(
+        select(AgentMessage.content)
+        .where(
+            AgentMessage.session_id == session_id,
+            AgentMessage.role == "user",
+            AgentMessage.id < asked_id,
+        )
+        .order_by(AgentMessage.id.desc())
+        .limit(1)
+    )
+    return f"{(before or '')[-400:]}\n{text}".strip()
+
+
 async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks.
@@ -1971,7 +1997,14 @@ async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: 
 async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     ws = await db.get(Workspace, agent.workspace_id)
     assert ws is not None
-    if session.memory_snapshot is None:  # frozen for the conversation, like a task run
+    # Frozen for the conversation, like a task run, so the cached prompt prefix keeps hitting.
+    # A WhatsApp or Telegram chat is one conversation forever: after a quiet hour (the cache
+    # is cold by then anyway) it picks up what changed in core memory meanwhile.
+    last = await db.scalar(
+        select(func.max(AgentMessage.created_at)).where(AgentMessage.session_id == session.id)
+    )
+    stale = last is not None and datetime.now(UTC) - last > SNAPSHOT_IDLE
+    if session.memory_snapshot is None or stale:
         session.memory_snapshot = await core_memory.snapshot(db, agent)
     asked = _add(db, agent, "user", session_id=session.id, content=text)
     await db.commit()
@@ -2002,16 +2035,27 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         return ChatReply(note, "", "", [], answer.id)
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
-    block, _, _ = await recall_block(db, agent, text, ws.timezone, exclude_session_id=session.id)
+    recalled: list[dict[str, Any]] = []
+    block, _, _ = await recall_block(
+        db,
+        agent,
+        await _recall_query(db, session.id, asked.id, text),
+        ws.timezone,
+        exclude_session_id=session.id,
+        used=recalled,
+    )
     # P22: the person's language rides on this turn too (never the system prompt). The
     # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
     lang = explicit_lang() or await prefs.language(db, session.user_id)
     note = lang_notes.chat_note(lang)
-    # P37: the person's dialect or casual style, and what their dialect words mean.
-    style = await prefs.speech(db, session.user_id)
+    # P37: the person's dialect or casual style, and what their dialect words mean, when
+    # they write in Malay; otherwise plain speech, so a dialect never outlives the setting.
+    style = dialects.style_for(await prefs.speech(db, session.user_id), lang, text)
     if style:
         extra = [dialects.voice_note(style, text), dialects.gloss(style, text)]
         note = "\n".join([note, *[x for x in extra if x]])
+    else:
+        note = f"{note}\n{dialects.plain_note(lang)}"
     block = f"{block}\n\n{note}" if block else note
     ctx = ToolContext(
         db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id
@@ -2092,7 +2136,13 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
                 "assistant",
                 session_id=session.id,
                 content=reply.content,
-                meta={"provider": reply.provider_name, "model": reply.model, "tools": used},
+                meta={
+                    "provider": reply.provider_name,
+                    "model": reply.model,
+                    "tools": used,
+                    # What it remembered for this answer, shown under it (and correctable).
+                    **({"recalled": recalled[:RECALLED_SHOWN]} if recalled else {}),
+                },
             )
             await db.commit()
             return ChatReply(reply.content, reply.provider_name, reply.model, used, answer.id)

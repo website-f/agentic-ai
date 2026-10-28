@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..i18n.dialects import about_speech
 from ..models import SOP, Agent, Branch, Broadcast, BroadcastReceipt, Department, Workspace
 
 WORKSPACE_RULES = """You are an AI staff member in an office run by people.
@@ -117,6 +118,9 @@ async def build_parts(
     if skills := await index_for(db, agent):
         parts.append(PromptPart("Skills", skills))
     if memory:
+        # A snapshot frozen before the person changed how their AI speaks may still say
+        # which dialect to use; the setting decides that (i18n.dialects.style_for).
+        memory = "\n".join(ln for ln in memory.splitlines() if not about_speech(ln))
         parts.append(PromptPart("Your memory", memory))
 
     since = datetime.now(UTC) - timedelta(days=30)

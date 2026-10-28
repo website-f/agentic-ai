@@ -2,7 +2,6 @@
 a staff computer's screen and files through the same two-lock remote path (with the notice on
 the computer), and can turn on a company backup of the folders staff computers share."""
 
-
 from agentic.core.db import SessionLocal
 from agentic.devices import backup
 from agentic.documents import storage
@@ -117,9 +116,10 @@ async def test_company_backup_copies_shared_folders_incrementally(client, llm, t
             kept = await storage.list_files(t, f"{backup.KEY_ROOT}/{ws_id}/{dev['device_id']}")
             names = {e.key.split("/")[-1] for e in kept}
             assert {"Q3 report.txt", "notes.txt", "_manifest.json"} <= names
-            got = await storage.get(
-                t, f"{backup.KEY_ROOT}/{ws_id}/{dev['device_id']}/0/Q3 report.txt"
-            )
+            # Kept under the folder's own stable name, not its place in the list.
+            key = next(e.key for e in kept if e.key.endswith("/Q3 report.txt"))
+            assert key.split("/")[-2] == backup._folder_tag("C:\\Users\\aina\\Documents")
+            got = await storage.get(t, key)
             assert got == b"revenue up 12 percent"
 
         # It is on the computer's activity log (the staff member sees it), never secretly.

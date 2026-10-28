@@ -6,11 +6,13 @@ Used two ways:
 """
 
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.fence import INJECTION, defuse, fence
+from ..i18n.dialects import about_speech
 from ..models import Agent
 from . import embed
 from .facts import mark_used
@@ -82,16 +84,25 @@ async def gather(
     if fact_rows and v.agent_id:
         await mark_used(db, [f for f, _ in fact_rows])
         await db.commit()
-    return [h for _, h in fact_rows], page_hits, hist
+    # The speech setting decides the language and dialect; an old memory of it must not.
+    return [h for _, h in fact_rows if not about_speech(h.title)], page_hits, hist
 
 
 async def recall_block(
-    db: AsyncSession, agent: Agent, query: str, tz: str, *, exclude_session_id: str | None = None
+    db: AsyncSession,
+    agent: Agent,
+    query: str,
+    tz: str,
+    *,
+    exclude_session_id: str | None = None,
+    used: list[dict[str, Any]] | None = None,
 ) -> tuple[str, int, int]:
     """(prompt block, facts used, pages used). Empty block when nothing relevant is known.
 
     The block also carries a short "From the library" part (P18) when a passage of the
-    office's guidelines clearly matches; it is fenced, since uploaded files are untrusted."""
+    office's guidelines clearly matches; it is fenced, since uploaded files are untrusted.
+    `used`, when given, collects what was recalled (facts, library files), so a chat answer
+    can show the person what it remembered and let them correct it."""
     from ..knowledge.search import auto_section  # late: knowledge imports brain
 
     v = await for_agent(db, agent)
@@ -106,7 +117,15 @@ async def recall_block(
         qvec=qvec,
         embedded=True,
     )
-    library, _ = await auto_section(db, agent, query, qvec)
+    library, _ = await auto_section(db, agent, query, qvec, used=used)
+    if used is not None:
+        used[:0] = [
+            {"kind": "fact", "id": h.id, "text": h.title}
+            for h in fact_hits
+            # Facts the agent keeps for itself (about how to work for other people) are used
+            # but not listed to whoever is chatting.
+            if not h.meta.get("private") or agent.owner_user_id
+        ]
     if not fact_hits and not page_hits and not library:
         return "", 0, 0
     lines = [OPEN]

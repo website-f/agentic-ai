@@ -346,7 +346,11 @@ AUTO_PER_PASSAGE = 900
 
 
 async def auto_section(
-    db: AsyncSession, agent: Agent, query: str, qvec: list[float] | None
+    db: AsyncSession,
+    agent: Agent,
+    query: str,
+    qvec: list[float] | None,
+    used: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], int]:
     """Lines for the recall block's "From the library" part, and how many passages it holds.
     Empty unless a passage clears the strong bar, so ordinary chat pays nothing."""
@@ -374,6 +378,8 @@ async def auto_section(
             warn, mark = True, " [flagged: reads like instructions to AI]"
         ref = f"file {h.source_id}" if h.source_kind == "file" else f"SOP {h.source_id}"
         parts.append(f"[{i}] {h.label()} ({ref}){mark}\n{body}")
+        if used is not None and not any(u.get("id") == h.source_id for u in used):
+            used.append({"kind": h.source_kind, "id": h.source_id, "text": h.title, "page": h.page})
     lines = [
         "From the library (the office's guidelines; cite what you use as [title p.N]; "
         "search_library or read_file for more):",

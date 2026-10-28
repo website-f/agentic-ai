@@ -1272,7 +1272,9 @@ async def add_connector(
     stats: dict[str, Any] = {}
     if body.kind != "webhook":
         stats = await connectors.sync(db, c)
+        # A failed first sync rolls back, which expires both rows: load them again.
         c = await db.get(CrmConnector, c.id) or c
+        obj = await db.get(CrmObject, c.object_id) if c.object_id else None
     out = _conn_out(c, obj)
     out["sync"] = stats
     if token:

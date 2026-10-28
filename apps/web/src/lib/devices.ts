@@ -473,7 +473,8 @@ export interface BackupSettings {
 
 export const orgComputersQuery = (q = "") =>
   queryOptions({
-    queryKey: ["org", "computers", q] as const,
+    // "list" keeps a search for "backup" apart from the backup settings below.
+    queryKey: ["org", "computers", "list", q] as const,
     queryFn: () => api<{ computers: StaffComputer[]; can_backup: boolean }>(`/api/org/computers${q ? `?q=${encodeURIComponent(q)}` : ""}`),
     refetchInterval: 30_000,
   });

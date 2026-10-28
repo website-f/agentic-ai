@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import threats
 from ..core.fence import INJECTION  # noqa: F401 (kept for recall withholding)
+from ..i18n.dialects import about_speech
 from ..models import Agent, BrainPage, Workspace
 from .facts import _SECRET
 from .store import Author, save_page
@@ -57,6 +58,8 @@ def refused(items: list[str]) -> str | None:
             return "Not saved. Core memory cannot change the rules, approvals or SOPs."
         if _SECRET.search(e):
             return "Not saved. Never keep passwords, keys, card or IC numbers in memory."
+        if about_speech(e):
+            return "Not saved. How your AI speaks to you is set in Settings, not in memory."
     return None
 
 
@@ -82,6 +85,9 @@ async def read(db: AsyncSession, agent: Agent) -> dict[str, list[str]]:
 async def snapshot(db: AsyncSession, agent: Agent) -> str:
     """Text for the prompt. Empty string when the agent has no core memory yet."""
     mem = await read(db, agent)
+    # Notes about which language or dialect to speak, kept before the setting existed or
+    # edited in the vault, never outvote the person's current setting.
+    mem = {k: [e for e in v if not about_speech(e)] for k, v in mem.items()}
     parts = []
     if mem["user"]:
         parts.append("About the people you work for:\n" + "\n".join(f"- {e}" for e in mem["user"]))

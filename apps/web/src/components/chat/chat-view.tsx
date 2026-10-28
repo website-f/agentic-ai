@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
 
 import { clearAsk, peekAsk, taskIdIn } from "./links";
+import { type Recalled, Remembered } from "./remembered";
 import { channelOf, SessionList, useSessions } from "./sessions";
 import { TASK_TOOLS, toolLook } from "./tools";
 
@@ -39,7 +40,7 @@ export interface ChatMessage {
   id: number | string;
   role: "user" | "assistant";
   content: string;
-  meta?: { provider?: string; model?: string; tools?: string[]; budget?: boolean } | null;
+  meta?: { provider?: string; model?: string; tools?: string[]; budget?: boolean; recalled?: Recalled[] } | null;
 }
 
 export interface ChatReply { session_id: string; reply: string; provider?: string; model?: string; tools_used: string[] }
@@ -585,6 +586,7 @@ function Reply({ m, agent, canTask, onTask, onCopy }: {
         ) : null}
         {/* A task it handed out: shown in place, its status following the work. */}
         {taskId ? <TaskCard taskId={taskId} className="mt-2.5" /> : null}
+        {m.meta?.recalled?.length ? <Remembered items={m.meta.recalled} /> : null}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-[12px] text-muted">
           <button type="button" onClick={() => onCopy(m.content)} className="inline-flex h-8 items-center gap-1 rounded-sm px-1.5 hover:bg-surface-2 hover:text-fg">
             <CopyIcon size={13} /> {t("Copy")}
