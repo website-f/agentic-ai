@@ -44,7 +44,13 @@ async def office_snapshot(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     branch = await db.get(Branch, branch_id)
-    if branch is None or branch.workspace_id != principal.workspace_id:
+    sc = principal.scope
+    # An office role sees its own company's floor only (another company's answers 404).
+    if (
+        branch is None
+        or branch.workspace_id != principal.workspace_id
+        or (not sc.everything and branch.id != sc.branch_id)
+    ):
         raise api_error(status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here.")
     depts = list(
         (
@@ -133,6 +139,11 @@ async def office_snapshot(
             (t for t in mine if t.status in ("running", "blocked")),
             max(mine, key=lambda t: t.updated_at, default=None),
         )
+        view_only = not principal.scope.sees_agent(a)  # staff watching colleagues
+        if view_only:  # that it works, not on what (its tasks are not theirs to read)
+            current, last_line = None, None
+        else:
+            last_line = last.get(a.id)
         out_agents.append(
             {
                 "id": a.id,
@@ -140,7 +151,7 @@ async def office_snapshot(
                 "role": a.role,
                 "color": a.color,
                 "department_id": a.department_id,
-                "view_only": not principal.scope.sees_agent(a),  # staff watching colleagues
+                "view_only": view_only,
                 "status": a.status,
                 "clone_of": a.clone_of,
                 "owner_user_id": a.owner_user_id,
@@ -150,7 +161,7 @@ async def office_snapshot(
                 "task": {"id": current.id, "title": current.title, "status": current.status}
                 if current
                 else None,
-                "last": last.get(a.id),
+                "last": last_line,
             }
         )
     return {

@@ -25,7 +25,7 @@ task, see its agent's transcript or approvals, or reach its files.
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, or_, select, true
+from sqlalchemy import ColumnElement, and_, false, or_, select
 
 from ..core.security import SCOPED_ROLES
 from ..i18n import Msg
@@ -98,7 +98,8 @@ class Scope:
         if self.kind != "own":
             return self.agent_where()
         mine = Agent.owner_user_id == self.user_id
-        office = Agent.branch_id == self.branch_id if self.branch_id else true()
+        # Staff without a company (theirs was deleted) watch no office, never every one.
+        office = Agent.branch_id == self.branch_id if self.branch_id else false()
         return and_(or_(mine, office), self._open())
 
     def observes_agent(self, a: Agent | None) -> bool:
@@ -106,7 +107,7 @@ class Scope:
             return False
         if self.sees_agent(a):
             return True
-        return self.kind == "own" and (not self.branch_id or a.branch_id == self.branch_id)
+        return self.kind == "own" and bool(self.branch_id) and a.branch_id == self.branch_id
 
     def sees_agent(self, a: Agent | None) -> bool:
         if a is None:
@@ -245,6 +246,19 @@ class Scope:
 
 # What watching an agent shows: that it is working and on what step, not its tasks' contents.
 WATCH_EVENTS = frozenset({"agent.status", "agent.thinking", "agent.activity", "agent.upsert"})
+# The fields a watcher gets of those events (no task title, thoughts, tool arguments,
+# results or answers): busy or idle, and the kind of step.
+WATCH_FIELDS = frozenset({"agent_id", "agent_name", "name", "status", "on", "kind", "tool"})
+
+
+def watch_view(type_: str, data: dict[str, Any], agent_ids: set[str]) -> dict[str, Any]:
+    """An event as this person may see it: in full for the agents they see, trimmed to
+    WATCH_FIELDS for the colleagues' agents they only watch."""
+    aid = data.get("agent_id")
+    if type_ not in WATCH_EVENTS or not aid or aid in agent_ids:
+        return data
+    return {k: v for k, v in data.items() if k in WATCH_FIELDS}
+
 
 BRANCH_EVENTS = frozenset({"intake.updated"})
 

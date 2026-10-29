@@ -45,7 +45,9 @@ import { TaskComposerHost } from "./task-composer/task-composer";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
 import { HelpAskSheet, useHelpAsk } from "./help-ask";
+import { InstallApp } from "./install-app";
 import { NeedsBell } from "./needs-bell";
+import { OfflineBanner } from "./offline-banner";
 import { Button } from "./ui/button";
 import {
   Menu,
@@ -820,6 +822,8 @@ export function AppShell() {
       <CommandPalette />
       <TaskComposerHost />
       <HelpAskSheet />
+      <OfflineBanner />
+      <InstallApp />
     </div>
   );
 }

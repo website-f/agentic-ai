@@ -202,7 +202,8 @@ function Onboarding({ staff, tw }: { staff: StaffState; tw: TwinState }) {
     const a = startingAnswers(tw);
     return { name: a.name, role: a.role, style: a.style ?? "", ask_first: a.ask_first ?? [] };
   });
-  const [blueprintId, setBlueprintId] = useState<string | null>(null);
+  // P55: the premade role for their department starts picked (they can change or clear it).
+  const [blueprintId, setBlueprintId] = useState<string | null>(() => staff.suggested_blueprint_id ?? null);
   const [workflowIds, setWorkflowIds] = useState<string[]>(() => staff.workflows.filter((w) => w.following).map((w) => w.id));
   const [duties, setDuties] = useState<DutyIn[]>([]);
   const [draft, setDraft] = useState<DutyIn | null>(null);
@@ -349,7 +350,9 @@ function Onboarding({ staff, tw }: { staff: StaffState; tw: TwinState }) {
                 <div className="grid gap-2" role="radiogroup" aria-label={t("Role blueprint")}>
                   <ChoiceCard on={blueprintId === null} onToggle={() => setBlueprintId(null)} title={t("No blueprint")} hint={t("Just what you told it, and your team's SOPs.")} />
                   {staff.blueprints.map((b) => (
-                    <ChoiceCard key={b.id} on={blueprintId === b.id} onToggle={() => setBlueprintId(b.id)} title={b.name} hint={b.description || b.role || undefined} />
+                    <ChoiceCard key={b.id} on={blueprintId === b.id} onToggle={() => setBlueprintId(b.id)}
+                      title={b.id === staff.suggested_blueprint_id ? t("{name} (suggested for your department)", { name: b.name }) : b.name}
+                      hint={b.description || b.role || undefined} />
                   ))}
                 </div>
                 {staff.blueprints.length === 0 ? <p className="text-[12.5px] text-muted">{t("Your company has no blueprints yet.")}</p> : null}

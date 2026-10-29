@@ -108,6 +108,7 @@ ASSISTANT_TOOLS = {
     "slacking_report": "allow",
     "notify_person": "allow",
     "message_agent": "allow",
+    "who_should_do": "allow",
     "email_search": "allow",
     "email_read": "allow",
     "email_draft_reply": "allow",

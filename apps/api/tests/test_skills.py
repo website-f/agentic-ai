@@ -101,6 +101,19 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
         "monthly-management-report",
         "pricing-margin-check",
         "financing-comparison",
+        # P55 everyday office work (skills/office_pack.py)
+        "write-business-letter",
+        "file-documents",
+        "compile-document-pack",
+        "summarise-document",
+        "reply-to-customer",
+        "expense-claim",
+        "staff-onboarding-file",
+        "proofread-document",
+        "tender-document-check",
+        "weekly-status-report",
+        "research-brief",
+        "clean-spreadsheet",
     }
     async with SessionLocal() as db:
         a = await db.get(Agent, agent["id"])

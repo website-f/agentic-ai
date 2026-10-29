@@ -39,10 +39,11 @@ class ScheduleError(ValueError):
 
 
 # ---------------------------------------------------------------- who set a schedule up
-# Schedule.created_by is "user:<id>" for one made on the Schedules page. One an agent made
-# when a person asked (agents/schedule_tools.py) reads "agent:<id>|for:<person>|chat[|once]":
-# the agent that runs it, the person who gets each result, where they asked (chat | task),
-# and whether it runs only once (then it switches itself off after firing).
+# Schedule.created_by is "user:<id>" for one made on the Schedules page, "user:<id>|once" for
+# a one-off made there (P55). One an agent made when a person asked (agents/schedule_tools.py)
+# reads "agent:<id>|for:<person>|chat[|once]": the agent that runs it, the person who gets
+# each result, where they asked (chat | task), and whether it runs only once (then it
+# switches itself off after firing).
 
 
 @dataclass(frozen=True)
@@ -58,16 +59,35 @@ def by_agent(agent_id: str, person: str | None, via: str, once: bool) -> str:
     return "|".join([*parts, "once"] if once else parts)
 
 
+def by_person(actor: str, once: bool) -> str:
+    """created_by for a schedule a person set up on the Schedules page (P55: or a one-off)."""
+    return with_once(actor, once)
+
+
+def with_once(created_by: str, once: bool) -> str:
+    """The same origin, made a one-off or recurring again (P55: the picker's "Once")."""
+    parts = [p for p in (created_by or "").split("|") if p and p != "once"]
+    return "|".join([*parts, "once"] if once else parts)
+
+
+# A one-off runs on one date: "minute hour day month *" (the year is the next one with it).
+_ONE_OFF = re.compile(r"\d{1,2} \d{1,2} \d{1,2} \d{1,2} \*")
+
+
+def one_off_cron(cron: str) -> bool:
+    return _ONE_OFF.fullmatch(" ".join(cron.split())) is not None
+
+
 def origin(created_by: str | None) -> Origin:
-    raw = created_by or ""
-    if raw.startswith("user:"):
-        return Origin(person=raw.removeprefix("user:"))
-    if not raw.startswith("agent:"):
-        return Origin(via="other")
-    parts = raw.split("|")
-    person = next((p.removeprefix("for:") for p in parts if p.startswith("for:")), None)
-    via = next((p for p in parts[1:] if p in ("chat", "task")), "task")
-    return Origin(parts[0].removeprefix("agent:"), person, via, "once" in parts[1:])
+    head, *rest = (created_by or "").split("|")
+    once = "once" in rest
+    if head.startswith("user:"):
+        return Origin(person=head.removeprefix("user:"), once=once)
+    if not head.startswith("agent:"):
+        return Origin(via="other", once=once)
+    person = next((p.removeprefix("for:") for p in rest if p.startswith("for:")), None)
+    via = next((p for p in rest if p in ("chat", "task")), "task")
+    return Origin(head.removeprefix("agent:"), person, via, once)
 
 
 def next_runs(cron: str, tz: str, n: int = 3, after: datetime | None = None) -> list[datetime]:

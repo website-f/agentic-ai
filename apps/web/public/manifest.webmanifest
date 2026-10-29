@@ -1,21 +1,55 @@
 {
   "name": "Agentic Office",
   "short_name": "Agentic",
-  "description": "Run your AI agents like an office.",
+  "description": "Run your AI agents like an office: hand out tasks, approve decisions and chat with your AI team, on your phone or desktop.",
+  "lang": "en",
+  "dir": "ltr",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0d1210",
-  "theme_color": "#13895f",
+  "theme_color": "#0d1210",
+  "categories": ["business", "productivity"],
+  "launch_handler": { "client_mode": "navigate-existing" },
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Approvals", "url": "/approvals", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Office", "url": "/office", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Approvals",
+      "description": "Decisions your agents are waiting on",
+      "url": "/approvals",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Tasks",
+      "description": "Everything your agents are working on",
+      "url": "/tasks",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Chat",
+      "description": "Talk to an agent",
+      "url": "/chat",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "My workspace",
+      "short_name": "My desk",
+      "description": "Your own desk, files and AI workers",
+      "url": "/workspace",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Office floor",
+      "short_name": "Office",
+      "description": "The live office of every branch",
+      "url": "/office",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

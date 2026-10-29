@@ -1,15 +1,17 @@
 /** My workspace → AI workers: each of the person's own AI workers with what it is doing, when
  * it works, the workflows it follows and quick ways to give it work; for people who manage
  * agents, the company agents they look after and their hours. */
-import { ChatCircleDotsIcon, ClockIcon, FlowArrowIcon, KanbanIcon, PencilSimpleIcon, UserFocusIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { BriefcaseIcon, ChatCircleDotsIcon, ClockIcon, FlowArrowIcon, KanbanIcon, PencilSimpleIcon, UserFocusIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { chatRoute } from "@/components/chat/links";
+import { JobPicker } from "@/components/job-picker";
 import { IconTile } from "@/components/page";
-import { openTaskComposer } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";
+import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Card, CardBody, CardHeader, ListCard, ListRow } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { useT } from "@/i18n";
@@ -25,6 +27,8 @@ export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () =
   const canAssist = !!me?.permissions.includes("assistants.use");
   const flowsOf = (id: string) => desk.procedures.workflows.filter((w) => w.followers.some((f) => f.id === id));
   const company = desk.assignable.filter((a) => !a.mine);
+  // P55: "Give a job" opens every kind of work it takes (components/job-picker).
+  const [jobFor, setJobFor] = useState<{ id: string; name: string } | null>(null);
   return (
     <div data-guide="desk.agents" className="grid min-w-0 gap-5">
       {desk.agents.length ? (
@@ -71,7 +75,7 @@ export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () =
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => openTaskComposer({ agentId: a.id })}><KanbanIcon size={14} /> {t("Give a task")}</Button>
+                    <Button size="sm" onClick={() => setJobFor({ id: a.id, name: a.name })}><BriefcaseIcon size={14} /> {t("Give a job")}</Button>
                     <Button size="sm" variant="outline" asChild><Link {...chatRoute(a.id, { from: "/workspace?tab=agents" })}><ChatCircleDotsIcon size={14} /> {t("Chat")}</Link></Button>
                     {a.is_twin ? (
                       <Button size="sm" variant="ghost" asChild><Link to="/my-worker"><PencilSimpleIcon size={14} /> {t("Hours and duties")}</Link></Button>
@@ -123,6 +127,13 @@ export function AgentsTab({ desk, onWorkflows }: { desk: Desk; onWorkflows: () =
             })}
           </ListCard>
         </Card>
+      ) : null}
+      {jobFor ? (
+        <ResponsiveDialog open onOpenChange={(o) => !o && setJobFor(null)} className="w-[min(94vw,52rem)]"
+          title={t("What should {name} do?", { name: jobFor.name })}
+          description={t("Pick a job; you can add the details and files next.")}>
+          <JobPicker agentId={jobFor.id} from="/workspace?tab=agents" onPicked={() => setJobFor(null)} />
+        </ResponsiveDialog>
       ) : null}
     </div>
   );

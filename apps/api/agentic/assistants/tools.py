@@ -20,7 +20,7 @@ from ..core.fence import fence
 from ..core.valkey import valkey
 from ..i18n import Msg, Plain
 from ..models import Agent, EmailDraft, GoogleAccount, Membership, Task, User
-from ..teams import objectives
+from ..teams import objectives, routing
 from . import gmail, insights
 from .names import ASSISTANT_ONLY  # noqa: F401 - re-exported for the registry
 
@@ -164,26 +164,24 @@ async def _notify(ctx: ToolContext, args: dict[str, Any]) -> str:
 
 async def _message_agent(ctx: ToolContext, args: dict[str, Any]) -> str:
     from ..agents import launch
-    from ..api.scope import member_scope
 
     ref = str(args.get("agent") or "").strip().lower()
     message = str(args.get("message") or "").strip()
-    if not ref or not message:
-        return "Error: give the agent (name or role) and the message."
-    sc = await member_scope(ctx.db, ctx.workspace.id, ctx.agent.owner_user_id or "")
-    if sc is None:
-        return "Error: your owner is no longer in this workspace."
-    rows = (
-        await ctx.db.scalars(
-            select(Agent).where(
-                Agent.workspace_id == ctx.workspace.id,
-                Agent.status == "active",
-                Agent.clone_of.is_(None),
-                Agent.id != ctx.agent.id,
-                sc.agent_where(),
+    if not message:
+        return "Error: give the message (what they should do)."
+    rows = await _instructable(ctx)
+    if isinstance(rows, str):
+        return rows
+    chosen = ""
+    if ref in ("", "auto", "best", "anyone", "best agent"):
+        # P55: no agent named: the best-suited one for this job (teams/routing.py).
+        picks = await routing.rank(ctx.db, _workers(rows), message, limit=1)
+        if not picks:
+            return (
+                "Error: no agent here fits this job. Name one (team_directory lists them), "
+                "or tell your owner which kind of agent to add."
             )
-        )
-    ).all()
+        ref, chosen = picks[0].agent.name.lower(), f" Picked as the best fit: {picks[0].why}."
     named = [a for a in rows if a.name.lower() == ref] or [
         a for a in rows if ref in f"{a.name} {a.role}".lower()
     ]
@@ -241,7 +239,54 @@ async def _message_agent(ctx: ToolContext, args: dict[str, Any]) -> str:
         )
     await ctx.db.commit()
     tail = f" It will tell {person.name} if they need to act." if person else ""
-    return f"Sent to {target.name} ({target.role}) as task {t.id}; it is working on it now.{tail}"
+    return (
+        f"Sent to {target.name} ({target.role}) as task {t.id}; it is working on it now."
+        f"{chosen}{tail}"
+    )
+
+
+async def _instructable(ctx: ToolContext) -> list[Agent] | str:
+    """The agents this assistant's owner may give work to (their scope), not itself."""
+    from ..api.scope import member_scope
+
+    sc = await member_scope(ctx.db, ctx.workspace.id, ctx.agent.owner_user_id or "")
+    if sc is None:
+        return "Error: your owner is no longer in this workspace."
+    return list(
+        (
+            await ctx.db.scalars(
+                select(Agent).where(
+                    Agent.workspace_id == ctx.workspace.id,
+                    Agent.status == "active",
+                    Agent.clone_of.is_(None),
+                    Agent.id != ctx.agent.id,
+                    sc.agent_where(),
+                )
+            )
+        ).all()
+    )
+
+
+def _workers(rows: list[Agent]) -> list[Agent]:
+    """Who is picked for a job nobody was named for: the office's agents first; a staff
+    member's own AI only when the office has none (it works for that person)."""
+    office = [a for a in rows if a.owner_user_id is None]
+    return office or [a for a in rows if not a.private]
+
+
+async def _who_should_do(ctx: ToolContext, args: dict[str, Any]) -> str:
+    job = str(args.get("job") or "").strip()
+    if not job:
+        return "Error: describe the job."
+    rows = await _instructable(ctx)
+    if isinstance(rows, str):
+        return rows
+    picks = await routing.rank(ctx.db, _workers(rows), job)
+    if not picks:
+        return "No agent here fits this job well. Tell your owner which kind of agent to add."
+    return "Best suited, best first:\n" + "\n".join(
+        f"- {p.agent.name} ({p.agent.role}): {p.why}" for p in picks
+    )
 
 
 # ---------------------------------------------------------------- Gmail
@@ -436,20 +481,32 @@ ASSISTANT_TOOLS: list[Tool] = [
     Tool(
         "message_agent",
         "Message another agent",
-        "Give another agent a job, e.g. remind a staff member's agent to finish a report; that agent works on it and tells its person if they must act. Use the agent's name, its role, or \"<person>'s agent\".",
+        "Give another agent a job, e.g. file documents, write a letter, chase invoices, remind a staff member's agent to finish a report; that agent works on it and tells its person if they must act. Leave agent empty to hand it to the best-suited agent automatically, or use the agent's name, its role, or \"<person>'s agent\".",
         _p(
             {
-                "agent": {"type": "string"},
+                "agent": {
+                    "type": "string",
+                    "description": 'Name, role or "<person>\'s agent"; empty = the best fit.',
+                },
                 "message": {
                     "type": "string",
                     "description": "What they should do, with any deadline.",
                 },
             },
-            ["agent", "message"],
+            ["message"],
         ),
         "medium",
         "allow",
         _message_agent,
+    ),
+    Tool(
+        "who_should_do",
+        "Find the right agent",
+        "Which agents suit a job best (role, skills, how busy), to tell your owner or before message_agent.",
+        _p({"job": {"type": "string", "description": "The job, in a sentence."}}, ["job"]),
+        "low",
+        "allow",
+        _who_should_do,
     ),
     Tool(
         "email_search",

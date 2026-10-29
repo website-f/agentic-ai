@@ -14,6 +14,7 @@ from ...core.security import can
 from ...models import Agent, Event
 from ...services.hub import CLOSE, hub
 from ..deps import Principal, api_error, current_principal
+from ..scope import watch_view
 
 router = APIRouter(tags=["events"])
 
@@ -97,9 +98,10 @@ async def stream(
                         cursor = e.seq
                         if not await ok(e.type, e.data):
                             continue
+                        data = watch_view(e.type, e.data or {}, seen["ids"])
                         yield _frame(
                             e.seq,
-                            {"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type, "data": e.data},
+                            {"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type, "data": data},
                         )
             yield f": connected at {cursor}\nretry: 3000\n\n"
             while not await request.is_disconnected():
@@ -112,8 +114,12 @@ async def stream(
                     break  # the browser reconnects and replays from its last event id
                 if payload["seq"] > cursor:
                     cursor = payload["seq"]
-                    if await ok(payload.get("type", ""), payload.get("data") or {}):
-                        yield _frame(cursor, payload)
+                    type_, data = payload.get("type", ""), payload.get("data") or {}
+                    if await ok(type_, data):
+                        trimmed = watch_view(type_, data, seen["ids"])
+                        yield _frame(
+                            cursor, payload if trimmed is data else {**payload, "data": trimmed}
+                        )
         except asyncio.CancelledError:
             pass
         finally:

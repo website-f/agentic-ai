@@ -1,4 +1,4 @@
-import { BrowserIcon, ChatsCircleIcon, EyeIcon, KanbanIcon, PaperPlaneRightIcon, PauseIcon, PlayIcon, PlusIcon } from "@phosphor-icons/react";
+import { BriefcaseIcon, ChatsCircleIcon, EyeIcon, KanbanIcon, PaperPlaneRightIcon, PauseIcon, PlayIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Tabs } from "radix-ui";
@@ -10,6 +10,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { chatRoute } from "@/components/chat/links";
 import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { ApprovalCard } from "@/components/approval-card";
+import { JobPicker } from "@/components/job-picker";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
@@ -31,8 +32,9 @@ export const STATE_INFO: Record<OfficeAgent["state"], { label: string; tone: "ac
   paused: { label: msg("Paused"), tone: "neutral" },
 };
 
-type Tab = "monitor" | "work" | "chat";
+type Tab = "job" | "monitor" | "work" | "chat";
 const TABS: { id: Tab; label: string; icon: typeof EyeIcon }[] = [
+  { id: "job", label: msg("Give a job"), icon: BriefcaseIcon },
   { id: "monitor", label: msg("Monitor"), icon: EyeIcon },
   { id: "work", label: msg("Work"), icon: KanbanIcon },
   { id: "chat", label: msg("Chat"), icon: ChatsCircleIcon },
@@ -66,9 +68,10 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
   const decided = agent.view_only !== undefined || !!known;
   const canWrite = mayWrite && decided && !viewOnly;
   const task = useQuery({ ...taskQuery(agent.task?.id ?? ""), enabled: !!agent.task && decided && !viewOnly });
-  const tabs = viewOnly ? TABS.filter((x) => x.id !== "chat") : TABS;
-  const [picked, setTab] = useState<Tab>("monitor");
-  const tab: Tab = tabs.some((x) => x.id === picked) ? picked : "monitor";
+  // P55: someone who may give it work starts on "Give a job"; a watcher only monitors.
+  const tabs = canWrite ? TABS : TABS.filter((x) => x.id !== "chat" && x.id !== "job");
+  const [picked, setTab] = useState<Tab | null>(null);
+  const tab: Tab = picked && tabs.some((x) => x.id === picked) ? picked : canWrite ? "job" : "monitor";
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const chat = useMutation({
@@ -107,8 +110,7 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
       }
       actions={
         <>
-          {canWrite ? <Button size="sm" onClick={() => openTaskComposer({ agentId: agent.id })}><PlusIcon size={14} weight="bold" /> {t("Give a task")}</Button> : null}
-          {canWrite && full.data ? <Button size="sm" variant="outline" onClick={() => openTaskComposer({ agentId: agent.id, kind: "browse" })}><BrowserIcon size={14} /> {t("Browse for me")}</Button> : null}
+          {canWrite && tab !== "job" ? <Button size="sm" onClick={() => setTab("job")}><BriefcaseIcon size={14} weight="bold" /> {t("Give a job")}</Button> : null}
           {canWrite ? (
             <Button size="sm" variant="outline" loading={pause.isPending} onClick={() => pause.mutate()}>
               {agent.status === "paused" ? <><PlayIcon size={14} /> {t("Resume")}</> : <><PauseIcon size={14} /> {t("Pause")}</>}
@@ -139,6 +141,14 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
               </Tabs.Trigger>
             ))}
           </Tabs.List>
+
+          {/* Give a job: every kind of work it takes, in plain words (components/job-picker). */}
+          {canWrite ? (
+            <Tabs.Content value="job" className="outline-none">
+              <p className="mb-3 text-[13px] text-muted">{t("What should {name} do? Pick a job; you can add the details and files next.", { name: agent.name })}</p>
+              <JobPicker agentId={agent.id} from={`/office?agent=${encodeURIComponent(agent.id)}`} />
+            </Tabs.Content>
+          ) : null}
 
           {/* Monitor: live screen (browser / what it is doing) + step by step. */}
           <Tabs.Content value="monitor" className="outline-none">
@@ -171,7 +181,9 @@ export function AgentSheet({ agent, departmentName, canWrite: mayWrite, canDecid
                 </div>
               ) : (
                 <p className="rounded-[var(--radius-md)] border border-dashed border-border px-3 py-4 text-center text-[13px] text-muted">
-                  {t("No task right now.")}{canWrite ? ` ${t("Give it one, or ask it to browse for you.")}` : ""}
+                  {/* A colleague's agent: busy or free, never on what (P55). */}
+                  {viewOnly && agent.state === "working" ? t("Busy with its team's work.") : t("No task right now.")}
+                  {canWrite ? ` ${t("Give it one, or ask it to browse for you.")}` : ""}
                 </p>
               )}
             </section>

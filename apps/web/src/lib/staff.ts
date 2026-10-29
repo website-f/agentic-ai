@@ -56,6 +56,8 @@ export interface StaffState {
   companies: Company[];
   twin: Agent | null;
   blueprints: { id: string; name: string; description: string; role: string }[];
+  /** P55: the premade role for the person's department, if one fits. */
+  suggested_blueprint_id?: string | null;
   workflows: { id: string; name: string; description: string; status: string; steps: number; following: boolean }[];
   default_hours: WorkHours;
 }

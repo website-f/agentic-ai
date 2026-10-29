@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agents import dispatch, hire, launch, twin, work_hours
+from ...agents import dispatch, hire, launch, roles, twin, work_hours
 from ...brain.store import Author
 from ...core.db import get_db
 from ...core.security import PERMISSIONS
@@ -118,7 +118,13 @@ async def staff_state(
             select(Branch).where(Branch.workspace_id == ws.id).order_by(Branch.created_at)
         )
     ).all()
+    if branch is not None and not principal.scope.everything:
+        # Placed in a company: only that one (not every company's name and departments).
+        branches = [b for b in branches if b.id == branch.id]
     home_branch = branch.id if branch else None
+    await roles.ensure_roles(db, ws)  # P55: premade roles to pick from
+    await db.commit()
+    suggested = roles.for_department(dept.name if dept else None)
     bps = (
         await db.scalars(
             select(Blueprint)
@@ -164,6 +170,10 @@ async def staff_state(
         "blueprints": [
             {"id": b.id, "name": b.name, "description": b.description, "role": b.role} for b in bps
         ],
+        # The premade role for their department, pre-selected in the onboarding.
+        "suggested_blueprint_id": next(
+            (b.id for b in bps if suggested is not None and b.name == suggested.name), None
+        ),
         "workflows": [
             {
                 "id": w.id,

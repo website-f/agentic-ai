@@ -7,6 +7,7 @@ ASSISTANT_ONLY = frozenset(
         "team_performance",
         "slacking_report",
         "message_agent",
+        "who_should_do",
         "email_search",
         "email_read",
         "email_draft_reply",

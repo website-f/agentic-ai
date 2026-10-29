@@ -484,6 +484,43 @@ async def create_skill(
     return {"skill": None, "proposal": (await _proposal_out(db, sp)).model_dump()}
 
 
+class ImportIn(BaseModel):
+    url: str | None = Field(default=None, max_length=1000)
+    text: str | None = Field(default=None, max_length=20_000)
+
+
+@router.post("/skills/import", status_code=status.HTTP_201_CREATED)
+async def import_skill(
+    body: ImportIn,
+    principal: Principal = Depends(require("agents.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P55: a skill from the open Agent Skills format (a SKILL.md link or its text). Always a
+    proposal, whoever imports it: it is reviewed (and safety-scanned) like an agent's."""
+    from ...skills import importer
+    from ...skills.learn_source import SourceError
+
+    if not (body.url or body.text):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_skill", "Give a link or paste the SKILL.md."
+        )
+    ws = await _ws(db, principal)
+    try:
+        name, description, text, note = await importer.read(body.url, body.text)
+        sp = await store.propose(
+            db,
+            ws,
+            name=name,
+            description=description,
+            body=text,
+            reason=f"{note} Brought in by {principal.user.name}.",
+            proposed_by=principal.actor,
+        )
+    except (store.SkillError, fmt.SkillFormatError, SourceError) as e:
+        raise _bad(e) from e
+    return {"skill": None, "proposal": (await _proposal_out(db, sp)).model_dump()}
+
+
 @router.patch("/skills/{skill_id}")
 async def update_skill(
     skill_id: str,

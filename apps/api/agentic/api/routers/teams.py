@@ -320,6 +320,8 @@ class ScheduleIn(BaseModel):
     timezone: str | None = None
     enabled: bool = True
     requires_review: bool = True
+    # P55: a one-off (cron "minute hour day month *") that switches itself off after firing.
+    once: bool = False
 
 
 class ScheduleUpdateIn(BaseModel):
@@ -331,6 +333,17 @@ class ScheduleUpdateIn(BaseModel):
     timezone: str | None = None
     enabled: bool | None = None
     requires_review: bool | None = None
+    once: bool | None = None
+
+
+def _check_once(once: bool, cron: str) -> None:
+    """P55: a one-off needs one date and time; the year is the next one that has it."""
+    if once and not schedules.one_off_cron(cron):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "bad_once",
+            "A one-off runs on one date: pick the day and the time.",
+        )
 
 
 async def _schedule_out(db: AsyncSession, s: Schedule) -> dict[str, Any]:
@@ -440,6 +453,7 @@ async def create_schedule(
         schedules.next_runs(body.cron, tz)
     except schedules.ScheduleError as e:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_cron", str(e)) from e
+    _check_once(body.once, body.cron)
     s = Schedule(
         workspace_id=principal.workspace_id,
         name=body.name.strip(),
@@ -450,7 +464,7 @@ async def create_schedule(
         timezone=tz,
         enabled=body.enabled,
         requires_review=body.requires_review,
-        created_by=principal.actor,
+        created_by=schedules.by_person(principal.actor, body.once),
     )
     db.add(s)
     await db.flush()
@@ -460,7 +474,7 @@ async def create_schedule(
         principal.actor,
         "schedule.created",
         target=s.id,
-        after={"name": s.name, "cron": s.cron, "agent": s.agent_id},
+        after={"name": s.name, "cron": s.cron, "agent": s.agent_id, "once": body.once},
     )
     await db.commit()
     await _sync(db, s)
@@ -477,6 +491,8 @@ async def update_schedule(
     s = await _schedule(db, principal, schedule_id)
     await _guard_schedule_owner(db, principal, s)  # P51: not someone else's own AI
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    was_once = schedules.origin(s.created_by).once
+    once = changes.pop("once", was_once)  # P55: kept in created_by, not a column
     if "agent_id" in changes:
         await _schedulable_agent(db, principal, changes["agent_id"])
     if "cron" in changes:
@@ -485,9 +501,13 @@ async def update_schedule(
         schedules.next_runs(changes.get("cron", s.cron), changes.get("timezone", s.timezone))
     except schedules.ScheduleError as e:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_cron", str(e)) from e
+    _check_once(once, changes.get("cron", s.cron))
     before = {k: getattr(s, k) for k in changes}
     for k, v in changes.items():
         setattr(s, k, v)
+    if once != was_once:
+        s.created_by = schedules.with_once(s.created_by, once)
+        before["once"], changes["once"] = was_once, once
     await audit.record(
         db,
         principal.workspace_id,

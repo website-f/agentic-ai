@@ -127,7 +127,10 @@ async def progress(
         "workflow_run": exists().where(
             WorkflowRun.workspace_id == ws, WorkflowRun.created_by == actor
         ),
-        "schedule": exists().where(Schedule.workspace_id == ws, Schedule.created_by == actor),
+        "schedule": exists().where(
+            Schedule.workspace_id == ws,
+            or_(Schedule.created_by == actor, Schedule.created_by == f"{actor}|once"),
+        ),
         "library": exists().where(
             DocFile.workspace_id == ws,
             DocFile.library.is_(True),

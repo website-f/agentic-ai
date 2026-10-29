@@ -239,7 +239,9 @@ async def person_of_task(db: AsyncSession, task: Task) -> str | None:
         if who.startswith("schedule:"):
             s = await db.get(Schedule, who.removeprefix("schedule:"))
             by = (s.created_by or "") if s is not None else ""
-            return by.removeprefix("user:") if by.startswith("user:") else None
+            from .schedules import origin  # "user:<id>" or, for a one-off, "user:<id>|once"
+
+            return origin(by).person if by.startswith("user:") else None
         up = t.root_task_id if t.root_task_id and t.root_task_id != t.id else t.parent_task_id
         t = await db.get(Task, up) if up else None
     return None

@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { SchedulePicker, useSchedulePicker } from "@/components/ui/schedule-picker";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +25,6 @@ import { locale, msg, t, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 import {
-  CRON_PRESETS,
   describeCron,
   incidentsQuery,
   RUN_TONE,
@@ -73,26 +73,27 @@ function ScheduleDialog({ s, onClose }: { s?: Schedule; onClose: () => void }) {
   const [agentId, setAgentId] = useState(s?.agent_id ?? "");
   const [title, setTitle] = useState(s?.title ?? "");
   const [brief, setBrief] = useState(s?.brief ?? "");
-  const [cron, setCron] = useState(s?.cron ?? CRON_PRESETS[0]?.cron ?? "0 9 * * 1-5");
-  const [custom, setCustom] = useState(!!s && !CRON_PRESETS.some((p) => p.cron === s.cron));
   const [review, setReview] = useState(s?.requires_review ?? true);
-  const { data: preview } = useQuery({
-    queryKey: ["cron-preview", cron],
-    queryFn: () => api<{ ok: boolean; next: string[]; error?: string }>(`/api/schedules/preview?cron=${encodeURIComponent(cron)}`),
-    enabled: cron.trim().split(/\s+/).length === 5,
+  // A one-off's cron has no year: read it as the next such date, or (once it has fired) the
+  // date it ran on.
+  const sched = useSchedulePicker({
+    cron: s?.cron, once: s?.origin?.once, tz: s?.timezone,
+    after: s && !s.enabled ? new Date(s.last_run_at ? +new Date(s.last_run_at) - 3_600_000 : s.created_at) : undefined,
   });
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, agent_id: agentId, title, brief, cron, requires_review: review };
+      const { cron, once } = sched.value;
+      // A one-off picked again for a new date runs again.
+      const rearm = !!s && once && cron !== s.cron ? { enabled: true } : {};
+      const body = { name, agent_id: agentId, title, brief, cron, once, requires_review: review, ...rearm };
       return s ? api<Schedule>(`/api/schedules/${s.id}`, "PATCH", body) : api<Schedule>("/api/schedules", "POST", body);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: teamKeys.schedules }); toast.success(s ? t("Saved.") : t("Scheduled.")); onClose(); },
   });
-  const options = [...CRON_PRESETS.map((p) => ({ value: p.cron, label: t(p.label) })), { value: "custom", label: t("Custom (cron)") }];
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={s ? t("Edit schedule") : t("New schedule")} className="sm:max-w-xl"
       description={t("Each run creates a fresh task for the agent. Failed runs retry after 5, 15 and 30 minutes.")}
-      footer={<Button loading={save.isPending} disabled={!name.trim() || !agentId || !title.trim() || preview?.ok === false} onClick={() => save.mutate()}>{s ? t("Save") : t("Create schedule")}</Button>}>
+      footer={<Button loading={save.isPending} disabled={!name.trim() || !agentId || !title.trim() || !!sched.problem} onClick={() => save.mutate()}>{s ? t("Save") : t("Create schedule")}</Button>}>
       <div className="grid gap-4">
         <Field label={t("Name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("e.g. Morning cash position")} autoFocus />
         <div className="grid gap-1.5">
@@ -102,12 +103,9 @@ function ScheduleDialog({ s, onClose }: { s?: Schedule; onClose: () => void }) {
         </div>
         <Field label={t("Task title")} value={title} onChange={(e) => setTitle(e.target.value)} hint={t("Each run's task gets the date added.")} />
         <TextareaField label={t("Brief")} rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder={t("What to do each time, and what the result should look like.")} />
-        <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-2">
           <span className="text-[13px] font-medium">{t("When")}</span>
-          <Select label={t("When")} value={custom ? "custom" : cron} onValueChange={(v) => { if (v === "custom") setCustom(true); else { setCustom(false); setCron(v); } }} options={options} />
-          {custom ? <Field label={t("Cron expression")} value={cron} onChange={(e) => setCron(e.target.value)} className="font-mono" hint={t("minute hour day month weekday, e.g. 30 8 * * 1-5. At most every 15 minutes.")} /> : null}
-          {preview?.ok === false ? <p role="alert" className="text-[12.5px] text-danger">{preview.error}</p> : null}
-          {preview?.ok ? <p className="text-[12.5px] text-muted">{t("Next: {times}", { times: preview.next.slice(0, 3).map(when).join(" · ") })}</p> : null}
+          <SchedulePicker state={sched} />
         </div>
         <SwitchField checked={review} onCheckedChange={setReview} label={t("Send results for review")} hint={t("Off: results go straight to done.")} />
         <FormError message={save.error ? errorMessage(save.error) : null} />
@@ -166,7 +164,7 @@ function SchedulesTab({ canWrite }: { canWrite: boolean }) {
                     {s.last_status ? <Pill tone={RUN_TONE[s.last_status]}>{t("Last run {status}", { status: t(RUN_WORD[s.last_status]).toLowerCase() })}</Pill> : null}
                   </span>
                   <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted">
-                    <Meta items={[s.agent_name, `${describeCron(s.cron)} (${s.timezone})`]} />
+                    <Meta items={[s.agent_name, `${describeCron(s.cron, s.origin?.once)} (${s.timezone})`]} />
                   </span>
                   <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
                     <Meta items={[s.enabled && s.next_runs[0] ? t("Next {when}", { when: when(s.next_runs[0]) }) : t("Not running"), s.last_run_at ? t("last {ago}", { ago: timeAgo(s.last_run_at).toLowerCase() }) : null, setUpBy(s)]} />

@@ -32,6 +32,7 @@ from ..models import (
 )
 from ..services import audit, events
 from . import format as fmt
+from .office_pack import OFFICE_SKILLS
 from .scan import blocked, scan
 
 log = logging.getLogger("agentic.skills")
@@ -283,6 +284,9 @@ for a vehicle, machine, property or working capital and asks which is cheaper.
 ]
 
 # Tests for the built-in skills: run from the Skills page like any skill's eval cases.
+# P55: everyday office work (letters, filing, compiling, claims, HR, replies...).
+BUILTIN += OFFICE_SKILLS
+
 BUILTIN_CASES: dict[str, list[dict[str, Any]]] = {
     "cash-flow-forecast": [
         {

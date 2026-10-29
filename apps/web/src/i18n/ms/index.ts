@@ -17,6 +17,7 @@ import { DESK } from "./desk";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
 import { GUIDE } from "./guide";
+import { INSTALL } from "./install";
 import { KNOWLEDGE } from "./knowledge";
 import { LIBRARY } from "./library";
 import { MICROSOFT } from "./microsoft";
@@ -26,6 +27,8 @@ import { PEOPLE } from "./people";
 import { PRIVACY } from "./privacy";
 import { PROVENANCE } from "./provenance";
 import { RUNS } from "./runs";
+import { SCHEDULE_PICKER } from "./schedule-picker";
+import { JOBS } from "./jobs";
 import { SEARCH } from "./search";
 import { SHELL } from "./shell";
 import { SPEECH } from "./speech";
@@ -71,4 +74,7 @@ export const MS: Record<string, string> = {
   ...CRM_CONNECTIONS,
   ...WORKSPACE_HUB,
   ...STAFF_COMPUTERS,
+  ...INSTALL,
+  ...SCHEDULE_PICKER,
+  ...JOBS,
 };

@@ -1,5 +1,5 @@
 import {
-  ArchiveIcon, ArrowsMergeIcon, BookOpenTextIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, LightningIcon, PencilSimpleIcon, PlusIcon,
+  ArchiveIcon, ArrowsMergeIcon, BookOpenTextIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, DownloadSimpleIcon, LightningIcon, PencilSimpleIcon, PlusIcon,
   RobotIcon, SealQuestionIcon, ShieldWarningIcon, SparkleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -27,6 +27,8 @@ import { usePagedList } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
 import { LearnSourceDialog } from "@/pages/learning/learn-source-dialog";
+
+import { ImportSkillDialog } from "./import-dialog";
 
 import { SuiteBadge } from "./eval-results";
 import { ProposalSheet } from "./proposal-sheet";
@@ -186,6 +188,7 @@ export function SkillsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
+  const canManage = me.permissions.includes("agents.manage");
   const canDecide = me.permissions.includes("approvals.decide");
   const search = useSearch({ strict: false }) as SkillsSearch;
   const navigate = useNavigate();
@@ -193,6 +196,7 @@ export function SkillsPage() {
   const [state, setState] = useState<"active" | "retired">("active");
   const [creating, setCreating] = useState(0);
   const [teaching, setTeaching] = useState(0);
+  const [importing, setImporting] = useState(false);
   const { data: skills, isLoading, error } = useQuery(skillsQuery(state));
   // Proposals only grow (the review queue and every past decision): both load 50 at a time.
   const pendingList = usePagedList<Proposal>(skillKeys.proposals("pending"), "/api/skill-proposals", { state: "pending" });
@@ -221,6 +225,7 @@ export function SkillsPage() {
         actions={canWrite ? (
           <>
             <Button data-guide="skills.teach" variant="outline" onClick={() => setTeaching((n) => n + 1)}><BookOpenTextIcon size={16} /> {t("Teach from a source")}</Button>
+            {canManage ? <Button variant="outline" onClick={() => setImporting(true)}><DownloadSimpleIcon size={16} /> {t("Import a skill")}</Button> : null}
             <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New skill")}</Button>
           </>
         ) : null}
@@ -288,6 +293,7 @@ export function SkillsPage() {
       {search.skill ? <SkillSheet key={search.skill} id={search.skill} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ skill: undefined })} /> : null}
       {search.proposal ? <ProposalSheet key={search.proposal} id={search.proposal} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ proposal: undefined })} /> : null}
       {teaching ? <LearnSourceDialog key={teaching} open onOpenChange={(o) => !o && setTeaching(0)} /> : null}
+      {importing ? <ImportSkillDialog onClose={() => setImporting(false)} onDone={() => { setImporting(false); go({ tab: "proposals" }); }} /> : null}
       {creating ? <NewSkill key={creating} open canDecide={canDecide} onOpenChange={(o) => !o && setCreating(0)} /> : null}
     </Page>
   );

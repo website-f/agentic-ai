@@ -1,8 +1,11 @@
 /** The obvious ways in: "Give my AI a task" with the three quick kinds of work, for the staff
  * home, the desk and an empty chat. Each opens the one task composer, ready to go. */
-import { ArrowRightIcon, BrowserIcon, DesktopTowerIcon, FileTextIcon, GlobeIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, BrowserIcon, DesktopTowerIcon, FileTextIcon, GlobeIcon, PencilSimpleLineIcon, SquaresFourIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { JobPicker } from "@/components/job-picker";
+import { ResponsiveDialog } from "@/components/ui/dialog";
 import { msg, t as tr, useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +62,7 @@ export function GiveTaskPanel({ agent, title, guide, className }: {
 }) {
   const t = useT();
   const working = !!agent.current_task && (agent.current_task.status ?? "running") === "running";
+  const [every, setEvery] = useState(false);
   return (
     <section data-guide={guide} className={cn("overflow-hidden rounded-[var(--radius-lg)] border border-accent/25 bg-surface shadow-[var(--shadow-soft)]", className)}>
       <div className="grid gap-3 bg-[radial-gradient(ellipse_at_top_left,var(--accent-soft),transparent_65%)] p-4 sm:p-5">
@@ -89,7 +93,19 @@ export function GiveTaskPanel({ agent, title, guide, className }: {
             </button>
           ))}
         </div>
+        {/* P55: letters, filing, claims, schedules, workflows... all in one place. */}
+        <button type="button" onClick={() => setEvery(true)}
+          className="inline-flex min-h-10 items-center gap-1.5 justify-self-start rounded-sm px-1 text-[13px] font-medium text-accent hover:underline">
+          <SquaresFourIcon size={15} weight="duotone" /> {t("See every job {name} can do", { name: agent.name })}
+        </button>
       </div>
+      {every ? (
+        <ResponsiveDialog open onOpenChange={(o) => !o && setEvery(false)} className="w-[min(94vw,52rem)]"
+          title={t("What should {name} do?", { name: agent.name })}
+          description={t("Pick a job; you can add the details and files next.")}>
+          <JobPicker agentId={agent.id} onPicked={() => setEvery(false)} />
+        </ResponsiveDialog>
+      ) : null}
     </section>
   );
 }

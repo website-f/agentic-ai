@@ -138,6 +138,13 @@ async def _used_by(db: AsyncSession, ws: str, name: str) -> int:
 async def list_blueprints(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> list[BlueprintOut]:
+    from ...agents import roles
+    from ...models import Workspace
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    if ws is not None:  # P55: the premade roles, once
+        await roles.ensure_roles(db, ws)
+        await db.commit()
     rows = (
         await db.scalars(
             select(Blueprint)

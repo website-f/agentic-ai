@@ -18,11 +18,12 @@ import { FilePicker } from "@/components/file-drop";
 import { ObjectivePicker } from "@/components/objective-bits";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
+import { SchedulePicker, useSchedulePicker } from "@/components/ui/schedule-picker";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SwitchField } from "@/components/ui/switch";
 import { VoiceInput } from "@/components/voice-input";
-import { locale, msg, useT } from "@/i18n";
+import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
 import { teamKeys, type Schedule } from "@/lib/teams";
@@ -33,7 +34,7 @@ import { TaskPicker, type TaskRef } from "@/pages/tasks/accountable";
 
 import { AgentPicker, NOBODY } from "./agent-picker";
 import { BrowseWhere, canBrowseOn, ON_SERVER, useMyDevicesFor } from "./browse-where";
-import { cronFor, researchBrief, titleFrom, type RepeatPreset } from "./briefs";
+import { researchBrief, titleFrom } from "./briefs";
 import { lastAgent, rememberAgent, useComposerStore, type ComposerKind, type ComposerPrefill, type ComposerResult } from "./store";
 
 const NONE = "none";
@@ -46,17 +47,6 @@ const KINDS: { kind: ComposerKind; icon: typeof GlobeIcon; title: string; body: 
   { kind: "browse", icon: BrowserIcon, title: msg("Browse a website"), body: msg("Opens a site to read or fill in. You can watch it live.") },
   { kind: "workflow", icon: FlowArrowIcon, title: msg("Follow a workflow"), body: msg("Runs one of your mapped procedures, step by step.") },
 ];
-
-const PRESETS: { value: RepeatPreset; label: string }[] = [
-  { value: "weekdays", label: msg("Every weekday") },
-  { value: "monday", label: msg("Every Monday") },
-  { value: "monthly", label: msg("1st of each month") },
-  { value: "daily", label: msg("Every day") },
-  { value: "custom", label: msg("Custom") },
-];
-
-const when = (iso: string) =>
-  new Date(iso).toLocaleString(locale(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** Mounted once (app shell, full-screen chat): renders the composer while it is open. */
 export function TaskComposerHost() {
@@ -134,11 +124,9 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   const agentId = picked ?? fallback;
   const agent = usable.find((a) => a.id === agentId) ?? null;
 
-  // ---- when
+  // ---- when: now, or on a schedule (once later, or repeating; P55: picked, never typed as cron)
   const [repeat, setRepeat] = useState(!!prefill.repeat);
-  const [preset, setPreset] = useState<RepeatPreset>("weekdays");
-  const [time, setTime] = useState("09:00");
-  const [custom, setCustom] = useState("0 9 * * 1-5");
+  const sched = useSchedulePicker({ active: repeat && (kind === "general" || kind === "research") });
   const [runNow, setRunNow] = useState(false);
 
   // ---- more
@@ -160,7 +148,8 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   const canRepeat = kind === "general" || kind === "research";
   const repeatOn = repeat && canRepeat;
   const shownTitle = (titleEdited ? title : titleFrom(text)).trim();
-  const cron = cronFor(preset, time, custom);
+  const { cron, once } = sched.value;
+  const alsoNow = runNow && !once;
   const branchId = agent?.branch_id ?? null;
   const needsAgent = kind === "research" || kind === "browse" || repeatOn;
   const hasAgent = !!agent;
@@ -174,11 +163,6 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
     queryKey: ["agent-logins", agentId],
     queryFn: () => api<{ name: string; hosts: string[] }[]>(`/api/agents/${agentId}/logins`),
     enabled: kind === "browse" && hasAgent,
-  });
-  const preview = useQuery({
-    queryKey: ["cron-preview", cron],
-    queryFn: () => api<{ ok: boolean; next: string[]; error?: string }>(`/api/schedules/preview?cron=${encodeURIComponent(cron)}`),
-    enabled: repeatOn && cron.split(" ").length === 5,
   });
 
   // Tender mode: the company's tender SOP is in every agent's instructions already, so a one-line
@@ -202,7 +186,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   const labelList = labels.split(",").map((l) => l.trim()).filter(Boolean);
   const ready = (() => {
     if (needsAgent && !hasAgent) return false;
-    if (repeatOn) return !!shownTitle && preview.data?.ok !== false && cron.split(" ").length === 5;
+    if (repeatOn) return !!shownTitle && !sched.problem;
     if (kind === "research") return text.trim().length >= 3 && !!shownTitle;
     if (kind === "browse") return url.trim().length > 3 && text.trim().length > 2;
     if (kind === "workflow") return !!flowId && !!shownTitle;
@@ -214,13 +198,14 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
       const brief = kind === "research" ? researchBrief(text, output) : text;
       if (repeatOn) {
         const ft = prefill.fromTask;
-        const same = ft && ft.agentId === agentId && ft.brief === text && ft.title.trim() === shownTitle;
+        // The same task on repeat (a one-off is a plain schedule: /repeat makes recurring ones).
+        const same = ft && !once && ft.agentId === agentId && ft.brief === text && ft.title.trim() === shownTitle;
         const s = same
           ? await api<Schedule>(`/api/tasks/${ft.id}/repeat`, "POST", { cron, name: shownTitle, requires_review: review })
           : await api<Schedule>("/api/schedules", "POST", {
-            name: shownTitle.slice(0, 160), agent_id: agentId, title: shownTitle.slice(0, 180), brief: brief.slice(0, 8000), cron, requires_review: review,
+            name: shownTitle.slice(0, 160), agent_id: agentId, title: shownTitle.slice(0, 180), brief: brief.slice(0, 8000), cron, once, requires_review: review,
           });
-        if (runNow) await api<Schedule>(`/api/schedules/${s.id}/run`, "POST");
+        if (alsoNow) await api<Schedule>(`/api/schedules/${s.id}/run`, "POST");
         return { kind: "schedule", id: s.id, name: s.name };
       }
       if (kind === "browse") {
@@ -258,7 +243,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
     onSuccess: (r) => {
       for (const k of [workKeys.tasks, workKeys.agents, keys.status, ["office"], runKeys.all, teamKeys.schedules]) void qc.invalidateQueries({ queryKey: k });
       if (hasAgent) rememberAgent(agentId);
-      if (r.kind === "schedule") toast.success(runNow ? t("Scheduled, and the first run has started.") : t("Scheduled."));
+      if (r.kind === "schedule") toast.success(alsoNow ? t("Scheduled, and the first run has started.") : t("Scheduled."));
       else if (r.kind === "run") toast.success(t("Started. Each step goes to its agent; decisions come to you."));
       else if (kind === "browse") toast.success(t("{name} is on it. Watch the browser here.", { name: agent?.name ?? "" }));
       else {
@@ -463,29 +448,13 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
               {/* ---- when */}
               <Block title={t("When")} hint={!canRepeat ? t("Repeating works for general tasks and web research.") : undefined}>
                 <Segmented label={t("When")} value={repeatOn ? "repeat" : "now"} onChange={(v) => setRepeat(v === "repeat")} className="w-full sm:w-fit [&>button]:flex-1 [&>button]:justify-center"
-                  options={[{ value: "now", label: t("Now") }, ...(canRepeat ? [{ value: "repeat" as const, label: t("Repeat") }] : [])]} />
+                  options={[{ value: "now", label: t("Now") }, ...(canRepeat ? [{ value: "repeat" as const, label: t("Schedule|verb") }] : [])]} />
                 {repeatOn ? (
                   <div className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
-                    <div role="radiogroup" aria-label={t("How often")} className="flex flex-wrap gap-1.5">
-                      {PRESETS.map((p) => (
-                        <button key={p.value} type="button" role="radio" aria-checked={preset === p.value} onClick={() => setPreset(p.value)}
-                          className={cn("h-9 rounded-full border px-3.5 text-[13px] transition-colors", preset === p.value ? "border-accent bg-accent-soft font-medium text-accent" : "border-border bg-surface hover:border-accent/40")}>
-                          {t(p.label)}
-                        </button>
-                      ))}
-                    </div>
-                    {preset === "custom" ? (
-                      <Field label={t("Cron expression")} value={custom} onChange={(e) => setCustom(e.target.value)} className="font-mono"
-                        hint={t("minute hour day month weekday, e.g. 30 8 * * 1-5. At most every 15 minutes.")} />
-                    ) : (
-                      <label className="flex items-center gap-2.5 text-[13px]">
-                        <span className="font-medium">{t("At")}</span>
-                        <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-32" aria-label={t("Time")} />
-                      </label>
-                    )}
-                    {preview.data?.ok === false ? <p role="alert" className="text-[12.5px] text-danger">{preview.data.error}</p> : null}
-                    {preview.data?.ok ? <p className="text-[12.5px] text-muted">{t("Next: {times}", { times: preview.data.next.slice(0, 3).map(when).join(" · ") })}</p> : null}
-                    <SwitchField checked={runNow} onCheckedChange={setRunNow} label={t("Also run it once now")} hint={t("Each run is a fresh task for the agent; it appears on the board.")} />
+                    <SchedulePicker state={sched} />
+                    {!once ? (
+                      <SwitchField checked={runNow} onCheckedChange={setRunNow} label={t("Also run it once now")} hint={t("Each run is a fresh task for the agent; it appears on the board.")} />
+                    ) : null}
                   </div>
                 ) : null}
               </Block>

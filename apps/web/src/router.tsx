@@ -106,13 +106,15 @@ function RootError({ error }: { error: unknown }) {
   const t = useT();
   const router = useRouter();
   const offline = error instanceof ApiError && error.code === "network";
+  // The phone has no connection at all (an installed app opened offline): say so plainly.
+  const noNet = offline && typeof navigator !== "undefined" && !navigator.onLine;
   return (
     <div className="grid min-h-dvh place-items-center px-6">
       <div className="max-w-sm">
         <PlugsIcon size={32} weight="duotone" className="text-danger" />
-        <h1 className="mt-3 text-lg font-semibold">{offline ? t("The server is not answering") : t("This page failed to load")}</h1>
+        <h1 className="mt-3 text-lg font-semibold">{noNet ? t("You are offline") : offline ? t("The server is not answering") : t("This page failed to load")}</h1>
         <p className="mt-1 text-[13.5px] text-muted">
-          {offline ? t("Start the stack with docker compose up -d, then try again.") : errorMessage(error)}
+          {noNet ? t("Connect to the internet or Wi-Fi, then try again.") : offline ? t("Start the stack with docker compose up -d, then try again.") : errorMessage(error)}
         </p>
         <Button className="mt-5" onClick={() => router.invalidate()}>
           <ArrowClockwiseIcon size={16} /> {t("Try again")}

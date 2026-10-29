@@ -98,9 +98,17 @@ HELPS: tuple[Help, ...] = (
     ),
     Help(
         "files",
-        "Finding things in files",
-        "Looks through the company's files and SOPs for what you need.",
-        {"list_files": "allow", "read_file": "allow", "view_image": "allow", "find_sop": "allow"},
+        "Finding and filing files",
+        "Looks through the company's files and SOPs for what you need, and files documents "
+        "into the right folders.",
+        {
+            "list_files": "allow",
+            "read_file": "allow",
+            "view_image": "allow",
+            "find_sop": "allow",
+            "list_folders": "allow",
+            "file_document": "allow",
+        },
     ),
     Help(
         "research",
@@ -129,8 +137,9 @@ HELPS: tuple[Help, ...] = (
     Help(
         "packs",
         "Submission packs",
-        "Matches the checklist of a tender or application to real files.",
-        {"pack_status": "allow", "pack_attach": "allow"},
+        "Matches the checklist of a tender or application to real files, and compiles "
+        "documents into one PDF.",
+        {"pack_status": "allow", "pack_attach": "allow", "compile_documents": "allow"},
     ),
 )
 HELP_BY_KEY = {h.key: h for h in HELPS}

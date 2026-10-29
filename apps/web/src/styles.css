@@ -210,6 +210,14 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+/* Installed app: no rubber-band bounce or pull-to-refresh on the page itself (lists inside
+   still scroll; they already contain their own overscroll). */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
 @media (pointer: coarse) {
   /* iOS Safari zooms the whole page into any field under 16px when it gets focus. */
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
@@ -242,9 +250,9 @@ html {
   }
 }
 @media (pointer: coarse) and (max-width: 767px) {
-  /* Like a native app: the tab bar steps aside while the keyboard is up. */
+  /* Like a native app: the tab bar (and cards floating above it) step aside while the keyboard is up. */
   body:has(:is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select, [contenteditable="true"]):focus)
-    nav[aria-label="Main"].fixed {
+    :is(nav[aria-label="Main"].fixed, [data-keyboard-hide]) {
     display: none;
   }
 }

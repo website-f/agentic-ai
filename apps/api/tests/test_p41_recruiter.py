@@ -98,7 +98,8 @@ async def test_the_recruiter_researches_and_drafts_a_blueprint(client, llm, temp
         assert p.name == "compare-three-quotations" and p.status == "pending"
     # The owner sees it with the analyst mark and can apply it like any blueprint.
     listed = (await client.get("/api/blueprints")).json()
-    assert listed[0]["source"] == "analyst"
+    # P55: beside the premade roles (source "builtin").
+    assert [b["source"] for b in listed if b["role"] == "Purchasing Officer"] == ["analyst"]
 
 
 async def test_a_thin_blueprint_is_refused(client, llm, temporal):

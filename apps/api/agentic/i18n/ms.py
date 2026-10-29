@@ -682,6 +682,10 @@ MS: dict[str, str] = {
     "Where things slip": "Di mana kerja tertangguh",
     "Notify a person": "Maklumkan seseorang",
     "Message another agent": "Hantar mesej kepada ejen lain",
+    "Find the right agent": "Cari ejen yang sesuai",
+    "See the folders": "Lihat folder",
+    "File documents": "Failkan dokumen",
+    "Compile into one PDF": "Gabungkan menjadi satu PDF",
     "Search my email": "Cari e-mel saya",
     "Read an email": "Membaca e-mel",
     "Draft a reply": "Draf balasan",
@@ -768,6 +772,9 @@ MS: dict[str, str] = {
     ),
     "Run at most every 15 minutes.": "Jalankan paling kerap setiap 15 minit.",
     "That cron expression is not valid ({error}).": "Ungkapan cron itu tidak sah ({error}).",
+    "A one-off runs on one date: pick the day and the time.": (
+        "Jadual sekali sahaja berjalan pada satu tarikh: pilih hari dan masanya."
+    ),
     "Say what the meeting is about.": "Nyatakan tujuan mesyuarat.",
     "A meeting needs at least two agents.": "Mesyuarat perlukan sekurang-kurangnya dua ejen.",
     "At most {n} agents per meeting.": "Paling banyak {n} ejen setiap mesyuarat.",
@@ -815,6 +822,14 @@ MS: dict[str, str] = {
     ),
     "The skill this proposal changes no longer exists.": (
         "Kemahiran yang diubah oleh cadangan ini sudah tiada."
+    ),
+    "Give a link or paste the SKILL.md.": "Beri pautan atau tampal SKILL.md.",
+    "Use an https:// link to the SKILL.md.": "Gunakan pautan https:// ke SKILL.md.",
+    "That is not a SKILL.md: it needs frontmatter with a name and a description.": (
+        "Itu bukan SKILL.md: ia perlukan frontmatter dengan nama dan penerangan."
+    ),
+    "This skill is too long to import (over 12,000 characters).": (
+        "Kemahiran ini terlalu panjang untuk diimport (lebih 12,000 aksara)."
     ),
     "Skill names are short kebab-case, like compare-vendor-quotes.": (
         "Nama kemahiran pendek dalam kebab-case, contohnya compare-vendor-quotes."

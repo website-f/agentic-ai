@@ -3,6 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
+import { InstallApp } from "@/components/install-app";
 import { LanguageSwitch } from "@/components/language-switch";
 import { SpeechStylePicker } from "@/components/speech-style";
 import { IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
@@ -77,6 +78,10 @@ export function SettingsPage() {
           </div>
         </dl>
       </Card>
+
+      <Section title={t("Install the app")} description={t("Open Agentic Office from your home screen or desktop, full screen like any other app.")}>
+        <InstallApp mode="inline" />
+      </Section>
 
       <Section title={t("People and account")}>
         <div className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
