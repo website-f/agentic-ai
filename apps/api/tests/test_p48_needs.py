@@ -19,7 +19,13 @@ async def test_needs_you_counts_only_what_each_person_may_act_on(client, llm, te
     o = await office(client)
     fin = await new_agent(client, o, "Faiz", "Finance")
     r = await client.get("/api/me/needs")
-    assert r.status_code == 200 and r.json() == {"total": 0, "items": []}
+    assert r.status_code == 200
+    assert {k: r.json()[k] for k in ("total", "items", "entries", "unread")} == {
+        "total": 0,
+        "items": [],
+        "entries": [],
+        "unread": 0,
+    }
 
     # An approval (a tool that asks), a bill to approve, and a failed task of mine.
     party = (

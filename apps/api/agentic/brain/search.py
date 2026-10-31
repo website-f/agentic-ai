@@ -21,6 +21,7 @@ from .scope import Viewer
 
 RRF_K = 60
 FRESH_DAYS = 180  # how fast a fact's freshness bonus fades
+WEAK_MATCH = 0.4  # a fact sharing one word with the query, not its meaning
 POOL = 30
 RELATIVE_MARGIN = 0.15
 
@@ -262,11 +263,19 @@ async def search_facts(
     }
     kw_set, vec_set = set(kw), set(vec)
     now = datetime.now(UTC)
+    want = set(terms(query))
     scored = []
     for fid, s in fused.items():
         f = facts.get(fid)
         if f is None:
             continue
+        # P56: one shared word is weak evidence once memory is big (any fact with "invoice"
+        # matches). When meaning is available and did not pick it, such a fact ranks well
+        # below real matches; it still fills a slot when nothing better is known.
+        if qvec is not None and fid not in vec_set:
+            shared = want & set(re.findall(r"\w+", f.text.lower()))
+            if len(shared) < min(2, len(want)):
+                s *= WEAK_MATCH
         s *= 0.7 + 0.3 * f.confidence
         # Fresher first among equals: a fact learned this month beats one from a year ago
         # (prices and contacts drift), but never drops below 80%. Not last_used_at: being

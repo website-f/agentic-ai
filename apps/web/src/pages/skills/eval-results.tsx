@@ -9,6 +9,8 @@ export function SuiteBadge({ suite, label }: { suite: EvalSuite | undefined; lab
   const t = useT();
   if (!suite) return null;
   if (suite.error) return <Pill tone="danger">{label ? t("{label}: could not run", { label }) : t("could not run")}</Pill>;
+  // P56: no cases is "not tested", never a green 0/0.
+  if (!suite.total) return <Pill tone="neutral">{label ? t("{label}: no tests yet", { label }) : t("No tests yet")}</Pill>;
   const all = suite.passed === suite.total;
   return (
     <Pill tone={all ? "ok" : suite.passed ? "warn" : "danger"}>
@@ -22,6 +24,8 @@ export function EvalResults({ suite, before }: { suite: EvalSuite; before?: Eval
   const t = useT();
   if (suite.error) return <p role="alert" className="text-[13px] text-danger">{suite.error}</p>;
   return (
+    <>
+    <p className="mb-2 text-[12px] text-muted">{t("Tests run the skill with simulated tools: they check that the steps are followed, not live data.")}</p>
     <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
       {suite.cases.map((c, i) => {
         const old = before?.cases[i];
@@ -45,6 +49,7 @@ export function EvalResults({ suite, before }: { suite: EvalSuite; before?: Eval
         );
       })}
     </ul>
+    </>
   );
 }
 

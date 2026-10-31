@@ -6,6 +6,8 @@ import { msg, t } from "@/i18n";
 import { api } from "./api";
 
 export type PageKind = "wiki" | "decision" | "raw" | "log" | "agent" | "dream" | "root" | "skill" | "index";
+/** P56: the graph also shows agents and the facts they learned. */
+export type GraphKind = PageKind | "fact" | "agent_node";
 
 export interface PageSummary {
   path: string;
@@ -130,7 +132,7 @@ export interface Overview {
 }
 
 export interface GraphData {
-  nodes: { id: string; path: string; title: string; kind: PageKind; degree: number }[];
+  nodes: { id: string; path: string; title: string; kind: GraphKind; degree: number; agent_id?: string }[];
   edges: { source: string; target: string }[];
   unresolved: string[];
 }
@@ -182,7 +184,9 @@ export const agentFactsQuery = (agentId: string) =>
   queryOptions({ queryKey: brainKeys.agentFacts(agentId), queryFn: () => api<Fact[]>(`/api/agents/${agentId}/facts`) });
 
 /** Folder labels and colours. Colours follow the categorical series in fixed order. */
-export const KIND_INFO: Record<PageKind, { label: string; color: string }> = {
+export const KIND_INFO: Record<GraphKind, { label: string; color: string }> = {
+  fact: { label: msg("Learned fact"), color: "var(--series-5)" },
+  agent_node: { label: msg("Agent"), color: "var(--series-6)" },
   wiki: { label: msg("Knowledge"), color: "var(--series-1)" },
   decision: { label: msg("Decision"), color: "var(--series-2)" },
   raw: { label: msg("Source"), color: "var(--series-3)" },

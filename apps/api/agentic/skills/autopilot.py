@@ -71,8 +71,9 @@ def verdict(p: SkillProposal, how: str) -> tuple[bool, str]:
         before = f"{old['passed']}/{old['total']}"
         if new["passed"] < old["passed"]:
             return False, f"it does worse than the current version ({score} vs {before} cases)"
-        if rate < MIN_PASS_RATE and new["passed"] == old["passed"] == 0:
-            return False, "neither version passes its cases"
+        if rate < MIN_PASS_RATE:
+            # P56: better than a bad version is not good enough (1/5 against 0/5).
+            return False, f"passes only {score} of its cases (current version {before})"
         return True, f"passes {score} cases (current version {before})"
     if rate < MIN_PASS_RATE:
         return False, f"passes only {score} of its cases"

@@ -104,10 +104,14 @@ def title_of(path: str, meta: dict[str, Any], content: str) -> str:
     return path.rsplit("/", 1)[-1][:-3][:300]
 
 
+_CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+
+
 def links_of(content: str) -> set[str]:
+    """[[links]] in a page, not the ones shown as examples in `code`."""
     return {
         m.group(1).strip().rsplit("/", 1)[-1].removesuffix(".md").lower()
-        for m in _LINK.finditer(content)
+        for m in _LINK.finditer(_CODE.sub(" ", content))
     }
 
 

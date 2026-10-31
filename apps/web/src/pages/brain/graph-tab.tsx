@@ -1,5 +1,6 @@
 import { GraphIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   forceCenter,
   forceCollide,
@@ -17,7 +18,7 @@ import { EmptyState } from "@/components/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { graphQuery, KIND_INFO, type GraphData, type PageKind } from "@/lib/brain";
+import { graphQuery, KIND_INFO, type GraphData, type GraphKind } from "@/lib/brain";
 
 type Node = GraphData["nodes"][number] & SimulationNodeDatum;
 type Edge = SimulationLinkDatum<Node>;
@@ -33,6 +34,13 @@ function cssColor(el: Element, value: string): string {
 export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void }) {
   const t = useT();
   const { data, isLoading, error } = useQuery(graphQuery);
+  const navigate = useNavigate();
+  // P56: an agent opens its profile, a fact the Facts tab; a page opens as before.
+  const open = (n: Node) => {
+    if (n.kind === "agent_node" && n.agent_id) void navigate({ to: "/agents/$agentId", params: { agentId: n.agent_id } });
+    else if (n.kind === "fact") void navigate({ to: "/brain", search: { tab: "facts" } as never });
+    else onOpenPage(n.path);
+  };
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -154,15 +162,15 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
   };
 
   const legend = useMemo(() => {
-    const counts = new Map<PageKind, number>();
+    const counts = new Map<GraphKind, number>();
     for (const n of data?.nodes ?? []) counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1);
     return [...counts.entries()];
   }, [data]);
 
   if (isLoading) return <Skeleton className="h-[min(64dvh,40rem)] min-h-80 rounded-[var(--radius-md)]" />;
   if (error || !data) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
-  if (!data.edges.length) {
-    return <EmptyState icon={GraphIcon} title={t("No links yet")} body={t("The graph shows how pages link to each other with [[page-name]]. It fills in as agents and people write linked pages.")} />;
+  if (!data.nodes.length) {
+    return <EmptyState icon={GraphIcon} title={t("Nothing learned yet")} body={t("The graph shows what your agents learned and how wiki pages link together. It fills in as they work.")} />;
   }
 
   return (
@@ -190,14 +198,14 @@ export function GraphTab({ onOpenPage }: { onOpenPage: (path: string) => void })
           onPointerLeave={() => setHover(null)}
           onClick={(e) => {
             const h = hitTest(e.clientX, e.clientY);
-            if (h) onOpenPage(h.node.path);
+            if (h) open(h.node);
           }}
         />
         {hover ? (
           <div className="pointer-events-none absolute z-10 max-w-64 rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[12.5px] shadow-[var(--shadow-pop)]"
             style={{ left: Math.max(4, Math.min(hover.x + 12, size.w - 200)), top: Math.max(hover.y - 44, 4) }}>
             <p className="font-medium break-words">{hover.node.title}</p>
-            <p className="truncate font-mono text-[11px] text-muted">{hover.node.path}</p>
+            {hover.node.path ? <p className="truncate font-mono text-[11px] text-muted">{hover.node.path}</p> : <p className="text-[11px] text-muted">{t(KIND_INFO[hover.node.kind].label)}</p>}
             <p className="text-muted">{hover.node.degree === 1 ? t("1 link · click to open") : t("{n} links · click to open", { n: hover.node.degree })}</p>
           </div>
         ) : null}

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import decisions, dispatch, launch, runtime
 from ...agents.tools import TOOLS
 from ...core.db import get_db
+from ...core.security import can
 from ...i18n import render, tr
 from ...i18n.labels import task_status_label
 from ...models import (
@@ -1146,6 +1147,46 @@ async def decide(
     except decisions.DecisionError as e:
         raise api_error(e.status, e.code, e.message) from e
     return await approval_out(db, a)
+
+
+@router.post("/approvals/{approval_id}/stop")
+async def stop_from_approval(
+    approval_id: str,
+    principal: Principal = Depends(require("approvals.decide")),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    """P56: "Stop the task" right where it asks: no to this, and the whole task (and the
+    sub-tasks it started) stops, so it cannot come back with the same question."""
+    a = await db.get(Approval, approval_id)
+    asker = await db.get(Agent, a.agent_id) if a is not None else None
+    if (
+        a is None
+        or a.workspace_id != principal.workspace_id
+        or not principal.scope.sees_agent(asker)
+    ):
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "approval_not_found", "That approval is not here."
+        )
+    if not can(principal.role, "work.write"):
+        raise api_error(status.HTTP_403_FORBIDDEN, "forbidden", "Your role cannot stop tasks.")
+    out = await cancel_task(a.task_id, principal, db)
+    # The run stops on its own shortly; its questions end now, not when it gets there.
+    t = await db.get(Task, a.task_id)
+    void = await runtime._void_approvals(db, t) if t is not None else []  # noqa: SLF001
+    await db.commit()
+    if t is not None:
+        for v in void:
+            await events.publish(
+                v.workspace_id,
+                "approval.resolved",
+                {
+                    "approval_id": v.id,
+                    "status": "cancelled",
+                    "task_id": t.id,
+                    "agent_id": v.agent_id,
+                },
+            )
+    return out
 
 
 # ---------------------------------------------------------------- P21 accountable work

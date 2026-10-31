@@ -682,6 +682,7 @@ MS: dict[str, str] = {
     "Where things slip": "Di mana kerja tertangguh",
     "Notify a person": "Maklumkan seseorang",
     "Message another agent": "Hantar mesej kepada ejen lain",
+    "Your role cannot stop tasks.": "Peranan anda tidak boleh menghentikan tugasan.",
     "Find the right agent": "Cari ejen yang sesuai",
     "See the folders": "Lihat folder",
     "File documents": "Failkan dokumen",

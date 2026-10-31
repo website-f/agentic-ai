@@ -214,6 +214,24 @@ async def task_event(
     )
 
 
+# P56: a task in any of these is not waiting on anyone, so a question it asked earlier is
+# void (stopped, finished, sent back): it leaves Approvals and can no longer be answered.
+NOT_WAITING = frozenset({"done", "failed", "cancelled", "review", "triage", "ready"})
+
+
+async def _void_approvals(db: AsyncSession, task: Task) -> list[Approval]:
+    rows = list(
+        (
+            await db.scalars(
+                select(Approval).where(Approval.task_id == task.id, Approval.status == "pending")
+            )
+        ).all()
+    )
+    for a in rows:
+        a.status, a.decided_at, a.decided_by = "cancelled", _now(), "system"
+    return rows
+
+
 async def set_task_status(
     db: AsyncSession,
     task: Task,
@@ -231,7 +249,19 @@ async def set_task_status(
     fields.setdefault("blocked_action", None)
     for k, v in fields.items():
         setattr(task, k, v)
+    void = await _void_approvals(db, task) if status in NOT_WAITING else []
     await db.commit()
+    for a in void:
+        await events.publish(
+            task.workspace_id,
+            "approval.resolved",
+            {
+                "approval_id": a.id,
+                "status": "cancelled",
+                "task_id": task.id,
+                "agent_id": a.agent_id,
+            },
+        )
     if before != status:
         await task_event(
             db,
@@ -609,6 +639,16 @@ async def _pending_calls(db: AsyncSession, history: list[AgentMessage]) -> list[
 DECIDED = ("approved", "denied", "answered", "expired")
 
 
+async def _said_no(db: AsyncSession, task: Task, tool: str) -> bool:
+    """A person denied this tool earlier in this task (P56: never asked twice)."""
+    hit = await db.scalar(
+        select(Approval.id)
+        .where(Approval.task_id == task.id, Approval.tool_name == tool, Approval.status == "denied")
+        .limit(1)
+    )
+    return hit is not None
+
+
 async def _known_link(db: AsyncSession, task: Task, url: str) -> bool:
     """P39: did this exact link appear in a tool result of this task (search results, a page
     it read)?"""
@@ -742,6 +782,24 @@ async def _resolve_calls(
                 f"was blocked from using {label}: {decision.reason}",
                 {"tool": name, "rule": decision.rule, "hardline": decision.hardline},
             )
+            continue
+        if decision.effect == "ask" and await _said_no(db, task, name):
+            # P56: the person already said no to this in this task. Asking again (another
+            # page, the same page) only floods them with the same question.
+            _add(
+                db,
+                agent,
+                "tool",
+                task_id=task.id,
+                content=(
+                    f"Not asked: the person already said no to {TOOLS[name].label.lower()} in "
+                    "this task. Do not ask for it again. Finish with what you have and say what "
+                    "you could not do, or use ask_human if you truly cannot go on."
+                ),
+                tool_call_id=call_id,
+                name=name,
+            )
+            await db.commit()
             continue
         if decision.effect == "ask":
             reason = str(args.get("why") or args.get("reason") or "")

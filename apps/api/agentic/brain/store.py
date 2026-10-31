@@ -48,7 +48,7 @@ It is plain markdown, so it also opens in Obsidian.
 - `log.md` one line per event. `index.md` map of the wiki, rebuilt every night.
 
 ## Rules
-- One topic per page. Link related pages with [[page-name]].
+- One topic per page. Link related pages with `[[page-name]]`.
 - Put the source and date on anything that can go out of date.
 - Decisions: what, why, who decided, when.
 """

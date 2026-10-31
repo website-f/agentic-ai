@@ -68,6 +68,11 @@ async def applicable_sops(db: AsyncSession, agent: Agent) -> list[SOP]:
     return sorted(rows, key=lambda s: (order.get(s.scope, 9), s.title.lower()))
 
 
+SOP_BUDGET_CHARS = 24_000  # about 6k tokens of SOPs and workflows in every prompt
+SOP_ONE_MAX = 12_000  # one SOP's share; longer ones end with a pointer to find_sop
+SOP_MIN_CHARS = 1_500  # below this, an SOP is listed by title instead of cut to nothing
+
+
 async def build_parts(
     db: AsyncSession, agent: Agent, mode: str = "task", memory: str | None = None
 ) -> list[PromptPart]:
@@ -76,6 +81,11 @@ async def build_parts(
     dept = await db.get(Department, agent.department_id) if agent.department_id else None
     parts = [PromptPart("Workspace rules", WORKSPACE_RULES)]
 
+    # P56: SOPs fill a fixed budget, most general first; the rest are listed by title and
+    # read with find_sop when a task needs them, so a company with many long SOPs does not
+    # drown every prompt (the bigger the prompt, the worse the model follows it).
+    budget = SOP_BUDGET_CHARS
+    later: list[str] = []
     for sop in await applicable_sops(db, agent):
         where = {
             "workspace": "all companies",
@@ -83,7 +93,25 @@ async def build_parts(
             "department": dept.name if dept else "your department",
             "library": "attached to you",
         }.get(sop.scope, sop.scope)
-        parts.append(PromptPart(f"{sop.title} ({where})", sop.body.strip(), sop=True))
+        body = sop.body.strip()
+        if budget < SOP_MIN_CHARS:
+            later.append(f"- {sop.title} ({where})")
+            continue
+        if len(body) > min(SOP_ONE_MAX, budget):
+            body = (
+                body[: min(SOP_ONE_MAX, budget)].rsplit("\n", 1)[0]
+                + f"\n\n(Continues: find_sop {sop.title!r} for the rest.)"
+            )
+        budget -= len(body)
+        parts.append(PromptPart(f"{sop.title} ({where})", body, sop=True))
+    if later:
+        parts.append(
+            PromptPart(
+                "More SOPs (read one with find_sop when the work needs it)",
+                "\n".join(later),
+                sop=True,
+            )
+        )
 
     from ..models import Workflow as _Workflow  # late: keep import local to this use
     from ..workflows.procedure import compile_text
@@ -98,9 +126,9 @@ async def build_parts(
         )
     ).all()
     for wf in flows:
-        parts.append(
-            PromptPart(f"Workflow: {wf.name}", compile_text(wf.name, wf.graph or {}), sop=True)
-        )
+        text = compile_text(wf.name, wf.graph or {})
+        # A workflow it follows is always in full: it is its procedure.
+        parts.append(PromptPart(f"Workflow: {wf.name}", text, sop=True))
 
     who = (
         f"Your name is {agent.name}. Your role is {agent.role}"

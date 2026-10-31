@@ -11,7 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { FileStatus } from "@/components/file-drop";
@@ -182,8 +182,9 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
   const [removing, setRemoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Moving between folders or opening a file never jumps the page back to the top.
   const go = (patch: { f?: string | undefined; folder?: string | undefined }) =>
-    navigate({ search: (s: { f?: string; folder?: string }) => ({ ...s, ...patch }) });
+    navigate({ search: (s: { f?: string; folder?: string }) => ({ ...s, ...patch }), resetScroll: false });
   // On wide screens a file opened from the list shows in a pane beside it; one opened from an
   // upload report or a link (further up, or straight in) opens in the side sheet.
   const [inPane, setInPane] = useState(false);
@@ -479,7 +480,7 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
           </div>
 
           {paneOpen ? (
-            <Card id="company-files-viewer" className="max-h-[calc(100dvh-2rem)] self-start overflow-y-auto p-4 xl:sticky xl:top-4">{viewer}</Card>
+            <Card id="company-files-viewer" className="max-h-[calc(100dvh-11rem)] self-start overflow-y-auto p-4 xl:sticky xl:top-0">{viewer}</Card>
           ) : null}
         </div>
       </section>
@@ -573,23 +574,44 @@ export function FilesPage() {
   const [treeOpen, setTreeOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
 
+  // The address keeps the folder (back, forward and links work), but moving around the
+  // Library never jumps the page back to the top: the tree keeps its place, and only the
+  // contents pane starts at the top of the new folder (see the effect below).
+  type Search = typeof search;
+  const goto = (patch: (s: Search) => Search) => void navigate({ search: patch, resetScroll: false });
   const pick = (v: StoreView) => {
     setTreeOpen(false);
-    void navigate({ search: (s) => ({ ...s, view: v === "folders" ? undefined : v, task: undefined, folder: undefined, origin: undefined, f: undefined, page: undefined }) });
+    goto((s) => ({ ...s, view: v === "folders" ? undefined : v, task: undefined, folder: undefined, origin: undefined, f: undefined, page: undefined }));
   };
   const pickFolder = (p: string) => {
     setTreeOpen(false);
-    void navigate({ search: (s) => ({ ...s, view: undefined, task: undefined, folder: p || undefined, f: undefined, page: undefined }) });
+    goto((s) => ({ ...s, view: undefined, task: undefined, folder: p || undefined, f: undefined, page: undefined }));
   };
   const pickCompany = (id: string) => {
     co.select(id);
     pickFolder("");
   };
-  const open = (id?: string) => navigate({ search: (s) => ({ ...s, f: id, page: undefined }) });
+  const open = (id?: string) => goto((s) => ({ ...s, f: id, page: undefined }));
   const startUpload = () => {
     if (view !== "folders") pickFolder("");
     setUploadOpen((o) => (view === "folders" ? !o : true));
   };
+
+  // A new folder starts at its top: the contents pane scrolls back (tablets and desktops); on
+  // phones the page comes back to the path row if it had scrolled past it, like a file manager.
+  const place = `${branch?.id ?? ""}|${view}|${folder}|${search.task ?? ""}`;
+  const pane = useRef<HTMLDivElement>(null);
+  const top = useRef<HTMLDivElement>(null);
+  const lastPlace = useRef(place);
+  useEffect(() => {
+    if (lastPlace.current === place) return;
+    lastPlace.current = place;
+    pane.current?.scrollTo({ top: 0 });
+    const mark = top.current;
+    if (!mark || !window.matchMedia("(max-width: 767px)").matches) return;
+    const y = mark.getBoundingClientRect().top - 56; // under the app's header (h-14)
+    if (y < 0) window.scrollBy({ top: y });
+  }, [place]);
 
   const tree = (
     <LibraryTree view={view} folder={folder} branch={branch} branches={co.branches} onView={pick} onFolder={pickFolder} onCompany={pickCompany} />
@@ -635,14 +657,20 @@ export function FilesPage() {
         : !co.branches.length ? (
           <EmptyState icon={BuildingsIcon} title={t("No companies yet")} body={t("Add a company in Organization first. Each company keeps its own documents.")} />
         ) : (
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-            <Card className="hidden max-h-[calc(100dvh-2rem)] min-w-0 self-start overflow-y-auto p-2 lg:sticky lg:top-4 lg:block">{tree}</Card>
-            <div className="grid min-w-0 content-start gap-4">
-              <BrowseCrumbs view={view} folder={folder} branch={branch} onRoot={() => pickFolder("")} onFolder={pickFolder} onOpenTree={() => setTreeOpen(true)} />
-              {view !== "folders" ? <p className="-mt-1 px-1 text-[13px] text-muted">{t(VIEW_INFO[view].hint)}</p> : null}
-              {/* Phones: the root of the Library lists its ready-made folders to tap into. */}
-              {view === "folders" && !folder ? <QuickFolders branch={branch} onView={pick} className="lg:hidden" /> : null}
-              {body}
+          // Tablets and desktops: a folder browser in a frame that fills the screen below the
+          // header. The tree on the left and the contents on the right each scroll on their own.
+          // Phones: one list at a time under the path row, tapping into folders.
+          <div ref={top} className="grid min-w-0 scroll-mt-16 gap-4 md:h-[calc(100dvh-5.5rem)] md:min-h-[30rem] md:grid-cols-[13rem_minmax(0,1fr)] md:gap-0 md:overflow-hidden md:rounded-[var(--radius-md)] md:border md:border-border lg:grid-cols-[16rem_minmax(0,1fr)]">
+            <aside className="hidden min-h-0 min-w-0 overflow-y-auto overscroll-contain border-r border-border bg-surface p-2 md:block">{tree}</aside>
+            <div className="grid min-w-0 content-start gap-4 md:flex md:min-h-0 md:flex-col md:gap-0">
+              <BrowseCrumbs view={view} folder={folder} branch={branch} onRoot={() => pickFolder("")} onFolder={pickFolder} onOpenTree={() => setTreeOpen(true)}
+                className="sticky top-14 z-20 shadow-[var(--shadow-soft)] md:static md:shrink-0 md:rounded-none md:border-0 md:border-b md:shadow-none" />
+              <div ref={pane} className="grid min-w-0 content-start gap-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:p-4">
+                {view !== "folders" ? <p className="-mt-1 px-1 text-[13px] text-muted md:mt-0">{t(VIEW_INFO[view].hint)}</p> : null}
+                {/* Phones: the root of the Library lists its ready-made folders to tap into. */}
+                {view === "folders" && !folder ? <QuickFolders branch={branch} onView={pick} className="md:hidden" /> : null}
+                {body}
+              </div>
             </div>
           </div>
         )}

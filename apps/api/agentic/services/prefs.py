@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
 
-KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale")
+KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale", "needs")  # P56 needs: bell read mark
 MAX_KEY_BYTES = 8_000  # one key's object, as JSON
 
 

@@ -572,13 +572,20 @@ async def _remember(ctx: ToolContext, args: dict[str, Any]) -> str:
     text = brain_facts.clean(str(args.get("fact", "")))
     if not text:
         return "Error: give one short, self-contained fact (no secrets)."
-    private = bool(args.get("private"))
+    from ..i18n.dialects import about_speech
+
+    if about_speech(text):  # P54: how to speak is the person's setting, never a memory
+        return "Not saved: how to speak to people is set in their Settings."
+    # P56: a person's private assistant keeps what it learns private (as learn() does), and
+    # a helper's private facts belong to the agent it helps (recall looks there).
+    private = bool(args.get("private")) or ctx.agent.private
+    owner = ctx.agent.clone_of or ctx.agent.id
     _, created = await brain_facts.add(
         ctx.db,
         await for_agent(ctx.db, ctx.agent),
         text,
         branch_id=None if private else ctx.agent.branch_id,
-        agent_id=ctx.agent.id if private else None,
+        agent_id=owner if private else None,
         source_kind="agent",
         source_id=ctx.task.id if ctx.task else None,
         source_label=f'task "{ctx.task.title[:120]}"' if ctx.task else "chat",

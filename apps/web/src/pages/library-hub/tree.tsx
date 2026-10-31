@@ -1,10 +1,13 @@
 /** The Browse tab's folder directory: the company's own folders as a tree, then the
  * ready-made folders (documents, SOPs, guidelines, templates and quick views of the file
- * store) with their counts. Down the side on desktop; in a sheet and as a drill-down list on
- * phones, with a breadcrumb above the contents. */
-import { BuildingsIcon, CaretRightIcon, FolderIcon, FolderOpenIcon, ShieldWarningIcon, TreeStructureIcon } from "@phosphor-icons/react";
+ * store) with their counts. A real folder tree down the side on tablets and desktops (its own
+ * scroll, arrow keys, chevrons); in a sheet and as a drill-down list on phones, with a
+ * breadcrumb and a back button above the contents. */
+import {
+  ArrowLeftIcon, BuildingsIcon, CaretRightIcon, FolderIcon, FolderOpenIcon, ShieldWarningIcon, TreeStructureIcon, type Icon,
+} from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { locale, useT } from "@/i18n";
@@ -18,86 +21,281 @@ import { sopsQuery } from "@/lib/work";
 
 import { sopsForCompany, templatesForCompany, VIEW_GROUPS, VIEW_INFO } from "./views";
 
-// ---------------------------------------------------------------- the company's folders
+// ---------------------------------------------------------------- the tree's shape
 
-function TreeNode({ node, depth, current, open, onToggle, onPick }: {
-  node: FolderNode;
-  depth: number;
-  current: string | null;
-  open: Set<string>;
-  onToggle: (path: string) => void;
-  onPick: (path: string) => void;
+/** One entry of the tree: a group heading, the company (its top folder), one of its folders,
+ * a company to pick (under "All companies") or a ready-made folder. */
+interface TNode {
+  key: string;
+  kind: "group" | "root" | "folder" | "company" | "view";
+  label: string;
+  children: TNode[];
+  path?: string;
+  view?: StoreView;
+  companyId?: string;
+  color?: string;
+  count?: number;
+  flagged?: number;
+}
+
+/** A visible row: the node, where it sits, and whether it is open. */
+interface TRow {
+  node: TNode;
+  level: number;
+  parent: string | null;
+  size: number;
+  pos: number;
+  open: boolean;
+}
+
+const GROUP_COMPANY = "g:company";
+const groupKey = (i: number) => `g:${i}`;
+const folderKey = (path: string) => `f:${path}`;
+
+function flatten(nodes: TNode[], level: number, parent: string | null, expanded: Set<string>, out: TRow[]): TRow[] {
+  nodes.forEach((node, i) => {
+    const open = node.children.length > 0 && expanded.has(node.key);
+    out.push({ node, level, parent, size: nodes.length, pos: i + 1, open });
+    if (open) flatten(node.children, level + 1, node.key, expanded, out);
+  });
+  return out;
+}
+
+/** The rows that must be open for this one to show. */
+function ancestorsOf(view: StoreView, folder: string, branch: Branch | null): string[] {
+  if (view !== "folders") {
+    const g = VIEW_GROUPS.findIndex((x) => x.views.includes(view));
+    return g >= 0 ? [groupKey(g)] : [];
+  }
+  return [GROUP_COMPANY, ...(branch ? [folderKey(""), ...folderChain(folder).slice(0, -1).map(folderKey)] : [])];
+}
+
+/** Scroll the nearest scrolling box (not the page) just enough to show `el`. */
+function keepInView(el: HTMLElement) {
+  let box = el.parentElement;
+  while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if (!box) return;
+  const r = el.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  const pad = 8;
+  if (r.top < b.top + pad) box.scrollTop -= b.top + pad - r.top;
+  else if (r.bottom > b.bottom - pad) box.scrollTop += r.bottom - (b.bottom - pad);
+}
+
+// ---------------------------------------------------------------- one row
+
+function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl }: {
+  row: TRow;
+  selected: boolean;
+  tabbable: boolean;
+  onActivate: () => void;
+  onToggle: () => void;
+  onFocus: () => void;
+  setEl: (el: HTMLLIElement | null) => void;
 }) {
   const t = useT();
-  const isOpen = open.has(node.path);
-  const on = current === node.path;
+  const { node, open } = row;
+  const group = node.kind === "group";
+  const V = node.view ? VIEW_INFO[node.view] : null;
+  const IconCmp: Icon | null = node.kind === "root" ? BuildingsIcon
+    : node.kind === "folder" ? (open || selected ? FolderOpenIcon : FolderIcon)
+    : V ? V.icon : null;
+  // Groups and the company sit flush; folders step in under the company.
+  const indent = group ? 0 : Math.max(0, row.level - 2) * 12;
   return (
-    <li>
-      <div className={cn("group flex min-w-0 items-center rounded-sm", on ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}
-        style={{ paddingLeft: `${depth * 12}px` }}>
-        {node.children.length ? (
-          <button type="button" onClick={() => onToggle(node.path)} aria-expanded={isOpen}
-            aria-label={isOpen ? t("Close {name}", { name: node.name }) : t("Open {name}", { name: node.name })}
-            className="grid size-7 shrink-0 place-items-center rounded-sm text-muted hover:text-fg pointer-coarse:size-9">
-            <CaretRightIcon size={12} weight="bold" className={cn("transition-transform", isOpen && "rotate-90")} />
-          </button>
-        ) : <span className="size-7 shrink-0 pointer-coarse:size-9" aria-hidden />}
-        <button type="button" onClick={() => onPick(node.path)} aria-current={on ? "true" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-left text-[13px] pointer-coarse:py-2.5">
-          {isOpen || on ? <FolderOpenIcon size={16} weight="duotone" className="shrink-0" /> : <FolderIcon size={16} weight="duotone" className="shrink-0 text-muted" />}
-          <span className="min-w-0 flex-1 truncate" title={node.path}>{node.name}</span>
+    <li ref={setEl} role="treeitem" aria-level={row.level} aria-setsize={row.size} aria-posinset={row.pos}
+      aria-expanded={node.children.length ? open : undefined} aria-selected={group ? undefined : selected}
+      tabIndex={tabbable ? 0 : -1} onClick={onActivate} onFocus={onFocus}
+      title={node.kind === "folder" ? node.path : V ? t(V.hint) : undefined}
+      className={cn(
+        "flex min-w-0 cursor-pointer items-center rounded-sm outline-none select-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset",
+        group ? "mt-2 text-muted/80 first:mt-0 hover:text-fg"
+          : selected ? "bg-accent-soft font-semibold text-accent" : "hover:bg-surface-2",
+      )}
+      style={{ paddingLeft: indent }}>
+      {node.children.length ? (
+        <span aria-hidden onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className="grid size-7 shrink-0 place-items-center rounded-sm text-muted hover:text-fg pointer-coarse:size-11">
+          <CaretRightIcon size={group ? 10 : 12} weight="bold" className={cn("transition-transform", open && "rotate-90")} />
+        </span>
+      ) : <span className="size-7 shrink-0 pointer-coarse:size-11" aria-hidden />}
+      {group ? (
+        <span className="min-w-0 flex-1 truncate py-1.5 pr-2 text-[10.5px] font-semibold tracking-[0.08em] uppercase">{node.label}</span>
+      ) : (
+        <span className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-[13px] pointer-coarse:py-2.5">
+          {node.kind === "company" ? <span aria-hidden className="mx-[3px] size-2.5 shrink-0 rounded-full" style={{ background: node.color || "var(--accent)" }} />
+            : IconCmp ? <IconCmp size={16} weight={selected && node.kind === "view" ? "fill" : "duotone"} className={cn("shrink-0", !selected && node.kind !== "root" && "text-muted")} /> : null}
+          <span className="min-w-0 flex-1 truncate">{node.label}</span>
           {node.flagged ? (
             <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warn/14 px-1.5 text-[11px] font-medium text-warn" title={t("{n} held back", { n: node.flagged })}>
               <ShieldWarningIcon size={11} weight="bold" />{node.flagged}
             </span>
           ) : null}
-          <span className="shrink-0 text-[11.5px] text-muted tabular">{node.files.toLocaleString(locale())}</span>
-        </button>
-      </div>
-      {isOpen && node.children.length ? (
-        <ul>
-          {node.children.map((c) => <TreeNode key={c.path} node={c} depth={depth + 1} current={current} open={open} onToggle={onToggle} onPick={onPick} />)}
-        </ul>
-      ) : null}
+          {node.count ? (
+            <span className={cn("shrink-0 tabular", node.view === "review" ? "rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white" : "text-[11.5px] font-normal text-muted")}>
+              {node.count.toLocaleString(locale())}
+            </span>
+          ) : null}
+        </span>
+      )}
     </li>
   );
 }
 
-/** One company's folders. `current` is null when another folder of the Library is open. */
-function FolderTree({ root, current, onPick, total, rootLabel }: {
-  root: FolderNode;
-  current: string | null;
-  onPick: (path: string) => void;
-  total: number;
-  rootLabel: string;
+// ---------------------------------------------------------------- the whole directory
+
+/** The Library's folders as one tree (role="tree"): the company and its folders, then the
+ * ready-made folders in their groups. Up and Down move, Right opens a folder (or steps into it),
+ * Left closes it (or steps out), Enter opens it, Home and End jump. The open folder stays
+ * highlighted and in view; the tree scrolls on its own, never the page. */
+export function LibraryTree({ view, folder, branch, branches, onView, onFolder, onCompany }: {
+  view: StoreView;
+  folder: string;
+  branch: Branch | null;
+  branches: Branch[];
+  onView: (v: StoreView) => void;
+  onFolder: (path: string) => void;
+  onCompany: (id: string) => void;
 }) {
   const t = useT();
-  // Open the chain to the current folder, plus whatever the person opens.
-  const [opened, setOpened] = useState<Set<string>>(() => new Set(folderChain(current ?? "").slice(0, -1)));
-  const open = useMemo(() => new Set([...opened, ...folderChain(current ?? "").slice(0, -1)]), [opened, current]);
-  const toggle = (p: string) => setOpened((s) => {
+  const counts = useViewCounts(branch);
+  const { tree, root } = useFolderTree(branch?.id ?? null);
+
+  const nodes = useMemo<TNode[]>(() => {
+    const folderNode = (n: FolderNode): TNode => ({
+      key: folderKey(n.path), kind: "folder", label: n.name, path: n.path, count: n.files, flagged: n.flagged, children: n.children.map(folderNode),
+    });
+    const company: TNode = branch
+      ? {
+        key: GROUP_COMPANY, kind: "group", label: t("Company folders"),
+        children: [{
+          key: folderKey(""), kind: "root", label: branch.name, path: "", count: tree?.total_files ?? root.files, flagged: root.flagged,
+          children: root.children.map(folderNode),
+        }],
+      }
+      : {
+        key: GROUP_COMPANY, kind: "group", label: t("Company folders"),
+        children: branches.map((b) => ({ key: `c:${b.id}`, kind: "company", label: b.name, companyId: b.id, color: b.color, children: [] })),
+      };
+    return [company, ...VIEW_GROUPS.map((g, i): TNode => ({
+      key: groupKey(i), kind: "group", label: t(g.title),
+      children: g.views.map((v) => ({ key: `v:${v}`, kind: "view", label: t(VIEW_INFO[v].label), view: v, count: counts[v], children: [] })),
+    }))];
+  }, [branch, branches, root, tree?.total_files, counts, t]);
+
+  const selectedKey = view === "folders" ? (branch ? folderKey(folder) : null) : `v:${view}`;
+
+  // Open: every group, the company, and the folders down to the open one; then whatever the
+  // person opens or closes. When the open folder changes, the way down to it opens again.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([
+    GROUP_COMPANY, folderKey(""), ...VIEW_GROUPS.map((_, i) => groupKey(i)), ...ancestorsOf(view, folder, branch),
+  ]));
+  const [seen, setSeen] = useState(selectedKey);
+  const [focusKey, setFocusKey] = useState<string | null>(selectedKey);
+  if (seen !== selectedKey) {
+    setSeen(selectedKey);
+    setFocusKey(selectedKey);
+    const need = ancestorsOf(view, folder, branch);
+    if (need.some((k) => !expanded.has(k))) setExpanded((s) => new Set([...s, ...need]));
+  }
+
+  const rows = useMemo(() => flatten(nodes, 1, null, expanded, []), [nodes, expanded]);
+  const active = rows.some((r) => r.node.key === focusKey) ? focusKey
+    : rows.some((r) => r.node.key === selectedKey) ? selectedKey
+    : rows[0]?.node.key ?? null;
+
+  const els = useRef(new Map<string, HTMLLIElement>());
+  // The open folder stays in view, scrolling the tree only when it is off-screen (also once
+  // the folders load, for a link straight to a deep folder).
+  const shown = rows.some((r) => r.node.key === selectedKey);
+  useEffect(() => {
+    const el = shown && selectedKey ? els.current.get(selectedKey) : undefined;
+    if (el) keepInView(el);
+  }, [selectedKey, shown]);
+
+  const toggle = (key: string, open?: boolean) => setExpanded((s) => {
     const n = new Set(s);
-    if (n.has(p)) n.delete(p);
-    else n.add(p);
+    if (open ?? !n.has(key)) n.add(key);
+    else n.delete(key);
     return n;
   });
+  const activate = (node: TNode) => {
+    setFocusKey(node.key);
+    if (node.kind === "group") toggle(node.key);
+    else if (node.kind === "company" && node.companyId) onCompany(node.companyId);
+    else if (node.kind === "view" && node.view) onView(node.view);
+    else if (node.path !== undefined) {
+      if (node.children.length) toggle(node.key, true);
+      onFolder(node.path);
+    }
+  };
+  const focusRow = (key: string | null | undefined) => {
+    if (!key) return;
+    setFocusKey(key);
+    const el = els.current.get(key);
+    if (el) {
+      el.focus({ preventScroll: true });
+      keepInView(el);
+    }
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLUListElement>) => {
+    const i = rows.findIndex((r) => r.node.key === active);
+    const row = rows[i];
+    if (!row) return;
+    const kids = row.node.children.length > 0;
+    switch (e.key) {
+      case "ArrowDown": focusRow(rows[i + 1]?.node.key); break;
+      case "ArrowUp": focusRow(rows[i - 1]?.node.key); break;
+      case "Home": focusRow(rows[0]?.node.key); break;
+      case "End": focusRow(rows[rows.length - 1]?.node.key); break;
+      case "ArrowRight":
+        if (kids && !row.open) toggle(row.node.key, true);
+        else if (row.open) focusRow(rows[i + 1]?.node.key);
+        break;
+      case "ArrowLeft":
+        if (row.open) toggle(row.node.key, false);
+        else focusRow(row.parent);
+        break;
+      case "Enter":
+      case " ":
+        activate(row.node);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  };
+
   return (
-    <div data-guide="files.tree" className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
-      <button type="button" onClick={() => onPick("")} aria-current={current === "" ? "true" : undefined}
-        className={cn("flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] font-medium pointer-coarse:py-2.5", current === "" ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}>
-        <BuildingsIcon size={16} weight="duotone" className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{rootLabel}</span>
-        {root.flagged ? <span className="inline-flex items-center gap-0.5 rounded-full bg-warn/14 px-1.5 text-[11px] font-medium text-warn"><ShieldWarningIcon size={11} weight="bold" />{root.flagged}</span> : null}
-        <span className="text-[11.5px] text-muted tabular">{total.toLocaleString(locale())}</span>
-      </button>
-      {root.children.length ? (
-        <ul>
-          {root.children.map((c) => <TreeNode key={c.path} node={c} depth={0} current={current} open={open} onToggle={toggle} onPick={onPick} />)}
-        </ul>
-      ) : <p className="px-2 py-1 text-[12.5px] text-muted">{t("No folders yet. Upload a folder or a zip and its folders show here.")}</p>}
-    </div>
+    <nav aria-label={t("Library folders")} data-guide="files.views" className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start">
+      <ul role="tree" aria-label={t("Library folders")} data-guide="files.tree" onKeyDown={onKeyDown}
+        className="grid grid-cols-[minmax(0,1fr)] content-start gap-px">
+        {rows.map((row) => (
+          <TreeRowWithHint key={row.node.key} empty={row.node.kind === "root" && !row.node.children.length}>
+            <TreeRow row={row} selected={row.node.key === selectedKey} tabbable={row.node.key === active}
+              onActivate={() => activate(row.node)} onToggle={() => toggle(row.node.key)} onFocus={() => setFocusKey(row.node.key)}
+              setEl={(el) => { if (el) els.current.set(row.node.key, el); else els.current.delete(row.node.key); }} />
+          </TreeRowWithHint>
+        ))}
+      </ul>
+    </nav>
   );
 }
+
+/** The company row, and under it a word on how folders appear while it has none. */
+function TreeRowWithHint({ empty, children }: { empty: boolean; children: ReactNode }) {
+  const t = useT();
+  if (!empty) return children;
+  return <>
+    {children}
+    <li role="none" className="py-1 pr-2 pl-9 text-[12px] text-muted">
+      {t("No folders yet. Upload a folder or a zip and its folders show here.")}
+    </li>
+  </>;
+}
+
+// ---------------------------------------------------------------- data
 
 export function findNode(root: FolderNode, path: string): FolderNode | null {
   if (root.path === path) return root;
@@ -138,70 +336,6 @@ export function useViewCounts(branch: Branch | null): Partial<Record<StoreView, 
   };
 }
 
-// ---------------------------------------------------------------- the whole directory
-
-function GroupTitle({ children }: { children: string }) {
-  return <p className="px-2 pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase first:pt-0">{children}</p>;
-}
-
-export function LibraryTree({ view, folder, branch, branches, onView, onFolder, onCompany }: {
-  view: StoreView;
-  folder: string;
-  branch: Branch | null;
-  branches: Branch[];
-  onView: (v: StoreView) => void;
-  onFolder: (path: string) => void;
-  onCompany: (id: string) => void;
-}) {
-  const t = useT();
-  const counts = useViewCounts(branch);
-  const { tree, root } = useFolderTree(branch?.id ?? null);
-  return (
-    <nav aria-label={t("Library folders")} data-guide="files.views" className="grid grid-cols-[minmax(0,1fr)] content-start gap-0.5">
-      <GroupTitle>{t("Company folders")}</GroupTitle>
-      {branch ? (
-        <FolderTree key={branch.id} root={root} current={view === "folders" ? folder : null} onPick={onFolder}
-          total={tree?.total_files ?? root.files} rootLabel={branch.name} />
-      ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
-          {branches.map((b) => (
-            <li key={b.id}>
-              <button type="button" onClick={() => onCompany(b.id)}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-surface-2 pointer-coarse:py-2.5">
-                <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: b.color || "var(--accent)" }} />
-                <span className="min-w-0 flex-1 truncate">{b.name}</span>
-                <CaretRightIcon size={12} className="shrink-0 text-muted" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {VIEW_GROUPS.map((g) => (
-        <div key={g.title} className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
-          <GroupTitle>{t(g.title)}</GroupTitle>
-          {g.views.map((v) => {
-            const on = v === view;
-            const V = VIEW_INFO[v];
-            const n = counts[v];
-            return (
-              <button key={v} type="button" onClick={() => onView(v)} aria-current={on ? "page" : undefined} title={t(V.hint)}
-                className={cn("flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] transition-colors pointer-coarse:py-2.5",
-                  on ? "bg-accent-soft font-semibold text-accent" : "hover:bg-surface-2")}>
-                <V.icon size={16} weight={on ? "fill" : "duotone"} className={cn("shrink-0", !on && "text-muted")} />
-                <span className="min-w-0 flex-1 truncate">{t(V.label)}</span>
-                {n ? (
-                  <span className={cn("tabular", v === "review" ? "rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white" : "text-[11.5px] text-muted")}>
-                    {n.toLocaleString(locale())}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      ))}
-    </nav>
-  );
-}
 
 // ---------------------------------------------------------------- phones: drill down
 
@@ -235,39 +369,54 @@ export function QuickFolders({ branch, onView, className }: { branch: Branch | n
   );
 }
 
-/** Where you are: Library › a ready-made folder, or Library › the company › its folders. */
-export function BrowseCrumbs({ view, folder, branch, onRoot, onFolder, onOpenTree }: {
+/** Where you are: Library › a ready-made folder, or Library › the company › its folders. Every
+ * part opens its folder. On phones a back button goes up one folder, and Folders opens the tree. */
+export function BrowseCrumbs({ view, folder, branch, onRoot, onFolder, onOpenTree, className }: {
   view: StoreView;
   folder: string;
   branch: Branch | null;
   onRoot: () => void;
   onFolder: (path: string) => void;
   onOpenTree: () => void;
+  className?: string;
 }) {
   const t = useT();
   const chain = view === "folders" ? folderChain(folder) : [];
-  const crumb = "min-w-0 rounded-sm px-1.5 py-0.5 text-left break-words [overflow-wrap:anywhere] hover:bg-surface-2";
+  const crumb = "min-w-0 rounded-sm px-1.5 py-0.5 text-left break-words [overflow-wrap:anywhere] hover:bg-surface-2 pointer-coarse:py-1.5";
   const sep = <CaretRightIcon size={11} className="shrink-0 text-muted" aria-hidden />;
+  // One folder up: the folder above, the company, or the Library itself.
+  const up: { label: string; go: () => void } | null = view !== "folders"
+    ? { label: t("Library"), go: onRoot }
+    : chain.length > 1 ? { label: folderName(chain[chain.length - 2] ?? ""), go: () => onFolder(chain[chain.length - 2] ?? "") }
+    : chain.length === 1 ? { label: branch?.name ?? t("Library"), go: () => onFolder("") }
+    : null;
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-      <Button size="sm" variant="outline" className="shrink-0 lg:hidden" onClick={onOpenTree}><TreeStructureIcon size={14} /> {t("Folders")}</Button>
+    <div className={cn("flex min-w-0 items-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2", className)}>
+      {up ? (
+        <button type="button" onClick={up.go} aria-label={t("Back to {name}", { name: up.label })} title={t("Back to {name}", { name: up.label })}
+          className="-my-1 -ml-1.5 grid size-11 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg md:hidden">
+          <ArrowLeftIcon size={18} weight="bold" />
+        </button>
+      ) : null}
       <nav aria-label={t("Folder path")} className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-[13px]">
         <button type="button" onClick={onRoot} className={cn(crumb, "shrink-0 whitespace-nowrap", view === "folders" && !folder && !branch && "font-semibold")}>{t("Library")}</button>
         {view !== "folders" ? (
-          <span className="flex min-w-0 items-center gap-1">{sep}<span className="min-w-0 px-1.5 font-semibold break-words">{t(VIEW_INFO[view].label)}</span></span>
+          <span className="flex min-w-0 items-center gap-1">{sep}<span aria-current="page" className="min-w-0 px-1.5 font-semibold break-words">{t(VIEW_INFO[view].label)}</span></span>
         ) : branch ? (
           <span className="flex min-w-0 items-center gap-1">
             {sep}
-            <button type="button" onClick={() => onFolder("")} className={cn(crumb, !folder && "font-semibold")}>{branch.name}</button>
+            <button type="button" onClick={() => onFolder("")} aria-current={!folder ? "page" : undefined} className={cn(crumb, !folder && "font-semibold")}>{branch.name}</button>
           </span>
         ) : null}
         {chain.map((p, i) => (
           <span key={p} className="flex min-w-0 items-center gap-1">
             {sep}
-            <button type="button" onClick={() => onFolder(p)} className={cn(crumb, i === chain.length - 1 && "font-semibold")}>{folderName(p)}</button>
+            <button type="button" onClick={() => onFolder(p)} aria-current={i === chain.length - 1 ? "page" : undefined}
+              className={cn(crumb, i === chain.length - 1 && "font-semibold")}>{folderName(p)}</button>
           </span>
         ))}
       </nav>
+      <Button size="sm" variant="outline" className="shrink-0 md:hidden" onClick={onOpenTree}><TreeStructureIcon size={14} /> {t("Folders")}</Button>
     </div>
   );
 }

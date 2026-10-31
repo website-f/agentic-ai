@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, and_, func, not_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...agents import dispatch
 from ...brain import core as core_memory
@@ -429,8 +430,23 @@ async def overview(
         .select_from(BrainFact)
         .where(BrainFact.workspace_id == ws.id, BrainFact.valid_to.is_(None))
     )
+    # P56: counted the way the graph draws them (not the nightly index's links to everything).
+    target = aliased(BrainPage)
     links = await db.scalar(
-        select(func.count()).select_from(BrainLink).where(BrainLink.workspace_id == ws.id)
+        select(func.count())
+        .select_from(BrainLink)
+        .join(BrainPage, BrainPage.id == BrainLink.src_page_id)
+        .join(
+            target,
+            and_(target.workspace_id == BrainLink.workspace_id, target.name == BrainLink.dst_name),
+        )
+        .where(
+            BrainLink.workspace_id == ws.id,
+            BrainPage.path.not_in(GENERATED),
+            BrainPage.kind.not_in(GRAPH_SKIP_KINDS),
+            target.kind.not_in(GRAPH_SKIP_KINDS),
+            target.id != BrainPage.id,
+        )
     )
     last = await db.scalar(
         select(BrainDream)
@@ -608,11 +624,18 @@ async def delete_page(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+GRAPH_SKIP_KINDS = ("dream", "log", "agent", "index", "skill")
+GRAPH_FACTS = 150  # the most used and newest facts shown around the agents that learned them
+PLACEHOLDER_LINKS = frozenset({"page-name"})  # the example in AGENTS.md's rules
+
+
 @router.get("/brain/graph")
 async def graph(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
-    """Pages and the [[links]] between them. The generated index and diaries are left out."""
+    """What the office knows and how it hangs together: wiki pages and their [[links]], and
+    (P56) the facts agents learned, each joined to the agent that learned it and to the wiki
+    pages it names. A workspace with facts but no linked pages still has a graph."""
     ws_id = principal.workspace_id
     pages = (
         await db.execute(
@@ -621,7 +644,7 @@ async def graph(
             ).where(
                 BrainPage.workspace_id == ws_id,
                 BrainPage.path.not_in(GENERATED),
-                BrainPage.kind.not_in(("dream", "log", "agent", "index", "skill")),
+                BrainPage.kind.not_in(GRAPH_SKIP_KINDS),
                 await _page_where(db, principal),
             )
         )
@@ -630,40 +653,91 @@ async def graph(
     for pid, _, _, _, name in pages:
         by_name.setdefault(name, pid)
     ids = {pid for pid, *_ in pages}
-    edges = set()
+    hidden_names = set(
+        (
+            await db.scalars(
+                select(BrainPage.name).where(
+                    BrainPage.workspace_id == ws_id, BrainPage.kind.in_(GRAPH_SKIP_KINDS)
+                )
+            )
+        ).all()
+    )
+    edges: set[tuple[str, str]] = set()
+    missing: set[str] = set()
     for src, dst_name in (
         await db.execute(
             select(BrainLink.src_page_id, BrainLink.dst_name).where(BrainLink.workspace_id == ws_id)
         )
     ).all():
+        if src not in ids:  # only links on pages this person may read
+            continue
         dst = by_name.get(dst_name)
-        if src in ids and dst and dst != src:
+        if dst and dst != src:
             edges.add((src, dst))
+        elif not dst and dst_name not in hidden_names and dst_name not in PLACEHOLDER_LINKS:
+            missing.add(dst_name)
+
+    # Facts, around the agent that learned each one (and the pages they mention).
+    v = await for_person(db, ws_id, principal.scope)
+    facts = (
+        await db.execute(
+            select(BrainFact.id, BrainFact.text, BrainFact.created_by, BrainFact.agent_id)
+            .where(BrainFact.workspace_id == ws_id, brain_facts.scope_filter(v))
+            .order_by(BrainFact.hits.desc(), BrainFact.valid_from.desc())
+            .limit(GRAPH_FACTS)
+        )
+    ).all()
+    learner_ids = {
+        (agent_id or (by or "").removeprefix("agent:"))
+        for _, _, by, agent_id in facts
+        if agent_id or (by or "").startswith("agent:")
+    }
+    agents = {
+        a.id: a
+        for a in (
+            await db.scalars(
+                select(Agent).where(
+                    Agent.workspace_id == ws_id,
+                    Agent.id.in_(learner_ids or {""}),
+                    principal.scope.observe_where(),
+                )
+            )
+        ).all()
+    }
+    titles = [(pid, (title or name or "").lower()) for pid, _, title, _, name in pages]
+    extra_nodes: list[dict[str, Any]] = []
+    for fid, text, by, agent_id in facts:
+        node = f"fact:{fid}"
+        extra_nodes.append({"id": node, "path": "", "title": text[:160], "kind": "fact"})
+        learner = agent_id or (
+            (by or "").removeprefix("agent:") if (by or "").startswith("agent:") else None
+        )
+        if learner in agents:
+            edges.add((node, f"agent:{learner}"))
+        low = text.lower()
+        for pid, title in titles:
+            if len(title) >= 4 and title in low:
+                edges.add((node, pid))
+    extra_nodes += [
+        {"id": f"agent:{a.id}", "path": "", "title": a.name, "kind": "agent_node", "agent_id": a.id}
+        for a in agents.values()
+    ]
+
     degree: dict[str, int] = {}
     for s, t in edges:
         degree[s] = degree.get(s, 0) + 1
         degree[t] = degree.get(t, 0) + 1
-    missing = sorted(
-        {
-            n
-            for _, n in (
-                await db.execute(
-                    select(BrainLink.src_page_id, BrainLink.dst_name).where(
-                        BrainLink.workspace_id == ws_id
-                    )
-                )
-            ).all()
-        }
-        - set(by_name)
-    )
+    page_nodes = [
+        {"id": pid, "path": path, "title": title, "kind": kind, "degree": degree.get(pid, 0)}
+        for pid, path, title, kind, _ in pages
+        if degree.get(pid) or kind != "root"  # unlinked vault files are just noise
+    ]
+    for n in extra_nodes:
+        n["degree"] = degree.get(n["id"], 0)
     return {
-        "nodes": [
-            {"id": pid, "path": path, "title": title, "kind": kind, "degree": degree.get(pid, 0)}
-            for pid, path, title, kind, _ in pages
-            if degree.get(pid) or kind != "root"  # unlinked vault files are just noise
-        ],
+        "nodes": page_nodes + extra_nodes,
         "edges": [{"source": s, "target": t} for s, t in sorted(edges)],
-        "unresolved": missing[:100],
+        "unresolved": sorted(missing)[:100],
     }
 
 

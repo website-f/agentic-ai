@@ -262,7 +262,7 @@ function TaskCard({ g, onOpen, openId, full, showCompany }: { g: TaskFiles; onOp
       ))}
       {!full && g.count > g.files.length ? (
         <div className="px-4 py-2.5">
-          <Button size="sm" variant="ghost" onClick={() => navigate({ search: (s) => ({ ...s, view: "tasks", task: g.task_id }) })}>
+          <Button size="sm" variant="ghost" onClick={() => navigate({ search: (s) => ({ ...s, view: "tasks", task: g.task_id }), resetScroll: false })}>
             {t("Show all {n} files", { n: g.count })} <ArrowRightIcon size={13} />
           </Button>
         </div>
@@ -290,7 +290,7 @@ function TasksView({ branchId, taskId, onOpen, openId }: { branchId: string | nu
     <div className="grid min-w-0 content-start gap-3">
       {taskId ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => navigate({ search: (s) => ({ ...s, task: undefined }) })}>{t("All tasks")}</Button>
+          <Button size="sm" variant="outline" onClick={() => navigate({ search: (s) => ({ ...s, task: undefined }), resetScroll: false })}>{t("All tasks")}</Button>
           <span className="text-[13px] text-muted">{t("Every file of this task and its helpers.")}</span>
         </div>
       ) : (

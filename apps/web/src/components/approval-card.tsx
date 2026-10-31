@@ -1,4 +1,4 @@
-import { CheckIcon, ClockIcon, CoinsIcon, QuestionIcon, ShieldWarningIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, ClockIcon, CoinsIcon, QuestionIcon, ShieldWarningIcon, StopCircleIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -145,6 +145,24 @@ export function ApprovalCard({
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // P56: stop the whole task right here, so it cannot come back with the same question.
+  const stop = useMutation({
+    mutationFn: () => api(`/api/approvals/${a.id}/stop`, "POST", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["approvals"] });
+      qc.invalidateQueries({ queryKey: workKeys.tasks });
+      qc.invalidateQueries({ queryKey: workKeys.agents });
+      qc.invalidateQueries({ queryKey: keys.status });
+      toast.success(t("Stopped. {name} will not ask about this task again.", { name: a.agent_name }));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const busy = decide.isPending || stop.isPending;
+  const stopButton = (
+    <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10" loading={stop.isPending} disabled={decide.isPending} onClick={() => stop.mutate()}>
+      <StopCircleIcon size={14} weight="bold" /> {t("Stop the whole task")}
+    </Button>
+  );
   const question = a.kind === "question";
   const budget = a.kind === "budget";
   // P36: more budget or allowance is a manager's call (agents/decisions.py GRANTERS).
@@ -210,6 +228,7 @@ export function ApprovalCard({
             <div className="flex flex-wrap gap-2">
               <Button type="submit" size="sm" disabled={!answer.trim()} loading={decide.isPending}><CheckIcon size={14} weight="bold" /> {t("Send answer")}</Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => decide.mutate({ decision: "deny", answer: "I can't answer that. Continue without it." })}>{t("Skip question")}</Button>
+              {stopButton}
             </div>
           </form>
         ) : denying ? (
@@ -226,14 +245,15 @@ export function ApprovalCard({
         ) : budget ? (
           <div data-guide={guideActions} className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> {t("Allow more")}</Button>
-            <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => setDenying(true)}>{t("Stop the task")}</Button>
+            {stopButton}
           </div>
         ) : (
           <div data-guide={guideActions} className="flex flex-wrap gap-2">
             <Button size="sm" loading={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "once" })}><CheckIcon size={14} weight="bold" /> {t("Approve once")}</Button>
             {/* High-risk tools ask every time: "always" is only offered for the rest. */}
             {a.risk !== "high" ? <Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ decision: "approve", scope: "always" })}>{t("Always allow for {name}", { name: a.agent_name })}</Button> : null}
-            <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => setDenying(true)}>{t("Deny")}</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDenying(true)}>{t("Deny")}</Button>
+            {stopButton}
           </div>
         )
       ) : null}
