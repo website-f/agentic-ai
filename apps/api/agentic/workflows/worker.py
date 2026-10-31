@@ -33,6 +33,7 @@ from .agent_activities import (
 )
 from .agent_workflows import AgentTaskWorkflow, BroadcastRepliesWorkflow
 from .brain_activities import (
+    brain_dream_due,
     brain_dream_run,
     brain_dream_tick,
     brain_learn_chat,
@@ -124,6 +125,7 @@ ACTIVITIES = [
     brain_learn_task,
     brain_learn_chat,
     brain_dream_tick,
+    brain_dream_due,
     brain_dream_run,
     skill_reflect,
     skill_reflect_chat,

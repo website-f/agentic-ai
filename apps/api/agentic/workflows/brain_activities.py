@@ -1,7 +1,8 @@
 """Activities for the brain: learning after work, and the nightly dream."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -73,6 +74,40 @@ async def brain_dream_tick() -> int:
     except Exception:  # noqa: BLE001 - the weekly report must never stop the dream tick
         logging.getLogger("agentic.brain").warning("weekly learning report failed", exc_info=True)
     return ran
+
+
+STUCK = timedelta(hours=1)  # a dream "running" this long died with its worker
+
+
+@activity.defn
+async def brain_dream_due() -> list[list[Any]]:
+    """P56, hourly: the workspaces whose dream is due ([id, force] pairs), each then dreamed in
+    its own workflow with its own time limit, so one big office cannot starve the rest. Due
+    means past today's dream hour where the workspace is, with no dream yet today: a night
+    the worker was down is caught up the same day. A dream stuck "running" is redone."""
+    now = datetime.now(UTC)
+    due: list[list[Any]] = []
+    async with SessionLocal() as db:
+        for ws in (await db.scalars(select(Workspace))).all():
+            local = now.astimezone(ZoneInfo(ws.timezone))
+            if local.hour < settings.dream_hour:
+                continue
+            d = await db.scalar(
+                select(BrainDream).where(
+                    BrainDream.workspace_id == ws.id, BrainDream.day == local.date()
+                )
+            )
+            if d is None or d.status not in ("done", "running"):
+                due.append([ws.id, False])
+            elif d.status == "running" and d.started_at and now - d.started_at > STUCK:
+                due.append([ws.id, True])
+    # P45: Monday morning, last week's "what the AI team learned" report.
+    try:
+        async with SessionLocal() as db:
+            await weekly.tick(db, now)
+    except Exception:  # noqa: BLE001 - the weekly report must never stop the dream tick
+        logging.getLogger("agentic.brain").warning("weekly learning report failed", exc_info=True)
+    return due
 
 
 @activity.defn

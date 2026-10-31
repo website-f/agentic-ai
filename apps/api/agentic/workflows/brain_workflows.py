@@ -5,9 +5,13 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError
+from temporalio.workflow import ParentClosePolicy
 
 with workflow.unsafe.imports_passed_through():
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
     from .brain_activities import (
+        brain_dream_due,
         brain_dream_run,
         brain_dream_tick,
         brain_learn_chat,
@@ -46,11 +50,33 @@ class LearnFromChatWorkflow:
 class DreamTickWorkflow:
     @workflow.run
     async def run(self) -> int:
-        return await workflow.execute_activity(
-            brain_dream_tick,
-            start_to_close_timeout=DREAM_TIMEOUT,
-            retry_policy=RetryPolicy(maximum_attempts=1),
+        if not workflow.patched("dream-per-workspace-v1"):
+            return await workflow.execute_activity(
+                brain_dream_tick,
+                start_to_close_timeout=DREAM_TIMEOUT,
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+        # P56: each due workspace dreams in its own workflow (own 30-minute limit), started
+        # and left to finish on its own; the id per day keeps one dream per workspace a day.
+        due = await workflow.execute_activity(
+            brain_dream_due,
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=RetryPolicy(maximum_attempts=2),
         )
+        day = workflow.now().strftime("%Y%m%d%H")
+        started = 0
+        for ws_id, force in due:
+            try:
+                await workflow.start_child_workflow(
+                    DreamWorkflow.run,
+                    args=[ws_id, force],
+                    id=f"dream-{ws_id}-{day}",
+                    parent_close_policy=ParentClosePolicy.ABANDON,
+                )
+                started += 1
+            except WorkflowAlreadyStartedError:
+                pass  # still dreaming from this hour's start
+        return started
 
 
 @workflow.defn

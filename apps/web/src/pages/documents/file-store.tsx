@@ -1,7 +1,8 @@
 /** The file store's lists on the Library's Browse tab: what waits for review, each piece of
  * work with everything it made, downloaded or was given, the newest files, what AI made, what
- * agents fetched from websites, uploads, and the guidelines. Any file opens in the same viewer
- * from any list. */
+ * agents fetched from websites, uploads, and the guidelines. Any file opens in the same file
+ * panel from any list (file-panel.tsx); each row marks itself with data-file-row so the panel
+ * can step through the list. */
 import { ArrowRightIcon, DownloadSimpleIcon, FolderOpenIcon, GlobeIcon, ListChecksIcon, SealCheckIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -10,19 +11,17 @@ import { useMemo, useState, type ReactNode } from "react";
 import { FileStatus } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
 import { EmptyState } from "@/components/page";
-import { FileProvenanceCard, MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
+import { MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
-import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { useCompanies } from "@/lib/company";
 import type { FileView } from "@/lib/file-store";
-import { docKeys, fileQuery, fileSize, fileUrl, siteOf } from "@/lib/documents";
+import { docKeys, fileSize, fileUrl, siteOf } from "@/lib/documents";
 import { kindKey, kindLabel, type CompanyFile } from "@/lib/intake";
 import { useDebounced, usePagedList } from "@/lib/paged";
 import { fileOrigin, provKeys, type FileProvenance, type ReviewedDoc } from "@/lib/provenance";
@@ -33,7 +32,6 @@ import { cn, timeAgo } from "@/lib/utils";
 import { BrowseControls, sortRows, Tile, TileGrid, useBrowsePrefs } from "../library-hub/browse-bits";
 import { VIEW_INFO } from "../library-hub/views";
 import { QueueRow } from "./documents";
-import { FileViewer } from "./files-viewer";
 import { FileTile, KindTile } from "./visuals";
 
 
@@ -69,7 +67,7 @@ export function StoreRow({ f, onOpen, showCompany, showTask = true, active }: {
   return (
     <ListRow onClick={onOpen} active={active}
       leading={kk === "other" ? <FileTile mime={f.mime} name={f.name} /> : <KindTile kind={kk} />}
-      title={f.title || f.name}
+      title={<span data-file-row={f.id}>{f.title || f.name}</span>}
       meta={<Meta items={[
         kindLabel(f.kind),
         f.pages ? (f.pages > 1 ? t("{n} pages", { n: f.pages }) : t("1 page")) : null,
@@ -95,29 +93,6 @@ export function StoreRow({ f, onOpen, showCompany, showTask = true, active }: {
   );
 }
 
-/** Any file, opened from any view, in a side sheet: who made it, then the file itself. */
-export function StoreFileSheet({ id, onClose }: { id: string; onClose: () => void }) {
-  const t = useT();
-  const co = useCompanies();
-  const { data: me } = useQuery(meQuery);
-  const { data } = useQuery(fileQuery(id));
-  const f = data as StoreFile | undefined;
-  const branch = co.branches.find((b) => b.id === f?.branch_id) ?? null;
-  return (
-    <SideSheet open onOpenChange={(o) => !o && onClose()} size="lg"
-      title={f ? <span className="min-w-0 break-words">{f.title || f.name}</span> : t("File")}
-      description={f ? [kindLabel(f.kind), fileSize(f.size), f.branch_name].filter(Boolean).join(" · ") : undefined}>
-      <div className="grid min-w-0 gap-4">
-        <FileProvenanceCard fileId={id} />
-        <div className="min-w-0 [&>div>div:first-child]:hidden">
-          <FileViewer id={id} branch={branch} folders={[]} onClose={onClose} inline
-            canEdit={!!me && hasAny(me, "work.write")} canManage={!!me && hasAny(me, "org.manage", "vault.manage")} />
-        </div>
-      </div>
-    </SideSheet>
-  );
-}
-
 // ---------------------------------------------------------------- flat views
 
 const FLAT: Partial<Record<FileView, Record<string, string>>> = {
@@ -135,7 +110,7 @@ export function StoreTile({ f, onOpen, active, corner }: { f: StoreFile; onOpen:
   return (
     <Tile onClick={onOpen} active={active} corner={corner}
       leading={kk === "other" ? <FileTile mime={f.mime} name={f.name} size="lg" /> : <KindTile kind={kk} size="lg" />}
-      title={f.title || f.name}
+      title={<span data-file-row={f.id}>{f.title || f.name}</span>}
       meta={[kindLabel(f.kind), fileSize(f.size), timeAgo(f.created_at)].filter(Boolean).join(" · ")}
       badge={(f.review_status === "waiting" || f.library || f.status !== "ready") ? <>
         <ReviewPill status={f.review_status} />

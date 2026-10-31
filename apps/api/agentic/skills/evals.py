@@ -14,14 +14,29 @@ import json
 import re
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..brain.facts import parse_json
 from ..engine import gateway
+from ..models import Agent
 
 RUNNER = """You are an office assistant. Follow this procedure exactly for the request below.
 Work only from the request; if information is missing, say what is missing. You may call the
 tools the procedure names; then give your final answer.
+
+<skill>
+{body}
+</skill>"""
+
+# P56: inside a real agent's instructions (its role, SOPs, rules), the skill is tested the way
+# it is used; RUNNER stays for a workspace with no agent yet.
+IN_AGENT = """{prompt}
+
+## The skill being tested
+Follow this procedure exactly for the request below. Work only from the request; if
+information is missing, say what is missing. You may call the tools the procedure names;
+then give your final answer.
 
 <skill>
 {body}
@@ -128,11 +143,41 @@ async def _chat(
     raise gateway.GatewayUnavailable(str(last) if last else "No model available.", [])
 
 
-async def run_case(db: AsyncSession, ws_id: str, body: str, case: dict[str, Any]) -> dict[str, Any]:
+async def pick_agent(db: AsyncSession, ws_id: str, prefer: list[str]) -> Agent | None:
+    """Whose instructions the tests run in: the agent that proposed or uses the skill, else
+    the workspace's most recently active office agent."""
+    for aid in prefer:
+        a = await db.get(Agent, aid) if aid else None
+        if a is not None and a.workspace_id == ws_id and a.status == "active":
+            return a
+    return await db.scalar(
+        select(Agent)
+        .where(
+            Agent.workspace_id == ws_id,
+            Agent.status == "active",
+            Agent.private.is_(False),
+            Agent.clone_of.is_(None),
+        )
+        .order_by(Agent.updated_at.desc())
+        .limit(1)
+    )
+
+
+async def system_for(db: AsyncSession, agent: Agent | None, body: str) -> str:
+    if agent is None:
+        return RUNNER.format(body=body)
+    from ..agents.prompt import system_prompt  # late: the prompt imports the skill store
+
+    return IN_AGENT.format(prompt=await system_prompt(db, agent, "task"), body=body)
+
+
+async def run_case(
+    db: AsyncSession, ws_id: str, body: str, case: dict[str, Any], system: str | None = None
+) -> dict[str, Any]:
     checks = case.get("checks") or {k: v for k, v in case.items() if k not in ("title", "input")}
     tools = stub_tools(body)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": RUNNER.format(body=body)},
+        {"role": "system", "content": system or RUNNER.format(body=body)},
         {"role": "user", "content": str(case.get("input", ""))},
     ]
     called: list[str] = []
@@ -197,12 +242,18 @@ async def run_case(db: AsyncSession, ws_id: str, body: str, case: dict[str, Any]
 
 
 async def run_suite(
-    db: AsyncSession, ws_id: str, body: str, cases: list[dict[str, Any]]
+    db: AsyncSession,
+    ws_id: str,
+    body: str,
+    cases: list[dict[str, Any]],
+    agent_ids: list[str] | None = None,
 ) -> dict[str, Any]:
+    agent = await pick_agent(db, ws_id, list(agent_ids or []))
+    system = await system_for(db, agent, body)
     results = []
     for case in cases[:20]:
         try:
-            results.append(await run_case(db, ws_id, body, case))
+            results.append(await run_case(db, ws_id, body, case, system))
         except gateway.GatewayUnavailable as e:
             return {
                 "error": str(e),
@@ -216,4 +267,6 @@ async def run_suite(
         "total": len(results),
         "tokens": sum(r["tokens"] for r in results),
         "cases": results,
+        # Shown with the results: whose instructions the skill ran in (tools are simulated).
+        "agent": {"id": agent.id, "name": agent.name} if agent else None,
     }

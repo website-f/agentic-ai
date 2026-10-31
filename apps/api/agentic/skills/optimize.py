@@ -211,7 +211,7 @@ async def _variants(
             fmt.check(skill.name, desc, body + "\n")
         except fmt.SkillFormatError:
             continue
-        result = await evals.run_suite(db, skill.workspace_id, body, cases)
+        result = await evals.run_suite(db, skill.workspace_id, body, cases, skill.agent_ids)
         if result.get("error"):
             continue
         out.append(Scored(body, desc, result, str(got.get("diagnosis") or "")[:400]))
@@ -225,7 +225,7 @@ async def optimize(db: AsyncSession, ws: Workspace, skill: Skill) -> Outcome:
     cases = cases[:MAX_CASES]
     if not cases:
         raise SkillError(f"{skill.name} has no test cases and none could be drafted.")
-    base = await evals.run_suite(db, ws.id, skill.body, cases)
+    base = await evals.run_suite(db, ws.id, skill.body, cases, skill.agent_ids)
     if base.get("error"):
         raise SkillError(f"The tests could not run: {base['error']}")
     baseline = Scored(skill.body, skill.description, base)

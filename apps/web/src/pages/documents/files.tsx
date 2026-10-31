@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 import { FileStatus } from "@/components/file-drop";
 import { LoadMore } from "@/components/load-more";
-import { FileProvenanceCard, MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
+import { MadeBy, ReviewPill, WorkLinks } from "@/components/provenance";
 import { EmptyState, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, Toolbar } from "@/components/ui/card";
@@ -30,7 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
-import { docKeys, fileQuery, fileSize, fileStatsQuery } from "@/lib/documents";
+import { docKeys, fileSize, fileStatsQuery } from "@/lib/documents";
 import {
   archiveUrl, deleteFile, fileTreeQuery, intakeKeys, KINDS, kindKey, kindLabel, notThere,
   type CompanyFile, type FolderNode, type IntakeBatch, type KindKey,
@@ -41,7 +41,6 @@ import { type StoreView } from "@/lib/file-store";
 import { fileOrigin, type FileOrigin, type FileProvenance } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
-import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 
@@ -52,8 +51,9 @@ import { LibraryHeader } from "../library-hub/hub";
 import { BrowseCrumbs, findNode, LibraryTree, QuickFolders, useFolderTree } from "../library-hub/tree";
 import { VIEW_INFO } from "../library-hub/views";
 import { BatchCard, IntakeDrop, type ShowFilter } from "./files-upload";
-import { FileViewer, MoveDialog, moveMany } from "./files-viewer";
-import { StoreFileSheet, StoreTile, StoreViewBody } from "./file-store";
+import { FilePanel } from "./file-panel";
+import { MoveDialog, moveMany } from "./files-viewer";
+import { StoreTile, StoreViewBody } from "./file-store";
 import { FileTile, KindTile } from "./visuals";
 
 type View = "folder" | "kind" | "department";
@@ -87,7 +87,7 @@ function FileRow({ f, branch, picked, onPick, onOpen, active, showFolder }: {
         className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 py-3 pr-4 pl-2 text-left transition-colors hover:bg-surface-2/70 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
         {kk === "other" ? <FileTile mime={f.mime} name={f.name} /> : <KindTile kind={kk} />}
         <span className="grid min-w-0 gap-0.5">
-          <span className="min-w-0 text-[14px] font-medium break-words max-sm:line-clamp-2 sm:truncate">{f.title || f.name}</span>
+          <span data-file-row={f.id} className="min-w-0 text-[14px] font-medium break-words max-sm:line-clamp-2 sm:truncate">{f.title || f.name}</span>
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-muted">
             <span>{kindLabel(f.kind)}</span>
             {dept ? <span>· {dept}</span> : null}
@@ -135,24 +135,6 @@ function FolderRow({ node, onPick }: { node: FolderNode; onPick: () => void }) {
   );
 }
 
-/** The open file in a side sheet, with who made it on top. The viewer renders as a pane
- * inside it; its own header is hidden because the sheet has one. */
-function FileSheet({ id, onClose, children }: { id: string; onClose: () => void; children: ReactNode }) {
-  const t = useT();
-  const { data } = useQuery(fileQuery(id));
-  const f = data as ProvFile | undefined;
-  return (
-    <SideSheet open onOpenChange={(o) => !o && onClose()} size="lg"
-      title={f ? <span className="min-w-0 break-words">{f.title || f.name}</span> : t("File")}
-      description={f ? [kindLabel(f.kind), fileSize(f.size)].filter(Boolean).join(" · ") : undefined}>
-      <div className="grid min-w-0 gap-4">
-        <FileProvenanceCard fileId={id} />
-        <div className="min-w-0 [&>div>div:first-child]:hidden">{children}</div>
-      </div>
-    </SideSheet>
-  );
-}
-
 // ---------------------------------------------------------------- the hub for one company
 
 function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolean }) {
@@ -162,9 +144,6 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
   const navigate = useNavigate({ from: "/files" });
   const { data: me } = useQuery(meQuery);
   const canEdit = !!me && hasAny(me, "work.write");
-  const canManage = !!me && hasAny(me, "org.manage", "vault.manage");
-  // A file opened from the list shows beside it only when there is room next to the folders.
-  const wide = useMedia("(min-width: 1440px)");
   const prefs = useBrowsePrefs();
 
   const folder = search.folder ?? "";
@@ -184,14 +163,9 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
 
   // Moving between folders or opening a file never jumps the page back to the top.
   const go = (patch: { f?: string | undefined; folder?: string | undefined }) =>
-    navigate({ search: (s: { f?: string; folder?: string }) => ({ ...s, ...patch }), resetScroll: false });
-  // On wide screens a file opened from the list shows in a pane beside it; one opened from an
-  // upload report or a link (further up, or straight in) opens in the side sheet.
-  const [inPane, setInPane] = useState(false);
-  const openFile = (id?: string, fromList = false) => {
-    setInPane(fromList);
-    go({ f: id });
-  };
+    navigate({ search: (s: { f?: string; folder?: string; page?: number }) => ({ ...s, ...patch, ...("f" in patch ? { page: undefined } : {}) }), resetScroll: false });
+  // Any file (from the list, an upload report or a link) opens in the file panel (FilesPage).
+  const openFile = (id?: string) => go({ f: id });
   const pickFolder = (p: string) => go({ folder: p || undefined, f: undefined });
 
   // Folders.
@@ -321,23 +295,6 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
     if (search.f && ids.includes(search.f)) openFile(undefined);
   };
 
-  const paneOpen = wide && inPane && !!search.f;
-  // P25: who made the file shows above the viewer, in the pane and in the sheet alike.
-  const viewer = search.f ? (
-    paneOpen ? (
-      <div className="grid gap-3">
-        <FileProvenanceCard fileId={search.f} />
-        <FileViewer id={search.f} branch={branch} folders={folderPaths} canManage={canManage} canEdit={canEdit}
-          onClose={() => openFile(undefined)} inline />
-      </div>
-    ) : (
-      <FileSheet id={search.f} onClose={() => openFile(undefined)}>
-        <FileViewer id={search.f} branch={branch} folders={folderPaths} canManage={canManage} canEdit={canEdit}
-          onClose={() => openFile(undefined)} inline />
-      </FileSheet>
-    )
-  ) : null;
-
   const subfolders = view === "folder" && !filtering ? here.children : [];
   const folderTotal = folder ? here.files : tree?.total_files || list.total || files.length;
   // A company with no files yet starts with the upload area open.
@@ -404,84 +361,77 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
           ) : null}
         </div>
 
-        {/* With a file open beside the list (wide screens): files | file. */}
-        <div className={cn("grid gap-4", paneOpen && "grid-cols-[minmax(0,1fr)_minmax(0,34rem)]")}>
-          <div className="grid min-w-0 content-start gap-3">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                <Segmented<View> label={t("Group")} value={view} onChange={setView} size="sm" guide="files.view"
-                  options={[
-                    { value: "folder", label: t("By folder") },
-                    { value: "kind", label: t("By kind") },
-                    { value: "department", label: t("By department") },
-                  ]} />
-                {folderTotal ? (
-                  <span className="text-[12.5px] text-muted">
-                    {t("{n} files · {size}", { n: folderTotal.toLocaleString(locale()), size: fileSize(folder ? here.size : tree?.total_size ?? 0) })}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-[12.5px] whitespace-nowrap text-muted">
-                  <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} disabled={!files.length} className="size-4 accent-[var(--accent)]" />
-                  {t("Select all")}
-                </label>
-                <Button size="sm" variant="ghost" asChild>
-                  <a href={archiveUrl({ branch_id: branch.id, folder: folder || null })} download data-guide="files.download-folder">
-                    <DownloadSimpleIcon size={14} /> {folder ? t("Download folder") : t("Download all")}
-                  </a>
-                </Button>
-              </div>
+        <div className="grid min-w-0 content-start gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <Segmented<View> label={t("Group")} value={view} onChange={setView} size="sm" guide="files.view"
+                options={[
+                  { value: "folder", label: t("By folder") },
+                  { value: "kind", label: t("By kind") },
+                  { value: "department", label: t("By department") },
+                ]} />
+              {folderTotal ? (
+                <span className="text-[12.5px] text-muted">
+                  {t("{n} files · {size}", { n: folderTotal.toLocaleString(locale()), size: fileSize(folder ? here.size : tree?.total_size ?? 0) })}
+                </span>
+              ) : null}
             </div>
-
-            {list.isLoading ? <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>
-              : list.error ? <p role="alert" className="text-danger">{errorMessage(list.error)}</p>
-              : !files.length && !subfolders.length ? (
-                <EmptyState icon={FolderOpenIcon}
-                  title={filtering ? t("No files match") : folder ? t("This folder is empty") : t("No files yet")}
-                  body={filtering ? t("Try another kind or department, or clear the filters.") : t("Drop the company's SOPs, guides, forms, certificates and contracts above. A whole zip is fine.")}
-                  action={filtering ? <Button size="sm" variant="outline" onClick={clearFilters}>{t("Clear filters")}</Button> : undefined} />
-              ) : grid ? (
-                <TileGrid data-guide="files.list">
-                  {subfolders.map((n) => (
-                    <Tile key={n.path} onClick={() => pickFolder(n.path)} title={n.name}
-                      leading={<span className="grid size-12 place-items-center rounded-[var(--radius-sm)] bg-warn/12 text-warn ring-1 ring-warn/20 ring-inset"><FolderIcon size={24} weight="duotone" /></span>}
-                      meta={`${n.files === 1 ? t("1 file") : t("{n} files", { n: n.files.toLocaleString(locale()) })} · ${fileSize(n.size)}`}
-                      badge={n.flagged ? <Pill tone="warn"><ShieldWarningIcon size={12} weight="bold" /> {n.flagged}</Pill> : undefined} />
-                  ))}
-                  {files.map((f) => (
-                    <StoreTile key={f.id} f={f as ProvFile} onOpen={() => openFile(f.id, true)} active={search.f === f.id}
-                      corner={<input type="checkbox" checked={picked.has(f.id)} onChange={(e) => pick(f, e.target.checked)}
-                        className="size-4 accent-[var(--accent)] pointer-coarse:size-5" aria-label={t("Select {name}", { name: f.title || f.name })} />} />
-                  ))}
-                </TileGrid>
-              ) : (
-                <ul data-guide="files.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-                  {subfolders.map((n) => <FolderRow key={n.path} node={n} onPick={() => pickFolder(n.path)} />)}
-                  {groups
-                    ? groups.flatMap((g) => [
-                      <li key={`h:${g.key}`} className="flex items-center gap-2 bg-surface-2/50 px-4 py-2 text-[12.5px] font-semibold">
-                        {g.kind ? <KindTile kind={g.kind} size="sm" /> : <BuildingsIcon size={15} className="text-muted" />}
-                        <span className="min-w-0 flex-1 truncate">{g.label}</span>
-                        <span className="font-normal text-muted tabular">{g.rows.length}</span>
-                      </li>,
-                      ...g.rows.map((f) => (
-                        <FileRow key={f.id} f={f} branch={branch} picked={picked.has(f.id)} onPick={(on) => pick(f, on)} onOpen={() => openFile(f.id, true)}
-                          active={search.f === f.id} showFolder />
-                      )),
-                    ])
-                    : files.map((f) => (
-                      <FileRow key={f.id} f={f} branch={branch} picked={picked.has(f.id)} onPick={(on) => pick(f, on)} onOpen={() => openFile(f.id, true)}
-                        active={search.f === f.id} showFolder={recursive} />
-                    ))}
-                </ul>
-              )}
-            {files.length ? <LoadMore noun="files" shown={files.length} total={list.total ?? (folder ? folderTotal : null)} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-[12.5px] whitespace-nowrap text-muted">
+                <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} disabled={!files.length} className="size-4 accent-[var(--accent)]" />
+                {t("Select all")}
+              </label>
+              <Button size="sm" variant="ghost" asChild>
+                <a href={archiveUrl({ branch_id: branch.id, folder: folder || null })} download data-guide="files.download-folder">
+                  <DownloadSimpleIcon size={14} /> {folder ? t("Download folder") : t("Download all")}
+                </a>
+              </Button>
+            </div>
           </div>
 
-          {paneOpen ? (
-            <Card id="company-files-viewer" className="max-h-[calc(100dvh-11rem)] self-start overflow-y-auto p-4 xl:sticky xl:top-0">{viewer}</Card>
-          ) : null}
+          {list.isLoading ? <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>
+            : list.error ? <p role="alert" className="text-danger">{errorMessage(list.error)}</p>
+            : !files.length && !subfolders.length ? (
+              <EmptyState icon={FolderOpenIcon}
+                title={filtering ? t("No files match") : folder ? t("This folder is empty") : t("No files yet")}
+                body={filtering ? t("Try another kind or department, or clear the filters.") : t("Drop the company's SOPs, guides, forms, certificates and contracts above. A whole zip is fine.")}
+                action={filtering ? <Button size="sm" variant="outline" onClick={clearFilters}>{t("Clear filters")}</Button> : undefined} />
+            ) : grid ? (
+              <TileGrid data-guide="files.list">
+                {subfolders.map((n) => (
+                  <Tile key={n.path} onClick={() => pickFolder(n.path)} title={n.name}
+                    leading={<span className="grid size-12 place-items-center rounded-[var(--radius-sm)] bg-warn/12 text-warn ring-1 ring-warn/20 ring-inset"><FolderIcon size={24} weight="duotone" /></span>}
+                    meta={`${n.files === 1 ? t("1 file") : t("{n} files", { n: n.files.toLocaleString(locale()) })} · ${fileSize(n.size)}`}
+                    badge={n.flagged ? <Pill tone="warn"><ShieldWarningIcon size={12} weight="bold" /> {n.flagged}</Pill> : undefined} />
+                ))}
+                {files.map((f) => (
+                  <StoreTile key={f.id} f={f as ProvFile} onOpen={() => openFile(f.id)} active={search.f === f.id}
+                    corner={<input type="checkbox" checked={picked.has(f.id)} onChange={(e) => pick(f, e.target.checked)}
+                      className="size-4 accent-[var(--accent)] pointer-coarse:size-5" aria-label={t("Select {name}", { name: f.title || f.name })} />} />
+                ))}
+              </TileGrid>
+            ) : (
+              <ul data-guide="files.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+                {subfolders.map((n) => <FolderRow key={n.path} node={n} onPick={() => pickFolder(n.path)} />)}
+                {groups
+                  ? groups.flatMap((g) => [
+                    <li key={`h:${g.key}`} className="flex items-center gap-2 bg-surface-2/50 px-4 py-2 text-[12.5px] font-semibold">
+                      {g.kind ? <KindTile kind={g.kind} size="sm" /> : <BuildingsIcon size={15} className="text-muted" />}
+                      <span className="min-w-0 flex-1 truncate">{g.label}</span>
+                      <span className="font-normal text-muted tabular">{g.rows.length}</span>
+                    </li>,
+                    ...g.rows.map((f) => (
+                      <FileRow key={f.id} f={f} branch={branch} picked={picked.has(f.id)} onPick={(on) => pick(f, on)} onOpen={() => openFile(f.id)}
+                        active={search.f === f.id} showFolder />
+                    )),
+                  ])
+                  : files.map((f) => (
+                    <FileRow key={f.id} f={f} branch={branch} picked={picked.has(f.id)} onPick={(on) => pick(f, on)} onOpen={() => openFile(f.id)}
+                      active={search.f === f.id} showFolder={recursive} />
+                  ))}
+              </ul>
+            )}
+          {files.length ? <LoadMore noun="files" shown={files.length} total={list.total ?? (folder ? folderTotal : null)} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
         </div>
       </section>
 
@@ -501,8 +451,6 @@ function CompanyHub({ branch, uploadOpen }: { branch: Branch; uploadOpen: boolea
           <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setPicked(new Map())}><XIcon size={14} /> {t("Clear")}</Button>
         </div>
       ) : null}
-
-      {!(wide && inPane) && viewer}
 
       <MoveDialog open={moving} onOpenChange={setMoving} folders={folderPaths} current={folder} count={picked.size}
         onMove={async (to) => {
@@ -616,10 +564,6 @@ export function FilesPage() {
   const tree = (
     <LibraryTree view={view} folder={folder} branch={branch} branches={co.branches} onView={pick} onFolder={pickFolder} onCompany={pickCompany} />
   );
-  // One company's folders show in the hub, which opens its own files; elsewhere a file opens
-  // in the side sheet.
-  const hub = view === "folders" && !!branch;
-
   let body: ReactNode;
   if (view === "folders") body = branch ? <CompanyHub key={branch.id} branch={branch} uploadOpen={uploadOpen} /> : <CompanyPicker branches={co.branches} onPick={pickCompany} />;
   else if (view === "documents") body = <DocumentsFolder branch={branch} />;
@@ -660,7 +604,7 @@ export function FilesPage() {
           // Tablets and desktops: a folder browser in a frame that fills the screen below the
           // header. The tree on the left and the contents on the right each scroll on their own.
           // Phones: one list at a time under the path row, tapping into folders.
-          <div ref={top} className="grid min-w-0 scroll-mt-16 gap-4 md:h-[calc(100dvh-5.5rem)] md:min-h-[30rem] md:grid-cols-[13rem_minmax(0,1fr)] md:gap-0 md:overflow-hidden md:rounded-[var(--radius-md)] md:border md:border-border lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <div ref={top} data-file-browser className="grid min-w-0 scroll-mt-16 gap-4 md:h-[calc(100dvh-5.5rem)] md:min-h-[30rem] md:grid-cols-[13rem_minmax(0,1fr)] md:gap-0 md:overflow-hidden md:rounded-[var(--radius-md)] md:border md:border-border lg:grid-cols-[16rem_minmax(0,1fr)]">
             <aside className="hidden min-h-0 min-w-0 overflow-y-auto overscroll-contain border-r border-border bg-surface p-2 md:block">{tree}</aside>
             <div className="grid min-w-0 content-start gap-4 md:flex md:min-h-0 md:flex-col md:gap-0">
               <BrowseCrumbs view={view} folder={folder} branch={branch} onRoot={() => pickFolder("")} onFolder={pickFolder} onOpenTree={() => setTreeOpen(true)}
@@ -675,7 +619,10 @@ export function FilesPage() {
           </div>
         )}
       <SideSheet open={treeOpen} onOpenChange={setTreeOpen} title={t("Folders")} size="sm">{tree}</SideSheet>
-      {!hub && search.f ? <StoreFileSheet id={search.f} onClose={() => open(undefined)} /> : null}
+      {/* Any file, from any folder or list: the file panel. Closing it leaves the page where it was. */}
+      <FilePanel id={search.f} page={search.page}
+        onClose={() => void navigate({ search: (s) => ({ ...s, f: undefined, page: undefined }), resetScroll: false, replace: true })}
+        onStep={(id) => void navigate({ search: (s) => ({ ...s, f: id, page: undefined }), resetScroll: false, replace: true })} />
     </Page>
   );
 }

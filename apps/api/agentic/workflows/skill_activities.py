@@ -100,7 +100,7 @@ async def skill_eval(kind: str, target_id: str) -> dict:
                 await db.scalars(select(SkillEvalCase).where(SkillEvalCase.skill_id == s.id))
             ).all()
         ]
-        result = await evals.run_suite(db, s.workspace_id, s.body, cases)
+        result = await evals.run_suite(db, s.workspace_id, s.body, cases, s.agent_ids)
         result["version"] = s.version
         s.last_eval = result
         await db.commit()

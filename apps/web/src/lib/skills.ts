@@ -50,6 +50,8 @@ export interface EvalSuite {
   cases: EvalCaseResult[];
   error?: string;
   version?: number;
+  /** P56: whose instructions the skill was tested in. */
+  agent?: { id: string; name: string } | null;
 }
 
 export interface Checks {

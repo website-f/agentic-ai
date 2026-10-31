@@ -25,7 +25,10 @@ export function EvalResults({ suite, before }: { suite: EvalSuite; before?: Eval
   if (suite.error) return <p role="alert" className="text-[13px] text-danger">{suite.error}</p>;
   return (
     <>
-    <p className="mb-2 text-[12px] text-muted">{t("Tests run the skill with simulated tools: they check that the steps are followed, not live data.")}</p>
+    <p className="mb-2 text-[12px] text-muted">
+      {suite.agent ? t("Tested as {name}, with its instructions and SOPs. ", { name: suite.agent.name }) : ""}
+      {t("Tests run the skill with simulated tools: they check that the steps are followed, not live data.")}
+    </p>
     <ul className="divide-y divide-border rounded-[var(--radius-md)] border border-border bg-surface">
       {suite.cases.map((c, i) => {
         const old = before?.cases[i];

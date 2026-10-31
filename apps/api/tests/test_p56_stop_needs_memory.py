@@ -150,3 +150,50 @@ async def test_sops_fill_a_budget_and_the_rest_are_listed(client, llm, temporal)
         assert "Procedure 5" in listed.text
         n = await db.scalar(select(func.count()).select_from(SOP))
         assert n >= 6
+
+
+async def test_each_workspace_dream_is_due_on_its_own_and_caught_up(
+    client, llm, temporal, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+
+    from agentic.brain.dream import local_day
+    from agentic.core.config import settings
+    from agentic.models import BrainDream
+    from agentic.workflows.brain_activities import brain_dream_due
+
+    await office(client)
+    monkeypatch.setattr(settings, "dream_hour", 0)  # past the dream hour all day
+    async with SessionLocal() as db:
+        ws = await db.scalar(select(Workspace))
+    # Missed the 02:00 slot (or never dreamed today): due now, the same day.
+    assert [ws.id, False] in await brain_dream_due()
+    async with SessionLocal() as db:
+        d = BrainDream(workspace_id=ws.id, day=local_day(ws), status="running")
+        d.started_at = datetime.now(UTC) - timedelta(hours=3)  # died with its worker
+        db.add(d)
+        await db.commit()
+        assert [ws.id, True] in await brain_dream_due()  # redone
+        d.status = "done"
+        await db.commit()
+    assert all(w != ws.id for w, _ in await brain_dream_due())
+
+
+async def test_a_skill_is_tested_inside_a_real_agents_instructions(client, llm, temporal):
+    from agentic.skills import evals
+
+    o = await office(client)
+    a = await new_agent(client, o, "Aina")
+    llm.say("Done: the letter has a reference number.")
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        out = await evals.run_suite(
+            db,
+            agent.workspace_id,
+            "## When to use\nLetters.\n## Steps\n1. Add a reference number.\n",
+            [{"title": "ref", "input": "Write a letter", "must_contain": ["reference"]}],
+            [agent.id],
+        )
+    assert out["passed"] == 1 and out["agent"] == {"id": a["id"], "name": "Aina"}
+    system = llm.requests[-1]["messages"][0]["content"]
+    assert "Your name is Aina" in system and "Add a reference number" in system

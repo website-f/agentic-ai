@@ -206,10 +206,11 @@ async def evaluate(db: AsyncSession, p: SkillProposal) -> dict[str, Any] | None:
     cases += [c for c in p.eval_cases if c.get("title") not in have and c.get("input")]
     if not cases or p.kind == "retire":
         return None
-    result: dict[str, Any] = {"new": await evals.run_suite(db, p.workspace_id, p.body, cases)}
     skill = await db.get(Skill, p.skill_id) if p.skill_id else None
+    who = [x for x in [p.agent_id, *((skill.agent_ids or []) if skill else [])] if x]
+    result: dict[str, Any] = {"new": await evals.run_suite(db, p.workspace_id, p.body, cases, who)}
     if skill is not None:
-        result["old"] = await evals.run_suite(db, p.workspace_id, skill.body, cases)
+        result["old"] = await evals.run_suite(db, p.workspace_id, skill.body, cases, who)
         result["old_version"] = skill.version
     p.eval = result
     await db.commit()

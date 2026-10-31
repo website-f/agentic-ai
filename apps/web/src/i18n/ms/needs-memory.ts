@@ -22,12 +22,16 @@ export const NEEDS_MEMORY: Record<string, string> = {
   // Brain graph (lib/brain.ts, pages/brain/graph-tab.tsx)
   "Learned fact": "Fakta yang dipelajari",
   "Nothing learned yet": "Belum ada apa-apa dipelajari",
+  "Drag to move around, scroll or pinch to zoom, drag a dot to move it, tap a dot to open it.":
+    "Seret untuk bergerak, tatal atau cubit untuk zum, seret titik untuk mengalihkannya, ketik titik untuk membukanya.",
+  "Fit everything": "Muatkan semua",
   "The graph shows what your agents learned and how wiki pages link together. It fills in as they work.":
     "Graf menunjukkan apa yang dipelajari oleh ejen anda dan bagaimana halaman wiki saling berpaut. Ia terisi apabila mereka bekerja.",
 
   // Skill tests (pages/skills/eval-results.tsx)
   "{label}: no tests yet": "{label}: belum ada ujian",
   "No tests yet": "Belum ada ujian",
+  "Tested as {name}, with its instructions and SOPs. ": "Diuji sebagai {name}, dengan arahan dan SOPnya. ",
   "Tests run the skill with simulated tools: they check that the steps are followed, not live data.":
     "Ujian menjalankan kemahiran dengan alat simulasi: ia menyemak langkah diikuti, bukan data sebenar.",
 };

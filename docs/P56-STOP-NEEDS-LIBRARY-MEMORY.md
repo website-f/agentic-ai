@@ -71,10 +71,30 @@ only facts had no graph at all.
 - The results say plainly that the tests run with simulated tools: they check the steps, not live
   data.
 
-## Not changed yet (reported, worth doing next)
-- **Nightly dream:** it runs every workspace one after another in one 30-minute activity, so a
-  big office can starve the last ones. Fix: one workflow per workspace, and a catch-up when the
-  worker was down at 02:00.
-- **Skill tests:** they use a bare prompt, not the agent's real prompt and SOPs.
-- **Tool list:** the tool list sent with each call (about 17k tokens) could also be trimmed to the
-  tools a task needs.
+## The nightly dream, one workspace at a time
+**Before:** one hourly job dreamed every due workspace one after another, inside a single
+30-minute limit with no retry. A big office could starve the rest, and a workspace whose 02:00
+slot was missed (the worker was down) skipped that night.
+
+**Now:**
+- Every hour, `brain_dream_due` lists the due workspaces. Due means past the dream hour where
+  the workspace is, with no dream yet today.
+- Each due workspace dreams in its own workflow, with its own 30-minute limit. The workflows
+  are started and left to finish on their own.
+- A missed night is caught up the same day.
+- A dream stuck "running" for over an hour (its worker died) is done again.
+- The old single job still runs for workflows already in flight (`workflow.patched`).
+
+## Skill tests in a real agent's instructions
+**Before:** skills were tested inside a bare "office assistant" prompt.
+
+**Now:** they run inside the system prompt of the agent that proposed the skill, else one it is
+given to, else the workspace's most recently active office agent. That prompt includes the
+agent's role, its rules and its SOPs. The skill is tested the way it is used.
+
+The results say which agent the skill was tested as. Tools are still simulated, so the tests
+check the steps, not live data.
+
+## Not changed yet
+- The tool list sent with each call (about 17k tokens) could be trimmed to the tools a task
+  needs.
