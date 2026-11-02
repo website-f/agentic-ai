@@ -203,7 +203,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 function TaskCard({ g, onOpen, openId, full, showCompany }: { g: TaskFiles; onOpen: (id: string) => void; openId?: string; full: boolean; showCompany: boolean }) {
   const t = useT();
-  const navigate = useNavigate({ from: "/files" });
+  const navigate = useNavigate({ from: "/explorer" });
   const by = new Map<Bucket, StoreFile[]>();
   for (const f of g.files) by.set(bucketOf(f), [...(by.get(bucketOf(f)) ?? []), f]);
   return (
@@ -248,7 +248,7 @@ function TaskCard({ g, onOpen, openId, full, showCompany }: { g: TaskFiles; onOp
 
 function TasksView({ branchId, taskId, onOpen, openId }: { branchId: string | null; taskId?: string; onOpen: (id: string) => void; openId?: string }) {
   const t = useT();
-  const navigate = useNavigate({ from: "/files" });
+  const navigate = useNavigate({ from: "/explorer" });
   const [q, setQ] = useState("");
   const needle = useDebounced(q.trim());
   const params = new URLSearchParams();

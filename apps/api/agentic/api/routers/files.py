@@ -6,6 +6,7 @@ file once — text, OCR for scans, a short summary — so agents never re-read t
 """
 
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import quote
@@ -79,6 +80,8 @@ class FileOut(BaseModel):
     document_id: str | None = None
     report_id: str | None = None
     review_status: str | None = None
+    # P61: a person's own labels on it.
+    labels: list[str] = Field(default_factory=list)
 
 
 def may_manage(principal: Principal) -> bool:
@@ -162,6 +165,7 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         document_id=f.document_id,
         report_id=f.report_id,
         review_status=review,
+        labels=list(f.labels or []),
     )
 
 
@@ -478,6 +482,7 @@ async def list_files(
     agent_id: str | None = Query(default=None, max_length=40),
     workflow_run_id: str | None = Query(default=None, max_length=40),
     library: bool | None = None,
+    label: str | None = Query(default=None, max_length=30),
     limit: int = Query(default=200, ge=1, le=500),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
@@ -488,8 +493,10 @@ async def list_files(
     `recursive` everything under it too; "" = the top) and `batch_id` (one upload). P25:
     `origin` (uploaded, made by a person, made by an agent), `agent_id` (that agent and the
     helpers it copied itself into) and `workflow_run_id`. `source=download`: files agents
-    fetched from websites; `library`: in (or not in) the knowledge library."""
+    fetched from websites; `library`: in (or not in) the knowledge library. P61: `label`."""
     query = _filtered(principal, branch_id, task_id, q)
+    if label and label.strip():
+        query = query.where(DocFile.labels.contains([label.strip()]))
     if source:
         query = query.where(DocFile.source == source)
     if origin:
@@ -535,6 +542,111 @@ async def list_files(
     return [await file_out(db, f) for f in rows]
 
 
+# ---------------------------------------------------------------- P61 labels
+
+MAX_LABELS = 12
+MAX_LABEL_LEN = 30
+
+
+def clean_labels(raw: list[str]) -> list[str]:
+    """Trimmed, 1..30 characters each, duplicates (any case) dropped, the first spelling
+    kept. Refuses an empty or too long label."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        lab = re.sub(r"\s+", " ", str(item or "")).strip()
+        if not lab or len(lab) > MAX_LABEL_LEN:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "bad_label",
+                "A label is 1 to {n} characters.",
+                n=MAX_LABEL_LEN,
+            )
+        if lab.casefold() not in seen:
+            seen.add(lab.casefold())
+            out.append(lab)
+    return out
+
+
+def set_labels(f: DocFile, labels: list[str]) -> None:
+    labels = clean_labels(labels)
+    if len(labels) > MAX_LABELS:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "too_many_labels",
+            "A file can have up to {n} labels.",
+            n=MAX_LABELS,
+        )
+    f.labels = labels
+
+
+class LabelCount(BaseModel):
+    label: str
+    count: int
+
+
+@router.get("/labels")
+async def label_counts(
+    branch_id: str | None = None,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[LabelCount]:
+    """Every label on the files this person sees, with how many files carry it (most used
+    first). Labels that differ only in case count together under the most used spelling."""
+    query = _filtered(principal, branch_id, None, "").with_only_columns(DocFile.labels)
+    query = query.where(func.jsonb_array_length(DocFile.labels) > 0)
+    counts: dict[str, dict[str, int]] = {}
+    for (labels,) in (await db.execute(query)).all():
+        for lab in labels or []:
+            spellings = counts.setdefault(str(lab).casefold(), {})
+            spellings[str(lab)] = spellings.get(str(lab), 0) + 1
+    out = [
+        LabelCount(label=max(sp, key=lambda k: (sp[k], k)), count=sum(sp.values()))
+        for sp in counts.values()
+    ]
+    return sorted(out, key=lambda x: (-x.count, x.label.casefold()))
+
+
+class LabelsIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    add: list[str] = Field(default_factory=list, max_length=MAX_LABELS)
+    remove: list[str] = Field(default_factory=list, max_length=50)
+
+
+class LabelsOut(BaseModel):
+    updated: int
+
+
+@router.post("/labels")
+async def bulk_labels(
+    body: LabelsIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> LabelsOut:
+    """Add and remove labels on many files at once (404 when one is not this person's to
+    change; nothing is saved then)."""
+    add = clean_labels(body.add)
+    remove = {lab.casefold() for lab in clean_labels(body.remove)}
+    ids = list(dict.fromkeys(body.ids))
+    changed = 0
+    for fid in ids:
+        f = await get_file(db, principal, fid)
+        before = list(f.labels or [])
+        kept = [lab for lab in before if lab.casefold() not in remove]
+        set_labels(f, kept + add)
+        if f.labels != before:
+            changed += 1
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "file.labelled",
+        after={"ids": ids[:50], "count": len(ids), "add": add, "remove": sorted(remove)},
+    )
+    await db.commit()
+    return LabelsOut(updated=changed)
+
+
 @router.get("/{file_id}")
 async def read_file(
     file_id: str,
@@ -571,8 +683,7 @@ async def download(
         data = await storage.read(db, f)
     except storage.StorageError as e:
         raise api_error(status.HTTP_502_BAD_GATEWAY, "storage_unavailable", str(e)) from e
-    show = inline and f.mime in INLINE_SAFE
-    mime = f.mime if show else (f.mime if f.mime in INLINE_SAFE else "application/octet-stream")
+    mime, show = served_type(f, inline)
     disposition = "inline" if show else "attachment"
     return Response(
         content=bytes(data or b""),
@@ -581,10 +692,26 @@ async def download(
             "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(f.name)}",
             # A served file can never run script against this origin.
             "Content-Security-Policy": (
-                "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
+                "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; "
+                "style-src 'unsafe-inline'"
             ),
+            "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+def served_type(f: DocFile, inline: bool) -> tuple[str, bool]:
+    """(Content-Type, shown inline?) for a download. P61: `inline` shows PDFs, pictures and
+    audio/video in the browser; anything else (HTML, SVG, XML, scripts...) is always an
+    attachment, and never with a type a browser would run."""
+    from ...documents.viewer import media_mime
+
+    media = media_mime(f.name, f.mime)
+    if f.mime in INLINE_SAFE:
+        return f.mime, inline
+    if media:  # audio/* or video/* only (from its type or its name), never markup
+        return media, inline
+    return "application/octet-stream", False
 
 
 class FileUpdateIn(BaseModel):
@@ -596,6 +723,8 @@ class FileUpdateIn(BaseModel):
     folder: str | None = Field(default=None, max_length=300)
     kind: str | None = Field(default=None, max_length=40)
     department_id: str | None = None
+    # P61: the file's labels, replacing what it had (None = leave them).
+    labels: list[str] | None = Field(default=None, max_length=50)
 
 
 @router.patch("/{file_id}")
@@ -609,6 +738,19 @@ async def update_file(
 
     f = await get_file(db, principal, file_id)
     before = (f.name, f.branch_id, f.department_id)
+    if body.labels is not None:
+        old_labels = list(f.labels or [])
+        set_labels(f, body.labels)
+        if f.labels != old_labels:
+            await audit.record(
+                db,
+                principal.workspace_id,
+                principal.actor,
+                "file.labelled",
+                target=f.id,
+                before={"labels": old_labels},
+                after={"labels": f.labels},
+            )
     if body.name:
         f.name = body.name.strip()
     if body.folder is not None:

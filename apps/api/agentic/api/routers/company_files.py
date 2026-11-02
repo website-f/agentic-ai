@@ -7,6 +7,7 @@ as a file id. Visibility is the files router's (documents.service.scoped); held-
 (files.may_manage), and every release or hold is in the audit log.
 """
 
+import asyncio
 import io
 import re
 import zipfile
@@ -16,7 +17,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,7 @@ from ...documents import render_pdf
 from ...documents.extract import sniff
 from ...intake import scan, sort
 from ...knowledge import indexer
-from ...models import Branch, DocFile, IntakeBatch
+from ...models import Branch, DocFile, IntakeBatch, Workspace
 from ...services import audit
 from ..deps import Principal, api_error, require
 from .files import (
@@ -59,6 +60,16 @@ def _visible(principal: Principal, branch_id: str | None) -> Any:
     if branch_id:
         q = q.where(DocFile.branch_id == branch_id)
     return visible_files(q, principal)
+
+
+def _changeable(principal: Principal, branch_id: str | None) -> Any:
+    """Files this person may change (get_file without the shared library guidelines)."""
+    from ...documents import service
+
+    q = select(DocFile).where(DocFile.workspace_id == principal.workspace_id)
+    if branch_id:
+        q = q.where(DocFile.branch_id == branch_id)
+    return service.scoped(q, DocFile, principal)
 
 
 def _under(folder: str) -> Any:
@@ -117,6 +128,15 @@ async def tree(
             e["flagged"] += int(flagged)
             if i == len(parts):
                 e["direct"] += 1
+    for saved in _saved_seen(
+        await _saved_folders(db, principal.workspace_id), principal, branch_id
+    ):
+        parts = saved["path"].split("/")
+        for i in range(1, len(parts) + 1):  # P61: created folders show while still empty
+            folders.setdefault(
+                "/".join(parts[:i]),
+                {"files": 0, "direct": 0, "size": 0, "kinds": {}, "flagged": 0},
+            )
     return TreeOut(
         folders=[FolderOut(path=p, **folders[p]) for p in sorted(folders, key=str.lower)],
         total_files=total,
@@ -158,6 +178,331 @@ async def move(
     )
     await db.commit()
     return MoveOut(moved=len(ids), folder=folder)
+
+
+# ---------------------------------------------------------------- P61 copying
+
+
+class CopyIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=200)
+    folder: str = Field(default="", max_length=300)
+
+
+class CopyOut(BaseModel):
+    copied: int
+    ids: list[str]  # the new files, in the order asked
+    skipped: list[str] = Field(default_factory=list)  # held-back files, not copied
+
+
+def copy_name(name: str, taken: set[str]) -> str:
+    """The name as it is when free in the folder, else "x (copy).pdf", "x (copy 2).pdf"..."""
+    if name.casefold() not in taken:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if not dot or not stem:
+        stem, ext = name, ""
+    n = 1
+    while True:
+        tag = " (copy)" if n == 1 else f" (copy {n})"
+        candidate = f"{stem[: 200 - len(tag) - len(ext) - 1]}{tag}" + (f".{ext}" if ext else "")
+        if candidate.casefold() not in taken:
+            return candidate
+        n += 1
+
+
+@router.post("/copy")
+async def copy_files(
+    body: CopyIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> CopyOut:
+    """A copy of each file (its bytes, read text, summary, kind and labels) in `folder`,
+    made by this person. Held-back files are left out (listed in `skipped`)."""
+    from ...documents import storage
+    from ...documents.provenance import desk_owner
+    from .files import start_reading
+
+    folder = clean_folder(body.folder)
+    taken = {
+        n.casefold()
+        for n in (
+            await db.scalars(
+                select(DocFile.name).where(
+                    DocFile.workspace_id == principal.workspace_id, DocFile.folder == folder
+                )
+            )
+        ).all()
+    }
+    owner = await desk_owner(db, principal.actor, None, None)
+    made: list[DocFile] = []
+    sources: list[str] = []
+    skipped: list[str] = []
+    for fid in list(dict.fromkeys(body.ids)):
+        f = await get_file(db, principal, fid, library_ok=True)  # 404 outside their scope
+        if f.quarantined:
+            skipped.append(f.id)
+            continue
+        try:
+            data = await storage.read(db, f)
+        except storage.StorageError as e:
+            raise api_error(status.HTTP_502_BAD_GATEWAY, "storage_unavailable", str(e)) from e
+        text = await db.scalar(select(DocFile.text).where(DocFile.id == f.id)) or ""
+        name = copy_name(f.name, taken)
+        taken.add(name.casefold())
+        new = DocFile(
+            workspace_id=principal.workspace_id,
+            branch_id=f.branch_id,
+            department_id=f.department_id,
+            name=name,
+            mime=f.mime,
+            size=len(data),
+            sha256=f.sha256,
+            status=f.status,
+            text=text,
+            pages=f.pages,
+            ocr=f.ocr,
+            kind=f.kind,
+            title=f.title,
+            summary=f.summary,
+            fields=dict(f.fields or {}),
+            expires_on=f.expires_on,
+            error=f.error,
+            source=f.source,
+            created_by=principal.actor,
+            folder=folder,
+            sensitive=dict(f.sensitive or {}),
+            quarantined=False,
+            restricted=f.restricted,
+            origin="person",
+            owner_user_id=owner,
+            labels=list(f.labels or []),
+        )
+        await storage.store_new(db, new, data)  # P40: where new files go, like an upload
+        db.add(new)
+        await db.flush()
+        made.append(new)
+        sources.append(f.id)
+    if made:
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "file.copied",
+            after={
+                "from": sources[:50],
+                "ids": [m.id for m in made][:50],
+                "count": len(made),
+                "folder": folder,
+            },
+        )
+    await db.commit()
+    for m in made:
+        if m.status == "reading":  # the original was still being read: read the copy too
+            await start_reading(m.id)
+    return CopyOut(copied=len(made), ids=[m.id for m in made], skipped=skipped)
+
+
+# ---------------------------------------------------------------- P61 folders
+
+FOLDERS_KEY = "file_folders"
+
+
+async def _saved_folders(
+    db: AsyncSession, workspace_id: str, *, lock: bool = False
+) -> list[dict[str, Any]]:
+    """The folders people created ({path, branch_id}), empty or not."""
+    q = select(Workspace.settings).where(Workspace.id == workspace_id)
+    if lock:
+        q = q.with_for_update()
+    settings = await db.scalar(q) or {}
+    out: list[dict[str, Any]] = []
+    for e in settings.get(FOLDERS_KEY) or []:
+        if isinstance(e, dict) and isinstance(e.get("path"), str) and e["path"]:
+            out.append({"path": e["path"], "branch_id": e.get("branch_id") or None})
+    return out
+
+
+async def _save_folders(db: AsyncSession, workspace_id: str, entries: list[dict[str, Any]]) -> None:
+    ws = await db.get(Workspace, workspace_id)
+    if ws is None:
+        return
+    unique: dict[tuple[str, str | None], dict[str, Any]] = {}
+    for e in entries:
+        unique.setdefault((e["path"], e["branch_id"]), e)
+    ws.settings = {**(ws.settings or {}), FOLDERS_KEY: list(unique.values())}
+
+
+def _company_ok(principal: Principal, branch_id: str | None) -> bool:
+    sc = principal.scope
+    return sc.everything or branch_id is None or branch_id == sc.branch_id
+
+
+def _saved_seen(
+    entries: list[dict[str, Any]], principal: Principal, branch_id: str | None
+) -> list[dict[str, Any]]:
+    """Created folders this person sees: of their company (or the whole workspace), and of
+    the company asked for when one is."""
+    return [
+        e
+        for e in entries
+        if _company_ok(principal, e["branch_id"])
+        and (branch_id is None or e["branch_id"] == branch_id)
+    ]
+
+
+def _is_under(path: str, base: str) -> bool:
+    return path == base or path.startswith(base + "/")
+
+
+def _named(raw: str) -> str:
+    path = clean_folder(raw)
+    if not path:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "folder_name", "Give the folder a name."
+        )
+    return path
+
+
+class FolderIn(BaseModel):
+    path: str = Field(min_length=1, max_length=300)
+    branch_id: str | None = None
+
+
+class FolderSaved(BaseModel):
+    path: str
+    branch_id: str | None
+
+
+class FolderRenameIn(BaseModel):
+    path: str = Field(min_length=1, max_length=300)
+    to: str = Field(min_length=1, max_length=300)
+    branch_id: str | None = None
+
+
+class FolderMovedOut(BaseModel):
+    moved: int
+
+
+@router.post("/folders", status_code=status.HTTP_201_CREATED)
+async def create_folder(
+    body: FolderIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> FolderSaved:
+    """A new, empty folder (kept in the workspace's settings until files go in it)."""
+    path = _named(body.path)
+    await check_branch(db, principal, body.branch_id)
+    saved = await _saved_folders(db, principal.workspace_id, lock=True)
+    has_files = await db.scalar(
+        _visible(principal, body.branch_id).where(_under(path)).with_only_columns(DocFile.id)
+    )
+    if has_files or any(e["path"] == path and e["branch_id"] == body.branch_id for e in saved):
+        raise api_error(status.HTTP_409_CONFLICT, "folder_exists", "That folder already exists.")
+    await _save_folders(
+        db, principal.workspace_id, [*saved, {"path": path, "branch_id": body.branch_id}]
+    )
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "folder.created",
+        after={"path": path, "branch_id": body.branch_id},
+    )
+    await db.commit()
+    return FolderSaved(path=path, branch_id=body.branch_id)
+
+
+@router.post("/folders/rename")
+async def rename_folder(
+    body: FolderRenameIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> FolderMovedOut:
+    """Rename or move a folder: every file this person sees in it or below it, and the
+    created folders below it, get the new path. Moving it to a new parent is a rename
+    ("A/B" -> "C/B")."""
+    from ...documents.service import DESK_ROOTS
+
+    src, dst = _named(body.path), _named(body.to)
+    await check_branch(db, principal, body.branch_id)
+    if _is_under(dst, src):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "folder_into_itself",
+            "A folder cannot be moved into itself.",
+        )
+    if src in DESK_ROOTS:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "folder_fixed",
+            "This folder cannot be renamed or moved.",
+        )
+    saved = await _saved_folders(db, principal.workspace_id, lock=True)
+    files = list(
+        (await db.scalars(_changeable(principal, body.branch_id).where(_under(src)))).all()
+    )
+    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id)}
+    moved_saved = [e for e in saved if id(e) in seen and _is_under(e["path"], src)]
+    if not files and not moved_saved:
+        raise api_error(status.HTTP_404_NOT_FOUND, "folder_not_found", "That folder is not here.")
+    new_paths = [dst + f.folder[len(src) :] for f in files] + [
+        dst + e["path"][len(src) :] for e in moved_saved
+    ]
+    if any(len(p) > 300 for p in new_paths):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "folder_too_long",
+            "That folder path is too long.",
+        )
+    for f in files:
+        f.folder = dst + f.folder[len(src) :]
+    for e in moved_saved:
+        e["path"] = dst + e["path"][len(src) :]
+    if moved_saved:
+        await _save_folders(db, principal.workspace_id, saved)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "folder.renamed",
+        before={"path": src},
+        after={"path": dst, "files": len(files), "branch_id": body.branch_id},
+    )
+    await db.commit()
+    return FolderMovedOut(moved=len(files))
+
+
+@router.post("/folders/delete", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_folder(
+    body: FolderIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Remove an empty folder (and the empty folders created below it). Refused while any
+    file is in it, even one this person cannot see."""
+    path = _named(body.path)
+    await check_branch(db, principal, body.branch_id)
+    q = select(DocFile.id).where(DocFile.workspace_id == principal.workspace_id, _under(path))
+    if body.branch_id:
+        q = q.where(DocFile.branch_id == body.branch_id)
+    if await db.scalar(q.limit(1)):
+        raise api_error(
+            status.HTTP_409_CONFLICT, "folder_not_empty", "This folder still has files."
+        )
+    saved = await _saved_folders(db, principal.workspace_id, lock=True)
+    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id)}
+    gone = [e for e in saved if id(e) in seen and _is_under(e["path"], path)]
+    if gone:
+        await _save_folders(db, principal.workspace_id, [e for e in saved if e not in gone])
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "folder.deleted",
+            before={"path": path, "branch_id": body.branch_id, "folders": len(gone)},
+        )
+        await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------- preview
@@ -228,6 +573,25 @@ async def preview(
         f"inline; filename*=UTF-8''{quote(re.sub(r'[.][^.]+$', '', f.name) + '.pdf')}"
     )
     return Response(content=pdf, media_type="application/pdf", headers=headers)
+
+
+@router.get("/{file_id}/view")
+async def view(
+    file_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """P61: the file as the web shows it in place: a table (Excel, CSV), safe HTML (Word,
+    PowerPoint), text, or a pointer to show it from /preview or /download?inline=1 (PDF,
+    pictures, audio, video). Held back like /preview."""
+    from ...documents import storage, viewer
+
+    f = await get_file(db, principal, file_id, library_ok=True)
+    check_held_back(principal, f)
+    data = await storage.read_id(db, f.id)
+    text = await db.scalar(select(DocFile.text).where(DocFile.id == f.id)) or ""
+    out = await asyncio.to_thread(viewer.view, data, f.name, f.mime, text)
+    return JSONResponse(out, headers={"Cache-Control": "private, no-store"})
 
 
 # ---------------------------------------------------------------- archive

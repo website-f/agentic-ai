@@ -6,7 +6,7 @@ import {
   FolderOpenIcon, ShieldWarningIcon, SkipForwardIcon, WarningIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, type DragEvent } from "react";
+import { useImperativeHandle, useRef, useState, type DragEvent, type Ref } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -52,11 +52,17 @@ function Bar({ value, tone = "accent", className, label }: { value: number; tone
 }
 
 /** Drop or choose files, folders or a zip; they go to the company's documents as one upload. */
-export function IntakeDrop({ branch, folder, onBatch }: {
+/** Start an upload from outside the drop zone (P61: files dropped on a folder in the explorer). */
+export interface IntakeDropHandle {
+  upload: (files: PickedFile[], folder: string) => void;
+}
+
+export function IntakeDrop({ branch, folder, onBatch, ref }: {
   branch: Branch;
   /** The folder being browsed: uploads go into it ("" or absent: the top). */
   folder?: string;
   onBatch: (batchId: string) => void;
+  ref?: Ref<IntakeDropHandle>;
 }) {
   const t = useT();
   const qc = useQueryClient();
@@ -70,7 +76,7 @@ export function IntakeDrop({ branch, folder, onBatch }: {
 
   const update = (i: number, patch: Partial<Item>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
-  const run = async (picked: PickedFile[]) => {
+  const run = async (picked: PickedFile[], into: string | undefined = folder) => {
     const files = picked.filter((p) => !isJunk(p) && p.file.size > 0);
     if (!files.length) {
       toast.error(tr("Nothing to upload: the folder is empty."));
@@ -87,7 +93,7 @@ export function IntakeDrop({ branch, folder, onBatch }: {
     const one = async (i: number) => {
       const p = files[i]!;
       update(i, { state: "sending" });
-      const params = { branch_id: branch.id, name: p.path, department_id: dept === AUTO ? null : dept, batch, folder: folder || null };
+      const params = { branch_id: branch.id, name: p.path, department_id: dept === AUTO ? null : dept, batch, folder: into || null };
       const progress = (f: number) => update(i, { progress: f });
       try {
         if (!plain) {
@@ -126,6 +132,8 @@ export function IntakeDrop({ branch, folder, onBatch }: {
     if (batch) onBatch(batch);
     if (sent === files.length) setTimeout(() => setItems([]), 1200);
   };
+
+  useImperativeHandle(ref, () => ({ upload: (files, into) => void run(files, into) }));
 
   const onDrop = async (e: DragEvent) => {
     e.preventDefault();

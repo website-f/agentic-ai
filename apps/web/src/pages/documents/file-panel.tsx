@@ -43,7 +43,7 @@ function rowIds(root: ParentNode): string[] {
 /** The button of a file's row, to step to it and to give focus back to it. */
 function rowButton(id: string): HTMLElement | null {
   const mark = document.querySelector(`[${FILE_ROW}="${CSS.escape(id)}"]`);
-  return mark?.closest<HTMLElement>("button, a") ?? null;
+  return mark?.closest<HTMLElement>("button, a, [role='option']") ?? null;
 }
 
 /** Keeps the list of shown files while the panel is open: more load, filters change. */

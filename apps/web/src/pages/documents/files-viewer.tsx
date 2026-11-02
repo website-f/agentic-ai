@@ -6,9 +6,9 @@
 import {
   ArrowClockwiseIcon, ArrowSquareOutIcon, BooksIcon, CornersInIcon, DotsThreeIcon, DownloadSimpleIcon, EyeIcon, FolderOpenIcon,
   FolderSimpleIcon, InfoIcon, LockSimpleIcon, LockSimpleOpenIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon, ShieldWarningIcon,
-  SparkleIcon, TrashIcon,
+  SparkleIcon, TagIcon, TrashIcon,
 } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -18,7 +18,8 @@ import { FileStatus } from "@/components/file-drop";
 import { LibraryToggle } from "@/components/library-toggle";
 import { PageTabs } from "@/components/page-tabs";
 import { PinButton } from "@/components/pin-button";
-import { FileProvenanceCard, ReviewPill } from "@/components/provenance";
+import { LabelChips, LabelsDialog } from "@/components/file-labels";
+import { FileProvenanceCard, MadeBy, ReviewPill } from "@/components/provenance";
 import { Meta } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -32,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { docKeys, fileSize, fileUrl } from "@/lib/documents";
+import { fileViewQuery, type ExplorerFile } from "@/lib/explorer";
 import {
   cleanFolder, deleteFile, flagWords, holdFile, intakeKeys, KINDS, kindKey, kindLabel, moveFiles, notThere, patchFile, previewKind,
   previewUrl, releaseFile, type CompanyFile,
@@ -42,6 +44,7 @@ import type { Branch } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { createViewport, type Viewport } from "@/lib/viewport";
 
+import { HtmlPage, MediaPlayer, SheetGrid, TextPage } from "./file-preview";
 import { FileTile, KindTile } from "./visuals";
 
 const NONE = "__none";
@@ -126,11 +129,14 @@ function PreviewNote({ icon, children, action }: { icon: ReactNode; children: Re
   );
 }
 
-/** The preview, filling the room it is given (its parent is `relative` and sized). */
+/** The preview, filling the room it is given (its parent is `relative` and sized). P61: what
+ * to show comes from GET /api/files/{id}/view (a spreadsheet grid, a Word page, text, PDF,
+ * image, audio or video); a server without it falls back to the file's type. */
 function Preview({ f, canSee, page, onDetails }: { f: CompanyFile; canSee: boolean; page?: number; onDetails: () => void }) {
   const t = useT();
   const kind = previewKind(f);
   const name = f.title || f.name;
+  const view = useQuery({ ...fileViewQuery(f.id), enabled: canSee && f.status !== "reading" });
   if (!canSee) {
     return (
       <PreviewNote icon={<LockSimpleIcon size={28} weight="duotone" className="text-warn" />}
@@ -143,6 +149,24 @@ function Preview({ f, canSee, page, onDetails }: { f: CompanyFile; canSee: boole
   // P25: a search hit opens a PDF at its page (#page=N; Office previews are a text PDF with
   // other page breaks, so they open at the top).
   const at = kind === "pdf" && page && page > 0 ? `#page=${page}` : "";
+  const v = view.data;
+  if (view.isLoading) return <Skeleton className="absolute inset-3" />;
+  if (v) {
+    if (v.type === "table") return <SheetGrid key={f.id} sheets={v.sheets} />;
+    if (v.type === "html") return <HtmlPage html={v.html} />;
+    if (v.type === "text") return <TextPage text={v.text} />;
+    if (v.type === "pdf") return <FramePreview key={f.id + at} src={previewUrl(f.id) + (kind === "pdf" ? at : "")} title={name} />;
+    if (v.type === "image") return <div className="absolute inset-0"><ZoomImage key={f.id} src={fileUrl(f.id, true)} alt={name} /></div>;
+    if (v.type === "media") return <MediaPlayer key={f.id} src={fileUrl(f.id, true)} mime={v.mime || f.mime} name={name} />;
+  }
+  if (v?.type === "none") {
+    return (
+      <PreviewNote icon={kindKey(f.kind) === "other" ? <FileTile mime={f.mime} name={f.name} size="lg" /> : <KindTile kind={kindKey(f.kind)} size="lg" />}
+        action={<Button size="sm" className={TOUCH} asChild><a href={fileUrl(f.id)} download><DownloadSimpleIcon size={14} /> {t("Download")}</a></Button>}>
+        {t("No preview for this file. Download it to open it.")}
+      </PreviewNote>
+    );
+  }
   if (kind === "pdf" || kind === "office") return <FramePreview key={f.id + at} src={previewUrl(f.id) + at} title={name} />;
   if (kind === "image") return <div className="absolute inset-0"><ZoomImage key={f.id} src={previewUrl(f.id)} alt={name} /></div>;
   if (kind === "text") {
@@ -300,7 +324,7 @@ type DescriptionSlot = ComponentType<{ asChild?: boolean; children: ReactNode }>
 
 /** One file, loaded, laid out for the file panel: the sticky header and the open tab. */
 export function FileView({ f, branch, folders, canManage, canEdit, page, tab, onTab, onClose, close, nav, phone, Title, Description }: {
-  f: CompanyFile;
+  f: ExplorerFile;
   branch: Branch | null;
   folders: string[];
   canManage: boolean;
@@ -323,6 +347,7 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
   const [moving, setMoving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [hold, setHold] = useState<"release" | "hold" | null>(null);
+  const [labelling, setLabelling] = useState(false);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: docKeys.files });
@@ -355,7 +380,10 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
   const kk = kindKey(f.kind);
   const pk = previewKind(f);
   const name = f.title || f.name;
-  const review = (f as CompanyFile & Partial<FileProvenance>).review_status;
+  const prov = f as CompanyFile & Partial<FileProvenance>;
+  const review = prov.review_status;
+  // The same query the preview runs (shared): an Office file shown as a PDF says so.
+  const viewType = useQuery({ ...fileViewQuery(f.id), enabled: canSee && f.status !== "reading" }).data?.type;
 
   const more = canManage || canEdit ? (
     <Menu>
@@ -430,12 +458,26 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
         {canSee ? <PinButton kind="file" refId={f.id} title={name} withLabel={!phone} className={phone ? "pointer-coarse:size-11" : undefined} /> : null}
         {more}
         <span className="flex min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto">
+          {prov.origin === "agent" || (!prov.origin && f.agent_id && f.source !== "upload")
+            ? <MadeBy origin="agent" agentName={prov.agent_name} agentColor={prov.agent_color} size="sm" /> : null}
           <ReviewPill status={review} />
           <FileStatus f={f} />
           {held ? <Pill tone="warn"><ShieldWarningIcon size={12} weight="bold" /> {t("Held back")}</Pill> : null}
           {f.library ? <Pill tone="accent">{t("Guideline")}</Pill> : null}
         </span>
       </div>
+
+      {/* P61: the file's own labels, changed right here. */}
+      {f.labels?.length || canEdit ? (
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+          <LabelChips labels={f.labels} max={8} />
+          {canEdit ? (
+            <Button size="sm" variant="ghost" className={cn("h-7 px-2 text-[12.5px]", TOUCH)} onClick={() => setLabelling(true)}>
+              <TagIcon size={13} /> {f.labels?.length ? t("Edit labels") : t("Add labels")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-2 flex min-w-0 items-end justify-between gap-2">
         <PageTabs<FileTab> value={tab} onChange={onTab} label={t("File")} className="mx-0 min-w-0 flex-1 border-b-0 px-0"
@@ -451,7 +493,7 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-soft)]">
         <Preview f={f} canSee={canSee} page={page} onDetails={() => onTab("details")} />
       </div>
-      {pk === "office" && canSee ? <p className="text-[12px] text-muted">{t("Office files are shown as a PDF. Download gives you the original.")}</p> : null}
+      {pk === "office" && canSee && (!viewType || viewType === "pdf") ? <p className="text-[12px] text-muted">{t("Office files are shown as a PDF. Download gives you the original.")}</p> : null}
     </div>
   );
 
@@ -539,6 +581,7 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
         onMove={async (folder) => {
           try { await moveMany([f.id], folder); refresh(); toast.success(tr("Moved.")); } catch (e) { toast.error(errorMessage(e)); throw e; }
         }} />
+      <LabelsDialog open={labelling} onOpenChange={setLabelling} files={[f]} branchId={f.branch_id ?? branch?.id ?? null} />
       <ReasonDialog open={hold === "release"} onOpenChange={(o) => !o && setHold(null)} title={t("Release this file?")} confirm={t("Release")}
         body={t("Agents can read it again and it can go in the library. Say why it is safe.")}
         onConfirm={async (reason) => { try { await releaseFile(f.id, reason); refresh(); toast.success(tr("Released.")); } catch (e) { toast.error(errorMessage(e)); throw e; } }} />

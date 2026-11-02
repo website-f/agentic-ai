@@ -527,7 +527,7 @@ function ThemeMenu() {
   );
 }
 
-function UserMenu() {
+export function UserMenu() {
   const { data: me } = useSuspenseQuery(meQuery);
   const t = useT();
   useProfileLanguage();

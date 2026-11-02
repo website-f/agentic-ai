@@ -7,7 +7,7 @@ import {
   ArrowLeftIcon, BuildingsIcon, CaretRightIcon, FolderIcon, FolderOpenIcon, ShieldWarningIcon, TreeStructureIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type HTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { locale, useT } from "@/i18n";
@@ -84,7 +84,17 @@ function keepInView(el: HTMLElement) {
 
 // ---------------------------------------------------------------- one row
 
-function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl }: {
+/** P61 (the explorer): folder rows take files and folders dropped on them, and folders can be
+ * dragged out of the tree. */
+export interface TreeDrop {
+  /** Something is dragged over the folder: true when it may go there. */
+  accepts: (path: string, e: DragEvent) => boolean;
+  onDrop: (path: string, e: DragEvent) => void;
+  onDragStart?: (path: string, e: DragEvent) => void;
+  onDragEnd?: () => void;
+}
+
+function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl, over, dnd }: {
   row: TRow;
   selected: boolean;
   tabbable: boolean;
@@ -92,6 +102,9 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
   onToggle: () => void;
   onFocus: () => void;
   setEl: (el: HTMLLIElement | null) => void;
+  /** Something is dragged over this folder and may drop here. */
+  over?: boolean;
+  dnd?: HTMLAttributes<HTMLLIElement> & { draggable?: boolean };
 }) {
   const t = useT();
   const { node, open } = row;
@@ -105,12 +118,13 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
   return (
     <li ref={setEl} role="treeitem" aria-level={row.level} aria-setsize={row.size} aria-posinset={row.pos}
       aria-expanded={node.children.length ? open : undefined} aria-selected={group ? undefined : selected}
-      tabIndex={tabbable ? 0 : -1} onClick={onActivate} onFocus={onFocus}
+      tabIndex={tabbable ? 0 : -1} onClick={onActivate} onFocus={onFocus} {...dnd}
       title={node.kind === "folder" ? node.path : V ? t(V.hint) : undefined}
       className={cn(
         "flex min-w-0 cursor-pointer items-center rounded-sm outline-none select-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-inset",
         group ? "mt-2 text-muted/80 first:mt-0 hover:text-fg"
           : selected ? "bg-accent-soft font-semibold text-accent" : "hover:bg-surface-2",
+        over && "bg-accent-soft text-accent ring-2 ring-accent ring-inset",
       )}
       style={{ paddingLeft: indent }}>
       {node.children.length ? (
@@ -148,7 +162,7 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
  * ready-made folders in their groups. Up and Down move, Right opens a folder (or steps into it),
  * Left closes it (or steps out), Enter opens it, Home and End jump. The open folder stays
  * highlighted and in view; the tree scrolls on its own, never the page. */
-export function LibraryTree({ view, folder, branch, branches, onView, onFolder, onCompany }: {
+export function LibraryTree({ view, folder, branch, branches, onView, onFolder, onCompany, drop }: {
   view: StoreView;
   folder: string;
   branch: Branch | null;
@@ -156,6 +170,8 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
   onView: (v: StoreView) => void;
   onFolder: (path: string) => void;
   onCompany: (id: string) => void;
+  /** Folders take drops (the explorer). */
+  drop?: TreeDrop;
 }) {
   const t = useT();
   const counts = useViewCounts(branch);
@@ -219,6 +235,38 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
     else n.delete(key);
     return n;
   });
+  const [over, setOver] = useState<string | null>(null);
+  // Hovering a closed folder while dragging opens it after a moment, to reach the ones inside.
+  const opener = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const dndFor = (node: TNode): (HTMLAttributes<HTMLLIElement> & { draggable?: boolean }) | undefined => {
+    if (!drop || node.path === undefined || (node.kind !== "folder" && node.kind !== "root")) return undefined;
+    const path = node.path;
+    return {
+      draggable: node.kind === "folder" && !!drop.onDragStart,
+      onDragStart: drop.onDragStart ? (e) => { e.stopPropagation(); drop.onDragStart?.(path, e); } : undefined,
+      onDragEnd: () => { setOver(null); drop.onDragEnd?.(); },
+      onDragOver: (e) => {
+        if (!drop.accepts(path, e)) return;
+        e.preventDefault();
+        if (over !== node.key) setOver(node.key);
+        if (node.children.length && !expanded.has(node.key) && opener.current?.key !== node.key) {
+          if (opener.current) clearTimeout(opener.current.timer);
+          opener.current = { key: node.key, timer: setTimeout(() => toggle(node.key, true), 700) };
+        }
+      },
+      onDragLeave: (e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setOver((o) => (o === node.key ? null : o));
+        if (opener.current?.key === node.key) { clearTimeout(opener.current.timer); opener.current = null; }
+      },
+      onDrop: (e) => {
+        e.preventDefault();
+        setOver(null);
+        if (opener.current) { clearTimeout(opener.current.timer); opener.current = null; }
+        drop.onDrop(path, e);
+      },
+    };
+  };
   const activate = (node: TNode) => {
     setFocusKey(node.key);
     if (node.kind === "group") toggle(node.key);
@@ -274,6 +322,7 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
         {rows.map((row) => (
           <TreeRowWithHint key={row.node.key} empty={row.node.kind === "root" && !row.node.children.length}>
             <TreeRow row={row} selected={row.node.key === selectedKey} tabbable={row.node.key === active}
+              over={over === row.node.key} dnd={dndFor(row.node)}
               onActivate={() => activate(row.node)} onToggle={() => toggle(row.node.key)} onFocus={() => setFocusKey(row.node.key)}
               setEl={(el) => { if (el) els.current.set(row.node.key, el); else els.current.delete(row.node.key); }} />
           </TreeRowWithHint>

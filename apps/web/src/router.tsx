@@ -69,7 +69,7 @@ const page = {
   workflows: lazyRouteComponent(() => import("@/pages/workflows"), "WorkflowsPage"),
   companyKit: lazyRouteComponent(() => import("@/pages/documents/kit"), "CompanyKitPage"),
   mcpServers: lazyRouteComponent(() => import("@/pages/mcp-servers"), "McpServersPage"),
-  files: lazyRouteComponent(() => import("@/pages/documents/files"), "FilesPage"),
+  explorer: lazyRouteComponent(() => import("@/pages/explorer"), "ExplorerPage"),
   templates: lazyRouteComponent(() => import("@/pages/documents/templates"), "TemplatesPage"),
   documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
   packs: lazyRouteComponent(() => import("@/pages/documents/packs"), "PacksPage"),
@@ -475,20 +475,28 @@ const companyKitRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { b?: string } => ({ b: str(s.b) }),
   component: page.companyKit,
 });
+/** The Library's address: f = the open file, folder, origin (made by), page = open a PDF at
+ * that page (a search hit), view = a ready-made folder (see STORE_VIEWS), task = one task's
+ * files, from = where Back goes. */
+interface LibrarySearch {
+  f?: string; folder?: string; origin?: "agent" | "uploaded" | "person"; page?: number; view?: StoreView; task?: string; from?: string;
+}
+const librarySearch = (s: Record<string, unknown>): LibrarySearch => ({
+  f: str(s.f), folder: str(s.folder), origin: s.origin === "agent" || s.origin === "uploaded" || s.origin === "person" ? s.origin : undefined,
+  page: num(s.page),
+  view: (STORE_VIEWS as readonly unknown[]).includes(s.view) ? (s.view as StoreView) : undefined,
+  task: str(s.task),
+  from: safeFrom(s.from),
+});
+// P61: the Library is a full-screen explorer (/explorer, below). /files, the address every link
+// and the nav use, goes there with the same search.
 const filesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/files",
-  // P25: page = open a PDF at that page (a search hit).
-  // The file store: view = which list (see STORE_VIEWS), task = one task's files.
-  validateSearch: (s: Record<string, unknown>): {
-    f?: string; folder?: string; origin?: "agent" | "uploaded" | "person"; page?: number; view?: StoreView; task?: string;
-  } => ({
-    f: str(s.f), folder: str(s.folder), origin: s.origin === "agent" || s.origin === "uploaded" || s.origin === "person" ? s.origin : undefined,
-    page: num(s.page),
-    view: (STORE_VIEWS as readonly unknown[]).includes(s.view) ? (s.view as StoreView) : undefined,
-    task: str(s.task),
-  }),
-  component: page.files,
+  validateSearch: librarySearch,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/explorer", search, replace: true });
+  },
 });
 const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: "/templates", component: page.templates });
 const documentsRoute = createRoute({
@@ -775,6 +783,21 @@ const chatFullRoute = createRoute({
   component: page.chatFull,
 });
 
+// P61: the Library's file explorer, full screen without the app shell (like the chat), signed in
+// and allowed the Library.
+const explorerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/explorer",
+  validateSearch: librarySearch,
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    if (!pathAllowed("/files", me.permissions)) throw redirect({ to: "/workspace" });
+  },
+  component: page.explorer,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -794,6 +817,7 @@ const routeTree = rootRoute.addChildren([
   welcomeRoute,
   presentRoute,
   chatFullRoute,
+  explorerRoute,
   appRoute.addChildren([
     homeRoute,
     assistantsRoute,

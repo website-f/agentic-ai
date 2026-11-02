@@ -46,6 +46,7 @@ import { WORKSPACE_HUB } from "./workspace-hub";
 import { FOLDER_BROWSER } from "./folder-browser";
 import { ERASE } from "./erase";
 import { TWO_FACTOR } from "./two-factor";
+import { EXPLORER } from "./explorer";
 
 export const MS: Record<string, string> = {
   ...COMMON,
@@ -91,4 +92,5 @@ export const MS: Record<string, string> = {
   ...FOLDER_BROWSER,
   ...TWO_FACTOR,
   ...ERASE,
+  ...EXPLORER,
 };

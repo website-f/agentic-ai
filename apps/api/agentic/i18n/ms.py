@@ -1787,4 +1787,14 @@ MS: dict[str, str] = {
     "This erase request is not open.": "Permintaan memadam ini tidak terbuka.",
     "The certificate is not ready yet.": "Sijil belum siap.",
     "Only a failed erase can be tried again.": ("Hanya pemadaman yang gagal boleh dicuba semula."),
+    # ------------------------------------------------------------ P61 Library: folders, labels (api/routers/company_files, files)
+    "Give the folder a name.": "Beri folder itu nama.",
+    "That folder already exists.": "Folder itu sudah ada.",
+    "A folder cannot be moved into itself.": "Folder tidak boleh dipindahkan ke dalam dirinya sendiri.",
+    "This folder cannot be renamed or moved.": "Folder ini tidak boleh dinamakan semula atau dipindahkan.",
+    "That folder is not here.": "Folder itu tiada di sini.",
+    "That folder path is too long.": "Laluan folder itu terlalu panjang.",
+    "This folder still has files.": "Folder ini masih ada fail.",
+    "A label is 1 to {n} characters.": "Label mesti 1 hingga {n} aksara.",
+    "A file can have up to {n} labels.": "Satu fail boleh ada sehingga {n} label.",
 }

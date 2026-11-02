@@ -1380,6 +1380,8 @@ class DocFile(Timestamps, Base):
     )
     storage_key: Mapped[str | None] = mapped_column(String(1000))
     storage_etag: Mapped[str | None] = mapped_column(String(200))
+    # P61: a person's own labels on the file ("urgent", "Q3"): at most 12, 1..30 characters.
+    labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
 
 class IntakeBatch(Timestamps, Base):
