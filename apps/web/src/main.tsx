@@ -21,6 +21,10 @@ function handleAuthError(error: unknown) {
     router.navigate({ to: "/login", search: { next: path } });
   } else if (error.code === "password_change_required" && path !== "/change-password") {
     router.navigate({ to: "/change-password" });
+  } else if (error.code === "2fa_required" && path !== "/two-step-setup") {
+    // P57: the company now requires two-step sign-in and this person has not set it up.
+    queryClient.invalidateQueries({ queryKey: ["me"] });
+    router.navigate({ to: "/two-step-setup" });
   }
 }
 

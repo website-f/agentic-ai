@@ -15,6 +15,7 @@ import {
   KanbanIcon,
   ReceiptIcon,
   SealCheckIcon,
+  ShieldCheckIcon,
   SparkleIcon,
   WarningCircleIcon,
   type Icon,
@@ -30,7 +31,7 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 
 export interface NeedItem {
-  key: "approvals" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "bills" | "skills" | "routines";
+  key: "approvals" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "bills" | "skills" | "routines" | "services";
   count: number;
   to: string;
   search: Record<string, string>;
@@ -64,6 +65,7 @@ const LOOK: Record<NeedItem["key"], { icon: Icon; label: string; one: string; to
   bills: { icon: ReceiptIcon, label: msg("{n} bills and receipts to approve"), one: msg("Bill to approve"), tone: "text-warn" },
   skills: { icon: SparkleIcon, label: msg("{n} skill proposals to decide"), one: msg("Skill proposal"), tone: "text-accent" },
   routines: { icon: GraduationCapIcon, label: msg("{n} learned routines to trust"), one: msg("Learned routine"), tone: "text-accent" },
+  services: { icon: ShieldCheckIcon, label: msg("{n} outside services wait for approval"), one: msg("Service to approve"), tone: "text-warn" },
 };
 
 const chip = "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] tabular";

@@ -2,6 +2,7 @@
 
     docker compose exec api python -m agentic.admin reset-password owner@example.com
     docker compose exec api python -m agentic.admin sessions-revoke owner@example.com
+    docker compose exec api python -m agentic.admin reset-2fa owner@example.com
     docker compose exec api python -m agentic.admin stuck-tasks [--fail]
     docker compose exec -e AGENTIC_OLD_MASTER_KEY=... api python -m agentic.admin rotate-master-key
     docker compose exec api python -m agentic.admin rotate-master-key --from-dev
@@ -72,6 +73,22 @@ async def reset_password(email: str) -> None:
     print("They must choose a new one at the next sign-in. All their sessions were ended.")
 
 
+async def reset_2fa(email: str) -> None:
+    """P57: the last owner lost their phone and their recovery codes."""
+    from .services import two_factor
+
+    u = await _user(email)
+    async with SessionLocal() as db:
+        user = await db.get(User, u.id)
+        assert user is not None
+        two_factor.turn_off(user)
+        await db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
+        for m in (await db.scalars(select(Membership).where(Membership.user_id == user.id))).all():
+            await audit.record(db, m.workspace_id, ACTOR, "auth.2fa_reset", target=user.id)
+        await db.commit()
+    print(f"Two-step sign-in is off for {u.email}. All their sessions were ended.")
+
+
 async def revoke_sessions(email: str) -> None:
     u = await _user(email)
     async with SessionLocal() as db:
@@ -122,6 +139,7 @@ SECRETS = [
     (Credential, "password_enc", lambda r: r.aad),
     (CredentialState, "state_enc", lambda r: f"credential_state:{r.credential_id}"),
     (InstanceSecret, "value_enc", lambda r: f"instance_secret:{r.name}"),
+    (User, "totp_secret_enc", lambda r: f"user_totp:{r.id}"),  # P57 two-step sign-in
 ]
 
 
@@ -169,6 +187,7 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("reset-password").add_argument("email")
     sub.add_parser("sessions-revoke").add_argument("email")
+    sub.add_parser("reset-2fa").add_argument("email")
     st = sub.add_parser("stuck-tasks")
     st.add_argument("--fail", action="store_true", help="mark them failed so they can be retried")
     rk = sub.add_parser("rotate-master-key")
@@ -181,6 +200,8 @@ def main() -> None:
                 await reset_password(a.email)
             elif a.cmd == "sessions-revoke":
                 await revoke_sessions(a.email)
+            elif a.cmd == "reset-2fa":
+                await reset_2fa(a.email)
             elif a.cmd == "rotate-master-key":
                 await rotate_master_key(a.from_dev)
             else:

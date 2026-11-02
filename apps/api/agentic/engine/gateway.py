@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, media, privacy, store
+from . import client, compliance, media, privacy, store
 from .client import Usage
 from .errors import Failure
 
@@ -205,6 +205,12 @@ async def _chat(
             continue
         if not p.enabled:
             attempts.append({"member": label, "skipped": "provider is turned off"})
+            continue
+        if not privacy.is_local(p) and not await compliance.allowed(
+            db, workspace_id, f"ai:{p.id}", p.name, f"{task}: {model_id}"
+        ):
+            # P57: the approved-services lock is on and this provider is not approved.
+            attempts.append({"member": label, "skipped": "not an approved service"})
             continue
         key = store.provider_key(p)
         if not key:
@@ -620,6 +626,12 @@ async def _walk(
             continue
         if not p.enabled:
             attempts.append({"member": label, "skipped": "provider is turned off"})
+            continue
+        if not privacy.is_local(p) and not await compliance.allowed(
+            db, workspace_id, f"ai:{p.id}", p.name, f"{task}: {model_id}"
+        ):
+            # P57: the approved-services lock is on and this provider is not approved.
+            attempts.append({"member": label, "skipped": "not an approved service"})
             continue
         key = store.provider_key(p)
         if not key:

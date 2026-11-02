@@ -47,8 +47,29 @@ METHOD_KIND = {
     "system.health": "health",
     "screen.capture": "screen",
     "input.send": "control",
+    # P58: one site's encrypted traffic through this computer (its person allowed the site).
+    "net.open": "tunnel",
 }
 REMOTE_LEVELS = ("off", "view", "control")
+_SUFFIX = re.compile(r"^(?=.{3,120}$)[a-z0-9-]+(\.[a-z0-9-]+)+$")
+
+
+def tunnel_hosts(raw: Any) -> list[str]:
+    """P58: a clean list of site suffixes (eperolehan.gov.my), at most 10."""
+    out: list[str] = []
+    for h in raw if isinstance(raw, list) else []:
+        s = str(h).strip().lower().rstrip(".")
+        if _SUFFIX.match(s) and s not in out:
+            out.append(s)
+    return out[:10]
+
+
+def host_in(host: str, suffixes: list[str]) -> bool:
+    """The host is one of the suffixes or a subdomain of one (not a look-alike)."""
+    h = (host or "").strip().lower().rstrip(".")
+    return any(h == s or h.endswith("." + s) for s in suffixes)
+
+
 # Methods that carry bytes back over HTTPS (the socket only carries the call).
 UPLOADS = frozenset({"files.upload", "screen.capture"})
 # Logged at most once a few minutes per computer (a live view asks for a frame a second).
@@ -61,7 +82,9 @@ PC_TOOLS = frozenset(
     {"pc_find_files", "pc_list_folder", "pc_read_file", "pc_save_to_workspace", "pc_save_to_pc"}
 )
 # What goes into the activity log from a call's params: places and queries, never contents.
-DETAIL_KEYS = ("query", "folder", "exts", "modified_after", "path", "name", "start_url", "channel")
+DETAIL_KEYS = (
+    "query", "folder", "exts", "modified_after", "path", "name", "start_url", "channel", "host",
+)  # fmt: skip
 
 
 class DeviceError(Exception):
@@ -420,6 +443,7 @@ def device_out(d: Device, online: bool) -> dict[str, Any]:
         "remote_pc": d.remote_pc,
         "remote_allowed": d.remote_allowed,
         "remote": remote_level(d),
+        "tunnel_hosts": list(d.tunnel_hosts or []),  # P58: sites its person lets through
     }
 
 

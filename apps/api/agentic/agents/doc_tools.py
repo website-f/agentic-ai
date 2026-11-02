@@ -638,6 +638,13 @@ async def _tool_call(ctx: ToolContext, args: dict[str, Any]) -> str:
     if found is None:
         return "Error: no such external tool. Use tool_search first."
     server, t = found
+    from ..engine import compliance
+
+    # P57: each outside tool server needs its own approval when the lock is on.
+    if not await compliance.allowed(
+        ctx.db, ctx.workspace.id, f"mcp:{server.id}", server.name, t["name"]
+    ):
+        return "Error: " + compliance.BLOCKED.format(label=server.name)
     raw_args = args.get("arguments")
     arguments: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     header = crypto.decrypt(server.auth_header_enc, server.aad) if server.auth_header_enc else ""

@@ -199,6 +199,29 @@ async def needs(
             "/learning",
             {},
         )
+    if can(role, "org.manage") and principal.scope.everything:
+        # P57: services the approved-services lock stopped, waiting for an owner's decision.
+        from ...engine import compliance
+        from ...models import Workspace
+
+        st = compliance.state(await db.get(Workspace, ws))
+        waiting = {k: r for k, r in st.requests.items() if st.lock and k not in st.approved}
+        if waiting:
+            items.append(
+                {"key": "services", "count": len(waiting), "to": "/approved-services", "search": {}}
+            )
+            for key, r in waiting.items():
+                at = r.get("last_at")
+                entries.append(
+                    {
+                        "key": "services",
+                        "id": key,
+                        "title": f"{r.get('label') or key}: {r.get('what') or ''}".strip(": "),
+                        "at": datetime.fromisoformat(at) if at else None,
+                        "to": "/approved-services",
+                        "search": {},
+                    }
+                )
     seen = _seen_at(principal)
     entries.sort(key=lambda e: e["at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
     for e in entries:

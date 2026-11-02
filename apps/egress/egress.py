@@ -33,6 +33,18 @@ Settings (environment):
                           `eperolehan.gov.my,mda.gov.my` (matches the host and its subdomains).
                           Both https (CONNECT) and plain http (absolute-form request) to
                           these hosts go through the upstream; neither leaves directly.
+  EGRESS_PC_TUNNEL        optional host:port of the API's site-through-a-computer gateway (P58,
+                          apps/api/agentic/devices/tunnel.py), e.g. api:3130. For the hosts in
+                          EGRESS_PC_TUNNEL_HOSTS (https only), the browser is asked for its
+                          workspace's proxy credentials (407) and the CONNECT is handed to the
+                          gateway with them. 200: through the workspace's company computer.
+                          409: not tunnelled, so it goes out as usual. 503: refused (the
+                          workspace said wait while its computer is unavailable).
+  EGRESS_PC_TUNNEL_HOSTS  comma list of host suffixes offered to the gateway, e.g.
+                          `eperolehan.gov.my`, or `*` for every https site (P60: each
+                          workspace's Web connections then decide: this server, a company
+                          computer or its proxies). With `*` the usual public-address check
+                          runs first, and a 409 goes out to the address it checked.
   EGRESS_MAX_CONNECTIONS  connections at once (default 512); more get 503
   EGRESS_CONNECT_TIMEOUT  seconds to connect upstream (default 10)
   EGRESS_DNS_TIMEOUT      seconds to resolve (default 5)
@@ -381,9 +393,15 @@ class Proxy:
         log_allowed: bool = False,
         upstream: tuple[str, int] | None = None,
         upstream_hosts: tuple[str, ...] = (),
+        pc_tunnel: tuple[str, int] | None = None,
+        pc_tunnel_hosts: tuple[str, ...] = (),
         out=None,
     ) -> None:
         self.policy, self.resolver, self.opener = policy, resolver, opener
+        self.pc_tunnel = pc_tunnel
+        self.pc_tunnel_hosts = tuple(
+            h.lower().strip().rstrip(".") for h in pc_tunnel_hosts if h.strip()
+        )
         self.upstream = upstream
         self.upstream_hosts = tuple(
             h.lower().strip().rstrip(".") for h in upstream_hosts if h.strip()
@@ -407,6 +425,12 @@ class Proxy:
             uhost, _, uport = up.rpartition(":")
             upstream = (uhost or up, int(uport) if uport.isdigit() else 3128)
         uhosts = tuple(h for h in env.get("EGRESS_UPSTREAM_HOSTS", "").split(",") if h.strip())
+        pc = env.get("EGRESS_PC_TUNNEL", "").strip()
+        pc_tunnel: tuple[str, int] | None = None
+        if pc:
+            phost, _, pport = pc.rpartition(":")
+            pc_tunnel = (phost or pc, int(pport) if pport.isdigit() else 3130)
+        phosts = tuple(h for h in env.get("EGRESS_PC_TUNNEL_HOSTS", "").split(",") if h.strip())
         return cls(
             Policy.from_env(env),
             max_connections=int(env.get("EGRESS_MAX_CONNECTIONS", "512")),
@@ -416,6 +440,8 @@ class Proxy:
             log_allowed=env.get("EGRESS_LOG_ALLOWED", "false").lower() in ("1", "true", "yes"),
             upstream=upstream,
             upstream_hosts=uhosts,
+            pc_tunnel=pc_tunnel,
+            pc_tunnel_hosts=phosts,
         )
 
     def via_upstream(self, host: str) -> bool:
@@ -424,6 +450,51 @@ class Proxy:
             return False
         h = host.lower().strip().rstrip(".")
         return any(h == s or h.endswith("." + s) for s in self.upstream_hosts)
+
+    def via_pc(self, host: str) -> bool:
+        """P58: whether this host is offered to the site-through-a-computer gateway."""
+        if not self.pc_tunnel:
+            return False
+        if "*" in self.pc_tunnel_hosts:  # P60: every site; the gateway decides per workspace
+            return True
+        h = host.lower().strip().rstrip(".")
+        return any(h == s or h.endswith("." + s) for s in self.pc_tunnel_hosts)
+
+    async def _try_pc(
+        self, host: str, port: int, auth: str
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter] | None:
+        """Hand a CONNECT to the gateway. The streams when it tunnels (200); None when it says
+        the connection is not its (409) or is not there; Denied when it refuses."""
+        assert self.pc_tunnel is not None
+        try:
+            gr, gw = await asyncio.wait_for(self.opener(*self.pc_tunnel), self.connect_timeout)
+        except (TimeoutError, OSError):
+            return None  # no gateway: go out as before
+        try:
+            gw.write(
+                f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n"
+                f"Proxy-Authorization: {auth}\r\n\r\n".encode("latin-1")
+            )
+            await gw.drain()
+            # The computer opens its connection first: allow it the gateway's own wait.
+            raw = await asyncio.wait_for(gr.readuntil(b"\r\n\r\n"), 60)
+        except (TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, OSError):
+            await self._close(gw)
+            raise Denied("company computer did not answer", status=504) from None
+        code = raw.split(b"\r\n", 1)[0].split(b" ")
+        status = int(code[1]) if len(code) > 1 and code[1].isdigit() else 502
+        if status == 200:
+            return gr, gw
+        body = b""
+        try:
+            body = await asyncio.wait_for(gr.read(500), 2)
+        except Exception:  # noqa: BLE001,S110 - the reason is a nicety
+            pass
+        await self._close(gw)
+        if status == 409:
+            return None
+        reason = body.decode("utf-8", "replace").strip()[:200]
+        raise Denied(f"company computer: {reason}", status=503)
 
     async def _connect_upstream(
         self, host: str, port: int
@@ -466,6 +537,21 @@ class Proxy:
             "Content-Type: text/plain; charset=utf-8\r\n"
             f"Content-Length: {len(body)}\r\n"
             "Connection: close\r\n\r\n"
+        ).encode()
+        try:
+            w.write(head + body)
+            await w.drain()
+        except (ConnectionError, OSError):
+            pass
+
+    @staticmethod
+    async def _challenge(w: asyncio.StreamWriter) -> None:
+        """407: the browser answers with its workspace's proxy credentials (P58)."""
+        body = b"proxy credentials needed\n"
+        head = (
+            "HTTP/1.1 407 Proxy Authentication Required\r\n"
+            'Proxy-Authenticate: Basic realm="agentic"\r\n'
+            f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
         ).encode()
         try:
             w.write(head + body)
@@ -563,6 +649,38 @@ class Proxy:
             if method == "CONNECT":
                 host, port = split_authority(target, None)
                 canon, _lit = normalize_host(host)
+                if port == 443 and self.via_pc(canon):
+                    # P58: offered to the site-through-a-computer gateway, with the browser's
+                    # workspace credentials (asked for once with a 407, as proxies do).
+                    auth = next((v for n, v in headers if n.lower() == "proxy-authorization"), "")
+                    if not auth:
+                        await self._challenge(cw)
+                        return
+                    if not self.policy.destination_allowed(canon):
+                        raise Denied("host not in EGRESS_ONLY_HOSTS")
+                    vetted = None
+                    if "*" in self.pc_tunnel_hosts:
+                        # P60: every site is offered, so the usual address check comes first
+                        # (a private address never leaves, whatever the way out).
+                        vetted = await decide(
+                            host, port, self.policy, self.resolver, self.dns_timeout
+                        )
+                    got = await self._try_pc(canon, port, auth)
+                    if got is not None:
+                        ur, uw = got
+                        self._allowed(client, method, canon, port, "gateway")
+                        cw.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                        await cw.drain()
+                        await self._splice(cr, cw, ur, uw)
+                        return
+                    if vetted is not None:  # not routed: straight out to the checked address
+                        vhost, vips = vetted
+                        ur, uw, ip = await self._connect(vips, port)
+                        self._allowed(client, method, vhost, port, ip)
+                        cw.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                        await cw.drain()
+                        await self._splice(cr, cw, ur, uw)
+                        return
                 if self.via_upstream(canon):
                     # A listed host: hand it to the trusted upstream, which does the egress and
                     # the public-address check. Keep the port allow-list here.

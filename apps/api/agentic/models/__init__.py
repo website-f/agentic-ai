@@ -55,6 +55,12 @@ class User(Timestamps, Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # P19: small per-person settings (tutorial progress, onboarding done, dismissed tips).
     prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    # P57: two-step sign-in (services/two_factor.py). The secret is sealed (core/crypto);
+    # enabled_at is None while a setup waits for its first code.
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
+    recovery_codes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
 
 class Membership(Timestamps, Base):
@@ -1929,6 +1935,8 @@ class Device(Base):
     # what the person allowed on the computer itself, and on the web with their password.
     remote_pc: Mapped[str] = mapped_column(String(8), default="off", server_default="off")
     remote_allowed: Mapped[str] = mapped_column(String(8), default="off", server_default="off")
+    # P58: sites its person lets through it (`agentic-pc tunnel on ...`); empty = off there.
+    tunnel_hosts: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -2531,3 +2539,7 @@ class CrmAccess(Timestamps, Base):
     level: Mapped[str] = mapped_column(String(6), default="view")
     hidden_fields: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     granted_by: Mapped[str] = mapped_column(String(80))
+
+
+# P57: export and erase a workspace (agentic/erasure/models.py).
+from ..erasure.models import ErasureRecord, WorkspaceExport  # noqa: E402, F401

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { LanguageSwitch } from "@/components/language-switch";
 import { Wordmark } from "@/components/logo";
 import { IconTile } from "@/components/page";
+import { CodeInput, RecoveryInput, TwoFactorSetup } from "@/components/two-factor";
 import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { msg, useT } from "@/i18n";
@@ -15,6 +16,7 @@ import { keys, meQuery } from "@/lib/queries";
 import { safeNext } from "@/lib/search";
 import { lastLoginPath, rememberLoginPath, staffQuery, type LoginPath } from "@/lib/staff";
 import { staffOnly } from "@/lib/twin";
+import { isChallenge, type TwoFactorChallenge } from "@/lib/two-factor";
 import type { Me } from "@/lib/types";
 import { useSignOut } from "@/lib/use-sign-out";
 import { cn } from "@/lib/utils";
@@ -83,25 +85,37 @@ function AuthLayout({ title, subtitle, children }: { title: string; subtitle: Re
   );
 }
 
-function useAuthSubmit<T>(path: string, onDone: (me: Me) => void | Promise<void>) {
+function useAuthSubmit<T>(
+  path: string,
+  onDone: (me: Me) => void | Promise<void>,
+  // P57: the password was right and the account uses two-step sign-in: a code comes next.
+  onChallenge?: (c: TwoFactorChallenge) => void,
+) {
   const t = useT();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
 
   const submit = async (body: T) => {
     setBusy(true);
     setError(null);
+    setErrorCode(null);
     setFields({});
     try {
-      const me = await api<Me>(path, "POST", body);
-      qc.setQueryData(keys.me, me);
+      const res = await api<Me | TwoFactorChallenge>(path, "POST", body);
+      if (isChallenge(res)) {
+        onChallenge?.(res);
+        return;
+      }
+      qc.setQueryData(keys.me, res);
       qc.setQueryData(keys.setup, { needs_setup: false });
-      await onDone(me);
+      await onDone(res);
     } catch (e) {
       if (e instanceof ApiError) {
         setFields(e.fields);
+        setErrorCode(e.code);
         setError(Object.keys(e.fields).length ? null : e.message);
       } else {
         setError(t("Something went wrong."));
@@ -110,7 +124,7 @@ function useAuthSubmit<T>(path: string, onDone: (me: Me) => void | Promise<void>
       setBusy(false);
     }
   };
-  return { busy, error, fields, submit };
+  return { busy, error, errorCode, fields, submit };
 }
 
 function formValues(e: FormEvent<HTMLFormElement>): Record<string, string> {
@@ -169,12 +183,19 @@ export function LoginPage() {
   const qc = useQueryClient();
   const search = useSearch({ strict: false }) as { next?: string };
   const [path, setPath] = useState<LoginPath>(lastLoginPath);
+  const [challenge, setChallenge] = useState<{ token: string; email: string } | null>(null);
+  const [email, setEmail] = useState("");
   const staff = path === "staff";
-  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", async (me) => {
+  const signedIn = async (me: Me) => {
     rememberLoginPath(path);
     if (me.user.must_change_password) navigate({ to: "/change-password" });
+    else if (me.user.two_factor_setup_required) navigate({ to: "/two-step-setup" });
     else navigate({ to: await landing(qc, me, path, search.next) });
-  });
+  };
+  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", signedIn, (c) => setChallenge({ token: c.challenge, email }));
+  if (challenge) {
+    return <CodeStep challenge={challenge.token} email={challenge.email} onDone={signedIn} onBack={() => setChallenge(null)} />;
+  }
   return (
     <AuthLayout
       title={staff ? t("Sign in to your AI worker") : t("Sign in")}
@@ -204,7 +225,11 @@ export function LoginPage() {
       </div>
       <form
         className={cn("grid gap-4", staff && "[&_input]:h-12 [&_input]:text-[16px]")}
-        onSubmit={(e) => submit(formValues(e))}
+        onSubmit={(e) => {
+          const v = formValues(e);
+          setEmail(v.email ?? "");
+          submit(v);
+        }}
         noValidate
       >
         <Field label={t("Email")} name="email" type="email" required autoComplete="username" inputMode="email" error={fields.email} />
@@ -215,6 +240,97 @@ export function LoginPage() {
         </Button>
         <p className="text-center text-[12.5px] text-muted">{t("Forgot your password? Ask an admin or your manager to reset it.")}</p>
       </form>
+    </AuthLayout>
+  );
+}
+
+/** P57: the second step of signing in: a code from the authenticator app, or a recovery code. */
+function CodeStep({ challenge, email, onDone, onBack }: { challenge: string; email: string; onDone: (me: Me) => Promise<void>; onBack: () => void }) {
+  const t = useT();
+  const [recovery, setRecovery] = useState(false);
+  const [code, setCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const { busy, error, errorCode, submit } = useAuthSubmit("/api/auth/login/2fa", onDone);
+  // The challenge is gone (timed out, or too many wrong codes): only the password step helps.
+  const expired = errorCode === "challenge_expired" || errorCode === "too_many_codes";
+  const send = (c?: string) => {
+    if (busy || expired) return;
+    if (recovery) {
+      if (recoveryCode.trim()) submit({ challenge, recovery_code: recoveryCode.trim() });
+      return;
+    }
+    const value = c ?? code;
+    if (value.length === 6) submit({ challenge, code: value }).then(() => setCode(""));
+  };
+  return (
+    <AuthLayout
+      title={recovery ? t("Use a recovery code") : t("Enter your code")}
+      subtitle={
+        recovery
+          ? t("Type one of the recovery codes you saved when you set up two-step sign-in. Each works once.")
+          : t("Open your authenticator app and type the 6-digit code for {email}.", { email: email || t("your account") })
+      }
+    >
+      <form
+        className="grid gap-4"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        {recovery ? (
+          <RecoveryInput label={t("Recovery code")} value={recoveryCode} onChange={setRecoveryCode} autoFocus />
+        ) : (
+          <CodeInput label={t("6-digit code")} value={code} onChange={setCode} onComplete={(c) => send(c)} autoFocus disabled={busy || expired} error={error} />
+        )}
+        <FormError message={error} />
+        {expired ? (
+          <Button type="button" size="lg" onClick={onBack}>
+            {t("Enter your password again")}
+          </Button>
+        ) : (
+          <Button type="submit" size="lg" loading={busy} disabled={recovery ? !recoveryCode.trim() : code.length !== 6}>
+            {t("Sign in")}
+          </Button>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+          <button type="button" className="text-accent hover:underline" onClick={() => setRecovery((v) => !v)}>
+            {recovery ? t("Use a code from your app instead") : t("Use a recovery code instead")}
+          </button>
+          <button type="button" className="text-muted hover:text-fg hover:underline" onClick={onBack}>
+            {t("Back")}
+          </button>
+        </div>
+        <p className="text-center text-[12.5px] text-muted">{t("Lost your phone and your recovery codes? Ask an owner to reset your two-step sign-in.")}</p>
+      </form>
+    </AuthLayout>
+  );
+}
+
+/** P57: the company requires two-step sign-in and this person has not set it up. Nothing else
+ * works until they do (the API answers 2fa_required everywhere else). */
+export function TwoStepSetupPage() {
+  const t = useT();
+  const { data: me } = useSuspenseQuery(meQuery);
+  const navigate = useNavigate();
+  const signOut = useSignOut();
+  const qc = useQueryClient();
+  return (
+    <AuthLayout title={t("Set up two-step sign-in")} subtitle={t("Your company requires two-step sign-in: set it up to continue.")}>
+      <div className="grid gap-4">
+        <TwoFactorSetup
+          email={me.user.email}
+          onDone={async () => {
+            const fresh = await qc.fetchQuery({ ...meQuery, staleTime: 0 });
+            toast.success(t("Two-step sign-in is on."));
+            navigate({ to: await landing(qc, fresh, lastLoginPath()) });
+          }}
+        />
+        <Button type="button" variant="ghost" onClick={signOut}>
+          {t("Sign out instead")}
+        </Button>
+      </div>
     </AuthLayout>
   );
 }
@@ -230,7 +346,8 @@ export function ChangePasswordPage() {
   const { busy, error, fields, submit } = useAuthSubmit("/api/auth/change-password", async (fresh) => {
     toast.success(t("Password updated. Other devices were signed out."));
     // A first sign-in (temporary password) continues where the login choice pointed.
-    navigate({ to: forced ? await landing(qc, fresh, lastLoginPath()) : "/" });
+    if (fresh.user.two_factor_setup_required) navigate({ to: "/two-step-setup" });
+    else navigate({ to: forced ? await landing(qc, fresh, lastLoginPath()) : "/" });
   });
   return (
     <AuthLayout

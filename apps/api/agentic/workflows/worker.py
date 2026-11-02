@@ -47,6 +47,8 @@ from .channel_workflows import DeliverWorkflow
 from .document_activities import file_extract, workflow_run_tick
 from .document_workflows import FileExtractWorkflow, WorkflowRunWorkflow
 from .engine_activities import check_all_providers
+from .erasure_activities import erase_failed, erase_step, export_build
+from .erasure_workflows import EraseWorkspaceWorkflow, ExportWorkspaceWorkflow
 from .hours_activities import deferred_start
 from .hours_workflows import DeferredStartWorkflow
 from .intake_activities import intake_fail, intake_finish, intake_pending, intake_read
@@ -111,6 +113,8 @@ WORKFLOWS = [
     MailPendingWorkflow,
     MailSyncTickWorkflow,
     MoneyRemindersWorkflow,
+    ExportWorkspaceWorkflow,
+    EraseWorkspaceWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -159,6 +163,9 @@ ACTIVITIES = [
     mail_pending,
     mail_tick,
     money_reminders,
+    export_build,
+    erase_step,
+    erase_failed,
 ]
 
 

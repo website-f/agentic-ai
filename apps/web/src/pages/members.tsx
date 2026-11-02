@@ -1,10 +1,11 @@
-import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, PencilSimpleIcon, RobotIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
+import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, PencilSimpleIcon, RobotIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Page, PageHeader, Section } from "@/components/page";
+import { ResetTwoFactorDialog, TwoFactorPill, useMemberTwoFactor } from "@/components/two-factor";
 import { Button } from "@/components/ui/button";
 import { Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -234,6 +235,10 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
   const [removing, setRemoving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [reset, setReset] = useState<string | null>(null);
+  // P57: owners and admins see who has two-step sign-in on; owners reset it (a lost phone).
+  const seesTwoFactor = me.permissions.includes("members.manage");
+  const hasTwoFactor = useMemberTwoFactor(member.user_id, seesTwoFactor);
+  const [resetting2fa, setResetting2fa] = useState(false);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
@@ -261,6 +266,7 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
           <span className="min-w-0 break-words">{member.name}</span>
           {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
           {member.must_change_password ? <Pill tone="warn">{t("Temporary password")}</Pill> : null}
+          <TwoFactorPill userId={member.user_id} enabled={seesTwoFactor} />
         </p>
         <p className="text-[12.5px] break-all text-muted">{member.email}</p>
         <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
@@ -287,6 +293,9 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
             <MenuContent>
               <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
               <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
+              {me.role === "owner" && hasTwoFactor ? (
+                <MenuItem icon={<ShieldSlashIcon />} onSelect={() => setResetting2fa(true)}>{t("Reset two-step sign-in")}</MenuItem>
+              ) : null}
               <MenuSeparator />
               <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Remove from workspace")}</MenuItem>
             </MenuContent>
@@ -311,6 +320,7 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
           }
         }}
       />
+      <ResetTwoFactorDialog member={member} open={resetting2fa} onOpenChange={setResetting2fa} />
       <ResponsiveDialog open={!!reset} onOpenChange={() => setReset(null)} title={t("Password reset")} footer={<Button onClick={() => setReset(null)}>{t("Done")}</Button>}>
         {reset ? <TempPassword email={member.email} password={reset} /> : null}
       </ResponsiveDialog>

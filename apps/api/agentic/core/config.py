@@ -6,6 +6,7 @@ Defaults target local development against the compose stack's dev ports
 
 import base64
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -70,6 +71,9 @@ class Settings(BaseSettings):
     # The browser service (Camoufox), reached by the worker only. Empty = no browser tools.
     browser_url: str = "http://browser:8600"
     browser_token: str = "dev-browser-token"  # noqa: S105 - dev default, required outside dev
+    # P58: where the API listens for the egress proxy's site-through-a-computer connections
+    # (devices/tunnel.py), e.g. 0.0.0.0:3130 on the browser network. Empty = off.
+    pc_tunnel_listen: str = ""
     # A saved login's browser session (cookies + local storage) is kept this many days, so
     # agents stay signed in between tasks; older ones are dropped and the agent signs in again.
     browser_session_days: int = Field(default=14, ge=1, le=90)
@@ -110,6 +114,12 @@ class Settings(BaseSettings):
     login_max_fails_per_email: int = 5
     login_max_fails_per_ip: int = 20
     login_lock_seconds: int = 900
+    # P57: two-step sign-in. A workspace made on this install (the setup page) starts with
+    # this rule; workspaces from before P57 have none, which means "off" until an owner
+    # turns it on. Tests set it to "off" so their owners are not asked for codes.
+    new_workspace_require_2fa: Literal["off", "admins", "everyone"] = "admins"
+    two_factor_fails_per_challenge: int = 5
+    two_factor_fails_per_user: int = 10  # per login_lock_seconds window
 
     # Web search (P13). Backends are tried in this order; the keyless DuckDuckGo fallback is
     # always last so search works with no setup. A self-hosted SearXNG is the recommended

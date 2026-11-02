@@ -171,6 +171,7 @@ test("a connection that hangs is cut, retried and reported; the status page need
     assert.equal(st.status, 200);
     const body = await st.json();
     assert.equal(body.linked, true);
+    assert.deepEqual(body.tunnel, { on: false, hosts: [], open: 0 });
     assert.equal((await fetch(`${base}/?k=${offline.control_key}`)).headers.get("x-frame-options"), "DENY");
     const other = await new Promise((resolve) => {
       http.get({ host: "127.0.0.1", port: offline.control_port, path: `/state?k=${offline.control_key}`, headers: { Host: "evil.example" } }, (res) => { res.resume(); resolve(res.statusCode); }).on("error", () => resolve(0));
@@ -197,4 +198,188 @@ test("linking refuses a plain http office address except on this same machine (P
   const local = await a.linkWith("http://127.0.0.1:9", "ABCD2345");
   assert.equal(local.ok, false);
   assert.doesNotMatch(local.error, /https:\/\/ address/);
+});
+
+// ---------------------------------------------------------------- P57: one site through this computer
+
+const net = require("node:net");
+const { EventEmitter } = require("node:events");
+
+test("tunnel sites match exactly or as a subdomain, never look-alikes", () => {
+  const hosts = ["eperolehan.gov.my"];
+  assert.ok(a.hostAllowed("eperolehan.gov.my", hosts));
+  assert.ok(a.hostAllowed("www.eperolehan.gov.my", hosts));
+  assert.ok(a.hostAllowed("WWW.EPEROLEHAN.GOV.MY", hosts));
+  for (const bad of ["eperolehan.gov.my.evil.com", "xeperolehan.gov.my", "gov.my", "evil.com", "", "eperolehan.gov.my:443", "eperolehan.gov.my."]) {
+    assert.ok(!a.hostAllowed(bad, hosts), bad);
+  }
+  assert.ok(!a.hostAllowed("eperolehan.gov.my", []));
+});
+
+test("tunnel command line: on, sites, off, and bad sites refused", () => {
+  assert.equal(a.parseTunnelArgs([], {}), null);
+  assert.deepEqual(a.parseTunnelArgs(["on"], {}), { on: true, hosts: ["eperolehan.gov.my"] });
+  assert.deepEqual(a.parseTunnelArgs(["on", "EPerolehan.gov.my", "portal.example.com", "eperolehan.gov.my"], {}), { on: true, hosts: ["eperolehan.gov.my", "portal.example.com"] });
+  assert.deepEqual(a.parseTunnelArgs(["off"], { on: true, hosts: ["a.example.com"] }), { on: false, hosts: ["a.example.com"] });
+  for (const bad of ["https://eperolehan.gov.my", "eperolehan.gov.my:443", "eperolehan.gov.my/login", "localhost", "-bad.example.com", "a..b.com", "*.gov.my", "eperolehan.gov.my."]) {
+    assert.throws(() => a.parseTunnelArgs(["on", bad], {}), /not a site name/, bad);
+  }
+  assert.throws(() => a.parseTunnelArgs(["on", ...Array.from({ length: 11 }, (_, i) => `s${i}.example.com`)], {}), /At most 10/);
+  assert.throws(() => a.parseTunnelArgs(["maybe"], {}), /Use:/);
+  assert.throws(() => a.parseTunnelArgs(["off", "x.com"], {}), /Use:/);
+  // the stored setting: off unless on is exactly true; on with no sites means the default
+  assert.deepEqual(a.tunnelOf({}), { on: false, hosts: [] });
+  assert.deepEqual(a.tunnelOf({ tunnel: { on: "yes", hosts: ["x.example.com"] } }), { on: false, hosts: ["x.example.com"] });
+  assert.deepEqual(a.tunnelOf({ tunnel: { on: true, hosts: ["Bad Host", 5] } }), { on: true, hosts: ["eperolehan.gov.my"] });
+  assert.deepEqual(a.hello({ token: "t", tunnel: { on: true, hosts: ["eperolehan.gov.my"] } }).tunnel, { on: true, hosts: ["eperolehan.gov.my"] });
+  assert.deepEqual(a.hello({ token: "t" }).tunnel, { on: false, hosts: [] });
+});
+
+test("the activity of net.open keeps only the site and port", () => {
+  assert.deepEqual(a.detailOf("net.open", { channel: "abcdefgh12", host: "eperolehan.gov.my", port: 443, data: "secret" }), { host: "eperolehan.gov.my", port: 443 });
+});
+
+const ON = { token: "tok", tunnel: { on: true, hosts: ["eperolehan.gov.my"] } };
+const GOOD = { channel: "chan_12345678", host: "www.eperolehan.gov.my", port: 443 };
+const noConnect = () => { throw new Error("must not connect"); };
+
+test("net.open is refused when off, paused, for other sites, other ports and bad params", async () => {
+  const deps = { connect: noConnect, WebSocket: function () { throw new Error("must not open"); } };
+  await assert.rejects(a.openTunnel(GOOD, { token: "t" }, "ws://x", deps), { code: "not_allowed", message: "Sending sites through this computer is off. On it, run: agentic-pc tunnel on" });
+  await assert.rejects(a.openTunnel(GOOD, { ...ON, paused: true }, "ws://x", deps), { code: "paused" });
+  await assert.rejects(a.openTunnel({ ...GOOD, host: "eperolehan.gov.my.evil.com" }, ON, "ws://x", deps), { code: "not_allowed", message: "This computer only lets through: eperolehan.gov.my" });
+  await assert.rejects(a.openTunnel({ ...GOOD, host: "xeperolehan.gov.my" }, ON, "ws://x", deps), { code: "not_allowed" });
+  await assert.rejects(a.openTunnel({ ...GOOD, port: 80 }, ON, "ws://x", deps), { code: "bad_request" });
+  await assert.rejects(a.openTunnel({ ...GOOD, port: "443" }, ON, "ws://x", deps), { code: "bad_request" });
+  await assert.rejects(a.openTunnel({ ...GOOD, channel: "../x" }, ON, "ws://x", deps), { code: "bad_request" });
+  await assert.rejects(a.openTunnel({ ...GOOD, host: "https://eperolehan.gov.my" }, ON, "ws://x", deps), { code: "bad_request" });
+  // at most 24 at once
+  const fillers = Array.from({ length: 24 }, () => ({ host: "eperolehan.gov.my", close() { a.tunnels.delete(this); } }));
+  for (const f of fillers) a.tunnels.add(f);
+  try { await assert.rejects(a.openTunnel(GOOD, ON, "ws://x", deps), { code: "busy" }); } finally { for (const f of fillers) a.tunnels.delete(f); }
+});
+
+/** A stand-in for the relay WebSocket: same surface as the global WebSocket. */
+class FakeWS {
+  constructor(url, behave = "open") {
+    this.url = url; this.readyState = 0; this.bufferedAmount = 0; this.sent = []; this.closed = false;
+    FakeWS.last = this;
+    setTimeout(() => {
+      if (behave === "open") { this.readyState = 1; this.onopen?.(); } else { this.readyState = 3; this.onerror?.(); }
+    }, 5);
+  }
+  send(d) { if (this.readyState !== 1) throw new Error("not open"); this.sent.push(d); }
+  close() { if (this.readyState === 3) return; this.readyState = 3; this.closed = true; setTimeout(() => this.onclose?.(), 0); }
+  deliver(data) { this.onmessage?.({ data }); }
+}
+
+test("net.open pipes a real local TCP connection both ways and records only sizes", async () => {
+  const echo = net.createServer((s) => { s.on("error", () => {}); s.pipe(s); });
+  await new Promise((r) => echo.listen(0, "127.0.0.1", r));
+  const port = echo.address().port;
+  let asked = null;
+  const deps = { connect: (o) => { asked = o; return net.connect({ host: "127.0.0.1", port }); }, WebSocket: FakeWS };
+  try {
+    const out = await a.openTunnel(GOOD, ON, "wss://office.example", deps);
+    assert.deepEqual(out, { ok: true });
+    assert.deepEqual(asked, { host: "www.eperolehan.gov.my", port: 443 });
+    const ws = FakeWS.last;
+    assert.equal(ws.url, "wss://office.example/api/devices/cdp/chan_12345678");
+    assert.equal(ws.binaryType, "arraybuffer");
+    assert.deepEqual(JSON.parse(ws.sent[0]), { type: "hello", token: "tok" });
+    assert.equal(a.tunnels.size, 1);
+    const payload = Buffer.from("encrypted-bytes-0123456789");
+    ws.deliver(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length)); // an ArrayBuffer, like the real one
+    const back = await waitFor(() => { const got = Buffer.concat(ws.sent.slice(1).map((d) => Buffer.from(d))); return got.length >= payload.length ? got : null; }, 3000);
+    assert.ok(back && back.equals(payload), "the bytes came back through the relay");
+    // the relay ends: the TCP side ends too, and the activity line has the site and sizes only
+    ws.readyState = 3; ws.onclose();
+    assert.ok(await waitFor(() => a.tunnels.size === 0, 2000));
+    const act = fs.readFileSync(path.join(process.env.AGENTIC_PC_HOME, "activity.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => JSON.stringify(l).includes("net.tunnel")).pop();
+    assert.ok(act, "a net.tunnel activity line");
+    const text = JSON.stringify(act);
+    assert.match(text, /www\.eperolehan\.gov\.my/);
+    assert.match(text, /"bytes_up":26/);
+    assert.match(text, /"bytes_down":26/);
+    assert.doesNotMatch(text, /encrypted-bytes/);
+  } finally {
+    a.tunnels.clear();
+    echo.close();
+  }
+});
+
+test("net.open fails cleanly when the site or the relay cannot be reached", async () => {
+  const gone = net.createServer();
+  await new Promise((r) => gone.listen(0, "127.0.0.1", r));
+  const deadPort = gone.address().port;
+  await new Promise((r) => gone.close(r));
+  await assert.rejects(a.openTunnel(GOOD, ON, "ws://x", { connect: () => net.connect({ host: "127.0.0.1", port: deadPort }), WebSocket: FakeWS }),
+    { code: "failed", message: "Could not reach www.eperolehan.gov.my." });
+  assert.equal(a.tunnels.size, 0);
+  const srv = net.createServer((s) => s.on("error", () => {}));
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  let sock = null;
+  try {
+    await assert.rejects(a.openTunnel(GOOD, ON, "ws://x", {
+      connect: () => (sock = net.connect({ host: "127.0.0.1", port: srv.address().port })),
+      WebSocket: class extends FakeWS { constructor(u) { super(u, "error"); } },
+    }), { code: "failed", message: "Could not open the relay." });
+    assert.equal(a.tunnels.size, 0);
+    assert.ok(sock.destroyed, "the TCP side is closed when the relay fails");
+  } finally { srv.close(); }
+});
+
+class FakeSocket extends EventEmitter {
+  constructor() { super(); this.written = []; this.paused = false; this.destroyed = false; }
+  write(b) { this.written.push(b); return true; }
+  pause() { this.paused = true; }
+  resume() { this.paused = false; }
+  destroy() { if (this.destroyed) return; this.destroyed = true; this.emit("close"); }
+}
+const openWs = () => ({ readyState: 1, bufferedAmount: 0, sent: [], send(d) { this.sent.push(d); }, close() { this.readyState = 3; this.closedByUs = true; } });
+
+test("the pipe holds back the site when the relay is slow, and resumes when it drains", async () => {
+  const s = new FakeSocket(); const w = openWs();
+  const p = a.pipeTunnel(s, w, { pollMs: 5 });
+  w.bufferedAmount = 5 * 1024 * 1024;
+  s.emit("data", Buffer.alloc(10));
+  assert.equal(s.paused, true);
+  w.bufferedAmount = 0;
+  assert.ok(await waitFor(() => !s.paused, 1000), "resumed");
+  w.onmessage({ data: new Uint8Array([1, 2, 3]).buffer });
+  assert.deepEqual([...s.written[0]], [1, 2, 3]);
+  w.onmessage({ data: "a text frame is ignored" });
+  assert.equal(s.written.length, 1);
+  assert.deepEqual(p.stats, { up: 3, down: 10 });
+  p.close("done");
+});
+
+test("the pipe ends both sides on a relay error, on either close, and when idle", async () => {
+  const cases = [
+    ["relay refused", (s, w) => w.onmessage({ data: '{"type":"error","code":"gone"}' })],
+    ["relay closed", (s, w) => w.onclose()],
+    ["site closed", (s) => s.emit("end")],
+    ["site error", (s) => s.emit("error", new Error("reset"))],
+    ["idle", () => {}],
+  ];
+  for (const [why, act] of cases) {
+    const s = new FakeSocket(); const w = openWs();
+    let ended = null;
+    a.pipeTunnel(s, w, { idleMs: why === "idle" ? 30 : 60_000, onClose: (r) => { ended = r; } });
+    act(s, w);
+    assert.ok(await waitFor(() => ended, 1500), why);
+    assert.equal(ended, why);
+    assert.ok(s.destroyed, `${why}: socket closed`);
+    if (why !== "relay closed") assert.ok(w.closedByUs, `${why}: relay closed`);
+  }
+});
+
+test("P59: the office's AI opens the browser here only for sites this computer allows", () => {
+  const { companyBrowserAllowed, AgentError } = require("./agent.cjs");
+  const on = { tunnel: { on: true, hosts: ["eperolehan.gov.my"] } };
+  assert.doesNotThrow(() => companyBrowserAllowed({ company: true, sites: ["eperolehan.gov.my"] }, on));
+  assert.doesNotThrow(() => companyBrowserAllowed({ channel: "x" }, { tunnel: { on: false } })); // the person's own AI
+  assert.throws(() => companyBrowserAllowed({ company: true, sites: ["eperolehan.gov.my"] }, { tunnel: { on: false } }), (e) => e instanceof AgentError && e.code === "not_allowed");
+  assert.throws(() => companyBrowserAllowed({ company: true, sites: ["example.com"] }, on), (e) => e.code === "not_allowed");
+  assert.throws(() => companyBrowserAllowed({ company: true, sites: [] }, on), (e) => e.code === "not_allowed");
 });

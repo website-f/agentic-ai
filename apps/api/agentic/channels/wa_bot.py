@@ -165,6 +165,11 @@ async def _take_file(db: AsyncSession, ch: Channel, msg: Inbound, user_id: str) 
 async def handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
     """One inbound message, answered in the linked person's language (English for a code
     from someone not linked yet: _link answers in the person the code belongs to)."""
+    from ..engine import compliance
+
+    # P57: WhatsApp is not an approved service of this company: no answer leaves through it.
+    if not await compliance.allowed(db, ch.workspace_id, "whatsapp", "WhatsApp", "a chat"):
+        return
     link = await db.scalar(
         select(ChannelLink).where(
             ChannelLink.channel_id == ch.id, ChannelLink.external_id == msg.sender

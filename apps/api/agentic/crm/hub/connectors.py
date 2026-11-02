@@ -430,6 +430,16 @@ async def upsert(
 async def sync(db: AsyncSession, conn: CrmConnector) -> dict[str, Any]:
     """Read the other system now and update its object. Records the outcome; commits."""
     obj = await db.get(CrmObject, conn.object_id) if conn.object_id else None
+    from ...engine import compliance
+
+    # P57: a connection to another system needs approval when the lock is on.
+    if not await compliance.allowed(
+        db, conn.workspace_id, f"connector:{conn.id}", conn.name, "a sync"
+    ):
+        conn.last_status = "error"
+        conn.last_error = compliance.BLOCKED.format(label=conn.name)[:500]
+        await db.commit()
+        return {"error": conn.last_error}
     try:
         if obj is None:
             raise ConnectorError(

@@ -52,6 +52,7 @@ from .routers import (
     teams,
     tutorial,
     twins,
+    two_factor,
     vault,
     web_tasks,
     whatsapp,
@@ -63,7 +64,7 @@ log = logging.getLogger("agentic.api")
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # No session exists yet on these, so there is no CSRF cookie to compare against.
-CSRF_EXEMPT = {"/api/auth/login", "/api/auth/setup", "/api/push/act"}
+CSRF_EXEMPT = {"/api/auth/login", "/api/auth/login/2fa", "/api/auth/setup", "/api/push/act"}
 # File uploads send raw bytes. A cross-site form cannot send octet-stream either, so the
 # JSON-only guarantee holds; the CSRF token is still checked.
 RAW_UPLOAD_PATHS = {"/api/files", "/api/transcribe"}
@@ -86,7 +87,11 @@ PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
 async def lifespan(_: FastAPI):
     # Load the embedding model in the background so the first search is not slow.
     warm = asyncio.create_task(embed.warm())
+    from ..devices import tunnel  # P58: the egress proxy's way through a company computer
+
+    await tunnel.start()
     yield
+    await tunnel.stop()
     warm.cancel()
     await close_valkey()
     await engine.dispose()
@@ -275,6 +280,7 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 for r in (
     system.router,
     auth.router,
+    two_factor.router,
     blueprints.router,
     members.router,
     org.router,
@@ -433,6 +439,11 @@ from .routers import needs as needs_router  # noqa: E402
 
 app.include_router(needs_router.router)
 
+# P57: the approved-services lock (Settings > Approved services).
+from .routers import compliance as compliance_router  # noqa: E402
+
+app.include_router(compliance_router.router)
+
 # P49: "Ask how": a person asks how to do something; plain steps with links to their pages.
 from .routers import help as help_router  # noqa: E402
 
@@ -443,3 +454,8 @@ app.include_router(help_router.router)
 from .routers import crm_hub as crm_hub_router  # noqa: E402
 
 app.include_router(crm_hub_router.router)
+
+# P57: Settings > Data and privacy: export all data, erase this workspace (owner only).
+from .routers import erasure as erasure_router  # noqa: E402
+
+app.include_router(erasure_router.router)

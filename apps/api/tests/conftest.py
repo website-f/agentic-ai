@@ -17,6 +17,8 @@ TEST_DB = os.environ.get("TEST_DB", "agentic_test")
 os.environ["AGENTIC_DATABASE_URL"] = f"postgresql+asyncpg://{PG}/{TEST_DB}"
 os.environ["AGENTIC_VALKEY_URL"] = os.environ.get("TEST_VALKEY", "redis://localhost:8507/15")
 os.environ["AGENTIC_ENV"] = "dev"
+# P57: test workspaces do not ask for two-step sign-in (test_p57_two_factor.py turns it on).
+os.environ["AGENTIC_NEW_WORKSPACE_REQUIRE_2FA"] = "off"
 # Fake provider hosts used by test_ai_engine.py skip DNS in the SSRF guard.
 os.environ["AGENTIC_PRIVATE_HOSTS_ALLOWED"] = "good.fake,ratelimit.fake,broken.fake,flaky.fake"
 # Brain: deterministic word-hash embeddings (no model download) and a throwaway vault.

@@ -29,6 +29,8 @@ const page = {
   setup: lazyRouteComponent(() => import("@/pages/auth"), "SetupPage"),
   login: lazyRouteComponent(() => import("@/pages/auth"), "LoginPage"),
   changePassword: lazyRouteComponent(() => import("@/pages/auth"), "ChangePasswordPage"),
+  twoStepSetup: lazyRouteComponent(() => import("@/pages/auth"), "TwoStepSetupPage"),
+  erased: lazyRouteComponent(() => import("@/pages/erased"), "ErasedPage"),
   home: lazyRouteComponent(() => import("@/pages/command-center"), "CommandCenterPage"),
   assistants: lazyRouteComponent(() => import("@/pages/assistants"), "AssistantsPage"),
   organization: lazyRouteComponent(() => import("@/pages/organization"), "OrganizationPage"),
@@ -86,6 +88,8 @@ const page = {
   computers: lazyRouteComponent(() => import("@/pages/computers"), "ComputersPage"),
   remote: lazyRouteComponent(() => import("@/pages/computers/remote"), "RemotePage"),
   staffComputers: lazyRouteComponent(() => import("@/pages/computers/staff"), "StaffComputersPage"),
+  approvedServices: lazyRouteComponent(() => import("@/pages/approved-services"), "ApprovedServicesPage"),
+  webConnections: lazyRouteComponent(() => import("@/pages/web-connections"), "WebConnectionsPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
@@ -184,12 +188,27 @@ const changePasswordRoute = createRoute({
   component: page.changePassword,
 });
 
+// P57: the company requires two-step sign-in and this person has not set it up yet.
+const twoStepSetupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/two-step-setup",
+  beforeLoad: async ({ context, location }) => {
+    let me = await loadMe(context.queryClient, location);
+    // Sent here by a 2fa_required answer: the cached "me" may predate the company's rule.
+    if (!me.user.two_factor_setup_required) me = await context.queryClient.fetchQuery({ ...meQuery, staleTime: 0 });
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (!me.user.two_factor_setup_required) throw redirect({ to: "/" });
+  },
+  component: page.twoStepSetup,
+});
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
   beforeLoad: async ({ context, location }) => {
     const me = await loadMe(context.queryClient, location);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
     // P36: one guard for every page, the same rule as the sidebar: staff keep to their own
     // desk, their AI and the work they are part of. Their AI's profile is My AI.
     if (!pathAllowed(location.pathname, me.permissions)) {
@@ -513,6 +532,9 @@ const twinRoute = createRoute({
 });
 
 // P19: staff hire their AI worker full screen (no app shell), then land on My AI worker.
+// P57: an erase in progress and its certificate. No session: the erase signs everyone out.
+const erasedRoute = createRoute({ getParentRoute: () => rootRoute, path: "/erased", component: page.erased });
+
 const welcomeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/welcome",
@@ -647,6 +669,26 @@ const staffComputersRoute = createRoute({
   component: page.staffComputers,
 });
 
+// P57: which outside services may receive company information (the approved-services lock).
+const approvedServicesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/approved-services",
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("org.manage")) throw redirect({ to: "/settings" });
+  },
+  component: page.approvedServices,
+});
+
+// P60: how the agents' browsers reach websites (this server, a company computer, proxies).
+const webConnectionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/web-connections",
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("org.manage")) throw redirect({ to: "/settings" });
+  },
+  component: page.webConnections,
+});
+
 // P34: mail that reached the person's Outlook and the shared mailboxes, and what the AI did with it.
 const mailRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -747,6 +789,8 @@ const routeTree = rootRoute.addChildren([
   setupRoute,
   loginRoute,
   changePasswordRoute,
+  twoStepSetupRoute,
+  erasedRoute,
   welcomeRoute,
   presentRoute,
   chatFullRoute,
@@ -805,6 +849,8 @@ const routeTree = rootRoute.addChildren([
     searchRoute,
     computersRoute,
     staffComputersRoute,
+    approvedServicesRoute,
+    webConnectionsRoute,
     remoteRoute,
     mailRoute,
     contactsRoute,

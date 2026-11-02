@@ -3,7 +3,7 @@
  * remote path, with the on-screen notice on the computer). The owner can also turn on a
  * company backup of the folders staff computers share, to a storage place they choose. */
 import {
-  AppleLogoIcon, ArchiveBoxIcon, DesktopTowerIcon, LinuxLogoIcon, MonitorPlayIcon,
+  AppleLogoIcon, ArchiveBoxIcon, DesktopTowerIcon, GlobeIcon, LinuxLogoIcon, MonitorPlayIcon,
   WindowsLogoIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -28,6 +28,8 @@ import { meQuery } from "@/lib/queries";
 import { useDebounced } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
+import { TunnelDialog } from "./tunnel-dialog";
+
 const OS_ICON: Record<string, Icon> = { mac: AppleLogoIcon, linux: LinuxLogoIcon, windows: WindowsLogoIcon };
 
 export function StaffComputersPage() {
@@ -37,6 +39,7 @@ export function StaffComputersPage() {
   const needle = useDebounced(q.trim());
   const roster = useQuery(orgComputersQuery(needle));
   const [backupOpen, setBackupOpen] = useState(false);
+  const [tunnelOpen, setTunnelOpen] = useState(false);
 
   const list = useMemo(() => roster.data?.computers ?? [], [roster.data]);
   const byCompany = useMemo(() => {
@@ -55,7 +58,10 @@ export function StaffComputersPage() {
         title={t("Staff computers")}
         description={t("Every company computer your staff have linked: who linked it, whether it is online, and the folders it shares. Open one to see its screen and fetch files — the computer shows a notice while you do.")}
         actions={roster.data?.can_backup ? (
-          <Button variant="outline" onClick={() => setBackupOpen(true)}><ArchiveBoxIcon size={16} /> {t("Backup settings")}</Button>
+          <>
+            <Button variant="outline" onClick={() => setTunnelOpen(true)}><GlobeIcon size={16} /> {t("ePerolehan through a computer")}</Button>
+            <Button variant="outline" onClick={() => setBackupOpen(true)}><ArchiveBoxIcon size={16} /> {t("Backup settings")}</Button>
+          </>
         ) : undefined}
       />
 
@@ -84,6 +90,7 @@ export function StaffComputersPage() {
       )}
 
       {backupOpen ? <BackupDialog onClose={() => setBackupOpen(false)} /> : null}
+      {tunnelOpen ? <TunnelDialog onClose={() => setTunnelOpen(false)} /> : null}
     </Page>
   );
 }

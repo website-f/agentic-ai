@@ -15,7 +15,8 @@ from ..core.security import PERMISSIONS, can, new_token, token_hash
 from ..engine import acting
 from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
 from ..i18n.labels import role_label
-from ..models import AuthSession, Membership, User
+from ..models import AuthSession, Membership, User, Workspace
+from ..services import two_factor
 from .scope import Scope
 
 SESSION_COOKIE = "agentic_session"
@@ -31,6 +32,8 @@ class Principal:
     session_id: str
     branch_id: str | None = None  # P9: a scoped role's branch / department
     department_id: str | None = None
+    # P57: the workspace requires two-step sign-in of this person and it is not set up yet.
+    two_factor_due: bool = False
 
     @property
     def actor(self) -> str:
@@ -177,8 +180,9 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         )
     row = (
         await db.execute(
-            select(User, Membership)
+            select(User, Membership, Workspace.settings)
             .join(Membership, Membership.user_id == User.id)
+            .join(Workspace, Workspace.id == Membership.workspace_id)
             .where(User.id == session.user_id, Membership.workspace_id == session.workspace_id)
         )
     ).first()
@@ -188,7 +192,7 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
             "access_removed",
             "This account no longer has access to the workspace.",
         )
-    user, m = row
+    user, m, ws_settings = row
     _remember_lang(request, user)
     # P36: model calls this request makes are this person's (their daily AI allowance).
     acting.set_person(user.id)
@@ -199,7 +203,17 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         session_id=session.id,
         branch_id=m.branch_id,
         department_id=m.department_id,
+        two_factor_due=two_factor.due(user, m.role, ws_settings),
     )
+
+
+def _require_two_factor(principal: Principal) -> None:
+    if principal.two_factor_due:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "2fa_required",
+            "Your company requires two-step sign-in. Set it up to continue.",
+        )
 
 
 async def principal_allow_pw_change(
@@ -218,10 +232,14 @@ async def optional_principal(
         p = await _load_principal(request, db)
     except HTTPException:
         return None
-    return None if p.user.must_change_password else p
+    return None if p.user.must_change_password or p.two_factor_due else p
 
 
-async def current_principal(request: Request, db: AsyncSession = Depends(get_db)) -> Principal:
+async def principal_allow_2fa_setup(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> Principal:
+    """P57: the two-step sign-in endpoints. A person the workspace asks for it must still be
+    able to reach them (everything else answers 2fa_required until it is set up)."""
     principal = await _load_principal(request, db)
     if principal.user.must_change_password:
         raise api_error(
@@ -229,6 +247,12 @@ async def current_principal(request: Request, db: AsyncSession = Depends(get_db)
             "password_change_required",
             "Set a new password before continuing.",
         )
+    return principal
+
+
+async def current_principal(request: Request, db: AsyncSession = Depends(get_db)) -> Principal:
+    principal = await principal_allow_2fa_setup(request, db)
+    _require_two_factor(principal)
     return principal
 
 

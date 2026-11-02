@@ -35,6 +35,12 @@ function describe(item: AuditItem): string {
     case "workspace.created": return tr("created the workspace {name}", { name: s(a.name) });
     case "auth.login": return tr("signed in");
     case "auth.password_changed": return tr("changed their password");
+    case "auth.2fa_enabled": return tr("turned on two-step sign-in");
+    case "auth.2fa_disabled": return tr("turned off two-step sign-in");
+    case "auth.2fa_recovery_used": return tr("signed in with a recovery code");
+    case "auth.2fa_recovery_regenerated": return tr("made new recovery codes");
+    case "auth.2fa_reset": return tr("reset a member's two-step sign-in");
+    case "workspace.require_2fa_changed": return tr("set who must use two-step sign-in: {rule}", { rule: tr(a.require_2fa === "everyone" ? "Everyone" : a.require_2fa === "admins" ? "Owners and admins" : "Off") });
     case "member.added": return tr("added {email} as {role}", { email: s(a.email), role: role(a.role) });
     case "member.role_changed": return tr("changed a role from {from} to {to}", { from: role(b.role), to: role(a.role) });
     case "member.removed": return tr("removed {email}", { email: s(b.email) });

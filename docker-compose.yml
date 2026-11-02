@@ -40,6 +40,9 @@ x-app-env: &app-env
   # The browser service agents drive (worker only).
   AGENTIC_BROWSER_URL: http://browser:8600
   AGENTIC_BROWSER_TOKEN: ${AGENTIC_BROWSER_TOKEN:-dev-browser-token}
+  # P58: the egress proxy hands chosen sites (ePerolehan) to this gateway in the API, which
+  # sends them through the workspace's chosen company computer (Staff computers > ePerolehan).
+  AGENTIC_PC_TUNNEL_LISTEN: ${AGENTIC_PC_TUNNEL_LISTEN:-0.0.0.0:3130}
   AGENTIC_SANDBOX_URL: http://sandbox:8610
   AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:-dev-sandbox-token}
   # The local backup brain (P14). Empty AGENTIC_LOCAL_LLM_URL turns it off.
@@ -392,6 +395,10 @@ services:
       # The ONLY destinations allowed (host suffixes), for a single-purpose proxy. Empty = any
       # public host. Used by the ePerolehan exit proxy on a home line, not by this stack.
       EGRESS_ONLY_HOSTS: ${EGRESS_ONLY_HOSTS:-}
+      # P58/P60: sites offered to the API gateway (`*` = every https site). Each workspace decides
+      # on Settings > Web connections: this server, a company computer or its proxies. Empty = off.
+      EGRESS_PC_TUNNEL: ${EGRESS_PC_TUNNEL:-api:3130}
+      EGRESS_PC_TUNNEL_HOSTS: ${EGRESS_PC_TUNNEL_HOSTS:-*}
       EGRESS_MAX_CONNECTIONS: ${EGRESS_MAX_CONNECTIONS:-512}
       EGRESS_LOG_ALLOWED: ${EGRESS_LOG_ALLOWED:-false}  # denials are always logged
     healthcheck:

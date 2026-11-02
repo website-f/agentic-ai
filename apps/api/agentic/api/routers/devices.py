@@ -747,6 +747,185 @@ async def set_backup(
     return await get_backup(principal, db)
 
 
+# ---------------------------------------------------------------- P58 a site through a computer
+
+
+class TunnelIn(BaseModel):
+    on: bool
+    device_id: str = Field(default="", max_length=40)
+    hosts: list[str] = Field(default_factory=list, max_length=10)
+    fallback: str = Field(default="wait", pattern="^(wait|direct|proxy)$")
+    show: bool = True  # P59: on that computer's screen
+
+
+@router.get("/api/org/computers/tunnel")
+async def get_tunnel(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Which company computer ePerolehan (or other chosen sites) leaves through, and the
+    computers that could: each with the sites its own person lets through it."""
+    from ...devices import tunnel
+
+    if not can(principal.role, "org.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "forbidden", "Only the owner chooses this computer."
+        )
+    ws = await db.get(Workspace, principal.workspace_id)
+    rows = (
+        await db.scalars(
+            select(Device).where(
+                Device.workspace_id == principal.workspace_id, Device.revoked_at.is_(None)
+            )
+        )
+    ).all()
+    online = await core.online_ids(d.id for d in rows)
+    return {
+        **tunnel.describe(ws),
+        "computers": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "online": d.id in online,
+                "paused": d.paused,
+                "allows": list(d.tunnel_hosts or []),
+                "version": d.version,
+            }
+            for d in rows
+        ],
+    }
+
+
+@router.put("/api/org/computers/tunnel")
+async def set_tunnel(
+    body: TunnelIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    from ...devices import tunnel
+
+    if not can(principal.role, "org.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "forbidden", "Only the owner chooses this computer."
+        )
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    hosts = core.tunnel_hosts(body.hosts) or list(tunnel.DEFAULT_HOSTS)
+    if body.on:
+        d = await db.get(Device, body.device_id) if body.device_id else None
+        if d is None or d.workspace_id != principal.workspace_id or d.revoked_at is not None:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "no_computer",
+                "Choose one of the company's linked computers.",
+            )
+    before = tunnel.describe(ws)
+    after = {
+        "on": body.on,
+        "device_id": body.device_id,
+        "hosts": hosts,
+        "fallback": body.fallback,
+        "show": body.show,
+    }
+    ws.settings = {**(ws.settings or {}), tunnel.SETTINGS_KEY: after}
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "devices.tunnel",
+        target=principal.workspace_id,
+        before=before,
+        after=after,
+    )
+    await db.commit()
+    return await get_tunnel(principal, db)
+
+
+# ---------------------------------------------------------------- P60 the company's proxies
+
+
+class ProxiesIn(BaseModel):
+    on: bool
+    sites: list[str] = Field(default_factory=lambda: ["*"], max_length=10)
+    # The pasted list (host:port:user:password per line, or proxy URLs). None keeps the saved
+    # one; it is never sent back.
+    list: str | None = Field(default=None, max_length=20_000)
+
+
+def _owner_only(principal: Principal) -> None:
+    if not can(principal.role, "org.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "forbidden", "Only the owner sets the web connections."
+        )
+
+
+@router.get("/api/org/proxies")
+async def get_proxies(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    from ...devices import proxies
+
+    _owner_only(principal)
+    return proxies.public(await db.get(Workspace, principal.workspace_id))
+
+
+@router.put("/api/org/proxies")
+async def set_proxies(
+    body: ProxiesIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Takes effect at once: the gateway reads the setting for every new connection."""
+    from ...devices import proxies
+
+    _owner_only(principal)
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    parsed = None
+    if body.list is not None:
+        try:
+            parsed = proxies.parse(body.list)
+        except proxies.ProxyListError as e:
+            raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_proxy_list", str(e)) from e
+    if body.on and not (parsed if parsed is not None else proxies.setting(ws).proxies):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "no_proxies", "Paste at least one proxy first."
+        )
+    before = proxies.public(ws)
+    proxies.save(ws, body.on, body.sites, parsed)
+    after = proxies.public(ws)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "web.proxies",
+        target=principal.workspace_id,
+        before={"on": before["on"], "sites": before["sites"], "count": len(before["proxies"])},
+        after={"on": after["on"], "sites": after["sites"], "count": len(after["proxies"])},
+    )
+    await db.commit()
+    return after
+
+
+@router.post("/api/org/proxies/test")
+async def test_proxies(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Each saved proxy: does it answer, the address the sites see, how long it took."""
+    import asyncio
+
+    from ...devices import proxies
+
+    _owner_only(principal)
+    st = proxies.setting(await db.get(Workspace, principal.workspace_id))
+    gate = asyncio.Semaphore(10)
+
+    async def one(p: proxies.Proxy) -> dict[str, Any]:
+        async with gate:
+            return await proxies.test(p)
+
+    return {"results": await asyncio.gather(*(one(p) for p in st.proxies))}
+
+
 # ---------------------------------------------------------------- inside the stack
 
 
@@ -764,6 +943,7 @@ class BrowserIn(BaseModel):
     start_url: str | None = Field(default=None, max_length=2000)
     agent_id: str | None = Field(default=None, max_length=40)
     task_id: str | None = Field(default=None, max_length=40)
+    sites: list[str] | None = Field(default=None, max_length=10)  # P59: a company computer
 
 
 def _internal(request: Request) -> None:
@@ -799,7 +979,11 @@ async def internal_browser(device_id: str, body: BrowserIn, request: Request) ->
     _internal(request)
     try:
         channel, ws_url = await bridge.open_browser(
-            device_id, body.start_url, agent_id=body.agent_id, task_id=body.task_id
+            device_id,
+            body.start_url,
+            agent_id=body.agent_id,
+            task_id=body.task_id,
+            sites=core.tunnel_hosts(body.sites) or None,
         )
     except DeviceError as e:
         return {"ok": False, "error": {"code": e.code, "message": e.message}}

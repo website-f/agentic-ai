@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import crypto
 from ..core.security import can
+from ..engine import compliance
 from ..i18n import Msg, Plain, current_lang, normalize, render, tr
 from ..models import (
     ActionToken,
@@ -465,6 +466,15 @@ async def deliver(db: AsyncSession, delivery_id: str) -> str:
     if d is None or d.state != "pending":
         return d.state if d else "missing"
     d.attempts += 1
+    service = {"webpush": "push"}.get(d.channel, d.channel)
+    if not await compliance.allowed(
+        db, d.workspace_id, service, compliance.KINDS.get(service, service), d.channel
+    ):
+        # P57: the approved-services lock is on and this channel is not approved: nothing of
+        # the company's leaves through it.
+        d.state, d.last_error = "skipped", "Not an approved service for this company."
+        await db.commit()
+        return d.state
     try:
         if d.channel == "webpush":
             sub = await db.get(PushSubscription, d.target)

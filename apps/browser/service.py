@@ -56,6 +56,7 @@ encrypts it, this service never stores it.
 import asyncio
 import base64
 import hashlib
+import hmac
 import ipaddress
 import json
 import logging
@@ -65,6 +66,7 @@ import re
 import secrets
 import socket
 import time
+import contextlib
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlparse
@@ -150,6 +152,9 @@ TYPO_RATE = max(0.0, min(0.3, float(os.environ.get("BROWSER_HUMAN_TYPO_RATE", "0
 HUMAN_CLICK = _env_bool("BROWSER_HUMAN_CLICK", "true")  # Bezier cursor path + hover + dwell
 CLICK_DWELL_MS = max(0, int(os.environ.get("BROWSER_HUMAN_CLICK_DWELL_MS", "120")))
 HUMAN_SCROLL = _env_bool("BROWSER_HUMAN_SCROLL", "true")  # several small wheel steps
+# A person's beat between one field and the next (reading the label, moving the hand), in ms.
+THINK_MS_MIN = max(0, int(os.environ.get("BROWSER_HUMAN_THINK_MS_MIN", "250")))
+THINK_MS_MAX = max(THINK_MS_MIN, int(os.environ.get("BROWSER_HUMAN_THINK_MS_MAX", "800")))
 # Serializes the actual click/cursor move of every machine so no two deadlock Camoufox's
 # humanized cursor. Created lazily on the running loop.
 _CLICK_GATE: asyncio.Lock | None = None
@@ -187,6 +192,90 @@ SERVER_ACTIONS = frozenset(
         "back",
     }
 )
+# P59 the site budget: a portal such as ePerolehan is used the way one person at a desk uses
+# it, across every agent of a company (they share its address): sittings of so many minutes
+# with a break after each, a cap per hour and per day, and office hours only. An action over
+# the budget is not done: the answer says how long to rest (the worker's task sleeps, then
+# carries on). Hosts and numbers are tunable per env; BROWSER_BUDGET_HOSTS empty = off.
+BUDGET_HOSTS = [
+    h.strip().lower()
+    for h in os.environ.get("BROWSER_BUDGET_HOSTS", "eperolehan.gov.my").split(",")
+    if h.strip()
+]
+BUDGET_SITTING_MIN = float(os.environ.get("BROWSER_BUDGET_SITTING_MIN", "25"))
+BUDGET_BREAK_MIN = float(os.environ.get("BROWSER_BUDGET_BREAK_MIN", "4"))
+BUDGET_BREAK_MAX = float(os.environ.get("BROWSER_BUDGET_BREAK_MAX", "10"))
+BUDGET_IDLE_MIN = 6.0  # this long without an action ends a sitting (a natural pause)
+BUDGET_PER_HOUR = int(os.environ.get("BROWSER_BUDGET_PER_HOUR", "90"))
+BUDGET_PER_DAY = int(os.environ.get("BROWSER_BUDGET_PER_DAY", "500"))
+BUDGET_HOURS = os.environ.get("BROWSER_BUDGET_HOURS", "07:30-22:00")  # local time
+BUDGET_TZ = os.environ.get("BROWSER_BUDGET_TZ", "Asia/Kuala_Lumpur")
+
+
+class _Budget:
+    """One company's use of one site: action times (last 24 h), the sitting, a break."""
+
+    def __init__(self) -> None:
+        self.times: list[float] = []
+        self.sitting_from = 0.0
+        self.rest_until = 0.0
+
+
+_budgets: dict[tuple[str, str], _Budget] = {}
+
+
+def budget_site(url: str | None) -> str | None:
+    host = (urlparse(url or "").hostname or "").lower().rstrip(".")
+    return next((b for b in BUDGET_HOSTS if host == b or host.endswith("." + b)), None)
+
+
+def _local_minutes(now: float) -> tuple[int, Any]:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    t = datetime.fromtimestamp(now, ZoneInfo(BUDGET_TZ))
+    return t.hour * 60 + t.minute, t
+
+
+def _hours() -> tuple[int, int]:
+    try:
+        a, b = BUDGET_HOURS.split("-")
+        ah, am = (int(x) for x in a.split(":"))
+        bh, bm = (int(x) for x in b.split(":"))
+        return ah * 60 + am, bh * 60 + bm
+    except ValueError:
+        return 0, 24 * 60
+
+
+def budget_check(key: tuple[str, str], now: float | None = None) -> tuple[float, str]:
+    """(seconds to rest, why) before one more server action on the site; (0, "") = go, and
+    the action is counted."""
+    now = time.time() if now is None else now
+    b = _budgets.setdefault(key, _Budget())
+    start, end = _hours()
+    mins, local = _local_minutes(now)
+    if not start <= mins < end:
+        wait_min = (start - mins) % (24 * 60)
+        return wait_min * 60.0 - local.second, "outside office hours on the site"
+    if now < b.rest_until:
+        return b.rest_until - now, "a short break, as a person takes"
+    b.times = [t for t in b.times if now - t < 86400]
+    last = b.times[-1] if b.times else 0.0
+    if not b.sitting_from or now - last > BUDGET_IDLE_MIN * 60:
+        b.sitting_from = now  # a new sitting after a natural pause
+    elif now - b.sitting_from >= BUDGET_SITTING_MIN * 60:
+        rest = random.uniform(BUDGET_BREAK_MIN, BUDGET_BREAK_MAX) * 60
+        b.rest_until, b.sitting_from = now + rest, 0.0
+        return rest, "a short break after a long sitting, as a person takes"
+    hour = [t for t in b.times if now - t < 3600]
+    if len(hour) >= BUDGET_PER_HOUR:
+        return hour[0] + 3600 - now + random.uniform(5, 60), "enough for this hour on the site"
+    if len(b.times) >= BUDGET_PER_DAY:
+        return b.times[0] + 86400 - now + random.uniform(60, 600), "enough for today on the site"
+    b.times.append(now)
+    return 0.0, ""
+
+
 # Self-healing: this many timeouts in one browser process within WEDGE_WINDOW seconds means
 # it is stuck; it is restarted and its agents' next step opens a fresh session.
 WEDGE_TIMEOUTS = 4
@@ -397,9 +486,11 @@ class Machine:
     keeps at most BROWSER_MAX_LIVE of these running at once. P31 PC machines (remote=True) are
     externally driven and never enter the pool."""
 
-    def __init__(self, agent_id: str, *, remote: bool = False) -> None:
+    def __init__(self, agent_id: str, *, remote: bool = False, workspace_id: str = "") -> None:
         self.agent_id = agent_id
         self.remote = remote
+        # P58: whose setting decides whether a site leaves through a company computer.
+        self.workspace_id = workspace_id
         self.manager: Any = None  # AsyncCamoufox (None for a remote PC machine)
         self.context: Any = None  # the persistent BrowserContext (our own or the PC's)
         self.sessions: dict[str, Session] = {}  # open tabs, by session id
@@ -452,7 +543,11 @@ class Machine:
                     except Exception:  # noqa: BLE001 - window/os alone still pin the identity
                         log.info("browserforge Screen unavailable; using window/os only")
                 if PROXY:
-                    opts["proxy"] = {"server": PROXY}
+                    # P58: the workspace's signed proxy credentials, so the egress proxy can
+                    # hand its chosen sites to the company-computer gateway; a page cannot set
+                    # or read them. Without a workspace, "-" (never tunnelled).
+                    ws = self.workspace_id or "-"
+                    opts["proxy"] = {"server": PROXY, "username": ws, "password": proxy_sign(ws)}
                     opts["firefox_user_prefs"] = {**PROXY_PREFS, **DOWNLOAD_PREFS}
                 else:
                     opts["firefox_user_prefs"] = dict(DOWNLOAD_PREFS)
@@ -524,6 +619,7 @@ class Session:
         self.download_notes: list[str] = []
         self.pending: set[asyncio.Task[None]] = set()
         self.last_server = 0.0  # when this session last made the site's server work
+        self.workspace_id = ""  # P59: whose site budget its actions count against
         self.act_times: list[float] = []  # recent server-action times, for the per-minute cap
         # P31: a Chrome/Edge on the person's own computer, reached over the API's CDP relay
         # (connect_over_cdp). Closing the session only disconnects; the PC closes its window.
@@ -706,7 +802,14 @@ class AllBrowsersBusy(HTTPException):
         super().__init__(503, "All browsers are busy. Try again shortly.")
 
 
-async def _acquire_machine(agent_id: str) -> Machine:
+def proxy_sign(workspace_id: str) -> str:
+    """The proxy password for a workspace (the API's devices/tunnel.py checks the same)."""
+    return hmac.new(
+        TOKEN.encode(), f"pc-tunnel:{workspace_id}".encode(), hashlib.sha256
+    ).hexdigest()[:40]
+
+
+async def _acquire_machine(agent_id: str, workspace_id: str = "") -> Machine:
     """The agent's running machine, launching it if needed. A full pool evicts the
     least-recently-used idle machine; if every running machine is busy, 503 (the caller waits
     and retries, then tells the agent all browsers are in use)."""
@@ -725,8 +828,10 @@ async def _acquire_machine(agent_id: str) -> Machine:
             m.touch()
             return m
         if m is None:
-            m = Machine(agent_id)
+            m = Machine(agent_id, workspace_id=workspace_id)
             machines[agent_id] = m
+        elif workspace_id and not m.workspace_id:
+            m.workspace_id = workspace_id  # known before its browser starts
         running = [x for x in machines.values() if x.context is not None]
         if len(running) >= BROWSER_MAX_LIVE:
             idle = [x for x in running if not x.busy()]
@@ -844,6 +949,8 @@ class Open(BaseModel):
     # P31: drive the browser on the person's own computer through the API's CDP relay
     # (ws://api:8501/internal/devices/cdp/{channel}) instead of one of ours.
     cdp_url: str | None = Field(default=None, max_length=300)
+    # P58: the agent's workspace (its proxy credentials; see Machine.workspace_id).
+    workspace_id: str = Field(default="", max_length=60)
 
 
 CDP_RELAY = re.compile(
@@ -974,6 +1081,21 @@ async def _click(page: Any, loc: Any, *, hover: bool = True) -> None:
         await loc.click(timeout=10_000)
 
 
+async def _hand_to(page: Any, loc: Any) -> None:
+    """Move the cursor onto an element and rest there a moment, without clicking."""
+    if not HUMAN_CLICK:
+        return
+    try:
+        await loc.scroll_into_view_if_needed(timeout=3000)
+        box = await loc.bounding_box()
+    except Exception:  # noqa: BLE001
+        return
+    if box:
+        async with _click_gate():
+            await _human_mouse(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        await asyncio.sleep(random.uniform(CLICK_DWELL_MS * 0.5, CLICK_DWELL_MS * 1.5) / 1000)
+
+
 async def _press(page: Any, loc: Any) -> None:
     """Click (Playwright waits for a page the click starts), then for that page to load."""
     await _click(page, loc)
@@ -983,14 +1105,37 @@ async def _press(page: Any, loc: Any) -> None:
         pass
 
 
+async def _think() -> None:
+    """The short beat a person takes before the next field (P58)."""
+    if THINK_MS_MAX:
+        await asyncio.sleep(random.uniform(THINK_MS_MIN, THINK_MS_MAX) / 1000)
+
+
+async def _into_field(loc: Any) -> None:
+    """Move the hand to the field and click into it, the way a person starts typing; a field
+    that cannot be clicked (covered, zero size) is focused instead."""
+    page = getattr(loc, "page", None)
+    if page is None:
+        await loc.focus(timeout=10_000)
+        return
+    try:
+        await _click(page, loc)
+    except Exception:  # noqa: BLE001 - fall back to focusing it
+        await loc.focus(timeout=10_000)
+
+
 async def _human_type(loc: Any, text: str) -> None:
-    """Type key by key with a jittered cadence and the odd backspace-correct. Focuses the
-    field itself, so no pre-click is needed; the final text is always exactly `text`."""
+    """Type key by key with a jittered cadence and the odd backspace-correct. Clicks into
+    the field itself, so no pre-click is needed; the final text is always exactly `text`."""
     try:
         await loc.scroll_into_view_if_needed(timeout=3000)
     except Exception:  # noqa: BLE001
         pass
-    await loc.focus(timeout=10_000)
+    await _think()
+    if HUMAN_CLICK:
+        await _into_field(loc)
+    else:
+        await loc.focus(timeout=10_000)
     await loc.fill("")  # clear whatever was there, reliably
     for ch in text:
         if TYPO_RATE and ch not in " \t\n" and random.random() < TYPO_RATE:
@@ -1218,12 +1363,14 @@ async def open_session(
             return {"id": sess.id, "restored": False, "reused": True}
     if body.cdp_url:
         return await _open_on_pc(body)
-    machine = await _acquire_machine(body.agent_id)  # may raise 503 (all browsers busy)
+    # may raise 503 (all browsers busy)
+    machine = await _acquire_machine(body.agent_id, body.workspace_id)
     sid = "bs_" + secrets.token_hex(8)
     restore = _clean_state(body.storage_state)
     sess = Session(
         sid, {"task_id": body.task_id, "agent_id": body.agent_id}, machine, body.allowed_hosts
     )
+    sess.workspace_id = body.workspace_id
     machine.sessions[sid] = sess  # reserve the tab before opening it
     sess.running = True  # busy while opening, so a concurrent acquire cannot evict the machine
     try:
@@ -1262,6 +1409,7 @@ async def _open_on_pc(body: Open) -> dict[str, Any]:
     sess = Session(
         sid, {"task_id": body.task_id, "agent_id": body.agent_id}, machine, body.allowed_hosts
     )
+    sess.workspace_id = body.workspace_id  # P59: the same site budget as on the server
     pw = await _playwright()
     try:
         browser = await pw.chromium.connect_over_cdp(
@@ -1474,6 +1622,16 @@ async def act(
 
 
 async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
+    if body.action in SERVER_ACTIONS:
+        # P59: the site budget (which site: where it is going, else where it is).
+        here = None
+        with contextlib.suppress(Exception):
+            here = s.page.url if s.page is not None else None
+        site = budget_site(body.url if body.action == "goto" else None) or budget_site(here)
+        if site:
+            rest, why = budget_check((s.workspace_id or s.owner.get("agent_id", ""), site))
+            if rest > 0:
+                return {"error": f"SITE_REST: {why}", "retry_after": int(rest) + 1, "site": site}
     await _pace(s, body.action)
     page = s.page
     point = None
@@ -1591,12 +1749,21 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
                         }
                     await loc.press("Enter")
             elif body.action == "select":
+                await _think()
+                await _hand_to(page, loc)  # the hand goes to the list before choosing
                 try:
                     await loc.select_option(label=body.text or "", timeout=5000)
                 except Exception:  # noqa: BLE001 - try the value instead of the label
                     await loc.select_option(value=body.text or "", timeout=5000)
             else:
-                await loc.set_checked(bool(body.text not in ("false", "off", "0")), timeout=5000)
+                want = bool(body.text not in ("false", "off", "0"))
+                await _think()
+                if HUMAN_CLICK and await loc.is_checked() != want:
+                    await _click(page, loc)  # a real click on the box, like a person
+                    if await loc.is_checked() != want:  # a styled box that ignores clicks
+                        await loc.set_checked(want, timeout=5000)
+                else:
+                    await loc.set_checked(want, timeout=5000)
             try:
                 await page.wait_for_load_state("networkidle", timeout=4000)
             except Exception:  # noqa: BLE001

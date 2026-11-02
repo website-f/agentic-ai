@@ -146,6 +146,11 @@ async def _lang_for(db: AsyncSession, ch: Channel, sender: dict[str, Any]) -> st
 
 
 async def handle_update(db: AsyncSession, ch: Channel, update: dict[str, Any]) -> None:
+    from ..engine import compliance
+
+    # P57: Telegram is not an approved service of this company: no answer leaves through it.
+    if not await compliance.allowed(db, ch.workspace_id, "telegram", "Telegram", "a chat"):
+        return
     cq = update.get("callback_query")
     sender = (cq or {}).get("from") or (update.get("message") or {}).get("from") or {}
     with use_lang(await _lang_for(db, ch, sender)):

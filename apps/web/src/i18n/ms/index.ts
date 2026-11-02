@@ -30,6 +30,9 @@ import { RUNS } from "./runs";
 import { SCHEDULE_PICKER } from "./schedule-picker";
 import { JOBS } from "./jobs";
 import { NEEDS_MEMORY } from "./needs-memory";
+import { APPROVED_SERVICES } from "./approved-services";
+import { PC_TUNNEL } from "./pc-tunnel";
+import { WEB_CONNECTIONS } from "./web-connections";
 import { SEARCH } from "./search";
 import { SHELL } from "./shell";
 import { SPEECH } from "./speech";
@@ -41,6 +44,8 @@ import { WORK_MORE } from "./work-more";
 import { STAFF_COMPUTERS } from "./staff-computers";
 import { WORKSPACE_HUB } from "./workspace-hub";
 import { FOLDER_BROWSER } from "./folder-browser";
+import { ERASE } from "./erase";
+import { TWO_FACTOR } from "./two-factor";
 
 export const MS: Record<string, string> = {
   ...COMMON,
@@ -80,5 +85,10 @@ export const MS: Record<string, string> = {
   ...SCHEDULE_PICKER,
   ...JOBS,
   ...NEEDS_MEMORY,
+  ...APPROVED_SERVICES,
+  ...PC_TUNNEL,
+  ...WEB_CONNECTIONS,
   ...FOLDER_BROWSER,
+  ...TWO_FACTOR,
+  ...ERASE,
 };

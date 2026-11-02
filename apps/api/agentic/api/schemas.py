@@ -55,6 +55,9 @@ class UserOut(BaseModel):
     email: str
     name: str
     must_change_password: bool
+    # P57: two-step sign-in is on; the workspace asks for it and it is not set up yet.
+    two_factor_enabled: bool = False
+    two_factor_setup_required: bool = False
 
 
 class WorkspaceOut(BaseModel):

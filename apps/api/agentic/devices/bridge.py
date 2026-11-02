@@ -367,17 +367,22 @@ async def open_browser(
     agent_id: str | None = None,
     task_id: str | None = None,
     timeout: float = 60.0,
+    sites: list[str] | None = None,
 ) -> tuple[str, str]:
     """Start the PC's browser (its own Agent profile) and its CDP relay. Returns (channel,
-    the internal ws:// URL the browser service connects to with its X-Browser-Token)."""
+    the internal ws:// URL the browser service connects to with its X-Browser-Token).
+    P59 `sites`: the office's AI on a company computer, only for these sites (the PC checks
+    its person let them through with `agentic-pc tunnel on`)."""
     if not SERVE_HERE:
-        body = {"start_url": start_url, "agent_id": agent_id, "task_id": task_id}
+        body = {"start_url": start_url, "agent_id": agent_id, "task_id": task_id, "sites": sites}
         data = await _remote(f"/internal/devices/{device_id}/browser", body, timeout + 30)
         return str(data.get("channel") or ""), str(data.get("ws_url") or "")
     ch = relay.create(device_id)
     params: dict[str, Any] = {"channel": ch.id}
     if start_url:
         params["start_url"] = start_url
+    if sites:
+        params["company"], params["sites"] = True, sites
     try:
         await call(
             device_id,

@@ -28,6 +28,7 @@ from ..core.config import settings
 from ..core.security import can
 from ..crm.access import MONEY_TOOLS, has_money
 from ..devices.core import PC_TOOLS, has_device, personal
+from ..engine import compliance
 from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, has_mailbox, has_teams
 from ..models import Agent, Membership
 from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
@@ -173,6 +174,21 @@ async def _evaluate(
         problem = await check_url_arg(args.get(arg, ""))
         if problem:
             return Decision("deny", "hardline.internal_address", problem, True)
+    if (service := compliance.service_of_tool(tool_name)) is not None:
+        # P57: the approved-services lock: a tool that reaches an outside service the company
+        # has not approved is not used (the attempt waits as a request for an owner).
+        from ..core.db import SessionLocal
+
+        async with SessionLocal() as db:
+            ok = await compliance.allowed(
+                db, agent.workspace_id, service, compliance.KINDS.get(service, service),
+                f"{agent.name}: {tool.label}",
+            )  # fmt: skip
+        if not ok:
+            label = compliance.KINDS.get(service, service)
+            return Decision(
+                "deny", f"compliance.{service}", compliance.BLOCKED.format(label=label), True
+            )
 
     why = hidden(agent, tool_name)
     if not why and tool_name in PC_TOOLS and not await has_device(agent):

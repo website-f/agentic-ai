@@ -391,6 +391,13 @@ async def run_sync(kind: str, box_id: str) -> str:
             box = await load_box(db, kind, box_id)
             if box is None or not is_active(box):
                 return "skipped"
+            from ..engine import compliance
+
+            # P57: Microsoft 365 is not an approved service of this company: no mail is read.
+            if not await compliance.allowed(
+                db, box.workspace_id, "m365", "Microsoft 365", "mail sync"
+            ):
+                return "skipped"
             try:
                 await sync_box(db, box)
             except MicrosoftError as e:

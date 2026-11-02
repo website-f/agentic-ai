@@ -5,10 +5,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import hash_password, needs_rehash, verify_password
 from ...models import AuthSession, Membership, PushSubscription, User, Workspace
-from ...services import audit, loginguard
+from ...services import audit, loginguard, two_factor
 from ...services.text import slugify
 from ..deps import (
     Principal,
@@ -49,6 +50,8 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
             email=user.email,
             name=user.name,
             must_change_password=user.must_change_password,
+            two_factor_enabled=two_factor.enabled(user),
+            two_factor_setup_required=two_factor.due(user, role, ws.settings),
         ),
         workspace=WorkspaceOut(id=ws.id, name=ws.name, slug=ws.slug, timezone=ws.timezone),
         role=role,  # type: ignore[arg-type]
@@ -88,7 +91,12 @@ async def setup(
     if await db.scalar(select(func.count()).select_from(User)):
         raise api_error(status.HTTP_409_CONFLICT, "already_set_up", "This install is set up.")
 
-    ws = Workspace(name=body.workspace_name.strip(), slug=slugify(body.workspace_name, "workspace"))
+    ws = Workspace(
+        name=body.workspace_name.strip(),
+        slug=slugify(body.workspace_name, "workspace"),
+        # P57: a new workspace asks its owners and admins for two-step sign-in.
+        settings={two_factor.SETTING: settings.new_workspace_require_2fa},
+    )
     user = User(
         email=body.email.lower(), name=body.name.strip(), password_hash=hash_password(body.password)
     )
@@ -108,10 +116,45 @@ async def setup(
     return await _me(db, user, ws.id, "owner")
 
 
-@router.post("/login")
+class TwoFactorChallengeOut(BaseModel):
+    """P57: the password was right; the code from the person's app comes next."""
+
+    needs_2fa: bool = True
+    challenge: str
+
+
+class LoginCodeIn(BaseModel):
+    challenge: str = Field(min_length=1, max_length=200)
+    code: str | None = Field(default=None, max_length=20)
+    recovery_code: str | None = Field(default=None, max_length=40)
+
+
+async def _signed_in(
+    db: AsyncSession,
+    request: Request,
+    response: Response,
+    user: User,
+    membership: Membership,
+    note: str = "",
+) -> MeOut:
+    user.last_login_at = datetime.now(UTC)
+    await start_session(db, response, request, user, membership.workspace_id)
+    await audit.record(
+        db,
+        membership.workspace_id,
+        f"user:{user.id}",
+        "auth.login",
+        target=user.id,
+        note=f"ip {client_ip(request)}{note}",
+    )
+    await db.commit()
+    return await _me(db, user, membership.workspace_id, membership.role)
+
+
+@router.post("/login", response_model=MeOut | TwoFactorChallengeOut)
 async def login(
     body: LoginIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)
-) -> MeOut:
+) -> MeOut | TwoFactorChallengeOut:
     email = body.email.lower()
     ip = client_ip(request)
     wait = await loginguard.locked_for(email, ip)
@@ -143,19 +186,96 @@ async def login(
 
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(body.password)
-    user.last_login_at = datetime.now(UTC)
     await loginguard.clear(email)
-    await start_session(db, response, request, user, membership.workspace_id)
-    await audit.record(
-        db,
-        membership.workspace_id,
-        f"user:{user.id}",
-        "auth.login",
-        target=user.id,
-        note=f"ip {ip}",
-    )
-    await db.commit()
-    return await _me(db, user, membership.workspace_id, membership.role)
+    if two_factor.enabled(user):
+        # P57: no session yet. The code from their app (or a recovery code) comes next.
+        await db.commit()
+        return TwoFactorChallengeOut(
+            challenge=await two_factor.new_challenge(user.id, membership.workspace_id)
+        )
+    return await _signed_in(db, request, response, user, membership)
+
+
+@router.post("/login/2fa")
+async def login_code(
+    body: LoginCodeIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)
+) -> MeOut:
+    """P57: the second step of signing in: the challenge from /login and a code."""
+    ch = await two_factor.read_challenge(body.challenge)
+    if ch is None:
+        raise api_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "challenge_expired",
+            "This sign-in timed out. Enter your password again.",
+        )
+    wait = await two_factor.locked_for(ch["user_id"])
+    if wait:
+        await two_factor.drop_challenge(body.challenge)
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "too_many_codes",
+            "Too many wrong codes. Try again in {minutes} min.",
+            minutes=max(1, round(wait / 60)),
+        )
+    if not (body.code or body.recovery_code):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "code_needed", "Enter the 6-digit code from your app."
+        )
+    # Locked, so one code cannot be used by two requests at once.
+    user = await db.scalar(select(User).where(User.id == ch["user_id"]).with_for_update())
+    membership = await db.get(Membership, (ch["workspace_id"], ch["user_id"]))
+    if user is None or membership is None or not user.is_active:
+        await two_factor.drop_challenge(body.challenge)
+        raise api_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "access_removed",
+            "This account no longer has access to the workspace.",
+        )
+    if not two_factor.enabled(user):  # turned off (an owner reset it) since the password step
+        await two_factor.drop_challenge(body.challenge)
+        return await _signed_in(db, request, response, user, membership)
+
+    if body.recovery_code:
+        ok = two_factor.use_recovery_code(user, body.recovery_code)
+    else:
+        ok = two_factor.check_code(user, body.code or "")
+    if not ok:
+        user_id = user.id  # read before the rollback expires the row
+        await db.rollback()
+        await two_factor.register_failure(user_id)
+        left = await two_factor.challenge_failed(body.challenge)
+        if left <= 0:
+            raise api_error(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "too_many_codes",
+                "Too many wrong codes. Sign in again.",
+            )
+        if body.recovery_code:
+            raise api_error(
+                status.HTTP_401_UNAUTHORIZED,
+                "bad_code",
+                "That recovery code is not right, or it was used already.",
+            )
+        raise api_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "bad_code",
+            "That code is not right. Use the newest code in your app.",
+        )
+
+    await two_factor.drop_challenge(body.challenge)
+    await two_factor.clear_failures(user.id)
+    note = ", two-step"
+    if body.recovery_code:
+        note = ", recovery code"
+        await audit.record(
+            db,
+            membership.workspace_id,
+            f"user:{user.id}",
+            "auth.2fa_recovery_used",
+            target=user.id,
+            after={"left": len(user.recovery_codes or [])},
+        )
+    return await _signed_in(db, request, response, user, membership, note)
 
 
 class LogoutIn(BaseModel):

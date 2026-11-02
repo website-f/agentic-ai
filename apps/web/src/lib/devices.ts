@@ -486,3 +486,40 @@ export const backupSettingsQuery = queryOptions({
 
 export const setBackup = (body: { enabled: boolean; target_id: string; every_hours: number }) =>
   api<BackupSettings>("/api/org/computers/backup", "PUT", body);
+
+/** P58: chosen sites (ePerolehan) through a company computer's own internet line. */
+export interface TunnelSettings {
+  on: boolean;
+  device_id: string;
+  hosts: string[];
+  fallback: "wait" | "direct" | "proxy";
+  /** P59: work only on these sites runs in a browser window on that computer's screen. */
+  show: boolean;
+  computers: { id: string; name: string; online: boolean; paused: boolean; allows: string[]; version: string }[];
+}
+
+export const tunnelSettingsQuery = queryOptions({
+  queryKey: ["org", "computers", "tunnel"] as const,
+  queryFn: () => api<TunnelSettings>("/api/org/computers/tunnel"),
+});
+
+export const setTunnel = (body: { on: boolean; device_id: string; hosts: string[]; fallback: "wait" | "direct" | "proxy"; show: boolean }) =>
+  api<TunnelSettings>("/api/org/computers/tunnel", "PUT", body);
+
+/** P60: the company's own outbound proxies (Settings > Web connections). */
+export interface ProxySettings {
+  on: boolean;
+  sites: string[];
+  proxies: { key: string; host: string; port: number; user: string }[];
+}
+export interface ProxyTest { key: string; ok: boolean; ip: string; ms: number; error: string }
+
+export const proxySettingsQuery = queryOptions({
+  queryKey: ["org", "proxies"] as const,
+  queryFn: () => api<ProxySettings>("/api/org/proxies"),
+});
+
+export const setProxies = (body: { on: boolean; sites: string[]; list?: string }) =>
+  api<ProxySettings>("/api/org/proxies", "PUT", body);
+
+export const testProxies = () => api<{ results: ProxyTest[] }>("/api/org/proxies/test", "POST", {});

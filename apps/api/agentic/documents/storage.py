@@ -449,11 +449,27 @@ def _ops(t: StorageTarget) -> tuple[Any, Any, Any, Any]:
     return ops
 
 
+async def _approved(t: StorageTarget) -> None:
+    """P57: with the approved-services lock on, outside storage the company has not approved
+    is neither written nor read (this server's disk needs no approval; deleting always may)."""
+    if t.kind == "local":
+        return
+    from ..core.db import SessionLocal
+    from ..engine import compliance
+
+    async with SessionLocal() as db:
+        ok = await compliance.allowed(db, t.workspace_id, f"storage:{t.id}", t.name, "a file")
+    if not ok:
+        raise StorageError(compliance.BLOCKED.format(label=t.name))
+
+
 async def put(t: StorageTarget, key: str, data: bytes) -> None:
+    await _approved(t)
     await _ops(t)[0](t, key, data)
 
 
 async def get(t: StorageTarget, key: str) -> bytes:
+    await _approved(t)
     return await _ops(t)[1](t, key)
 
 

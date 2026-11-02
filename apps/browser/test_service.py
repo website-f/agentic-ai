@@ -135,6 +135,8 @@ def fast_human(monkeypatch):
     monkeypatch.setattr(service, "TYPE_MS_MIN", 0)
     monkeypatch.setattr(service, "TYPE_MS_MAX", 0)
     monkeypatch.setattr(service, "CLICK_DWELL_MS", 0)
+    monkeypatch.setattr(service, "THINK_MS_MIN", 0)
+    monkeypatch.setattr(service, "THINK_MS_MAX", 0)
     monkeypatch.setattr(service, "TYPO_RATE", 0.0)
     monkeypatch.setattr(service, "_type_delay", lambda ch="": 0.0)
 
@@ -170,6 +172,16 @@ async def test_human_type_enters_exact_text():
     await service._type_field(loc, "Hello, world 42")
     assert loc.value == "Hello, world 42"
     assert loc.focuses == 1 and loc.clicks == 0  # focuses itself, never clicks
+
+
+async def test_human_type_clicks_into_the_field_first_when_it_can():
+    """P58: like a person, the hand goes to the field and clicks into it, then types."""
+    loc = FakeLocator(editable=True)
+    loc.page = FakePage()
+    await service._type_field(loc, "QT123")
+    assert loc.value == "QT123"
+    assert loc.clicks == 1 and loc.ops.index("click") < loc.ops.index("fill")
+    assert loc.page.mouse.moves  # a cursor path to the field
 
 
 async def test_human_type_backspace_correct_still_exact(monkeypatch):
@@ -281,3 +293,57 @@ async def test_a_full_machine_waits_for_its_own_tabs(monkeypatch):
     m.sessions["t1"] = types.SimpleNamespace(running=False, hold_until=0.0)
     with pytest.raises(service.AllBrowsersBusy):  # one tab already, cap is 1
         await service._acquire_machine("solo")
+
+
+# ---------------------------------------------------------------- P59 the site budget
+
+
+def _at(hh: int, mm: int = 0) -> float:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime(2026, 11, 3, hh, mm, tzinfo=ZoneInfo(service.BUDGET_TZ)).timestamp()
+
+
+def test_budget_knows_the_site_and_its_subdomains():
+    assert service.budget_site("https://www.eperolehan.gov.my/x") == "eperolehan.gov.my"
+    assert service.budget_site("https://eperolehan.gov.my") == "eperolehan.gov.my"
+    assert service.budget_site("https://eperolehan.gov.my.evil.com") is None
+    assert service.budget_site("https://example.com") is None
+
+
+def test_budget_keeps_office_hours(monkeypatch):
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_HOURS", "07:30-22:00")
+    rest, why = service.budget_check(("ws", "eperolehan.gov.my"), _at(23, 0))
+    assert "office hours" in why and 8 * 3600 <= rest <= 9 * 3600  # until 07:30
+    assert service.budget_check(("ws", "eperolehan.gov.my"), _at(9, 0)) == (0.0, "")
+
+
+def test_budget_takes_a_break_after_a_long_sitting(monkeypatch):
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_SITTING_MIN", 25)
+    key = ("ws", "eperolehan.gov.my")
+    t = _at(10, 0)
+    for i in range(26):  # one action a minute for 26 minutes
+        rest, _ = service.budget_check(key, t + i * 60)
+        if rest:
+            break
+    assert rest >= service.BUDGET_BREAK_MIN * 60  # a break of 4-10 minutes
+    again, why = service.budget_check(key, t + i * 60 + 30)
+    assert again > 0 and "break" in why  # still resting
+    assert service.budget_check(key, t + i * 60 + rest + 1)[0] == 0  # back after the break
+    other = service.budget_check(("other-ws", "eperolehan.gov.my"), t + i * 60)
+    assert other == (0.0, "")  # another company has its own budget
+
+
+def test_budget_caps_each_hour(monkeypatch):
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_PER_HOUR", 5)
+    monkeypatch.setattr(service, "BUDGET_SITTING_MIN", 999)
+    key = ("ws", "eperolehan.gov.my")
+    t = _at(10, 0)
+    for i in range(5):
+        assert service.budget_check(key, t + i * 10)[0] == 0
+    rest, why = service.budget_check(key, t + 60)
+    assert "this hour" in why and rest > 3000

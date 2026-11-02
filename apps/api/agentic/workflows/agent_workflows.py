@@ -2,6 +2,7 @@
 the wait lives in Temporal, the conversation lives in Postgres."""
 
 import asyncio
+import contextlib
 from datetime import timedelta
 from typing import Any
 
@@ -99,6 +100,17 @@ class AgentTaskWorkflow:
                 if why is None:
                     continue
                 state, r = "failed", {"state": "failed", "message": why}
+            if state == "rest" and workflow.patched("site-rest-v1"):
+                # P59: the site budget asked for a rest (a person's break, office hours): sleep,
+                # then the agent carries on. A cancel still stops it at once.
+                with contextlib.suppress(TimeoutError):
+                    await workflow.wait_condition(
+                        lambda: self.cancelled,
+                        timeout=timedelta(seconds=max(60, int(r.get("timeout_seconds") or 60))),
+                    )
+                if self.cancelled:
+                    break
+                continue
             if state == "needs_approval":
                 aid = r["approval_id"]
                 try:

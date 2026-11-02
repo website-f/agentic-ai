@@ -106,9 +106,10 @@ over HTTPS uploads/downloads, never in the socket.
 | `files.save` | `{download_url, folder, name}` | PC GETs `download_url` (Bearer) and writes `folder/name` (never overwrites: adds " (2)"); desktop app asks the person first; `data: {path, size}` |
 | `browser.open` | `{channel, start_url?}` | PC starts Chrome/Edge (headed, own profile dir, `--remote-debugging-port=0`, `--remote-debugging-address=127.0.0.1`), reads `DevToolsActivePort`, opens `wss://HOST/api/devices/cdp/{channel}` (first message `{"type":"hello","token":"…"}`, then raw CDP frames both ways) and pipes it to its local `ws://127.0.0.1:PORT/devtools/browser/…`; `data: {browser, version}` |
 | `browser.close` | `{channel}` | closes the pipe and the browser window it opened |
+| `net.open` | `{channel, host, port: 443}` | P57: a TCP connection from the PC to an allowed site, piped to `wss://HOST/api/devices/cdp/{channel}`; `data: {ok: true}` once both ends are open. See **Sending one site through this computer** |
 
 Errors use codes: `paused`, `not_allowed` (outside the folders / deny list), `not_found`,
-`too_big`, `no_browser`, `busy`, `failed`.
+`too_big`, `no_browser`, `busy`, `failed`, `bad_request` (`net.open` params).
 
 ### Server-side calls between processes
 
@@ -144,8 +145,8 @@ Uninstall (`agentic-pc uninstall`): unlink, stop the agent, remove the `Run` ent
 entry, delete the config folder, then the program folder once node exits (a one-time `RunOnce`
 entry repeats that at the next sign-in in case it was cut short).
 
-CLI: `agentic-pc status | folders [add|remove] <path> | remote [off|view|control] | pause |
-resume | unlink | logs | uninstall | run | link <code> --server <url>`.
+CLI: `agentic-pc status | folders [add|remove] <path> | remote [off|view|control] |
+tunnel [on [site ...]|off] | pause | resume | unlink | logs | uninstall | run | link <code> --server <url>`.
 
 ## Linux (P42)
 
@@ -260,6 +261,43 @@ It is not code-signed, so SmartScreen asks once (*More info > Run anyway*). Sign
 certificate (`signtool`) to remove that warning. The one-line installers stay for Mac, Linux
 and anyone who prefers them; both installs share the same configuration and only one agent
 runs at a time.
+
+## Sending one site through this computer (tunnel, P57, agent 0.4.0)
+
+The office's AI browser runs on the server. For one site family (default: the ePerolehan
+procurement portal, `eperolehan.gov.my`) the company may want that browser's traffic to leave
+through a company computer's own internet line, so the portal sees the office's own connection,
+as when staff sign in themselves.
+
+- **Off until the person on the computer turns it on**: `agentic-pc tunnel on` (ePerolehan),
+  or `agentic-pc tunnel on site.example.gov.my other.example.com` (up to 10 sites; each is a
+  lower-case domain with at least one dot: no `https://`, port or path). `agentic-pc tunnel`
+  shows the state; `agentic-pc tunnel off` turns it off and ends open connections at once
+  (so do pausing and unlinking; linking to another office server starts with it off).
+- **Only the listed sites pass**: a site or any subdomain of it (`www.eperolehan.gov.my`), never
+  a look-alike (`eperolehan.gov.my.evil.com`, `xeperolehan.gov.my`), and only port 443.
+- **The PC cannot read it**: TLS runs end to end between the server's browser and the site; the
+  PC passes encrypted bytes only. Its activity log keeps the site, the port, bytes up/down and
+  how long, never the bytes.
+- Visible on the computer: `agentic-pc status`, `agentic-pc doctor` and the status page
+  ("Sites through this computer: on — eperolehan.gov.my (2 open now)" / "off").
+
+Protocol:
+
+- `hello` and `state` carry `"tunnel": {"on": false, "hosts": []}` (a CLI change is sent as
+  `state` within about 2 s). The server never sets it: it is the computer's own consent.
+- `net.open` `{channel, host, port}`: the PC connects `host:443` (10 s timeout), opens
+  `wss://HOST/api/devices/cdp/{channel}` (first message `{"type":"hello","token":"…"}`),
+  and answers `{ok: true}` only when both are open, so the server can start sending. Then raw
+  bytes both ways as binary frames; a text frame starting `{"type":"error"` from the relay,
+  either side closing, or 10 minutes with no bytes ends both. At most 24 open at once; the
+  site is held back while the relay has more than 4 MB queued.
+- Errors: `paused`; `not_allowed` "Sending sites through this computer is off. On it, run:
+  agentic-pc tunnel on" or "This computer only lets through: <sites>"; `bad_request` (port
+  not 443, bad channel or site name); `busy` (24 open); `failed` "Could not reach <site>." or
+  "Could not open the relay.".
+- Activity: the call is logged as `net.open` with `{host, port}` only; when it ends, a
+  `net.tunnel` line with `{host, port, bytes_up, bytes_down, seconds, why}` (up = to the site).
 
 ## Desktop app
 

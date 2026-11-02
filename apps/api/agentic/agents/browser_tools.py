@@ -54,6 +54,8 @@ MAX_OUTPUT_DEFAULT = 6_000
 
 BUSY_RETRIES = 6
 BUSY_WAIT = 5  # seconds; under the 45 s tool timeout in all
+# P59: a site-budget rest up to this long is waited out inside the call; longer rests the task.
+SHORT_REST = 30
 
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake browser
 _UNSET: Any = object()
@@ -194,14 +196,32 @@ async def _session(ctx: Any) -> str:
     allowed = await task_hosts(ctx.db, ctx.task)
     saved = await vault.restorable(ctx.db, ctx.agent, allowed)
     storage = vault.merge_states([s for _, _, s in saved])
-    body: dict[str, Any] = {"task_id": task_id, "agent_id": ctx.agent.id, "allowed_hosts": allowed}
+    body: dict[str, Any] = {
+        "task_id": task_id,
+        "agent_id": ctx.agent.id,
+        "allowed_hosts": allowed,
+        "workspace_id": ctx.agent.workspace_id,  # P58: its proxy credentials
+    }
     if storage:
         body["storage_state"] = storage
     # P31: a task for the person's own computer drives a real window there (CDP relay).
     device_id: str | None = getattr(ctx.task, "device_id", None)
     channel = ""
+    sites: list[str] | None = None
+    if not device_id:
+        # P59: a task only on the sites the company sends through one of its computers opens
+        # its browser on that computer's screen, so the person there sees the work happen.
+        from ..devices import tunnel
+
+        device_id, why = await tunnel.screen_for(ctx.db, ctx.agent.workspace_id, allowed)
+        if why:
+            raise BrowsersBusy(
+                f"The site is used from the company's chosen computer, and {why}. Tell the "
+                "person; do not switch to another browser."
+            )
+        sites = allowed if device_id else None
     if device_id:
-        channel, body["cdp_url"] = await _open_on_pc(ctx, device_id)
+        channel, body["cdp_url"] = await _open_on_pc(ctx, device_id, sites)
     try:
         async with _client() as c:
             r = await c.post("/sessions", json=body)
@@ -252,15 +272,18 @@ async def _session(ctx: Any) -> str:
     return sid
 
 
-async def _open_on_pc(ctx: Any, device_id: str) -> tuple[str, str]:
-    """Start the browser on the person's computer; (channel, the relay URL for the service)."""
+async def _open_on_pc(ctx: Any, device_id: str, sites: list[str] | None = None) -> tuple[str, str]:
+    """Start the browser on the person's computer; (channel, the relay URL for the service).
+    P59 `sites`: the company's chosen computer, for those sites only (any office agent)."""
     from ..devices import bridge
     from ..devices.core import DeviceError, personal
 
-    if not personal(ctx.agent):
+    if not sites and not personal(ctx.agent):
         raise BrowsersBusy("Only the person's own AI may browse on their computer.")
     try:
-        return await bridge.open_browser(device_id, agent_id=ctx.agent.id, task_id=ctx.task.id)
+        return await bridge.open_browser(
+            device_id, agent_id=ctx.agent.id, task_id=ctx.task.id, sites=sites
+        )
     except DeviceError as e:
         why = {
             "offline": "it is offline (turned off, asleep, or the agent is not running)",
@@ -452,6 +475,19 @@ async def _act(
                 r = await c.post(f"/sessions/{sid}/act", json=payload)
             r.raise_for_status()
             obs = r.json()
+            # P59: the site budget asked for a rest. A short one is waited out here, like a
+            # person pausing; a longer one rests the whole task (runtime.SITE_REST).
+            for _ in range(2):
+                wait = int(obs.get("retry_after") or 0)
+                if not wait or wait > SHORT_REST:
+                    break
+                await asyncio.sleep(wait)
+                r = await c.post(f"/sessions/{sid}/act", json=payload)
+                r.raise_for_status()
+                obs = r.json()
+            if int(obs.get("retry_after") or 0) > SHORT_REST:
+                why = str(obs.get("error") or "").removeprefix("SITE_REST: ")
+                return {"error": f"SITE_REST {int(obs['retry_after'])}: {why}"}
     except BrowsersBusy as e:
         return {
             "error": e.message

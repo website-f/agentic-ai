@@ -143,6 +143,11 @@ async def serve(ws: WebSocket) -> None:
             d.os = hello["os"]
         if hello.get("remote") in core.REMOTE_LEVELS:  # P42: what the PC allows
             d.remote_pc = hello["remote"]
+        tunnel = hello.get("tunnel")  # P58: sites the PC's person lets through it
+        if isinstance(tunnel, dict):
+            d.tunnel_hosts = (
+                core.tunnel_hosts(tunnel.get("hosts")) if tunnel.get("on") is True else []
+            )
         d.arch = core.clip(hello.get("arch"), 16) or d.arch
         d.hostname = core.clip(hello.get("hostname"), 120) or d.hostname
         if isinstance(hello.get("browsers"), list):
@@ -246,6 +251,12 @@ async def _state(conn: Connection, m: dict[str, Any]) -> None:
         if m.get("remote") in core.REMOTE_LEVELS and m["remote"] != d.remote_pc:
             d.remote_pc = m["remote"]
             await core.log_activity(db, d, "remote", {"by": "pc", "level": d.remote_pc})
+        tunnel = m.get("tunnel")  # P58: the PC's person changed which sites pass through it
+        if isinstance(tunnel, dict):
+            hosts = core.tunnel_hosts(tunnel.get("hosts")) if tunnel.get("on") is True else []
+            if hosts != (d.tunnel_hosts or []):
+                d.tunnel_hosts = hosts
+                await core.log_activity(db, d, "tunnel", {"by": "pc", "hosts": hosts})
         if isinstance(m.get("paused"), bool) and m["paused"] != d.paused:
             d.paused = m["paused"]
             await core.log_activity(db, d, "pause" if d.paused else "resume", {"by": "pc"})

@@ -3,9 +3,11 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
+import { DataPrivacySection } from "@/components/data-privacy";
 import { InstallApp } from "@/components/install-app";
 import { LanguageSwitch } from "@/components/language-switch";
 import { SpeechStylePicker } from "@/components/speech-style";
+import { TwoFactorSettings } from "@/components/two-factor";
 import { IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -95,6 +97,10 @@ export function SettingsPage() {
         </div>
       </Section>
 
+      <Section title={t("Security")}>
+        <TwoFactorSettings />
+      </Section>
+
       <Section title={t("Language")} description={t("English or Bahasa Melayu. Saved to your profile, so it follows you to other devices.")}>
         <LanguageSwitch size="md" />
       </Section>
@@ -125,6 +131,8 @@ export function SettingsPage() {
           })}
         </RadioGroup.Root>
       </Section>
+
+      {me.role === "owner" ? <DataPrivacySection /> : null}
     </Page>
   );
 }

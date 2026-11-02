@@ -36,6 +36,35 @@ MS: dict[str, str] = {
     "Pick a password you have not used here.": "Pilih kata laluan yang belum pernah anda guna di sini.",
     "This install is set up.": "Pemasangan ini sudah disediakan.",
     "Your role cannot read this workspace.": "Peranan anda tidak boleh membaca ruang kerja ini.",
+    # ------------------------------------------------------------ P57 two-step sign-in (api/routers/two_factor, auth)
+    "Your company requires two-step sign-in. Set it up to continue.": (
+        "Syarikat anda mewajibkan log masuk dua langkah. Sediakannya untuk teruskan."
+    ),
+    "This sign-in timed out. Enter your password again.": (
+        "Log masuk ini sudah tamat masa. Masukkan kata laluan anda semula."
+    ),
+    "Too many wrong codes. Try again in {minutes} min.": (
+        "Terlalu banyak kod salah. Cuba lagi dalam {minutes} minit."
+    ),
+    "Too many wrong codes. Sign in again.": "Terlalu banyak kod salah. Log masuk semula.",
+    "Enter the 6-digit code from your app.": "Masukkan kod 6 digit daripada aplikasi anda.",
+    "That recovery code is not right, or it was used already.": (
+        "Kod pemulihan itu salah, atau sudah digunakan."
+    ),
+    "That code is not right. Use the newest code in your app.": (
+        "Kod itu salah. Guna kod terbaharu dalam aplikasi anda."
+    ),
+    "Two-step sign-in is already on. Turn it off first to move it to a new phone.": (
+        "Log masuk dua langkah sudah aktif. Matikannya dahulu untuk pindah ke telefon baharu."
+    ),
+    "Start the setup again.": "Mulakan persediaan semula.",
+    "Two-step sign-in is not on.": "Log masuk dua langkah belum aktif.",
+    "Only an owner can change two-step sign-in for the company.": (
+        "Hanya pemilik boleh menukar log masuk dua langkah untuk syarikat."
+    ),
+    "Turn off your own two-step sign-in in Settings.": (
+        "Matikan log masuk dua langkah anda sendiri dalam Tetapan."
+    ),
     # ------------------------------------------------------------ role names and statuses (i18n/labels)
     "Owner": "Pemilik",
     "Admin": "Admin",
@@ -683,6 +712,11 @@ MS: dict[str, str] = {
     "Notify a person": "Maklumkan seseorang",
     "Message another agent": "Hantar mesej kepada ejen lain",
     "Your role cannot stop tasks.": "Peranan anda tidak boleh menghentikan tugasan.",
+    "Only the workspace owner sets this.": "Hanya pemilik ruang kerja boleh menetapkan ini.",
+    "Only the owner chooses this computer.": "Hanya pemilik boleh memilih komputer ini.",
+    "Only the owner sets the web connections.": "Hanya pemilik boleh menetapkan sambungan web.",
+    "Paste at least one proxy first.": "Tampal sekurang-kurangnya satu proksi dahulu.",
+    "Choose one of the company's linked computers.": "Pilih salah satu komputer syarikat yang dipautkan.",
     "Find the right agent": "Cari ejen yang sesuai",
     "See the folders": "Lihat folder",
     "File documents": "Failkan dokumen",
@@ -1723,4 +1757,34 @@ MS: dict[str, str] = {
     "Choose where to keep the backup first (Settings > Storage).": (
         "Pilih tempat untuk menyimpan sandaran dahulu (Tetapan > Storan)."
     ),
+    # ------------------------------------------------------------ P57 export and erase a workspace
+    "Only an owner can export or erase this workspace's data.": (
+        "Hanya pemilik boleh mengeksport atau memadam data ruang kerja ini."
+    ),
+    "Your password is not right.": "Kata laluan anda tidak betul.",
+    "Enter the code from your authenticator app.": "Masukkan kod daripada aplikasi pengesah anda.",
+    "Type the workspace's name exactly as shown to confirm.": (
+        "Taip nama ruang kerja tepat seperti yang ditunjukkan untuk mengesahkan."
+    ),
+    "An export is already being made.": "Satu eksport sedang dibuat.",
+    "The background job engine is not reachable. Try again in a minute.": (
+        "Enjin kerja latar tidak dapat dihubungi. Cuba lagi sebentar nanti."
+    ),
+    "That export was not found.": "Eksport itu tidak dijumpai.",
+    "This download link has expired. Open Data and privacy again for a new one.": (
+        "Pautan muat turun ini sudah tamat. Buka Data dan privasi semula untuk pautan baharu."
+    ),
+    "This export was already downloaded or has expired. Make a new one.": (
+        "Eksport ini sudah dimuat turun atau sudah tamat. Buat yang baharu."
+    ),
+    "An erase of this workspace is already open.": (
+        "Permintaan memadam ruang kerja ini sudah dibuka."
+    ),
+    "That erase request was not found.": "Permintaan memadam itu tidak dijumpai.",
+    "The erase has started and cannot be stopped.": (
+        "Pemadaman sudah bermula dan tidak boleh dihentikan."
+    ),
+    "This erase request is not open.": "Permintaan memadam ini tidak terbuka.",
+    "The certificate is not ready yet.": "Sijil belum siap.",
+    "Only a failed erase can be tried again.": ("Hanya pemadaman yang gagal boleh dicuba semula."),
 }

@@ -12,6 +12,7 @@ import re
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +64,7 @@ BROWSER_ERROR_LIMIT = 3
 
 @dataclass
 class StepResult:
-    state: str  # done | needs_approval | failed | continue | delegate | meeting
+    state: str  # done | needs_approval | failed | continue | delegate | meeting | rest
     message: str | None = None
     approval_id: str | None = None
     timeout_seconds: int = 0
@@ -637,6 +638,9 @@ async def _pending_calls(db: AsyncSession, history: list[AgentMessage]) -> list[
 
 
 DECIDED = ("approved", "denied", "answered", "expired")
+# P59: a site-budget rest from the browser ("SITE_REST <seconds>: <why>"); the task sleeps.
+SITE_REST = re.compile(r"SITE_REST (\d+): ([^\n]*)")
+MAX_REST = 12 * 3600
 
 
 async def _said_no(db: AsyncSession, task: Task, tool: str) -> bool:
@@ -832,6 +836,17 @@ async def _resolve_calls(
             agent, task, "tool_call", tool=name, label=TOOLS[name].label, args=_brief(args)
         )
         result = await run_tool_once(replace(ctx, call_id=call_id), name, args, call_id)
+        rest = SITE_REST.search(result) if name.startswith("browser_") else None
+        if rest is not None:
+            # P59: the site budget says rest, as a person would; the task sleeps, then the
+            # agent carries on from here (its browser page stays as it was).
+            secs = max(60, min(int(rest.group(1)), MAX_REST))
+            back = (_now() + timedelta(seconds=secs)).astimezone(ZoneInfo(ctx.workspace.timezone))
+            why = rest.group(2).strip()
+            result = (
+                f"Paused on the site: {why}. Resumed at {back:%H:%M}. Carry on where you were "
+                "(look at the page again first)."
+            )
         if _stuck(name, result) and await _help_hint_once(db, task, agent):
             result += HELP_HINT
         await _add_tool_result(
@@ -846,6 +861,9 @@ async def _resolve_calls(
         )
         await db.commit()
         await activity(agent, task, "tool_result", tool=name, preview=_brief(result, 400))
+        if rest is not None:
+            await task_event(db, task, "rest", f"agent:{agent.id}", result.split(" Carry on")[0])
+            return StepResult("rest", result, timeout_seconds=secs)
         if name.startswith("browser_") and _browser_tool_error(result):
             streak = _browser_error_streak(await _history(db, task_id=task.id))
             if streak >= BROWSER_ERROR_LIMIT:
