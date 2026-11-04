@@ -55,6 +55,7 @@ async def _out(db: AsyncSession, s: SOP, names: dict[str, str] | None = None) ->
         status=s.status,
         source_file_ids=ids,
         source_files=[{"id": i, "name": names[i]} for i in ids if i in names],
+        pack=s.pack_key.split(":", 1)[0] if s.pack_key else None,
     )
 
 

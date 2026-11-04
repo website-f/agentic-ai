@@ -138,6 +138,11 @@ class Settings(BaseSettings):
     media_dir: str = "./data/media"
     # P40: the "This server's disk" file storage (company files kept on the VPS disk).
     files_dir: str = "./data/files"
+    # P65: the Prima Secure knowledge pack (company SOPs, workflows W1-W34, rules, record
+    # forms) imported into every workspace's Library. The folder mirrors apps/prima; empty =
+    # /app/prima-pack in the image, else the repo's apps/prima. Off = never imported.
+    prima_pack: bool = True
+    prima_pack_dir: str = ""
     minutes_max_mb: int = Field(default=1024, ge=1, le=10_240)
     minutes_max_hours: float = Field(default=4.0, gt=0, le=12)
 

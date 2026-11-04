@@ -80,6 +80,12 @@ async def build_parts(
     branch = await db.get(Branch, agent.branch_id)
     dept = await db.get(Department, agent.department_id) if agent.department_id else None
     parts = [PromptPart("Workspace rules", WORKSPACE_RULES)]
+    # P65: where the company's own procedures are imported (the Prima Secure pack), say so
+    # and what they forbid; the procedures themselves are looked up when the work needs them.
+    from ..knowledge import prima_pack
+
+    if await prima_pack.installed(db, agent.workspace_id):
+        parts.append(PromptPart("Company procedures", prima_pack.PROMPT_NOTE))
 
     # P56: SOPs fill a fixed budget, most general first; the rest are listed by title and
     # read with find_sop when a task needs them, so a company with many long SOPs does not

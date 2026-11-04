@@ -1,5 +1,7 @@
 """Agents: templates, tools, the builder's prompt preview, CRUD, and direct chat."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -15,8 +17,9 @@ from ...agents.prompt import build_parts, render
 from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import FOLLOWS, TOOLS, mode_of
 from ...assistants import access as assistant_access
-from ...core.db import get_db
+from ...core.db import SessionLocal, get_db
 from ...core.security import PERMISSIONS
+from ...core.valkey import valkey
 from ...engine import gateway
 from ...i18n import Msg
 from ...i18n.labels import agent_status_label, role_label
@@ -725,20 +728,16 @@ async def chat(
         )
         db.add(s)
         await db.commit()
+    # P64: the turn runs on its own (its own database session), so a page reload, a dropped
+    # connection or a proxy timeout never cancels it half way: the answer is saved anyway and
+    # the page picks it up from the conversation (GET .../progress, then .../messages).
+    work = asyncio.create_task(_turn(a.id, s.id, body.message))
+    _TURNS.add(work)
+    work.add_done_callback(_TURNS.discard)
     try:
-        reply = await runtime.chat_turn(db, a, s, body.message)
+        reply = await asyncio.shield(work)
     except gateway.GatewayUnavailable as e:
         raise api_error(status.HTTP_502_BAD_GATEWAY, "no_model_available", str(e)) from e
-    s.title = s.title or body.message[:80]
-    # Every turn moves the conversation up the list (nothing else on the row changes, so the
-    # updated_at onupdate would not fire by itself).
-    s.updated_at = datetime.now(UTC)
-    await db.commit()
-    if reply.message_id is not None:
-        try:  # learning is best effort: chat must work even if Temporal is down
-            await dispatch.start_chat_learning(reply.message_id)
-        except Exception:  # noqa: BLE001
-            log.warning("could not start chat learning", exc_info=True)
     return ChatOut(
         session_id=s.id,
         reply=reply.content,
@@ -746,3 +745,73 @@ async def chat(
         model=reply.model,
         tools_used=reply.tools_used,
     )
+
+
+_TURNS: set[asyncio.Task[Any]] = set()  # running turns, kept so none is garbage-collected
+BUSY_FOR = 300  # seconds a turn counts as running at most (a crash never leaves it stuck)
+
+
+def _busy_key(session_id: str) -> str:
+    return f"chat:busy:{session_id}"
+
+
+async def _turn(agent_id: str, session_id: str, message: str) -> runtime.ChatReply:
+    with contextlib.suppress(Exception):
+        await valkey().set(_busy_key(session_id), "1", ex=BUSY_FOR)
+    try:
+        async with SessionLocal() as db:
+            a = await db.get(Agent, agent_id)
+            s = await db.get(ChatSession, session_id)
+            assert a is not None and s is not None
+            reply = await runtime.chat_turn(db, a, s, message)
+            s.title = s.title or message[:80]
+            # Every turn moves the conversation up the list (nothing else on the row
+            # changes, so the updated_at onupdate would not fire by itself).
+            s.updated_at = datetime.now(UTC)
+            await db.commit()
+    finally:
+        with contextlib.suppress(Exception):
+            await valkey().delete(_busy_key(session_id))
+    if reply.message_id is not None:
+        try:  # learning is best effort: chat must work even if Temporal is down
+            await dispatch.start_chat_learning(reply.message_id)
+        except Exception:  # noqa: BLE001
+            log.warning("could not start chat learning", exc_info=True)
+    return reply
+
+
+@router.get("/chat/sessions/{session_id}/progress")
+async def session_progress(
+    session_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P64: whether the agent is still working on this conversation's last message, and the
+    tools it used for it so far (the page shows "Checking your Outlook inbox..." meanwhile)."""
+    s = await db.get(ChatSession, session_id)
+    if s is None or s.user_id != principal.user.id:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "session_not_found", "That conversation is not here."
+        )
+    try:
+        busy = bool(await valkey().exists(_busy_key(s.id)))
+    except Exception:  # noqa: BLE001 - no cache: say idle, the page reads the messages
+        busy = False
+    last_user = await db.scalar(
+        select(func.max(AgentMessage.id)).where(
+            AgentMessage.session_id == s.id, AgentMessage.role == "user"
+        )
+    )
+    tools: list[str] = []
+    if busy and last_user:
+        rows = (
+            await db.scalars(
+                select(AgentMessage).where(
+                    AgentMessage.session_id == s.id,
+                    AgentMessage.id > last_user,
+                    AgentMessage.role == "tool",
+                )
+            )
+        ).all()
+        tools = [m.name for m in rows if m.name]
+    return {"busy": busy, "tools": tools}

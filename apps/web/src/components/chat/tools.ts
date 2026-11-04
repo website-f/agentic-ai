@@ -4,7 +4,7 @@ import {
   BookOpenTextIcon, BrainIcon, BrowserIcon, CalculatorIcon, CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon,
   ChartLineUpIcon, ClipboardTextIcon, ClockCountdownIcon, ClockIcon, CodeIcon, CursorClickIcon, EnvelopeSimpleIcon, FileTextIcon,
   FilesIcon, FloppyDiskIcon, FlowArrowIcon, GlobeIcon, HandIcon, ImageIcon, KanbanIcon, LightbulbIcon, LightningIcon,
-  MagnifyingGlassIcon, NotePencilIcon, PaperPlaneRightIcon, SparkleIcon, TrendDownIcon, UsersThreeIcon, WhatsappLogoIcon,
+  ChatsCircleIcon, MagnifyingGlassIcon, NotePencilIcon, PaperPlaneRightIcon, SparkleIcon, TrendDownIcon, UsersThreeIcon, WhatsappLogoIcon,
   type Icon,
 } from "@phosphor-icons/react";
 
@@ -29,6 +29,12 @@ export const TOOL_LOOK: Record<string, ToolLook> = {
   calendar_update_event: { label: msg("Proposed a change"), icon: CalendarBlankIcon },
   calendar_cancel_event: { label: msg("Proposed a cancellation"), icon: CalendarXIcon },
   // P34: the same jobs on Outlook
+  outlook_inbox: { label: msg("Checked your inbox"), icon: EnvelopeSimpleIcon },
+  teams_chats: { label: msg("Checked your Teams chats"), icon: ChatsCircleIcon },
+  teams_read_chat: { label: msg("Read a Teams chat"), icon: ChatsCircleIcon },
+  teams_send: { label: msg("Drafted a Teams message"), icon: PaperPlaneRightIcon },
+  teams_channels: { label: msg("Checked your Teams channels"), icon: ChatsCircleIcon },
+  teams_read_channel: { label: msg("Read a Teams channel"), icon: ChatsCircleIcon },
   outlook_search: { label: msg("Searched email"), icon: MagnifyingGlassIcon },
   outlook_read: { label: msg("Read an email"), icon: EnvelopeSimpleIcon },
   outlook_draft_reply: { label: msg("Drafted a reply"), icon: PaperPlaneRightIcon },

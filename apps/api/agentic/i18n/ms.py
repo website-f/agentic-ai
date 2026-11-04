@@ -1315,6 +1315,7 @@ MS: dict[str, str] = {
     "Microsoft refused access to this mailbox. Ask the Microsoft 365 admin to include it in the app's RBAC for Applications scope.": "Microsoft menolak akses ke peti mel ini. Minta pentadbir Microsoft 365 memasukkannya ke dalam skop RBAC for Applications aplikasi ini.",
     # P34 mail features: Outlook tools, approvals, the pipeline and the daily digest
     # (agents/mail_tools.py, microsoft/features.py, microsoft/approvals.py)
+    "Check the Outlook inbox": "Semak peti masuk Outlook",
     "Search Outlook": "Cari dalam Outlook",
     "Read an Outlook email": "Baca e-mel Outlook",
     "Draft an Outlook reply": "Draf balasan Outlook",
@@ -1818,4 +1819,6 @@ MS: dict[str, str] = {
     "This folder still has files.": "Folder ini masih ada fail.",
     "A label is 1 to {n} characters.": "Label mesti 1 hingga {n} aksara.",
     "A file can have up to {n} labels.": "Satu fail boleh ada sehingga {n} label.",
+    # ------------------------------------------------------------ P65 Prima Secure knowledge pack (api/routers/library)
+    "The Prima Secure pack is not on this server.": "Pek Prima Secure tiada di pelayan ini.",
 }

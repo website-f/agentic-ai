@@ -146,6 +146,7 @@ def ai_may_use_shared(agent: Agent | None, mailbox: SharedMailbox | None) -> boo
 # a mailbox (its owner's own Outlook, or a shared mailbox it is assigned to).
 MAIL_TOOLS = frozenset(
     {
+        "outlook_inbox",
         "outlook_search",
         "outlook_read",
         "outlook_draft_reply",

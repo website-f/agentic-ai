@@ -84,6 +84,7 @@ OUTSIDE_CONTENT = frozenset(
         "pc_list_folder",
         "pc_read_file",
         # P34: mail and calendars from Outlook.
+        "outlook_inbox",
         "outlook_search",
         "outlook_read",
         "outlook_calendar_agenda",

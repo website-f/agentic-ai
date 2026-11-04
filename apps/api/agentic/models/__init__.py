@@ -310,6 +310,8 @@ class SOP(Timestamps, Base):
             "scope IN ('workspace', 'branch', 'department', 'library')", name="ck_sops_scope"
         ),
         Index("ix_sops_ws_scope", "workspace_id", "scope", "scope_id"),
+        # P65: one SOP per knowledge-pack section per workspace (NULLs never collide).
+        UniqueConstraint("workspace_id", "pack_key", name="uq_sops_ws_pack_key"),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("sp"))
@@ -324,6 +326,11 @@ class SOP(Timestamps, Base):
     # never shown to agents; only "active" ones are.
     status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
     source_file_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    # P65: an SOP imported from a knowledge pack (knowledge/prima_pack.py): the pack section
+    # it came from ("prima:docs/system/04-workflows.md#w12") and the sha256 of the title and
+    # body the import last wrote, so a re-run skips it, updates it, or sees a person edited it.
+    pack_key: Mapped[str | None] = mapped_column(String(160))
+    pack_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class Agent(Timestamps, Base):

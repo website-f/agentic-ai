@@ -213,6 +213,19 @@ class Graph:
             delta_link=body.get("@odata.deltaLink"),
         )
 
+    async def inbox_messages(
+        self, top: int = 15, *, since: datetime, unread_only: bool = False
+    ) -> list[dict[str, Any]]:
+        """P64: the inbox's newest mail, newest first, metadata and preview only. (Graph wants
+        an $orderby property in the $filter too, first: receivedDateTime is in both.)"""
+        flt = f"receivedDateTime ge {iso(since)}" + (" and isRead eq false" if unread_only else "")
+        body = await self._get(
+            f"{self.root}/mailFolders/inbox/messages",
+            **{"$filter": flt, "$orderby": "receivedDateTime desc",
+               "$top": max(1, min(top, 50)), "$select": MESSAGE_META},
+        )  # fmt: skip
+        return list(body.get("value") or [])
+
     async def search_messages(self, query: str, top: int = 10) -> list[dict[str, Any]]:
         """Full-text search over the whole mailbox ($search, Graph's KQL), newest matches,
         metadata only."""

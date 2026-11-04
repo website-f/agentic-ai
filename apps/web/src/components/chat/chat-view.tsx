@@ -24,7 +24,7 @@ import { TaskCard } from "@/components/task-composer/task-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoiceInput } from "@/components/voice-input";
 import { t as tr, useT } from "@/i18n";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
 import { useIsPhone } from "@/lib/use-media";
@@ -41,6 +41,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   meta?: { provider?: string; model?: string; tools?: string[]; budget?: boolean; recalled?: Recalled[] } | null;
+  created_at?: string;
 }
 
 export interface ChatReply { session_id: string; reply: string; provider?: string; model?: string; tools_used: string[] }
@@ -141,6 +142,13 @@ export function ChatView({
     sessionCb.current?.(current);
   }, [current]);
 
+  // P64: the agent keeps working on the server even when this request ends early (the page
+  // reloaded, the connection dropped, a proxy gave up): the page then watches the conversation
+  // until the answer is saved, and shows what the agent is doing meanwhile.
+  const [waiting, setWaiting] = useState(false);
+  const lastMsg = thread.data?.[thread.data.length - 1];
+  const [openedAt] = useState(() => Date.now());
+  const recentAsk = !!lastMsg && lastMsg.role === "user" && !!lastMsg.created_at && openedAt - Date.parse(lastMsg.created_at) < 5 * 60_000;
   const send = useMutation({
     mutationFn: (text: string) => api<ChatReply>(`/api/agents/${agent.id}/chat`, "POST", { message: text, session_id: current }),
     onMutate: (text) => {
@@ -157,12 +165,39 @@ export function ChatView({
       onReply?.(r);
     },
     onError: (e, text) => {
+      const lost = !(e instanceof ApiError) || e.status === 0 || e.status === 504 || (e.status >= 500 && e.code !== "no_model_available");
+      if (lost) {
+        // The message reached the server and the agent is still on it: watch for the answer.
+        setLocal([]);
+        setWaiting(true);
+        if (current) void qc.invalidateQueries({ queryKey: workKeys.messages(current) });
+        else void qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
+        return;
+      }
       toast.error(errorMessage(e));
       setLocal((l) => l.slice(0, -1));
       // Nothing typed is lost: the message goes back in the box.
       setDraft((d) => (d.trim() ? d : text));
     },
   });
+  const watching = !send.isPending && (waiting || recentAsk);
+  const progress = useQuery({
+    queryKey: ["chat", "progress", current ?? "none"],
+    queryFn: async () => {
+      const r = await api<{ busy: boolean; tools: string[] }>(`/api/chat/sessions/${current}/progress`);
+      if (!r.busy && !send.isPending && current) {
+        // The agent finished while we watched: show its answer, and stop watching.
+        void qc.invalidateQueries({ queryKey: workKeys.messages(current) });
+        void qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
+        setWaiting(false);
+      }
+      return r;
+    },
+    enabled: !!current && (send.isPending || watching),
+    refetchInterval: (q) => (send.isPending || waiting || q.state.data?.busy ? 1500 : false),
+  });
+  const stillWorking = watching && !!progress.data?.busy;
+  const working = send.isPending || stillWorking;
 
   const toBottom = (smooth: boolean) => {
     const el = scroller.current;
@@ -277,7 +312,7 @@ export function ChatView({
 
   const submit = (text = draft) => {
     const said = text.trim();
-    if (!said || send.isPending || locked) return;
+    if (!said || working || locked) return;
     setDraft("");
     stick.current = true;
     send.mutate(said);
@@ -335,7 +370,11 @@ export function ChatView({
   const copy = (text: string) =>
     void navigator.clipboard?.writeText(text).then(() => toast.success(tr("Copied.")), () => toast.error(tr("Copy blocked by the browser.")));
 
-  const thinkingText = thinking ? thinking(asked) : t("{name} is thinking…", { name: agent.name });
+  const lastTool = progress.data?.tools[progress.data.tools.length - 1];
+  const doing = lastTool ? toolLook(lastTool)?.label : undefined;
+  const thinkingText = doing
+    ? t("{name} is working: {step}…", { name: agent.name, step: t(doing) })
+    : thinking ? thinking(asked) : t("{name} is thinking…", { name: agent.name });
   const railOpen = rail && !phone;
   const prompts = locked ? [] : quickPrompts ?? [];
   const placeholder = inactive
@@ -370,14 +409,14 @@ export function ChatView({
           {!phone && !rail ? (
             <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Show conversations")} title={t("Show conversations")}><SidebarSimpleIcon size={17} /></Button>
           ) : null}
-          <AgentAvatar name={agent.name} color={agent.color} size="sm" working={send.isPending || agent.current_task?.status === "running"} className="ml-1" />
+          <AgentAvatar name={agent.name} color={agent.color} size="sm" working={working || agent.current_task?.status === "running"} className="ml-1" />
           <div className="ml-1 min-w-0 flex-1">
             <h1 className="flex min-w-0 items-center gap-2 text-[14.5px] leading-tight font-semibold">
               <span className="truncate">{agent.name}</span>
               {agent.status === "paused" ? <Pill className="shrink-0 px-1.5 py-0 text-[10.5px]">{t("Paused")}</Pill>
                 : agent.status === "retired" ? <Pill className="shrink-0 px-1.5 py-0 text-[10.5px]">{t("Retired")}</Pill> : null}
             </h1>
-            <p className="truncate text-[12px] text-muted">{send.isPending ? thinkingText : title && current ? title : agent.role}</p>
+            <p className="truncate text-[12px] text-muted">{working ? thinkingText : title && current ? title : agent.role}</p>
           </div>
           {headerExtra}
           {canWrite && !inactive ? (
@@ -464,7 +503,7 @@ export function ChatView({
                 ];
               })}
             </AnimatePresence>
-            {send.isPending ? (
+            {working ? (
               <li className="flex items-center gap-3">
                 <AgentAvatar name={agent.name} color={agent.color} size="sm" working />
                 <span className="flex items-center gap-2 rounded-[var(--radius-lg)] bg-surface-2/70 px-3.5 py-2.5 text-[13px] text-muted">
@@ -522,7 +561,7 @@ export function ChatView({
             />
             <VoiceInput round disabled={locked}
               onText={(said) => { setDraft((d) => (d.trim() ? `${d.trimEnd()} ${said}` : said)); box.current?.focus(); }} />
-            <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || send.isPending || locked} aria-label={t("Send")}>
+            <Button type="submit" size="icon" className="size-11 rounded-full" disabled={!draft.trim() || working || locked} aria-label={t("Send")}>
               <PaperPlaneRightIcon size={18} weight="fill" />
             </Button>
           </form>

@@ -11,6 +11,8 @@
 - The Graph webhook (public): validation handshake, clientState check, queue, 202.
 """
 
+import asyncio
+import contextlib
 import json
 import logging
 import urllib.parse
@@ -26,6 +28,7 @@ from ...assistants.access import may_assist
 from ...core import crypto
 from ...core.db import SessionLocal, get_db
 from ...core.security import can
+from ...core.valkey import valkey
 from ...i18n import render, tr
 from ...microsoft import access, app, auth, graph, signin, sync
 from ...microsoft import rules as mail_rules
@@ -352,6 +355,25 @@ async def microsoft_account(
 
 # ---------------------------------------------------------------- Teams (P52): your own chats
 
+# P64: Teams lists are slow at Microsoft (seconds each): kept briefly, so reopening the page
+# or switching tabs is instant. ?fresh=1 reads them again.
+CHATS_FOR = 60
+CHANNELS_FOR = 300
+
+
+async def _kept(key: str, ttl: int, fresh: bool, make: Any) -> Any:
+    if not fresh:
+        try:
+            raw = await valkey().get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception:  # noqa: BLE001,S110 - no cache: ask Microsoft
+            pass
+    value = await make()
+    with contextlib.suppress(Exception):
+        await valkey().set(key, json.dumps(value, default=str), ex=ttl)
+    return value
+
 
 async def _my_graph(db: AsyncSession, principal: Principal) -> graph.Graph:
     acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
@@ -376,17 +398,29 @@ def _teams_fail(e: MicrosoftError) -> Exception:
 
 @router.get(f"{BASE}/teams/chats")
 async def teams_chats(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+    fresh: bool = Query(default=False),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """Your own Teams chats (never anyone else's), most recent first."""
+    g = await _my_graph(db, principal)
+    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
+    # The name saved at connect, not one more call to Microsoft (P64).
+    me = (acct.display_name if acct else "") or ""
+
+    async def make() -> list[dict[str, Any]]:
+        try:
+            return _chat_rows(await g.list_chats(30), me)
+        except MicrosoftError as e:
+            raise _teams_fail(e) from e
+
+    key = f"teams:chats:{principal.workspace_id}:{principal.user.id}"
+    return await _kept(key, CHATS_FOR, fresh, make)
+
+
+def _chat_rows(chats: list[dict[str, Any]], me: str) -> list[dict[str, Any]]:
     from ...agents.teams_tools import plain
 
-    g = await _my_graph(db, principal)
-    try:
-        me = (await g.me()).get("displayName") or ""
-        chats = await g.list_chats(30)
-    except MicrosoftError as e:
-        raise _teams_fail(e) from e
     out = []
     for c in chats:
         last = c.get("lastMessagePreview") or {}
@@ -480,14 +514,29 @@ def _channel_msg(m: dict[str, Any]) -> dict[str, Any]:
 
 @router.get(f"{BASE}/teams/channels")
 async def teams_channels(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+    fresh: bool = Query(default=False),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """The teams you are a member of, each with its channels (your own connection only)."""
     g = await _channels_graph(db, principal)
+    key = f"teams:channels:{principal.workspace_id}:{principal.user.id}"
+    return await _kept(key, CHANNELS_FOR, fresh, lambda: _team_rows(g))
+
+
+async def _team_rows(g: graph.Graph) -> list[dict[str, Any]]:
     try:
+        teams = await g.joined_teams()
+        # Every team's channels at once (P64), a few at a time so Microsoft does not throttle.
+        gate = asyncio.Semaphore(5)
+
+        async def channels_of(team: dict[str, Any]) -> list[dict[str, Any]]:
+            async with gate:
+                return await g.team_channels(str(team.get("id") or ""))
+
+        lists = await asyncio.gather(*(channels_of(t) for t in teams))
         out = []
-        for team in await g.joined_teams():
-            channels = await g.team_channels(str(team.get("id") or ""))
+        for team, channels in zip(teams, lists, strict=True):
             out.append(
                 {
                     "id": team.get("id"),

@@ -36,9 +36,12 @@ LIBRARY_TOOLS = (
         "search_library",
         "Search the library",
         "Search the office's library — SOPs, guidelines, manuals and policies people "
-        "uploaded — for passages about something (e.g. 'refund for damaged goods', 'claim "
-        "limit for travel'). Returns numbered passages with their title, page and file id; "
-        "cite the ones you use as [title p.N], and use read_file for the full text.",
+        "uploaded, and the company's imported procedures, workflows, rules and record forms "
+        "(e.g. 'Prima · W12 Monthly staff payroll') — for passages about something (e.g. "
+        "'refund for damaged goods', 'claim limit for travel', 'who approves payroll'). Look "
+        "the procedure up before related work and follow it. Returns numbered passages with "
+        "their title, page and file id; cite the ones you use as [title p.N], and use "
+        "read_file for the full text.",
         {
             "type": "object",
             "properties": {

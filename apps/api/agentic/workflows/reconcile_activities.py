@@ -15,6 +15,15 @@ async def liveness_reconcile() -> dict[str, int]:
         out.update({f"library_{k}": v for k, v in caught.items()})
     except Exception:  # noqa: BLE001 - the liveness round already did its work
         activity.logger.warning("library catch-up failed", exc_info=True)
+    # P65: the Prima Secure knowledge pack for workspaces made since the API started (and
+    # sections left unindexed). Quick when nothing changed.
+    try:
+        from ..knowledge import prima_pack
+
+        synced = await prima_pack.sync_all()
+        out.update({f"prima_{k}": v for k, v in synced.items() if k != "workspaces"})
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("prima pack sync failed", exc_info=True)
     # P40: storage sources (B2, the server's disk, a file server) imported into the Library.
     try:
         from ..core.db import SessionLocal

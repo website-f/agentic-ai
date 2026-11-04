@@ -10,4 +10,13 @@ export const SIGN_IN: Record<string, string> = {
   "Lets each person's own AI read the posts in the Teams channels they belong to. First, in Microsoft Entra, add the delegated Microsoft Graph permission ChannelMessage.Read.All to the app and grant admin consent; then turn this on. People sign in with Microsoft again (or reconnect) to pick it up.":
     "Membenarkan AI setiap orang membaca hantaran dalam saluran Teams yang mereka sertai. Mula-mula, dalam Microsoft Entra, tambah kebenaran Microsoft Graph diwakilkan ChannelMessage.Read.All pada aplikasi dan berikan persetujuan pentadbir; kemudian hidupkan ini. Pengguna log masuk dengan Microsoft sekali lagi (atau sambung semula) untuk mendapatkannya.",
   "Grant admin consent": "Berikan persetujuan pentadbir",
+
+  // P64: what the agent is doing in a chat
+  "{name} is working: {step}…": "{name} sedang bekerja: {step}…",
+  "Checked your inbox": "Menyemak peti masuk anda",
+  "Checked your Teams chats": "Menyemak sembang Teams anda",
+  "Read a Teams chat": "Membaca sembang Teams",
+  "Drafted a Teams message": "Merangka mesej Teams",
+  "Checked your Teams channels": "Menyemak saluran Teams anda",
+  "Read a Teams channel": "Membaca saluran Teams",
 };

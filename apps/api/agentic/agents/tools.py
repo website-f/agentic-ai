@@ -1307,7 +1307,9 @@ TOOLS["find_sop"] = Tool(
     "find_sop",
     "Find an SOP",
     "Search the written procedures (SOPs) you may follow, including other departments' and "
-    "the library, for how something is done here.",
+    "the library (with the company's imported workflows, rules and record forms, e.g. "
+    "'Prima · W14 Staff claim'), for how something is done here, who does each step and who "
+    "approves. Use it before related work and follow what it says.",
     {
         "type": "object",
         "properties": {"query": {"type": "string", "description": "e.g. supplier registration"}},

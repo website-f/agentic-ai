@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -364,3 +364,61 @@ async def reindex(
     await audit.record(db, principal.workspace_id, principal.actor, "library.reindex")
     await db.commit()
     return ReindexOut(state=await start_index("workspace", principal.workspace_id))
+
+
+class PackIn(BaseModel):
+    # Also overwrite sections a person edited in the app (and remove ones they edited that
+    # are gone from the pack). Off: their edits are kept.
+    force: bool = False
+
+
+class PackOut(BaseModel):
+    pack: str
+    sections: int
+    created: int
+    updated: int
+    unchanged: int
+    kept: int
+    removed: int
+    indexing: int  # SOPs whose passages are being (re)built after this answer
+
+
+@router.post("/api/library/packs/prima")
+async def sync_prima_pack(
+    background: BackgroundTasks,
+    body: PackIn | None = None,
+    principal: Principal = Depends(require("members.assign_owner")),
+    db: AsyncSession = Depends(get_db),
+) -> PackOut:
+    """P65: import (or bring up to date) the Prima Secure SOPs, workflows, rules and forms as
+    Library SOPs. Owner only, audited; a re-run changes only what changed."""
+    from ...knowledge import prima_pack
+
+    pack = prima_pack.load_pack()
+    if pack is None or not pack.docs:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND,
+            "pack_not_found",
+            "The Prima Secure pack is not on this server.",
+        )
+    out = await prima_pack.apply(
+        db,
+        principal.workspace_id,
+        pack,
+        force=bool(body and body.force),
+        actor=principal.actor,
+        audit_always=True,
+    )
+    if out.to_index:
+        background.add_task(prima_pack.index_later, out.to_index)
+    c = out.counts()
+    return PackOut(
+        pack=prima_pack.PACK,
+        sections=len(pack.docs),
+        created=c["created"],
+        updated=c["updated"],
+        unchanged=c["unchanged"],
+        kept=c["kept"],
+        removed=c["removed"],
+        indexing=len(out.to_index),
+    )

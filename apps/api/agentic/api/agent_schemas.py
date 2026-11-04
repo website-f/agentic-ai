@@ -151,6 +151,8 @@ class SOPOut(BaseModel):
     status: str = "active"
     source_file_ids: list[str] = Field(default_factory=list)
     source_files: list[dict[str, str]] = Field(default_factory=list)
+    # P65: the knowledge pack it was imported from ("prima"); None for one people wrote.
+    pack: str | None = None
 
 
 class ChatIn(BaseModel):

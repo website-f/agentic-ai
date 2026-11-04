@@ -90,7 +90,13 @@ async def lifespan(_: FastAPI):
     from ..devices import tunnel  # P58: the egress proxy's way through a company computer
 
     await tunnel.start()
+    # P65: the Prima Secure SOPs and workflows into every workspace's Library (unchanged
+    # sections are skipped; the worker's liveness round repeats it for new workspaces).
+    from ..knowledge import prima_pack
+
+    pack = asyncio.create_task(prima_pack.run_at_startup())
     yield
+    pack.cancel()
     await tunnel.stop()
     warm.cancel()
     await close_valkey()
