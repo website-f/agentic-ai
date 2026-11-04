@@ -404,7 +404,9 @@ services:
     healthcheck:
       test: ["CMD", "python", "/app/egress.py", "--health"]
       interval: 15s
-      timeout: 5s
+      # Python's start-up alone took 9-19 s on a busy host (load 11+ on 8 cores): a 5 s limit
+      # flapped it to unhealthy while it served normally.
+      timeout: 15s
       retries: 3
       start_period: 5s
     mem_limit: 128m  # ~25 MB idle, ~30 MB with 6 agents browsing (measured)
