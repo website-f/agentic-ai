@@ -3,7 +3,8 @@
 Protocol (docs/PC-AGENT.md): the PC's first message is `hello` with its token; the server
 answers `welcome` (or `error` and closes). Then `ping`/`pong`, `call`/`result`, `settings`
 (server -> PC) and `state` (PC -> server). 60 s of silence = offline. A second connection for
-the same device replaces the first.
+the same device replaces the first. P62: `tunnel_ask` (server -> PC) asks the person there to
+let the company's chosen sites through it.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from typing import Any
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from ..core.db import SessionLocal
-from ..models import Device
+from ..models import Device, Workspace
 from . import core
 from .core import DeviceError
 
@@ -102,6 +103,31 @@ async def push_settings(device: Device) -> None:
         )
 
 
+async def ask_tunnel(device_id: str, hosts: list[str], by: str = "") -> bool:
+    """P62: ask the person at the computer to let these sites through it. The agent (0.5.0+)
+    opens its own page there with Allow / Not now; nothing passes until they press Allow.
+    False when the computer is not connected here."""
+    c = connection(device_id)
+    if c is None:
+        return False
+    try:
+        await c.send({"type": "tunnel_ask", "hosts": hosts, "by": by[:80]})
+    except Exception:  # noqa: BLE001 - it asks again when it next connects
+        return False
+    return True
+
+
+async def _pending_ask(db: Any, d: Device) -> list[str]:
+    """The sites the workspace wants through this computer that its person has not allowed."""
+    from . import tunnel
+
+    ws = await db.get(Workspace, d.workspace_id)
+    m = tunnel.mode_of(ws)
+    if m.mode != "pc" or tunnel.setting(ws).device_id != d.id:
+        return []
+    return [] if all(core.host_in(s, d.tunnel_hosts or []) for s in m.sites) else m.sites
+
+
 async def disconnect(device_id: str, code: str, message: str) -> None:
     c = REGISTRY.pop(device_id, None)
     if c is not None:
@@ -165,6 +191,7 @@ async def serve(ws: WebSocket) -> None:
             "name": d.name,
             "settings": {"folders": list(d.folders or []), "paused": d.paused},
         }
+        ask = await _pending_ask(db, d)
         db.expunge(d)
     old = REGISTRY.get(d.id)
     REGISTRY[d.id] = conn
@@ -172,6 +199,8 @@ async def serve(ws: WebSocket) -> None:
         await old.close(4409, ("replaced", "Another connection for this computer took over."))
     try:
         await conn.send(welcome)
+        if ask:  # P62: still waiting for its person's OK
+            await conn.send({"type": "tunnel_ask", "hosts": ask, "by": ""})
         await core.set_online(d.id, conn.id, base)
         await core.publish(d, "device.status", online=True)
         await _loop(conn)

@@ -28,7 +28,6 @@ import { meQuery } from "@/lib/queries";
 import { useDebounced } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
-import { TunnelDialog } from "./tunnel-dialog";
 
 const OS_ICON: Record<string, Icon> = { mac: AppleLogoIcon, linux: LinuxLogoIcon, windows: WindowsLogoIcon };
 
@@ -39,7 +38,6 @@ export function StaffComputersPage() {
   const needle = useDebounced(q.trim());
   const roster = useQuery(orgComputersQuery(needle));
   const [backupOpen, setBackupOpen] = useState(false);
-  const [tunnelOpen, setTunnelOpen] = useState(false);
 
   const list = useMemo(() => roster.data?.computers ?? [], [roster.data]);
   const byCompany = useMemo(() => {
@@ -59,7 +57,7 @@ export function StaffComputersPage() {
         description={t("Every company computer your staff have linked: who linked it, whether it is online, and the folders it shares. Open one to see its screen and fetch files — the computer shows a notice while you do.")}
         actions={roster.data?.can_backup ? (
           <>
-            <Button variant="outline" onClick={() => setTunnelOpen(true)}><GlobeIcon size={16} /> {t("ePerolehan through a computer")}</Button>
+            <Button asChild variant="outline"><Link to="/web-connections"><GlobeIcon size={16} /> {t("Web connections")}</Link></Button>
             <Button variant="outline" onClick={() => setBackupOpen(true)}><ArchiveBoxIcon size={16} /> {t("Backup settings")}</Button>
           </>
         ) : undefined}
@@ -90,7 +88,6 @@ export function StaffComputersPage() {
       )}
 
       {backupOpen ? <BackupDialog onClose={() => setBackupOpen(false)} /> : null}
-      {tunnelOpen ? <TunnelDialog onClose={() => setTunnelOpen(false)} /> : null}
     </Page>
   );
 }

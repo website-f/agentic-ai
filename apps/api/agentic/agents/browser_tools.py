@@ -800,6 +800,17 @@ async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
         return f"Error: {e}"
     if ctx.task is None:
         return "Error: the browser only works inside a task."
+    # P62: the company's chosen way to this site (a computer, its proxies) is unavailable:
+    # say why, rather than a bare connection error, and never another way round.
+    from ..devices import tunnel
+
+    why = await tunnel.unavailable(ctx.agent.workspace_id, host_of(url))
+    if why:
+        return (
+            f"Error: {host_of(url)} cannot be opened right now: {why}. The company chose how "
+            "this site is reached (Settings > Web connections). Tell the person; do not try "
+            "another way."
+        )
     note = ""
     try:
         outcome, checked, name = await _restore_check(ctx, url)

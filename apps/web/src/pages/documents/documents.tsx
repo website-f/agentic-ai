@@ -35,7 +35,7 @@ type OriginFilter = DocOrigin | typeof ALL;
 
 export function DocumentsPage() {
   const t = useT();
-  const search = useSearch({ from: "/app/documents" });
+  const search = useSearch({ from: "/library/documents" });
   const navigate = useNavigate({ from: "/documents" });
   const { data: me } = useQuery(meQuery);
   const [status, setStatus] = useState<Filter>(ALL);

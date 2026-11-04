@@ -255,3 +255,32 @@ Alternatively, an admin in each tenant can grant admin consent for everyone.
 | A personal mailbox **is** reachable with app access | The Entra *Application* permissions were not removed (Step 4.6) |
 | People see "Reconnect Outlook" | Their password changed, consent was revoked, or the client secret expired |
 | Card says "Checks every 3 minutes" | The server has no public https address; mail still arrives, just less instantly |
+
+## Teams channel posts (P63)
+
+Each person's own AI (their twin or private assistant) can already read their Teams **chats**.
+It can also read, **read only**, the posts in the Teams **channels** of the teams they are a
+member of: to summarise what was posted, find something, or draft a reply as text for the person
+to post themselves. Nothing is ever posted in a channel by the office.
+
+Reading channel posts needs the delegated permission `ChannelMessage.Read.All`, which only an
+admin can consent to. Until it is on, the Teams view and the AI say: "Reading Teams channel posts
+needs your Microsoft 365 admin to turn it on (Channels > Microsoft 365), then reconnect
+Microsoft."
+
+To turn it on:
+
+1. In **Microsoft Entra > App registrations > the app > API permissions**, press **Add a
+   permission > Microsoft Graph > Delegated permissions** and add `ChannelMessage.Read.All`.
+2. Press **Grant admin consent for <your organisation>**.
+3. In the office, on **Channels > Microsoft 365**, turn on **Teams channel posts**. Only then
+   does the office ask for the new permission (asking before the consent would stop everyone's
+   sign-in at "Need admin approval").
+4. Each person **reconnects Microsoft** once (Microsoft 365 page > Teams > Channels >
+   **Reconnect Microsoft 365**), or signs in with Microsoft again. Their Teams view then shows
+   **Channels** next to **Chats**.
+
+What it reads: only the teams and channels the person is a member of (Microsoft enforces this),
+through their own connection, and only for their own AI when they are the one asking. Posts are
+read live when asked (there is no background sync of channels); what the AI quotes stays in that
+conversation like any other answer, and it treats the posts as outside text.

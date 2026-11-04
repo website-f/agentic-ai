@@ -32,7 +32,15 @@ export interface MicrosoftConfig {
   can_configure: boolean;
   /** Shared mailboxes (application permissions) are turned on for this server. */
   shared_enabled: boolean;
+  /** P63: "Sign in with Microsoft" on the sign-in page (on unless an admin turned it off). */
+  sign_in?: boolean;
+  /** P63: Teams channel posts are asked for (an admin granted ChannelMessage.Read.All). */
+  teams_channels?: boolean;
 }
+
+/** P63: the admin switches on Channels > Microsoft 365. */
+export const setMicrosoftOptions = (body: { sign_in?: boolean; teams_channels?: boolean }) =>
+  api<MicrosoftConfig>("/api/integrations/microsoft/options", "PUT", body);
 
 export interface MicrosoftConfigIn {
   client_id: string;
@@ -53,6 +61,8 @@ export interface MicrosoftAccount {
   calendar_ok: boolean;
   /** P52: the connection allows Teams (made after Teams was added; else reconnect once). */
   teams_ok?: boolean;
+  /** P63: the connection may read Teams channel posts (an admin turned it on, then a reconnect). */
+  channels_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */
@@ -429,7 +439,44 @@ export interface TeamsMessage { id: string; at: string | null; from: string; tex
 export const teamsKeys = {
   chats: ["microsoft", "teams", "chats"] as const,
   chat: (id: string) => ["microsoft", "teams", "chat", id] as const,
+  channels: ["microsoft", "teams", "channels"] as const,
+  channel: (teamId: string, channelId: string) => ["microsoft", "teams", "channel", teamId, channelId] as const,
 };
+
+// P63: the channels of the teams you are a member of, read only.
+
+export interface TeamsChannel { id: string; name: string; description: string; kind: string; url: string | null }
+
+export interface TeamsTeam { id: string; name: string; description: string; channels: TeamsChannel[] }
+
+export interface TeamsPost {
+  id: string;
+  at: string | null;
+  from: string;
+  subject: string | null;
+  text: string;
+  url: string | null;
+}
+
+export interface TeamsChannelPost extends TeamsPost { replies: TeamsPost[] }
+
+export const teamsChannelsQuery = queryOptions({
+  queryKey: teamsKeys.channels,
+  queryFn: () => api<TeamsTeam[]>("/api/integrations/microsoft/teams/channels"),
+  retry: false,
+  staleTime: 5 * 60_000,
+});
+
+export const teamsChannelQuery = (teamId: string, channelId: string) =>
+  queryOptions({
+    queryKey: teamsKeys.channel(teamId, channelId),
+    queryFn: () =>
+      api<TeamsChannelPost[]>(
+        `/api/integrations/microsoft/teams/teams/${encodeURIComponent(teamId)}/channels/${encodeURIComponent(channelId)}/messages`,
+      ),
+    retry: false,
+    refetchInterval: 60_000,
+  });
 
 export const teamsChatsQuery = queryOptions({
   queryKey: teamsKeys.chats,

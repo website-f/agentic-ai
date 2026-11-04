@@ -70,6 +70,7 @@ const page = {
   companyKit: lazyRouteComponent(() => import("@/pages/documents/kit"), "CompanyKitPage"),
   mcpServers: lazyRouteComponent(() => import("@/pages/mcp-servers"), "McpServersPage"),
   explorer: lazyRouteComponent(() => import("@/pages/explorer"), "ExplorerPage"),
+  libraryFrame: lazyRouteComponent(() => import("@/pages/explorer/frame"), "LibraryFrame"),
   templates: lazyRouteComponent(() => import("@/pages/documents/templates"), "TemplatesPage"),
   documents: lazyRouteComponent(() => import("@/pages/documents/documents"), "DocumentsPage"),
   packs: lazyRouteComponent(() => import("@/pages/documents/packs"), "PacksPage"),
@@ -168,11 +169,15 @@ const setupRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  validateSearch: (s: Record<string, unknown>): { next?: string } => ({
+  // P63: sso = back from "Sign in with Microsoft" (done: signed in, the page lands the person;
+  // code: the two-step code comes next); sso_error = why it did not work.
+  validateSearch: (s: Record<string, unknown>): { next?: string; sso?: "done" | "code"; sso_error?: string } => ({
     next: typeof s.next === "string" ? s.next : undefined,
+    sso: s.sso === "done" || s.sso === "code" ? s.sso : undefined,
+    sso_error: typeof s.sso_error === "string" ? s.sso_error.slice(0, 200) : undefined,
   }),
-  beforeLoad: async ({ context }) => {
-    if (await alreadySignedIn(context.queryClient)) throw redirect({ to: "/" });
+  beforeLoad: async ({ context, search }) => {
+    if (search.sso !== "done" && (await alreadySignedIn(context.queryClient))) throw redirect({ to: "/" });
     const s = await context.queryClient.fetchQuery(setupStatusQuery).catch(() => null);
     if (s?.needs_setup) throw redirect({ to: "/setup" });
   },
@@ -217,6 +222,22 @@ const appRoute = createRoute({
     return { me };
   },
   component: AppShell,
+});
+
+// P61b: the whole Library (Browse, Documents, SOPs, Guidelines, Templates, Packs, Company kit,
+// Search) in one full-screen frame without the app shell, signed in and allowed each page.
+const libraryFrameRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "library",
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    // Browse (/explorer) is the Library's own page: the same rule as /files.
+    if (!pathAllowed(location.pathname === "/explorer" ? "/files" : location.pathname, me.permissions)) throw redirect({ to: "/workspace" });
+    return { me };
+  },
+  component: page.libraryFrame,
 });
 
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: page.home });
@@ -357,12 +378,12 @@ const chatRoute = createRoute({
   component: page.chat,
 });
 const sopsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/sops",
   validateSearch: (s: Record<string, unknown>): { sop?: string } => ({ sop: str(s.sop) }),
   component: page.sops,
 });
-const libraryRoute = createRoute({ getParentRoute: () => appRoute, path: "/library", component: page.library });
+const libraryRoute = createRoute({ getParentRoute: () => libraryFrameRoute, path: "/library", component: page.library });
 
 const BRAIN_TABS = ["pages", "facts", "search", "graph", "dreams"] as const;
 const brainRoute = createRoute({
@@ -470,7 +491,7 @@ const workflowsRoute = createRoute({
   component: page.workflows,
 });
 const companyKitRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/company-kit",
   validateSearch: (s: Record<string, unknown>): { b?: string } => ({ b: str(s.b) }),
   component: page.companyKit,
@@ -491,22 +512,22 @@ const librarySearch = (s: Record<string, unknown>): LibrarySearch => ({
 // P61: the Library is a full-screen explorer (/explorer, below). /files, the address every link
 // and the nav use, goes there with the same search.
 const filesRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/files",
   validateSearch: librarySearch,
   beforeLoad: ({ search }) => {
     throw redirect({ to: "/explorer", search, replace: true });
   },
 });
-const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: "/templates", component: page.templates });
+const templatesRoute = createRoute({ getParentRoute: () => libraryFrameRoute, path: "/templates", component: page.templates });
 const documentsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/documents",
   validateSearch: (s: Record<string, unknown>): { d?: string; new?: number; view?: "review" } => ({ d: str(s.d), new: num(s.new), view: s.view === "review" ? "review" : undefined }),
   component: page.documents,
 });
 const packsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/packs",
   validateSearch: (s: Record<string, unknown>): { p?: string } => ({ p: str(s.p) }),
   component: page.packs,
@@ -630,7 +651,7 @@ const guidePageRoute = createRoute({
 // P25: search inside every document.
 const SEARCH_TYPES = ["file", "sop", "document", "template", "page"] as const;
 const searchRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/search",
   validateSearch: (
     s: Record<string, unknown>,
@@ -783,18 +804,11 @@ const chatFullRoute = createRoute({
   component: page.chatFull,
 });
 
-// P61: the Library's file explorer, full screen without the app shell (like the chat), signed in
-// and allowed the Library.
+// P61: the Library's file explorer (its Browse tab).
 const explorerRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => libraryFrameRoute,
   path: "/explorer",
   validateSearch: librarySearch,
-  beforeLoad: async ({ context, location }) => {
-    const me = await loadMe(context.queryClient, location);
-    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
-    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
-    if (!pathAllowed("/files", me.permissions)) throw redirect({ to: "/workspace" });
-  },
   component: page.explorer,
 });
 
@@ -817,7 +831,17 @@ const routeTree = rootRoute.addChildren([
   welcomeRoute,
   presentRoute,
   chatFullRoute,
-  explorerRoute,
+  libraryFrameRoute.addChildren([
+    explorerRoute,
+    filesRoute,
+    documentsRoute,
+    sopsRoute,
+    libraryRoute,
+    templatesRoute,
+    packsRoute,
+    companyKitRoute,
+    searchRoute,
+  ]),
   appRoute.addChildren([
     homeRoute,
     assistantsRoute,
@@ -839,8 +863,6 @@ const routeTree = rootRoute.addChildren([
     approvalsRoute,
     broadcastsRoute,
     chatRoute,
-    sopsRoute,
-    libraryRoute,
     brainRoute,
     skillsRoute,
     learningRoute,
@@ -856,11 +878,6 @@ const routeTree = rootRoute.addChildren([
     blueprintsRoute,
     mcpServersRoute,
     workflowsRoute,
-    companyKitRoute,
-    filesRoute,
-    templatesRoute,
-    documentsRoute,
-    packsRoute,
     twinRoute,
     myWorkerRoute,
     deskRoute,
@@ -870,7 +887,6 @@ const routeTree = rootRoute.addChildren([
     guideRoute,
     guidePageRoute,
     objectivesRoute,
-    searchRoute,
     computersRoute,
     staffComputersRoute,
     approvedServicesRoute,
@@ -891,6 +907,8 @@ export function makeRouter(queryClient: QueryClient) {
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     scrollRestoration: true,
+    // The full-screen Library scrolls inside its own area: a new page starts at its top.
+    scrollToTopSelectors: ["#library-main"],
   });
 }
 

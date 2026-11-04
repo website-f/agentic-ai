@@ -107,7 +107,7 @@ function Recent({ onPick }: { onPick: (q: string) => void }) {
 
 export function SearchPage() {
   const t = useT();
-  const search = useSearch({ from: "/app/search" }) as Search;
+  const search = useSearch({ from: "/library/search" }) as Search;
   const navigate = useNavigate({ from: "/search" });
   const co = useCompanies();
   const phone = useIsPhone();

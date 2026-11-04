@@ -717,6 +717,19 @@ MS: dict[str, str] = {
     "Only the owner sets the web connections.": "Hanya pemilik boleh menetapkan sambungan web.",
     "Paste at least one proxy first.": "Tampal sekurang-kurangnya satu proksi dahulu.",
     "Choose one of the company's linked computers.": "Pilih salah satu komputer syarikat yang dipautkan.",
+    # P63 Sign in with Microsoft
+    "Sign in with Microsoft is not set up here yet.": "Log masuk dengan Microsoft belum disediakan di sini.",
+    "Enter your work email first, then press Sign in with Microsoft.": "Masukkan e-mel kerja anda dahulu, kemudian tekan Log masuk dengan Microsoft.",
+    "That Microsoft sign-in expired. Press Sign in with Microsoft again.": "Log masuk Microsoft itu telah tamat tempoh. Tekan Log masuk dengan Microsoft sekali lagi.",
+    "Microsoft's answer could not be checked. Try again.": "Jawapan Microsoft tidak dapat disemak. Cuba lagi.",
+    "This Microsoft organisation is not linked to the office. An admin links it on Channels > Microsoft 365 (Grant company-wide access).": "Organisasi Microsoft ini tidak dipautkan ke pejabat. Pentadbir memautkannya di Saluran > Microsoft 365 (Berikan akses seluruh syarikat).",
+    "No one with {email} is in this office yet. Ask your admin to add you, then sign in with Microsoft again.": "Belum ada sesiapa dengan {email} di pejabat ini. Minta pentadbir anda menambah anda, kemudian log masuk dengan Microsoft sekali lagi.",
+    "Too many tries. Wait a minute.": "Terlalu banyak cubaan. Tunggu seminit.",
+    "Set up the Microsoft app first.": "Sediakan aplikasi Microsoft dahulu.",
+    # P62 Web connections
+    "A computer carries only the sites you list, such as eperolehan.gov.my.": "Komputer hanya membawa laman yang anda senaraikan, seperti eperolehan.gov.my.",
+    "Choose Browse through a computer first.": "Pilih Layari melalui komputer dahulu.",
+    "One check at a time. Try again shortly.": "Satu semakan pada satu masa. Cuba lagi sebentar lagi.",
     "Find the right agent": "Cari ejen yang sesuai",
     "See the folders": "Lihat folder",
     "File documents": "Failkan dokumen",
@@ -1719,6 +1732,14 @@ MS: dict[str, str] = {
     "List Teams chats": "Senaraikan sembang Teams",
     "Read a Teams chat": "Baca sembang Teams",
     "Send a Teams message": "Hantar mesej Teams",
+    # ------------------------------------------------------------ P63 Teams channel posts
+    "List Teams channels": "Senaraikan saluran Teams",
+    "Read a Teams channel": "Baca saluran Teams",
+    "That channel was not found.": "Saluran itu tidak dijumpai.",
+    "Reading Teams channel posts needs your Microsoft 365 admin to turn it on (Channels > Microsoft 365), then reconnect Microsoft.": (
+        "Membaca mesej saluran Teams memerlukan pentadbir Microsoft 365 anda menghidupkannya "
+        "(Saluran > Microsoft 365), kemudian sambung semula Microsoft."
+    ),
     # ------------------------------------------------------------ P52 security audit fixes
     "Only an owner or admin can change the built-in templates. Make a copy to edit.": (
         "Hanya pemilik atau pentadbir boleh mengubah templat terbina dalam. Buat salinan untuk "

@@ -115,20 +115,52 @@ async def test_a_site_goes_through_the_chosen_company_computer(client, llm, temp
 
 
 async def test_the_computer_must_allow_the_site_itself(client, llm, temporal):
+    """P62: choosing a computer asks its person there (Allow / Not now); until they allow it
+    the site is refused with why, and never goes out from the server instead."""
     o = await office(client)
     owner_id, ws_id = await ids_of("owner@example.com")
     await personal_agent(o, owner_id, ws_id, is_twin=True)
     dev = await link(client)
     pc = await SitePC(dev["token"]).start()
     try:
-        await client.put(
-            "/api/org/computers/tunnel",
-            json={"on": True, "device_id": dev["device_id"], "fallback": "direct"},
+        r = await client.put(
+            "/api/org/web",
+            json={"mode": "pc", "sites": ["eperolehan.gov.my"], "device_id": dev["device_id"]},
             headers=csrf(client),
         )
+        assert r.status_code == 200, r.text
+        assert r.json()["asked"] is True and r.json()["mode"] == "pc"
+        for _ in range(50):
+            if any(m["type"] == "tunnel_ask" for m in pc.other):
+                break
+            await asyncio.sleep(0.05)
+        ask = next(m for m in pc.other if m["type"] == "tunnel_ask")
+        assert ask["hosts"] == ["eperolehan.gov.my"] and ask["by"]
         status, msg, device = await tunnel.decide(ws_id, "eperolehan.gov.my")
-        # Not allowed on the computer, and the workspace lets it go direct meanwhile.
-        assert status == 409 and "does not let" in msg and device is None
+        assert status == 503 and "has not allowed it yet" in msg and device is None
+        assert "has not allowed" in await tunnel.unavailable(ws_id, "www.eperolehan.gov.my")
+        assert await tunnel.unavailable(ws_id, "example.com") == ""  # other sites: the server
+
+        # Allow pressed on the computer's page: the agent reports it, and it goes through.
+        await pc.ws.send_json(
+            {"type": "state", "tunnel": {"on": True, "hosts": ["eperolehan.gov.my"]}}
+        )
+        for _ in range(50):
+            if (await tunnel.route(ws_id, "www.eperolehan.gov.my")).kind == "computer":
+                break
+            await asyncio.sleep(0.05)
+        assert (await tunnel.route(ws_id, "www.eperolehan.gov.my")).kind == "computer"
+        got = (await client.get("/api/org/web")).json()
+        me = next(c for c in got["computers"] if c["id"] == dev["device_id"])
+        assert me["allows"] == ["eperolehan.gov.my"] and me["online"] and not me["can_ask"]
+
+        # A computer carries only listed sites.
+        r = await client.put(
+            "/api/org/web",
+            json={"mode": "pc", "sites": ["*"], "device_id": dev["device_id"]},
+            headers=csrf(client),
+        )
+        assert r.status_code == 422
     finally:
         await pc.stop()
 
@@ -266,3 +298,87 @@ async def test_sites_go_through_the_companys_proxies_with_failover(client, llm, 
     finally:
         good.close()
         gateway.close()
+
+
+async def test_the_chosen_way_is_used_or_refused_never_the_servers_address(client, llm, temporal):
+    """P62: with proxies chosen, a site whose proxies are all down, or whose proxies wait for
+    approval on Approved services, is refused with why (503). Before, both quietly went out
+    from the server's own address, the one the site had blocked."""
+    await office(client)
+    _, ws_id = await ids_of("owner@example.com")
+    dead = await asyncio.start_server(lambda r, w: w.close(), "127.0.0.1", 0)
+    dead_port = dead.sockets[0].getsockname()[1]
+    dead.close()
+    gateway = await asyncio.start_server(tunnel.handle, "127.0.0.1", 0)
+    gport = gateway.sockets[0].getsockname()[1]
+    try:
+        none = await client.put(
+            "/api/org/web", json={"mode": "proxy", "sites": ["*"]}, headers=csrf(client)
+        )
+        assert none.status_code == 422  # nothing to go through yet
+        r = await client.put(
+            "/api/org/web",
+            json={
+                "mode": "proxy",
+                "sites": ["eperolehan.gov.my"],
+                "proxy_list": f"127.0.0.1:{dead_port}:u:p",
+            },
+            headers=csrf(client),
+        )
+        assert r.status_code == 200, r.text
+        got = r.json()
+        assert got["mode"] == "proxy" and got["sites"] == ["eperolehan.gov.my"]
+        assert len(got["proxies"]) == 1 and got["proxies_approved"] is True
+
+        rr, ww, status = await _connect(gport, "www.eperolehan.gov.my", ws_id)
+        assert status.startswith(b"HTTP/1.1 503"), status
+        assert b"proxies answered" in await asyncio.wait_for(rr.read(300), 5)
+        ww.close()
+        _, ww, status = await _connect(gport, "news.example.com", ws_id)  # not listed: server
+        assert status.startswith(b"HTTP/1.1 409")
+        ww.close()
+
+        # The approved-services lock on, proxies not approved: refused with why.
+        lock = await client.put("/api/compliance/lock", json={"on": True}, headers=csrf(client))
+        assert lock.status_code == 200, lock.text
+        assert "approval" in await tunnel.unavailable(ws_id, "www.eperolehan.gov.my")
+        check = await client.post(
+            "/api/org/web/check", json={"site": "eperolehan.gov.my"}, headers=csrf(client)
+        )
+        assert check.status_code == 200
+        assert check.json()["way"] == "refuse" and "approval" in check.json()["why"]
+
+        # Browsing from here again: every site goes out from the server.
+        await client.put("/api/org/web", json={"mode": "server", "sites": []}, headers=csrf(client))
+        assert (await tunnel.route(ws_id, "www.eperolehan.gov.my")).kind == "server"
+        log = (await client.get("/api/audit")).json()["items"]
+        assert any(e["action"] == "web.route" for e in log)
+    finally:
+        gateway.close()
+
+
+def test_a_sites_answer_reads_as_opened_or_blocked():
+    """P62: the check reads ePerolehan's block page: refused, and the address it saw."""
+    page = (
+        "<html><head><style>body{}</style></head><body><h1>ePerolehan Access Is Currently "
+        "Unavailable</h1><p>Your request was blocked for security reasons.</p>"
+        "<p>Your IP address: 84.46.249.133</p><script>x()</script></body></html>"
+    )
+    got = tunnel.read_answer(403, page)
+    assert got["blocked"] and not got["ok"] and got["seen_ip"] == "84.46.249.133"
+    assert "blocked for security reasons" in got["says"]
+    fine = tunnel.read_answer(200, "<html><body>Welcome to ePerolehan</body></html>")
+    assert fine["ok"] and not fine["blocked"] and fine["seen_ip"] == "" and fine["says"] == ""
+
+
+def test_saved_before_p62_the_two_switches_become_one_choice():
+    from agentic.models import Workspace
+
+    ws = Workspace(id="w1", name="x", settings={"pc_tunnel": {"on": True, "hosts": ["a.gov.my"]}})
+    assert tunnel.mode_of(ws) == tunnel.Mode("pc", ["a.gov.my"])
+    ws.settings = {"web_proxy": {"on": True}}
+    assert tunnel.mode_of(ws) == tunnel.Mode("proxy", ["*"])
+    ws.settings = {}
+    assert tunnel.mode_of(ws).mode == "server"
+    ws.settings = {"web_route": {"mode": "pc", "sites": ["*"]}}
+    assert tunnel.mode_of(ws).sites == ["eperolehan.gov.my"]  # a computer never takes every site

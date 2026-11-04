@@ -216,7 +216,7 @@ export function SopsPage() {
       <LibraryHeader tab="/sops"
         actions={<>
           {/* P24: turn a company's uploaded procedures into SOPs from Company files. */}
-          <Button variant="ghost" asChild><Link to="/files">{t("Upload in Browse →")}</Link></Button>
+          <Button variant="ghost" asChild><Link to="/explorer">{t("Upload in Browse →")}</Link></Button>
           {canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New SOP")}</Button> : null}
         </>} />
       {isLoading ? (

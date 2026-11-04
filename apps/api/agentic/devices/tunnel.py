@@ -21,11 +21,15 @@ Settings ("pc_tunnel" in the workspace's settings): {on, device_id, hosts, fallb
 fallback: "wait" (refuse while the computer is unavailable, the default) | "direct" |
 "proxy" (P60: the company's own proxies, devices/proxies.py).
 
-P60, three ways out, chosen per site on Settings > Web connections: this server (409, the egress
-proxy goes direct), the company computer (above), or the company's proxies (the gateway opens
-the CONNECT through one of them). A way out that is itself unavailable (the computer offline, a
-proxy down) falls back as the setting says; a site refusing or blocking a request never moves
-it elsewhere.
+P60, three ways out: this server (409, the egress proxy goes direct), the company computer
+(above), or the company's proxies (the gateway opens the CONNECT through one of them).
+
+P62, one choice on Settings > Web connections ("web_route": {mode, sites}): browse from this
+server (the default), through a company computer, or through the company's proxies, for the
+listed sites (proxies may also take every site). Whatever is chosen is used or the connection is
+refused with the reason (503): it never quietly leaves from this server's address instead, the
+way the old fallbacks and an unapproved proxy list did. A site refusing or blocking a request
+never moves it elsewhere either.
 """
 
 import asyncio
@@ -34,6 +38,7 @@ import contextlib
 import hashlib
 import hmac
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,7 +71,7 @@ class Setting:
     on: bool
     device_id: str
     hosts: list[str]
-    fallback: str  # wait | direct
+    fallback: str  # wait | direct | proxy (before P62; no longer used)
     # P59: a task that works only on these sites opens its browser on that computer's screen
     # (a real window its person can watch) instead of on the server.
     show: bool = True
@@ -81,6 +86,65 @@ def setting(ws: Workspace | None) -> Setting:
         raw.get("fallback") if raw.get("fallback") in ("direct", "proxy") else "wait",
         raw.get("show") is not False,
     )
+
+
+MODE_KEY = "web_route"
+MODES = ("server", "pc", "proxy")
+
+
+@dataclass(frozen=True)
+class Mode:
+    """P62: how the agents' browsers reach `sites`: "server", "pc" or "proxy". ["*"] (every
+    site) only with proxies: a computer carries only the sites listed, and allowed, on it."""
+
+    mode: str
+    sites: list[str]
+
+    def covers(self, host: str) -> bool:
+        return self.mode != "server" and ("*" in self.sites or core.host_in(host, self.sites))
+
+
+def clean_sites(mode: str, raw: Any) -> list[str]:
+    if mode == "proxy" and (raw in (None, "*") or (isinstance(raw, list) and "*" in raw)):
+        return ["*"]
+    return core.tunnel_hosts(raw) or list(DEFAULT_HOSTS)
+
+
+def mode_of(ws: Workspace | None) -> Mode:
+    s = (ws.settings if ws else None) or {}
+    raw = s.get(MODE_KEY)
+    if isinstance(raw, dict) and raw.get("mode") in MODES:
+        return Mode(raw["mode"], clean_sites(raw["mode"], raw.get("sites")))
+    # Saved before P62: the two switches of P58 and P60 (the computer's came first).
+    pc, px = s.get(SETTINGS_KEY) or {}, s.get(proxies_mod.SETTINGS_KEY) or {}
+    if pc.get("on"):
+        return Mode("pc", clean_sites("pc", pc.get("hosts")))
+    if px.get("on"):
+        return Mode("proxy", clean_sites("proxy", px.get("sites")))
+    return Mode("server", list(DEFAULT_HOSTS))
+
+
+def save_mode(ws: Workspace, mode: str, sites: list[str]) -> Mode:
+    m = Mode(mode, clean_sites(mode, sites))
+    ws.settings = {**(ws.settings or {}), MODE_KEY: {"mode": m.mode, "sites": m.sites}}
+    return m
+
+
+async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[str]) -> str:
+    """Why the chosen computer cannot carry `sites` now ("" when it can)."""
+    d = await db.get(Device, device_id) if device_id else None
+    if d is None or d.workspace_id != workspace_id or d.revoked_at is not None:
+        return "the chosen computer is no longer linked" if device_id else "no computer is chosen"
+    if d.paused:
+        return f"{d.name} is paused"
+    if not all(core.host_in(s, d.tunnel_hosts or []) for s in sites):
+        return (
+            f"{d.name} has not allowed it yet (on that computer, press Allow on the Agentic "
+            "Office page)"
+        )
+    if d.id not in await core.online_ids([d.id]):
+        return f"{d.name} is offline"
+    return ""
 
 
 def _credentials(headers: dict[str, str]) -> str | None:
@@ -108,42 +172,41 @@ class Route:
 
 
 async def route(workspace_id: str, host: str) -> Route:
-    """P60: the way out for a connection to `host`."""
+    """The way out for a connection to `host` (P62: the chosen one, or refused)."""
     async with SessionLocal() as db:
         ws = await db.get(Workspace, workspace_id)
-        st = setting(ws)
-        px = proxies_mod.setting(ws)
-
-        async def proxy_ok() -> bool:
-            # Asked only when proxies would carry it, so the approved-services lock records
-            # a request only then.
-            return bool(px.on and px.proxies) and await compliance.allowed(
-                db, workspace_id, "proxy", "Web proxies", host
-            )
-
-        if st.on and core.host_in(host, st.hosts):
-            site = next(h for h in st.hosts if core.host_in(host, [h]))
-            d = await db.get(Device, st.device_id) if st.device_id else None
-            why = ""
-            if d is None or d.workspace_id != workspace_id or d.revoked_at is not None:
-                why = "the chosen computer is no longer linked"
-            elif d.paused:
-                why = f"{d.name} is paused"
-            elif not core.host_in(host, d.tunnel_hosts or []):
-                why = f"{d.name} does not let {host} through (on it: agentic-pc tunnel on {host})"
-            elif d.id not in await core.online_ids([d.id]):
-                why = f"{d.name} is offline"
-            if not why:
-                return Route("computer", device_id=d.id, site=site)  # type: ignore[union-attr]
-            if st.fallback == "proxy" and await proxy_ok():
-                return Route("proxy", why, proxies=px.proxies, site=site)
-            if st.fallback == "wait":
+        m = mode_of(ws)
+        if not m.covers(host):
+            return Route("server", "not routed")
+        site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
+        if m.mode == "pc":
+            device_id = setting(ws).device_id
+            why = await computer_down(db, workspace_id, device_id, [host])
+            if why:
                 return Route("refuse", why)
-            return Route("server", f"going direct: {why}")
-        if px.covers(host) and await proxy_ok():
-            site = next((h for h in px.sites if h != "*" and core.host_in(host, [h])), host)
-            return Route("proxy", proxies=px.proxies, site=site)
-    return Route("server", "not routed")
+            return Route("computer", device_id=device_id, site=site)
+        px = proxies_mod.setting(ws)
+        if not px.proxies:
+            return Route("refuse", "no proxies are saved on Settings > Web connections")
+        # Asked only when proxies would carry it, so the approved-services lock records a
+        # request only then.
+        if not await compliance.allowed(db, workspace_id, "proxy", "Web proxies", host):
+            return Route(
+                "refuse", "the web proxies wait for an owner's approval on Approved services"
+            )
+        return Route("proxy", proxies=px.proxies, site=site)
+
+
+async def unavailable(workspace_id: str, host: str) -> str:
+    """Why `host` cannot be opened now the chosen way ("" when it can): told to the agent
+    before its browser tries, instead of a bare connection error."""
+    if not workspace_id or not host:
+        return ""
+    try:
+        r = await route(workspace_id, host)
+    except Exception:  # noqa: BLE001 - the gateway decides again for real
+        return ""
+    return r.why if r.kind == "refuse" else ""
 
 
 async def decide(workspace_id: str, host: str) -> tuple[int, str, str | None]:
@@ -222,14 +285,8 @@ async def handle(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
                 kind="tunnel",
             )
         except DeviceError as e:
-            # The computer could not open it (it is the way out that failed): fall back.
-            ws = await _workspace(ws_id)
-            st, px = setting(ws), proxies_mod.setting(ws)
-            if st.fallback == "proxy" and px.on and px.proxies:
-                via = Route("proxy", e.message, proxies=px.proxies, site=way.site)
-                await _through_proxy(ws_id, via, host, port, r, w)
-                return
-            await _reply(w, 409 if st.fallback == "direct" else 503, e.message or e.code)
+            # The computer could not open it: refused with why, never sent out from here.
+            await _reply(w, 503, e.message or e.code)
             return
         if not await relay.wait_pc(ch.id, relay.PC_WAIT) or ch.pc is None:
             await _reply(w, 503, "the computer did not open the connection")
@@ -248,13 +305,16 @@ async def handle(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
 async def _through_proxy(
     ws_id: str, way: Route, host: str, port: int, r: asyncio.StreamReader, w: asyncio.StreamWriter
 ) -> None:
-    """P60: the site's own proxy, or the next when it is down; all down: this server (409)."""
+    """P60: the site's own proxy, or the next when it is down; all down: refused (P62: never
+    this server's address instead)."""
     pool = way.proxies or []
+    last = ""
     for p in (await proxies_mod.order(ws_id, way.site, pool))[: proxies_mod.TRIES]:
         try:
             pr, pw = await proxies_mod.open_via(p, host, port)
         except (OSError, TimeoutError) as e:
-            log.info("proxy %s unreachable for %s: %s", p.key, ws_id, e)
+            log.warning("proxy %s failed for %s: %s", p.key, host, e)
+            last = str(e) or type(e).__name__
             await proxies_mod.set_aside(ws_id, p)
             continue
         await proxies_mod.remember(ws_id, way.site, pool, p)
@@ -265,7 +325,7 @@ async def _through_proxy(
             with contextlib.suppress(Exception):
                 pw.close()
         return
-    await _reply(w, 409, "no proxy answered: going direct")
+    await _reply(w, 503, f"none of the company's proxies answered ({last or 'no proxy'})")
 
 
 async def _pipe_streams(
@@ -288,11 +348,6 @@ async def _pipe_streams(
         for t in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await t
-
-
-async def _workspace(ws_id: str) -> Workspace | None:
-    async with SessionLocal() as db:
-        return await db.get(Workspace, ws_id)
 
 
 async def _splice(r: asyncio.StreamReader, w: asyncio.StreamWriter, ch: relay.Channel) -> None:
@@ -351,35 +406,84 @@ async def stop() -> None:
 
 
 def describe(ws: Workspace | None) -> dict[str, Any]:
-    st = setting(ws)
+    st, m = setting(ws), mode_of(ws)
     return {
-        "on": st.on,
+        "on": m.mode == "pc",
         "device_id": st.device_id,
-        "hosts": st.hosts,
-        "fallback": st.fallback,
+        "hosts": m.sites if m.mode == "pc" else st.hosts,
+        "fallback": "wait",
         "show": st.show,
     }
 
 
+_BLOCK_WORDS = re.compile(r"blocked|access denied|forbidden|not authori[sz]ed|captcha", re.I)
+_SEEN_IP = re.compile(
+    r"your ip(?: address)?\s*(?:is)?\s*:?\s*([0-9a-f]{1,4}(?:[.:][0-9a-f]{0,4}){3,7})", re.I
+)
+_TAGS = re.compile(r"<(script|style)\b.*?</\1>|<[^>]+>", re.I | re.S)
+CHECK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
+
+
+def read_answer(status: int, html: str) -> dict[str, Any]:
+    """What a site's answer means for the person: opened, or refused (and the address it says
+    it saw, when its page shows one, as ePerolehan's block page does)."""
+    text = re.sub(r"\s+", " ", _TAGS.sub(" ", html)).strip()
+    seen = _SEEN_IP.search(text)
+    blocked = status in (401, 403, 429, 451) or (status >= 400 and bool(_BLOCK_WORDS.search(text)))
+    return {
+        "status": status,
+        "ok": 200 <= status < 400,
+        "blocked": blocked,
+        "seen_ip": seen.group(1) if seen else "",
+        "says": text[:200] if status >= 400 else "",
+    }
+
+
+async def check(workspace_id: str, site: str) -> dict[str, Any]:
+    """P62 (Settings > Web connections > Check): open `site` once the way the agents' browsers
+    would (through the egress proxy with the workspace's credentials, so the gateway chooses
+    as it does for them): the way it went, the site's answer, the address it saw."""
+    import httpx
+
+    host = site.strip().lower()
+    r = await route(workspace_id, host)
+    way = {"computer": "pc"}.get(r.kind, r.kind)
+    out: dict[str, Any] = {"site": host, "way": way, "why": r.why if way == "refuse" else ""}
+    if way == "refuse":
+        return out
+    if way == "proxy" and r.proxies:
+        p = (await proxies_mod.order(workspace_id, r.site, r.proxies))[0]
+        out["via"] = p.key
+        t = await proxies_mod.test(p)
+        out["proxy_ip"] = t.get("ip", "")
+    if not settings.egress_url:
+        return {**out, "error": "No egress proxy is set for checks."}
+    u = httpx.URL(settings.egress_url)
+    proxy = f"{u.scheme}://{workspace_id}:{sign(workspace_id)}@{u.host}:{u.port or 3128}"
+    names = [host] if host.startswith("www.") else [host, f"www.{host}"]
+    err = ""
+    async with httpx.AsyncClient(
+        proxy=proxy, timeout=30, follow_redirects=True, headers={"User-Agent": CHECK_UA}
+    ) as c:
+        for name in names:  # a bare site name may only answer as www.
+            try:
+                resp = await c.get(f"https://{name}/")
+            except httpx.HTTPError as e:
+                err = str(e)[:200] or type(e).__name__
+                continue
+            return {**out, "site": name, **read_answer(resp.status_code, resp.text[:40_000])}
+    return {**out, "error": err}
+
+
 async def screen_for(db: Any, workspace_id: str, sites: list[str] | None) -> tuple[str, str]:
     """P59: (device id, "") when a task that works only on `sites` should open its browser on
-    the workspace's chosen computer; ("", why) when it should but cannot (the workspace said
-    wait); ("", "") to use the server's browser."""
+    the workspace's chosen computer; ("", why) when it should but cannot; ("", "") to use the
+    server's browser."""
     if not sites:
         return "", ""
-    st = setting(await db.get(Workspace, workspace_id))
-    if not (st.on and st.show and all(core.host_in(s, st.hosts) for s in sites)):
+    ws = await db.get(Workspace, workspace_id)
+    st, m = setting(ws), mode_of(ws)
+    if not (m.mode == "pc" and st.show and all(m.covers(s) for s in sites)):
         return "", ""
-    d = await db.get(Device, st.device_id) if st.device_id else None
-    why = ""
-    if d is None or d.workspace_id != workspace_id or d.revoked_at is not None:
-        why = "the chosen computer is no longer linked"
-    elif d.paused:
-        why = f"{d.name} is paused"
-    elif not all(core.host_in(s, d.tunnel_hosts or []) for s in sites):
-        why = f"{d.name} does not let these sites through (on it: agentic-pc tunnel on)"
-    elif d.id not in await core.online_ids([d.id]):
-        why = f"{d.name} is offline"
-    if why:
-        return ("", "") if st.fallback == "direct" else ("", why)
-    return d.id, ""
+    why = await computer_down(db, workspace_id, st.device_id, sites)
+    return ("", why) if why else (st.device_id, "")

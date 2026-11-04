@@ -827,6 +827,11 @@ async def set_tunnel(
         "show": body.show,
     }
     ws.settings = {**(ws.settings or {}), tunnel.SETTINGS_KEY: after}
+    # P62: the one choice follows (the computer on; off ends it only if it was the computer).
+    if body.on:
+        tunnel.save_mode(ws, "pc", hosts)
+    elif tunnel.mode_of(ws).mode == "pc":
+        tunnel.save_mode(ws, "server", hosts)
     await audit.record(
         db,
         principal.workspace_id,
@@ -893,6 +898,12 @@ async def set_proxies(
     before = proxies.public(ws)
     proxies.save(ws, body.on, body.sites, parsed)
     after = proxies.public(ws)
+    from ...devices import tunnel
+
+    if body.on:  # P62: the one choice follows
+        tunnel.save_mode(ws, "proxy", body.sites)
+    elif tunnel.mode_of(ws).mode == "proxy":
+        tunnel.save_mode(ws, "server", [])
     await audit.record(
         db,
         principal.workspace_id,
@@ -924,6 +935,198 @@ async def test_proxies(
             return await proxies.test(p)
 
     return {"results": await asyncio.gather(*(one(p) for p in st.proxies))}
+
+
+# ---------------------------------------------------------------- P62 how the AI browses
+
+
+ASK_VERSION = (0, 5, 0)  # the agent that shows Allow / Not now on its own page
+
+
+def _version(v: str | None) -> tuple[int, ...]:
+    try:
+        return tuple(int(x) for x in (v or "0").split("-")[0].split(".")[:3])
+    except ValueError:
+        return (0,)
+
+
+class WebIn(BaseModel):
+    mode: str = Field(pattern="^(server|pc|proxy)$")
+    sites: list[str] = Field(default_factory=list, max_length=10)
+    device_id: str = Field(default="", max_length=40)
+    show: bool = True  # P59: on that computer's screen
+    # A new proxy list (host:port:user:password per line, or proxy URLs). None keeps the saved
+    # one; it is never sent back.
+    proxy_list: str | None = Field(default=None, max_length=20_000)
+
+
+class SiteIn(BaseModel):
+    site: str = Field(default="", max_length=120)
+
+
+async def _web(db: AsyncSession, workspace_id: str) -> dict[str, Any]:
+    from ...devices import proxies, tunnel
+    from ...engine import compliance
+
+    ws = await db.get(Workspace, workspace_id)
+    m, st = tunnel.mode_of(ws), tunnel.setting(ws)
+    rows = (
+        await db.scalars(
+            select(Device)
+            .where(Device.workspace_id == workspace_id, Device.revoked_at.is_(None))
+            .order_by(Device.created_at)
+        )
+    ).all()
+    online = await core.online_ids(d.id for d in rows)
+    return {
+        "mode": m.mode,
+        "sites": m.sites,
+        "device_id": st.device_id,
+        "show": st.show,
+        "computers": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "online": d.id in online,
+                "paused": d.paused,
+                "allows": list(d.tunnel_hosts or []),
+                "version": d.version,
+                "can_ask": _version(d.version) >= ASK_VERSION,
+            }
+            for d in rows
+        ],
+        "proxies": proxies.public(ws)["proxies"],
+        "proxies_approved": compliance.state(ws).allows("proxy"),
+    }
+
+
+@router.get("/api/org/web")
+async def get_web(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """How the AI's browsers reach websites: this server, a company computer or the company's
+    proxies, for which sites; the computers that could carry them; the saved proxies."""
+    _owner_only(principal)
+    return await _web(db, principal.workspace_id)
+
+
+@router.put("/api/org/web")
+async def set_web(
+    body: WebIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Takes effect for the next connection. With a computer chosen that has not allowed the
+    sites yet, its person is asked on that computer (Allow / Not now)."""
+    from ...devices import proxies, tunnel
+
+    _owner_only(principal)
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    parsed = None
+    if body.proxy_list is not None and body.proxy_list.strip():
+        try:
+            parsed = proxies.parse(body.proxy_list)
+        except proxies.ProxyListError as e:
+            raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_proxy_list", str(e)) from e
+    if body.mode == "proxy" and "*" not in body.sites:
+        sites = core.tunnel_hosts(body.sites)
+    else:
+        sites = body.sites
+    if body.mode == "pc" and "*" in body.sites:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "pc_sites",
+            "A computer carries only the sites you list, such as eperolehan.gov.my.",
+        )
+    d = None
+    if body.mode == "pc":
+        d = await db.get(Device, body.device_id) if body.device_id else None
+        if d is None or d.workspace_id != principal.workspace_id or d.revoked_at is not None:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "no_computer",
+                "Choose one of the company's linked computers.",
+            )
+    if body.mode == "proxy" and not (parsed or proxies.setting(ws).proxies):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "no_proxies", "Paste at least one proxy first."
+        )
+    before = {**tunnel.describe(ws), "mode": tunnel.mode_of(ws).mode}
+    m = tunnel.save_mode(ws, body.mode, sites)
+    pc = dict((ws.settings or {}).get(tunnel.SETTINGS_KEY) or {})
+    pc.update(
+        on=m.mode == "pc",
+        device_id=body.device_id or pc.get("device_id", ""),
+        hosts=m.sites if m.mode == "pc" else pc.get("hosts") or list(tunnel.DEFAULT_HOSTS),
+        fallback="wait",
+        show=body.show,
+    )
+    ws.settings = {**(ws.settings or {}), tunnel.SETTINGS_KEY: pc}
+    px = proxies.setting(ws)
+    proxies.save(ws, m.mode == "proxy", m.sites if m.mode == "proxy" else px.sites, parsed)
+    after = {"mode": m.mode, "sites": m.sites, "device_id": pc["device_id"], "show": body.show}
+    if parsed is not None:
+        after["proxies"] = len(parsed)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "web.route",
+        target=principal.workspace_id,
+        before=before,
+        after=after,
+    )
+    await db.commit()
+    asked = False
+    if d is not None and not all(core.host_in(s, d.tunnel_hosts or []) for s in m.sites):
+        asked = await hub.ask_tunnel(d.id, m.sites, principal.user.name)
+    return {**await _web(db, principal.workspace_id), "asked": asked}
+
+
+@router.post("/api/org/web/ask")
+async def ask_web(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Ask the chosen computer's person again (its page opens there with Allow / Not now)."""
+    from ...devices import tunnel
+
+    _owner_only(principal)
+    ws = await db.get(Workspace, principal.workspace_id)
+    m, st = tunnel.mode_of(ws), tunnel.setting(ws)
+    if m.mode != "pc" or not st.device_id:
+        raise api_error(
+            status.HTTP_409_CONFLICT, "not_pc", "Choose Browse through a computer first."
+        )
+    return {"asked": await hub.ask_tunnel(st.device_id, m.sites, principal.user.name)}
+
+
+@router.post("/api/org/web/check")
+async def check_web(
+    body: SiteIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Open a site once the way the agents' browsers would: the way it went, the site's
+    answer, and the address the site saw when its page shows it."""
+    from ...devices import tunnel
+
+    _owner_only(principal)
+    site = (core.tunnel_hosts([body.site]) or [""])[0]
+    if not site:
+        m = tunnel.mode_of(await db.get(Workspace, principal.workspace_id))
+        site = next((s for s in m.sites if s != "*"), tunnel.DEFAULT_HOSTS[0])
+    try:
+        first = await valkey().set(f"web:check:{principal.workspace_id}", "1", ex=8, nx=True)
+    except Exception:  # noqa: BLE001 - no cache: no limit
+        first = True
+    if not first:
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "slow_down",
+            "One check at a time. Try again shortly.",
+        )
+    return await tunnel.check(principal.workspace_id, site)
 
 
 # ---------------------------------------------------------------- inside the stack

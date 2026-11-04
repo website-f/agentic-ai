@@ -1,7 +1,7 @@
 import { BuildingsIcon, HardDrivesIcon, LockSimpleIcon, ShieldCheckIcon, SignInIcon, UserFocusIcon, UsersThreeIcon, type Icon } from "@phosphor-icons/react";
-import { useQueryClient, useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { toast } from "sonner";
 
 import { LanguageSwitch } from "@/components/language-switch";
@@ -181,9 +181,9 @@ export function LoginPage() {
   const t = useT();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const search = useSearch({ strict: false }) as { next?: string };
+  const search = useSearch({ strict: false }) as { next?: string; sso?: "done" | "code"; sso_error?: string };
   const [path, setPath] = useState<LoginPath>(lastLoginPath);
-  const [challenge, setChallenge] = useState<{ token: string; email: string } | null>(null);
+  const [challenge, setChallenge] = useState<{ token: string; email: string } | null>(() => ssoChallenge(search.sso));
   const [email, setEmail] = useState("");
   const staff = path === "staff";
   const signedIn = async (me: Me) => {
@@ -193,8 +193,17 @@ export function LoginPage() {
     else navigate({ to: await landing(qc, me, path, search.next) });
   };
   const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", signedIn, (c) => setChallenge({ token: c.challenge, email }));
+  const finishing = useSsoDone(search.sso === "done", signedIn);
+  const loginForm = useRef<HTMLFormElement>(null);
   if (challenge) {
     return <CodeStep challenge={challenge.token} email={challenge.email} onDone={signedIn} onBack={() => setChallenge(null)} />;
+  }
+  if (finishing) {
+    return (
+      <AuthLayout title={t("Signing you in")} subtitle={t("Microsoft confirmed it is you. Opening the office…")}>
+        <div className="grid place-items-center py-6"><span className="size-6 animate-spin rounded-full border-2 border-accent border-t-transparent" /></div>
+      </AuthLayout>
+    );
   }
   return (
     <AuthLayout
@@ -223,7 +232,9 @@ export function LoginPage() {
           );
         })}
       </div>
+      <MicrosoftSignIn staff={staff} next={search.next} error={search.sso_error} form={loginForm} />
       <form
+        ref={loginForm}
         className={cn("grid gap-4", staff && "[&_input]:h-12 [&_input]:text-[16px]")}
         onSubmit={(e) => {
           const v = formValues(e);
@@ -241,6 +252,88 @@ export function LoginPage() {
         <p className="text-center text-[12.5px] text-muted">{t("Forgot your password? Ask an admin or your manager to reset it.")}</p>
       </form>
     </AuthLayout>
+  );
+}
+
+// ---------------------------------------------------------------- P63 Sign in with Microsoft
+
+/** Back from Microsoft with the two-step code still to enter: the challenge is in the address's
+ * fragment (never sent to a server), read once and cleared from the address bar. */
+function ssoChallenge(sso: string | undefined): { token: string; email: string } | null {
+  if (sso !== "code" || typeof window === "undefined") return null;
+  const h = new URLSearchParams(window.location.hash.slice(1));
+  const token = h.get("mfa");
+  if (!token) return null;
+  window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  return { token, email: h.get("email") ?? "" };
+}
+
+/** Back from Microsoft signed in: read who it is, then land them as a password sign-in does. */
+function useSsoDone(on: boolean, signedIn: (me: Me) => Promise<void>): boolean {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(on);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!on || started.current) return;
+    started.current = true;
+    qc.fetchQuery({ ...meQuery, staleTime: 0 })
+      .then(async (me) => {
+        qc.setQueryData(keys.me, me);
+        await signedIn(me);
+      })
+      .catch(() => setBusy(false));
+  }, [on, qc, signedIn]);
+  return busy;
+}
+
+/** The Microsoft logo, as Microsoft's sign-in button guidelines show it. */
+function MicrosoftLogo() {
+  return (
+    <svg aria-hidden width="18" height="18" viewBox="0 0 21 21">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
+/** One button: Microsoft's own sign-in (with its multi-factor), then back here signed in. The
+ * email typed above it, if any, picks the office and fills Microsoft's account box. */
+function MicrosoftSignIn({ staff, next, error, form }: {
+  staff: boolean; next?: string; error?: string; form: RefObject<HTMLFormElement | null>;
+}) {
+  const emailInput = () => form.current?.elements.namedItem("email") as HTMLInputElement | null | undefined;
+  const t = useT();
+  const sso = useQuery({ queryKey: ["auth", "sso"], queryFn: () => api<{ microsoft: boolean }>("/api/auth/sso"), staleTime: 60_000 });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(error ?? null);
+  if (!sso.data?.microsoft) return problem ? <div className="mb-4"><FormError message={problem} /></div> : null;
+  const go = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const r = await api<{ url: string }>("/api/auth/microsoft/start", "POST", {
+        email: emailInput()?.value.trim() ?? "",
+        next: safeNext(next, ""),
+      });
+      window.location.href = r.url;
+    } catch (e) {
+      setBusy(false);
+      setProblem(e instanceof ApiError ? e.message : t("Something went wrong."));
+      if (e instanceof ApiError && e.code === "email_needed") emailInput()?.focus();
+    }
+  };
+  return (
+    <div className="mb-5 grid gap-4">
+      <Button type="button" variant="outline" size="lg" loading={busy} onClick={() => void go()} className={cn("gap-2.5", staff && "h-12 text-[16px]")}>
+        {!busy ? <MicrosoftLogo /> : null} {t("Sign in with Microsoft")}
+      </Button>
+      <FormError message={problem} />
+      <div className="flex items-center gap-3 text-[12px] text-muted">
+        <span className="h-px flex-1 bg-border" /> {t("or with your password")} <span className="h-px flex-1 bg-border" />
+      </div>
+    </div>
   );
 }
 

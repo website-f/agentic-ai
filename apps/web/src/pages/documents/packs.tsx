@@ -408,7 +408,7 @@ function PackDetail({ id }: { id: string }) {
 
 export function PacksPage() {
   const t = useT();
-  const search = useSearch({ from: "/app/packs" });
+  const search = useSearch({ from: "/library/packs" });
   const navigate = useNavigate({ from: "/packs" });
   const { data: packs = [], isLoading, error } = useQuery({ ...packsQuery, enabled: !search.p });
   const [creating, setCreating] = useState(false);

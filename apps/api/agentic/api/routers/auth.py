@@ -278,6 +278,48 @@ async def login_code(
     return await _signed_in(db, request, response, user, membership, note)
 
 
+# ---------------------------------------------------------------- P63 Sign in with Microsoft
+
+
+class MicrosoftStartIn(BaseModel):
+    email: str = Field(default="", max_length=254)
+    next: str = Field(default="", max_length=500)
+
+
+@router.get("/sso")
+async def sso_options(db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
+    """Which other ways to sign in the sign-in page offers."""
+    from ...microsoft import signin
+
+    return {"microsoft": bool(await signin.offices(db))}
+
+
+@router.post("/microsoft/start")
+async def microsoft_start(
+    body: MicrosoftStartIn, request: Request, db: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    """Microsoft's sign-in page for this office; it comes back to the Microsoft callback
+    (routers/microsoft.py), which signs the person in (microsoft/signin.py)."""
+    from ...microsoft import app as ms_app
+    from ...microsoft import signin
+    from ...microsoft.errors import MicrosoftError
+
+    if await signin.slow_down(client_ip(request)):
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS, "too_many_attempts", "Too many tries. Wait a minute."
+        )
+    nxt = body.next if body.next.startswith("/") and not body.next.startswith("//") else ""
+    try:
+        url = await signin.start(
+            db, ms_app.request_base(request.headers, request.url.scheme), body.email, nxt
+        )
+    except signin.EmailNeeded as e:
+        raise api_error(status.HTTP_409_CONFLICT, "email_needed", e.args[0]) from e
+    except MicrosoftError as e:
+        raise api_error(status.HTTP_409_CONFLICT, "not_available", e.args[0]) from e
+    return {"url": url}
+
+
 class LogoutIn(BaseModel):
     # P29: this device's web-push endpoint (the browser's PushSubscription.endpoint). Push
     # subscriptions are per person, not per session, so the app names the one to drop.

@@ -2,9 +2,8 @@
  * paste; labels; previews of spreadsheets, Word pages, audio and video; and asking AI to
  * organize a folder. */
 export const EXPLORER: Record<string, string> = {
-  // The page.
-  "More in the Library": "Lagi dalam Perpustakaan",
-  "Library pages": "Halaman Perpustakaan",
+  // The page (and P61b's full-screen Library frame).
+  "Download everything from {company}": "Muat turun semua fail {company}",
   "Show the folders": "Tunjukkan folder",
   "Hide the folders": "Sembunyikan folder",
 

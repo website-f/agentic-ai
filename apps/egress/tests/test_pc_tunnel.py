@@ -115,7 +115,7 @@ def test_refused_while_the_computer_is_unavailable():
     async def t(proxy, pport, seen):
         out = await ask(pport, REQ + AUTH + b"\r\n")
         assert out.startswith(b"HTTP/1.1 503")
-        assert b"company computer: Aina's PC is offline" in out
+        assert b"chosen way: Aina's PC is offline" in out
 
     run(
         b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 20\r\n\r\nAina's PC is offline",

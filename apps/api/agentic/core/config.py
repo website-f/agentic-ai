@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # P58: where the API listens for the egress proxy's site-through-a-computer connections
     # (devices/tunnel.py), e.g. 0.0.0.0:3130 on the browser network. Empty = off.
     pc_tunnel_listen: str = ""
+    # P62: the browser's egress proxy, for Settings > Web connections > Check (the same way out
+    # the agents' browsers take). Empty = no check.
+    egress_url: str = "http://egress:3128"
     # A saved login's browser session (cookies + local storage) is kept this many days, so
     # agents stay signed in between tasks; older ones are dropped and the agent signs in again.
     browser_session_days: int = Field(default=14, ge=1, le=90)

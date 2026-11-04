@@ -39,6 +39,10 @@ DELEGATED_SCOPES = (
     " Chat.Read ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All"
 )
 TEAMS_SCOPES = ("Chat.Read", "ChatMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All")
+# P63: the posts in the Teams channels a person belongs to. Only an admin may consent to it,
+# so it is asked for only once the Channels page says an admin granted it (asking for it
+# before would stop everyone's sign-in at "needs admin approval").
+CHANNEL_SCOPE = "ChannelMessage.Read.All"
 APP_SCOPE = "https://graph.microsoft.com/.default"  # app-only: whatever the admin granted
 
 CALLBACK_PATH = "/api/integrations/microsoft/callback"
@@ -67,10 +71,19 @@ class AppConfig:
     admin_consented_at: str = ""
     public_base: str = ""
     source: str = ""  # dashboard | env | "" (none)
+    # P63: "Sign in with Microsoft" on the sign-in page (on unless an admin turns it off).
+    sign_in: bool = True
+    # P63: an admin granted ChannelMessage.Read.All, so it is asked for (Teams channel posts).
+    teams_channels: bool = False
 
     @property
     def configured(self) -> bool:
         return bool(self.client_id and self.client_secret)
+
+    @property
+    def scopes(self) -> str:
+        """The delegated scopes a person's sign-in asks for."""
+        return DELEGATED_SCOPES + (f" {CHANNEL_SCOPE}" if self.teams_channels else "")
 
     @property
     def multi_tenant(self) -> bool:
@@ -108,6 +121,8 @@ async def load(db: AsyncSession, workspace_id: str) -> AppConfig:
         admin_tenant=str(data.get("admin_tenant") or ""),
         admin_consented_at=str(data.get("admin_consented_at") or ""),
         public_base=str(data.get("public_base") or ""),
+        sign_in=data.get("sign_in") is not False,
+        teams_channels=data.get("teams_channels") is True,
     )
     if data.get("client_id") and data.get("client_secret"):
         cfg.client_id, cfg.client_secret = data["client_id"], data["client_secret"]

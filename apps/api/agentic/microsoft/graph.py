@@ -42,6 +42,10 @@ MAX_WAIT = 30.0
 RETRY_STATUSES = frozenset({429, 503, 504})
 IMMUTABLE = 'IdType="ImmutableId"'
 MAX_ATTACHMENT = 25 * 1024 * 1024
+# Teams listings (P63): caps so one question never walks a whole tenant.
+MAX_TEAMS = 100
+MAX_CHANNELS = 200
+MAX_CHANNEL_PAGES = 3
 # What a mail list row needs (no body): the sync and listings use it.
 MESSAGE_META = (
     "id,conversationId,internetMessageId,receivedDateTime,from,sender,toRecipients,"
@@ -520,8 +524,73 @@ class Graph:
         )
 
     async def joined_teams(self) -> list[dict[str, Any]]:
-        body = await self._get("/me/joinedTeams", **{"$select": "id,displayName,description"})
+        """The teams the person is a member of (Team.ReadBasic.All)."""
+        return await self._pages(
+            "/me/joinedTeams", MAX_TEAMS, **{"$select": "id,displayName,description"}
+        )
+
+    async def team_channels(self, team_id: str) -> list[dict[str, Any]]:
+        """A team's channels the person can see (Channel.ReadBasic.All)."""
+        return await self._pages(
+            f"/teams/{_q(team_id)}/channels",
+            MAX_CHANNELS,
+            **{"$select": "id,displayName,description,membershipType,webUrl"},
+        )
+
+    async def channel_messages(
+        self,
+        team_id: str,
+        channel_id: str,
+        top: int = 20,
+        *,
+        since: datetime | None = None,
+        replies: bool = True,
+    ) -> list[dict[str, Any]]:
+        """A channel's top-level posts (P63, ChannelMessage.Read.All), newest first, at most
+        `top` of them over at most MAX_CHANNEL_PAGES pages. With `replies`, each post carries
+        its replies under "replies" ($expand). With `since`, only posts started or answered
+        from then on."""
+        want = max(1, min(top, 50))
+        params: dict[str, Any] = {"$top": want}
+        if replies:
+            params["$expand"] = "replies"
+        path: str | None = f"/teams/{_q(team_id)}/channels/{_q(channel_id)}/messages"
+        out: list[dict[str, Any]] = []
+        for n in range(MAX_CHANNEL_PAGES):
+            if path is None:
+                break
+            # The next links carry the query themselves.
+            body = await self.request("GET", path, params=params if n == 0 else None)
+            page = list(body.get("value") or [])
+            out += [m for m in page if since is None or _active_since(m, since)]
+            path = body.get("@odata.nextLink")
+            if len(out) >= want or not page:
+                break
+            if since is not None and all(not _active_since(m, since) for m in page):
+                break  # older than asked for: the next pages are older still
+        out.sort(key=_activity, reverse=True)
+        return out[:want]
+
+    async def message_replies(
+        self, team_id: str, channel_id: str, message_id: str, top: int = 20
+    ) -> list[dict[str, Any]]:
+        """The replies to one channel post, newest first."""
+        body = await self._get(
+            f"/teams/{_q(team_id)}/channels/{_q(channel_id)}/messages/{_q(message_id)}/replies",
+            **{"$top": max(1, min(top, 50))},
+        )
         return list(body.get("value") or [])
+
+    async def _pages(self, path: str, cap: int, **params: Any) -> list[dict[str, Any]]:
+        """Every item of a listing, following nextLink, at most `cap` items."""
+        out: list[dict[str, Any]] = []
+        body = await self._get(path, **params)
+        while True:
+            out += list(body.get("value") or [])
+            link = body.get("@odata.nextLink")
+            if not link or len(out) >= cap:
+                return out[:cap]
+            body = await self.request("GET", link)
 
     async def create_subscription(
         self,
@@ -567,6 +636,19 @@ class Graph:
 
 def _q(graph_id: str) -> str:
     return urllib.parse.quote(graph_id, safe="")
+
+
+def _activity(m: dict[str, Any]) -> datetime:
+    """A channel post's latest activity: its own time or its newest reply's."""
+    times = [parse_time(m.get("createdDateTime"))]
+    times += [parse_time(r.get("createdDateTime")) for r in m.get("replies") or []]
+    return max((t for t in times if t), default=datetime.min.replace(tzinfo=UTC))
+
+
+def _active_since(m: dict[str, Any], since: datetime) -> bool:
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=UTC)
+    return _activity(m) >= since
 
 
 def _retry_after(r: httpx.Response, attempt: int) -> float:

@@ -209,7 +209,7 @@ export function LibraryPage() {
       <LibraryHeader tab="/library"
         actions={<>
           {/* P24: a company's whole document set (zips, folders) goes in through Browse. */}
-          <Button variant="ghost" asChild><Link to="/files">{t("Upload in Browse →")}</Link></Button>
+          <Button variant="ghost" asChild><Link to="/explorer">{t("Upload in Browse →")}</Link></Button>
           {data?.can_reindex ? (
             <Button variant="outline" loading={reindex.isPending} onClick={() => reindex.mutate()}>
               <ArrowClockwiseIcon size={16} /> {t("Index again")}

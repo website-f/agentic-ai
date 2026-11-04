@@ -27,7 +27,7 @@ from ...core import crypto
 from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...i18n import render, tr
-from ...microsoft import access, app, auth, graph, sync
+from ...microsoft import access, app, auth, graph, signin, sync
 from ...microsoft import rules as mail_rules
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
 from ...models import Agent, Branch, MailItem, SharedMailbox
@@ -74,6 +74,9 @@ async def _status(db: AsyncSession, principal: Principal, base: str) -> dict[str
         "shared_enabled": cfg.configured and cfg.app_tenant() is not None,
         # Extra, for the Channels page: which tenant consented (managers only).
         "admin_tenant": (cfg.admin_tenant or None) if manage else None,
+        # P63: Sign in with Microsoft, and Teams channel posts (after an admin's consent).
+        "sign_in": cfg.sign_in,
+        "teams_channels": cfg.teams_channels,
     }
 
 
@@ -83,6 +86,42 @@ async def microsoft_status(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    return await _status(db, principal, _base(request))
+
+
+class MicrosoftOptionsIn(BaseModel):
+    sign_in: bool | None = None
+    teams_channels: bool | None = None
+
+
+@router.put(f"{BASE}/options")
+async def microsoft_options(
+    body: MicrosoftOptionsIn,
+    request: Request,
+    principal: Principal = Depends(require("channels.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P63: "Sign in with Microsoft" on the sign-in page, and asking for Teams channel posts
+    (turn on only once an admin granted ChannelMessage.Read.All, or everyone's sign-in stops
+    at Microsoft's "needs admin approval")."""
+    before = await app.load(db, principal.workspace_id)
+    if not before.configured:
+        raise api_error(
+            status.HTTP_409_CONFLICT, "not_configured", "Set up the Microsoft app first."
+        )
+    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    row = await app.update(db, principal.workspace_id, principal.actor, **changes)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "integration.updated",
+        target=row.id,
+        before={"kind": "microsoft", "sign_in": before.sign_in,
+                "teams_channels": before.teams_channels},
+        after={"kind": "microsoft", **changes},
+    )  # fmt: skip
+    await db.commit()
     return await _status(db, principal, _base(request))
 
 
@@ -182,8 +221,59 @@ async def _home(db: AsyncSession, principal: Principal | None) -> str:
     return "/my-worker"
 
 
+async def _sign_in(
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession,
+    state: str,
+    code: str,
+    error: str,
+    error_description: str,
+) -> RedirectResponse:
+    """P63: the callback of "Sign in with Microsoft": the session is made here, then the sign-in
+    page finishes (where to land, the two-step code when one is still needed)."""
+    from ...services import two_factor
+    from .auth import _signed_in
+
+    def to_login(msg: str) -> RedirectResponse:
+        return RedirectResponse(
+            "/login?" + urllib.parse.urlencode({"sso_error": msg[:200]}), status_code=303
+        )
+
+    if error:
+        await signin.drop(state)
+        if error == "access_denied":
+            return to_login(tr("Microsoft sign-in was cancelled."))
+        return to_login((error_description or error).split("\n")[0])
+    try:
+        got = await signin.finish(db, state, code)
+    except MicrosoftError as e:
+        return to_login(_say(e))
+    except Exception:  # noqa: BLE001 - Microsoft unreachable and the like
+        log.warning("Microsoft sign-in failed", exc_info=True)
+        return to_login(tr("Could not reach Microsoft. Try again."))
+    user = got.user
+    if user.must_change_password:  # an invited person's first password: Microsoft instead
+        user.must_change_password = False
+    if got.account is not None:
+        await sync.queue_box(got.account)
+        background.add_task(sync.kick)
+    if two_factor.enabled(user) and not got.mfa:
+        # Two-step set up here, and Microsoft did not do multi-factor: the code comes next.
+        challenge = await two_factor.new_challenge(user.id, got.membership.workspace_id)
+        await db.commit()
+        tail = urllib.parse.urlencode({"mfa": challenge, "email": got.email})
+        return RedirectResponse(f"/login?sso=code#{tail}", status_code=303)
+    q = {"sso": "done", **({"next": got.next} if got.next else {})}
+    resp = RedirectResponse("/login?" + urllib.parse.urlencode(q), status_code=303)
+    note = ", Microsoft" + (" (multi-factor)" if got.mfa else "")
+    await _signed_in(db, request, resp, user, got.membership, note)
+    return resp
+
+
 @router.get(f"{BASE}/callback")
 async def microsoft_callback(
+    request: Request,
     background: BackgroundTasks,
     state: str = Query(default="", max_length=200),
     code: str = Query(default="", max_length=4000),
@@ -192,6 +282,8 @@ async def microsoft_callback(
     principal: Principal | None = Depends(optional_principal),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
+    if await signin.is_sign_in(state):  # P63: Sign in with Microsoft, not a connection
+        return await _sign_in(request, background, db, state, code, error, error_description)
     home = await _home(db, principal)
 
     def back(result: str, msg: str = "") -> RedirectResponse:
@@ -237,6 +329,7 @@ async def microsoft_account(
             "mail_ok": False,
             "calendar_ok": False,
             "teams_ok": False,
+            "channels_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -250,6 +343,7 @@ async def microsoft_account(
         "calendar_ok": auth.has_scope(acct.scopes, "Calendars.ReadWrite"),
         # P52: Teams needs a reconnect for connections made before Teams was added.
         "teams_ok": auth.has_scope(acct.scopes, "Chat.Read"),
+        "channels_ok": auth.has_scope(acct.scopes, app.CHANNEL_SCOPE),  # P63: channel posts
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,
@@ -338,6 +432,116 @@ async def teams_chat_messages(
         }
         for m in reversed(msgs)
         if m.get("messageType") in (None, "message")
+    ]
+
+
+# ---------------------------------------------------------------- Teams (P63): channel posts
+
+
+def _channels_off() -> Exception:
+    return api_error(
+        status.HTTP_409_CONFLICT,
+        "teams_channels_off",
+        "Reading Teams channel posts needs your Microsoft 365 admin to turn it on "
+        "(Channels > Microsoft 365), then reconnect Microsoft.",
+    )
+
+
+async def _channels_graph(db: AsyncSession, principal: Principal) -> graph.Graph:
+    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
+    if acct is not None and acct.status in access.USABLE_ACCOUNT:
+        if not auth.has_scope(acct.scopes, app.CHANNEL_SCOPE):
+            raise _channels_off()
+    return await _my_graph(db, principal)
+
+
+def _channels_fail(e: MicrosoftError) -> Exception:
+    if getattr(e, "status", 0) == 403:
+        return _channels_off()
+    if getattr(e, "status", 0) == 404:
+        return api_error(
+            status.HTTP_404_NOT_FOUND, "teams_channel_not_found", "That channel was not found."
+        )
+    return api_error(status.HTTP_502_BAD_GATEWAY, "microsoft_error", _say(e))
+
+
+def _channel_msg(m: dict[str, Any]) -> dict[str, Any]:
+    from ...agents.teams_tools import plain, sender
+
+    return {
+        "id": m.get("id"),
+        "at": m.get("createdDateTime"),
+        "from": sender(m),
+        "subject": plain(m.get("subject")) or None,
+        "text": plain((m.get("body") or {}).get("content"))[:4000],
+        "url": m.get("webUrl"),
+    }
+
+
+@router.get(f"{BASE}/teams/channels")
+async def teams_channels(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """The teams you are a member of, each with its channels (your own connection only)."""
+    g = await _channels_graph(db, principal)
+    try:
+        out = []
+        for team in await g.joined_teams():
+            channels = await g.team_channels(str(team.get("id") or ""))
+            out.append(
+                {
+                    "id": team.get("id"),
+                    "name": team.get("displayName") or "",
+                    "description": team.get("description") or "",
+                    "channels": [
+                        {
+                            "id": c.get("id"),
+                            "name": c.get("displayName") or "",
+                            "description": c.get("description") or "",
+                            "kind": c.get("membershipType") or "standard",
+                            "url": c.get("webUrl"),
+                        }
+                        for c in channels
+                    ],
+                }
+            )
+    except MicrosoftError as e:
+        raise _channels_fail(e) from e
+    return out
+
+
+@router.get(f"{BASE}/teams/teams/{{team_id}}/channels/{{channel_id}}/messages")
+async def teams_channel_messages(
+    team_id: str,
+    channel_id: str,
+    limit: int = Query(default=30, ge=1, le=50),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """A channel's recent posts with their replies, oldest first (newest last). Read only."""
+    from ...agents.teams_tools import is_post
+
+    g = await _channels_graph(db, principal)
+    try:
+        posts = await g.channel_messages(team_id, channel_id, limit)
+        for p in posts:
+            if "replies" not in p and is_post(p):
+                p["replies"] = await g.message_replies(team_id, channel_id, str(p.get("id")))
+    except MicrosoftError as e:
+        raise _channels_fail(e) from e
+    return [
+        {
+            **_channel_msg(p),
+            "replies": [
+                _channel_msg(r)
+                for r in sorted(
+                    p.get("replies") or [], key=lambda r: r.get("createdDateTime") or ""
+                )
+                if is_post(r)
+            ],
+        }
+        for p in reversed(posts)
+        if is_post(p)
     ]
 
 

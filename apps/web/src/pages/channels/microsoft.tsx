@@ -57,6 +57,7 @@ import {
   removeMailbox,
   rulesSummary,
   saveMicrosoftConfig,
+  setMicrosoftOptions,
   startAdminConsent,
   TASK_CATEGORIES,
   tenantProblem,
@@ -187,7 +188,10 @@ export function MicrosoftCard({ canManage }: { canManage: boolean }) {
               ) : null}
 
               {cfg.configured && cfg.can_configure && !editing ? (
-                <AppSummary cfg={cfg} onEdit={() => setEditing(true)} />
+                <>
+                  <AppSummary cfg={cfg} onEdit={() => setEditing(true)} />
+                  <SignInOptions cfg={cfg} />
+                </>
               ) : null}
 
               {cfg.configured && (canManage || cfg.can_configure) ? <SharedMailboxes cfg={cfg} /> : null}
@@ -196,6 +200,43 @@ export function MicrosoftCard({ canManage }: { canManage: boolean }) {
       </CardBody>
       <SetupGuide open={guide} onOpenChange={setGuide} cfg={cfg ?? null} />
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------- P63 sign-in and Teams channels
+
+/** "Sign in with Microsoft" on the sign-in page, and Teams channel posts (only after an admin
+ * granted ChannelMessage.Read.All: asking for it before stops everyone's sign-in). */
+function SignInOptions({ cfg }: { cfg: MicrosoftConfig }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: setMicrosoftOptions,
+    onSuccess: (next) => {
+      qc.setQueryData(microsoftConfigQuery.queryKey, next);
+      toast.success(t("Saved."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const consent = useMutation({
+    mutationFn: startAdminConsent,
+    onSuccess: ({ url }) => { window.location.href = url; },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <div className="grid gap-4 border-t border-border pt-4">
+      <SwitchField checked={cfg.sign_in ?? true} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ sign_in: v })}
+        label={t("Sign in with Microsoft")}
+        hint={t("People sign in to the office with their work Microsoft account, and their Outlook, calendar and Teams connect in the same step. Only people already added to the office get in; add them on Members first.")} />
+      <div className="grid gap-2">
+        <SwitchField checked={!!cfg.teams_channels} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ teams_channels: v })}
+          label={t("Teams channel posts")}
+          hint={t("Lets each person's own AI read the posts in the Teams channels they belong to. First, in Microsoft Entra, add the delegated Microsoft Graph permission ChannelMessage.Read.All to the app and grant admin consent; then turn this on. People sign in with Microsoft again (or reconnect) to pick it up.")} />
+        <Button size="sm" variant="outline" className="w-fit" loading={consent.isPending} onClick={() => consent.mutate()}>
+          {t("Grant admin consent")}
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -27,7 +27,7 @@ const net = require("node:net");
 const crypto = require("node:crypto");
 const { spawn, spawnSync } = require("node:child_process");
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 // P52: running as AgenticOfficePC.exe (a Node single executable application).
 const SEA = (() => { try { return require("node:sea").isSea(); } catch { return false; } })();
 const IS_WIN = process.platform === "win32";
@@ -367,11 +367,12 @@ function closeBrowserSession(why) {
 }
 
 /** P59: the office's AI (not this person's own) may open the browser here only for the
- * sites this computer's person let through with `agentic-pc tunnel on`, so they can watch it. */
+ * sites this computer's person let through (Allow on its page, or `agentic-pc tunnel on`), so they
+ * can watch it. */
 function companyBrowserAllowed(params, cfg) {
   if (!params || params.company !== true) return;
   const t = tunnelOf(cfg);
-  if (!t.on) throw new AgentError("not_allowed", "The office's AI may not use this computer's browser. On it, run: agentic-pc tunnel on");
+  if (!t.on) throw new AgentError("not_allowed", "The office's AI may not use this computer's browser. On it, open Agentic Office from the Start menu and press Allow.");
   const sites = Array.isArray(params.sites) ? params.sites.map(String) : [];
   if (!sites.length || !sites.every((s) => hostAllowed(s, t.hosts))) {
     throw new AgentError("not_allowed", `This computer only lets through: ${t.hosts.join(", ")}`);
@@ -440,7 +441,8 @@ async function openBrowser(params, cfg, wsBase) {
 
 // The office's browser (on the server) can send ONE site family (default: ePerolehan) out
 // through this computer's own internet line, so the site sees the company's own connection.
-// Off until the person runs `agentic-pc tunnel on`. Only the listed sites, only port 443: the
+// Off until the person presses Allow on this computer's page (P62; or runs `agentic-pc tunnel on`).
+// Only the listed sites, only port 443: the
 // browser's TLS runs end to end, so this computer passes encrypted bytes it cannot read.
 const TUNNEL_DEFAULT_HOSTS = ["eperolehan.gov.my"];
 const TUNNEL_MAX_HOSTS = 10;
@@ -491,6 +493,38 @@ function parseTunnelArgs(args, current) {
   }
   if (hosts.length > TUNNEL_MAX_HOSTS) throw new Error(`At most ${TUNNEL_MAX_HOSTS} sites.`);
   return { on: true, hosts: hosts.length ? hosts : [...TUNNEL_DEFAULT_HOSTS] };
+}
+
+// P62: the office asks, the person here answers on the status page (Allow / Not now), with no
+// command line. Nothing passes until they press Allow; Turn off on the same page ends it.
+let tunnelAsk = null; // { hosts, by, at } waiting for an answer here
+const ASK_OPEN_EVERY = 10 * 60_000; // the page pops up at most this often for the same ask
+const askOpened = new Map(); // hosts key -> when the page was last opened for it
+
+/** A `tunnel_ask` from the office server -> { hosts, by, at }, or null when it is not one or
+ * this computer already lets all those sites through. */
+function askFrom(msg, cfg) {
+  if (!msg || !Array.isArray(msg.hosts)) return null;
+  const hosts = [...new Set(msg.hosts.map((h) => String(h).trim().toLowerCase()).filter(validHost))].slice(0, TUNNEL_MAX_HOSTS);
+  if (!hosts.length) return null;
+  const t = tunnelOf(cfg);
+  if (t.on && hosts.every((h) => hostAllowed(h, t.hosts))) return null;
+  return { hosts, by: typeof msg.by === "string" ? msg.by.slice(0, 80) : "", at: new Date().toISOString() };
+}
+
+/** Pressing Allow: these sites join the ones already let through (at most 10). */
+function allowTunnel(cfg, hosts) {
+  const t = tunnelOf(cfg);
+  const add = (hosts && hosts.length ? hosts : TUNNEL_DEFAULT_HOSTS).filter(validHost);
+  return { on: true, hosts: [...new Set([...(t.on ? t.hosts : []), ...add])].slice(0, TUNNEL_MAX_HOSTS) };
+}
+
+/** Whether to pop the status page up for this ask now (not again within 10 minutes). */
+function shouldOpenAsk(ask, now = Date.now()) {
+  const key = ask.hosts.join(",");
+  if (now - (askOpened.get(key) || 0) < ASK_OPEN_EVERY) return false;
+  askOpened.set(key, now);
+  return true;
 }
 
 function closeTunnels(why) {
@@ -560,7 +594,7 @@ async function openTunnel(params, cfg, wsBase, deps = {}) {
   const WS = deps.WebSocket || WebSocket;
   const t = tunnelOf(cfg);
   if (cfg.paused) throw new AgentError("paused", "This computer is paused.");
-  if (!t.on) throw new AgentError("not_allowed", "Sending sites through this computer is off. On it, run: agentic-pc tunnel on");
+  if (!t.on) throw new AgentError("not_allowed", "Sending sites through this computer is off. On it, open Agentic Office from the Start menu and press Allow.");
   const channel = typeof params.channel === "string" ? params.channel : "";
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(channel)) throw new AgentError("bad_request", "Bad channel.");
   const host = typeof params.host === "string" ? params.host.trim().toLowerCase() : "";
@@ -1089,10 +1123,20 @@ async function run() {
   const control = await startControl({
     state: () => {
       const c = readConfig();
-      return { ...statusNow, version: VERSION, linked: !!c.token, name: c.name || "", server: c.server || "", paused: !!c.paused, folders: c.folders || [], remote: remoteOf(c), tunnel: { ...tunnelOf(c), open: tunnels.size } };
+      return { ...statusNow, version: VERSION, linked: !!c.token, name: c.name || "", server: c.server || "", paused: !!c.paused, folders: c.folders || [], remote: remoteOf(c), tunnel: { ...tunnelOf(c), open: tunnels.size }, ask: tunnelAsk };
     },
     reconnect: () => reconnect("reconnect asked on the status page"),
     pause: (on) => { writeConfig({ ...readConfig(), paused: on }); if (on) closeTunnels("paused"); },
+    // P62: Allow / Turn off on the page (the file watch below tells the server).
+    tunnel: (on) => {
+      const c = readConfig();
+      const next = on ? allowTunnel(c, tunnelAsk ? tunnelAsk.hosts : tunnelOf(c).hosts) : { on: false, hosts: tunnelOf(c).hosts };
+      writeConfig({ ...c, tunnel: next });
+      if (!on) closeTunnels("turned off on this computer");
+      log(on ? `sites through this computer allowed on the page: ${next.hosts.join(", ")}` : "sites through this computer turned off on the page");
+      tunnelAsk = null;
+    },
+    dismiss: () => { tunnelAsk = null; },
     // No remote carried over: linkWith keeps it only for the same server (P52).
     link: (server, code) => linkWith(server, code),
   });
@@ -1178,6 +1222,14 @@ async function run() {
         lastState = stateOf(cfg);
         if (cfg.paused) { closeBrowserSession("paused from the web"); closeTunnels("paused from the web"); }
         log("settings from the web:", { folders: cfg.folders, paused: cfg.paused });
+      } else if (m.type === "tunnel_ask") {
+        // P62: the office chose this computer for some sites: ask the person here.
+        const ask = askFrom(m, readConfig());
+        if (ask) {
+          tunnelAsk = ask;
+          log(`the office asks to let through: ${ask.hosts.join(", ")}`);
+          if (control && shouldOpenAsk(ask) && !process.env.AGENTIC_PC_NO_BROWSER) openUrl(`http://127.0.0.1:${control.port}/?k=${control.key}`);
+        }
       } else if (m.type === "error") {
         log("server refused:", m.code, m.message || "");
         if (m.code === "bad_token" || m.code === "revoked") {
@@ -1263,9 +1315,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}.r
 input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);margin-top:4px}
 label{display:block;margin-top:10px;font-size:13px;font-weight:600}ol{margin:0;padding-left:20px}li{margin:6px 0}
 .err{color:var(--bad);font-size:13px;margin-top:8px}code{font-size:13px}
+.ask{border:2px solid var(--accent);border-radius:12px;padding:14px;margin-top:4px}.ask p{margin:0 0 8px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--line)}.pill.on{color:#fff;background:var(--ok);border-color:var(--ok)}
 </style></head><body><main>
 <div><h1>Agentic Office on this computer</h1><p class="muted">Lets your own AI use the folders you chose on this computer. Only you see this page.</p></div>
 <div class="card" id="status"><div class="state"><span class="dot warn"></span>Checking…</div></div>
+<div class="card" id="sites" hidden></div>
 <div class="card" id="help" hidden></div>
 <div class="card" id="link" hidden><h2>Link this computer</h2>
 <p class="muted">On the web, open <b>My computers</b>, press <b>Link a computer</b>, and copy the code.</p>
@@ -1286,7 +1341,14 @@ if(!s.linked){st.innerHTML='<div class="state"><span class="dot warn"></span>Not
 else if(s.state==="online"){st.innerHTML='<div class="state"><span class="dot ok"></span>Online</div><p class="muted">Linked as <b>'+esc(s.name)+'</b> to '+esc(s.server)+' · since '+ago(s.since)+'</p><p class="muted">'+(s.paused?"<b>Paused:</b> the AI cannot use this computer.":"The AI can use: "+esc((s.folders||[]).join(", ")||"no folders"))+'</p><p class="muted">Sites through this computer: '+(s.tunnel&&s.tunnel.on?"<b>on</b> — "+esc((s.tunnel.hosts||[]).join(", "))+" ("+(s.tunnel.open||0)+" open now)":"off")+'</p><div class="row">'+(s.paused?'<button class="primary" onclick="act(\\'/resume\\')">Let the AI use it again</button>':'<button onclick="act(\\'/pause\\')">Pause the AI</button>')+'</div>';}
 else{st.innerHTML='<div class="state"><span class="dot bad"></span>'+(s.state==="connecting"?"Connecting…":"Offline")+'</div><p class="muted">'+esc(s.last_error||"")+(s.next_try?' · next try '+new Date(s.next_try).toLocaleTimeString():"")+'</p><div class="row"><button class="primary" onclick="act(\\'/reconnect\\')">Reconnect now</button></div>';
 help.hidden=false;help.innerHTML='<h2>If it stays offline</h2><ol><li>Check this computer is on the internet: open any website.</li><li>Press <b>Reconnect now</b>. It also retries by itself every minute.</li><li>If you use a VPN or office firewall, make sure <code>'+esc(s.server)+'</code> is allowed.</li><li>Restart the computer. It starts by itself when you sign in.</li><li>Still offline? On the web, open <b>My computers</b>: if this computer is not listed, link it again with a new code.</li></ol>';}
+const sites=document.getElementById("sites");sites.hidden=!s.linked;
+if(s.linked){const t=s.tunnel||{},a=s.ask,list=(t.hosts&&t.hosts.length?t.hosts:["eperolehan.gov.my"]).join(", ");let h='<h2>Websites through this computer</h2>';
+if(a){h+='<div class="ask"><p><b>'+esc(a.by||"Your office")+'</b> asks to open <b>'+esc(a.hosts.join(", "))+'</b> through this computer, so the site sees your office internet line instead of the server.</p><p class="muted">Only these sites. The AI may open them in a browser window here, so you can watch what it does. You can turn it off on this page at any time.</p><div class="row"><button class="primary" data-act="/tunnel" data-on="1">Allow</button><button data-act="/ask/dismiss">Not now</button></div></div>';}
+else if(t.on){h+='<p><span class="pill on">On</span> '+esc(list)+' · '+(t.open||0)+' open now</p><p class="muted">Your office AI opens these sites through this computer. Nothing else passes through it.</p><div class="row"><button data-act="/tunnel" data-on="0">Turn off</button></div>';}
+else{h+='<p><span class="pill">Off</span></p><p class="muted">When your office chooses this computer for a site such as ePerolehan, it asks you here first.</p><div class="row"><button data-act="/tunnel" data-on="1">Turn on for '+esc(list)+'</button></div>';}
+sites.innerHTML=h;}
 document.getElementById("foot").textContent="Agent "+s.version+(s.at?"":"");}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(b)act(b.dataset.act,b.dataset.on!==undefined?{on:b.dataset.on==="1"}:{})});
 document.getElementById("doLink").onclick=async()=>{const e=document.getElementById("linkErr");e.textContent="";try{await api("/link",{server:document.getElementById("server").value.trim(),code:document.getElementById("code").value.trim()});load()}catch(x){e.textContent=x.message}};
 load();setInterval(load,3000);
 </script></body></html>`;
@@ -1324,6 +1386,8 @@ async function startControl(api) {
         if (url.pathname === "/reconnect") { api.reconnect(); return send(res, 200, { ok: true }); }
         if (url.pathname === "/pause") { api.pause(true); return send(res, 200, { ok: true }); }
         if (url.pathname === "/resume") { api.pause(false); return send(res, 200, { ok: true }); }
+        if (url.pathname === "/tunnel") { api.tunnel(body.on === true); return send(res, 200, { ok: true }); }
+        if (url.pathname === "/ask/dismiss") { api.dismiss(); return send(res, 200, { ok: true }); }
         if (url.pathname === "/link") {
           const r = await api.link(String(body.server || ""), String(body.code || ""));
           if (!r.ok) return send(res, 400, { error: r.error });
@@ -1784,6 +1848,7 @@ module.exports = {
   denied, allowedPath, inside, safeName, sameServer, searchFiles, listFolder, matcher, NO_SAVE_EXTS, AgentError, VERSION,
   needRemote, parseCombo, sendKeysText, sendKeysCombo, xdoCombo, macCombo, toPixel, health, runHelper,
   linkWith, validHost, tunnelOf, hostAllowed, parseTunnelArgs, pipeTunnel, openTunnel, detailOf, hello, tunnels, companyBrowserAllowed,
+  askFrom, allowTunnel, shouldOpenAsk, PAGE,
 };
 
 if (require.main === module || SEA) {

@@ -120,7 +120,7 @@ async def auth_url(
         "response_type": "code",
         "redirect_uri": redirect,
         "response_mode": "query",
-        "scope": app.DELEGATED_SCOPES,
+        "scope": cfg.scopes,
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
@@ -157,7 +157,7 @@ async def finish(
             "code": code,
             "redirect_uri": st["redirect"],
             "code_verifier": st["verifier"],
-            "scope": app.DELEGATED_SCOPES,
+            "scope": cfg.scopes,
         },
     )
     if status >= 400 or not tok.get("access_token"):
@@ -166,22 +166,32 @@ async def finish(
         raise MicrosoftError(
             Msg("Microsoft gave no refresh token. Connect again and accept all the permissions.")
         )
-    granted = str(tok.get("scope") or "")
-    if not has_scope(granted, "Mail.ReadWrite"):
+    if not has_scope(str(tok.get("scope") or ""), "Mail.ReadWrite"):
         raise MicrosoftError(
             Msg("Mail access was not granted. Accept the mail permissions on Microsoft's screen.")
         )
-    claims = _claims(str(tok.get("id_token") or ""))
-    profile: dict[str, Any] = {}
+    return await store(db, workspace_id, user_id, tok, await profile_of(tok))
+
+
+async def profile_of(tok: dict[str, Any]) -> dict[str, Any]:
+    """The signed-in person's /me (id, mail, userPrincipalName, displayName), or {}."""
+    from .graph import Graph
+
+    async def fixed(_force: bool = False) -> str:
+        return tok["access_token"]
+
     try:
-        from .graph import Graph
-
-        async def fixed(_force: bool = False) -> str:
-            return tok["access_token"]
-
-        profile = await Graph(fixed, "/me").me()
+        return await Graph(fixed, "/me").me()
     except MicrosoftError:
-        profile = {}
+        return {}
+
+
+async def store(
+    db: AsyncSession, workspace_id: str, user_id: str, tok: dict[str, Any], profile: dict[str, Any]
+) -> MicrosoftAccount:
+    """Keep this person's connection (one per person): its refresh token, encrypted. Commits."""
+    granted = str(tok.get("scope") or "")
+    claims = _claims(str(tok.get("id_token") or ""))
     acct = await db.scalar(
         select(MicrosoftAccount).where(
             MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
@@ -245,9 +255,22 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
             "client_secret": cfg.client_secret,
             "grant_type": "refresh_token",
             "refresh_token": crypto.decrypt(acct.token_enc, acct.aad),
-            "scope": app.DELEGATED_SCOPES,
+            "scope": cfg.scopes,
         },
     )
+    if cfg.teams_channels and str(tok.get("error") or "") in RECONNECT_ERRORS:
+        # P63: Teams channel posts were switched on but this person's grant lacks them (no
+        # consent yet): keep everything else working with the scopes they have.
+        status, tok = await _token_call(
+            tenant,
+            {
+                "client_id": cfg.client_id,
+                "client_secret": cfg.client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": crypto.decrypt(acct.token_enc, acct.aad),
+                "scope": app.DELEGATED_SCOPES,
+            },
+        )
     if status >= 400 or not tok.get("access_token"):
         why = _why(tok, status)
         if str(tok.get("error") or "") in RECONNECT_ERRORS:

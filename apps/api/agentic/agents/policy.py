@@ -53,6 +53,8 @@ OUTSIDE_CONTENT = frozenset(
         # P52: other people's Teams messages.
         "teams_chats",
         "teams_read_chat",
+        "teams_channels",  # P63: channel posts
+        "teams_read_channel",
         "email_read",
         "email_search",
         "web_fetch",

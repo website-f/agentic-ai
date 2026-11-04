@@ -136,6 +136,7 @@ class FakePC:
         self.calls: list[dict] = []
         self.settings: list[dict] = []
         self.errors: list[dict] = []
+        self.other: list[dict] = []  # anything else the server sent (P62: tunnel_ask)
         self.relay: FakeWS | None = None
         self.ws: FakeWS | None = None
         self.welcome: dict | None = None
@@ -172,6 +173,8 @@ class FakePC:
                 self.settings.append(m)
             elif m["type"] == "error":
                 self.errors.append(m)
+            elif m["type"] != "call":
+                self.other.append(m)
             elif m["type"] == "call":
                 self.calls.append(m)
                 try:

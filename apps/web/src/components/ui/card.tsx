@@ -141,12 +141,14 @@ export function Toolbar({ className, ...props }: HTMLAttributes<HTMLDivElement>)
 }
 
 /** Sticky footer for forms on phones (sits above the tab bar); a plain row on larger screens. */
+/** On phones it sticks above the app's tab bar; a full-screen page without that bar sets
+ * --bottom-bar: 0px (the Library frame). */
 export function ActionBar({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
         "flex flex-wrap items-center justify-end gap-2",
-        "max-md:sticky max-md:bottom-[calc(4.25rem+env(safe-area-inset-bottom))] max-md:z-20 max-md:-mx-4 max-md:border-t max-md:border-border max-md:bg-surface/95 max-md:px-4 max-md:py-3 max-md:backdrop-blur-md max-md:[&>*]:flex-1",
+        "max-md:sticky max-md:bottom-[calc(var(--bottom-bar,4.25rem)+env(safe-area-inset-bottom))] max-md:z-20 max-md:-mx-4 max-md:border-t max-md:border-border max-md:bg-surface/95 max-md:px-4 max-md:py-3 max-md:backdrop-blur-md max-md:[&>*]:flex-1",
         className,
       )}
       {...props}

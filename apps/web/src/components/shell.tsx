@@ -781,13 +781,20 @@ function MobileTabBar() {
   );
 }
 
-function useDeviceSync() {
+let pushSynced = false;
+
+/** The installed app's badge and this device's push subscription; the full-screen Library uses it too. */
+export function useDeviceSync() {
   const { data } = useQuery(systemStatusQuery);
   const waiting = data?.counts.approvals_pending ?? 0;
   // The number on the installed app's icon follows the approvals waiting.
   useEffect(() => setBadge(waiting), [waiting]);
   // The browser may have rotated this device's push subscription: re-send it once per start.
-  useEffect(() => void syncPush(), []);
+  useEffect(() => {
+    if (pushSynced) return;
+    pushSynced = true;
+    void syncPush();
+  }, []);
 }
 
 export function AppShell() {

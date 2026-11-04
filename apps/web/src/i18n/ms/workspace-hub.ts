@@ -130,6 +130,24 @@ export const WORKSPACE_HUB: Record<string, string> = {
   "Ask my AI about it": "Tanya AI saya tentangnya",
   "Open in Teams": "Buka dalam Teams",
   "No messages.": "Tiada mesej.",
+  // P63: Teams channel posts (read only)
+  "Teams": "Teams",
+  "Chats": "Sembang",
+  "Team": "Pasukan",
+  "Teams channel posts are not on": "Mesej saluran Teams belum dihidupkan",
+  "Reading Teams channel posts needs your Microsoft 365 admin to turn it on (Channels > Microsoft 365), then reconnect Microsoft.":
+    "Membaca mesej saluran Teams memerlukan pentadbir Microsoft 365 anda menghidupkannya (Saluran > Microsoft 365), kemudian sambung semula Microsoft.",
+  "No teams yet": "Belum ada pasukan",
+  "The teams you are a member of in Microsoft Teams show here, with their channels.":
+    "Pasukan Microsoft Teams yang anda sertai dipaparkan di sini, bersama salurannya.",
+  "Read only: the channels of the teams you are a member of, from your own connection. Your AI can summarise them and draft replies for you to post.":
+    "Baca sahaja: saluran pasukan yang anda sertai, daripada sambungan anda sendiri. AI anda boleh meringkaskannya dan mendraf balasan untuk anda hantar sendiri.",
+  "No channels you can see in this team.": "Tiada saluran yang boleh anda lihat dalam pasukan ini.",
+  "Teams channel (read only)": "Saluran Teams (baca sahaja)",
+  "Read the Teams channel \"{title}\" (team {team}, channel {channel}) with teams_read_channel and summarise what was posted, what needs my attention and what was decided. If I should answer something, draft the reply as text for me to post myself.":
+    "Baca saluran Teams \"{title}\" (pasukan {team}, saluran {channel}) dengan teams_read_channel dan ringkaskan apa yang dihantar, apa yang perlu perhatian saya dan apa yang telah diputuskan. Jika ada yang patut saya jawab, draf balasan sebagai teks untuk saya hantar sendiri.",
+  "No posts in this channel yet.": "Belum ada mesej dalam saluran ini.",
+  "{n} replies": "{n} balasan",
 
   // task board
   "Scroll the board left": "Tatal papan ke kiri",

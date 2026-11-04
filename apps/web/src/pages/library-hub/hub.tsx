@@ -1,7 +1,8 @@
 /** The Library: every file, document, SOP and guideline in one place. One nav entry; each tab
- * keeps its own address (/files, /documents, /sops, ...), so deep links, the guide and the
- * tutorial still open the right one. Every tab page starts with <LibraryHeader>: the one title
- * "Library", the tab's own description and actions, then the tabs. */
+ * keeps its own address (/explorer, /documents, /sops, ...), so deep links, the guide and the
+ * tutorial still open the right one. P61b: every tab opens inside one full-screen frame
+ * (../explorer/frame.tsx) whose header carries Back, the company, the search and these tabs;
+ * each tab page starts with <LibraryHeader>: the tab's own title, description and actions. */
 import {
   BooksIcon, FileMagnifyingGlassIcon, FileTextIcon, FilesIcon, FolderOpenIcon, IdentificationCardIcon, PackageIcon, StackIcon,
   type Icon,
@@ -13,9 +14,12 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { PageHeader } from "@/components/page";
 import { SearchField } from "@/components/search-box";
 import { msg, useT } from "@/i18n";
+import type { StoreView } from "@/lib/file-store";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { ALL_NAV } from "@/nav";
+
+import { useLibraryFrame } from "../explorer/frame-context";
 
 export type LibraryPath = "/files" | "/documents" | "/sops" | "/library" | "/templates" | "/packs" | "/company-kit" | "/search";
 
@@ -80,13 +84,22 @@ function onPath(pathname: string, to: string) {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-/** The Library's tabs: links, so each tab is its own address. Scrolls sideways on phones. */
-export function LibraryTabs({ className }: { className?: string }) {
+/** Browse lives at /explorer (/files redirects there). */
+function isOn(pathname: string, tab: LibraryPath) {
+  return tab === "/files" ? onPath(pathname, "/explorer") || onPath(pathname, "/files") : onPath(pathname, tab);
+}
+
+/** Where Browse opens again: the folder last open in this visit (from the frame). */
+export interface BrowseSearch { folder?: string; view?: StoreView; task?: string; origin?: "agent" | "uploaded" | "person"; from?: string }
+
+/** The Library's tabs: links, so each tab is its own address. Scrolls sideways on phones and
+ * keeps the open tab in view. `bar`: the full-width row under the Library frame's header. */
+export function LibraryTabs({ className, bar = false, browse }: { className?: string; bar?: boolean; browse?: BrowseSearch }) {
   const t = useT();
   const tabs = useLibraryTabs();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const list = useRef<HTMLDivElement>(null);
-  const current = tabs.find((x) => onPath(pathname, x.to))?.to;
+  const current = tabs.find((x) => isOn(pathname, x.to))?.to;
   // On phones the row scrolls: keep the open tab in view.
   useEffect(() => {
     const box = list.current;
@@ -95,22 +108,31 @@ export function LibraryTabs({ className }: { className?: string }) {
     box.scrollTo({ left: tab.offsetLeft - (box.clientWidth - tab.offsetWidth) / 2 });
   }, [current]);
   return (
-    <nav aria-label={t("Library")} className={cn("min-w-0", className)}>
+    <nav aria-label={t("Library")} className={cn("min-w-0", bar && "shrink-0 border-b border-border bg-surface", className)}>
       <div ref={list} data-guide="library.tabs"
-        className="-mx-4 flex min-w-0 gap-1 overflow-x-auto border-b border-border px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        className={cn(
+          "relative flex min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          bar ? "gap-0.5 px-1.5 sm:px-3" : "-mx-4 gap-1 border-b border-border px-4 sm:mx-0 sm:px-0",
+        )}>
         {tabs.map((tab) => {
           const active = tab.to === current;
           const IconCmp = tab.icon;
-          return (
-            <Link key={tab.to} to={tab.to} aria-current={active ? "page" : undefined}
-              className={cn(
-                "relative flex shrink-0 items-center gap-2 px-3 pt-2 pb-3 text-[14px] whitespace-nowrap transition-colors",
-                "after:absolute after:inset-x-2 after:-bottom-px after:h-[2.5px] after:rounded-full after:transition-colors",
-                active ? "font-semibold text-fg after:bg-accent" : "text-muted after:bg-transparent hover:text-fg",
-              )}>
-              <IconCmp size={18} weight={active ? "fill" : "regular"} className={active ? "text-accent" : undefined} />
-              {t(tab.label)}
-            </Link>
+          const look = cn(
+            "relative flex shrink-0 items-center gap-2 whitespace-nowrap transition-colors",
+            "after:absolute after:inset-x-2 after:rounded-full after:transition-colors",
+            bar ? "min-h-11 px-2.5 text-[13.5px] after:bottom-0 after:h-[2.5px] sm:px-3" : "min-h-11 px-3 pt-2 pb-3 text-[14px] after:-bottom-px after:h-[2.5px]",
+            active ? "font-semibold text-fg after:bg-accent" : "text-muted after:bg-transparent hover:text-fg",
+          );
+          const body = <>
+            <IconCmp size={bar ? 17 : 18} weight={active ? "fill" : "regular"} className={active ? "text-accent" : undefined} />
+            {t(tab.label)}
+          </>;
+          // Browse goes straight to the explorer (no hop through /files), back into the folder
+          // last open unless Browse is the open tab already (then it goes to the top).
+          return tab.to === "/files" ? (
+            <Link key={tab.to} to="/explorer" search={active ? {} : (browse ?? {})} aria-current={active ? "page" : undefined} className={look}>{body}</Link>
+          ) : (
+            <Link key={tab.to} to={tab.to} aria-current={active ? "page" : undefined} className={look}>{body}</Link>
           );
         })}
       </div>
@@ -118,11 +140,15 @@ export function LibraryTabs({ className }: { className?: string }) {
   );
 }
 
-/** The top of every Library tab: the title "Library", what this tab is for, its own actions
- * (Upload, New document, New SOP...), then the tabs. */
+/** The top of every Library tab. Inside the Library frame: the tab's own title, what it is for
+ * and its actions (Upload, New document, New SOP...); the frame already shows "Library", the
+ * search and the tabs. On its own: the title "Library", the description, the actions, a box that
+ * searches the whole Library, then the tabs. */
 export function LibraryHeader({ tab, actions }: { tab: LibraryPath; actions?: ReactNode }) {
   const t = useT();
   const here = libraryTab(tab);
+  const framed = !!useLibraryFrame();
+  if (framed) return <PageHeader title={t(here.label)} eyebrow={false} icon={here.icon} description={t(here.description)} actions={actions} />;
   return (
     <div className="grid min-w-0 gap-4">
       <PageHeader title={t("Library")} eyebrow={false} icon={here.icon} description={t(here.description)} actions={actions} />

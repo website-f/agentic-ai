@@ -200,7 +200,10 @@ async def mail_ready(db: AsyncSession, agent: Agent | None) -> bool:
 
 # P52: Microsoft Teams, through the same personal connection: only a person's own AI (twin or
 # private assistant), only its owner's chats. A shared mailbox never gives Teams.
-TEAMS_TOOLS = frozenset({"teams_chats", "teams_read_chat", "teams_send"})
+# P63: and, read only, the posts of the channels they are a member of.
+TEAMS_TOOLS = frozenset(
+    {"teams_chats", "teams_read_chat", "teams_send", "teams_channels", "teams_read_channel"}
+)
 
 
 async def teams_account(db: AsyncSession, agent: Agent | None) -> MicrosoftAccount | None:

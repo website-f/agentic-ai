@@ -156,7 +156,7 @@ function KitForm({ kit }: { kit: CompanyKit }) {
         ) : null}
       </form>
 
-      <aside className="grid content-start gap-4 max-lg:row-start-1 lg:sticky lg:top-20">
+      <aside className="grid content-start gap-4 max-lg:row-start-1 lg:sticky lg:top-6">
         <Letterhead data={data} logo={logo} />
         <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-4">
           <span className="text-[13px] font-semibold">{t("Logo")}</span>
@@ -187,7 +187,7 @@ function KitForm({ kit }: { kit: CompanyKit }) {
 
 export function CompanyKitPage() {
   const t = useT();
-  const search = useSearch({ from: "/app/company-kit" });
+  const search = useSearch({ from: "/library/company-kit" });
   const navigate = useNavigate({ from: "/company-kit" });
   const { data: kits = [], isLoading, error } = useQuery(kitsQuery);
   // One company at a time: without ?b= it opens the header's company (under "All companies",
@@ -199,6 +199,15 @@ export function CompanyKitPage() {
   useEffect(() => {
     if (!search.b && start) navigate({ search: { b: start }, replace: true });
   }, [start, search.b, navigate]);
+  // The company picked in the header (the Library frame's) opens that company's kit.
+  const picked = useRef(one?.id);
+  useEffect(() => {
+    if (!one?.id || picked.current === one.id) return;
+    const first = picked.current === undefined; // the companies just loaded: keep ?b=
+    picked.current = one.id;
+    if (first) return;
+    if (kits.some((k) => k.branch_id === one.id)) void navigate({ search: { b: one.id }, replace: true });
+  }, [one?.id, kits, navigate]);
 
   return (
     <Page>

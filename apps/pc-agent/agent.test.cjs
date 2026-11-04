@@ -245,7 +245,7 @@ const noConnect = () => { throw new Error("must not connect"); };
 
 test("net.open is refused when off, paused, for other sites, other ports and bad params", async () => {
   const deps = { connect: noConnect, WebSocket: function () { throw new Error("must not open"); } };
-  await assert.rejects(a.openTunnel(GOOD, { token: "t" }, "ws://x", deps), { code: "not_allowed", message: "Sending sites through this computer is off. On it, run: agentic-pc tunnel on" });
+  await assert.rejects(a.openTunnel(GOOD, { token: "t" }, "ws://x", deps), { code: "not_allowed", message: "Sending sites through this computer is off. On it, open Agentic Office from the Start menu and press Allow." });
   await assert.rejects(a.openTunnel(GOOD, { ...ON, paused: true }, "ws://x", deps), { code: "paused" });
   await assert.rejects(a.openTunnel({ ...GOOD, host: "eperolehan.gov.my.evil.com" }, ON, "ws://x", deps), { code: "not_allowed", message: "This computer only lets through: eperolehan.gov.my" });
   await assert.rejects(a.openTunnel({ ...GOOD, host: "xeperolehan.gov.my" }, ON, "ws://x", deps), { code: "not_allowed" });
@@ -382,4 +382,29 @@ test("P59: the office's AI opens the browser here only for sites this computer a
   assert.throws(() => companyBrowserAllowed({ company: true, sites: ["eperolehan.gov.my"] }, { tunnel: { on: false } }), (e) => e instanceof AgentError && e.code === "not_allowed");
   assert.throws(() => companyBrowserAllowed({ company: true, sites: ["example.com"] }, on), (e) => e.code === "not_allowed");
   assert.throws(() => companyBrowserAllowed({ company: true, sites: [] }, on), (e) => e.code === "not_allowed");
+});
+
+test("P62: the office's ask, Allow on the page, and the page popping up at most every 10 min", () => {
+  const { askFrom, allowTunnel, shouldOpenAsk } = a;
+  // An ask: clean site names only, and nothing to ask when they are already let through.
+  const ask = askFrom({ hosts: ["ePerolehan.gov.my", "https://x", "eperolehan.gov.my"], by: "Fitri" }, {});
+  assert.deepEqual(ask.hosts, ["eperolehan.gov.my"]);
+  assert.equal(ask.by, "Fitri");
+  assert.equal(askFrom({ hosts: ["eperolehan.gov.my"] }, { tunnel: { on: true, hosts: ["eperolehan.gov.my"] } }), null);
+  assert.equal(askFrom({ hosts: ["bad host"] }, {}), null);
+  assert.equal(askFrom({}, {}), null);
+  // Allow adds the asked sites to the ones already allowed.
+  assert.deepEqual(allowTunnel({}, ["eperolehan.gov.my"]), { on: true, hosts: ["eperolehan.gov.my"] });
+  assert.deepEqual(allowTunnel({ tunnel: { on: true, hosts: ["a.gov.my"] } }, ["eperolehan.gov.my"]), { on: true, hosts: ["a.gov.my", "eperolehan.gov.my"] });
+  assert.deepEqual(allowTunnel({ tunnel: { on: false, hosts: ["a.gov.my"] } }, []), { on: true, hosts: ["eperolehan.gov.my"] });
+  const one = { hosts: ["p62-test.gov.my"] };
+  assert.equal(shouldOpenAsk(one, 1_000_000), true);
+  assert.equal(shouldOpenAsk(one, 1_000_000 + 60_000), false);
+  assert.equal(shouldOpenAsk(one, 1_000_000 + 11 * 60_000), true);
+});
+
+test("P62: the status page's script parses", () => {
+  const script = a.PAGE.split("<script>")[1].split("</script>")[0];
+  assert.doesNotThrow(() => new Function(script));
+  assert.match(a.PAGE, /data-act="\/tunnel" data-on="1">Allow</);
 });

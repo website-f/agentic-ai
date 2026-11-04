@@ -494,7 +494,7 @@ class Proxy:
         if status == 409:
             return None
         reason = body.decode("utf-8", "replace").strip()[:200]
-        raise Denied(f"company computer: {reason}", status=503)
+        raise Denied(f"not opened the company's chosen way: {reason}", status=503)
 
     async def _connect_upstream(
         self, host: str, port: int
