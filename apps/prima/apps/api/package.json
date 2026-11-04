@@ -1,0 +1,35 @@
+{
+  "name": "@prima/api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/src/main.js",
+    "start:dev": "npm run build && node dist/src/main.js",
+    "db:reset": "npm run build && node dist/src/reset-db.js",
+    "entra:link": "node dist/src/entra-link.js",
+    "db:setup": "node dist/src/db-setup.js",
+    "pins:hash": "node dist/src/hash-pins.js",
+    "reviews:tidy": "node dist/src/tidy-reviews.js",
+    "test": "npm run build && node --test --test-concurrency=1 dist/test/*.test.js",
+    "release:check": "node dist/src/release-check.js",
+    "release:module": "node dist/src/module-install.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "~11.2.8",
+    "@nestjs/core": "~11.2.8",
+    "@nestjs/platform-express": "~11.2.8",
+    "@prima/core": "0.1.0",
+    "pg": "~8.16.0",
+    "reflect-metadata": "~0.2.2",
+    "rxjs": "~7.8.2"
+  },
+  "devDependencies": {
+    "@types/express": "~5.0.3",
+    "@types/node": "~22.15.30",
+    "@types/pg": "~8.15.4",
+    "typescript": "~5.8.3"
+  }
+}

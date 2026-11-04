@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "oldSha": "678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b",
+  "newSha": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe",
+  "runnerSha": "675171b69b447423eca0e0c2172f2723c9ce18bd5536dbe5599d86230638124c",
+  "files": [
+    {
+      "path": "candidate-readiness-js/hr-it-readiness.js",
+      "sha256": "d6d3d780b38a8b74eb3556ebe42b344057dce502b592eed25354350846079b01"
+    },
+    {
+      "path": "candidate-readiness-js/it-cleanup-readiness.js",
+      "sha256": "d87cb61417351252f24ef566da52616659dfb98971f66e948b2f8367e56bbe57"
+    },
+    {
+      "path": "candidate-readiness-js/it-manual-readiness.js",
+      "sha256": "9d07236c69058827120cd3af8ef1745554897714589921b80fef7628b82f4d2d"
+    },
+    {
+      "path": "candidate-readiness-js/it-operations-readiness.js",
+      "sha256": "35d43fe0647720368e0b1ccb720ab0e84f0e8202ef9f1290c2cfd7f0628c6c3d"
+    },
+    {
+      "path": "candidate-readiness-js/it-workflow-metrics-readiness.js",
+      "sha256": "75940642731fb4a578fcba18181012cbc89d9a462f77ae353ebcc1c4f31a6789"
+    },
+    {
+      "path": "candidate-readiness-js/procurement-readiness.js",
+      "sha256": "50564887797509b7045296b18d9af113af3cb3c8df638694dcd9930df3492974"
+    },
+    {
+      "path": "candidate-readiness-js/rental-correction-readiness.js",
+      "sha256": "6953eece51a88c5f1d2954f74959da95064e4fe37b436db7f413bc15a5f71450"
+    },
+    {
+      "path": "candidate-readiness/hr-it-readiness.ts",
+      "sha256": "24c9c1e1a0bdb93487f5fd95a7c7ad9e70ecc8ea6b12f5d7fd80a6e9ad828c5b"
+    },
+    {
+      "path": "candidate-readiness/it-cleanup-readiness.ts",
+      "sha256": "c19aba7d5cb68778669ce8728be0185da36407c52c66dd472e4c787b0218ea48"
+    },
+    {
+      "path": "candidate-readiness/it-manual-readiness.ts",
+      "sha256": "6d1425ccdaf8435691c7abe6fe2e50feb1e4f72dcfadfb0aa32da32770d4b098"
+    },
+    {
+      "path": "candidate-readiness/it-operations-readiness.ts",
+      "sha256": "067d83935c850036a9b433a0e73d8eb97ff10f519735b487e66262d891c9e83b"
+    },
+    {
+      "path": "candidate-readiness/it-workflow-metrics-readiness.ts",
+      "sha256": "927cbe987017ebdcc39203c951ce25bb5cdd037036965f33c1abdf72e67bfbc5"
+    },
+    {
+      "path": "candidate-readiness/procurement-readiness.ts",
+      "sha256": "4d7580c20390f97e9da70dce95cb8e766e3d1ec734022c9f2041fc021319dea8"
+    },
+    {
+      "path": "candidate-readiness/rental-correction-readiness.ts",
+      "sha256": "b4877f2ce441d4da5d58a9f7dccf0e2aeabd0d4906664ae231ced82445fe6203"
+    },
+    {
+      "path": "candidate.sql",
+      "sha256": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe"
+    },
+    {
+      "path": "existing-admin-cli.cjs",
+      "sha256": "f5378b1f46fe8eb7012b6d545e0c66ef3e7e7f2aca3efda04354433f208601df"
+    },
+    {
+      "path": "existing-admin-transition.cjs",
+      "sha256": "675171b69b447423eca0e0c2172f2723c9ce18bd5536dbe5599d86230638124c"
+    },
+    {
+      "path": "live.sql",
+      "sha256": "678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b"
+    },
+    {
+      "path": "readiness-manifest.json",
+      "sha256": "294f46e3a469639265e9791d7dcb03ef9d06913dd72ba539b2edabc4565287cb"
+    }
+  ]
+}

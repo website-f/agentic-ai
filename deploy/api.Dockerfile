@@ -89,6 +89,11 @@ COPY --from=build --chown=app:app /app /app
 COPY --from=build /opt/models /opt/models
 # P31: the PC agent's install script templates (agentic/devices/install.py reads them here).
 COPY --chown=app:app apps/pc-agent/install /app/pc-agent/install
+# P65: the Prima Secure knowledge pack (agentic/knowledge/prima_pack.py reads it here).
+COPY --chown=app:app apps/prima/docs/system /app/prima-pack/docs/system
+COPY --chown=app:app apps/prima/docs/IT_*.md apps/prima/docs/HR_IT_INTAKE_*.md apps/prima/docs/STAFF_DATA_SECURITY.md apps/prima/docs/WEBSITE_*.md /app/prima-pack/docs/
+COPY --chown=app:app apps/prima/apps/web/src/it-guide/catalog.ts /app/prima-pack/apps/web/src/it-guide/catalog.ts
+COPY --chown=app:app apps/prima/CLAUDE.md /app/prima-pack/CLAUDE.md
 COPY --from=pcexe --chown=app:app /pc/out/AgenticOfficePC.exe /pc/out/AgenticOfficePC.exe.sha256 /app/pc-agent/
 # The vault, media and files (P40) volumes inherit this owner the first time Docker creates them.
 RUN mkdir -p /data/vault /data/media /data/files && chown app:app /data/vault /data/media /data/files

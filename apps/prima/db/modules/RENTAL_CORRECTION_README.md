@@ -1,0 +1,11 @@
+# Rental correction module — preparation only
+
+Apply `rental-correction-v1.sql` once to the exact reviewed base schema, in a separately authorized migration window. It is deliberately not startup SQL and not automatically run by `001_init.sql`. Its transaction creates five append-only tables, RLS, indexes, private validators and a second original-bill payment trigger. Reapplication fails rather than drops/reseeds anything. Record its exact SHA in the release migration ledger; a marker alone is not readiness.
+
+The runtime must pass both existing IT operations readiness and rental module readiness. Original bill payment recording fails closed if module readiness is absent. Existing base readiness accepts only the exact optional original-payment trigger; rental readiness requires it and checks every table, role, function body/owner/EXECUTE boundary, policy, trigger, column, key and unique index.
+
+No Finance assignment is added. Explicit companyIds and current Finance exclusions apply before supersession lookup. Default missing company assignments require separate authorized administration, not automatic fixes. Proposed records, Manager/Finance reviews, immutable replacements and payment *references* do not move money. Originals, prior snapshots and audit remain intact. Paid/legacy/historical bills and replacement chains are excluded.
+
+Canonical JSON hashing matches the application sorted-key algorithm for supported records; unusual legacy JSON numeric/key representations may fail closed and require reconciliation, never a hash bypass. Transactions use the common IT admission advisory lock and row locks. Raw conflicting SQL can deadlock with application lock order; PostgreSQL must abort rather than partially commit, and the same operation ID must be reconciled before retry.
+
+Restricted localhost PostgreSQL tests are normal CI tests, not opt-in. Local compilation/catalog mocks are not SQL execution evidence. Real PostgreSQL tests (including complete service workflow, receipt integrity, scope, supersession and concurrency), migration rehearsal, backup/restore proof and staff UAT remain rollout gates. No live migration or payment was performed by preparing this module.

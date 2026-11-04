@@ -1,0 +1,11 @@
+/** Staged coordination records only; never authentication principals or applied access. */
+export type HrItKind='collection'|'request'|'edit'|'submit'|'technical'|'self_details'|'scope_review'|'hr_review'|'delegation_request'|'delegation_decision'|'cancel';
+export type HrItSubject={kind:'existing_user'|'hr_person';id:string};
+export type HrItRole='pwvsb_officer'|'company_manager'|'admin_exec'|'supervisor'|'guard';
+export interface HrItPayload {proposedRole:HrItRole;startOn:string;reason:string;technical:{tenantId:string|null;oid:string|null;upnLabel:string;evidenceRef:string;recordedById:string|null;delegationId:string|null};collectedDetails:{upnLabel:string;evidenceRef:string;byId:string;at:string;delegationId:string|null}|null;selfDetails:{upnLabel:string;evidenceRef:string;byId:string;at:string}|null;status:'draft'|'submitted'|'cancelled'}
+export interface HrItRequest extends HrItPayload {id:string;workflow:'onboard'|'offboard';subject:HrItSubject;subjectLabel:string;targetUserId:string|null;companyId:string;createdById:string;createdAt:string;version:number;hash:string;history:{version:number;hash:string;byId:string;at:string;action:HrItKind;payload:HrItPayload}[]}
+export interface HrItApproval {id:string;requestId:string;version:number;hash:string;kind:'cos'|'company_head'|'hr_review';actorId:string;at:string;decision:'approve'|'return';note:string;sequence:number;mappingId:string|null;mappingVersion:number|null}
+export interface HrItDelegation {id:string;requestId:string;targetKey:string;delegateId:string;task:'collect_identity_details'|'prepare_link_request';expiresAt:string;version:number;status:'requested'|'approved'|'revoked';requestedById:string;requestedAt:string;approvedById:string|null;approvedAt:string|null;revokedById:string|null;revokedAt:string|null;reason:string;note:string}
+/** Provisioned through a separately reviewed administrative process, never by the app. */
+export interface HrItAuthorityMapping {id:string;kind:'company_head'|'hr_administrator';companyId:string;userId:string;version:number;active:boolean;validFrom:string;validUntil:string|null;provenance:string}
+export interface HrItReceipt {id:string;userId:string;operationId:string;kind:HrItKind;hash:string;outcome:'committed'|'rejected';recordId:string|null;version:number|null;message:string|null;at:string}

@@ -17,3 +17,6 @@ assets-private
 !**/.env.example
 *.log
 apps/api/data
+apps/prima/**/dist
+apps/prima/**/dist-demo
+apps/prima/**/coverage

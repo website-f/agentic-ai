@@ -91,6 +91,7 @@ const page = {
   staffComputers: lazyRouteComponent(() => import("@/pages/computers/staff"), "StaffComputersPage"),
   approvedServices: lazyRouteComponent(() => import("@/pages/approved-services"), "ApprovedServicesPage"),
   webConnections: lazyRouteComponent(() => import("@/pages/web-connections"), "WebConnectionsPage"),
+  prisma: lazyRouteComponent(() => import("@/pages/prisma"), "PrismaPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
@@ -709,6 +710,8 @@ const approvedServicesRoute = createRoute({
 });
 
 // P60: how the agents' browsers reach websites (this server, a company computer, proxies).
+// P65: Prima Secure's launch page (the app itself is at /prisma/, outside this one).
+const prismaRoute = createRoute({ getParentRoute: () => appRoute, path: "/prisma", component: page.prisma });
 const webConnectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/web-connections",
@@ -891,6 +894,7 @@ const routeTree = rootRoute.addChildren([
     staffComputersRoute,
     approvedServicesRoute,
     webConnectionsRoute,
+    prismaRoute,
     remoteRoute,
     mailRoute,
     contactsRoute,

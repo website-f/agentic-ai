@@ -1,0 +1,33 @@
+# Independent read-only check for the already-published Prima staging website.
+# Unlike "Deploy staging", this does NOT build/push an API image, update Azure,
+# run a database job, request tokens/secrets, or publish the website.
+# Playwright 1.56.1 supports Ubuntu 24.04, not Ubuntu 26.04.
+name: Verify staging website
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.actor == 'fauzan4377' && github.triggering_actor == 'fauzan4377'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load known staging URLs and Microsoft IDs (no secrets)
+        run: infra/staging-env.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npm i --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Check Microsoft sign-in page and API without signing anyone in
+        run: |
+          node scripts/staging-signin-check.mjs "$WEB_ORIGIN" "$AZURE_TENANT_ID" "$ENTRA_SPA_CLIENT_ID" "${ENTRA_API_APP_ID_URI:-api://$ENTRA_API_CLIENT_ID}"
+          scripts/staging-smoke.sh "$API_URL" 3 5 "$WEB_ORIGIN"
+          echo "### Published staging site passed read-only verification: $WEB_ORIGIN" >> "$GITHUB_STEP_SUMMARY"

@@ -11,6 +11,8 @@
 # build output
 node_modules/
 dist/
+dist-demo/
+coverage/
 .venv/
 __pycache__/
 *.pyc

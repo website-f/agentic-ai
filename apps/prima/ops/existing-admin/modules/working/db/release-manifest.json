@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe"
+  },
+  "modules": [
+    {
+      "id": "procurement",
+      "path": "db/modules/it-procurement-v1.sql",
+      "sha256": "56c32d567e5d3ff1a4959833c85a8d1643ca3197ce8d9c73235890c7ee4c0756",
+      "requires": []
+    },
+    {
+      "id": "rental_corrections",
+      "path": "db/modules/rental-correction-v1.sql",
+      "sha256": "251de5d5cf1d981b134a73d5d70a14684dbc616673b134837ee56f46c84aaa81",
+      "requires": []
+    },
+    {
+      "id": "cleanup",
+      "path": "db/modules/it-cleanup-v1.sql",
+      "sha256": "0f3daa00c104e09942fc5c1098ce1ddbc64b94043d89f0d6002fa21ee7d682f3",
+      "requires": [
+        "procurement",
+        "rental_corrections"
+      ]
+    },
+    {
+      "id": "metrics",
+      "path": "db/modules/it-workflow-metrics-v1.sql",
+      "sha256": "bf9ea41504bff1b0318e2d7037e8f6f62ac695898441a673621a4219d1e735ae",
+      "requires": []
+    },
+    {
+      "id": "job_email",
+      "path": "apps/api/src/connections-mail/job-email-v2.sql",
+      "sha256": "cefa0824c56a1e0f0e11c74d8929f181ed30810eef139f0116d72f27820e6e65",
+      "requires": []
+    }
+  ]
+}

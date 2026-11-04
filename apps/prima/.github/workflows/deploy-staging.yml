@@ -1,0 +1,380 @@
+# Manual main/CEO-only staging workflow. Build-only prepares a registry artifact;
+# deployment is a separately selected mode and confirmation. Neither mode migrates
+# the database or changes application settings/secrets. Rollback is image-only and
+# requires fresh proof that the previous immutable image matches the applied schema.
+name: Deploy staging
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build an image only, or explicitly deploy main to staging
+        required: true
+        type: choice
+        default: build-only
+        options:
+          - build-only
+          - deploy
+      confirm:
+        description: Type BUILD STAGING IMAGE for build-only, or DEPLOY STAGING for deploy (CEO only)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'fauzan4377' && github.triggering_actor == 'fauzan4377' &&
+      ((inputs.mode == 'build-only' && inputs.confirm == 'BUILD STAGING IMAGE') ||
+       (inputs.mode == 'deploy' && inputs.confirm == 'DEPLOY STAGING'))
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: prima_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:ci@localhost:5432/prima_test
+      DEV_TOKEN_SECRET: ci-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/release-packaging.test.mjs
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - run: npm test -w @prima/core
+      - run: npm test -w @prima/api
+      - run: npm run typecheck -w @prima/web
+
+  build_image:
+    needs: test
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'fauzan4377' && github.triggering_actor == 'fauzan4377' &&
+      ((inputs.mode == 'build-only' && inputs.confirm == 'BUILD STAGING IMAGE') ||
+       (inputs.mode == 'deploy' && inputs.confirm == 'DEPLOY STAGING'))
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      tag: ${{ steps.image.outputs.tag }}
+      schema_sha: ${{ steps.image.outputs.schema_sha }}
+      release_sha: ${{ steps.image.outputs.release_sha }}
+      operator_sha: ${{ steps.image.outputs.operator_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Load the staging settings (IDs and names only)
+        run: infra/staging-env.sh
+      - name: Sign in to Azure for the registry build (federated identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push an immutable API artifact only
+        id: image
+        run: |
+          set -euo pipefail
+          RELEASE_WANT=$(node scripts/release-artifact.mjs "$GITHUB_WORKSPACE")
+          WANT=$(sha256sum db/migrations/001_init.sql | cut -d' ' -f1)
+          TAG="$ACR.azurecr.io/prima-api:${GITHUB_SHA}"
+          az acr login --name "$ACR"
+          docker build --label "org.prima.schema-sha256=$WANT" -t "$TAG" .
+          BUILT_ID=$(docker image inspect "$TAG" --format '{{.Id}}')
+          [[ "$BUILT_ID" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Built image identity is unavailable."; exit 1; }
+          docker push "$TAG"
+          docker pull "$TAG"
+          DIGEST=$(docker image inspect "$TAG" --format '{{json .RepoDigests}}' | jq -er --arg prefix "$ACR.azurecr.io/prima-api@sha256:" '[.[] | select(startswith($prefix))][0]')
+          [[ "$DIGEST" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "::error::Image digest unavailable; refusing artifact output."; exit 1; }
+          PULLED_ID=$(docker image inspect "$DIGEST" --format '{{.Id}}')
+          [ "$PULLED_ID" = "$BUILT_ID" ] || { echo "::error::Registry tag resolved to different image bytes; refusing artifact output."; exit 1; }
+          CID=
+          cleanup() { if [ -n "$CID" ]; then docker rm "$CID" >/dev/null 2>&1 || true; fi; }
+          trap cleanup EXIT
+          CID=$(docker create --entrypoint /bin/false "$DIGEST")
+          docker cp "$CID:/app/db/migrations/001_init.sql" "$RUNNER_TEMP/candidate-schema.sql"
+          [ -f "$RUNNER_TEMP/candidate-schema.sql" ] && [ ! -L "$RUNNER_TEMP/candidate-schema.sql" ] && [ -s "$RUNNER_TEMP/candidate-schema.sql" ] || { echo "::error::Candidate schema file unavailable."; exit 1; }
+          ACTUAL_SCHEMA=$(sha256sum "$RUNNER_TEMP/candidate-schema.sql" | cut -d' ' -f1)
+          [ "$ACTUAL_SCHEMA" = "$WANT" ] || { echo "::error::Candidate image schema differs from source; refusing artifact output."; exit 1; }
+          mkdir -p "$RUNNER_TEMP/candidate-release/apps/api/src/connections-mail"
+          docker cp "$CID:/app/db" "$RUNNER_TEMP/candidate-release/db"
+          docker cp "$CID:/app/apps/api/src/connections-mail/job-email-v2.sql" "$RUNNER_TEMP/candidate-release/apps/api/src/connections-mail/job-email-v2.sql"
+          ACTUAL_RELEASE=$(node scripts/release-artifact.mjs "$RUNNER_TEMP/candidate-release")
+          [ "$ACTUAL_RELEASE" = "$RELEASE_WANT" ] || { echo "::error::Candidate complete release differs from source."; exit 1; }
+          mkdir -p "$RUNNER_TEMP/candidate-operator"
+          docker cp "$CID:/app/ops/existing-admin/." "$RUNNER_TEMP/candidate-operator/"
+          node ops/existing-admin/verify.cjs > "$RUNNER_TEMP/source-operator.json"
+          node ops/existing-admin/verify.cjs "$RUNNER_TEMP/candidate-operator" > "$RUNNER_TEMP/image-operator.json"
+          cmp "$RUNNER_TEMP/source-operator.json" "$RUNNER_TEMP/image-operator.json"
+          OPERATOR_SHA=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])).operatorSha256)' "$RUNNER_TEMP/image-operator.json")
+          echo "operator_sha=$OPERATOR_SHA" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_WANT" >> "$GITHUB_OUTPUT"
+          # The candidate container is never started; the label is not sole evidence.
+          echo "image=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "schema_sha=$WANT" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Staging API image built (not proof of deployment)"
+            echo "Tag: $TAG"
+            echo "Immutable image: $DIGEST"
+            echo "Expected schema SHA256: $WANT"
+            echo "Named operator artifact SHA256: $OPERATOR_SHA"
+            cat "$RUNNER_TEMP/image-operator.json"
+            echo "Build-only never patches the API, migrates a database, fetches a website token or publishes the website."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: [test, build_image]
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'fauzan4377' && github.triggering_actor == 'fauzan4377' &&
+      inputs.mode == 'deploy' && inputs.confirm == 'DEPLOY STAGING'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE: ${{ needs.build_image.outputs.image }}
+      TARGET_SCHEMA: ${{ needs.build_image.outputs.schema_sha }}
+      TARGET_RELEASE: ${{ needs.build_image.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Load the staging settings (IDs and names only)
+        run: infra/staging-env.sh
+      - name: Sign in to Azure (federated identity, no secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Check staging before deployment (read only)
+        run: |
+          az extension add -n containerapp --upgrade -y --only-show-errors
+          infra/check-staging.sh
+      - name: Capture the previous ready image and its schema without starting it
+        run: |
+          set -euo pipefail
+          REVISION_MODE=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.configuration.activeRevisionsMode -o tsv)
+          [ "$REVISION_MODE" = Single ] || { echo "::error::Single revision mode is required for trustworthy readiness/traffic checks. No settings were changed; manual review required."; exit 1; }
+          READY_REV=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.latestReadyRevisionName -o tsv)
+          [ -n "$READY_REV" ] && [ "$READY_REV" != None ] || { echo "::error::No ready API revision; manual recovery required."; exit 1; }
+          PREVIOUS=$(az containerapp revision show -n "$API_APP" -g "$RG" --revision "$READY_REV" --query 'properties.template.containers[0].image' -o tsv)
+          [[ "$PREVIOUS" == "$ACR.azurecr.io/prima-api:"* || "$PREVIOUS" == "$ACR.azurecr.io/prima-api@sha256:"* ]] || { echo "::error::Unexpected previous repository; refusing deployment."; exit 1; }
+          az acr login --name "$ACR"
+          CID=
+          cleanup() { if [ -n "$CID" ]; then docker rm "$CID" >/dev/null 2>&1 || true; fi; }
+          trap cleanup EXIT
+          PREVIOUS_DIGEST=
+          PREVIOUS_HASH=
+          # A mutable tag resolved now is not proof of the digest actually running
+          # in that revision. Legacy tagged revisions require manual recovery.
+          if [[ "$PREVIOUS" =~ @sha256:[0-9a-f]{64}$ ]] && docker pull "$PREVIOUS" &&
+             PREVIOUS_DIGEST=$(docker image inspect "$PREVIOUS" --format '{{json .RepoDigests}}' | jq -er --arg prefix "$ACR.azurecr.io/prima-api@sha256:" '[.[] | select(startswith($prefix))][0]') &&
+             [[ "$PREVIOUS_DIGEST" =~ @sha256:[0-9a-f]{64}$ ]] && [ "$PREVIOUS_DIGEST" = "$PREVIOUS" ] &&
+             CID=$(docker create --entrypoint /bin/false "$PREVIOUS_DIGEST") &&
+             docker cp "$CID:/app/db/migrations/001_init.sql" "$RUNNER_TEMP/previous-schema.sql" &&
+             [ -f "$RUNNER_TEMP/previous-schema.sql" ] && [ ! -L "$RUNNER_TEMP/previous-schema.sql" ] && [ -s "$RUNNER_TEMP/previous-schema.sql" ]; then
+            PREVIOUS_HASH=$(sha256sum "$RUNNER_TEMP/previous-schema.sql" | cut -d' ' -f1)
+          else
+            PREVIOUS_DIGEST=
+            echo "::warning::Prior immutable image/schema unavailable; automatic rollback will be forbidden. Manual recovery may be required."
+            echo "Automatic rollback unavailable: prior immutable image/schema evidence is missing. Manual recovery is required if deployment fails." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          PREVIOUS_RELEASE=
+          mkdir -p "$RUNNER_TEMP/previous-release/apps/api/src/connections-mail"
+          if [ -n "$CID" ] && docker cp "$CID:/app/db" "$RUNNER_TEMP/previous-release/db" &&
+             docker cp "$CID:/app/apps/api/src/connections-mail/job-email-v2.sql" "$RUNNER_TEMP/previous-release/apps/api/src/connections-mail/job-email-v2.sql"; then
+            PREVIOUS_RELEASE=$(node scripts/release-artifact.mjs "$RUNNER_TEMP/previous-release" || true)
+          fi
+          echo "PREVIOUS_RELEASE=$PREVIOUS_RELEASE" >> "$GITHUB_ENV"
+          # No docker start/run: only copy the migration file from an unstarted container.
+          READY_AFTER=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.latestReadyRevisionName -o tsv)
+          REF_AFTER=$(az containerapp revision show -n "$API_APP" -g "$RG" --revision "$READY_REV" --query 'properties.template.containers[0].image' -o tsv)
+          [ "$READY_AFTER" = "$READY_REV" ] && [ "$REF_AFTER" = "$PREVIOUS" ] || { echo "::error::Ready revision changed during capture; stop and review."; exit 1; }
+          echo "PREVIOUS_IMAGE=$PREVIOUS_DIGEST" >> "$GITHUB_ENV"
+          echo "PREVIOUS_SCHEMA=$PREVIOUS_HASH" >> "$GITHUB_ENV"
+          echo "Previous ready revision: $READY_REV; pinned image: ${PREVIOUS_DIGEST:-unknown}; schema: ${PREVIOUS_HASH:-unknown}." >> "$GITHUB_STEP_SUMMARY"
+      - name: Require matching applied schema immediately before changing the API image
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE" == "$ACR.azurecr.io/prima-api@sha256:"* ]] && [[ "$IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "::error::Candidate image is not an immutable repository digest."; exit 1; }
+          LOCAL_SCHEMA=$(sha256sum db/migrations/001_init.sql | cut -d' ' -f1)
+          [ "$TARGET_SCHEMA" = "$LOCAL_SCHEMA" ] || { echo "::error::Build output/source schema mismatch."; exit 1; }
+          if [ -z "${PREVIOUS_IMAGE:-}" ] || [ "${PREVIOUS_SCHEMA:-}" != "$TARGET_SCHEMA" ]; then
+            echo "::warning::Automatic rollback is unavailable: prior immutable image/schema is unknown or incompatible. An operator must handle recovery if this deployment fails; never downgrade the database automatically."
+            echo "### Automatic rollback unavailable for this deployment" >> "$GITHUB_STEP_SUMMARY"
+            echo "Prior immutable image/schema is unknown or incompatible with the candidate schema. Forward deployment still requires matching applied schema. If validation fails, manual recovery is required; no automatic database downgrade or unverified image rollback is allowed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          REVISION_MODE=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.configuration.activeRevisionsMode -o tsv)
+          [ "$REVISION_MODE" = Single ] || { echo "::error::Single revision mode is required for trustworthy readiness/traffic checks. No settings were changed; manual review required."; exit 1; }
+          # 404, transport error, empty/malformed report or wrong applied hash all stop here.
+          # current=false is legitimate if an authorized migration is ahead of the old API.
+          if ! curl -fsS --max-time 10 "$API_URL/api/health/schema" > "$RUNNER_TEMP/preflight-schema.json"; then
+            echo "::error::Applied database schema is unavailable (including 404). API unchanged; verify schema manually before another deploy."
+            exit 1
+          fi
+          node scripts/staging-schema-gate.mjs deploy "$TARGET_SCHEMA" "$RUNNER_TEMP/preflight-schema.json"
+          [ "$TARGET_RELEASE" = "$(node scripts/release-artifact.mjs "$GITHUB_WORKSPACE")" ] || { echo "::error::Release artifact mismatch."; exit 1; }
+          curl -fsS --max-time 10 "$API_URL/api/health/release" > "$RUNNER_TEMP/preflight-release.json"
+          node scripts/staging-release-gate.mjs deploy "$TARGET_RELEASE" "$RUNNER_TEMP/preflight-release.json"
+          infra/set-api-image.sh "$IMAGE"
+
+      - name: Verify the NEW revision, and safely roll back if it fails
+        run: |
+          # A successful PATCH only queues an Azure rollout. The public URL can still be served
+          # by the PREVIOUS ready revision; checking it too soon produces a false pass/failure.
+          new_ready=false
+          for i in $(seq 1 36); do
+            LATEST=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.latestRevisionName -o tsv 2>/dev/null || true)
+            READY=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.latestReadyRevisionName -o tsv 2>/dev/null || true)
+            LATEST_IMAGE=
+            if [ -n "$LATEST" ] && [ "$LATEST" != None ]; then
+              LATEST_IMAGE=$(az containerapp revision show -n "$API_APP" -g "$RG" --revision "$LATEST" \
+                --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+            fi
+            if [ "$LATEST_IMAGE" = "$IMAGE" ] && [ -n "$LATEST" ] && [ "$LATEST" = "$READY" ]; then
+              echo "Confirmed NEW ready revision: $LATEST ($LATEST_IMAGE)"
+              new_ready=true
+              break
+            fi
+            echo "Waiting for NEW revision (latest=$LATEST, ready=$READY, latest image=$LATEST_IMAGE)."
+            sleep 10
+          done
+
+          passed=false
+          if [ "$new_ready" = true ]; then
+            if scripts/staging-smoke.sh "$API_URL" 18 10 "$WEB_ORIGIN"; then
+              if curl -fsS --max-time 10 "$API_URL/api/health/schema" > "$RUNNER_TEMP/new-schema.json" &&
+                 node scripts/staging-schema-gate.mjs deploy "$TARGET_SCHEMA" "$RUNNER_TEMP/new-schema.json" &&
+                 curl -fsS --max-time 10 "$API_URL/api/health/release" > "$RUNNER_TEMP/new-release.json" &&
+                 node scripts/staging-release-gate.mjs deploy "$TARGET_RELEASE" "$RUNNER_TEMP/new-release.json" &&
+                 jq -e --arg want "$TARGET_SCHEMA" '.current == true and .expected == $want' "$RUNNER_TEMP/new-schema.json" >/dev/null; then
+                passed=true
+              else
+                echo "::error::New API does not report a current database schema."
+              fi
+            fi
+          else
+            echo "::error::The expected new image never became the latest ready revision; check its startup logs and schema."
+          fi
+
+          if [ "$passed" != true ]; then
+            # Azure rejects PATCH with ContainerAppOperationInProgress while its previous
+            # update is settling. Retry, but NEVER change secrets, identities or database.
+            if [ -z "${PREVIOUS_IMAGE:-}" ] || [ -z "${PREVIOUS_SCHEMA:-}" ]; then
+              echo "::error::Automatic rollback blocked: prior immutable image/schema evidence is unavailable. Manual recovery required; do not downgrade the database."
+              echo "### API validation failed; automatic rollback blocked (unknown prior image/schema). Website was not published. Manual recovery required." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "::warning::New API failed validation. Checking image-only rollback compatibility for $PREVIOUS_IMAGE."
+            rollback_requested=false
+            for i in $(seq 1 30); do
+              # Re-read immediately before EVERY rollback PATCH. A schema-changing
+              # migration usually makes the previous image incompatible: never guess.
+              REVISION_MODE=$(az containerapp show -n "$API_APP" -g "$RG" --query properties.configuration.activeRevisionsMode -o tsv)
+              [ "$REVISION_MODE" = Single ] || { echo "::error::Rollback blocked: revision/traffic mode is not Single. Manual recovery required."; exit 1; }
+              if ! curl -fsS --max-time 10 "$API_URL/api/health/schema" > "$RUNNER_TEMP/rollback-schema.json" ||
+                 ! node scripts/staging-schema-gate.mjs rollback "$PREVIOUS_SCHEMA" "$RUNNER_TEMP/rollback-schema.json" ||
+                 ! curl -fsS --max-time 10 "$API_URL/api/health/release" > "$RUNNER_TEMP/rollback-release.json" ||
+                 ! node scripts/staging-release-gate.mjs rollback "$PREVIOUS_RELEASE" "$RUNNER_TEMP/rollback-release.json"; then
+                echo "::error::Automatic rollback blocked: current database schema cannot be proven compatible with the previous image. Manual recovery required; do not downgrade the database."
+                echo "### API validation failed; rollback blocked by schema evidence. Website was not published. Manual recovery required." >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+              if infra/set-api-image.sh "$PREVIOUS_IMAGE"; then
+                rollback_requested=true
+                break
+              fi
+              echo "Rollback PATCH not accepted yet; retrying after Azure finishes provisioning ($i/30)."
+              sleep 10
+            done
+
+            restored=false
+            if [ "$rollback_requested" = true ]; then
+              for i in $(seq 1 30); do
+                APP_JSON=$(az containerapp show -n "$API_APP" -g "$RG" -o json 2>/dev/null || echo '{}')
+                CONFIGURED=$(jq -r '.properties.template.containers[0].image // ""' <<<"$APP_JSON")
+                READY=$(jq -r '.properties.latestReadyRevisionName // ""' <<<"$APP_JSON")
+                READY_IMAGE=
+                if [ -n "$READY" ]; then
+                  READY_IMAGE=$(az containerapp revision show -n "$API_APP" -g "$RG" --revision "$READY" \
+                    --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+                fi
+                if [ "$CONFIGURED" = "$PREVIOUS_IMAGE" ] && [ "$READY_IMAGE" = "$PREVIOUS_IMAGE" ] && \
+                   curl -fsS --max-time 10 "$API_URL/api/health" >/dev/null &&
+                   curl -fsS --max-time 10 "$API_URL/api/health/schema" > "$RUNNER_TEMP/restored-schema.json" &&
+                   node scripts/staging-schema-gate.mjs rollback "$PREVIOUS_SCHEMA" "$RUNNER_TEMP/restored-schema.json" &&
+                   curl -fsS --max-time 10 "$API_URL/api/health/release" > "$RUNNER_TEMP/restored-release.json" &&
+                   node scripts/staging-release-gate.mjs rollback "$PREVIOUS_RELEASE" "$RUNNER_TEMP/restored-release.json" &&
+                   jq -e --arg want "$PREVIOUS_SCHEMA" '.current == true and .expected == $want' "$RUNNER_TEMP/restored-schema.json" >/dev/null; then
+                  restored=true
+                  break
+                fi
+                echo "Waiting for old image configuration and healthy ready revision ($i/30)."
+                sleep 10
+              done
+            fi
+            if [ "$restored" = true ]; then
+              echo "::warning::Previous image is configured and a ready old-image revision is healthy; deployment stopped."
+            else
+              echo "::error::ROLLBACK NOT VERIFIED. Do not run another deployment. Inspect Azure revisions immediately."
+            fi
+            {
+              echo "### New API did not pass; website was not published"
+              echo "New image: $IMAGE. Previous image: $PREVIOUS_IMAGE."
+              echo "Rollback verified: $restored."
+              echo "Inspect the new revision's console/system logs before deciding whether the database needs the CEO-run migration."
+              echo "Do NOT assume an older API's 404 schema endpoint proves that a migration is necessary."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Build the website for this API
+        run: |
+          npm ci
+          VITE_API_URL="$API_URL" npm run build -w @prima/web
+          grep -q "$API_URL" apps/web/dist/assets/*.js || { echo "::error::The website build does not point at $API_URL."; exit 1; }
+
+      - name: Fetch the website deployment token (never stored in GitHub)
+        run: |
+          TOKEN=$(az staticwebapp secrets list -n "$SWA" -g "$RG" --query properties.apiKey -o tsv)
+          echo "::add-mask::$TOKEN"
+          echo "SWA_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Publish the website
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ env.SWA_TOKEN }}
+          action: upload
+          app_location: apps/web/dist
+          skip_app_build: true
+          skip_api_build: true
+
+      - name: Check the Microsoft sign-in page opens for Prima (headless browser)
+        run: |
+          npm i --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node scripts/staging-signin-check.mjs "$WEB_ORIGIN" "$AZURE_TENANT_ID" "$ENTRA_SPA_CLIENT_ID" "${ENTRA_API_APP_ID_URI:-api://$ENTRA_API_CLIENT_ID}"
+          scripts/staging-smoke.sh "$API_URL" 3 5 "$WEB_ORIGIN"
+          echo "### Staging is up: $WEB_ORIGIN" >> "$GITHUB_STEP_SUMMARY"

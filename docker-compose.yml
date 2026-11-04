@@ -632,6 +632,90 @@ services:
     networks: [data, edge]  # edge only for offsite repositories
     <<: [*app-hardening, *logging]
 
+  # ---------------------------------------------------------------- P65: Prima Secure (apps/prima)
+  # PWVSB's operations app beside the office, at /prisma/ (deploy/nginx/web.conf). Its own
+  # PostgreSQL 16 (what it is built and tested on), never shared with ours: a schema owned by
+  # a non-superuser, FORCEd row-level security, an append-only audit chain. prima-setup runs
+  # Prima's own db-setup and module installer before every start of prima-api, which refuses
+  # to start on a schema that is not exactly its release. Profile `prima`: deploy-vps.sh starts
+  # it as its own step, so Prima failing to start never holds up the office.
+  prima-db:
+    profiles: [prima]
+    image: postgres:16.8-alpine
+    restart: unless-stopped
+    user: "70:70"  # the image's postgres user: no root entrypoint step needed
+    environment:
+      POSTGRES_USER: prima_super
+      POSTGRES_PASSWORD: ${PRIMA_DB_SUPER_PASSWORD:-prima_super_dev}
+      POSTGRES_DB: postgres
+      PRIMA_OWNER_PASSWORD: ${PRIMA_OWNER_PASSWORD:-prima_owner_dev_password}
+    volumes:
+      - primadata:/var/lib/postgresql/data
+      - ./deploy/prima/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prima_super -d prima"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [prima]
+    <<: [*hardening, *logging]
+
+  prima-setup:
+    profiles: [prima]
+    build:
+      context: apps/prima
+      dockerfile: Dockerfile
+    image: agentic-prima-api:dev
+    restart: "no"
+    command: ["node", "/setup/prima-setup.cjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://prima_owner:${PRIMA_OWNER_PASSWORD:-prima_owner_dev_password}@prima-db:5432/prima
+      PRIMA_API_DB_PASSWORD: ${PRIMA_API_DB_PASSWORD:-prima_api_dev_password_0123456789}
+      ENTRA_BOOTSTRAP_LINKS: ${PRIMA_ENTRA_BOOTSTRAP_LINKS:-}
+    volumes:
+      - ./deploy/prima/prima-setup.cjs:/setup/prima-setup.cjs:ro
+    depends_on:
+      prima-db: { condition: service_healthy }
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [prima]
+    <<: [*app-hardening, *logging]
+
+  prima-api:
+    profiles: [prima]
+    image: agentic-prima-api:dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://prima_api:${PRIMA_API_DB_PASSWORD:-prima_api_dev_password_0123456789}@prima-db:5432/prima
+      PRIMA_API_DB_USER: prima_api
+      PRIMA_DATA_MODE: ${PRIMA_DATA_MODE:-test}
+      PIN_PEPPER: ${PRIMA_PIN_PEPPER:-}
+      # Microsoft sign-in (all three or none): the company's Entra "Prima Secure" registrations.
+      # The SPA registration needs https://<this site>/prisma/ as a redirect URI.
+      ENTRA_TENANT_ID: ${PRIMA_ENTRA_TENANT_ID:-}
+      ENTRA_SPA_CLIENT_ID: ${PRIMA_ENTRA_SPA_CLIENT_ID:-}
+      ENTRA_API_CLIENT_ID: ${PRIMA_ENTRA_API_CLIENT_ID:-}
+      ENTRA_API_APP_ID_URI: ${PRIMA_ENTRA_API_APP_ID_URI:-}
+      LEADERSHIP_ONBOARDING_ONLY: ${PRIMA_LEADERSHIP_ONBOARDING_ONLY:-false}
+    depends_on:
+      prima-setup: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 384m
+    cpus: 0.5
+    # prima: its database. edge: our nginx reaches it, and it checks Microsoft sign-in keys.
+    networks: [prima, edge]
+    <<: [*app-hardening, *logging]
+
   # ---------------------------------------------------------------- profile: obs
   # Profile `obs` (P8): self-hosted Langfuse traces of every model call.
   # Off by default. Opt in with two lines in .env:
@@ -814,9 +898,12 @@ networks:
   search:
     internal: true  # worker <-> searxng only
   search-out: {}  # searxng's way out to the search engines; nothing else uses it
+  prima:
+    internal: true  # P65: Prima's database <-> its setup job and API only
 
 volumes:
   pgdata: {}
+  primadata: {}  # P65: Prima Secure's own PostgreSQL 16
   valkeydata: {}
   vault: {}
   media: {}  # meeting recordings (minutes); not backed up: originals are transient

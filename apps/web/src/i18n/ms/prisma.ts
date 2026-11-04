@@ -1,0 +1,33 @@
+/** P65 Prisma: the launch page and menu entry for Prima Secure (apps/prima). */
+export const PRISMA: Record<string, string> = {
+  "Prisma": "Prisma",
+  "Prima Secure": "Prima Secure",
+  "Prima Secure: the group's operations app, where staff do the daily work while their AI follows its SOPs.":
+    "Prima Secure: aplikasi operasi kumpulan, tempat staf melakukan kerja harian sementara AI mereka mengikut SOPnya.",
+  "Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more. Its SOPs and workflows are in the Library for your AI.":
+    "Prima Secure, aplikasi operasi kumpulan: kakitangan dan tapak, jadual tugas, kehadiran, kes, HR, tuntutan, IT dan banyak lagi. SOP dan aliran kerjanya ada dalam Pustaka untuk AI anda.",
+  "Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more. Staff do the daily work there; your AI follows the same SOPs and workflows from the Library.":
+    "Prima Secure, aplikasi operasi kumpulan: kakitangan dan tapak, jadual tugas, kehadiran, kes, HR, tuntutan, IT dan banyak lagi. Staf melakukan kerja harian di sana; AI anda mengikut SOP dan aliran kerja yang sama daripada Pustaka.",
+  "Open Prima Secure": "Buka Prima Secure",
+  "Running on this server": "Berjalan di pelayan ini",
+  "Not running right now": "Tidak berjalan sekarang",
+  "Microsoft sign-in set up": "Log masuk Microsoft disediakan",
+  "Microsoft sign-in not set up yet": "Log masuk Microsoft belum disediakan",
+  "Ways in": "Cara masuk",
+  "Sign in with your company Microsoft account. What you see follows your role and companies in Prima.":
+    "Log masuk dengan akaun Microsoft syarikat anda. Apa yang anda lihat mengikut peranan dan syarikat anda dalam Prima.",
+  "Preview with sample data": "Pratonton dengan data contoh",
+  "The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.":
+    "Aplikasi yang sama dengan data rekaan, dalam pelayar anda sahaja. Tanpa log masuk, tiada apa disimpan untuk syarikat.",
+  "Your AI and Prima": "AI anda dan Prima",
+  "Prima's SOPs, the 34 end-to-end workflows, its business rules and record forms are in the Library. Agents look them up before related work and follow them.":
+    "SOP Prima, 34 aliran kerja hujung ke hujung, peraturan perniagaan dan borang rekodnya ada dalam Pustaka. Ejen menyemaknya sebelum kerja berkaitan dan mengikutinya.",
+  "Open Guidelines": "Buka Garis Panduan",
+  "Prima keeps its own rules: the AI prepares and drafts, people decide. No pay, deduction, discipline or contract decision is made by the AI, and staff send their own replies from Outlook.":
+    "Prima mengekalkan peraturannya sendiri: AI menyediakan dan merangka, manusia membuat keputusan. Tiada keputusan gaji, potongan, tindakan tatatertib atau kontrak dibuat oleh AI, dan staf menghantar balasan mereka sendiri dari Outlook.",
+  "Set-up for the Microsoft admin": "Persediaan untuk pentadbir Microsoft",
+  "In Microsoft Entra, open the app registration \"Prima Secure App\" > Authentication > Single-page application, and add this redirect URI:":
+    "Dalam Microsoft Entra, buka pendaftaran aplikasi \"Prima Secure App\" > Authentication > Single-page application, dan tambah URI ubah hala ini:",
+  "Link each person's Microsoft account to their Prima user (one line per person on the server, docs/P65-PRIMA-SECURE.md).":
+    "Pautkan akaun Microsoft setiap orang kepada pengguna Prima mereka (satu baris setiap orang di pelayan, docs/P65-PRIMA-SECURE.md).",
+};

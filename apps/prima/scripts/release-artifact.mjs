@@ -1,0 +1,9 @@
+// File-only release artifact verifier. Never starts a container or contacts a database/provider.
+import {readFileSync,lstatSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {createHash} from 'node:crypto';
+import {pathToFileURL} from 'node:url';
+const specs=[['procurement','db/modules/it-procurement-v1.sql',[]],['rental_corrections','db/modules/rental-correction-v1.sql',[]],['cleanup','db/modules/it-cleanup-v1.sql',['procurement','rental_corrections']],['metrics','db/modules/it-workflow-metrics-v1.sql',[]],['job_email','apps/api/src/connections-mail/job-email-v2.sql',[]]];
+const sha=b=>createHash('sha256').update(b).digest('hex');
+export function verifyReleaseArtifact(root){const bytes=readFileSync(resolve(root,'db/release-manifest.json')),m=JSON.parse(bytes);if(m.version!==1||Object.keys(m).sort().join(',')!=='base,modules,version'||m.base?.path!=='db/migrations/001_init.sql'||Object.keys(m.base).sort().join(',')!=='path,sha256'||m.modules?.length!==specs.length)throw Error('Invalid complete release manifest');for(let n=0;n<specs.length;n++){const [id,path,requires]=specs[n],v=m.modules[n];if(!v||Object.keys(v).sort().join(',')!=='id,path,requires,sha256'||v.id!==id||v.path!==path||JSON.stringify(v.requires)!==JSON.stringify(requires))throw Error('Invalid selected module');}for(const x of [m.base,...m.modules]){const p=resolve(root,x.path),s=lstatSync(p);if(!s.isFile()||s.isSymbolicLink()||!/^[a-f0-9]{64}$/.test(x.sha256)||sha(readFileSync(p))!==x.sha256)throw Error('Release SQL bytes differ');}return {sha256:sha(bytes),manifest:m};}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{const a=verifyReleaseArtifact(process.argv[2]??process.cwd());console.log(a.sha256);}catch{console.error('Complete release artifact verification failed.');process.exitCode=1;}}

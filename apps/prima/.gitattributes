@@ -1,0 +1,5 @@
+# Prima files are hash-pinned (db/release-manifest.json): always LF, whatever the checkout.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

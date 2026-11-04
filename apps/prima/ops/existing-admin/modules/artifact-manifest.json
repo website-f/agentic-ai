@@ -1,0 +1,182 @@
+{
+  "profile": "azure-primaadmin-selected-module-2026-11-02",
+  "releaseSha256": "734f15d2d04be8e56f0ad7d562742d5a8760de9fb922b69d197c877c5f3ec3ab",
+  "files": [
+    {
+      "path": "admin-module.cjs",
+      "sha256": "3e18baf051900cbcf975552e9c52b1d4efc167093229b6bec9ee0c5a6a5d3070"
+    },
+    {
+      "path": "artifact.cjs",
+      "sha256": "65e302055ba9e336fc625ce2f86126b2f2b00c4457a1e5e3b27fa44116ba7860"
+    },
+    {
+      "path": "cli.cjs",
+      "sha256": "af5b675df9e9fa6e16d5815120f0b4f3c9cab3a922e188958d3a0a1f5d30d0dc"
+    },
+    {
+      "path": "working/apps/api/dist/connections-mail/pg-job-email-store.js",
+      "sha256": "7c61822b60d0c65c68b45db97c4c0d08926935d9911a83cb4570a1cbdd08fed2"
+    },
+    {
+      "path": "working/apps/api/dist/db.js",
+      "sha256": "20d28236bfcf69b4bc34b12c1f7934f3f04dd023a4476aa8a8669a16c89655a3"
+    },
+    {
+      "path": "working/apps/api/dist/hr-it-readiness.js",
+      "sha256": "d6d3d780b38a8b74eb3556ebe42b344057dce502b592eed25354350846079b01"
+    },
+    {
+      "path": "working/apps/api/dist/it-cleanup-readiness.js",
+      "sha256": "d87cb61417351252f24ef566da52616659dfb98971f66e948b2f8367e56bbe57"
+    },
+    {
+      "path": "working/apps/api/dist/it-manual-readiness.js",
+      "sha256": "9d07236c69058827120cd3af8ef1745554897714589921b80fef7628b82f4d2d"
+    },
+    {
+      "path": "working/apps/api/dist/it-operations-readiness.js",
+      "sha256": "35d43fe0647720368e0b1ccb720ab0e84f0e8202ef9f1290c2cfd7f0628c6c3d"
+    },
+    {
+      "path": "working/apps/api/dist/it-workflow-metrics-readiness.js",
+      "sha256": "75940642731fb4a578fcba18181012cbc89d9a462f77ae353ebcc1c4f31a6789"
+    },
+    {
+      "path": "working/apps/api/dist/procurement-readiness.js",
+      "sha256": "50564887797509b7045296b18d9af113af3cb3c8df638694dcd9930df3492974"
+    },
+    {
+      "path": "working/apps/api/dist/release-catalog.js",
+      "sha256": "335958ea9f6b150c94cfc15bffebf846e6574d810431403ff0277aa11f570b43"
+    },
+    {
+      "path": "working/apps/api/dist/rental-correction-readiness.js",
+      "sha256": "6953eece51a88c5f1d2954f74959da95064e4fe37b436db7f413bc15a5f71450"
+    },
+    {
+      "path": "working/apps/api/dist/src/connections-mail/pg-job-email-store.js",
+      "sha256": "7c61822b60d0c65c68b45db97c4c0d08926935d9911a83cb4570a1cbdd08fed2"
+    },
+    {
+      "path": "working/apps/api/dist/src/db.js",
+      "sha256": "20d28236bfcf69b4bc34b12c1f7934f3f04dd023a4476aa8a8669a16c89655a3"
+    },
+    {
+      "path": "working/apps/api/dist/src/hr-it-readiness.js",
+      "sha256": "d6d3d780b38a8b74eb3556ebe42b344057dce502b592eed25354350846079b01"
+    },
+    {
+      "path": "working/apps/api/dist/src/it-cleanup-readiness.js",
+      "sha256": "d87cb61417351252f24ef566da52616659dfb98971f66e948b2f8367e56bbe57"
+    },
+    {
+      "path": "working/apps/api/dist/src/it-manual-readiness.js",
+      "sha256": "9d07236c69058827120cd3af8ef1745554897714589921b80fef7628b82f4d2d"
+    },
+    {
+      "path": "working/apps/api/dist/src/it-operations-readiness.js",
+      "sha256": "35d43fe0647720368e0b1ccb720ab0e84f0e8202ef9f1290c2cfd7f0628c6c3d"
+    },
+    {
+      "path": "working/apps/api/dist/src/it-workflow-metrics-readiness.js",
+      "sha256": "75940642731fb4a578fcba18181012cbc89d9a462f77ae353ebcc1c4f31a6789"
+    },
+    {
+      "path": "working/apps/api/dist/src/module-install.js",
+      "sha256": "d47b67f630898fae3b3483dab6765358cdef2fa9894b42e88570a0aeca537466"
+    },
+    {
+      "path": "working/apps/api/dist/src/procurement-readiness.js",
+      "sha256": "50564887797509b7045296b18d9af113af3cb3c8df638694dcd9930df3492974"
+    },
+    {
+      "path": "working/apps/api/dist/src/release-artifact.js",
+      "sha256": "5b9db5c5594f916c139e15ec8457819111fe8aab0df24b76f653843c075fa3dd"
+    },
+    {
+      "path": "working/apps/api/dist/src/release-catalog.js",
+      "sha256": "335958ea9f6b150c94cfc15bffebf846e6574d810431403ff0277aa11f570b43"
+    },
+    {
+      "path": "working/apps/api/dist/src/rental-correction-readiness.js",
+      "sha256": "6953eece51a88c5f1d2954f74959da95064e4fe37b436db7f413bc15a5f71450"
+    },
+    {
+      "path": "working/apps/api/src/connections-mail/job-email-v2.sql",
+      "sha256": "cefa0824c56a1e0f0e11c74d8929f181ed30810eef139f0116d72f27820e6e65"
+    },
+    {
+      "path": "working/apps/api/src/connections-mail/pg-job-email-store.ts",
+      "sha256": "696d5a69b479b6f5685a21b1a8b575f987c19da64831545e4ca31facbe36925c"
+    },
+    {
+      "path": "working/apps/api/src/db.ts",
+      "sha256": "69cd79f36d98ef907f9c64337539adefe91081b50ade9fa0c6874ed86102b139"
+    },
+    {
+      "path": "working/apps/api/src/hr-it-readiness.ts",
+      "sha256": "24c9c1e1a0bdb93487f5fd95a7c7ad9e70ecc8ea6b12f5d7fd80a6e9ad828c5b"
+    },
+    {
+      "path": "working/apps/api/src/it-cleanup-readiness.ts",
+      "sha256": "c19aba7d5cb68778669ce8728be0185da36407c52c66dd472e4c787b0218ea48"
+    },
+    {
+      "path": "working/apps/api/src/it-manual-readiness.ts",
+      "sha256": "6d1425ccdaf8435691c7abe6fe2e50feb1e4f72dcfadfb0aa32da32770d4b098"
+    },
+    {
+      "path": "working/apps/api/src/it-operations-readiness.ts",
+      "sha256": "067d83935c850036a9b433a0e73d8eb97ff10f519735b487e66262d891c9e83b"
+    },
+    {
+      "path": "working/apps/api/src/it-workflow-metrics-readiness.ts",
+      "sha256": "927cbe987017ebdcc39203c951ce25bb5cdd037036965f33c1abdf72e67bfbc5"
+    },
+    {
+      "path": "working/apps/api/src/module-install.ts",
+      "sha256": "a34380cccc886fb5e62a06d6600df80c8399deb2f14144847a58720c5b380194"
+    },
+    {
+      "path": "working/apps/api/src/procurement-readiness.ts",
+      "sha256": "4d7580c20390f97e9da70dce95cb8e766e3d1ec734022c9f2041fc021319dea8"
+    },
+    {
+      "path": "working/apps/api/src/release-artifact.ts",
+      "sha256": "11646d1fb2c20963d637569cedd2ba98e41668ff029ade3be87c06c47e7573d3"
+    },
+    {
+      "path": "working/apps/api/src/release-catalog.ts",
+      "sha256": "7c878dcfa1f06d9f5a2428f853d468cec398e856f4ddf3c976668de6b9722e91"
+    },
+    {
+      "path": "working/apps/api/src/rental-correction-readiness.ts",
+      "sha256": "b4877f2ce441d4da5d58a9f7dccf0e2aeabd0d4906664ae231ced82445fe6203"
+    },
+    {
+      "path": "working/db/migrations/001_init.sql",
+      "sha256": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe"
+    },
+    {
+      "path": "working/db/modules/it-cleanup-v1.sql",
+      "sha256": "0f3daa00c104e09942fc5c1098ce1ddbc64b94043d89f0d6002fa21ee7d682f3"
+    },
+    {
+      "path": "working/db/modules/it-procurement-v1.sql",
+      "sha256": "56c32d567e5d3ff1a4959833c85a8d1643ca3197ce8d9c73235890c7ee4c0756"
+    },
+    {
+      "path": "working/db/modules/it-workflow-metrics-v1.sql",
+      "sha256": "bf9ea41504bff1b0318e2d7037e8f6f62ac695898441a673621a4219d1e735ae"
+    },
+    {
+      "path": "working/db/modules/rental-correction-v1.sql",
+      "sha256": "251de5d5cf1d981b134a73d5d70a14684dbc616673b134837ee56f46c84aaa81"
+    },
+    {
+      "path": "working/db/release-manifest.json",
+      "sha256": "734f15d2d04be8e56f0ad7d562742d5a8760de9fb922b69d197c877c5f3ec3ab"
+    }
+  ]
+}

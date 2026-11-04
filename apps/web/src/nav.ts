@@ -66,6 +66,7 @@ export type AppPath =
   | "/staff-computers"
   | "/approved-services"
   | "/web-connections"
+  | "/prisma"
   | "/workspace"
   | "/forms"
   | "/overview"
@@ -193,6 +194,15 @@ export const NAV: NavSection[] = [
       { to: "/contacts", label: msg("Contacts"), icon: AddressBookIcon, blurb: msg("Customers, suppliers, partners and leads: their people, TIN and SSM, every mail, task, invoice and deal with them, and what they owe.") },
       { to: "/deals", label: msg("Deals"), icon: HandshakeIcon, blurb: msg("The sales pipeline as a board, from lead to won or lost. Drag a deal along as it moves; each stage shows its count and value.") },
       { to: "/money", label: msg("Money"), icon: CoinsIcon, perm: "finance.view", blurb: msg("Invoices customers owe you and bills you owe suppliers (captured from email), what is overdue, the cash coming in and going out, and payment reminders.") },
+    ],
+  },
+  // P65: Prima Secure (apps/prima), PWVSB's operations app, beside the office at /prisma/.
+  {
+    title: msg("Prisma"),
+    hint: msg("Prima Secure: the group's operations app, where staff do the daily work while their AI follows its SOPs."),
+    open: "all",
+    items: [
+      { to: "/prisma", label: msg("Prisma"), icon: ShieldCheckIcon, blurb: msg("Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more. Its SOPs and workflows are in the Library for your AI.") },
     ],
   },
   {

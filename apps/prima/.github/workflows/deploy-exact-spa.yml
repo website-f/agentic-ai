@@ -1,0 +1,118 @@
+# NONEXECUTED TEMPLATE. Publishing this workflow/running it requires separate approval.
+name: Exact 9c03 SPA cutover (prepared only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: string
+        description: Type PUBLISH EXACT 9C03 SPA AFTER PUBLIC CHECK
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+jobs:
+  exact_spa:
+    if: github.ref == 'refs/heads/main' && github.actor == 'fauzan4377' && github.triggering_actor == 'fauzan4377' && inputs.confirm == 'PUBLISH EXACT 9C03 SPA AFTER PUBLIC CHECK'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9c03cbffa23e07b9377bf24349b8b2e1e64643fe
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: azure/login@v2
+        with:
+          client-id: ab6f2182-391d-4b22-91cc-38f24b8f523d
+          tenant-id: 49308e52-642d-4368-8ee4-bc0629b34f2b
+          subscription-id: 25160f28-6994-4787-be7a-df622e1088a9
+      - name: Install official Container Apps CLI extension explicitly
+        run: az extension add -n containerapp --upgrade -y --only-show-errors
+      - name: Verify exact owner-opened candidate through ARM and public HTTPS
+        env:
+          AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no'
+        run: |
+          mkdir -p "$RUNNER_TEMP/prima-public"
+          cat > "$RUNNER_TEMP/prima-public/check.cjs" <<'PRIMA_PUBLIC'
+          'use strict';
+          // Preparation only. Requires separately approved owner private check and public cutover first.
+          const {spawnSync}=require('node:child_process');
+          const APP='ca-prima-api-staging',REV='ca-prima-api-staging--0000008',CONTAINER='ca-prima-api-staging';
+          const IMAGE='acrprimastagingsea.azurecr.io/prima-api@sha256:3611361f0aec89c13d72c8726e4fca9a239be280f746584f43f5a5fa1488b578';
+          const ORIGIN='https://ca-prima-api-staging.yellowsand-230f2038.southeastasia.azurecontainerapps.io';
+          const RELEASE='734f15d2d04be8e56f0ad7d562742d5a8760de9fb922b69d197c877c5f3ec3ab',BASE='4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe';
+          const IDS=['procurement','rental_corrections','cleanup','metrics','job_email'];
+          function release(x){if(x?.version!==1||x.expected!==RELEASE||x.ready!==true||x.catalog?.ready!==true||x.catalog?.baseReady!==true||!Array.isArray(x.catalog.codes)||x.catalog.codes.length||Object.keys(x.catalog.modules||{}).sort().join(',')!==[...IDS].sort().join(',')||IDS.some(id=>x.catalog.modules[id].ready!==true||!Array.isArray(x.catalog.modules[id].codes)||x.catalog.modules[id].codes.length))throw Error();}
+          function topology(app,revisions,replicas){const p=app?.properties,ingress=p?.configuration?.ingress;if(p?.provisioningState!=='Succeeded'||!Array.isArray(p.template?.containers)||p.template.containers.length!==1||p.template.containers[0].name!==CONTAINER||p.template.containers[0].image!==IMAGE||p?.configuration?.activeRevisionsMode!=='Single'||ingress?.external!==true||p.latestRevisionName!==REV||p.latestReadyRevisionName!==REV||ingress.fqdn!==new URL(ORIGIN).hostname)throw Error();
+          const traffic=ingress.traffic;if(!Array.isArray(traffic)||!traffic.length||traffic.some(t=>typeof t.weight!=='number'||t.weight<0||t.weight>100||t.label||(t.latestRevision===true?t.revisionName&&t.revisionName!==REV:t.revisionName!==REV))||traffic.reduce((n,t)=>n+t.weight,0)!==100)throw Error();
+          if(!Array.isArray(revisions)||revisions.filter(r=>r.name===REV).length!==1)throw Error();
+          for(const r of revisions){if(typeof r.name!=='string'||!r.name.startsWith(APP+'--'))throw Error();const list=replicas[r.name];if(!Array.isArray(list))throw Error();if(r.name!==REV){if(list.length!==0||r.properties?.active!==false)throw Error();}else{const c=r.properties?.template?.containers;if(r.properties?.active!==true||!Array.isArray(c)||c.length!==1||c[0].name!==CONTAINER||c[0].image!==IMAGE||list.length<1||r.properties?.healthState!=='Healthy'||r.properties?.runningState!=='Running'||list.some(rep=>!Array.isArray(rep.properties?.containers)||rep.properties.containers.length!==1||rep.properties.containers[0].name!==CONTAINER||rep.properties.containers[0].ready!==true||rep.properties.containers[0].runningState!=='Running'))throw Error();}}
+          }
+          function az(args){const r=spawnSync('az',['containerapp',...args,'--subscription','25160f28-6994-4787-be7a-df622e1088a9','-g','rg-prima-staging-sea','-n',APP,'-o','json','--only-show-errors'],{encoding:'utf8',timeout:30000,maxBuffer:1024*1024});if(r.status!==0||r.error)throw Error();return JSON.parse(r.stdout);}
+          function arm(){const app=az(['show']),revisions=az(['revision','list']);if(!Array.isArray(revisions)||revisions.length>100)throw Error();const replicas={};for(const r of revisions){if(typeof r.name!=='string'||!r.name.startsWith(APP+'--'))throw Error();replicas[r.name]=az(['replica','list','--revision',r.name]);}topology(app,revisions,replicas);}
+          async function main(){arm();for(const path of ['/api/health','/api/health/schema','/api/health/release']){const response=await fetch(ORIGIN+path,{redirect:'error',signal:AbortSignal.timeout(30000),headers:{'Cache-Control':'no-cache'}});if(!response.ok)throw Error();const body=await response.text();if(body.length>262144)throw Error();const x=JSON.parse(body);if(path.endsWith('/release'))release(x);else if(path.endsWith('/schema')){if(x.current!==true||x.expected!==BASE||x.applied!==BASE)throw Error();}else if(x.ok!==true)throw Error();}arm();console.log(JSON.stringify({code:'EXACT_PUBLIC_CANDIDATE_VERIFIED',revision:REV,image:IMAGE,release:RELEASE,checkedAt:new Date().toISOString(),providerVerified:false}));}
+          module.exports={release,topology,main,REV,CONTAINER,IMAGE,ORIGIN};if(require.main===module)main().catch(()=>{console.error('STOP: PUBLIC_CANDIDATE_PROOF_FAILED');process.exitCode=1;});
+          PRIMA_PUBLIC
+          timeout 300 /usr/bin/env -u NODE_OPTIONS -u NODE_PATH -u NODE_TLS_REJECT_UNAUTHORIZED -u NODE_EXTRA_CA_CERTS node "$RUNNER_TEMP/prima-public/check.cjs"
+      - name: Build exact matching SPA (not API build-only output)
+        run: |
+          cat > "$RUNNER_TEMP/build-spa.sh" <<'PRIMA_BUILD'
+          #!/usr/bin/env bash
+          # PREPARED ONLY. Build from a separate full exact checkout; does not publish anything.
+          set -euo pipefail
+          set +x
+          EXPECTED=9c03cbffa23e07b9377bf24349b8b2e1e64643fe
+          API_URL=https://ca-prima-api-staging.yellowsand-230f2038.southeastasia.azurecontainerapps.io
+          [[ $# = 1 ]] || { echo 'Provide a full clean source checkout directory'; exit 1; }
+          cd "$1"
+          [[ "$(git rev-parse HEAD)" = "$EXPECTED" ]] || { echo 'STOP: wrong full source revision'; exit 1; }
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo 'STOP: source checkout is not clean'; exit 1; }
+          [[ "$(git rev-parse --is-shallow-repository)" = false ]] || { echo 'STOP: obtain full verified checkout first'; exit 1; }
+          # Refuse local override inputs; build source and API endpoint must be reproducible.
+          for f in .env .env.local .env.production .env.production.local apps/web/.env apps/web/.env.local apps/web/.env.production apps/web/.env.production.local; do [[ ! -e "$f" ]] || { echo 'STOP: unexpected local build environment file'; exit 1; }; done
+          while IFS='=' read -r k rest; do [[ "$k" != VITE_* ]] || { echo 'STOP: clear inherited VITE overrides'; exit 1; }; done < <(env)
+          npm ci
+          npm run build -w @prima/core
+          VITE_API_URL="$API_URL" npm run build -w @prima/web
+          [[ -f apps/web/dist/index.html ]] || exit 1
+          grep -Fq "$API_URL" apps/web/dist/assets/*.js || { echo 'STOP: wrong API URL in SPA artifact'; exit 1; }
+          [[ -z "$(git diff --name-only)" ]] || { echo 'STOP: tracked source changed during build'; exit 1; }
+          node -e 'const fs=require("fs"),crypto=require("crypto"),path=require("path");const root="apps/web/dist",rows=[];function scan(p){for(const n of fs.readdirSync(p).sort()){const q=path.join(p,n),s=fs.lstatSync(q);if(s.isSymbolicLink())throw Error("symlink");if(s.isDirectory())scan(q);else if(s.isFile())rows.push({path:path.relative(root,q),sha256:crypto.createHash("sha256").update(fs.readFileSync(q)).digest("hex")});}}scan(root);console.log(JSON.stringify({source:"9c03cbffa23e07b9377bf24349b8b2e1e64643fe",apiUrl:"https://ca-prima-api-staging.yellowsand-230f2038.southeastasia.azurecontainerapps.io",files:rows},null,2));' > spa-build-manifest.json
+          printf 'SPA build prepared only; NOT published. Review spa-build-manifest.json before separate publication approval.\n'
+          PRIMA_BUILD
+          bash "$RUNNER_TEMP/build-spa.sh" "$GITHUB_WORKSPACE"
+      - name: Recheck exact public candidate immediately before SPA publication
+        env:
+          AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no'
+        run: timeout 300 /usr/bin/env -u NODE_OPTIONS -u NODE_PATH -u NODE_TLS_REJECT_UNAUTHORIZED -u NODE_EXTRA_CA_CERTS node "$RUNNER_TEMP/prima-public/check.cjs"
+      - name: Fetch existing deployment token for ephemeral use, masked and never published as an artifact
+        id: token
+        env:
+          AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no'
+        run: |
+          set -euo pipefail
+          set +x
+          TOKEN=$(az staticwebapp secrets list --subscription 25160f28-6994-4787-be7a-df622e1088a9 -g rg-prima-staging-sea -n swa-prima-staging --query properties.apiKey -o tsv)
+          [[ -n "$TOKEN" && "$TOKEN" != None && "$TOKEN" != *$'\n'* ]] || exit 1
+          echo "::add-mask::$TOKEN"
+          printf 'value=%s\n' "$TOKEN" >> "$GITHUB_OUTPUT"
+          unset TOKEN
+      - name: Publish this exact built SPA only
+        uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # verified v1 commit
+        with:
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.value }}
+          action: upload
+          app_location: apps/web/dist
+          skip_app_build: true
+          skip_api_build: true
+      - name: Record non-secret source/artifact evidence (not live acceptance)
+        run: |
+          cat spa-build-manifest.json >> "$GITHUB_STEP_SUMMARY"
+          echo 'SPA uploaded; API public ingress has NOT been changed by this workflow. Owner-controlled traffic changes are outside this workflow; sign-in/provider UAT remains separately gated.' >> "$GITHUB_STEP_SUMMARY"

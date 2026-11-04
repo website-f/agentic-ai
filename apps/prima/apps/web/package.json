@@ -1,0 +1,27 @@
+{
+  "name": "@prima/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build:demo": "tsc --noEmit -p tsconfig.json && vite build --mode demo",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "~4.29.1",
+    "@prima/core": "0.1.0",
+    "react": "~18.3.1",
+    "react-dom": "~18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.23",
+    "@types/react-dom": "~18.3.7",
+    "@vitejs/plugin-react": "~4.5.2",
+    "typescript": "~5.8.3",
+    "vite": "~6.4.5",
+    "vite-plugin-singlefile": "~2.2.0"
+  }
+}

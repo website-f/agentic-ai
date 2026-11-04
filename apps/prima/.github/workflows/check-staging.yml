@@ -1,0 +1,48 @@
+# Read-only check of the Prima staging resources in Azure (pre-publication review, 28 Oct 2026). It replaces
+# "Provision staging", whose generated resource names did not match the real ones and could have created a second
+# database, vault and registry. Nothing here creates, changes or deletes anything in Azure.
+# On pull requests that change infra/, only the live price estimate runs (no Azure sign-in; it informs, never blocks).
+name: Check staging
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/check-staging.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  price:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Live Azure price estimate (information only; warns, never blocks)
+        continue-on-error: true
+        run: node infra/staging-price.mjs
+
+  check:
+    # Azure gives a sign-in token only to runs on main (the deployment identity's federated credential).
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.actor == 'fauzan4377'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load the staging settings (IDs and names only)
+        run: infra/staging-env.sh
+      - name: Sign in to Azure (federated identity, no secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Check the staging resources (read only)
+        run: |
+          az extension add -n containerapp --upgrade -y --only-show-errors
+          infra/check-staging.sh

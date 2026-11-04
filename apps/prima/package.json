@@ -1,0 +1,26 @@
+{
+  "name": "prima-secure-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Prima Secure App: group operations platform for PWVSB Security Group (Wave 1, mock data)",
+  "workspaces": [
+    "packages/core",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @prima/core && npm run build -w @prima/api && VITE_ALLOW_SAME_ORIGIN_API=true npm run build -w @prima/web",
+    "test": "npm test -w @prima/core && npm test -w @prima/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:reset": "npm run db:reset -w @prima/api",
+    "dev:api": "npm run start:dev -w @prima/api",
+    "dev:web": "npm run dev -w @prima/web",
+    "demo:build": "npm run build:demo -w @prima/web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "multer": "~2.5.0"
+  }
+}

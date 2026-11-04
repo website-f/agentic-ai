@@ -1,0 +1,171 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: prima_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:ci@localhost:5432/prima_test
+      DEV_TOKEN_SECRET: ci-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs
+      - run: npm ci
+      - run: node --test scripts/job-emails-vite-startup.test.mjs scripts/website-policy-vite-transform.test.mjs scripts/it-manual-vite-boundary.test.mjs
+      - run: node --test scripts/mail-connection-state.test.mjs scripts/mail-connection-render.test.cjs scripts/connections-state.test.mjs scripts/connections-v2.test.mjs scripts/sharepoint-request-state.test.mjs scripts/sharepoint-request-http.test.mjs scripts/job-email-integration.test.mjs
+      - run: node --test scripts/website-schedule-state.test.mjs scripts/website-policy-ui.test.cjs scripts/website-pilot-ui.test.cjs scripts/it-manual-state.test.mjs scripts/it-manual-render.test.cjs scripts/it-manual-provenance.test.cjs scripts/it-operations-display.test.mjs scripts/it-operations-contract.test.mjs scripts/it-operations-render.test.cjs scripts/it-guide-state.test.mjs scripts/it-guide-render.test.cjs scripts/hr-it-state.test.mjs scripts/hr-it-render.test.cjs scripts/it-onboarding-evidence.test.cjs scripts/it-corrections-state.test.mjs scripts/it-corrections-render.test.cjs scripts/rental-correction-state.test.mjs scripts/rental-correction-render.test.cjs scripts/procurement-state.test.mjs scripts/procurement-render.test.cjs scripts/metrics-state.test.mjs scripts/metrics-render.test.cjs scripts/cleanup-state.test.mjs scripts/cleanup-render.test.cjs
+      - run: node --test scripts/drawer-focus.test.mjs scripts/it-buy-render.test.cjs
+      - run: node --test scripts/it-extraction-state.test.mjs scripts/it-extraction-render.test.mjs
+      - name: Test Arisha import review state, render and backend contract decoding
+        run: node --test scripts/it-import-review-state.test.mjs scripts/it-import-review-render.test.mjs scripts/it-import-contract.test.mjs scripts/it-import-contract-integration.test.mjs scripts/it-import-http.test.mjs scripts/it-import-marker.test.mjs scripts/it-import-recovery.test.mjs
+      # Fails on a high or critical advisory in anything that ships to the server (dev-only tools are reported in docs).
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build -w @prima/core
+      - run: node --test scripts/procurement-core-contract.test.mjs scripts/metrics-core-contract.test.mjs scripts/cleanup-core-contract.test.mjs
+      - name: Test import adapter against this candidate's real core (synthetic data only)
+        run: PRIMA_REVIEWED_CORE_MODULE="$GITHUB_WORKSPACE/packages/core/dist/index.js" node --test scripts/it-import-reviewed-core.test.mjs scripts/it-manual-contract-integration.test.mjs scripts/it-operations-core.test.mjs scripts/hr-it-core.test.mjs scripts/it-corrections-core.test.mjs scripts/rental-correction-core.test.mjs
+      - run: npm test -w @prima/core
+      - run: npm test -w @prima/api
+      - run: npm run typecheck -w @prima/web
+      - run: npm run build:demo -w @prima/web
+      - run: node --test scripts/it-purchase-reason.test.cjs
+      - run: node --test scripts/release-packaging.test.mjs
+      - run: node --test scripts/arisha-avatar.test.mjs
+      # The server-connected website, as Azure gets it (a placeholder API address).
+      - run: VITE_API_URL=https://ca-prima-api-staging.example.invalid npm run build -w @prima/web
+
+
+  synthetic-browser:
+    # Separate ephemeral runner: no Azure login, deployments, secrets or real data.
+    # A draft PR still runs this job after publication is separately authorized.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - run: npm run build:demo -w @prima/web
+      - name: Install pinned synthetic browser tooling in runner temporary storage
+        run: |
+          npm install --prefix "$RUNNER_TEMP/prima-browser" --no-save --package-lock=false --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/prima-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Exercise synthetic desktop and phone review flows (no external calls)
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          node scripts/arisha-review-smoke.mjs
+          node scripts/it-import-smoke.mjs
+          node scripts/it-extraction-browser-smoke.mjs
+          node scripts/it-import-review-browser-smoke.mjs
+          node scripts/connections-browser-smoke.mjs
+          node scripts/website-policy-browser-smoke.mjs
+          node scripts/job-emails-browser.mjs
+          node scripts/drawer-browser-smoke.mjs
+          node scripts/it-manual-browser-smoke.mjs
+          node scripts/it-corrections-browser-smoke.mjs
+          node scripts/rental-correction-browser-smoke.mjs
+          node scripts/procurement-browser-smoke.mjs
+          node scripts/metrics-browser-smoke.mjs
+          node scripts/cleanup-browser-smoke.mjs
+          node scripts/hr-it-browser-smoke.mjs
+          node scripts/it-onboarding-browser-smoke.mjs
+
+  packaged_release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify complete SQL artifact in an unstarted local image
+        run: bash scripts/check-packaged-release.sh
+
+  base_transition_rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [base-transition.pg.test.cjs, cli.pg.test.cjs]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_URL: postgres://postgres:ci@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci -w @prima/core -w @prima/api
+      - run: node --test ops/base-transition/base-transition.test.cjs ops/base-transition/cli.test.cjs ops/base-transition/packaging.test.cjs
+      - name: Rehearse exact base transition on fresh disposable PostgreSQL only
+        run: node --test "ops/base-transition/${{ matrix.suite }}"
+
+  existing_admin_compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [combined-module-loss.pg.test.cjs, modules-admin.pg.test.cjs, inspect.pg.test.cjs]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci -w @prima/core -w @prima/api
+      - name: Verify separately named artifacts and local safety tests
+        run: |
+          node ops/existing-admin/verify.cjs
+          node --test ops/existing-admin/tests/base-cli.test.cjs ops/existing-admin/tests/modules-cli.test.cjs ops/existing-admin/tests/inspect.test.cjs ops/existing-admin/tests/packaging.test.cjs
+      - name: Rehearse on a fresh disposable local PostgreSQL16 SCRAM TLS cluster
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: bash ops/existing-admin/tests/run-disposable-pg16.sh "${{ matrix.suite }}"

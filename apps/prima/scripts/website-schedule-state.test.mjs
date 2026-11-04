@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+const source=readFileSync(new URL('../apps/web/src/views/website-schedule-state.ts',import.meta.url),'utf8');
+const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+const {loadWebsiteVisit,websiteNoticeIsMonth}=await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const visit=()=>({active:true,attempted:false,generation:0});
+const board={allowed:true,schedule:{runs:true,auto:true}};
+const result={ran:true,reviews:0,checks:0,sent:0};
+test('one attempt per mounted visit, another visit runs again',async()=>{let calls=0;const api={websiteBoard:async()=>board,websiteAction:async()=>{calls++;return result;}};const v=visit();await loadWebsiteVisit(api,v);await loadWebsiteVisit(api,v);assert.equal(calls,1);await loadWebsiteVisit(api,visit());assert.equal(calls,2);});
+test('failure permits explicit retry',async()=>{let calls=0;const api={websiteBoard:async()=>board,websiteAction:async()=>{if(++calls===1)throw Error('offline');return result;}};const v=visit();await assert.rejects(loadWebsiteVisit(api,v));await loadWebsiteVisit(api,v);assert.equal(calls,2);});
+test('unmounted pending board never schedules',async()=>{let resolve,calls=0;const api={websiteBoard:()=>new Promise(r=>resolve=r),websiteAction:async()=>{calls++;return result;}};const v=visit();const pending=loadWebsiteVisit(api,v);v.active=false;v.generation++;resolve(board);await pending;assert.equal(calls,0);});
+test('superseded board cannot schedule after newer read',async()=>{let resolve,calls=0,reads=0;const api={websiteBoard:()=>++reads===1?new Promise(r=>resolve=r):Promise.resolve({...board,allowed:false}),websiteAction:async()=>{calls++;return result;}};const v=visit();const pending=loadWebsiteVisit(api,v);await loadWebsiteVisit(api,v);resolve(board);await pending;assert.equal(calls,0);});
+test('unauthorized and disabled boards never schedule',async()=>{for(const b of [{allowed:false},{allowed:true,schedule:{runs:false,auto:true}},{allowed:true,schedule:{runs:true,auto:false}}]){let calls=0;await loadWebsiteVisit({websiteBoard:async()=>b,websiteAction:async()=>calls++},visit());assert.equal(calls,0);}});
+test('month summary routes to Checks, not nonexistent detail record',()=>{assert.equal(websiteNoticeIsMonth({kind:'check',id:'2026-10'}),true);assert.equal(websiteNoticeIsMonth({kind:'check',id:'wk-2026-10-site1'}),false);assert.equal(websiteNoticeIsMonth({kind:'review',id:'2026-10'}),false);});
+test('older failed action does not clear newer attempt ownership',async()=>{let reject;const v=visit();const old=loadWebsiteVisit({websiteBoard:async()=>board,websiteAction:()=>new Promise((_,r)=>reject=r)},v);await new Promise(r=>setImmediate(r));v.attemptGeneration=++v.generation;v.attempted=true;reject(Error('old'));await assert.rejects(old);assert.equal(v.attempted,true);});
+test('read-only reload while action pending still allows retry on failure',async()=>{let reject;const v=visit();const api={websiteBoard:async()=>board,websiteAction:()=>new Promise((_,r)=>reject=r)};const old=loadWebsiteVisit(api,v);await new Promise(r=>setImmediate(r));await loadWebsiteVisit(api,v);reject(Error('offline'));await assert.rejects(old);assert.equal(v.attempted,false);});

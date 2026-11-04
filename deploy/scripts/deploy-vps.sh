@@ -63,8 +63,11 @@ if [ "$PULL" = true ]; then
   git pull --ff-only
   [ "$(git rev-parse HEAD)" = "$prev" ] || echo "Now at $(git rev-parse HEAD)"
 fi
+# P65: Prima Secure's secrets, generated into .env the first time (never changed after).
+bash deploy/scripts/prima-secrets.sh
 "${DC[@]}" config --quiet  # the new compose files may need new .env values
 "${DC[@]}" build --pull api web browser egress sandbox backup
+"${DC[@]}" --profile prima build --pull prima-setup  # P65: Prima Secure's API image
 
 # 3. Networks whose isolation changed. Docker cannot flip `internal` on an existing network,
 # so the first deploy after the change removes the old one (and the stateless services on
@@ -85,6 +88,13 @@ recreate_internal llm ollama ollama-pull api worker
 
 # 4. Start.
 "${DC[@]}" up -d --remove-orphans
+# P65: Prima Secure (/prisma/), on its own: its setup job installs its schema first. If it
+# cannot start, the office above keeps running and this says so.
+if ! "${DC[@]}" --profile prima up -d prima-db prima-setup prima-api; then
+  echo >&2
+  echo "WARNING: Prima Secure did not start; the office is running. See:" >&2
+  echo "  docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile prima logs prima-setup prima-api" >&2
+fi
 "${DC[@]}" ps --format "table {{.Service}}\t{{.Status}}"
 echo
 
