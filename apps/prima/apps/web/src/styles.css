@@ -765,8 +765,10 @@ th.num {
   border-bottom: 0;
 }
 .list-item > div {
-  min-width: 0;
-  flex: 1 1 260px;
+  /* Grows into the row and wraps its tags under it below ~220px. Basis 0, not a size: in a
+     row laid out as a column, a size here would become the row's height. */
+  flex: 1 1 0;
+  min-width: min(220px, 100%);
 }
 .list-item > .chip,
 .list-item > .row {

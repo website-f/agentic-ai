@@ -1,0 +1,380 @@
+/* Cases (incidents): the board, the case detail and the raise-a-case form. Colours come from styles.css tokens only. */
+
+.cs-filter {
+  width: auto;
+  flex: 0 1 180px;
+  min-width: 0;
+}
+
+/* ---------- The board ---------- */
+.cs-board {
+  overflow: hidden;
+}
+.cs-board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.cs-board-head h2 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.cs-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cs-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+.cs-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 300px) 128px;
+  grid-template-areas: 'sev main state when';
+  gap: 6px 16px;
+  align-items: start;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 3px 0 0 transparent;
+  transition: background-color 0.12s;
+}
+.cs-row:hover {
+  background: var(--surface-2);
+}
+.cs-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cs-row[data-sev='P1'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.cs-row[data-sev='P2'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.cs-row[data-mine='own'] {
+  background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface));
+}
+.cs-row[data-mine='own']:hover {
+  background: var(--warn-soft);
+}
+.cs-row-sev {
+  grid-area: sev;
+  padding-top: 2px;
+}
+.cs-row-main {
+  grid-area: main;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cs-row-title {
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.cs-row-meta,
+.cs-row-where {
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.cs-row-state {
+  grid-area: state;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+}
+.cs-row-when {
+  grid-area: when;
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.cs-row-age {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ---------- Case detail (inside the drawer) ---------- */
+.cs-dhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.cs-desc {
+  max-width: 70ch;
+  line-height: 1.55;
+}
+.cs-facts {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.cs-facts .k-facts {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px 16px;
+}
+.cs-sec {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.cs-sec h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.cs-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cs-reporter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* An action box: the note, proof and the buttons that act on the case. */
+.cs-act {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.cs-act .textarea {
+  background: var(--surface);
+}
+.cs-act-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The escalation ladder: a vertical stepper. */
+.cs-ladder,
+.cs-tl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.cs-ladder > li,
+.cs-tl > li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  position: relative;
+  padding-bottom: 14px;
+}
+.cs-ladder > li:last-child,
+.cs-tl > li:last-child {
+  padding-bottom: 0;
+}
+.cs-ladder > li:not(:last-child)::before,
+.cs-tl > li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 24px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.cs-ladder > li[data-state='done']:not(:last-child)::before {
+  background: var(--accent);
+}
+.cs-ladder-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--on-primary);
+}
+.cs-ladder > li[data-state='done'] .cs-ladder-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cs-ladder > li[data-state='now'] .cs-ladder-dot {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.cs-ladder > li[data-state='now'] .cs-ladder-dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.cs-ladder > li[data-state='more'] .cs-ladder-dot {
+  border-style: dashed;
+}
+.cs-ladder-body {
+  display: grid;
+  gap: 4px;
+  padding-top: 1px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cs-ladder > li[data-state='todo'] .cs-ladder-body,
+.cs-ladder > li[data-state='more'] .cs-ladder-body {
+  color: var(--muted);
+}
+.cs-ladder > li[data-state='todo'] strong {
+  font-weight: 500;
+}
+.cs-ladder-sign {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* History: what happened and who acted. */
+.cs-tl-dot {
+  justify-self: center;
+  margin-top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+.cs-tl > li:not(:last-child)::before {
+  top: 18px;
+}
+.cs-tl-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cs-tl-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.cs-tl-top time {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cs-tl-date {
+  font-family: var(--font-body);
+}
+.cs-tl-note {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+}
+
+.cs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Raise a case ---------- */
+.cs-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.cs-span {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.cs-form-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/* ---------- Phones and narrow windows ---------- */
+@media (max-width: 1100px) {
+  .cs-row {
+    grid-template-columns: 44px minmax(0, 1fr) 112px;
+    grid-template-areas:
+      'sev main when'
+      'sev state state';
+  }
+}
+@media (max-width: 860px) {
+  .cs-filter {
+    flex: 1 1 140px;
+  }
+  .cs-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-areas:
+      'sev main'
+      'sev state'
+      'sev when';
+    gap: 6px 10px;
+    padding: 12px 14px;
+  }
+  .cs-row-when {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    justify-items: start;
+    text-align: left;
+  }
+  .cs-board-head {
+    padding: 12px 14px;
+  }
+  .cs-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Long chips (escalation states) wrap instead of running off a phone. */
+.cs-ladder .chip,
+.cs-row-state .chip,
+.cs-dhead .chip {
+  white-space: normal;
+  max-width: 100%;
+  height: auto;
+}
+.cs-sec,
+.cs-act,
+.cs-ladder-body,
+.cs-tl-body,
+.cs-row-main {
+  grid-template-columns: minmax(0, 1fr);
+}

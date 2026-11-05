@@ -1,0 +1,664 @@
+/* Attendance and roster (P71 redesign). Colours come only from the theme variables in styles.css. */
+
+.att-pad {
+  padding: 16px 18px;
+}
+
+/* ---------- Alerting the PIC now: one column per kind of problem ---------- */
+.att-live-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.att-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--crit);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--crit) 50%, transparent);
+  animation: att-pulse 1.8s ease-out infinite;
+  flex: none;
+}
+@keyframes att-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--crit) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--crit) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .att-pulse {
+    animation: none;
+  }
+}
+.att-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.att-group {
+  --tone: var(--crit);
+  --tone-soft: var(--crit-soft);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.att-group[data-tone='warn'] {
+  --tone: var(--warn);
+  --tone-soft: var(--warn-soft);
+}
+.att-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.3;
+  min-width: 0;
+}
+.att-group-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--tone-soft);
+  color: var(--tone);
+  flex: none;
+}
+.att-group-label {
+  flex: 1;
+  min-width: 0;
+}
+.att-count {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tone);
+  color: var(--on-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.att-alerts {
+  display: grid;
+  gap: 8px;
+}
+.att-alert {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tone);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.att-alert:hover {
+  background: color-mix(in srgb, var(--tone-soft) 45%, var(--surface));
+  border-color: color-mix(in srgb, var(--tone) 35%, var(--line));
+  border-left-color: var(--tone);
+}
+.att-alert-who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.att-alert-where,
+.att-alert-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.att-alert-last {
+  font-size: 0.8rem;
+}
+.att-alert-state {
+  margin-top: 6px;
+  display: flex;
+}
+
+/* ---------- Day sheet ---------- */
+.att-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.att-sheet {
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.att-sheet table {
+  min-width: 980px;
+}
+.att-sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.att-sheet thead th:first-child {
+  left: 0;
+  z-index: 3;
+}
+.att-sheet tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  min-width: 13rem;
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.att-sheet tbody tr:hover td:first-child {
+  background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+}
+.att-sheet td {
+  vertical-align: middle;
+}
+.att-guard {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+.att-guard .k-person {
+  max-width: 15rem;
+}
+.att-nobody {
+  width: 32px;
+  height: 32px;
+  border-radius: 30%;
+  border: 1.5px dashed var(--muted);
+  flex: none;
+}
+.att-sheet tr.att-sub td {
+  background: var(--surface-2);
+}
+.att-sheet tr.att-sub td:first-child {
+  padding-left: 32px;
+  background: var(--surface-2);
+}
+.att-sheet tr[data-state='no_show'] td:first-child,
+.att-sheet tr[data-state='unfilled'] td:first-child,
+.att-sheet tr.att-stray td:first-child {
+  box-shadow: inset 3px 0 0 var(--crit), inset -1px 0 0 var(--line);
+}
+.att-sheet tr[data-state='late_on_duty'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn), inset -1px 0 0 var(--line);
+}
+.att-site {
+  font-weight: 500;
+}
+.att-nowrap {
+  white-space: nowrap;
+}
+.att-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.att-alert-btn {
+  padding: 2px 4px;
+}
+
+/* ---------- Absence and discipline ---------- */
+.att-record {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.att-record-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.att-record-main,
+.att-record-full {
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .att-record {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+  .att-record-full {
+    grid-column: 1 / -1;
+  }
+}
+.att-row {
+  align-items: center;
+}
+.att-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.att-row-title {
+  font-weight: 600;
+}
+.att-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.att-row .k-person-sub {
+  white-space: normal;
+}
+.list-item.att-entry {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+.list-item.att-entry > div {
+  flex: none;
+}
+.att-entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.att-note {
+  max-width: 75ch;
+  margin-top: 2px;
+}
+@media (min-width: 860px) {
+  .att-record-full .list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .att-record-full .list-item:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+  .att-record-full .list-item:nth-last-child(2):nth-child(odd) {
+    border-bottom: 0;
+  }
+  .att-record-full .list > .empty {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Roster ---------- */
+.ros-site {
+  width: min(320px, 100%);
+}
+.ros .k-head-actions {
+  min-width: 0;
+}
+.ros-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ros-range svg {
+  color: var(--muted);
+}
+.ros .seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ros-wrap {
+  max-height: min(74vh, 820px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.ros-grid.roster {
+  min-width: 1000px;
+  width: 100%;
+  table-layout: fixed;
+}
+.ros-grid.roster th,
+.ros-grid.roster td {
+  padding: 6px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.ros-grid.roster tr > :last-child {
+  border-right: 0;
+}
+.ros-grid.roster tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.ros-grid.roster thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 6px;
+  text-align: center;
+  background: var(--surface-2);
+}
+.ros-grid.roster thead th:first-child {
+  left: 0;
+  z-index: 3;
+  width: 168px;
+  text-align: left;
+  padding-left: 14px;
+  vertical-align: bottom;
+}
+.ros-grid.roster tbody th {
+  top: auto;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 168px;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--surface);
+  text-align: left;
+  white-space: normal;
+  font-size: inherit;
+  color: inherit;
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.ros-grid.roster tbody th > span {
+  display: block;
+}
+.ros-post {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ros-wd {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ros-date {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.ros-grid.roster thead th.today {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.ros-grid.roster thead th.today .ros-date {
+  color: var(--accent);
+}
+.ros-grid.roster td.today {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+.ros-grid.roster tbody tr:hover td {
+  background: transparent;
+}
+.ros-grid.roster tbody tr:hover td.today {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+.ros-none {
+  text-align: center;
+  vertical-align: middle !important;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.ros-grid .cell {
+  min-height: 54px;
+  height: 100%;
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  gap: 2px;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.ros-grid .cell:not(:disabled):hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ros-grid .cell:disabled {
+  cursor: default;
+}
+.ros-grid .cell .who {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: none;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.ros-grid .cell .who svg {
+  flex: none;
+}
+.ros-grid .cell .who-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ros-grid .cell[data-state='ok'] {
+  border-left: 3px solid var(--ok);
+}
+.ros-grid .cell[data-state='draft'] {
+  background: var(--surface-2);
+  border-style: dashed;
+  border-left: 3px solid var(--warn);
+}
+.ros-grid .cell[data-state='unfilled'] {
+  border: 1px dashed var(--crit);
+  background: var(--crit-soft);
+  color: var(--crit);
+  justify-content: center;
+}
+.ros-grid .cell[data-state='blocked'] {
+  border-color: var(--crit);
+  box-shadow: inset 3px 0 0 var(--crit);
+  background: color-mix(in srgb, var(--crit-soft) 50%, var(--surface));
+}
+.ros-grid .cell[data-state='blocked'] .who {
+  color: var(--crit);
+}
+.ros-grid .cell[data-state='past'] {
+  opacity: 0.55;
+  background: var(--surface-2);
+}
+.ros-draft {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.ros-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-right: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.ros-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ros-key::before {
+  content: '';
+  width: 14px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.ros-key[data-state='ok']::before {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+.ros-key[data-state='draft']::before {
+  border-style: dashed;
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.ros-key[data-state='unfilled']::before {
+  border: 1px dashed var(--crit);
+  background: var(--crit-soft);
+}
+.ros-key[data-state='blocked']::before {
+  border-color: var(--crit);
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.ros-key[data-state='past']::before {
+  opacity: 0.55;
+  background: var(--surface-2);
+}
+
+/* Assign drawer */
+.ros-now {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.ros-now-name {
+  font-weight: 600;
+}
+.ros-warn > div {
+  margin-top: 8px;
+}
+.ros-search .k-search {
+  max-width: none;
+}
+.ros-cand {
+  align-items: center;
+}
+.ros-cand-main {
+  display: grid;
+  gap: 6px;
+}
+.ros-cand .k-person-sub {
+  white-space: normal;
+}
+
+@media (max-width: 860px) {
+  .att-sheet,
+  .ros-wrap {
+    max-height: 70vh;
+  }
+  .att-sheet tbody td:first-child {
+    min-width: 10.5rem;
+  }
+  .att-guard .k-person {
+    max-width: 11rem;
+  }
+  .ros-grid.roster {
+    min-width: 860px;
+  }
+  .ros-grid.roster thead th:first-child,
+  .ros-grid.roster tbody th {
+    width: 116px;
+    padding-left: 10px;
+    padding-right: 8px;
+  }
+  .ros-site {
+    width: 100%;
+  }
+  .att-row-side {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* Compact alert cards: name and alert state on one line, the rest under it; a long column scrolls. */
+.att-alerts {
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+.att-alert {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  padding: 8px 10px 8px 12px;
+}
+.att-alert > span {
+  grid-column: 1 / -1;
+}
+.att-alert > .att-alert-who {
+  grid-column: 1;
+  grid-row: 1;
+}
+.att-alert > .att-alert-state {
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: 0;
+}
+.att-sheet th:nth-child(2),
+.att-sheet td:nth-child(2) {
+  min-width: 14rem;
+}
+.att-sheet td:nth-child(7),
+.att-sheet td:nth-child(8) {
+  min-width: 10rem;
+}
+@media (max-width: 860px) {
+  .att-alert {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .att-alert > .att-alert-state {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 4px;
+  }
+  .att-alerts {
+    max-height: 340px;
+  }
+}
+
+/* Long names wrap to two lines instead of being cut. */
+.ros-grid .cell .who {
+  align-items: flex-start;
+}
+.ros-grid .cell .who svg {
+  margin-top: 2px;
+}
+.ros-grid .cell .who-name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+/* A long absence list scrolls inside its card so the rest of the tab stays in reach. */
+.att-record-main .list {
+  max-height: min(78vh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 860px) {
+  .att-guard .k-person-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

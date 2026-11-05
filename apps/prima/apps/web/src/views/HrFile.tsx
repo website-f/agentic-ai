@@ -1,13 +1,27 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { HIRING_DOC_LABEL, HOSPITAL_DOC_LABEL, HOSPITAL_STAGE_LABEL, LEAVE_LABEL, type HospitalClaimStage, type ProofInput } from '@prima/core';
 import { api, type GuardProfile, type HiringDocKind } from '../api';
 import { Chip, ErrorNotice, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Steps, type StepState } from '../kit';
 import { DocList, ProofPicker } from './Proof';
 
 /**
  * A worker's HR file (Shahirah, 26 Oct 2026): the hiring papers every worker must have, every MC uploaded and approved,
  * the hospitalisation claim papers with a tracker, and the claims and disciplinary policies in plain view.
  */
+
+/** One section of a person's profile: a heading with an optional summary on the right, then its body (people.css). */
+export function Sec({ title, aside, children }: { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="pp-sec">
+      <div className="pp-sec-head">
+        <h3>{title}</h3>
+        {aside && <div className="pp-sec-aside">{aside}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export function HiringChecklist({ d }: { d: GuardProfile }) {
   const h = d.hiring;
@@ -16,16 +30,15 @@ export function HiringChecklist({ d }: { d: GuardProfile }) {
   const missing = h.items.filter((i) => !i.done).length;
   const mcGap = h.mc.total - h.mc.withDoc;
   return (
-    <section>
-      <h3>Hiring checklist</h3>
-      <div className="list">
+    <Sec title="Hiring checklist" aside={<Chip tone={missing ? 'warn' : 'ok'}>{missing ? `${missing} missing` : 'All on file'}</Chip>}>
+      <div className="list pp-box">
         {h.items.map((i) => (
-          <div key={i.kind} className="list-item" style={{ flexWrap: 'wrap' }}>
+          <div key={i.kind} className="list-item">
             <div>
               <div>{i.label}</div>
               <div className="muted small">{i.done ? `Uploaded by ${i.by}, ${dateTimeLabel(i.at!)}` : 'Not on file'}</div>
             </div>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="pp-chips">
               <Chip tone={i.done ? 'ok' : 'warn'}>{i.done ? 'On file' : 'Missing'}</Chip>
               {h.canUpload && adding !== i.kind && (
                 <button className="btn btn-sm" onClick={() => setAdding(i.kind as HiringDocKind)}>
@@ -47,17 +60,19 @@ export function HiringChecklist({ d }: { d: GuardProfile }) {
           <Chip tone={mcGap ? 'crit' : h.mc.waiting ? 'warn' : 'ok'}>{mcGap ? `${mcGap} without MC` : h.mc.waiting ? 'Waiting' : 'Complete'}</Chip>
         </div>
       </div>
-      <p className="muted small">
-        {missing ? `${missing} paper${missing > 1 ? 's' : ''} missing. ` : 'All hiring papers on file. '}
-        Every MC must be uploaded; the app does not accept sick leave without one.
-      </p>
-      {h.items.some((i) => i.done) && (
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowDocs(!showDocs)}>
-          {showDocs ? 'Hide the papers' : 'Open the papers'}
-        </button>
-      )}
+      <div className="pp-bar">
+        <p className="pp-note">
+          {missing ? `${missing} paper${missing > 1 ? 's' : ''} missing. ` : 'All hiring papers on file. '}
+          Every MC must be uploaded; the app does not accept sick leave without one.
+        </p>
+        {h.items.some((i) => i.done) && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowDocs(!showDocs)}>
+            {showDocs ? 'Hide the papers' : 'Open the papers'}
+          </button>
+        )}
+      </div>
       {showDocs && <PersonDocs personId={d.person.id} filter={(caption) => Object.values(HIRING_DOC_LABEL).includes(caption)} />}
-    </section>
+    </Sec>
   );
 }
 
@@ -72,10 +87,10 @@ function HiringUpload({ personId, kind, onDone }: { personId: string; kind: Hiri
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+    <div className="pp-form pp-inline">
       <ProofPicker site={null} refText="HR" items={proof} onChange={setProof} documentsOnly required />
       <ErrorNotice error={act.error} />
-      <div className="row">
+      <div className="pp-actions pp-start">
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !proof.length}
@@ -101,18 +116,32 @@ const STAGE_TONE: Record<HospitalClaimStage, 'info' | 'warn' | 'ok' | 'crit'> = 
   rejected: 'crit',
 };
 const NEXT_STAGE: Partial<Record<HospitalClaimStage, HospitalClaimStage>> = { collecting: 'submitted', submitted: 'approved', approved: 'paid' };
+const STAGE_ORDER: HospitalClaimStage[] = ['collecting', 'submitted', 'approved', 'paid'];
+
+/** Where the claim is, drawn as steps; a rejected claim stops after it was sent. */
+function claimSteps(stage: HospitalClaimStage): { label: string; state: StepState }[] {
+  if (stage === 'rejected')
+    return [
+      { label: HOSPITAL_STAGE_LABEL.collecting, state: 'done' },
+      { label: HOSPITAL_STAGE_LABEL.submitted, state: 'done' },
+      { label: HOSPITAL_STAGE_LABEL.rejected, state: 'stopped' },
+    ];
+  const at = STAGE_ORDER.indexOf(stage);
+  return STAGE_ORDER.map((s, i) => ({ label: HOSPITAL_STAGE_LABEL[s], state: i < at || (s === 'paid' && stage === 'paid') ? 'done' : i === at ? 'now' : 'todo' }));
+}
 
 /** Hospitalisation: the claim papers and where the claim is, one card per stay. */
 export function HospitalClaims({ d }: { d: GuardProfile }) {
   const stays = d.leave.requests.filter((q) => q.kind === 'HOSPITAL' && q.hospitalClaim);
   if (!stays.length) return null;
   return (
-    <section>
-      <h3>Hospitalisation claims</h3>
-      {stays.map((q) => (
-        <HospitalClaimCard key={q.id} q={q} canEdit={d.hiring.canUpload} />
-      ))}
-    </section>
+    <Sec title="Hospitalisation claims">
+      <div className="pp-claims">
+        {stays.map((q) => (
+          <HospitalClaimCard key={q.id} q={q} canEdit={d.hiring.canUpload} />
+        ))}
+      </div>
+    </Sec>
   );
 }
 
@@ -129,10 +158,10 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
   const update = (input: Parameters<typeof api.updateHospitalClaim>[1], p: ProofInput[] = [], ok = 'Claim updated.') =>
     act.run(() => api.updateHospitalClaim(q.id, input, p), ok);
   return (
-    <div className="panel" style={{ padding: 10, marginBottom: 10 }}>
-      <div className="panel-head">
+    <div className="pp-box pp-claim">
+      <div className="pp-claim-head">
         <div>
-          <div style={{ fontWeight: 600 }}>
+          <div className="pp-strong">
             {dateLabel(q.from)}
             {q.to !== q.from ? ` to ${dateLabel(q.to)}` : ''} · {q.days} d
           </div>
@@ -142,9 +171,12 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
         </div>
         <Chip tone={STAGE_TONE[c.stage]}>{HOSPITAL_STAGE_LABEL[c.stage]}</Chip>
       </div>
-      <div className="list">
+      <div className="pp-claim-steps">
+        <Steps steps={claimSteps(c.stage)} />
+      </div>
+      <div className="list pp-claim-docs">
         {c.docs.map((x) => (
-          <div key={x.item} className="list-item" style={{ flexWrap: 'wrap' }}>
+          <div key={x.item} className="list-item">
             <div>
               <div>{HOSPITAL_DOC_LABEL[x.item]}</div>
               {x.at && (
@@ -153,7 +185,7 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
                 </div>
               )}
             </div>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="pp-chips">
               <Chip tone={x.status === 'received' ? 'ok' : x.status === 'not_needed' ? 'neutral' : 'warn'}>
                 {x.status === 'received' ? 'Received' : x.status === 'not_needed' ? 'Not needed' : 'Missing'}
               </Chip>
@@ -171,9 +203,9 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
               )}
             </div>
             {adding === x.item && (
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              <div className="pp-form pp-inline">
                 <ProofPicker site={null} refText="Hospital" items={proof} onChange={setProof} documentsOnly required />
-                <div className="row">
+                <div className="pp-actions pp-start">
                   <button
                     className="btn btn-primary btn-sm"
                     disabled={act.busy || !proof.length}
@@ -193,7 +225,7 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
         ))}
       </div>
       {canEdit && next && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+        <div className="pp-form pp-claim-move">
           {c.stage === 'collecting' && (
             <label className="field">
               <span className="label">Insurer</span>
@@ -210,7 +242,7 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
             <span className="label">Note (claim number, reason)</span>
             <input className="input" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Claim note" />
           </label>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
+          <div className="pp-actions pp-start">
             <button
               className="btn btn-primary btn-sm"
               disabled={act.busy}
@@ -229,11 +261,13 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <button className="btn btn-ghost btn-sm" onClick={() => setLog(!log)}>
-        {log ? 'Hide history' : `History (${c.history.length})`}
-      </button>
+      <div className="pp-claim-foot">
+        <button className="btn btn-ghost btn-sm" onClick={() => setLog(!log)} aria-expanded={log}>
+          {log ? 'Hide history' : `History (${c.history.length})`}
+        </button>
+      </div>
       {log && (
-        <div className="list">
+        <div className="list pp-claim-docs">
           {c.history.map((h, i) => (
             <div key={i} className="list-item">
               <span className="small">{h.text}</span>
@@ -251,14 +285,13 @@ function HospitalClaimCard({ q, canEdit }: { q: GuardProfile['leave']['requests'
 export function MedicalHistory({ d }: { d: GuardProfile }) {
   if (!d.medical) return null;
   return (
-    <section>
-      <h3>Illness details, last 12 months</h3>
-      <div className="list">
+    <Sec title="Illness details, last 12 months">
+      <div className="list pp-box">
         {d.medical.length === 0 && <div className="empty">No MC in the last 12 months.</div>}
         {d.medical.map((m) => (
           <div key={m.id} className="list-item">
             <div>
-              <div style={{ fontWeight: 600 }}>{m.illness}</div>
+              <div className="pp-strong">{m.illness}</div>
               <div className="muted small">
                 {LEAVE_LABEL[m.kind]} · {dateLabel(m.from)}
                 {m.to !== m.from ? ` to ${dateLabel(m.to)}` : ''} ({m.days} d){m.clinic ? ` · ${m.clinic}` : ''}
@@ -268,22 +301,21 @@ export function MedicalHistory({ d }: { d: GuardProfile }) {
           </div>
         ))}
       </div>
-      <p className="muted small">Medical details are seen only by the worker, their company and HR.</p>
-    </section>
+      <p className="pp-note">Medical details are seen only by the worker, their company and HR.</p>
+    </Sec>
   );
 }
 
 export function ClaimsPolicy({ d, self }: { d: GuardProfile; self?: boolean }) {
   const r = d.policies.claims;
   return (
-    <section>
-      <h3>What can be claimed</h3>
-      <div className="list">
+    <Sec title="What can be claimed">
+      <div className="list pp-box">
         {r.value.map((c) => (
           <div key={c.clause} className="list-item">
             <div>
               <div>
-                <span className="mono small">{c.clause}</span> {c.item}
+                <span className="mono small pp-clause">{c.clause}</span> {c.item}
               </div>
               {c.note && <div className="muted small">{c.note}</div>}
             </div>
@@ -291,40 +323,42 @@ export function ClaimsPolicy({ d, self }: { d: GuardProfile; self?: boolean }) {
           </div>
         ))}
       </div>
-      <p className="muted small">
-        {self ? null : <>{r.id} · Draft. {r.source}</>}
-      </p>
-    </section>
+      {!self && (
+        <p className="pp-note">
+          {r.id} · Draft. {r.source}
+        </p>
+      )}
+    </Sec>
   );
 }
 
 export function DisciplinePolicy({ d }: { d: GuardProfile }) {
   const r = d.policies.discipline;
   return (
-    <section>
-      <details>
-        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Disciplinary policy and who decides</summary>
-        <div className="list" style={{ marginTop: 8 }}>
-          {r.value.steps.map((s, i) => (
-            <div key={s.step} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-              <div style={{ fontWeight: 600 }}>
-                {i + 1}. {s.step}
-              </div>
-              <div className="small">{s.when}</div>
-              <div className="muted small">
-                Decided by: {s.by} · Kept on record: {s.keep}
-              </div>
-            </div>
-          ))}
+    <section className="pp-sec">
+      <details className="pp-box pp-details">
+        <summary>Disciplinary policy and who decides</summary>
+        <div className="pp-details-body">
+          <ol className="list pp-policy-steps">
+            {r.value.steps.map((s) => (
+              <li key={s.step} className="list-item pp-stack">
+                <div className="pp-strong">{s.step}</div>
+                <div className="small">{s.when}</div>
+                <div className="muted small">
+                  Decided by: {s.by} · Kept on record: {s.keep}
+                </div>
+              </li>
+            ))}
+          </ol>
+          <ul className="small pp-principles">
+            {r.value.principles.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+          <p className="pp-note">
+            {r.id} · Draft. {r.source}
+          </p>
         </div>
-        <ul className="small" style={{ paddingLeft: 18 }}>
-          {r.value.principles.map((p) => (
-            <li key={p}>{p}</li>
-          ))}
-        </ul>
-        <p className="muted small">
-          {r.id} · Draft. {r.source}
-        </p>
       </details>
     </section>
   );

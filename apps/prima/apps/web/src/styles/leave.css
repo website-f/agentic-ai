@@ -1,0 +1,554 @@
+/* P71: leave and claims (Claims.tsx, HrLeave.tsx). An approval inbox: one card per request, who decides next, one
+   clear decision. Colours only through the theme's variables so dark mode follows. */
+
+/* ---------- Layout ---------- */
+/* Every single-column grid here is bounded by its container, so a wide child (filters, a long name) scrolls or wraps
+   inside instead of widening the page. */
+.lv-col,
+.lv-inbox,
+.lv-rates,
+.lv-enter,
+.lv-pad,
+.lv-group,
+.lv-stack,
+.lv-rows,
+.lv-req,
+.lv-receipt,
+.lv-formbox,
+.lv-trip {
+  grid-template-columns: minmax(0, 1fr);
+}
+.lv-page {
+  gap: 20px;
+}
+.lv-mine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 1180px) {
+  .lv-mine {
+    grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+  }
+}
+.lv-col,
+.lv-inbox,
+.lv-rates,
+.lv-enter {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.lv-pad {
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  container-type: inline-size;
+}
+.lv-divide {
+  border-top: 1px solid var(--line);
+}
+.lv-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.lv-group-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  padding-left: 2px;
+}
+.lv-stack {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.lv-title-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.lv-title-icon svg {
+  color: var(--accent);
+}
+.lv-spacer {
+  flex: 1 1 auto;
+}
+.lv-break {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- One request (claim, trip, flexible work) ---------- */
+.lv-req {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.lv-stack > .lv-req {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+.lv-rows {
+  display: grid;
+  min-width: 0;
+}
+.lv-rows > * + * {
+  border-top: 1px solid var(--line);
+}
+.lv-req-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 12px;
+}
+.lv-req-head:not(:has(> .k-avatar, > .lv-kind)) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.lv-req-who,
+.lv-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.lv-req-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+.lv-req-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.lv-req-amt {
+  display: grid;
+  justify-items: end;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.lv-req-amt strong {
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.lv-req-status {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.lv-req-text {
+  font-size: 0.86rem;
+  color: var(--muted);
+  max-width: 75ch;
+  margin: 0;
+}
+.lv-kind {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.lv-kind-lg {
+  width: 40px;
+  height: 40px;
+  border-radius: 30%;
+}
+.lv-trip {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.lv-trip .k-facts {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px 20px;
+}
+.lv-trip .k-facts dd {
+  font-size: 0.86rem;
+}
+.lv-steps {
+  padding-top: 2px;
+}
+/* The line between steps starts where the label's own background does, so no stub shows beside the dot. */
+.lv-steps .k-step:not(:last-child)::after {
+  left: 32px;
+}
+.lv-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--line);
+  display: grid;
+  gap: 2px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+div.lv-trail {
+  display: block;
+}
+.lv-req-act {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.lv-decide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.lv-decide-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.lv-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 75ch;
+  margin: 0;
+}
+
+/* ---------- Simple rows (trips, holidays, staff, claimed receipts) ---------- */
+.lv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.lv-row > .lv-row-text {
+  flex: 1 1 140px;
+}
+.lv-row > .chip,
+.lv-row > .btn {
+  flex: none;
+}
+.lv-remove {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1 1 260px;
+  max-width: 420px;
+  min-width: 0;
+}
+.lv-remove .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lv-remove .btn {
+  flex: none;
+}
+
+/* Holidays: a calendar leaf per day; a removed one is struck through and dimmed. */
+.lv-leaf {
+  display: inline-grid;
+  grid-template-rows: auto 1fr;
+  flex: none;
+  width: 44px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+  text-align: center;
+}
+.lv-leaf-m {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 0;
+}
+.lv-leaf-d {
+  font-size: 1.05rem;
+  font-weight: 650;
+  padding: 2px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.lv-holiday[data-removed='true'] .lv-strike {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.lv-holiday[data-removed='true'] .lv-leaf {
+  opacity: 0.55;
+}
+
+/* HR staff settings: the open editor under a row. */
+.lv-staff-edit {
+  margin: 0 18px 14px;
+}
+.lv-staff-groups {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 24px;
+  align-items: end;
+}
+.lv-staff-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  justify-items: start;
+}
+.lv-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.lv-inline .select {
+  width: auto;
+  min-width: 140px;
+}
+.lv-days {
+  width: 90px;
+}
+
+/* ---------- Forms: two columns of labelled fields, the action bottom right ---------- */
+.lv-formbox {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+  min-width: 0;
+  container-type: inline-size;
+}
+.lv-formbox-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.lv-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+  min-width: 0;
+}
+.lv-form > .field {
+  min-width: 0;
+}
+.lv-full,
+.lv-form > .notice,
+.lv-form > .lv-hint {
+  grid-column: 1 / -1;
+}
+.lv-form-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 4px;
+}
+.lv-form-foot > .notice {
+  flex: 1 1 100%;
+}
+@container (max-width: 360px) {
+  .lv-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container (max-width: 480px) {
+  .lv-staff-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Filters ---------- */
+.lv-seg {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lv-seg::-webkit-scrollbar {
+  display: none;
+}
+.lv-seg button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.lv-seg button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lv-seg-n {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.lv-seg button[aria-pressed='true'] .lv-seg-n {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Receipt wallet ---------- */
+.lv-wallet-top {
+  border-bottom: 1px solid var(--line);
+}
+.lv-wallet-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lv-filebtn {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.lv-filebtn input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.lv-filebtn:focus-within {
+  box-shadow: var(--ring);
+}
+.lv-receipt {
+  display: grid;
+  gap: 12px;
+  padding: 14px 18px;
+  min-width: 0;
+  container-type: inline-size;
+}
+.lv-receipt-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+}
+/* Fixed places, so a thumbnail that fails to load (and hides) leaves the name and status where they are. */
+.lv-receipt-head > .lv-thumb,
+.lv-receipt-head > .lv-kind {
+  grid-column: 1;
+}
+.lv-receipt-head > .lv-row-text {
+  grid-column: 2;
+}
+.lv-receipt-head > .lv-req-status {
+  grid-column: 3;
+}
+.lv-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.lv-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+@container (max-width: 620px) {
+  .lv-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 340px) {
+  .lv-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.lv-receipt-act {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.lv-claimed {
+  border-top: 1px solid var(--line);
+  padding-block: 10px;
+  justify-items: start;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+  .lv-req {
+    padding: 14px;
+  }
+  .lv-row {
+    padding: 12px 14px;
+  }
+  .lv-pad {
+    padding: 14px;
+  }
+  .lv-staff-edit {
+    margin: 0 14px 14px;
+  }
+  /* Who and the amount on top; the status under them. */
+  .lv-req-head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .lv-req-head:not(:has(> .k-avatar, > .lv-kind)) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lv-req-status {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .lv-receipt-head > .lv-req-status {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+  .lv-decide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The steps two to a row, without the connecting line. */
+  .lv-steps .k-step {
+    flex: 1 1 45%;
+  }
+  .lv-remove {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .lv-form-foot .btn {
+    flex: 1 1 auto;
+  }
+  .lv-seg {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .lv-trip .k-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .lv-form,
+  .lv-staff-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

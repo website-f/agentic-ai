@@ -1,0 +1,510 @@
+/* P71: People and HR (People.tsx, HrFile.tsx, Hr.tsx). Colours come only from the theme variables in styles.css. */
+
+/* ---------- People: the directory ---------- */
+.pp-toolbar {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+/* The list scrolls inside its card, so the training panel below stays within reach. */
+.table-wrap.pp-table {
+  border: 0;
+  border-radius: 0;
+  overflow: auto;
+  max-height: min(760px, 72vh);
+}
+.pp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+/* The training panel stacks some rows as columns; there a row keeps its natural height. */
+.pp-page > .panel .list-item > div {
+  flex-basis: auto;
+}
+.pp-table td {
+  vertical-align: middle;
+}
+.pp-table td:first-child {
+  max-width: 0;
+  width: 55%;
+}
+.pp-cap {
+  text-transform: capitalize;
+}
+.pp-row-open {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.pp-row-open:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.pp-row-open .k-person {
+  max-width: 100%;
+}
+.pp-row-open .k-person-sub .mono {
+  font-size: 0.95em;
+}
+
+/* ---------- The person drawer ---------- */
+.pp-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.pp-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.pp-hero-chips,
+.pp-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pp-hero-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+.tabbar.pp-tabs {
+  flex-wrap: wrap;
+  gap: 2px;
+  border-radius: var(--r-md);
+  width: auto;
+}
+.tabbar.pp-tabs button {
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+}
+/* The drawer body is a scrolling flex column: its parts keep their height. */
+.pp-hero,
+.tabbar.pp-tabs,
+.pp-tab {
+  flex: none;
+}
+
+/* ---------- Profile sections (also used on My details) ---------- */
+.pp-tab {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.pp-sec {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.pp-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+.pp-sec-head h3 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+.pp-sec-aside {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pp-box {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+  overflow: hidden;
+}
+.pp-pad {
+  padding: 14px 16px;
+}
+.pp-box > .list-item,
+.pp-box .list > .list-item {
+  padding: 11px 14px;
+}
+/* Keep a status chip beside its text where the row has room. */
+.pp-box .list-item:not(.pp-stack) > div:first-child {
+  flex: 1 1 170px;
+}
+.pp-box .empty {
+  padding: 18px 14px;
+}
+.pp-box .empty::before {
+  display: none;
+}
+.pp-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 75ch;
+  line-height: 1.45;
+}
+.pp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.pp-bar .pp-note {
+  flex: 1 1 260px;
+}
+.pp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.list-item > .pp-chips {
+  flex: none;
+}
+.pp-strong {
+  font-weight: 600;
+}
+.pp-total {
+  font-weight: 600;
+  background: var(--surface-2);
+}
+.list-item.pp-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.list-item.pp-stack > div {
+  flex: none;
+  min-width: 0;
+}
+.pp-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px 12px;
+}
+.pp-line > div {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.pp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pp-actions.pp-start {
+  justify-content: flex-start;
+}
+.pp-form {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.pp-stack > .pp-form {
+  margin-top: 6px;
+}
+.list-item > .pp-inline {
+  flex: 1 1 100%;
+  margin-top: 4px;
+}
+.list-item.pp-pin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.pp-pin > .input {
+  min-width: 0;
+}
+.pp-clause {
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+/* Hospitalisation claims: one box per stay, with where the claim is. */
+.pp-claims {
+  display: grid;
+  gap: 12px;
+}
+.pp-claim {
+  display: grid;
+}
+.pp-claim-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.pp-claim-head > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.pp-claim-steps {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.pp-claim-docs > .list-item {
+  padding: 10px 14px;
+}
+.pp-claim-move {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.pp-claim > .notice {
+  margin: 8px 14px 0;
+}
+.pp-claim-foot {
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+}
+
+/* Disciplinary policy: folded away, numbered steps when open. */
+.pp-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 12px 14px;
+  list-style-position: inside;
+}
+.pp-details[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.pp-details-body {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.pp-details-body > .pp-note,
+.pp-details-body > .pp-principles {
+  margin: 0 14px;
+}
+.pp-policy-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pp-step;
+}
+.pp-policy-steps > li {
+  counter-increment: pp-step;
+  padding: 10px 14px;
+}
+.pp-policy-steps > li > .pp-strong::before {
+  content: counter(pp-step) '. ';
+}
+.pp-principles {
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+/* ---------- HR monitor ---------- */
+.hr-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hr-jump button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 32px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.hr-jump button:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft);
+}
+.hr-jump button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.hr-group {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  scroll-margin-top: 80px;
+}
+.hr-group-head {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.hr-group-head h2 {
+  font-size: 1.05rem;
+}
+.hr-group-head p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 75ch;
+}
+.hr-group-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+/* A group with no panel for this user disappears, with its jump button. */
+.hr-group:has(> .hr-group-body:empty) {
+  display: none;
+}
+.hr-page:has(#hr-g-pay > .hr-group-body:empty) .hr-jump [data-for='hr-g-pay'],
+.hr-page:has(#hr-g-move > .hr-group-body:empty) .hr-jump [data-for='hr-g-move'],
+.hr-page:has(#hr-g-cases > .hr-group-body:empty) .hr-jump [data-for='hr-g-cases'],
+.hr-page:has(#hr-g-grow > .hr-group-body:empty) .hr-jump [data-for='hr-g-grow'],
+.hr-page:has(#hr-g-leave > .hr-group-body:empty) .hr-jump [data-for='hr-g-leave'] {
+  display: none;
+}
+.table-wrap.hr-table {
+  border: 0;
+  border-radius: 0;
+}
+.hr-table td {
+  vertical-align: middle;
+}
+.hr-table td:first-child {
+  min-width: 200px;
+}
+.hr-unknown {
+  display: grid;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.hr-unknown-head {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--unknown);
+}
+.hr-unknown-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hr-num[data-tone='crit'] {
+  color: var(--crit);
+  font-weight: 600;
+}
+.hr-num[data-tone='warn'] {
+  color: var(--warn);
+  font-weight: 600;
+}
+.hr-company {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.hr-company:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.hr-company-name {
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .pp-toolbar {
+    padding: 12px;
+  }
+  .pp-toolbar .seg {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .pp-table td:first-child {
+    width: 72%;
+  }
+  .pp-hero {
+    padding: 10px 12px;
+  }
+  .hr-jump {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: -4px;
+    padding-inline: 4px;
+  }
+  .hr-jump::-webkit-scrollbar {
+    display: none;
+  }
+  .hr-jump button {
+    flex: none;
+  }
+}
+
+/* Grid columns never grow past the screen: wide tables scroll inside their card instead. */
+.pp-tab,
+.pp-sec,
+.pp-form,
+.pp-claims,
+.pp-claim,
+.hr-group,
+.hr-group-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* Panels from the other HR screens keep to the column on a phone: fields shrink, stacked rows keep their own height. */
+.hr-group-body > .panel {
+  min-width: 0;
+}
+.hr-group-body .panel :is(select, input, textarea) {
+  max-width: 100%;
+}
+.hr-group-body .list-item[style*='column'] > div {
+  flex-basis: auto;
+}
+.hr-group-body .list-item > .row {
+  max-width: 100%;
+  min-width: 0;
+}
+.pp-box .k-facts {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px 20px;
+}
+/* Long column names wrap so more of the company table fits before it scrolls. */
+.hr-table th {
+  white-space: normal;
+  vertical-align: bottom;
+  min-width: 64px;
+}

@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
+import { Avatar, Card, Facts, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
 import { LeaveForm } from './Leave';
 import { SocsoTab } from './Socso';
-import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory } from './HrFile';
+import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory, Sec } from './HrFile';
 import { SHIFT_STATE } from './shared';
 import { RecordButton } from './RecordForm';
 import { GuardTrainingPanel } from './HrDevelop';
+import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
   const { companyId: chosen, me } = useApp();
@@ -29,55 +32,70 @@ export function People({ openPersonId }: { openPersonId?: string }) {
     );
   const rows = (data ?? []).filter((r) => (filter === 'blocked' ? !r.deployable : filter === 'np' ? r.person.nationality === 'NP' : true));
   const blockedCount = (data ?? []).filter((r) => !r.deployable).length;
+  const dueCount = (data ?? []).filter((r) => r.deployable && r.warnings).length;
+  const okCount = (data ?? []).filter((r) => r.deployable && !r.warnings).length;
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{hr ? 'People' : 'Guards'}</h1>
-          <p>
+    <div className="page pp-page">
+      <PageHead
+        title={hr ? 'People' : 'Guards'}
+        sub={
+          <>
             Allowed to work means a valid KDN guard card (or vetting already submitted in eSIMS while KDN decides), CSG training done within the first year of
             work, age 60 or under, and for Nepali guards a valid permit, passport, FOMEMA and insurance.
-          </p>
-        </div>
-        <div className="row">
-          <input id="people-search" className="input" placeholder="Search name or staff number" value={q} onChange={(e) => setQ(e.target.value)} />
-          <div className="seg" role="group" aria-label="Filter">
-            <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-              All
-            </button>
-            <button aria-pressed={filter === 'blocked'} onClick={() => setFilter('blocked')}>
-              Not allowed ({blockedCount})
-            </button>
-            {me.user.department !== 'hr' && (
-              <button aria-pressed={filter === 'np'} onClick={() => setFilter('np')}>
-                Nepali
+          </>
+        }
+        actions={<RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" />}
+      />
+
+      {data && (
+        <Stats>
+          <Stat label={q ? 'Found' : 'On the list'} value={data.length} icon={<UsersThreeIcon />} tone="info" onClick={() => setFilter('all')} />
+          <Stat label="Allowed to work" value={okCount} icon={<CheckCircleIcon />} tone={okCount ? 'ok' : 'neutral'} />
+          <Stat label="Allowed, papers due" value={dueCount} icon={<WarningIcon />} tone={dueCount ? 'warn' : 'neutral'} />
+          <Stat label="Not allowed" value={blockedCount} icon={<ProhibitIcon />} tone={blockedCount ? 'crit' : 'ok'} onClick={() => setFilter('blocked')} />
+        </Stats>
+      )}
+
+      <Card flush>
+        <div className="pp-toolbar">
+          <Toolbar
+            end={
+              hr && (
+                <div className="seg" role="group" aria-label="Employer">
+                  <button aria-pressed={!central} onClick={() => setCentral(false)}>
+                    Chosen company
+                  </button>
+                  <button aria-pressed={central} onClick={() => setCentral(true)}>
+                    PWVSB central staff
+                  </button>
+                </div>
+              )
+            }
+          >
+            <Search value={q} onChange={setQ} placeholder="Search name or staff number" />
+            <div className="seg" role="group" aria-label="Filter">
+              <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+                All
               </button>
-            )}
-          </div>
-          {hr && (
-            <div className="seg" role="group" aria-label="Employer">
-              <button aria-pressed={!central} onClick={() => setCentral(false)}>
-                Chosen company
+              <button aria-pressed={filter === 'blocked'} onClick={() => setFilter('blocked')}>
+                Not allowed ({blockedCount})
               </button>
-              <button aria-pressed={central} onClick={() => setCentral(true)}>
-                PWVSB central staff
-              </button>
+              {me.user.department !== 'hr' && (
+                <button aria-pressed={filter === 'np'} onClick={() => setFilter('np')}>
+                  Nepali
+                </button>
+              )}
             </div>
-          )}
-          <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" />
+          </Toolbar>
         </div>
-      </div>
-      <GuardTrainingPanel />
-      <section className="panel">
         {!data && <Loading what="guards" />}
         {data && (
-          <div className="table-wrap">
+          <div className="table-wrap pp-table">
             <table>
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Staff no</th>
                   <th className="hide-sm">Role</th>
                   <th className="hide-sm">From</th>
                   <th>Can work</th>
@@ -86,9 +104,12 @@ export function People({ openPersonId }: { openPersonId?: string }) {
               <tbody>
                 {rows.slice(0, 300).map((r) => (
                   <tr key={r.person.id} className="clickable" onClick={() => setOpen(r.person.id)}>
-                    <td style={{ fontWeight: 600 }}>{r.person.name}</td>
-                    <td className="mono">{r.person.staffNo}</td>
-                    <td className="hide-sm">{r.person.role.replace('_', ' ')}</td>
+                    <td>
+                      <button type="button" className="pp-row-open" onClick={(e) => (e.stopPropagation(), setOpen(r.person.id))}>
+                        <Person name={r.person.name} sub={<span className="mono">{r.person.staffNo}</span>} size={34} />
+                      </button>
+                    </td>
+                    <td className="hide-sm pp-cap">{r.person.role.replace('_', ' ')}</td>
                     <td className="hide-sm">{r.person.nationality === 'NP' ? 'Nepal' : 'Malaysia'}</td>
                     <td>{r.deployable ? r.warnings ? <Chip tone="warn">Yes, papers due</Chip> : <Chip tone="ok">Yes</Chip> : <Chip tone="crit">No</Chip>}</td>
                   </tr>
@@ -99,13 +120,21 @@ export function People({ openPersonId }: { openPersonId?: string }) {
             {rows.length === 0 && <div className="empty">Nobody matches.</div>}
           </div>
         )}
-      </section>
+      </Card>
+
+      <GuardTrainingPanel />
       {open && <PersonDrawer personId={open} onClose={() => setOpen(undefined)} />}
     </div>
   );
 }
 
 type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits';
+
+const STATUS_LABEL: Record<string, [string, 'ok' | 'warn' | 'neutral']> = {
+  active: ['Active', 'ok'],
+  suspended: ['Suspended', 'warn'],
+  left: ['Left', 'neutral'],
+};
 
 /**
  * The guard profile (Fauzan, 25 Oct 2026): HR details, papers and training with what comes next, hours worked,
@@ -129,9 +158,20 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
         ...(prof.data.access.pay ? ([['benefits', 'Benefits']] as [Tab, string][]) : []),
       ]
     : [];
+  const blocked = data ? data.findings.some((f) => f.level === 'block') : false;
+  const status = p ? STATUS_LABEL[p.status] : undefined;
   return (
     <Drawer
-      title={p?.name ?? 'Guard'}
+      title={
+        p ? (
+          <span className="pp-title">
+            <Avatar name={p.name} size={40} />
+            <span>{p.name}</span>
+          </span>
+        ) : (
+          'Guard'
+        )
+      }
       sub={p ? `${p.staffNo} · ${p.jobTitle ?? ROLE_LABEL[p.role]} · ${data?.branch?.name ?? ''}` : undefined}
       onClose={onClose}
     >
@@ -139,13 +179,30 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
       {!data && !basic.error && <Loading what="profile" />}
       {data && p && (
         <>
-          {p.role === 'office' && (
-            <div className="row" style={{ justifyContent: 'flex-end' }}>
-              <RecordButton kind="officeStaff" id={p.id} label="Edit staff details" />
+          <div className="pp-hero">
+            <div className="pp-hero-chips">
+              {status && <Chip tone={status[1]}>{status[0]}</Chip>}
+              <Chip tone="neutral">{p.nationality === 'NP' ? 'Nepal' : 'Malaysia'}</Chip>
+              {p.role !== 'office' &&
+                (blocked ? (
+                  <Chip tone="crit">Cannot work today</Chip>
+                ) : data.findings.length ? (
+                  <Chip tone="warn">Can work, papers due</Chip>
+                ) : (
+                  <Chip tone="ok">Can work</Chip>
+                ))}
             </div>
-          )}
+            <div className="pp-hero-actions">
+              {/\d/.test(p.phone) && (
+                <a className="btn btn-sm" href={`tel:${p.phone.replace(/[^\d+]/g, '')}`}>
+                  <PhoneIcon /> Call
+                </a>
+              )}
+              {p.role === 'office' && <RecordButton kind="officeStaff" id={p.id} label="Edit staff details" />}
+            </div>
+          </div>
           {tabs.length > 0 && (
-            <div className="tabbar" role="tablist" aria-label="Profile sections" style={{ flexWrap: 'wrap' }}>
+            <div className="tabbar pp-tabs" role="tablist" aria-label="Profile sections">
               {tabs.map(([k, label]) => (
                 <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
                   {label}
@@ -173,52 +230,41 @@ const ROLE_LABEL: Record<string, string> = { guard: 'Guard', supervisor: 'Office
 export function WorkTab({ data }: { data: PersonDetail }) {
   const p = data.person;
   return (
-    <>
-      <div className="grid-2">
-        <div>
-          <div className="label">Identity (masked)</div>
-          <div className="mono">{p.idMasked}</div>
+    <div className="pp-tab">
+      <Sec title="Personal and employment">
+        <div className="pp-box pp-pad">
+          <Facts
+            items={[
+              ['Identity (masked)', <span className="mono">{p.idMasked}</span>],
+              ['Born', dateLabel(p.dob)],
+              ['Phone', <span className="mono">{p.phone}</span>],
+              ['Joined', dateLabel(p.hiredOn)],
+              ['Face for clock-in', p.faceEnrolledOn ? `Enrolled ${dateLabel(p.faceEnrolledOn)}` : <Chip tone="warn">Not enrolled</Chip>],
+            ]}
+          />
         </div>
-        <div>
-          <div className="label">Born</div>
-          <div>{dateLabel(p.dob)}</div>
-        </div>
-        <div>
-          <div className="label">Phone</div>
-          <div className="mono">{p.phone}</div>
-        </div>
-        <div>
-          <div className="label">Joined</div>
-          <div>{dateLabel(p.hiredOn)}</div>
-        </div>
-        <div>
-          <div className="label">Face for clock-in</div>
-          <div>{p.faceEnrolledOn ? `Enrolled ${dateLabel(p.faceEnrolledOn)}` : <Chip tone="warn">Not enrolled</Chip>}</div>
-        </div>
-      </div>
-      {'hiring' in data && <HiringChecklist d={data as GuardProfile} />}
-      {(data.canSetPin || data.accounts.length > 0) && <AccessSection data={data} />}
+      </Sec>
       {p.role !== 'office' && (
-        <section>
-          <h3>Can this guard work today?</h3>
+        <Sec title="Can this guard work today?">
           {data.findings.length === 0 ? (
             <div className="notice" data-tone="ok">
               Yes. All required papers are valid.
             </div>
           ) : (
-            <Findings items={data.findings} />
+            <div className="pp-box pp-pad">
+              <Findings items={data.findings} />
+            </div>
           )}
           {data.armedFindings.some((f) => f.code === 'MISSING_FIREARM_PERMIT' || f.code === 'EXPIRED_FIREARM_PERMIT') && (
-            <p className="muted small" style={{ marginTop: 6 }}>
-              Not cleared for armed posts.
-            </p>
+            <p className="pp-note">Not cleared for armed posts.</p>
           )}
-        </section>
+        </Sec>
       )}
+      {'hiring' in data && <HiringChecklist d={data as GuardProfile} />}
+      {(data.canSetPin || data.accounts.length > 0) && <AccessSection data={data} />}
       {p.role !== 'office' && (
-        <section>
-          <h3>Shifts, last and next 7 days</h3>
-          <div className="list">
+        <Sec title="Shifts, last and next 7 days">
+          <div className="list pp-box">
             {data.shifts.length === 0 && <div className="empty">No shifts.</div>}
             {data.shifts.map((s) => (
               <div key={s.id} className="list-item">
@@ -232,9 +278,9 @@ export function WorkTab({ data }: { data: PersonDetail }) {
               </div>
             ))}
           </div>
-        </section>
+        </Sec>
       )}
-    </>
+    </div>
   );
 }
 
@@ -250,10 +296,9 @@ function AccessSection({ data }: { data: PersonDetail }) {
   const [from, setFrom] = useState('');
   const p = data.person;
   return (
-    <section>
-      <h3>PIN and Prima access</h3>
+    <Sec title="PIN and Prima access">
       <ErrorNotice error={act.error} />
-      <div className="list">
+      <div className="list pp-box">
         <div className="list-item">
           <div>
             <div>PIN for site devices and witness sign-offs</div>
@@ -262,7 +307,7 @@ function AccessSection({ data }: { data: PersonDetail }) {
           {data.pinSet ? <Chip tone="ok">Set</Chip> : <Chip tone="warn">Not set</Chip>}
         </div>
         {data.canSetPin && p.status === 'active' && (
-          <div className="list-item" style={{ gap: 8 }}>
+          <div className="list-item pp-pin">
             <input
               className="input"
               type="password"
@@ -284,8 +329,8 @@ function AccessSection({ data }: { data: PersonDetail }) {
           </div>
         )}
         {data.accounts.map((a) => (
-          <div key={a.userId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div key={a.userId} className="list-item pp-stack">
+            <div className="pp-line">
               <div>
                 <div>Prima account: {a.title}</div>
                 {a.closed && <div className="muted small">Closed by {a.closed.by}: {a.closed.reason}</div>}
@@ -293,21 +338,21 @@ function AccessSection({ data }: { data: PersonDetail }) {
               {a.closedFrom ? <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip> : <Chip tone="ok">Open</Chip>}
             </div>
             {a.canClose && !a.closedFrom && closing !== a.userId && (
-              <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <div className="pp-actions">
                 <button className="btn btn-sm" onClick={() => setClosing(a.userId)}>
                   Close access
                 </button>
               </div>
             )}
             {closing === a.userId && (
-              <>
+              <div className="pp-form">
                 <input className="input" aria-label="Reason" placeholder="Reason, e.g. resigned, contract ended, dismissed" value={reason} onChange={(e) => setReason(e.target.value)} />
                 <label className="field">
                   <span className="label">From (empty means now)</span>
                   <input className="input" type="date" aria-label="Close from" value={from} onChange={(e) => setFrom(e.target.value)} />
                 </label>
                 <p className="muted small">From that day Prima refuses this account and its company grants end. IT still disables the Microsoft account.</p>
-                <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+                <div className="pp-actions">
                   <button className="btn btn-sm" onClick={() => setClosing(null)}>
                     Cancel
                   </button>
@@ -323,26 +368,25 @@ function AccessSection({ data }: { data: PersonDetail }) {
                     Close access
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         ))}
       </div>
-    </section>
+    </Sec>
   );
 }
 
 export function TrainingTab({ d }: { d: GuardProfile }) {
   return (
-    <>
-      <section>
-        <h3>Coming next</h3>
+    <div className="pp-tab">
+      <Sec title="Coming next">
         {d.next.length === 0 ? (
           <div className="notice" data-tone="ok">
             Nothing due in the next 90 days.
           </div>
         ) : (
-          <div className="list">
+          <div className="list pp-box">
             {d.next.map((n) => (
               <div key={n.type} className="list-item">
                 <div>
@@ -354,10 +398,9 @@ export function TrainingTab({ d }: { d: GuardProfile }) {
             ))}
           </div>
         )}
-      </section>
-      <section>
-        <h3>Licences, training and certificates</h3>
-        <div className="list">
+      </Sec>
+      <Sec title="Licences, training and certificates">
+        <div className="list pp-box">
           {d.credentials.length === 0 && <div className="empty">None needed for this job.</div>}
           {d.credentials.map((c) => (
             <div key={c.type} className="list-item">
@@ -375,10 +418,9 @@ export function TrainingTab({ d }: { d: GuardProfile }) {
             </div>
           ))}
         </div>
-      </section>
-      <section>
-        <h3>Chances to upgrade</h3>
-        <div className="list">
+      </Sec>
+      <Sec title="Chances to upgrade">
+        <div className="list pp-box">
           {d.upgrades.map((u) => (
             <div key={u.id} className="list-item">
               <div>
@@ -391,9 +433,9 @@ export function TrainingTab({ d }: { d: GuardProfile }) {
             </div>
           ))}
         </div>
-        <p className="muted small">Placeholder list until Group HR gives the real course catalogue and HRD Corp rules ({d.upgradeRule.id}).</p>
-      </section>
-    </>
+        <p className="pp-note">Placeholder list until Group HR gives the real course catalogue and HRD Corp rules ({d.upgradeRule.id}).</p>
+      </Sec>
+    </div>
   );
 }
 
@@ -404,28 +446,27 @@ export function TrainingTab({ d }: { d: GuardProfile }) {
 export function HoursTab({ d, self }: { d: GuardProfile; self?: boolean }) {
   const m = d.hours;
   return (
-    <>
+    <div className="pp-tab">
       <div className="kpis">
         <Kpi label="Hours this month" value={m.thisMonth.hours} note={`${m.thisMonth.days} days, ${m.thisMonth.overtimeHours} h overtime`} />
         <Kpi label="Hours last month" value={m.lastMonth.hours} note={`${m.lastMonth.days} days, ${m.lastMonth.overtimeHours} h overtime`} />
         <Kpi label="Missed shifts this month" value={m.thisMonth.missed} tone={m.thisMonth.missed ? 'warn' : 'ok'} note={`${m.thisMonth.late} late`} />
       </div>
-      {!d.pay && d.access.pay && jaOwns('payroll') && <p className="muted small">Pay and payslips are in the JA Group app.</p>}
+      {!d.pay && d.access.pay && jaOwns('payroll') && <p className="pp-note">Pay and payslips are in the JA Group app.</p>}
       {d.pay && (
-        <section>
-          <h3>Pay this month (estimate)</h3>
+        <Sec title="Pay this month (estimate)">
           {d.pay.basic == null ? (
             <div className="notice" data-tone="warn">
               No pay on record.
             </div>
           ) : (
-            <div className="list">
+            <div className="list pp-box">
               <div className="list-item">
                 <span>Basic pay</span>
                 <span className="mono">RM{d.pay.basic.toFixed(2)}</span>
               </div>
               {d.pay.workings.map((w, i) => (
-                <div key={w.label} className="list-item" style={i === d.pay!.workings.length - 1 ? { fontWeight: 600 } : undefined}>
+                <div key={w.label} className={i === d.pay!.workings.length - 1 ? 'list-item pp-total' : 'list-item'}>
                   <div>
                     <div>{w.label}</div>
                     {!self && (
@@ -440,14 +481,11 @@ export function HoursTab({ d, self }: { d: GuardProfile; self?: boolean }) {
               ))}
             </div>
           )}
-          <p className="muted small">
-            An estimate from clock-in times, before payroll. EPF, SOCSO, EIS and tax deductions come with the payroll rules and payslips.
-          </p>
-        </section>
+          <p className="pp-note">An estimate from clock-in times, before payroll. EPF, SOCSO, EIS and tax deductions come with the payroll rules and payslips.</p>
+        </Sec>
       )}
-      <section>
-        <h3>Hours day by day, this month</h3>
-        <div className="list">
+      <Sec title="Hours day by day, this month">
+        <div className="list pp-box">
           {m.days.length === 0 && <div className="empty">No clocked shift this month yet.</div>}
           {m.days.map((x) => (
             <div key={x.clockIn} className="list-item">
@@ -459,16 +497,16 @@ export function HoursTab({ d, self }: { d: GuardProfile; self?: boolean }) {
                   in {hhmm(x.clockIn)} · out {hhmm(x.clockOut)} · {x.normal} h normal{x.overtime ? ` + ${x.overtime} h overtime` : ''}
                 </div>
               </div>
-              <div className="row" style={{ gap: 6 }}>
+              <div className="pp-chips">
                 {x.late && <Chip tone="warn">Late</Chip>}
                 <span className="mono">{x.hours} h</span>
               </div>
             </div>
           ))}
         </div>
-        <p className="muted small">{self ? `Total this month: ${m.thisMonth.hours} h.` : `Hours over 8 in a day count as overtime. Total this month: ${m.thisMonth.hours} h.`}</p>
-      </section>
-    </>
+        <p className="pp-note">{self ? `Total this month: ${m.thisMonth.hours} h.` : `Hours over 8 in a day count as overtime. Total this month: ${m.thisMonth.hours} h.`}</p>
+      </Sec>
+    </div>
   );
 }
 
@@ -477,7 +515,7 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
   const [redo, setRedo] = useState<{ kind: (typeof d.leave.requests)[number]['kind']; from: string; to: string; reason: string; illness?: string; clinic?: string; mcNo?: string; correctsId?: string; reusedDocs?: number } | null>(null);
   const b = d.leave.balances;
   return (
-    <>
+    <div className="pp-tab">
       <div className="kpis">
         <Kpi
           label="Annual leave left"
@@ -489,24 +527,23 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
         {b.maternity.entitled > 0 && <Kpi label="Maternity leave" value={b.maternity.entitled} note={b.maternity.taken ? `${b.maternity.taken} taken this year` : 'consecutive days a birth'} />}
         {b.paternity.entitled > 0 && <Kpi label="Paternity leave" value={b.paternity.entitled - b.paternity.taken} note={`of ${b.paternity.entitled} days a birth`} />}
       </div>
-      <p className="muted small">
-        {b.years} year{b.years === 1 ? '' : 's'} of service. {b.note ? `${b.note} ` : ''}
-        {!self && b.rule.source}
-      </p>
-      {d.access.requestLeave && !asking && (
-        <div>
-          <button className="btn btn-sm" onClick={() => setAsking(true)}>
+      <div className="pp-bar">
+        <p className="pp-note">
+          {b.years} year{b.years === 1 ? '' : 's'} of service. {b.note ? `${b.note} ` : ''}
+          {!self && b.rule.source}
+        </p>
+        {d.access.requestLeave && !asking && (
+          <button className="btn btn-sm btn-primary" onClick={() => setAsking(true)}>
             {self ? 'Ask for leave' : 'Ask for leave for this person'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {asking && <LeaveForm key={redo ? `${redo.from}-${redo.to}` : 'new'} personId={personId} prefill={redo} onDone={() => (setAsking(false), setRedo(null))} />}
-      <section>
-        <h3>Requests</h3>
-        <div className="list">
+      <Sec title="Requests">
+        <div className="list pp-box">
           {d.leave.requests.length === 0 && <div className="empty">No requests yet.</div>}
           {d.leave.requests.map((q) => (
-            <div key={q.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+            <div key={q.id} className="list-item">
               <div>
                 <div>
                   {LEAVE_LABEL[q.kind]} · {dateLabel(q.from)}
@@ -520,7 +557,7 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
                   {q.proofIds.length ? ` · ${q.kind === 'SICK' || q.kind === 'HOSPITAL' ? 'MC' : 'document'} uploaded` : ''}
                 </div>
               </div>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+              <div className="pp-chips">
                 <Chip tone={q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'crit' : 'warn'}>{q.status}</Chip>
                 {q.status === 'rejected' && d.access.requestLeave && !asking && !d.leave.requests.some((x) => x.correctsId === q.id) && (
                   <button
@@ -548,24 +585,23 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
             </div>
           ))}
         </div>
-      </section>
+      </Sec>
       <HospitalClaims d={d} />
-    </>
+    </div>
   );
 }
 
 export function WarningsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
   const w = d.warnings;
   return (
-    <>
+    <div className="pp-tab">
       {!self && <DisciplinePolicy d={d} />}
-      <section>
-        <h3>Disciplinary record</h3>
-        <div className="list">
+      <Sec title="Disciplinary record">
+        <div className="list pp-box">
           {w.discipline.length === 0 && <div className="empty">No warnings on record.</div>}
           {w.discipline.map((x) => (
-            <div key={x.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-              <div style={{ fontWeight: 600 }}>
+            <div key={x.id} className="list-item pp-stack">
+              <div className="pp-strong">
                 {x.label} · {dateLabel(x.date)}
               </div>
               <div className="muted small">
@@ -575,10 +611,9 @@ export function WarningsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
             </div>
           ))}
         </div>
-      </section>
-      <section>
-        <h3>Attendance problems, last 30 days</h3>
-        <div className="list">
+      </Sec>
+      <Sec title="Attendance problems, last 30 days">
+        <div className="list pp-box">
           {w.recent.length === 0 && <div className="empty">None.</div>}
           {w.recent.map((x, i) => (
             <div key={i} className="list-item">
@@ -592,31 +627,32 @@ export function WarningsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
             </div>
           ))}
         </div>
-      </section>
-    </>
+      </Sec>
+    </div>
   );
 }
 
 export function BenefitsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
   return (
-    <section>
-      <h3>Medical and other benefits</h3>
-      <div className="list">
-        {(d.benefits ?? []).map((b) => (
-          <div key={b.name} className="list-item">
-            <div>
-              <div>{b.name}</div>
-              <div className="muted small">{b.detail}</div>
+    <div className="pp-tab">
+      <Sec title="Medical and other benefits">
+        <div className="list pp-box">
+          {(d.benefits ?? []).map((b) => (
+            <div key={b.name} className="list-item">
+              <div>
+                <div>{b.name}</div>
+                <div className="muted small">{b.detail}</div>
+              </div>
+              <Chip tone={b.status === 'unknown' ? 'warn' : 'ok'}>
+                {b.status === 'statutory' ? 'Statutory' : b.status === 'on_record' ? 'On record' : 'Unknown'}
+              </Chip>
             </div>
-            <Chip tone={b.status === 'unknown' ? 'warn' : 'ok'}>
-              {b.status === 'statutory' ? 'Statutory' : b.status === 'on_record' ? 'On record' : 'Unknown'}
-            </Chip>
-          </div>
-        ))}
-      </div>
-      <p className="muted small">Company cover and claims are not linked yet, so they show as Unknown, never as fine.</p>
+          ))}
+        </div>
+        <p className="pp-note">Company cover and claims are not linked yet, so they show as Unknown, never as fine.</p>
+      </Sec>
       <MedicalHistory d={d} />
       <ClaimsPolicy d={d} self={self} />
-    </section>
+    </div>
   );
 }

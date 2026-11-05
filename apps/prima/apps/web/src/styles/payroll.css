@@ -1,0 +1,680 @@
+/* Staff payroll (P71 redesign): pay runs as stages, exceptions first. Colours come from styles.css tokens only. */
+
+.pay-fig {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Board: runs on the left, changes to verify on the right ---------- */
+.pay-board {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.pay-main,
+.pay-aside {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+@media (min-width: 1240px) {
+  .pay-board-two {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+    grid-template-areas: 'main aside';
+    align-items: start;
+  }
+  .pay-board-two .pay-main {
+    grid-area: main;
+  }
+  .pay-board-two .pay-aside {
+    grid-area: aside;
+  }
+}
+
+.pay-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.pay-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pay-section-head h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* ---------- One employer's month ---------- */
+.pay-runs {
+  display: grid;
+  gap: 12px;
+}
+.pay-run {
+  display: grid;
+  gap: 16px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.pay-run[data-turn='yes'] {
+  border-color: var(--warn);
+  box-shadow: inset 4px 0 0 var(--warn), var(--shadow);
+}
+.pay-run[data-late='yes']:not([data-turn='yes']) {
+  box-shadow: inset 4px 0 0 var(--crit), var(--shadow);
+}
+.pay-run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+.pay-run-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pay-run-title h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pay-run-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pay-run .k-step-text {
+  background: var(--surface);
+}
+.pay-figs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.pay-figs > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.pay-figs dt {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pay-figs dd {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pay-figs > div[data-tone='warn'] {
+  background: var(--warn-soft);
+}
+.pay-figs > div[data-tone='warn'] dd {
+  color: var(--warn);
+}
+.pay-run-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Earlier months ---------- */
+.pay-hist {
+  display: grid;
+}
+.pay-hist-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+  padding: 12px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.pay-hist-row:last-child {
+  border-bottom: 0;
+}
+.pay-hist-row:hover {
+  background: var(--surface-2);
+}
+.pay-hist-row[data-turn='yes'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.pay-hist-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pay-hist-figs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+.pay-hist-figs > span {
+  white-space: nowrap;
+}
+.pay-hist-k {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.pay-hist-tags {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.pay-caret {
+  color: var(--muted);
+  flex: none;
+}
+
+/* ---------- Changes to verify: the shared panel, laid out as an inbox here ---------- */
+.pay-inbox > .panel > .list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.pay-inbox > .panel > .list > .list-item {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.pay-inbox > .panel > .list > .list-item:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.pay-inbox > .panel > .list > .list-item:has(.chip[data-tone='warn']) {
+  border-color: var(--warn);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.pay-inbox > .panel > .list > .empty {
+  padding: 20px 12px;
+}
+.pay-inbox > .panel > .muted.small {
+  border-top: 1px solid var(--line);
+  max-width: 75ch;
+}
+
+/* ---------- Run detail (in the drawer) ---------- */
+.pay-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.pay-detail .k-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pay-yourstep {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+}
+.pay-yourstep-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.pay-yourstep-head h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.pay-form {
+  display: grid;
+  gap: 8px;
+}
+.pay-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pay-note {
+  min-height: 64px;
+  resize: vertical;
+}
+.pay-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pay-blockers h3 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.pay-blockers ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.pay-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.pay-timeline li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  position: relative;
+  padding-bottom: 16px;
+}
+.pay-timeline li:last-child {
+  padding-bottom: 0;
+}
+.pay-timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.pay-timeline li[data-state='done']:not(:last-child)::before {
+  background: var(--accent);
+}
+.pay-timeline-dot {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1.5px solid var(--line);
+}
+.pay-timeline li[data-state='done'] .pay-timeline-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+}
+.pay-timeline li[data-state='now'] .pay-timeline-dot {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--ring);
+}
+.pay-timeline-text {
+  display: grid;
+  gap: 2px;
+  padding-top: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pay-timeline-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pay-timeline li[data-state='todo'] .pay-timeline-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+.pay-after {
+  margin-top: 12px;
+}
+
+.pay-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pay-row-stack {
+  display: grid;
+  gap: 4px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.pay-row-stack:last-child {
+  border-bottom: 0;
+}
+.pay-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pay-remit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.pay-control {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.pay-files {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+.pay-files .btn {
+  justify-content: flex-start;
+}
+
+/* ---------- Staff lines ---------- */
+.pay-socso {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.pay-socso table {
+  min-width: 560px;
+}
+.pay-total td {
+  font-weight: 700;
+}
+.pay-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pay-line {
+  display: grid;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.pay-line:last-child {
+  border-bottom: 0;
+}
+.pay-line[data-flagged='yes'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.pay-line-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 12px;
+}
+.pay-line-name {
+  background: none;
+  border: 0;
+  padding: 4px;
+  margin: -4px;
+  border-radius: var(--r-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.pay-line-name:hover {
+  background: var(--surface-2);
+}
+.pay-line-name:hover .k-person-name {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.pay-line-net {
+  display: grid;
+  justify-items: end;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pay-line-k {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pay-line-figs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+.pay-line-figs dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.pay-line-figs dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.pay-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.pay-flags li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 0.82rem;
+  color: var(--warn);
+}
+.pay-flags svg {
+  flex: none;
+  margin-top: 2px;
+}
+.pay-line-edit {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.pay-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.pay-edit-label {
+  flex: 1 0 100%;
+}
+.pay-in-sm {
+  width: 130px;
+}
+.pay-in-md {
+  width: 160px;
+}
+.pay-in-lg {
+  width: 220px;
+  max-width: 100%;
+}
+.pay-oneoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- My payslips ---------- */
+.pay-mine {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .pay-mine {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  }
+}
+.pay-slips-y {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 12px 18px 4px;
+}
+.pay-slips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pay-slip-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pay-slips li:last-child .pay-slip-item {
+  border-bottom: 0;
+}
+.pay-slip-item:hover {
+  background: var(--surface-2);
+}
+.pay-slip-month {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pay-slip-net {
+  font-weight: 700;
+}
+.pay-zakat {
+  display: grid;
+  gap: 12px;
+}
+.pay-zakat > p {
+  max-width: 75ch;
+}
+
+/* The payslip itself (also what the download copies). */
+.pay-slip {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.pay-slip-head {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.pay-slip-head h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.pay-slip-rows {
+  display: grid;
+}
+.pay-slip-row.list-item {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  flex-wrap: nowrap;
+}
+.pay-slip-row > span:first-child {
+  min-width: 0;
+}
+.pay-slip-row[data-kind='sum'] {
+  font-weight: 600;
+  background: var(--surface-2);
+}
+.pay-slip-row[data-kind='net'] {
+  font-size: 1rem;
+  background: var(--accent-soft);
+  border-top: 1px solid var(--line);
+}
+.pay-slip-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+  .pay-figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pay-run {
+    padding: 14px;
+  }
+  .pay-run .k-step {
+    flex: 1 1 50%;
+  }
+  .pay-run .k-step:nth-child(2n)::after {
+    display: none;
+  }
+  .pay-hist-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px 14px;
+  }
+  .pay-hist-figs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .pay-line,
+  .pay-row-stack {
+    padding: 12px 14px;
+  }
+  .pay-in-sm,
+  .pay-in-md,
+  .pay-in-lg {
+    width: auto;
+    flex: 1 1 140px;
+  }
+  .pay-slip-item {
+    padding: 12px 14px;
+  }
+}
+.pay-row-top > .chip,
+.pay-run-tags > .chip,
+.pay-hist-tags > .chip {
+  flex: none;
+}
+.pay-socso td:first-child {
+  min-width: 150px;
+}

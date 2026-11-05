@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, PencilSimpleLineIcon, ProhibitIcon, UserCircleDashedIcon } from '@phosphor-icons/react';
 import { addDays, dateOf, isBlocked } from '@prima/core';
 import { api, type Roster } from '../api';
 import { useApp } from '../App';
+import { Card, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, Drawer, ErrorNotice, Findings, Loading, dayLabel, hhmm, useAction, useLoad } from '../ui';
+import '../styles/attendance.css';
 
 type RosterShift = Roster['shifts'][number];
 
@@ -51,42 +54,42 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
   const unfilled = r?.shifts.filter((s) => !s.personId) ?? [];
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Roster</h1>
-          <p>Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change.</p>
-        </div>
-        <div className="row">
-          <select id="roster-site" className="select" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 320 }}>
+    <div className="page ros">
+      <PageHead
+        title="Roster"
+        sub="Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change."
+        actions={
+          <select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
             {sites.data?.map((s) => (
               <option key={s.site.id} value={s.site.id}>
                 {s.site.code} · {s.site.name}
               </option>
             ))}
           </select>
-          <div className="seg">
-            <button onClick={() => setFrom(addDays(from, -7))} aria-label="Previous week">
-              ‹
-            </button>
-            <button aria-pressed={from === today} onClick={() => setFrom(today)}>
-              This week
-            </button>
-            <button onClick={() => setFrom(addDays(from, 7))} aria-label="Next week">
-              ›
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {r && (
-        <div className="row">
-          {r.site.armed && <Chip tone="crit">Armed site: firearm permit needed</Chip>}
-          <Chip tone={unfilled.length ? 'crit' : 'ok'}>{unfilled.length} unfilled</Chip>
-          <Chip tone={blocked.length ? 'crit' : 'ok'}>{blocked.length} guards not allowed to work</Chip>
-          <Chip tone={drafts.length ? 'warn' : 'ok'}>{drafts.length} not yet published</Chip>
-          <span className="grow" style={{ flex: 1 }} />
-          {r.canPublish && (
+        <Stats>
+          <Stat label="Unfilled" value={unfilled.length} tone={unfilled.length ? 'crit' : 'ok'} icon={<UserCircleDashedIcon size={16} />} note="This week" />
+          <Stat
+            label="Guards not allowed to work"
+            value={blocked.length}
+            tone={blocked.length ? 'crit' : 'ok'}
+            icon={<ProhibitIcon size={16} />}
+          />
+          <Stat
+            label="Not yet published"
+            value={drafts.length}
+            tone={drafts.length ? 'warn' : 'ok'}
+            icon={<PencilSimpleLineIcon size={16} />}
+          />
+        </Stats>
+      )}
+
+      <Toolbar
+        end={
+          r?.canPublish && (
             <button
               className="btn btn-primary"
               disabled={!drafts.length || publish.busy}
@@ -99,45 +102,84 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
             >
               Publish this week
             </button>
-          )}
+          )
+        }
+      >
+        <div className="seg" role="group" aria-label="Week">
+          <button onClick={() => setFrom(addDays(from, -7))} aria-label="Previous week">
+            <CaretLeftIcon size={16} />
+          </button>
+          <button aria-pressed={from === today} onClick={() => setFrom(today)}>
+            This week
+          </button>
+          <button onClick={() => setFrom(addDays(from, 7))} aria-label="Next week">
+            <CaretRightIcon size={16} />
+          </button>
         </div>
-      )}
+        <span className="ros-range">
+          <CalendarBlankIcon size={16} aria-hidden="true" />
+          {dayLabel(days[0])} – {dayLabel(days[6])}
+        </span>
+        {r?.site.armed && <Chip tone="crit">Armed site: firearm permit needed</Chip>}
+      </Toolbar>
       <ErrorNotice error={publish.error} />
 
-      <section className="panel">
-        {!r && <Loading what="roster" />}
+      <Card
+        title={r ? `${r.site.code} · ${r.site.name}` : 'Shifts'}
+        sub="One row per post and start time; a second guard on the same slot gets its own row."
+        flush
+        footer={
+          <div className="ros-legend" aria-label="Key">
+            <span className="ros-key" data-state="ok">Published</span>
+            <span className="ros-key" data-state="draft">Draft</span>
+            <span className="ros-key" data-state="unfilled">Unfilled</span>
+            <span className="ros-key" data-state="blocked">Not allowed to work</span>
+            <span className="ros-key" data-state="past">Past</span>
+          </div>
+        }
+      >
+        {!r && (
+          <div className="att-pad">
+            <Loading what="roster" />
+          </div>
+        )}
         {r && (
-          <div className="table-wrap">
-            <table className="roster">
+          <div className="table-wrap ros-wrap">
+            <table className="roster ros-grid">
               <thead>
                 <tr>
-                  <th>Post and time</th>
-                  {days.map((d) => (
-                    <th key={d} className={d === today ? 'today' : undefined}>
-                      {dayLabel(d)}
-                    </th>
-                  ))}
+                  <th scope="col">Post and time</th>
+                  {days.map((d) => {
+                    const [wd, ...rest] = dayLabel(d).split(' ');
+                    return (
+                      <th key={d} scope="col" className={d === today ? 'today' : undefined} aria-current={d === today ? 'date' : undefined}>
+                        <span className="ros-wd">{wd}</span>
+                        <span className="ros-date">{rest.join(' ')}</span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{row.post}</div>
-                      <div className="mono small muted">{row.time}</div>
-                    </td>
+                    <th scope="row">
+                      <span className="ros-post">{row.post}</span>
+                      <span className="mono small muted">{row.time}</span>
+                    </th>
                     {days.map((d) => {
                       const s = row.cells.get(d);
+                      const tc = d === today ? 'today' : '';
                       if (!s)
                         return (
-                          <td key={d} className="muted small" style={{ textAlign: 'center' }}>
-                            –
+                          <td key={d} className={`ros-none ${tc}`}>
+                            <span title="No shift">–</span>
                           </td>
                         );
                       const past = s.end <= me.now;
                       const state = past ? 'past' : !s.personId ? 'unfilled' : isBlocked(s.findings) ? 'blocked' : s.status === 'draft' ? 'draft' : 'ok';
                       return (
-                        <td key={d}>
+                        <td key={d} className={tc || undefined}>
                           <button
                             className="cell"
                             data-state={state}
@@ -147,13 +189,19 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
                           >
                             {s.personId ? (
                               <>
-                                <span className="who">{s.personName}</span>
+                                <span className="who">
+                                  {state === 'blocked' && <ProhibitIcon size={14} aria-label="Not allowed to work" />}
+                                  <span className="who-name">{s.personName}</span>
+                                </span>
                                 <span className="mono muted">{s.staffNo}</span>
                               </>
                             ) : (
-                              <span className="who">Unfilled</span>
+                              <span className="who">
+                                <UserCircleDashedIcon size={14} aria-hidden="true" />
+                                <span className="who-name">Unfilled</span>
+                              </span>
                             )}
-                            {s.status === 'draft' && !past && <span className="muted">Draft</span>}
+                            {s.status === 'draft' && !past && <span className="ros-draft">Draft</span>}
                           </button>
                         </td>
                       );
@@ -164,7 +212,7 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
             </table>
           </div>
         )}
-      </section>
+      </Card>
       {editing && <AssignDrawer shift={editing} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -186,20 +234,22 @@ function AssignDrawer({ shift, onClose }: { shift: RosterShift; onClose: () => v
 
   return (
     <Drawer title={`${dayLabel(shift.date)}, ${hhmm(shift.start)}–${hhmm(shift.end)}`} sub={`${shift.siteName} · ${shift.postName}`} onClose={onClose}>
-      <div>
+      <div className="ros-now">
         <div className="label">Now</div>
-        <div style={{ fontWeight: 600 }}>{shift.personName ?? 'Nobody assigned'}</div>
+        {shift.personName ? <Person name={shift.personName} sub={shift.staffNo ?? undefined} /> : <div className="ros-now-name">Nobody assigned</div>}
         <Findings items={shift.findings} />
         {shift.personId && (
-          <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => assign(null)} disabled={act.busy}>
-            Remove guard from this shift
-          </button>
+          <div>
+            <button className="btn btn-sm" onClick={() => assign(null)} disabled={act.busy}>
+              Remove guard from this shift
+            </button>
+          </div>
         )}
       </div>
       {warnings.length > 0 && (
-        <div className="notice" data-tone="warn">
+        <div className="notice ros-warn" data-tone="warn">
           Assigned. Please check: {warnings.join(' ')}
-          <div style={{ marginTop: 8 }}>
+          <div>
             <button className="btn btn-sm" onClick={onClose}>
               Done
             </button>
@@ -207,19 +257,25 @@ function AssignDrawer({ shift, onClose }: { shift: RosterShift; onClose: () => v
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <input id="candidate-search" className="input" placeholder="Search guard name or staff number" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="ros-search">
+        <Search value={q} onChange={setQ} placeholder="Search guard name or staff number" label="Search guard name or staff number" />
+      </div>
       <ErrorNotice error={error} />
       {!data && !error && <Loading what="guards" />}
       <div className="list">
         {data?.candidates.map((c) => (
-          <div key={c.person.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                {c.person.name} <span className="mono muted small">{c.person.staffNo}</span>
-              </div>
-              <div className="muted small">
-                {c.person.nationality === 'NP' ? 'Nepal' : 'Malaysia'} · {c.shiftsThisWeek} shifts around this date{c.sameBranch ? ' · same branch' : ''}
-              </div>
+          <div key={c.person.id} className="list-item ros-cand">
+            <div className="ros-cand-main">
+              <Person
+                name={c.person.name}
+                size={32}
+                sub={
+                  <>
+                    <span className="mono">{c.person.staffNo}</span> · {c.person.nationality === 'NP' ? 'Nepal' : 'Malaysia'} · {c.shiftsThisWeek} shifts around this date
+                    {c.sameBranch ? ' · same branch' : ''}
+                  </>
+                }
+              />
               <Findings items={c.findings} />
             </div>
             <button className="btn btn-sm btn-primary" disabled={c.blocked || act.busy || c.person.id === shift.personId} onClick={() => assign(c.person.id)}>

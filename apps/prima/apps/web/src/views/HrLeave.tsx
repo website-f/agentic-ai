@@ -10,6 +10,8 @@ import {
   useAction,
   useLoad,
 } from "../ui";
+import { Avatar, Card, Empty, Search, Steps, Toolbar } from "../kit";
+import "../styles/leave.css";
 
 /**
  * HR Phase 3, slice 3C (Fauzan, 2 Nov 2026): public holidays HR keeps (more than the Act if HR wants), leave days HR
@@ -28,6 +30,18 @@ function keepsHr(u: {
 }
 
 type Compulsory = keyof typeof COMPULSORY_HOLIDAY_LABEL;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A small calendar leaf: the day over the month. */
+function DateLeaf({ date }: { date: string }) {
+  return (
+    <span className="lv-leaf" aria-hidden="true">
+      <span className="lv-leaf-m">{MONTHS[Number(date.slice(5, 7)) - 1] ?? ""}</span>
+      <span className="lv-leaf-d">{Number(date.slice(8, 10)) || ""}</span>
+    </span>
+  );
+}
 
 export function HolidaysPanel() {
   const [year, setYear] = useState(
@@ -48,16 +62,10 @@ export function HolidaysPanel() {
   const d = list.data;
   const short = d.checks.filter((c) => !c.ok);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Public holidays {d.year}</h2>
-          <div className="muted small">
-            Staff leave skips these days and weekends. The Act needs at least{" "}
-            {d.rule.value.minPerYear} a year with the five fixed ones; HR may
-            add more.
-          </div>
-        </div>
+    <Card
+      title={`Public holidays ${d.year}`}
+      sub={`Staff leave skips these days and weekends. The Act needs at least ${d.rule.value.minPerYear} a year with the five fixed ones; HR may add more.`}
+      actions={
         <select
           className="select"
           value={year}
@@ -73,40 +81,37 @@ export function HolidaysPanel() {
             );
           })}
         </select>
-      </div>
+      }
+      flush
+    >
       {short.length > 0 && (
-        <div className="notice small" data-tone="warn">
-          Not complete yet for {short.length} state
-          {short.length === 1 ? "" : "s"}:{" "}
-          {short
-            .slice(0, 6)
-            .map(
-              (c) =>
-                `${c.state} (${c.count} of ${c.min}${c.missing.length ? `, missing ${c.missing.map((m) => COMPULSORY_HOLIDAY_LABEL[m]).join(", ")}` : ""})`,
-            )
-            .join("; ")}
-          {short.length > 6 ? " …" : ""}
+        <div className="lv-pad">
+          <div className="notice small" data-tone="warn">
+            Not complete yet for {short.length} state
+            {short.length === 1 ? "" : "s"}:{" "}
+            {short
+              .slice(0, 6)
+              .map(
+                (c) =>
+                  `${c.state} (${c.count} of ${c.min}${c.missing.length ? `, missing ${c.missing.map((m) => COMPULSORY_HOLIDAY_LABEL[m]).join(", ")}` : ""})`,
+              )
+              .join("; ")}
+            {short.length > 6 ? " …" : ""}
+          </div>
         </div>
       )}
-      <div className="list">
+      <div className="lv-rows">
         {d.holidays.length === 0 && (
           <div className="empty">No holidays entered for {d.year} yet.</div>
         )}
         {d.holidays.map((h) => (
-          <div
-            key={h.id}
-            className="list-item"
-            style={{ flexWrap: "wrap", gap: 6 }}
-          >
-            <div>
-              <div
-                style={{
-                  textDecoration: h.removed ? "line-through" : undefined,
-                }}
-              >
+          <div key={h.id} className="lv-row lv-holiday" data-removed={h.removed ? "true" : undefined}>
+            <DateLeaf date={h.date} />
+            <div className="lv-row-text">
+              <div className="lv-req-title lv-strike">
                 {dateLabel(h.date)} · {h.name}
               </div>
-              <div className="muted small">
+              <div className="lv-req-sub">
                 {h.states ? h.states.join(", ") : "All states"}
                 {h.compulsory ? ` · fixed by the Act` : ""}
                 {h.removed
@@ -115,7 +120,7 @@ export function HolidaysPanel() {
               </div>
             </div>
             {d.canEdit && !h.removed && (
-              <div className="row" style={{ gap: 6 }}>
+              <div className="lv-remove">
                 <input
                   className="input"
                   placeholder="Reason to remove"
@@ -145,109 +150,104 @@ export function HolidaysPanel() {
         ))}
       </div>
       {d.canEdit && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginTop: 10,
-          }}
-        >
-          <h3>Add a holiday</h3>
-          <div className="grid-2">
-            <label className="field">
-              <span className="label">Date</span>
-              <input
-                className="input"
-                type="date"
-                value={f.date}
-                onChange={(e) => setF({ ...f, date: e.target.value })}
-                aria-label="Holiday date"
-              />
-            </label>
-            <label className="field">
-              <span className="label">Name</span>
-              <input
-                className="input"
-                value={f.name}
-                onChange={(e) => setF({ ...f, name: e.target.value })}
-                aria-label="Holiday name"
-                placeholder="e.g. Hari Raya Aidilfitri"
-              />
-            </label>
-            <label className="field">
-              <span className="label">States (empty for all)</span>
-              <input
-                className="input"
-                value={f.states}
-                onChange={(e) => setF({ ...f, states: e.target.value })}
-                aria-label="States"
-                placeholder={d.checks
-                  .map((c) => c.state)
-                  .slice(0, 2)
-                  .join(", ")}
-              />
-            </label>
-            <label className="field">
-              <span className="label">Fixed by the Act?</span>
-              <select
-                className="select"
-                value={f.compulsory}
-                onChange={(e) =>
-                  setF({ ...f, compulsory: e.target.value as "" | Compulsory })
-                }
-                aria-label="Fixed holiday"
-              >
-                <option value="">No</option>
-                {(Object.keys(COMPULSORY_HOLIDAY_LABEL) as Compulsory[]).map(
-                  (k) => (
-                    <option key={k} value={k}>
-                      {COMPULSORY_HOLIDAY_LABEL[k]}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-          </div>
-          <ErrorNotice error={act.error} />
-          <div className="row">
-            <button
-              className="btn btn-primary"
-              disabled={act.busy || !f.date || f.name.trim().length < 3}
-              onClick={async () => {
-                const states = f.states
-                  .split(",")
-                  .map((x) => x.trim())
-                  .filter(Boolean);
-                const r = await act.run(
-                  () =>
-                    api.addPublicHoliday({
-                      date: f.date,
-                      name: f.name,
-                      states: states.length ? states : null,
-                      compulsory: f.compulsory || null,
-                      note: f.note,
-                    }),
-                  "Holiday added.",
-                );
-                if (r) {
-                  setF({
-                    date: "",
-                    name: "",
-                    states: "",
-                    compulsory: "",
-                    note: "",
-                  });
-                  list.reload();
-                }
-              }}
-            >
-              Add holiday
-            </button>
+        <div className="lv-pad lv-divide">
+          <div className="lv-formbox">
+            <h3 className="lv-formbox-title">Add a holiday</h3>
+            <div className="lv-form">
+              <label className="field">
+                <span className="label">Date</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={f.date}
+                  onChange={(e) => setF({ ...f, date: e.target.value })}
+                  aria-label="Holiday date"
+                />
+              </label>
+              <label className="field">
+                <span className="label">Name</span>
+                <input
+                  className="input"
+                  value={f.name}
+                  onChange={(e) => setF({ ...f, name: e.target.value })}
+                  aria-label="Holiday name"
+                  placeholder="e.g. Hari Raya Aidilfitri"
+                />
+              </label>
+              <label className="field">
+                <span className="label">States (empty for all)</span>
+                <input
+                  className="input"
+                  value={f.states}
+                  onChange={(e) => setF({ ...f, states: e.target.value })}
+                  aria-label="States"
+                  placeholder={d.checks
+                    .map((c) => c.state)
+                    .slice(0, 2)
+                    .join(", ")}
+                />
+              </label>
+              <label className="field">
+                <span className="label">Fixed by the Act?</span>
+                <select
+                  className="select"
+                  value={f.compulsory}
+                  onChange={(e) =>
+                    setF({ ...f, compulsory: e.target.value as "" | Compulsory })
+                  }
+                  aria-label="Fixed holiday"
+                >
+                  <option value="">No</option>
+                  {(Object.keys(COMPULSORY_HOLIDAY_LABEL) as Compulsory[]).map(
+                    (k) => (
+                      <option key={k} value={k}>
+                        {COMPULSORY_HOLIDAY_LABEL[k]}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <div className="lv-form-foot">
+                <ErrorNotice error={act.error} />
+                <button
+                  className="btn btn-primary"
+                  disabled={act.busy || !f.date || f.name.trim().length < 3}
+                  onClick={async () => {
+                    const states = f.states
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean);
+                    const r = await act.run(
+                      () =>
+                        api.addPublicHoliday({
+                          date: f.date,
+                          name: f.name,
+                          states: states.length ? states : null,
+                          compulsory: f.compulsory || null,
+                          note: f.note,
+                        }),
+                      "Holiday added.",
+                    );
+                    if (r) {
+                      setF({
+                        date: "",
+                        name: "",
+                        states: "",
+                        compulsory: "",
+                        note: "",
+                      });
+                      list.reload();
+                    }
+                  }}
+                >
+                  Add holiday
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -275,40 +275,33 @@ export function HrLeaveSettingsPanel() {
       !q || `${s.name} ${s.staffNo}`.toLowerCase().includes(q.toLowerCase()),
   );
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Working from home and extra leave</h2>
-          <div className="muted small">
-            Working from home stays blocked until HR allows it for the staff
-            member. HR may give more leave than the Act, never less.
-          </div>
-        </div>
+    <Card
+      title="Working from home and extra leave"
+      sub="Working from home stays blocked until HR allows it for the staff member. HR may give more leave than the Act, never less."
+      actions={
         <Chip tone="info">
           {list.data.staff.filter((s) => s.wfhAllowed).length} may work from
           home
         </Chip>
+      }
+      flush
+    >
+      <div className="lv-pad">
+        <Toolbar end={<span className="muted small">{rows.length > 50 ? `First 50 of ${rows.length}` : `${rows.length} staff`}</span>}>
+          <Search value={q} onChange={setQ} placeholder="Find staff" />
+        </Toolbar>
       </div>
-      <input
-        className="input"
-        placeholder="Find staff"
-        aria-label="Find staff"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
-      <div className="list">
+      <div className="lv-rows">
+        {rows.length === 0 && <Empty title="No staff match">Try another name or staff number.</Empty>}
         {rows.slice(0, 50).map((s) => (
-          <div
-            key={s.personId}
-            className="list-item"
-            style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-          >
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
+          <div key={s.personId} className="lv-staff">
+            <div className="lv-row">
+              <Avatar name={s.name} size={36} />
+              <div className="lv-row-text">
+                <div className="lv-req-title">
                   {s.name} ({s.staffNo}) {s.jobTitle ? `· ${s.jobTitle}` : ""}
                 </div>
-                <div className="muted small">
+                <div className="lv-req-sub">
                   {s.wfhAllowed
                     ? `Working from home allowed by ${s.wfhAllowed.by}`
                     : "Working from home not allowed"}
@@ -321,6 +314,7 @@ export function HrLeaveSettingsPanel() {
               {!s.own && (
                 <button
                   className="btn btn-sm"
+                  aria-expanded={open === s.personId}
                   onClick={() =>
                     setOpen(open === s.personId ? null : s.personId)
                   }
@@ -330,78 +324,20 @@ export function HrLeaveSettingsPanel() {
               )}
             </div>
             {open === s.personId && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <input
-                  className="input"
-                  placeholder="Reason (needed)"
-                  aria-label="Reason"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy || !note.trim()}
-                    onClick={() =>
-                      void act
-                        .run(
-                          () =>
-                            api.setWfhAllowed(s.personId, !s.wfhAllowed, note),
-                          s.wfhAllowed
-                            ? "Working from home stopped."
-                            : "Working from home allowed.",
-                        )
-                        .then(() => list.reload())
-                    }
-                  >
-                    {s.wfhAllowed
-                      ? "Stop working from home"
-                      : "Allow working from home"}
-                  </button>
-                  <select
-                    className="select"
-                    value={kind}
-                    onChange={(e) =>
-                      setKind(e.target.value as (typeof OVERRIDE_KINDS)[number])
-                    }
-                    aria-label="Leave kind"
-                  >
-                    {OVERRIDE_KINDS.map((k) => (
-                      <option key={k} value={k}>
-                        {LEAVE_LABEL[k]}
-                      </option>
-                    ))}
-                  </select>
+              <div className="lv-formbox lv-staff-edit">
+                <label className="field">
+                  <span className="label">Reason (needed)</span>
                   <input
                     className="input"
-                    style={{ width: 90 }}
-                    inputMode="numeric"
-                    placeholder="Days"
-                    aria-label="Days"
-                    value={days}
-                    onChange={(e) => setDays(e.target.value)}
+                    placeholder="Reason (needed)"
+                    aria-label="Reason"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
                   />
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy || !note.trim() || !/^\d+$/.test(days)}
-                    onClick={() =>
-                      void act
-                        .run(
-                          () =>
-                            api.setLeaveOverride(
-                              s.personId,
-                              kind,
-                              Number(days),
-                              note,
-                            ),
-                          "Leave days set.",
-                        )
-                        .then(() => list.reload())
-                    }
-                  >
-                    Set days
-                  </button>
-                  {s.overrides[kind] && (
+                </label>
+                <div className="lv-staff-groups">
+                  <div className="lv-staff-group">
+                    <span className="label">Working from home</span>
                     <button
                       className="btn btn-sm"
                       disabled={act.busy || !note.trim()}
@@ -409,28 +345,100 @@ export function HrLeaveSettingsPanel() {
                         void act
                           .run(
                             () =>
-                              api.setLeaveOverride(
-                                s.personId,
-                                kind,
-                                null,
-                                note,
-                              ),
-                            "Back to the Act.",
+                              api.setWfhAllowed(s.personId, !s.wfhAllowed, note),
+                            s.wfhAllowed
+                              ? "Working from home stopped."
+                              : "Working from home allowed.",
                           )
                           .then(() => list.reload())
                       }
                     >
-                      Back to the Act
+                      {s.wfhAllowed
+                        ? "Stop working from home"
+                        : "Allow working from home"}
                     </button>
-                  )}
+                  </div>
+                  <div className="lv-staff-group">
+                    <span className="label">Leave days above the Act</span>
+                    <div className="lv-inline">
+                      <select
+                        className="select"
+                        value={kind}
+                        onChange={(e) =>
+                          setKind(e.target.value as (typeof OVERRIDE_KINDS)[number])
+                        }
+                        aria-label="Leave kind"
+                      >
+                        {OVERRIDE_KINDS.map((k) => (
+                          <option key={k} value={k}>
+                            {LEAVE_LABEL[k]}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="input lv-days"
+                        inputMode="numeric"
+                        placeholder="Days"
+                        aria-label="Days"
+                        value={days}
+                        onChange={(e) => setDays(e.target.value)}
+                      />
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={act.busy || !note.trim() || !/^\d+$/.test(days)}
+                        onClick={() =>
+                          void act
+                            .run(
+                              () =>
+                                api.setLeaveOverride(
+                                  s.personId,
+                                  kind,
+                                  Number(days),
+                                  note,
+                                ),
+                              "Leave days set.",
+                            )
+                            .then(() => list.reload())
+                        }
+                      >
+                        Set days
+                      </button>
+                      {s.overrides[kind] && (
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          disabled={act.busy || !note.trim()}
+                          onClick={() =>
+                            void act
+                              .run(
+                                () =>
+                                  api.setLeaveOverride(
+                                    s.personId,
+                                    kind,
+                                    null,
+                                    note,
+                                  ),
+                                "Back to the Act.",
+                              )
+                              .then(() => list.reload())
+                          }
+                        >
+                          Back to the Act
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         ))}
       </div>
-      <ErrorNotice error={act.error} />
-    </section>
+      {act.error && (
+        <div className="lv-pad">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -454,187 +462,202 @@ export function FlexPanel() {
   if (!d.canDecide && !staff) return null;
   const pending = d.rows.filter((r) => r.status === "pending");
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>Flexible hours or days</h3>
-          <div className="muted small">
-            Ask HR for different hours or days. HR answers in writing within 60
-            days, with the reasons if it says no.
+    <Card
+      title="Flexible hours or days"
+      sub="Ask HR for different hours or days. HR answers in writing within 60 days, with the reasons if it says no."
+      actions={
+        <>
+          {d.canDecide && (
+            <Chip tone={pending.length ? "warn" : "ok"}>
+              {pending.length} waiting
+            </Chip>
+          )}
+          {staff && !asking && !pending.some((r) => r.own) && (
+            <button className="btn btn-sm" onClick={() => setAsking(true)}>
+              Ask for flexible hours or days
+            </button>
+          )}
+        </>
+      }
+      flush
+    >
+      {asking && (
+        <div className="lv-pad">
+          <div className="lv-formbox">
+            <h3 className="lv-formbox-title">Ask for flexible hours or days</h3>
+            <div className="lv-form">
+              <label className="field">
+                <span className="label">Hours or days</span>
+                <select
+                  className="select"
+                  value={f.kind}
+                  onChange={(e) =>
+                    setF({ ...f, kind: e.target.value as "hours" | "days" })
+                  }
+                  aria-label="Hours or days"
+                >
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </select>
+              </label>
+              <label className="field">
+                <span className="label">From</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={f.from}
+                  onChange={(e) => setF({ ...f, from: e.target.value })}
+                  aria-label="From"
+                />
+              </label>
+              <label className="field lv-full">
+                <span className="label">What you ask for</span>
+                <input
+                  className="input"
+                  placeholder="What you ask for, e.g. 8.00 to 5.00"
+                  aria-label="What you ask for"
+                  value={f.detail}
+                  onChange={(e) => setF({ ...f, detail: e.target.value })}
+                />
+              </label>
+              <label className="field lv-full">
+                <span className="label">Reason</span>
+                <input
+                  className="input"
+                  placeholder="Reason"
+                  aria-label="Reason"
+                  value={f.reason}
+                  onChange={(e) => setF({ ...f, reason: e.target.value })}
+                />
+              </label>
+              <div className="lv-form-foot">
+                <button className="btn btn-ghost" onClick={() => setAsking(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={
+                    act.busy ||
+                    f.detail.trim().length < 5 ||
+                    f.reason.trim().length < 5 ||
+                    !f.from
+                  }
+                  onClick={async () => {
+                    const r = await act.run(
+                      () => api.requestFlex({ ...f, to: null }),
+                      "Sent to HR.",
+                    );
+                    if (r) {
+                      setAsking(false);
+                      list.reload();
+                    }
+                  }}
+                >
+                  Send to HR
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        {d.canDecide && (
-          <Chip tone={pending.length ? "warn" : "ok"}>
-            {pending.length} waiting
-          </Chip>
-        )}
-      </div>
-      <div className="list">
+      )}
+      <div className="lv-rows">
         {d.rows.length === 0 && <div className="empty">No requests.</div>}
         {d.rows.slice(0, 30).map((r) => (
-          <div
-            key={r.id}
-            className="list-item"
-            style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-          >
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
+          <article key={r.id} className="lv-req">
+            <header className="lv-req-head">
+              {d.canDecide && <Avatar name={r.name} size={40} />}
+              <div className="lv-req-who">
+                <div className="lv-req-title">
                   {d.canDecide ? `${r.name}: ` : ""}flexible {r.kind} from{" "}
                   {dateLabel(r.from)}
                 </div>
-                <div className="muted small">
+                <div className="lv-req-sub">
                   {r.detail} · {r.reason}
-                  {r.status === "pending"
-                    ? ` · answer by ${dateLabel(r.answerBy)}`
-                    : ` · ${r.status} by ${r.decidedBy}: ${r.note}`}
                 </div>
               </div>
-              <Chip
-                tone={
-                  r.status === "approved"
-                    ? "ok"
-                    : r.status === "refused"
-                      ? "crit"
-                      : r.overdue
+              <div className="lv-req-status">
+                <Chip
+                  tone={
+                    r.status === "approved"
+                      ? "ok"
+                      : r.status === "refused"
                         ? "crit"
-                        : "warn"
-                }
-              >
-                {r.overdue ? "overdue" : r.status}
-              </Chip>
+                        : r.overdue
+                          ? "crit"
+                          : "warn"
+                  }
+                >
+                  {r.overdue ? "overdue" : r.status}
+                </Chip>
+              </div>
+            </header>
+            <div className="lv-steps">
+              <Steps
+                steps={[
+                  { label: "Asked", state: "done" },
+                  r.status === "pending"
+                    ? { label: "HR answers in writing", state: r.overdue ? "stopped" : "now", note: `answer by ${dateLabel(r.answerBy)}` }
+                    : {
+                        label: r.status === "approved" ? "Approved" : "Refused",
+                        state: r.status === "approved" ? "done" : "stopped",
+                        note: `${r.status} by ${r.decidedBy}: ${r.note}`,
+                      },
+                ]}
+              />
             </div>
             {d.canDecide && r.status === "pending" && !r.own && (
-              <div className="row" style={{ gap: 6 }}>
-                <input
-                  className="input"
-                  placeholder="Written answer (needed; give the grounds for a refusal)"
-                  aria-label={`Answer for ${r.name}`}
-                  value={note[r.id] ?? ""}
-                  onChange={(e) =>
-                    setNote((x) => ({ ...x, [r.id]: e.target.value }))
-                  }
-                />
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={act.busy || !(note[r.id] ?? "").trim()}
-                  onClick={() =>
-                    void act
-                      .run(
-                        () => api.decideFlex(r.id, true, note[r.id] ?? ""),
-                        "Approved.",
-                      )
-                      .then(() => list.reload())
-                  }
-                >
-                  Approve
-                </button>
-                <button
-                  className="btn btn-sm"
-                  disabled={act.busy || (note[r.id] ?? "").trim().length < 10}
-                  onClick={() =>
-                    void act
-                      .run(
-                        () => api.decideFlex(r.id, false, note[r.id] ?? ""),
-                        "Refused in writing.",
-                      )
-                      .then(() => list.reload())
-                  }
-                >
-                  Refuse
-                </button>
+              <div className="lv-req-act">
+                <div className="lv-decide">
+                  <input
+                    className="input"
+                    placeholder="Written answer (needed; give the grounds for a refusal)"
+                    aria-label={`Answer for ${r.name}`}
+                    value={note[r.id] ?? ""}
+                    onChange={(e) =>
+                      setNote((x) => ({ ...x, [r.id]: e.target.value }))
+                    }
+                  />
+                  <div className="lv-decide-btns">
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || (note[r.id] ?? "").trim().length < 10}
+                      onClick={() =>
+                        void act
+                          .run(
+                            () => api.decideFlex(r.id, false, note[r.id] ?? ""),
+                            "Refused in writing.",
+                          )
+                          .then(() => list.reload())
+                      }
+                    >
+                      Refuse
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={act.busy || !(note[r.id] ?? "").trim()}
+                      onClick={() =>
+                        void act
+                          .run(
+                            () => api.decideFlex(r.id, true, note[r.id] ?? ""),
+                            "Approved.",
+                          )
+                          .then(() => list.reload())
+                      }
+                    >
+                      Approve
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
-          </div>
+          </article>
         ))}
       </div>
-      {staff && !asking && !pending.some((r) => r.own) && (
-        <button
-          className="btn btn-sm"
-          style={{ alignSelf: "flex-start", marginTop: 8 }}
-          onClick={() => setAsking(true)}
-        >
-          Ask for flexible hours or days
-        </button>
-      )}
-      {asking && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginTop: 8,
-          }}
-        >
-          <div className="grid-2">
-            <label className="field">
-              <span className="label">Hours or days</span>
-              <select
-                className="select"
-                value={f.kind}
-                onChange={(e) =>
-                  setF({ ...f, kind: e.target.value as "hours" | "days" })
-                }
-                aria-label="Hours or days"
-              >
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
-              </select>
-            </label>
-            <label className="field">
-              <span className="label">From</span>
-              <input
-                className="input"
-                type="date"
-                value={f.from}
-                onChange={(e) => setF({ ...f, from: e.target.value })}
-                aria-label="From"
-              />
-            </label>
-          </div>
-          <input
-            className="input"
-            placeholder="What you ask for, e.g. 8.00 to 5.00"
-            aria-label="What you ask for"
-            value={f.detail}
-            onChange={(e) => setF({ ...f, detail: e.target.value })}
-          />
-          <input
-            className="input"
-            placeholder="Reason"
-            aria-label="Reason"
-            value={f.reason}
-            onChange={(e) => setF({ ...f, reason: e.target.value })}
-          />
-          <div className="row" style={{ gap: 6 }}>
-            <button
-              className="btn btn-primary"
-              disabled={
-                act.busy ||
-                f.detail.trim().length < 5 ||
-                f.reason.trim().length < 5 ||
-                !f.from
-              }
-              onClick={async () => {
-                const r = await act.run(
-                  () => api.requestFlex({ ...f, to: null }),
-                  "Sent to HR.",
-                );
-                if (r) {
-                  setAsking(false);
-                  list.reload();
-                }
-              }}
-            >
-              Send to HR
-            </button>
-            <button className="btn" onClick={() => setAsking(false)}>
-              Cancel
-            </button>
-          </div>
+      {act.error && (
+        <div className="lv-pad">
+          <ErrorNotice error={act.error} />
         </div>
       )}
-      <ErrorNotice error={act.error} />
-    </section>
+    </Card>
   );
 }

@@ -1,5 +1,14 @@
 import { useRef, useState } from "react";
 import {
+  CaretRightIcon,
+  DownloadSimpleIcon,
+  FileCsvIcon,
+  FlagIcon,
+  HourglassMediumIcon,
+  WalletIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
+import {
   isGroupLeader,
   type StaffPayLine,
   type StaffPayStage,
@@ -18,7 +27,6 @@ import {
   Chip,
   Drawer,
   ErrorNotice,
-  Kpi,
   Loading,
   dateLabel,
   dateTimeLabel,
@@ -26,6 +34,8 @@ import {
   useLoad,
   type Tone,
 } from "../ui";
+import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from "../kit";
+import "../styles/payroll.css";
 
 /**
  * Staff payroll (Fauzan, 27 Oct 2026). Guards and officers are paid from the JA Group app; staff are paid here. HR
@@ -40,6 +50,8 @@ const STAGE: Record<StaffPayStage, [Tone, string]> = {
   coo_approved: ["info", "With Finance to pay"],
   paid: ["ok", "Paid"],
 };
+/** The stages in order, so a run's progress can be drawn from its stage alone. */
+const ORDER: StaffPayStage[] = ["draft", "submitted", "approved", "coo_approved", "paid"];
 const FILES: [StaffPayFile, string][] = [
   ["bank", "Bank upload"],
   ["sql", "SQL Account journal"],
@@ -57,6 +69,21 @@ const monthLabel = (p: string) =>
     timeZone: "UTC",
   });
 
+/** HR prepares, the Chief of Staff approves, the COO approves, Finance pays: drawn from the run's stage. */
+function runSteps(stage: StaffPayStage, late: boolean) {
+  const at = ORDER.indexOf(stage);
+  const labels: [string, string][] = [
+    ["Prepared by HR", "HR to submit"],
+    ["Chief of Staff approves", "Chief of Staff to approve"],
+    ["COO approves", "COO to approve"],
+    [stage === "paid" ? "Paid by Finance" : "Finance pays", "Finance to pay"],
+  ];
+  return labels.map(([label, waiting], i) => {
+    const state: StepState = at > i ? "done" : at === i ? (late ? "stopped" : "now") : "todo";
+    return { label, state, note: at === i ? (late ? `${waiting}, late` : waiting) : undefined };
+  });
+}
+
 export function StaffPayView() {
   const { me } = useApp();
   const { data, error } = useLoad(() => api.staffPayroll(), []);
@@ -71,45 +98,46 @@ export function StaffPayView() {
   if (!data) return <Loading what="staff payroll" />;
   const current = tab ?? (data.role ? "runs" : "mine");
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Staff payroll</h1>
-        <p className="muted">
-          For staff only; guards and officers are paid from the JA Group app. HR
-          prepares, the Chief of Staff approves, then the COO approves, and
-          Finance pays through the bank and posts to SQL Account. Wages are due
-          by the {data.rule.payByDay}th of the next month.
-        </p>
-      </div>
-      {data.role && (
-        <div className="tabbar" role="tablist" aria-label="Staff payroll">
-          <button
-            role="tab"
-            aria-selected={current === "runs"}
-            onClick={() => setTab("runs")}
-          >
-            Payroll
-          </button>
-          <button
-            role="tab"
-            aria-selected={current === "mine"}
-            onClick={() => setTab("mine")}
-          >
-            My payslips
-          </button>
-          <button
-            role="tab"
-            aria-selected={current === "tables"}
-            onClick={() => setTab("tables")}
-          >
-            EPF and SOCSO tables
-          </button>
-        </div>
-      )}
-      {current === "runs" && seesPayChanges && <PayChangesPanel />}
-      {current === "runs" && seesPayChanges && <AdvancesOverdue />}
+    <div className="page pay">
+      <PageHead
+        title="Staff payroll"
+        sub={
+          <>
+            For staff only; guards and officers are paid from the JA Group app.
+            HR prepares, the Chief of Staff approves, then the COO approves, and
+            Finance pays through the bank and posts to SQL Account. Wages are
+            due by the {data.rule.payByDay}th of the next month.
+          </>
+        }
+      >
+        {data.role && (
+          <div className="tabbar" role="tablist" aria-label="Staff payroll">
+            <button
+              role="tab"
+              aria-selected={current === "runs"}
+              onClick={() => setTab("runs")}
+            >
+              Payroll
+            </button>
+            <button
+              role="tab"
+              aria-selected={current === "mine"}
+              onClick={() => setTab("mine")}
+            >
+              My payslips
+            </button>
+            <button
+              role="tab"
+              aria-selected={current === "tables"}
+              onClick={() => setTab("tables")}
+            >
+              EPF and SOCSO tables
+            </button>
+          </div>
+        )}
+      </PageHead>
       {current === "runs" ? (
-        <Runs data={data} onOpen={setOpen} />
+        <Runs data={data} onOpen={setOpen} seesPayChanges={seesPayChanges} />
       ) : current === "tables" ? (
         <StatTablesView />
       ) : (
@@ -123,129 +151,214 @@ export function StaffPayView() {
 function Runs({
   data,
   onOpen,
+  seesPayChanges,
 }: {
   data: StaffPayBoard;
   onOpen: (id: string) => void;
+  seesPayChanges: boolean;
 }) {
   const act = useAction();
   const mine = data.runs.filter((r) => r.mineToAct);
   const late = data.employers.filter((e) => e.lastLate);
   const thisMonth = data.runs.filter((r) => r.period === data.period);
-  const periods = [...new Set(data.runs.map((r) => r.period))];
+  const flagged = thisMonth.reduce((n, r) => n + r.totals.flagged, 0);
+  // This month's runs show on the employer cards; every other run is listed by month underneath.
+  const onCards = new Set(data.employers.map((e) => e.current?.id).filter(Boolean));
+  const others = data.runs.filter((r) => !onCards.has(r.id));
+  const periods = [...new Set(others.map((r) => r.period))];
+  const runOf = (id: string) => data.runs.find((r) => r.id === id) ?? null;
+  // Exceptions first: the runs waiting for you, then late ones, then those with staff to check.
+  const rank = (e: StaffPayBoard["employers"][number]) => {
+    const r = e.current ? runOf(e.current.id) : null;
+    if (r?.mineToAct) return 0;
+    if (e.lastLate || r?.late) return 1;
+    if (r?.totals.flagged) return 2;
+    return 3;
+  };
+  const employers = [...data.employers].sort((a, b) => rank(a) - rank(b));
   return (
     <>
-      <div className="kpis">
-        <Kpi
+      <Stats>
+        <Stat
           label="Waiting for you"
           value={mine.length}
           tone={mine.length ? "warn" : "ok"}
+          icon={<HourglassMediumIcon size={18} />}
         />
-        <Kpi
+        <Stat
           label={`${monthLabel(data.prev)} not paid by the ${data.rule.payByDay}th`}
           value={late.length}
           tone={late.length ? "crit" : "ok"}
           note="Employment Act s.19"
+          icon={<WarningCircleIcon size={18} />}
         />
-        <Kpi
+        <Stat
           label={`${monthLabel(data.period)} net pay`}
-          value={rm(thisMonth.reduce((n, r) => n + r.totals.net, 0))}
+          value={<span className="pay-fig">{rm(thisMonth.reduce((n, r) => n + r.totals.net, 0))}</span>}
           note={`${thisMonth.length} employers`}
+          icon={<WalletIcon size={18} />}
         />
-        <Kpi
+        <Stat
           label="Staff with something to check"
-          value={thisMonth.reduce((n, r) => n + r.totals.flagged, 0)}
-          tone={thisMonth.some((r) => r.totals.flagged) ? "warn" : "ok"}
+          value={flagged}
+          tone={flagged ? "warn" : "ok"}
+          icon={<FlagIcon size={18} />}
         />
-      </div>
+      </Stats>
       {late.length > 0 && (
         <div className="notice" data-tone="crit">
           {monthLabel(data.prev)} salaries not paid by the {data.rule.payByDay}
           th: {late.map((e) => e.companyName).join(", ")}.
         </div>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>{monthLabel(data.period)} by employer</h3>
-        </div>
-        <ErrorNotice error={act.error} />
-        <div className="list">
-          {data.employers.map((e) => (
-            <div
-              key={e.companyId}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{e.companyName}</div>
-                <div className="muted small">{e.staff} staff</div>
-              </div>
-              {e.current ? (
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => onOpen(e.current!.id)}
-                >
-                  <Chip tone={STAGE[e.current.stage][0]}>
-                    {STAGE[e.current.stage][1]}
-                  </Chip>
-                </button>
-              ) : data.role === "hr" ? (
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy}
-                  onClick={() =>
-                    act.run(
-                      () => api.prepareStaffPay(e.companyId, data.period),
-                      "Prepared. Check the lines, then submit.",
-                    )
-                  }
-                >
-                  Prepare {monthLabel(data.period)}
-                </button>
-              ) : (
-                <Chip tone="unknown">Not prepared</Chip>
+      <div className={seesPayChanges ? "pay-board pay-board-two" : "pay-board"}>
+        {seesPayChanges && (
+          <aside className="pay-aside" aria-label="To verify">
+            <div className="pay-inbox">
+              <PayChangesPanel />
+            </div>
+            <div className="pay-adv">
+              <AdvancesOverdue />
+            </div>
+          </aside>
+        )}
+        <div className="pay-main">
+          <section className="pay-section" aria-labelledby="pay-month-h">
+            <div className="pay-section-head">
+              <h2 id="pay-month-h">{monthLabel(data.period)} by employer</h2>
+              {mine.length > 0 && (
+                <Chip tone="warn">{`${mine.length} waiting for you`}</Chip>
               )}
             </div>
+            <ErrorNotice error={act.error} />
+            {employers.length === 0 ? (
+              <Empty title="No employer with staff yet" />
+            ) : (
+              <div className="pay-runs">
+                {employers.map((e) => {
+                  const r = e.current ? runOf(e.current.id) : null;
+                  const stage = e.current?.stage ?? null;
+                  return (
+                    <article
+                      key={e.companyId}
+                      className="pay-run"
+                      data-turn={r?.mineToAct ? "yes" : undefined}
+                      data-late={r?.late || e.lastLate ? "yes" : undefined}
+                    >
+                      <header className="pay-run-head">
+                        <div className="pay-run-title">
+                          <h3>{e.companyName}</h3>
+                          <span className="muted small">{e.staff} staff</span>
+                        </div>
+                        <div className="pay-run-tags">
+                          {r?.mineToAct && <Chip tone="warn">Your turn</Chip>}
+                          {e.lastLate && (
+                            <Chip tone="crit">{`${monthLabel(data.prev)} late`}</Chip>
+                          )}
+                          {stage ? (
+                            <Chip tone={r?.late ? "crit" : STAGE[stage][0]}>
+                              {r?.late ? "Late" : STAGE[stage][1]}
+                            </Chip>
+                          ) : (
+                            <Chip tone="unknown">Not prepared</Chip>
+                          )}
+                        </div>
+                      </header>
+                      {stage && <Steps steps={runSteps(stage, !!r?.late)} />}
+                      {r && (
+                        <dl className="pay-figs">
+                          <div>
+                            <dt>Gross</dt>
+                            <dd>{rm(r.totals.gross)}</dd>
+                          </div>
+                          <div>
+                            <dt>Net</dt>
+                            <dd>{rm(r.totals.net)}</dd>
+                          </div>
+                          <div>
+                            <dt>Employer cost</dt>
+                            <dd>{rm(r.totals.cost)}</dd>
+                          </div>
+                          <div data-tone={r.totals.flagged ? "warn" : undefined}>
+                            <dt>To check</dt>
+                            <dd>{r.totals.flagged}</dd>
+                          </div>
+                        </dl>
+                      )}
+                      {(e.current || data.role === "hr") && (
+                      <footer className="pay-run-foot">
+                        {e.current ? (
+                          <button
+                            className={r?.mineToAct ? "btn btn-primary btn-sm" : "btn btn-sm"}
+                            onClick={() => onOpen(e.current!.id)}
+                          >
+                            {r?.mineToAct ? "Open and act" : "Open"}
+                            <CaretRightIcon size={14} aria-hidden="true" />
+                          </button>
+                        ) : data.role === "hr" ? (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={act.busy}
+                            onClick={() =>
+                              act.run(
+                                () => api.prepareStaffPay(e.companyId, data.period),
+                                "Prepared. Check the lines, then submit.",
+                              )
+                            }
+                          >
+                            Prepare {monthLabel(data.period)}
+                          </button>
+                        ) : null}
+                      </footer>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+          {periods.map((p) => (
+            <Card key={p} title={monthLabel(p)} flush>
+              <div className="pay-hist">
+                {others
+                  .filter((r) => r.period === p)
+                  .sort((a, b) => Number(b.mineToAct) - Number(a.mineToAct))
+                  .map((r) => (
+                    <button
+                      key={r.id}
+                      className="pay-hist-row"
+                      data-turn={r.mineToAct ? "yes" : undefined}
+                      onClick={() => onOpen(r.id)}
+                    >
+                      <span className="pay-hist-name">
+                        <strong>{r.companyName}</strong>
+                        <span className="muted small">{r.totals.headcount} staff</span>
+                      </span>
+                      <span className="pay-hist-figs">
+                        <span>
+                          <span className="pay-hist-k">Gross</span> {rm(r.totals.gross)}
+                        </span>
+                        <span>
+                          <span className="pay-hist-k">Net</span> {rm(r.totals.net)}
+                        </span>
+                        <span>
+                          <span className="pay-hist-k">Employer cost</span> {rm(r.totals.cost)}
+                        </span>
+                      </span>
+                      <span className="pay-hist-tags">
+                        {r.mineToAct && <Chip tone="warn">Your turn</Chip>}
+                        <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>
+                          {r.late ? "Late" : STAGE[r.stage][1]}
+                        </Chip>
+                        <CaretRightIcon size={14} aria-hidden="true" className="pay-caret" />
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </Card>
           ))}
         </div>
-      </section>
-      {periods.map((p) => (
-        <section key={p} className="panel">
-          <div className="panel-head">
-            <h3>{monthLabel(p)}</h3>
-          </div>
-          <div className="list">
-            {data.runs
-              .filter((r) => r.period === p)
-              .map((r) => (
-                <button
-                  key={r.id}
-                  className="list-item"
-                  style={{
-                    flexWrap: "wrap",
-                    gap: 6,
-                    textAlign: "left",
-                    width: "100%",
-                  }}
-                  onClick={() => onOpen(r.id)}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{r.companyName}</div>
-                    <div className="muted small">
-                      {r.totals.headcount} staff · gross {rm(r.totals.gross)} ·
-                      net {rm(r.totals.net)} · employer cost {rm(r.totals.cost)}
-                    </div>
-                  </div>
-                  <div className="row" style={{ gap: 6 }}>
-                    {r.mineToAct && <Chip tone="warn">Your turn</Chip>}
-                    <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>
-                      {r.late ? "Late" : STAGE[r.stage][1]}
-                    </Chip>
-                  </div>
-                </button>
-              ))}
-          </div>
-        </section>
-      ))}
+      </div>
     </>
   );
 }
@@ -289,12 +402,14 @@ function RunDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
       {data && !slip && <RunBody data={data} onSlip={setSlip} />}
       {data && slip && (
         <>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setSlip(null)}
-          >
-            Back to the list
-          </button>
+          <div>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setSlip(null)}
+            >
+              Back to the list
+            </button>
+          </div>
           <Payslip
             line={slip}
             period={data.run.period}
@@ -341,23 +456,26 @@ function RunBody({
     ["Approved by the COO", run.cooApproved],
     ["Paid by Finance", run.paid],
   ];
+  const nowAt = steps.findIndex(([, s]) => !s);
+  const acts =
+    can.submit || can.approve || can.cooApprove || can.pay || can.return || can.prepare;
   return (
-    <>
-      <div className="kpis">
-        <Kpi label="Staff" value={totals.headcount} />
-        <Kpi label="Net pay" value={rm(totals.net)} />
-        <Kpi
+    <div className="pay-detail">
+      <Stats>
+        <Stat label="Staff" value={totals.headcount} />
+        <Stat label="Net pay" value={<span className="pay-fig">{rm(totals.net)}</span>} />
+        <Stat
           label="Employer cost"
-          value={rm(totals.cost)}
+          value={<span className="pay-fig">{rm(totals.cost)}</span>}
           note="Gross, claims, EPF, SOCSO, EIS, HRD"
         />
-        <Kpi
+        <Stat
           label="PCB estimated"
           value={totals.pcbEstimated}
           tone={totals.pcbEstimated ? "warn" : "ok"}
           note="Finance checks in LHDN e-PCB"
         />
-      </div>
+      </Stats>
       {data.ownLine && (data.role === "cos" || data.role === "coo") && (
         <div className="notice" data-tone="info">
           Your own salary is in this month. The{" "}
@@ -365,79 +483,40 @@ function RunBody({
           is the second check on it.
         </div>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Steps</h3>
-        </div>
-        <div className="list">
-          {steps.map(([label, s]) => (
-            <div key={label} className="list-item">
-              <div>{label}</div>
-              <span className="muted small">
-                {s
-                  ? `${s.by} · ${dateTimeLabel(s.at)}${s.note ? ` · ${s.note}` : ""}`
-                  : "Not yet"}
-              </span>
-            </div>
-          ))}
-          {run.paid && (
-            <div className="muted small">
-              Bank reference {run.paid.bankRef}, paid{" "}
-              {dateLabel(run.paid.paidOn)}, PCB checked in e-PCB.
-            </div>
-          )}
-          {run.returns.map((r) => (
-            <div key={r.at} className="notice" data-tone="warn">
-              Returned by {r.by} on {dateTimeLabel(r.at)}: {r.note}
-            </div>
-          ))}
-        </div>
-      </section>
-      <ErrorNotice error={act.error} />
-      {data.blockers.length > 0 && (
-        <section className="panel" aria-label="Before submitting">
-          <h2>Before this month can be submitted</h2>
-          {data.blockers.map((b) => (
-            <div key={b} className="small" style={{ color: "var(--warn, #b45309)" }}>
-              {b}
-            </div>
-          ))}
-        </section>
-      )}
-      {(can.submit ||
-        can.approve ||
-        can.cooApprove ||
-        can.pay ||
-        can.return ||
-        can.prepare) && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Your step</h3>
+      {acts && (
+        <section className="pay-yourstep" aria-labelledby="pay-yourstep-h">
+          <div className="pay-yourstep-head">
+            <h3 id="pay-yourstep-h">Your step</h3>
+            <Chip tone="warn">Your turn</Chip>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {can.pay && (
-              <>
+          <ErrorNotice error={act.error} />
+          {can.pay && (
+            <div className="pay-form">
+              <label className="field">
+                <span className="label">Bank reference</span>
                 <input
                   className="input"
-                  aria-label="Bank reference"
                   placeholder="Bank payment reference"
                   value={bankRef}
                   onChange={(e) => setBankRef(e.target.value)}
                 />
-                <label className="row small" style={{ gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={pcbChecked}
-                    onChange={(e) => setPcbChecked(e.target.checked)}
-                  />
-                  PCB checked against LHDN e-PCB for every line
-                </label>
-              </>
-            )}
-            {(can.return || can.approve || can.cooApprove) && (
-              <input
-                className="input"
-                aria-label="Comment"
+              </label>
+              <label className="pay-check small">
+                <input
+                  type="checkbox"
+                  checked={pcbChecked}
+                  onChange={(e) => setPcbChecked(e.target.checked)}
+                />
+                PCB checked against LHDN e-PCB for every line
+              </label>
+            </div>
+          )}
+          {(can.return || can.approve || can.cooApprove) && (
+            <label className="field">
+              <span className="label">Comment</span>
+              <textarea
+                className="textarea pay-note"
+                rows={2}
                 placeholder={
                   can.approve || can.cooApprove
                     ? "Comment (needed to approve; a short one is fine), or what needs to change (to return)"
@@ -446,115 +525,152 @@ function RunBody({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
+            </label>
+          )}
+          <div className="pay-actions">
+            {can.submit && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy}
+                onClick={() =>
+                  act.run(
+                    () => api.staffPayStep(run.id, "submit", {}),
+                    "Sent to the Chief of Staff.",
+                  )
+                }
+              >
+                Submit to the Chief of Staff
+              </button>
             )}
-            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              {can.prepare && (
-                <button
-                  className="btn btn-sm"
-                  disabled={act.busy}
-                  onClick={() =>
-                    act.run(
-                      () => api.prepareStaffPay(run.companyId, run.period),
-                      "Recalculated.",
-                    )
-                  }
-                >
-                  Recalculate
-                </button>
-              )}
-              {can.submit && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy}
-                  onClick={() =>
-                    act.run(
-                      () => api.staffPayStep(run.id, "submit", {}),
-                      "Sent to the Chief of Staff.",
-                    )
-                  }
-                >
-                  Submit to the Chief of Staff
-                </button>
-              )}
-              {can.approve && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !note.trim()}
-                  onClick={() =>
-                    act.run(
-                      () => api.staffPayStep(run.id, "approve", { note }),
-                      "Approved, sent to the COO.",
-                    )
-                  }
-                >
-                  Approve
-                </button>
-              )}
-              {can.cooApprove && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !note.trim()}
-                  onClick={() =>
-                    act.run(
-                      () => api.staffPayStep(run.id, "coo_approve", { note }),
-                      "Approved, Finance can pay.",
-                    )
-                  }
-                >
-                  Approve as COO
-                </button>
-              )}
-              {can.pay && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !bankRef.trim() || !pcbChecked}
-                  onClick={() =>
-                    act.run(
-                      () =>
-                        api.staffPayStep(run.id, "pay", {
-                          bankRef,
-                          pcbChecked,
-                        }),
-                      "Marked paid.",
-                    )
-                  }
-                >
-                  Mark paid
-                </button>
-              )}
-              {can.return && (
-                <button
-                  className="btn btn-sm"
-                  disabled={act.busy || !note.trim()}
-                  onClick={() =>
-                    act.run(
-                      () => api.staffPayStep(run.id, "return", { note }),
-                      "Returned to HR.",
-                    )
-                  }
-                >
-                  Return to HR
-                </button>
-              )}
-            </div>
+            {can.approve && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || !note.trim()}
+                onClick={() =>
+                  act.run(
+                    () => api.staffPayStep(run.id, "approve", { note }),
+                    "Approved, sent to the COO.",
+                  )
+                }
+              >
+                Approve
+              </button>
+            )}
+            {can.cooApprove && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || !note.trim()}
+                onClick={() =>
+                  act.run(
+                    () => api.staffPayStep(run.id, "coo_approve", { note }),
+                    "Approved, Finance can pay.",
+                  )
+                }
+              >
+                Approve as COO
+              </button>
+            )}
+            {can.pay && (
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || !bankRef.trim() || !pcbChecked}
+                onClick={() =>
+                  act.run(
+                    () =>
+                      api.staffPayStep(run.id, "pay", {
+                        bankRef,
+                        pcbChecked,
+                      }),
+                    "Marked paid.",
+                  )
+                }
+              >
+                Mark paid
+              </button>
+            )}
+            {can.prepare && (
+              <button
+                className="btn btn-sm"
+                disabled={act.busy}
+                onClick={() =>
+                  act.run(
+                    () => api.prepareStaffPay(run.companyId, run.period),
+                    "Recalculated.",
+                  )
+                }
+              >
+                Recalculate
+              </button>
+            )}
+            {can.return && (
+              <button
+                className="btn btn-sm"
+                disabled={act.busy || !note.trim()}
+                onClick={() =>
+                  act.run(
+                    () => api.staffPayStep(run.id, "return", { note }),
+                    "Returned to HR.",
+                  )
+                }
+              >
+                Return to HR
+              </button>
+            )}
           </div>
         </section>
       )}
-      {data.directorChecks.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>For directors to verify</h3>
-            <Chip tone="warn">{`${data.directorChecks.length} unresolved`}</Chip>
-          </div>
-          <p className="muted small" style={{ padding: "0 12px" }}>
-            Shown only to directors. Payroll carries on as normal; these stay
-            unresolved until the published table is loaded and checked, or
-            the PCB is entered from LHDN's e-PCB.
+      {!acts && <ErrorNotice error={act.error} />}
+      {data.blockers.length > 0 && (
+        <section className="notice pay-blockers" data-tone="warn" aria-label="Before submitting">
+          <h3>Before this month can be submitted</h3>
+          <ul>
+            {data.blockers.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <Card title="Steps">
+        <ol className="pay-timeline">
+          {steps.map(([label, s], i) => (
+            <li key={label} data-state={s ? "done" : i === nowAt ? "now" : "todo"}>
+              <span className="pay-timeline-dot" aria-hidden="true">
+                {s ? "✓" : i + 1}
+              </span>
+              <span className="pay-timeline-text">
+                <span className="pay-timeline-label">{label}</span>
+                <span className="muted small">
+                  {s
+                    ? `${s.by} · ${dateTimeLabel(s.at)}${s.note ? ` · ${s.note}` : ""}`
+                    : "Not yet"}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        {run.paid && (
+          <p className="muted small pay-after">
+            Bank reference {run.paid.bankRef}, paid{" "}
+            {dateLabel(run.paid.paidOn)}, PCB checked in e-PCB.
           </p>
-          <div className="list">
+        )}
+        {run.returns.map((r) => (
+          <div key={r.at} className="notice pay-after" data-tone="warn">
+            Returned by {r.by} on {dateTimeLabel(r.at)}: {r.note}
+          </div>
+        ))}
+      </Card>
+      {data.directorChecks.length > 0 && (
+        <Card
+          title="For directors to verify"
+          sub="Shown only to directors. Payroll carries on as normal; these stay unresolved until the published table is loaded and checked, or the PCB is entered from LHDN's e-PCB."
+          actions={<Chip tone="warn">{`${data.directorChecks.length} unresolved`}</Chip>}
+          flush
+        >
+          <ul className="pay-rows">
             {data.directorChecks.map((x) => (
-              <div key={x.key} className="list-item" style={{ display: "block" }}>
-                <div className="row" style={{ justifyContent: "space-between", gap: 6 }}>
+              <li key={x.key} className="pay-row-stack">
+                <div className="pay-row-top">
                   <span>{x.text}</span>
                   <Chip tone="warn">{x.status}</Chip>
                 </div>
@@ -562,56 +678,58 @@ function RunBody({
                   Source: {x.source} · Affects: {x.affected} · Responsible:{" "}
                   {x.responsible}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
       {data.remittances.length > 0 &&
         ["approved", "consented", "paid"].includes(data.run.stage) && (
-          <section className="panel">
-            <div className="panel-head">
-              <h3>Contributions and zakat, paid by Finance</h3>
-            </div>
-            <p className="muted small" style={{ padding: "0 12px" }}>
-              What this payroll owes EPF, PERKESO, LHDN, HRD Corp and the zakat
-              bodies, due the month after. Shown from Finance's records; nothing
-              to do here.
-            </p>
-            <div className="list">
+          <Card
+            title="Contributions and zakat, paid by Finance"
+            sub="What this payroll owes EPF, PERKESO, LHDN, HRD Corp and the zakat bodies, due the month after. Shown from Finance's records; nothing to do here."
+            flush
+          >
+            <ul className="pay-rows">
               {data.remittances.map((x) => (
-                <div key={x.body} className="list-item">
-                  <span>
-                    {x.body} · due {dateLabel(x.dueOn)}
-                    {x.amount != null && ` · RM${x.amount.toFixed(2)}`}
-                    {x.paidOn && ` · paid ${dateLabel(x.paidOn)}`}
-                    {x.seenInBank && " · seen in the bank"}
-                  </span>
-                  <Chip tone={REMIT[x.state][0]}>{REMIT[x.state][1]}</Chip>
-                </div>
+                <li key={x.body} className="pay-row-stack">
+                  <div className="pay-row-top">
+                    <strong>{x.body}</strong>
+                    <Chip tone={REMIT[x.state][0]}>{REMIT[x.state][1]}</Chip>
+                  </div>
+                  <div className="muted small pay-remit-meta">
+                    <span>due {dateLabel(x.dueOn)}</span>
+                    {x.amount != null && <span className="pay-fig">RM{x.amount.toFixed(2)}</span>}
+                    {x.paidOn && <span>paid {dateLabel(x.paidOn)}</span>}
+                    {x.seenInBank && <span>seen in the bank</span>}
+                  </div>
+                </li>
               ))}
-            </div>
-          </section>
+            </ul>
+          </Card>
         )}
       {can.export && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Draft files for Finance</h3>
+        <Card
+          title="Draft files for Finance"
+          sub="Prima does not send these anywhere. Finance checks them, then uploads to the bank, SQL Account, KWSP, PERKESO and LHDN."
+        >
+          <div className="pay-control">
+            <p className="small">
+              Control total: {data.control.count} payments,{" "}
+              <span className="pay-fig">
+                RM
+                {data.control.net.toLocaleString("en-MY", {
+                  minimumFractionDigits: 2,
+                })}
+              </span>
+              , check code <span className="mono">{data.control.code}</span>.
+            </p>
+            <p className="muted small">
+              Finance matches these on the bank portal before releasing. Only
+              Finance takes the bank file.
+            </p>
           </div>
-          <p className="muted small">
-            Prima does not send these anywhere. Finance checks them, then
-            uploads to the bank, SQL Account, KWSP, PERKESO and LHDN.
-          </p>
-          <p className="small">
-            Control total: {data.control.count} payments, RM
-            {data.control.net.toLocaleString("en-MY", {
-              minimumFractionDigits: 2,
-            })}
-            , check code <span className="mono">{data.control.code}</span>.
-            Finance matches these on the bank portal before releasing. Only
-            Finance takes the bank file.
-          </p>
-          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <div className="pay-files">
             {FILES.filter(([k]) => k !== "bank" || can.bankFile).map(
               ([k, label]) => (
                 <button
@@ -620,73 +738,94 @@ function RunBody({
                   disabled={act.busy}
                   onClick={() => download(k)}
                 >
+                  <FileCsvIcon size={16} aria-hidden="true" />
                   {label}
                 </button>
               ),
             )}
           </div>
-        </section>
+        </Card>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Staff</h3>
-          <span className="muted small">
+      <Card
+        title="Staff"
+        sub={
+          <span className="pay-fig">
             EPF {rm(totals.epf)} · PCB {rm(totals.pcb)} · HRD {rm(totals.hrd)}
           </span>
-        </div>
+        }
+        flush
+      >
         <SocsoColumns lines={run.lines} totals={totals} />
-        <div className="list">
+        <ul className="pay-lines">
           {run.lines.map((l) => (
-            <div
-              key={l.personId}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}
-            >
-              <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
-              >
+            <li key={l.personId} className="pay-line" data-flagged={l.flags.length ? "yes" : undefined}>
+              <div className="pay-line-head">
                 <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ padding: 0, textAlign: "left" }}
+                  className="pay-line-name"
                   onClick={() => onSlip(l)}
+                  aria-label={`Payslip for ${l.name}`}
                 >
-                  <span style={{ fontWeight: 600 }}>{l.name}</span>{" "}
-                  <span className="muted small">{l.jobTitle}</span>
+                  <Person name={l.name} sub={l.jobTitle} size={32} />
                 </button>
-                <span style={{ fontWeight: 600 }}>{rm(l.net)}</span>
+                <span className="pay-line-net">
+                  <span className="pay-line-k">Net</span>
+                  {rm(l.net)}
+                </span>
               </div>
-              <div className="muted small">
-                Gross {rm(l.gross)} · EPF {rm(l.epfEe)} · SOCSO {rm(l.socsoEe)}{" "}
-                · LINDUNG{" "}
-                {l.lindungStatus === "opted_out"
-                  ? "opted out"
-                  : rm(l.lindungEe)}{" "}
-                · EIS {rm(l.eisEe)} · PCB {rm(l.pcb)}
-                {l.pcbSource === "estimate" && l.pcb > 0 ? " (estimate)" : ""}
-                {l.claims ? ` · claims ${rm(l.claims)}` : ""}
-              </div>
-              {l.flags.map((f) => (
-                <div
-                  key={f}
-                  className="small"
-                  style={{ color: "var(--warn, #b45309)" }}
-                >
-                  {f}
+              <dl className="pay-line-figs">
+                <div>
+                  <dt>Gross</dt>
+                  <dd>{rm(l.gross)}</dd>
                 </div>
-              ))}
-              {can.prepare && <PcbEdit runId={run.id} line={l} />}
-              {can.prepare && <OneOffEdit runId={run.id} line={l} types={oneOffTypes} />}
-              {can.prepare && l.partMonth && <PartPayEdit runId={run.id} line={l} />}
-            </div>
+                <div>
+                  <dt>EPF</dt>
+                  <dd>{rm(l.epfEe)}</dd>
+                </div>
+                <div>
+                  <dt>SOCSO</dt>
+                  <dd>{rm(l.socsoEe)}</dd>
+                </div>
+                <div>
+                  <dt>LINDUNG</dt>
+                  <dd>{l.lindungStatus === "opted_out" ? "opted out" : rm(l.lindungEe)}</dd>
+                </div>
+                <div>
+                  <dt>EIS</dt>
+                  <dd>{rm(l.eisEe)}</dd>
+                </div>
+                <div>
+                  <dt>PCB{l.pcbSource === "estimate" && l.pcb > 0 ? " (estimate)" : ""}</dt>
+                  <dd>{rm(l.pcb)}</dd>
+                </div>
+                {l.claims ? (
+                  <div>
+                    <dt>Claims</dt>
+                    <dd>{rm(l.claims)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {l.flags.length > 0 && (
+                <ul className="pay-flags">
+                  {l.flags.map((f) => (
+                    <li key={f}>
+                      <WarningCircleIcon size={14} aria-hidden="true" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {can.prepare && (
+                <div className="pay-line-edit">
+                  <PcbEdit runId={run.id} line={l} />
+                  <OneOffEdit runId={run.id} line={l} types={oneOffTypes} />
+                  {l.partMonth && <PartPayEdit runId={run.id} line={l} />}
+                </div>
+              )}
+            </li>
           ))}
-        </div>
-      </section>
-    </>
+        </ul>
+      </Card>
+    </div>
   );
 }
 
@@ -696,10 +835,9 @@ function PcbEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
     line.pcbSource === "entered" ? String(line.pcb) : "",
   );
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="pay-edit">
       <input
-        className="input"
-        style={{ maxWidth: 160 }}
+        className="input pay-in-sm"
         aria-label={`PCB for ${line.name}`}
         inputMode="decimal"
         placeholder="PCB from e-PCB"
@@ -736,13 +874,13 @@ function PartPayEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
   const [allow, setAllow] = useState(line.partPay ? String(line.partPay.allowances) : "");
   const [note, setNote] = useState(line.partPay?.note ?? "");
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-      <span className="small">
+    <div className="pay-edit">
+      <span className="small pay-edit-label">
         Part month {dateLabel(line.partMonth!.from)} to {dateLabel(line.partMonth!.to)}:
       </span>
-      <input className="input" style={{ maxWidth: 130 }} inputMode="decimal" aria-label={`Part-month basic for ${line.name}`} placeholder="Basic, RM" value={basic} onChange={(e) => setBasic(e.target.value)} />
-      <input className="input" style={{ maxWidth: 150 }} inputMode="decimal" aria-label={`Part-month allowances for ${line.name}`} placeholder="Fixed allowances, RM" value={allow} onChange={(e) => setAllow(e.target.value)} />
-      <input className="input" style={{ maxWidth: 260 }} aria-label={`How the part-month pay was worked out for ${line.name}`} placeholder="How it was worked out" value={note} onChange={(e) => setNote(e.target.value)} />
+      <input className="input pay-in-sm" inputMode="decimal" aria-label={`Part-month basic for ${line.name}`} placeholder="Basic, RM" value={basic} onChange={(e) => setBasic(e.target.value)} />
+      <input className="input pay-in-md" inputMode="decimal" aria-label={`Part-month allowances for ${line.name}`} placeholder="Fixed allowances, RM" value={allow} onChange={(e) => setAllow(e.target.value)} />
+      <input className="input pay-in-lg" aria-label={`How the part-month pay was worked out for ${line.name}`} placeholder="How it was worked out" value={note} onChange={(e) => setNote(e.target.value)} />
       <button
         className="btn btn-sm"
         disabled={act.busy || basic.trim() === "" || note.trim().length < 5}
@@ -772,10 +910,10 @@ function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: Staff
   const save = (next: { label: string; amount: number; typeId?: string | null }[], msg: string) =>
     act.run(() => api.setStaffPayLine(runId, line.personId, { extra: next }), msg);
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="pay-edit">
       {extra.map((a, i) => (
-        <span key={i} className="small">
-          One-off: {a.label} {rm(a.amount)}{" "}
+        <span key={i} className="small pay-oneoff">
+          One-off: {a.label} <span className="pay-fig">{rm(a.amount)}</span>{" "}
           <button className="btn btn-sm btn-ghost" disabled={act.busy} onClick={() => save(extra.filter((_, k) => k !== i), "One-off removed.")}>
             Remove
           </button>
@@ -783,7 +921,7 @@ function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: Staff
       ))}
       {oneOff.length > 0 && (
         <>
-          <select className="input" style={{ maxWidth: 220 }} aria-label={`One-off allowance for ${line.name}`} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+          <select className="input pay-in-lg" aria-label={`One-off allowance for ${line.name}`} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
             <option value="">One-off allowance</option>
             {oneOff.map((t) => (
               <option key={t.id} value={t.id}>
@@ -792,8 +930,7 @@ function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: Staff
             ))}
           </select>
           <input
-            className="input"
-            style={{ maxWidth: 120 }}
+            className="input pay-in-sm"
             inputMode="decimal"
             aria-label={`One-off amount for ${line.name}`}
             value={amount}
@@ -839,37 +976,45 @@ function Mine({ data }: { data: StaffPayBoard }) {
   const slipRef = useRef<HTMLDivElement>(null);
   if (!data.mine.length)
     return (
-      <>
+      <div className="pay-mine">
+        <Card title="My payslips">
+          <Empty title="No payslips yet">
+            They appear here once Finance has paid the month.
+          </Empty>
+        </Card>
         <MyZakat />
-        <section className="panel">
-          <div className="empty">
-            No payslips yet. They appear here once Finance has paid the month.
-          </div>
-        </section>
-      </>
+      </div>
     );
   const slip = open == null ? null : data.mine[open];
+  const years = [...new Set(data.mine.map((m) => m.period.slice(0, 4)))];
   return (
-    <>
+    <div className="pay-mine">
+      <Card title="My payslips" sub="Open a month to see the payslip and download it." flush>
+        {years.map((y) => (
+          <div key={y} className="pay-slips-year">
+            {years.length > 1 && <h3 className="pay-slips-y">{y}</h3>}
+            <ul className="pay-slips">
+              {data.mine.map((m, i) =>
+                m.period.slice(0, 4) !== y ? null : (
+                  <li key={m.runId}>
+                    <button className="pay-slip-item" onClick={() => setOpen(i)}>
+                      <span className="pay-slip-month">
+                        <strong>{monthLabel(m.period)}</strong>
+                        <span className="muted small">
+                          {m.companyName} · Paid {dateLabel(m.paidOn)}
+                        </span>
+                      </span>
+                      <span className="pay-slip-net pay-fig">{rm(m.line.net)}</span>
+                      <CaretRightIcon size={14} aria-hidden="true" className="pay-caret" />
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+        ))}
+      </Card>
       <MyZakat />
-      <section className="panel">
-        <div className="list">
-          {data.mine.map((m, i) => (
-            <button
-              key={m.runId}
-              className="list-item"
-              style={{ width: "100%", textAlign: "left" }}
-              onClick={() => setOpen(i)}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{monthLabel(m.period)}</div>
-                <div className="muted small">Paid {dateLabel(m.paidOn)}</div>
-              </div>
-              <span style={{ fontWeight: 600 }}>{rm(m.line.net)}</span>
-            </button>
-          ))}
-        </div>
-      </section>
       {slip && (
         <Drawer
           title={`Payslip, ${monthLabel(slip.period)}`}
@@ -883,16 +1028,18 @@ function Mine({ data }: { data: StaffPayBoard }) {
               companyName={slip.companyName}
             />
           </div>
-          <button
-            className="btn btn-sm"
-            style={{ marginTop: 8 }}
-            onClick={() => downloadSlip(slipRef.current, slip.period)}
-          >
-            Download payslip
-          </button>
+          <div>
+            <button
+              className="btn btn-sm"
+              onClick={() => downloadSlip(slipRef.current, slip.period)}
+            >
+              <DownloadSimpleIcon size={16} aria-hidden="true" />
+              Download payslip
+            </button>
+          </div>
         </Drawer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -905,23 +1052,23 @@ function Payslip({
   period: string;
   companyName: string;
 }) {
-  const row = (label: string, amount: number, minus = false) => (
-    <div key={label} className="list-item">
+  const row = (label: string, amount: number, minus = false, kind?: string) => (
+    <div key={label} className="list-item pay-slip-row" data-kind={kind}>
       <span>{label}</span>
-      <span>{minus && amount ? `(${rm(amount)})` : rm(amount)}</span>
+      <span className="pay-fig">{minus && amount ? `(${rm(amount)})` : rm(amount)}</span>
     </div>
   );
   return (
-    <section className="panel">
-      <div className="panel-head">
+    <section className="pay-slip">
+      <header className="pay-slip-head">
         <h3>
           {l.name} · {l.staffNo}
         </h3>
         <span className="muted small">
           {companyName} · {monthLabel(period)} · {l.jobTitle}
         </span>
-      </div>
-      <div className="list">
+      </header>
+      <div className="pay-slip-rows">
         {row("Basic pay", l.basic)}
         {l.allowanceLines.map((a) => row(a.label, a.amount))}
         {l.unpaidDays > 0 &&
@@ -930,11 +1077,11 @@ function Payslip({
             l.unpaidDeduction,
             true,
           )}
-        {row("Gross pay", l.gross)}
+        {row("Gross pay", l.gross, false, "sum")}
         {row("EPF (employee)", l.epfEe, true)}
         {row("SOCSO (employee)", l.socsoEe, true)}
         {l.lindungStatus === "opted_out" ? (
-          <div className="list-item">
+          <div className="list-item pay-slip-row">
             <span>LINDUNG 24 Jam</span>
             <span className="muted">Opted out</span>
           </div>
@@ -959,12 +1106,12 @@ function Payslip({
             true,
           )}
         {l.claims > 0 && row("Claims paid back", l.claims)}
-        <div className="list-item" style={{ fontWeight: 700 }}>
-          <span>Net pay</span>
-          <span>{rm(l.net)}</span>
+        <div className="list-item pay-slip-row" data-kind="net">
+          <strong>Net pay</strong>
+          <strong className="pay-fig">{rm(l.net)}</strong>
         </div>
       </div>
-      <p className="muted small">
+      <p className="muted small pay-slip-foot">
         Paid by your employer on top: EPF {rm(l.epfEr)}, SOCSO {rm(l.socsoEr)},
         EIS {rm(l.eisEr)}.{" "}
         {l.bank
@@ -987,7 +1134,7 @@ function SocsoColumns({
   totals: StaffPayRunView["totals"];
 }) {
   return (
-    <div className="table-wrap" style={{ marginBottom: 8 }}>
+    <div className="table-wrap pay-socso">
       <table>
         <thead>
           <tr>
@@ -1028,7 +1175,7 @@ function SocsoColumns({
               </td>
             </tr>
           ))}
-          <tr style={{ fontWeight: 700 }}>
+          <tr className="pay-total">
             <td>Total</td>
             <td className="num">{rm(totals.socsoEr)}</td>
             <td className="num">{rm(totals.socsoEe)}</td>
@@ -1057,24 +1204,25 @@ function MyZakat() {
   const est =
     data.basicPay && b ? (data.basicPay * Number(p || 0)) / 100 : null;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>My zakat deduction</h3>
-        <span className="muted small">
+    <Card
+      title="My zakat deduction"
+      actions={
+        <Chip tone={data.choice ? "ok" : "neutral"}>
           {data.choice
             ? `${data.choice.percent}% to ${data.choice.body}`
             : "None"}
-        </span>
-      </div>
-      <p className="muted small" style={{ padding: "0 12px" }}>
-        Your choice: the zakat body and the percentage of your gross pay. It is
-        deducted from your salary, paid by the company to the body, and your PCB
-        goes down by the same amount. It applies from the next payroll HR
-        prepares. Only you can change or stop it.
-      </p>
-      <div style={{ padding: "0 12px 12px" }}>
+        </Chip>
+      }
+    >
+      <div className="pay-zakat">
+        <p className="muted small">
+          Your choice: the zakat body and the percentage of your gross pay. It is
+          deducted from your salary, paid by the company to the body, and your PCB
+          goes down by the same amount. It applies from the next payroll HR
+          prepares. Only you can change or stop it.
+        </p>
         <label className="field">
-          <span>Zakat body</span>
+          <span className="label">Zakat body</span>
           <select
             className="select"
             value={b}
@@ -1088,7 +1236,7 @@ function MyZakat() {
         </label>
         {b && (
           <label className="field">
-            <span>
+            <span className="label">
               Percentage of gross pay ({data.minPercent}% to {data.maxPercent}%)
             </span>
             <input
@@ -1101,38 +1249,40 @@ function MyZakat() {
         )}
         {est != null && (
           <p className="muted small">
-            About {rm(Math.round(est * 100) / 100)} a month on your basic pay.
+            About <span className="pay-fig">{rm(Math.round(est * 100) / 100)}</span> a month on your basic pay.
           </p>
         )}
-        <button
-          className="btn btn-primary"
-          disabled={act.busy}
-          onClick={async () => {
-            const ok = await act.run(
-              () =>
-                api.setMyZakat(
-                  b ? { body: b, percent: Number(p) } : { body: null },
-                ),
-              b
-                ? "Saved. It applies from the next payroll."
-                : "Zakat deduction stopped from the next payroll.",
-            );
-            if (ok) {
-              setBody(null);
-              setPct(null);
-              reload();
-            }
-          }}
-        >
-          {b
-            ? "Save my choice"
-            : data.choice
-              ? "Stop my zakat deduction"
-              : "Save"}
-        </button>
+        <div>
+          <button
+            className="btn btn-primary"
+            disabled={act.busy}
+            onClick={async () => {
+              const ok = await act.run(
+                () =>
+                  api.setMyZakat(
+                    b ? { body: b, percent: Number(p) } : { body: null },
+                  ),
+                b
+                  ? "Saved. It applies from the next payroll."
+                  : "Zakat deduction stopped from the next payroll.",
+              );
+              if (ok) {
+                setBody(null);
+                setPct(null);
+                reload();
+              }
+            }}
+          >
+            {b
+              ? "Save my choice"
+              : data.choice
+                ? "Stop my zakat deduction"
+                : "Save"}
+          </button>
+        </div>
         <ErrorNotice error={act.error} />
         {data.history.length > 0 && (
-          <div className="muted small" style={{ paddingTop: 8 }}>
+          <div className="muted small">
             Changes:{" "}
             {data.history
               .slice(0, 4)
@@ -1144,6 +1294,6 @@ function MyZakat() {
           </div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
