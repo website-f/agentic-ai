@@ -68,8 +68,13 @@ async def test_a_site_goes_through_the_chosen_company_computer(client, llm, temp
             await asyncio.sleep(0.05)
         assert d.tunnel_hosts == ["eperolehan.gov.my"]
 
-        # Off in the workspace: not the gateway's (the egress proxy goes direct).
+        # P69: nothing chosen in the workspace: ePerolehan still goes through a linked computer
+        # that allowed it (a residential line), never from the server's own address.
         _, w, status = await _connect(port, "www.eperolehan.gov.my", ws_id)
+        assert status.startswith(b"HTTP/1.1 200")
+        w.close()
+        # Other sites are not the gateway's (the egress proxy goes direct).
+        _, w, status = await _connect(port, "example.com", ws_id)
         assert status.startswith(b"HTTP/1.1 409")
         w.close()
 
@@ -379,6 +384,6 @@ def test_saved_before_p62_the_two_switches_become_one_choice():
     ws.settings = {"web_proxy": {"on": True}}
     assert tunnel.mode_of(ws) == tunnel.Mode("proxy", ["*"])
     ws.settings = {}
-    assert tunnel.mode_of(ws).mode == "server"
+    assert tunnel.mode_of(ws) == tunnel.Mode("pc", ["eperolehan.gov.my"])  # P69: the default
     ws.settings = {"web_route": {"mode": "pc", "sites": ["*"]}}
     assert tunnel.mode_of(ws).sites == ["eperolehan.gov.my"]  # a computer never takes every site

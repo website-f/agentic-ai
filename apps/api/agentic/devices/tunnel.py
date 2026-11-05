@@ -42,6 +42,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
+
 from ..core.config import settings
 from ..core.db import SessionLocal
 from ..engine import compliance
@@ -121,7 +123,9 @@ def mode_of(ws: Workspace | None) -> Mode:
         return Mode("pc", clean_sites("pc", pc.get("hosts")))
     if px.get("on"):
         return Mode("proxy", clean_sites("proxy", px.get("sites")))
-    return Mode("server", list(DEFAULT_HOSTS))
+    # P69: nothing chosen yet: ePerolehan goes through a linked company computer (a residential
+    # line), never from the server's own address. Other sites go from the server as before.
+    return Mode("pc", list(DEFAULT_HOSTS))
 
 
 def save_mode(ws: Workspace, mode: str, sites: list[str]) -> Mode:
@@ -145,6 +149,21 @@ async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[
     if d.id not in await core.online_ids([d.id]):
         return f"{d.name} is offline"
     return ""
+
+
+async def any_computer(db: Any, workspace_id: str, host: str) -> str:
+    """P69: with no computer chosen, a linked one that has allowed `host` and is online now
+    (most recently seen first), or ""."""
+    rows = (
+        await db.scalars(
+            select(Device)
+            .where(Device.workspace_id == workspace_id, Device.revoked_at.is_(None))
+            .order_by(Device.last_seen_at.desc().nullslast())
+        )
+    ).all()
+    ready = [d for d in rows if not d.paused and core.host_in(host, d.tunnel_hosts or [])]
+    online = await core.online_ids([d.id for d in ready])
+    return next((d.id for d in ready if d.id in online), "")
 
 
 def _credentials(headers: dict[str, str]) -> str | None:
@@ -180,8 +199,14 @@ async def route(workspace_id: str, host: str) -> Route:
             return Route("server", "not routed")
         site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
         if m.mode == "pc":
-            device_id = setting(ws).device_id
+            device_id = setting(ws).device_id or await any_computer(db, workspace_id, host)
             why = await computer_down(db, workspace_id, device_id, [host])
+            if why == "no computer is chosen":
+                why = (
+                    "ePerolehan is opened through a company computer, and none is linked or "
+                    "has allowed it yet. Link your PC on Staff computers (download Agentic "
+                    "Office PC), then press Allow on that PC"
+                )
             if why:
                 return Route("refuse", why)
             return Route("computer", device_id=device_id, site=site)

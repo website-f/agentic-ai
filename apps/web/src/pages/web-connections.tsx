@@ -1,6 +1,6 @@
 /** P62 Settings > Web connections: ONE choice for how the AI's browsers reach websites —
- * browse from here (this server, the default), browse through a company computer (the office's
- * own internet line), or use the company's proxies (a pasted Webshare list) — and for which
+ * browse through a company computer (the office's own internet line: the default since P69, so
+ * ePerolehan never sees the server's address), browse from here (this server), or use the company's proxies (a pasted Webshare list) — and for which
  * sites. The chosen way is used or the site is refused with why; it never quietly falls back to
  * the server's address. Choosing a computer asks its person there (Allow / Not now on the
  * Agentic Office page that opens on it): no command line. "Check" opens a site once the way the
@@ -181,10 +181,10 @@ export function WebConnectionsPage() {
         {q.isLoading ? <Skeleton className="h-28" /> : q.error ? <p role="alert" className="text-danger">{errorMessage(q.error)}</p> : (
           <div className="grid gap-5">
             <div role="radiogroup" aria-label={t("How the AI browses")} className="grid gap-2.5 lg:grid-cols-3">
-              <Choice on={mode === "server"} icon={CloudIcon} title={t("Browse from here")} onPick={() => setMode("server")}
-                body={t("From the office server. Always available. The usual choice.")} />
               <Choice on={mode === "pc"} icon={DesktopTowerIcon} title={t("Browse through a computer")} onPick={() => setMode("pc")}
-                body={t("Through one of your company computers, so sites see your office's own internet line. Best for ePerolehan.")} />
+                body={t("The default. Through your own linked PC, so ePerolehan sees your office's home or office internet line, not a server. Link your PC on Staff computers, then press Allow on it.")} />
+              <Choice on={mode === "server"} icon={CloudIcon} title={t("Browse from here")} onPick={() => setMode("server")}
+                body={t("From the office server. Government portals such as ePerolehan may refuse its address.")} />
               <Choice on={mode === "proxy"} icon={PlugsIcon} title={t("Use your proxies")} onPick={() => setMode("proxy")}
                 body={t("Through your proxy provider, such as Webshare.")} />
             </div>

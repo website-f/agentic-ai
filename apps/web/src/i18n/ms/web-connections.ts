@@ -97,4 +97,9 @@ export const WEB_CONNECTIONS: Record<string, string> = {
     "Laman itu juga menolak alamat proksi ini. Layari melalui komputer menggunakan talian internet pejabat anda sendiri, seperti cara staf anda sampai ke laman itu.",
   "The site refuses this server's address. Browse through a computer uses your office's own internet line, the way your staff reach the site.":
     "Laman itu menolak alamat pelayan ini. Layari melalui komputer menggunakan talian internet pejabat anda sendiri, seperti cara staf anda sampai ke laman itu.",
+  // P69: the linked PC is the default.
+  "The default. Through your own linked PC, so ePerolehan sees your office's home or office internet line, not a server. Link your PC on Staff computers, then press Allow on it.":
+    "Lalai. Melalui PC anda sendiri yang dipautkan, jadi ePerolehan melihat talian internet rumah atau pejabat anda, bukan pelayan. Pautkan PC anda di Komputer staf, kemudian tekan Benarkan padanya.",
+  "From the office server. Government portals such as ePerolehan may refuse its address.":
+    "Dari pelayan pejabat. Portal kerajaan seperti ePerolehan mungkin menolak alamatnya.",
 };
