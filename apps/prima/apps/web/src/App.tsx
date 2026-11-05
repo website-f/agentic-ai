@@ -8,6 +8,7 @@ import type { Company, User } from '@prima/core';
 import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, jaOwns, seesArmsDetail } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { publishPage, rulesFor } from './prima-page';
 import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
@@ -742,6 +743,16 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     return VIEW_TOKENS.includes(h) && nav.some((x) => x.view === h) ? h : nav[0].view;
   };
   const [route, setRoute] = useState<Route>({ view: initialView() });
+  // P75: the office's feedback button explains the screen open now (prima-page.ts).
+  useEffect(() => {
+    const item = nav.find((n) => n.view === route.view);
+    publishPage({
+      view: route.view,
+      title: item?.label ?? route.view,
+      role: { label: me.user.department === 'it' ? 'Merdeka Network' : ROLE_LABEL[me.user.role] },
+      rules: rulesFor(route.view),
+    });
+  }, [route.view, me.user.id, me.user.role, me.user.department, nav]);
   const [moreOpen, setMoreOpen] = useState(false);
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;

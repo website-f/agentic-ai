@@ -24,3 +24,12 @@ if (!__DEMO__ && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => undefined);
   });
 }
+
+// P75: the Agentic Office's feedback button (built by apps/web, served by the office at the site root as
+// /feedback-widget.js). Loaded at run time, only inside the office (not in the test version, which has no office).
+if (!__DEMO__ && import.meta.env.VITE_OFFICE === 'true') {
+  const widget = document.createElement('script');
+  widget.type = 'module';
+  widget.src = '/feedback-widget.js';
+  document.body.appendChild(widget);
+}
