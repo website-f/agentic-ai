@@ -1,0 +1,32 @@
+{
+  "status": "PROPOSED at the combined merge (R14b): manifest entry for #62's module. No install is authorized by this file.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email",
+    "central_admin_walls",
+    "central_admin_panel",
+    "central_admin_delegations",
+    "central_admin_legal_holds",
+    "company_office",
+    "company_run_links",
+    "org_links",
+    "special_ops"
+  ],
+  "modules": [
+    {
+      "id": "fw_welfare",
+      "version": 1,
+      "path": "db/modules/fw-welfare-v1.sql",
+      "sha256": "5ab0f22874be281bf87036378f8fb8d162d8ed4c5292bc83644230b41ef5fe1f",
+      "requires": [],
+      "catalog": "apps/api/src/fw-welfare-readiness.ts fwWelfareProblems"
+    }
+  ]
+}

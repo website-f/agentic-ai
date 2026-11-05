@@ -34,12 +34,18 @@ export interface ArishaAnswer {
 }
 
 export interface ArishaToolSpec {
-  name: 'record_form' | 'prepare_record' | 'executive_summary' | 'finance_papers' | 'prepare_finance_paper';
+  name: 'record_form' | 'prepare_record' | 'executive_summary' | 'finance_papers' | 'prepare_finance_paper' | 'task_guide';
   description: string;
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required: string[] };
 }
 
 export const ARISHA_TOOLS: ArishaToolSpec[] = [
+  {
+    name: 'task_guide',
+    description:
+      'Read only. Returns the in-app guide cards this person may use (BM and English), the same versioned cards as the Guide tab: who does the task, which screen, the fields and rules, what is entered once and reused, and what is not verified or switched off. Explain from these cards only; never claim a task, screen or connection the cards do not show.',
+    inputSchema: { type: 'object', properties: { cardId: { type: 'string' } }, required: [] },
+  },
   {
     name: 'record_form',
     description:
@@ -80,6 +86,7 @@ export function arishaToolsFor(user: ArishaPilotUser): ArishaToolSpec[] {
   const contexts = ['operations', 'compliance', 'finance-papers'].filter((context) => arishaMayReadContext(user, context));
   return ARISHA_TOOLS.filter((tool) =>
     tool.name === 'executive_summary' ||
+    tool.name === 'task_guide' ||
     ((tool.name === 'record_form' || tool.name === 'prepare_record') && arishaRecordKindsFor(user).length > 0) ||
     ((tool.name === 'finance_papers' || tool.name === 'prepare_finance_paper') && arishaMayPrepareFinance(user))
   ).map((tool) => tool.name === 'executive_summary' ? { ...tool, inputSchema: { ...tool.inputSchema, properties: { ...tool.inputSchema.properties, context: { type: 'string', enum: contexts } } } } : tool);

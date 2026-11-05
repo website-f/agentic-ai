@@ -2,7 +2,7 @@ import {liveItRows} from './it-cleanup-guards';
 // Manual IT work records only. Nothing here provisions accounts, changes permissions or certifies compliance.
 import type { Store } from './store';
 import type { ItAccount, ItAsset, ItManualMetadata, ItManualKind, ItOnboarding, User } from './types';
-import { AccessDenied, accessClosed } from './access';
+import { AccessDenied, CENTRAL_EMPLOYER_IDS, accessClosed, centralEmployerName, isCentralEmployer } from './access';
 import { BadRequest, NotFound } from './service';
 import { sha256Hex } from './audit';
 import { dateOf } from './time';
@@ -59,7 +59,7 @@ export class ItManualService {
   }
   private async company(tx: Store, id: unknown) {
     if (id === null) return null;
-    if (typeof id !== 'string' || !(await tx.get('companies', id))) throw new BadRequest('Choose a registered company or mark the unit unlinked.');
+    if (typeof id !== 'string' || (!isCentralEmployer(id) && !(await tx.get('companies', id)))) throw new BadRequest('Choose a registered company or mark the unit unlinked.');
     return id;
   }
   private async rows(tx = this.store): Promise<Row[]> { return [...await tx.list('itOnboarding', {}), ...await tx.list('itAccounts', {}), ...await tx.list('itAssets', {})]; }
@@ -79,7 +79,9 @@ export class ItManualService {
     return { ...marker(user), connection: 'not_connected' as const, configuration:ready?'ready':'setup_required', problems, canCreate: ready&&isIt(user), canCheck: ready&&isManager(user), canCreateAsset: ready&&isIt(user),
       staff: isIt(user) ? people.map(u => ({ id:u.id, name:u.name, title:u.title })) : [],
       itStaff: isIt(user) ? people.filter(isIt).map(u => ({ id:u.id, name:u.name })) : [],
-      companies: isIt(user) ? companies.map(c => ({ id:c.id, name:c.name })) : [],
+      // The central employers (PWVSB, Merdeka Network, Goodwill Empire, Sasa Team) have staff and devices too; they are not
+      // rows of the companies table, so they are listed first by name (Arisha main review round 2, 2 Nov 2026).
+      companies: isIt(user) ? [...CENTRAL_EMPLOYER_IDS.map(id => ({ id, name:centralEmployerName(id)! })), ...companies.map(c => ({ id:c.id, name:c.name }))] : [],
       jobs: isIt(user) ? (await this.store.list('itJobs', {})).filter(j => j.status !== 'cancelled' && (isLead(user) || j.assigneeId === user.id || j.givenById === user.id)).map(j => ({ id:j.id, title:j.title })) : [],
       onboarding: readonlyHr ? [] : await liveItRows(this.store,'itOnboarding'),
       accounts: readonlyHr ? [] : await liveItRows(this.store,'itAccounts'),

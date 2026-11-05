@@ -41,7 +41,8 @@ export function HostelsView() {
         <h1>Hostels</h1>
         <p className="muted">
           Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM
-          approves, then the COO; the company pays from its own bank and uploads the slip. A bill closes only with the slip.
+          approves, then the COO. The company pays from its own bank; when Finance records the payment (account, day, reference) it shows here as paid at once,
+          with no slip needed. Otherwise the company uploads the slip. Once Finance loads the bank statement, the bill shows where the money was seen leaving.
         </p>
       </div>
       <div className="kpis">
@@ -128,7 +129,7 @@ function BillItem({ b }: { b: BillRow }) {
     ['FWM checked', bill.fwmCheck],
     ['Operations Director / OGM', bill.sectorApproval],
     ['COO', bill.cooApproval],
-    ['Payment slip', bill.slip],
+    ['Payment slip', bill.financePaid && !bill.slip ? { by: `not needed, Finance recorded the payment`, at: bill.financePaid.at, note: '' } : bill.slip],
   ] as const;
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
@@ -150,6 +151,21 @@ function BillItem({ b }: { b: BillRow }) {
           </button>
         </div>
       </div>
+      {(bill.financePaid || bill.bankSeen) && (
+        <div className="small">
+          {bill.financePaid && (
+            <>
+              Paid by Finance: {rm(bill.financePaid.amount)} from {bill.financePaid.bank} on {dateLabel(bill.financePaid.on)}, ref {bill.financePaid.ref}{' '}
+              (recorded by {bill.financePaid.by}).{' '}
+            </>
+          )}
+          {bill.bankSeen && (
+            <span>
+              Seen leaving {bill.bankSeen.bank} on the bank statement, {dateLabel(bill.bankSeen.date)}.
+            </span>
+          )}
+        </div>
+      )}
       {bill.returned && bill.status === 'returned' && (
         <div className="small">
           Sent back by {bill.returned.by}: {bill.returned.note}

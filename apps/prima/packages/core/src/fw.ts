@@ -3,7 +3,7 @@
 
 import { RULES } from './rules';
 import { addDays, daysBetween } from './time';
-import type { FwmTaskKind, FwPaper, IsoDate } from './types';
+import type { FwCheckKind, FwConcern, FwmTaskKind, FwPaper, FwWelfareCheck, IsoDate } from './types';
 
 export const FW_PAPER_LABEL: Record<FwPaper, string> = {
   PLKS_PERMIT: 'Work permit (PLKS)',
@@ -87,4 +87,73 @@ export function fwServicePlan(hiredOn: IsoDate, today: IsoDate) {
     daysToLeave: daysBetween(today, leaveBy),
     finalYear: year >= cap,
   };
+}
+
+// ---------- Responsible recruitment and worker welfare (masterplan §240, Fauzan 3 Nov 2026) ----------
+
+export const FW_CHECK_LABEL: Record<FwCheckKind, string> = {
+  ARRIVAL_FEE: 'Arrival fee check',
+  PASSPORT: 'Passport check',
+  WELFARE: 'Welfare talk',
+};
+
+export const FW_CONCERN_LABEL: Record<FwConcern, string> = {
+  PAY: 'Pay late or short',
+  HOURS: 'Too many hours or no rest day',
+  HOUSING: 'Hostel conditions',
+  TREATMENT: 'Treatment by a supervisor',
+  FEES: 'Paying a fee or debt to someone',
+  DOCUMENTS: 'Passport or papers kept from them',
+  HEALTH: 'Health',
+  OTHER: 'Other',
+};
+
+/** Whether a new check needs following up: a fee paid, a passport held without consent, or a concern raised. */
+export function fwCheckOpens(c: Pick<FwWelfareCheck, 'kind' | 'paidAnything' | 'heldBy' | 'docIds' | 'concerns'>): boolean {
+  if (c.kind === 'ARRIVAL_FEE') return !!c.paidAnything;
+  // Rule FWM-PASSPORT-CONSENT (Fauzan, 3 Nov 2026): an attached document counts as consent; its content is not checked.
+  if (c.kind === 'PASSPORT') return c.heldBy === 'company' && !c.docIds.length;
+  return (c.concerns ?? []).length > 0;
+}
+
+/** Who holds the passport after this check and any follow-up on it, and whether a company hold is consented. */
+export function fwPassportCustody(c: FwWelfareCheck | null): { holder: 'worker' | 'company' | null; consented: boolean } {
+  if (!c || c.kind !== 'PASSPORT') return { holder: null, consented: false };
+  if (c.status === 'closed' && c.custodyAfter) return { holder: c.custodyAfter, consented: c.custodyAfter === 'company' };
+  const holder = c.heldBy ?? null;
+  return { holder, consented: holder === 'company' && c.docIds.length > 0 };
+}
+
+export interface AgencyScore {
+  agency: string;
+  checked: number;
+  feesFound: number;
+  /** RM the workers said they paid. */
+  paid: number;
+  /** RM the agencies paid back. */
+  repaid: number;
+  open: number;
+}
+
+/**
+ * The agency scorecard from the arrival fee checks: how many workers each agency brought, how many paid a fee, how
+ * much, and how much was paid back. Agency names are matched ignoring case and spaces.
+ */
+export function agencyScorecard(checks: FwWelfareCheck[]): AgencyScore[] {
+  const by = new Map<string, AgencyScore>();
+  for (const c of checks) {
+    if (c.kind !== 'ARRIVAL_FEE') continue;
+    const name = (c.agency ?? '').trim() || 'Agency not recorded';
+    const key = name.toLowerCase().replace(/\s+/g, ' ');
+    const s = by.get(key) ?? { agency: name, checked: 0, feesFound: 0, paid: 0, repaid: 0, open: 0 };
+    s.checked += 1;
+    if (c.paidAnything) {
+      s.feesFound += 1;
+      s.paid += c.amount ?? 0;
+      s.repaid += c.repaid ?? 0;
+    }
+    if (c.status === 'open') s.open += 1;
+    by.set(key, s);
+  }
+  return [...by.values()].sort((a, b) => b.feesFound - a.feesFound || b.paid - a.paid || a.agency.localeCompare(b.agency));
 }

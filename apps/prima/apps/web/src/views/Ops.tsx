@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { api, type RegionalOps } from '../api';
 import { useApp } from '../App';
 import { LeavePanel } from './Leave';
+import { GovOpsMonitorPanel } from './GovOps';
+import { ManagementFeeBillsPanel } from './ManagementFees';
 import { Chip, ErrorNotice, Kpi, Loading, dayLabel, hhmm, useLoad } from '../ui';
 
 type Item = RegionalOps['attention'][number];
@@ -105,6 +107,10 @@ export function OpsView() {
       </section>
 
       <LeavePanel title="Leave and absence requests from guards and officers" />
+
+      {data.sector !== 'private' && <GovOpsMonitorPanel sector="government" />}
+      {data.sector !== 'government' && <GovOpsMonitorPanel sector="private" />}
+      {(me.user.opsTier === 'ogm' || me.user.opsTier === 'ops_director' || me.user.opsTier === 'coo') && <ManagementFeeBillsPanel />}
 
       <section className="panel">
         <div className="panel-head">

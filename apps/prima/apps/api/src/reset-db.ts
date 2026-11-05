@@ -1,9 +1,9 @@
 // Rebuild the database with fresh mock data dated to today. Development only: refuses to
 // run unless the target is a local database.
-import { generateDataset, dateOf, type Dataset, type TableName } from '@prima/core';
+import { generateDataset, dateOf, type Dataset, type DataWall, type TableName } from '@prima/core';
 import { Client } from 'pg';
 import { nowMyt } from './db';
-import { migrationSql } from './schema';
+import { companyOfficeModuleSql, companyRunLinksModuleSql, migrationSql } from './schema';
 
 const COMPANY_TABLES: TableName[] = [
   'branches',
@@ -43,6 +43,7 @@ const COMPANY_TABLES: TableName[] = [
   'socsoClaims',
   'fwRenewals',
   'fwmTasks',
+  'fwWelfareChecks',
   'hostels',
   'hostelStays',
   'hostelBills',
@@ -70,6 +71,7 @@ const COMPANY_TABLES: TableName[] = [
   'corpFilings',
   'corpChanges',
   'siteVisits',
+  'companyDesks',
   'grants',
 ];
 const TABLE_NAME: Partial<Record<TableName, string>> = {
@@ -96,6 +98,7 @@ const TABLE_NAME: Partial<Record<TableName, string>> = {
   socsoClaims: 'socso_claims',
   fwRenewals: 'fw_renewals',
   fwmTasks: 'fwm_tasks',
+  fwWelfareChecks: 'fw_welfare_checks',
   hostelStays: 'hostel_stays',
   hostelBills: 'hostel_bills',
   utilityCharges: 'utility_charges',
@@ -124,6 +127,7 @@ const TABLE_NAME: Partial<Record<TableName, string>> = {
   corpChanges: 'corp_changes',
   siteVisits: 'site_visits',
   jaRecords: 'ja_records',
+  companyDesks: 'company_desks',
 };
 
 export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
@@ -137,6 +141,9 @@ export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
   try {
     await client.query('DROP SCHEMA IF EXISTS prima CASCADE');
     await client.query(migrationSql());
+    // Development and tests only: the optional company office module, so local databases match the code under review.
+    await client.query(companyOfficeModuleSql());
+    await client.query(companyRunLinksModuleSql());
     const ds = generateDataset({ today: dateOf(now), now });
     await insertDataset(client, ds);
     return ds;
@@ -146,6 +153,9 @@ export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
 }
 
 export { migrationSha, migrationSql } from './schema';
+
+/** Every department wall, opened only inside the load transaction below. */
+const LOAD_WALLS: DataWall[] = ['asset_read', 'asset_write', 'act', 'pdpa', 'bcm', 'arms', 'cms'];
 
 /** Writes a whole dataset into an empty schema in one transaction. */
 export async function insertDataset(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
@@ -162,7 +172,11 @@ export async function insertDataset(client: Pick<Client, 'query'>, ds: Dataset):
 async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   // The tables keep their company wall even for their owner (FORCE ROW LEVEL SECURITY). A superuser passes anyway;
   // an Azure administrator is not one, so the load opens the wall to the companies it writes, for this transaction only.
-  await client.query(`SELECT set_config('app.company_ids', $1, true), set_config('app.group_user', 'on', true)`, [ds.companies.map((c) => c.id).join(',')]);
+  // The department walls (access.ts DataWall) are opened the same way, so the CMS roster and arms rows can be loaded.
+  await client.query(
+    `SELECT set_config('app.company_ids', $1, true), set_config('app.group_user', 'on', true), set_config('app.walls', $2, true)`,
+    [ds.companies.map((c) => c.id).join(','), LOAD_WALLS.join(',')],
+  );
   const bulk = async (table: string, rows: unknown[], cols: (r: any) => unknown[], colNames: string) => {
     for (let i = 0; i < rows.length; i += 1000) {
       const chunk = rows.slice(i, i + 1000);
@@ -177,6 +191,7 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   };
   await bulk('arisha_drafts', ds.arishaDrafts, (r) => [r.id, r], 'id,data');
   await bulk('companies', ds.companies, (r) => [r.id, r], 'id,data');
+  await bulk('company_run_links', ds.companyRunLinks ?? [], (r) => [r.id, r], 'id,data');
   await bulk('users', ds.users, (r) => [r.id, r], 'id,data');
   await bulk('cms_shifts', ds.cmsShifts, (r) => [r.id, r], 'id,data');
   await bulk('cms_staff', ds.cmsStaff, (r) => [r.id, r], 'id,data');
@@ -193,6 +208,24 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('bcm_systems', ds.bcmSystems, (r) => [r.id, r], 'id,data');
   await bulk('bcm_drills', ds.bcmDrills, (r) => [r.id, r], 'id,data');
   await bulk('am_depn_postings', ds.amDepnPostings, (r) => [r.id, r], 'id,data');
+  await bulk('staff_ids', ds.staffIds, (r) => [r.id, r], 'id,data');
+  await bulk('staff_accounts', ds.staffAccounts, (r) => [r.id, r], 'id,data');
+  await bulk('staff_faces', ds.staffFaces, (r) => [r.id, r], 'id,data');
+  await bulk('public_holidays', ds.publicHolidays, (r) => [r.id, r], 'id,data');
+  await bulk('allowance_types', ds.allowanceTypes, (r) => [r.id, r], 'id,data');
+  await bulk('flex_requests', ds.flexRequests, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('vacancies', ds.vacancies, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('staff_movements', ds.staffMovements, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('login_handovers', ds.loginHandovers, (r) => [r.id, r], 'id,data');
+  await bulk('hr_filings', ds.hrFilings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('hr_cases', ds.hrCases, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('office_osh', ds.officeOsh, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('staff_training', ds.staffTraining, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('staff_appraisals', ds.staffAppraisals, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('hr_policies', ds.hrPolicies, (r) => [r.id, r], 'id,data');
+  await bulk('staff_overtime', ds.staffOvertime, (r) => [r.id, r], 'id,data');
+  await bulk('hr_legal_checks', ds.hrLegalChecks, (r) => [r.id, r], 'id,data');
+  await bulk('policy_acks', ds.policyAcks, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('door_events', ds.doorEvents, (r) => [r.id, r], 'id,data');
   await bulk('act_findings', ds.actFindings, (r) => [r.id, r], 'id,data');
   await bulk('act_audits', ds.actAudits, (r) => [r.id, r], 'id,data');

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, type CreditBoard, type CreditLoanInput } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { CentralAdminGuide } from './CentralAdminGuide';
 
 /**
  * PWVSB credit and collateral (V8, V10). PWVSB lends to, or pays on behalf of, a group company. A beneficial-interest
@@ -83,6 +84,7 @@ export function CreditView() {
           <ErrorNotice error={act.error} />
         </div>
       )}
+      <CentralAdminGuide view="credit" />
       <div className="tabbar" role="tablist" aria-label="PWVSB credit">
         {tabs.map(([t, l]) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
@@ -264,14 +266,22 @@ function Loans({ data }: { data: CreditBoard }) {
       <div className="list">
         {!rows.length && <div className="empty">No financing.</div>}
         {rows.map((r) => (
-          <LoanLine key={r.loan.id} r={r} open={open === r.loan.id} onToggle={() => setOpen(open === r.loan.id ? null : r.loan.id)} />
+          <LoanLine
+            key={r.loan.id}
+            r={r}
+            licence={{ can: data.canCheckLicence, last: data.lastLicence }}
+            open={open === r.loan.id}
+            onToggle={() => setOpen(open === r.loan.id ? null : r.loan.id)}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function LoanLine({ r, open, onToggle }: { r: Row; open: boolean; onToggle: () => void }) {
+type LicenceCtx = { can: boolean; last: CreditBoard['lastLicence'] };
+
+function LoanLine({ r, licence, open, onToggle }: { r: Row; licence: LicenceCtx; open: boolean; onToggle: () => void }) {
   const l = r.loan;
   const label =
     l.status !== 'active'
@@ -317,23 +327,55 @@ function LoanLine({ r, open, onToggle }: { r: Row; open: boolean; onToggle: () =
         </div>
         <Chip tone={r.tone}>{label}</Chip>
       </button>
-      {open && <LoanDetail r={r} />}
+      {open && <LoanDetail r={r} licence={licence} />}
     </div>
   );
 }
 
-function LoanDetail({ r }: { r: Row }) {
+function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
   const act = useAction();
   const l = r.loan;
   const [pay, setPay] = useState({ no: r.overdue[0]?.no ?? r.next?.no ?? 0, amount: '', bankRef: '', paidOn: '' });
   const [ssm, setSsm] = useState({ ref: '', on: '' });
+  const [stamp, setStamp] = useState({ ref: '', on: '' });
+  const [fix, setFix] = useState<{ open: boolean; kind: CreditLoanInput['collateral']; ref: string; reason: string }>({
+    open: false,
+    kind: l.collateral.kind,
+    ref: l.collateral.agreementRef ?? '',
+    reason: '',
+  });
+  const [rec, setRec] = useState<{ open: boolean; field: 'stamp' | 'charge' | 'signedOn'; ref: string; on: string; created: string; reason: string }>({
+    open: false,
+    field: l.stamped ? 'stamp' : l.charge ? 'charge' : 'signedOn',
+    ref: '',
+    on: '',
+    created: '',
+    reason: '',
+  });
+  const openRec = (field: typeof rec.field) =>
+    setRec({
+      open: true,
+      field,
+      ref: field === 'stamp' ? (l.stamped?.ref ?? '') : field === 'charge' ? (l.charge?.ssmRef ?? '') : '',
+      on: field === 'stamp' ? (l.stamped?.on ?? '') : field === 'charge' ? (l.charge?.lodgedOn ?? '') : (l.signedOn ?? ''),
+      created: l.charge?.createdOn ?? '',
+      reason: '',
+    });
+  const recInput = (): Parameters<typeof api.creditCorrectRecord>[1] =>
+    rec.field === 'stamp'
+      ? { field: 'stamp', ref: rec.ref.trim() || null, on: rec.on || null, reason: rec.reason }
+      : rec.field === 'charge'
+        ? { field: 'charge', createdOn: rec.created, ssmRef: rec.ref.trim() || null, lodgedOn: rec.on || null, reason: rec.reason }
+        : { field: 'signedOn', signedOn: rec.on || null, reason: rec.reason };
+  const [kpkt, setKpkt] = useState({ ref: licence.last?.ref ?? '', validTo: licence.last?.validTo ?? '', note: '' });
   const [note, setNote] = useState('');
   const unpaid = l.schedule.filter((i) => i.paidAmount < i.amount);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div className="muted small">
-        Agreement {l.agreementRef} (template {l.templateId}){l.stamped ? `, stamped ${l.stamped.ref}` : ', stamping not recorded'} · collateral:{' '}
-        {COLLATERAL[l.collateral.kind]}
+        Agreement {l.agreementRef} (template {l.templateId}), {l.signedOn ? `signed ${dateLabel(l.signedOn)}` : 'signing date not recorded'}, starts{' '}
+        {dateLabel(l.startOn)}
+        {l.stamped ? `, stamped ${l.stamped.ref} on ${dateLabel(l.stamped.on)}` : ', stamping not recorded'} · collateral: {COLLATERAL[l.collateral.kind]}
         {l.collateral.agreementRef ? ` (${l.collateral.agreementRef})` : ''} · cure period {l.cureDays} days
         {l.charge
           ? ` · charge created ${dateLabel(l.charge.createdOn)}${l.charge.lodgedOn ? `, lodged ${dateLabel(l.charge.lodgedOn)} (${l.charge.ssmRef})` : `, not lodged (${r.chargeDays} days)`}`
@@ -411,6 +453,201 @@ function LoanDetail({ r }: { r: Row }) {
             onClick={() => act.run(() => api.creditRepayment(l.id, pay.no, Number(pay.amount), pay.bankRef, pay.paidOn), 'Repayment recorded.')}
           >
             Record repayment
+          </button>
+        </div>
+      )}
+      {r.stampState !== 'ok' && (
+        <p className={r.stampState === 'overdue' ? 'error small' : 'small'}>
+          Agreement not stamped: {r.stampDays} days since {r.stampFrom === 'signed' ? 'signing' : 'the start date (signing date not recorded)'}; stamp within 30
+          days of signing.
+        </p>
+      )}
+      {/* Masterplan §103: the Deputy Chief of Staff records the KPKT licence check; staff never wait on it. */}
+      <div className="small" aria-label="KPKT licence check">
+        {l.lenderLicence
+          ? licence.can
+            ? `KPKT licence ${l.lenderLicence.ref} valid to ${dateLabel(l.lenderLicence.validTo)}, ${r.licenceState === 'checked' ? 'valid' : 'not valid'} on the loan date ${dateLabel(r.licenceLoanDate)}; checked by ${l.lenderLicence.by}: ${l.lenderLicence.note}`
+            : `KPKT licence check recorded by ${l.lenderLicence.by}.`
+          : 'KPKT licence check: waiting for the Deputy Chief of Staff.'}
+      </div>
+      {licence.can && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} aria-label="Record KPKT licence check">
+          <input
+            className="input"
+            aria-label="KPKT licence number"
+            placeholder="KPKT licence number"
+            value={kpkt.ref}
+            onChange={(e) => setKpkt({ ...kpkt, ref: e.target.value })}
+          />
+          <label className="small">
+            Valid to{' '}
+            <input
+              className="input"
+              type="date"
+              aria-label="Licence valid to"
+              value={kpkt.validTo}
+              onChange={(e) => setKpkt({ ...kpkt, validTo: e.target.value })}
+            />
+          </label>
+          <input
+            className="input"
+            aria-label="How it was checked"
+            placeholder="How it was checked (e.g. counsel's confirmation)"
+            value={kpkt.note}
+            onChange={(e) => setKpkt({ ...kpkt, note: e.target.value })}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || !kpkt.ref.trim() || !kpkt.validTo || kpkt.note.trim().length < 5}
+            onClick={() => act.run(() => api.creditCheckLenderLicence(l.id, kpkt), 'Licence check recorded.')}
+          >
+            {l.lenderLicence ? 'Record a new check' : 'Record licence check'}
+          </button>
+        </div>
+      )}
+      {r.collateralMissing && <p className="small">The collateral agreement reference is not on file. The credit officer can correct the record below.</p>}
+      {(l.corrections ?? []).length > 0 && (
+        <div className="small muted" aria-label="Record corrections">
+          Corrections:
+          <ul style={{ margin: '2px 0 0 16px' }}>
+            {(l.corrections ?? []).map((c, i) => (
+              <li key={i}>
+                {dateTimeLabel(c.at)}, {c.by}: {c.from} to {c.to}. Reason: {c.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {r.role === 'officer' && l.status === 'active' && !fix.open && (
+        <div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setFix({ ...fix, open: true })}>
+            Correct collateral record
+          </button>
+        </div>
+      )}
+      {r.role === 'officer' && l.status === 'active' && fix.open && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} aria-label="Correct collateral">
+          <select
+            className="input"
+            aria-label="Collateral kind"
+            value={fix.kind}
+            onChange={(e) => setFix({ ...fix, kind: e.target.value as CreditLoanInput['collateral'] })}
+          >
+            {(Object.keys(COLLATERAL) as CreditLoanInput['collateral'][]).map((k) => (
+              <option key={k} value={k}>
+                {COLLATERAL[k]}
+              </option>
+            ))}
+          </select>
+          {fix.kind !== 'NONE' && (
+            <input
+              className="input"
+              aria-label="Collateral agreement reference"
+              placeholder="Collateral agreement reference"
+              value={fix.ref}
+              onChange={(e) => setFix({ ...fix, ref: e.target.value })}
+            />
+          )}
+          <input
+            className="input"
+            aria-label="Reason for correction"
+            placeholder="Why (required)"
+            value={fix.reason}
+            onChange={(e) => setFix({ ...fix, reason: e.target.value })}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || fix.reason.trim().length < 5 || (fix.kind !== 'NONE' && !fix.ref.trim())}
+            onClick={() =>
+              act.run(() => api.creditCorrectCollateral(l.id, fix.kind, fix.kind === 'NONE' ? null : fix.ref, fix.reason), 'Collateral record corrected.')
+            }
+          >
+            Save correction
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => setFix({ ...fix, open: false })}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {r.role === 'officer' && !rec.open && (
+        <div>
+          <button className="btn btn-sm btn-ghost" onClick={() => openRec(l.stamped ? 'stamp' : l.charge ? 'charge' : 'signedOn')}>
+            Correct stamping, charge or signing date
+          </button>
+        </div>
+      )}
+      {r.role === 'officer' && rec.open && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} aria-label="Correct a recorded entry">
+          <select className="input" aria-label="What to correct" value={rec.field} onChange={(e) => openRec(e.target.value as typeof rec.field)}>
+            {l.stamped && <option value="stamp">Stamping</option>}
+            {l.charge && <option value="charge">SSM charge</option>}
+            <option value="signedOn">Signing date</option>
+          </select>
+          {rec.field === 'charge' && (
+            <label className="small">
+              Charge created on{' '}
+              <input
+                className="input"
+                type="date"
+                aria-label="Charge created on"
+                value={rec.created}
+                onChange={(e) => setRec({ ...rec, created: e.target.value })}
+              />
+            </label>
+          )}
+          {rec.field !== 'signedOn' && (
+            <input
+              className="input"
+              aria-label={rec.field === 'stamp' ? 'Corrected stamp certificate' : 'Corrected SSM reference'}
+              placeholder={rec.field === 'stamp' ? 'Stamp certificate (empty to take off)' : 'SSM reference (empty if not lodged)'}
+              value={rec.ref}
+              onChange={(e) => setRec({ ...rec, ref: e.target.value })}
+            />
+          )}
+          <input
+            className="input"
+            type="date"
+            aria-label={rec.field === 'stamp' ? 'Corrected stamping date' : rec.field === 'charge' ? 'Corrected lodgement date' : 'Signing date'}
+            value={rec.on}
+            onChange={(e) => setRec({ ...rec, on: e.target.value })}
+          />
+          <input
+            className="input"
+            aria-label="Reason for record correction"
+            placeholder="Why (required)"
+            value={rec.reason}
+            onChange={(e) => setRec({ ...rec, reason: e.target.value })}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || rec.reason.trim().length < 5 || (rec.field === 'charge' && !rec.created)}
+            onClick={() =>
+              act.run(() => api.creditCorrectRecord(l.id, recInput()), 'Correction saved.').then((ok) => ok && setRec({ ...rec, open: false, reason: '' }))
+            }
+          >
+            Save record correction
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => setRec({ ...rec, open: false })}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {r.role === 'officer' && !l.stamped && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <input
+            className="input"
+            aria-label="Stamp certificate"
+            placeholder="Stamp certificate number"
+            value={stamp.ref}
+            onChange={(e) => setStamp({ ...stamp, ref: e.target.value })}
+          />
+          <input className="input" type="date" aria-label="Stamped on" value={stamp.on} onChange={(e) => setStamp({ ...stamp, on: e.target.value })} />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || !stamp.ref.trim() || !stamp.on}
+            onClick={() => act.run(() => api.creditStamped(l.id, stamp.ref, stamp.on), 'Stamping recorded.')}
+          >
+            Agreement stamped
           </button>
         </div>
       )}
@@ -518,6 +755,16 @@ function AddLoan({ onDone }: { onDone: () => void }) {
           onChange={(e) => setF({ ...f, ratePct: Number(e.target.value) })}
         />
         <input className="input" type="date" aria-label="Start date" value={f.startOn} onChange={(e) => setF({ ...f, startOn: e.target.value })} />
+        <label className="small">
+          Signed on (if known){' '}
+          <input
+            className="input"
+            type="date"
+            aria-label="Signed on"
+            value={f.signedOn ?? ''}
+            onChange={(e) => setF({ ...f, signedOn: e.target.value || null })}
+          />
+        </label>
         <input
           className="input"
           aria-label="Term in months"

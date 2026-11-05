@@ -4,13 +4,32 @@ import type {CleanupKind} from './it-cleanup-types';
 // against PostgreSQL in the API and against memory in the browser demo.
 
 import { appendAudit } from './audit';
-import type { AuditEntry, Dataset, Id, IsoDate, TableName, User, ItTicket } from './types';
+import type { AuditEntry, Dataset, Id, IsoDate, LegalHoldTable, TableName, User, ItTicket } from './types';
 
 export type Row<T extends TableName> = Dataset[T][number];
 export type AuditBody = Omit<AuditEntry, 'hash' | 'prevHash' | 'seq'>;
 
 /** Equality filter on top-level fields; an array value means "field is one of". */
 export type Filter<T extends TableName> = { [K in keyof Row<T>]?: Row<T>[K] | Row<T>[K][] };
+
+/**
+ * A date window on one text field holding an ISO date or date-time (review, 3 Nov 2026: screens that showed a day or a
+ * month read every shift, attendance row and patrol tap ever recorded, which grows every month). `from` is inclusive,
+ * `before` exclusive, both compared as text, so a date bound works on a date-time field. A row without the field is left
+ * out when a range is given.
+ */
+export interface Range<T extends TableName> {
+  field: keyof Row<T> & string;
+  from?: string;
+  before?: string;
+}
+
+export function inRange(row: unknown, range: { field: string; from?: string; before?: string } | undefined): boolean {
+  if (!range) return true;
+  const v = (row as Record<string, unknown>)[range.field];
+  if (typeof v !== 'string') return false;
+  return (range.from === undefined || v >= range.from) && (range.before === undefined || v < range.before);
+}
 
 export interface Store {
   workflowMetricProblems?():Promise<string[]>;
@@ -28,12 +47,18 @@ export interface Store {
   itManualProblems?(): Promise<string[]>;
   itOperationsProblems?(): Promise<string[]>;
   procurementProblems?(): Promise<string[]>;
+  /** False until the optional company office module is applied in the database (memory stores always have it). */
+  companyOfficeReady?(): Promise<boolean>;
+  /** False until the optional module for companies run by another office is applied (memory stores always have it). */
+  companyRunLinksReady?(): Promise<boolean>;
   rentalCorrectionProblems?(): Promise<string[]>;
   hrItProblems?(): Promise<string[]>;
   hrItTrustedTenant?(): string | null;
   /** Allocate and insert one ticket atomically; historical references are never renumbered. */
   createItTicket(body: Omit<ItTicket, 'id' | 'ref'>): Promise<ItTicket>;
-  list<T extends TableName>(table: T, filter?: Filter<T>): Promise<Row<T>[]>;
+  /** False when an optional module's table is not installed yet (PostgreSQL); the in-memory store has every table. */
+  hasTable?(table: TableName): Promise<boolean>;
+  list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]>;
   get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined>;
   insert<T extends TableName>(table: T, row: Row<T>): Promise<void>;
   update<T extends TableName>(table: T, id: Id, patch: Partial<Row<T>>): Promise<Row<T>>;
@@ -45,6 +70,14 @@ export interface Store {
    * other and the second sees what the first did. The single-threaded test store has nothing to hold.
    */
   lock?<T extends TableName>(table: T, id: Id): Promise<void>;
+  /**
+   * The Finance team (a number) recorded for a company, read past the company wall by the database's own function
+   * (prima.org_finance_team), so the hand-over layer and its database check always see the same team. Optional: a
+   * store without it falls back to reading finStatus.
+   */
+  orgFinanceTeam?(companyId: Id): Promise<number | null>;
+  /** The company whose office runs this one (hand-over receivers), when the run-links module is installed. */
+  orgRunBy?(companyId: Id): Promise<Id | null>;
   /**
    * Retention for Arisha IT import reviews (expire after 24h, clear rows 30 days after closing), done and audited by the
    * database in one step; in memory the service tidies and audits itself.
@@ -146,8 +179,8 @@ export class MemoryStore implements Store {
     return ticket;
   }
 
-  async list<T extends TableName>(table: T, filter?: Filter<T>): Promise<Row<T>[]> {
-    return (this.data[table] as Row<T>[]).filter((r) => matches(r, filter));
+  async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]> {
+    return (this.data[table] as Row<T>[]).filter((r) => matches(r, filter) && inRange(r, range));
   }
 
   async get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined> {
@@ -170,6 +203,7 @@ export class MemoryStore implements Store {
     const arr = this.data[table] as Row<T>[];
     if(table==='itJobs'&&idOf({...arr[i],...patch})!==id)throw new Error('Job identity cannot be changed.');
     assertMemoryCleanupWrite(this.data,table,{...arr[i],...patch});
+    memoryLegalHoldPreserve(this.data, table, id, arr[i]);
     arr[i] = { ...arr[i], ...patch };
     this.onChange?.(this.data);
     return arr[i];
@@ -185,4 +219,34 @@ export class MemoryStore implements Store {
     // Single-threaded; writes are applied in order. The demo has no rollback.
     return fn(this);
   }
+}
+
+/**
+ * Same rule as the database trigger prima.lh_preserve (db/modules/central-admin-legal-holds-v1.sql): before a record on
+ * an open legal hold changes, its earlier content is kept as a version. Synthetic demo and tests only.
+ */
+const LEGAL_HOLD_TABLES: Partial<Record<TableName, LegalHoldTable>> = {
+  evidenceDocs: 'evidence_docs',
+  evidencePhotos: 'evidence_photos',
+  cases: 'cases',
+  contracts: 'contracts',
+  corpProfiles: 'corp_profiles',
+  people: 'people',
+  insuranceClaims: 'insurance_claims',
+};
+function memoryLegalHoldPreserve(data: Dataset, table: TableName, id: Id, before: unknown) {
+  const tbl = LEGAL_HOLD_TABLES[table];
+  if (!tbl || !data.legalHolds?.length) return;
+  const h = data.legalHolds.find((x) => x.tbl === tbl && x.refId === id && !x.released);
+  if (!h) return;
+  (data.legalHoldVersions ??= []).push({
+    id: `lhv-${data.legalHoldVersions.length + 1}-${h.id}`,
+    companyId: h.companyId,
+    holdId: h.id,
+    tbl,
+    refId: id,
+    at: new Date().toISOString().slice(0, 19) + 'Z',
+    byId: null,
+    before: structuredClone(before),
+  });
 }

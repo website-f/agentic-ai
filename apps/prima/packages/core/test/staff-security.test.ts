@@ -162,14 +162,36 @@ describe('department walls', () => {
     const walls = (id: string) => dataWalls(ds.users.find((u) => u.id === id)!);
     expect(walls('u-asset-mm')).toEqual(['asset_read', 'asset_write']);
     expect(walls('u-pdpa')).toEqual(['pdpa']);
-    expect(walls('u-it-ex1')).toEqual(['bcm']);
-    expect(walls('u-pwvsb-hr')).toEqual(['offboard']);
+    expect(walls('u-it-ex1')).toEqual(['bcm', 'login_handover']);
+    // Arisha main, 84b056e: IT reads the login handover, never the movement row (pay, private reason).
+    expect(walls('u-it-ex1')).not.toContain('staff_movements');
+    expect(walls('u-pwvsb-hr')).toEqual(['offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'staff_movements', 'login_handover']);
+    // HR wall (slice 3A part 3): Finance reads salary accounts, never the full IC.
+    expect(walls('u-fd')).toContain('staff_accounts');
+    expect(walls('u-fd')).not.toContain('staff_ids');
     // ACT audits assets but never writes them, ACT head included.
-    expect(walls('u-act-dep')).toEqual(['asset_read', 'act']);
+    expect(walls('u-act-aud2')).toEqual(['asset_read', 'act', 'corporate', 'legal']);
     expect(walls('u-audit')).toContain('asset_read');
     expect(walls('u-audit')).not.toContain('asset_write');
-    for (const id of ['u-transport', 'u-legal', 'u-proc-exec', 'u-fwm-ex1', 'u-cm-sasa', 'u-ja-sync']) expect(walls(id)).toEqual([]);
-    for (const u of ds.users.filter((x) => x.integration)) expect(dataWalls(u)).toEqual([]);
+    // PWVSB legal reads arms requests for their legal check (Special Ops slice 4C), so it passes the arms wall only.
+    expect(walls('u-legal')).toEqual(['arms', 'corporate', 'legal', 'mandates']);
+    // The company manager sees and handles their own company's firearms (Special Ops slice 4A: the arms wall).
+    expect(walls('u-cm-sasa')).toEqual(['arms', 'corporate', 'legal', 'mandates', 'staff_company', 'staff_movements']);
+    // System feeds hold no wall, except the Asset Management system feed (Special Ops 4G), which updates the units it reports.
+    for (const u of ds.users.filter((x) => x.integration && !['am', 'whatsapp', 'ja'].includes(String(x.integration)))) expect(dataWalls(u)).toEqual([]);
+    for (const k of ['am', 'whatsapp']) expect(dataWalls(ds.users.find((x) => x.integration === k)!)).toEqual(['asset_read', 'asset_write']);
+    // Central Admin walls (5A part 2): legal sees all three; a company manager sees its company file and mandates; the
+    // company secretary sees company secretary records only.
+    expect(walls('u-legal')).toEqual(['arms', 'corporate', 'legal', 'mandates']);
+    expect(walls('u-cm-sasa')).toEqual(['arms', 'corporate', 'legal', 'mandates', 'staff_company', 'staff_movements']);
+    expect(walls('u-cosec')).toEqual(['corporate']);
+    // Slice 3G: FWM reads foreign workers' passports only; the JA feed keeps guard rows only.
+    for (const id of ['u-transport', 'u-proc-exec']) expect(walls(id)).toEqual([]);
+    expect(walls('u-fwm-ex1')).toEqual(['fw_ids']);
+    expect(walls('u-ja-sync')).toEqual(['guard_feed']);
+    // A company manager reads only their own staff's numbers (Fauzan, 1 Nov 2026).
+    expect(walls('u-cm-sasa')).toEqual(['arms', 'corporate', 'legal', 'mandates', 'staff_company', 'staff_movements']);
+    for (const u of ds.users.filter((x) => x.integration && !['am', 'whatsapp', 'ja'].includes(String(x.integration)))) expect(dataWalls(u)).toEqual([]);
   });
 
   it('keeps the screens and the walls in step: no wall, no board', async () => {

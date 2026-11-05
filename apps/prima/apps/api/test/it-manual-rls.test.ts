@@ -156,6 +156,19 @@ describe('manual IT database boundaries',()=>{
   assert.equal((await as('it-a',c=>c.query("SELECT id FROM prima.it_accounts WHERE data->>'name'=$1",[failInput.name]))).rowCount,0);
   assert.equal((await as('it-a',c=>c.query('SELECT id FROM prima.it_manual_receipts WHERE id=$1',['it-a:'+failInput.requestId]))).rowCount,0);
  });
+ it('central employers (PWVSB, Merdeka, Goodwill, Sasa Team) are offered and accepted for manual records; an unknown company is refused',async()=>{
+  const svc=(c:Client)=>{const store=new PgStore(c as unknown as PoolClient);return {store,service:new ItManualService(store,()=> '2026-11-01T00:00:00+08:00')};};
+  const board=await as('it-a',async c=>{const {store,service}=svc(c);return service.board((await store.get('users','it-a')) as User);});
+  for(const id of ['pwvsb','merdeka','goodwill','sasateam'])assert.ok(board.companies.some(x=>x.id===id),id);
+  for(const [n,companyId] of ['goodwill','sasateam'].entries()){
+   const input={requestId:`7777777${n}-7777-4777-8777-777777777777`,name:`Synthetic ${companyId} system`,kind:'other',companyId,unitLabel:'',note:'Synthetic note'};
+   const r=await as('it-a',async c=>{const {store,service}=svc(c);return service.create((await store.get('users','it-a')) as User,'system',input);}) as {terminal?:string};
+   assert.equal(r.terminal,'committed');
+   assert.equal((await as('it-a',c=>c.query("SELECT data#>>'{manual,companyId}' AS co FROM prima.it_accounts WHERE data->>'name'=$1",[input.name]))).rows[0].co,companyId);
+  }
+  const bad=await as('it-a',async c=>{const {store,service}=svc(c);return service.create((await store.get('users','it-a')) as User,'system',{requestId:'78787878-7878-4878-8878-787878787878',name:'Synthetic unknown',kind:'other',companyId:'not-a-company',unitLabel:'',note:'Synthetic note'});}) as {terminal?:string};
+  assert.equal(bad.terminal,'rejected');
+ });
  it('rollback removes both mutation and receipt; concurrent receipt IDs commit once',async()=>{
   const r=receipt('it-a','44444444-4444-4444-8444-444444444444');
   await assert.rejects(as('it-a',async c=>{await update(c,'it_assets','asset',{status:'repair'});await insertReceipt(c,r);throw Error('synthetic failure');}));

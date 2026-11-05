@@ -2,7 +2,7 @@
   "version": 1,
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe"
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
   },
   "modules": [
     {
@@ -14,13 +14,13 @@
     {
       "id": "rental_corrections",
       "path": "db/modules/rental-correction-v1.sql",
-      "sha256": "251de5d5cf1d981b134a73d5d70a14684dbc616673b134837ee56f46c84aaa81",
+      "sha256": "3bc99a1dc3248519218872ca7b5615c76d91d5e8c23645fa4176de51c543ac3f",
       "requires": []
     },
     {
       "id": "cleanup",
       "path": "db/modules/it-cleanup-v1.sql",
-      "sha256": "0f3daa00c104e09942fc5c1098ce1ddbc64b94043d89f0d6002fa21ee7d682f3",
+      "sha256": "0c768fcf79e9ec24b65cf7e160840c9fa9bd6d95d7109f949c4dee218ca8f8c0",
       "requires": [
         "procurement",
         "rental_corrections"
@@ -36,6 +36,64 @@
       "id": "job_email",
       "path": "apps/api/src/connections-mail/job-email-v2.sql",
       "sha256": "cefa0824c56a1e0f0e11c74d8929f181ed30810eef139f0116d72f27820e6e65",
+      "requires": []
+    },
+    {
+      "id": "central_admin_walls",
+      "path": "db/modules/central-admin-walls-v1.sql",
+      "sha256": "180d296df38cf76a9c0c8fb11c52750d2d7e69d703c5df380d691ab0369e2041",
+      "requires": []
+    },
+    {
+      "id": "central_admin_panel",
+      "path": "db/modules/central-admin-panel-v1.sql",
+      "sha256": "0942afb070a6d7fb472de43cb4eb1cf680ea6f75092da3a238160e3f1c31f2a6",
+      "requires": [
+        "central_admin_walls"
+      ]
+    },
+    {
+      "id": "central_admin_delegations",
+      "path": "db/modules/central-admin-delegations-v1.sql",
+      "sha256": "1b5b2cd56433765ec05b1a095071dd987db9bdb528dc02a440b05b90878d8b61",
+      "requires": []
+    },
+    {
+      "id": "central_admin_legal_holds",
+      "path": "db/modules/central-admin-legal-holds-v1.sql",
+      "sha256": "77a6e2efccc07ef426919fbf240c15cfdba880f700dbcb936bf0567ad2c49dc2",
+      "requires": []
+    },
+    {
+      "id": "company_office",
+      "path": "db/modules/company-office-v1.sql",
+      "sha256": "9fd6a94554eafa913d05fbbc282408a673cb868a3ca1a11a221df327f5d834e9",
+      "requires": []
+    },
+    {
+      "id": "company_run_links",
+      "path": "db/modules/company-run-links-v1.sql",
+      "sha256": "66d5eeb9a710ff82c8911814b37f36b272064ba4593d9fd9807a7552dadd2bf5",
+      "requires": [
+        "company_office"
+      ]
+    },
+    {
+      "id": "org_links",
+      "path": "db/modules/org-links-v1.sql",
+      "sha256": "e7613deb45b3c02c7933436b0ee6bd044ba995515796d6e3010aaf883bae7294",
+      "requires": []
+    },
+    {
+      "id": "special_ops",
+      "path": "db/modules/special-ops-v1.sql",
+      "sha256": "429e6a832a36fd32125ad96534ed84b5b3b2156ea4b8a349831ee13fcf76b335",
+      "requires": []
+    },
+    {
+      "id": "fw_welfare",
+      "path": "db/modules/fw-welfare-v1.sql",
+      "sha256": "5ab0f22874be281bf87036378f8fb8d162d8ed4c5292bc83644230b41ef5fe1f",
       "requires": []
     }
   ]

@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import type { FinPackItem, FinPackStatus } from '@prima/core';
-import { api, type FinBoard } from '../api';
+import { api, type FinBoard, type FinDesk } from '../api';
+import { useApp } from '../App';
+import { ManagementFeesPanel } from './ManagementFees';
+import { takeFinTarget, type FinTarget } from '../finTarget';
+import { CloseTab, FinPackPanel, PaymentsTab } from './FinanceDesk';
+import { ChecksTab } from './FinanceChecks';
+import { FinanceSettingsTab } from './FinanceSettings';
+import { FinanceKpiTab } from './FinanceKpi';
+import { FinanceDashboardTab } from './FinanceDashboard';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 
 /**
@@ -10,7 +18,7 @@ import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useA
  */
 
 type Row = FinBoard['rows'][number];
-type Tab = 'teams' | 'banks' | 'books' | 'papers';
+type Tab = 'teams' | 'payments' | 'close' | 'checks' | 'banks' | 'books' | 'papers' | 'settings' | 'kpi' | 'dashboard';
 
 const TONE: Record<Row['tone'], [Tone, string]> = {
   crit: ['crit', 'Act now'],
@@ -24,19 +32,26 @@ const PACK: Record<FinPackStatus, [Tone, string]> = {
   reviewed: ['info', 'Reviewed'],
   sent: ['ok', 'Sent'],
 };
-const NEXT: Partial<Record<FinPackStatus, [FinPackStatus, string]>> = {
-  todo: ['prepared', 'Mark prepared'],
-  prepared: ['reviewed', 'Mark reviewed'],
-  reviewed: ['sent', 'Mark sent'],
-};
 /** Data entry prepares, the deputy also reviews, the team leader and the Finance Director also send. */
 const mayFor = (role: FinBoard['financeRole']): FinPackStatus[] =>
   role === 'leader' || role === 'director' ? ['prepared', 'reviewed', 'sent'] : role === 'deputy' ? ['prepared', 'reviewed'] : ['prepared'];
 const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function FinanceView() {
+  const { me } = useApp();
   const { data, error } = useLoad(() => api.finBoard(), []);
-  const [tab, setTab] = useState<Tab>('teams');
+  // Phase 2 (31 Oct 2026): payments, the month-end close and the bank and payment packs.
+  const { data: desk } = useLoad(() => api.finDesk(), []);
+  // A home or Today item opens the right tab, section and company (staff-eye review, Fauzan 2 Nov 2026).
+  const [target, setTarget] = useState<(FinTarget & { n: number }) | null>(() => {
+    const t = takeFinTarget();
+    return t ? { ...t, n: 0 } : null;
+  });
+  const [tab, setTab] = useState<Tab>(target?.tab ?? 'teams');
+  const goTo = (t: FinTarget) => {
+    setTarget((x) => ({ ...t, n: (x?.n ?? 0) + 1 }));
+    setTab(t.tab);
+  };
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="finance" />;
@@ -56,6 +71,8 @@ export function FinanceView() {
           Test data: SQL Account is not connected yet.
         </p>
       </div>
+      {desk && <FinanceToday onGo={goTo} />}
+      {desk && <KeyNumbers onGo={() => setTab('dashboard')} />}
       <div className="kpis">
         <Kpi label="Companies to act on now" value={count('crit')} tone={count('crit') ? 'crit' : 'ok'} note={`of ${data.rows.length}`} />
         <Kpi label="Unknown" value={count('unknown')} tone={count('unknown') ? 'unknown' : 'ok'} note="No recent SQL figures, or tests not run" />
@@ -66,6 +83,16 @@ export function FinanceView() {
         {(
           [
             ['teams', data.role === 'lead' ? 'Teams' : 'Companies'],
+            ...(desk
+              ? ([
+                  ['dashboard', 'Dashboard'],
+                  ['payments', 'Payments'],
+                  ['close', 'Month-end close'],
+                  ['checks', 'Checks'],
+                  ['settings', 'Settings'],
+                  ...(['director', 'ceo', 'leader'].includes(desk.actor.kind) ? ([['kpi', 'KPIs']] as [Tab, string][]) : []),
+                ] as [Tab, string][])
+              : []),
             ['banks', 'Bank reconciliation'],
             ['books', 'Closing and posting'],
             ['papers', 'Auditor and tax'],
@@ -77,10 +104,17 @@ export function FinanceView() {
         ))}
       </div>
       {tab === 'teams' && <Teams data={data} onOpen={setOpen} />}
+      {tab === 'payments' && desk && <PaymentsTab desk={desk} />}
+      {tab === 'close' && desk && <CloseTab desk={desk} />}
+      {tab === 'checks' && desk && <ChecksTab key={target?.n ?? 0} desk={desk} target={target} />}
+      {tab === 'settings' && desk && <FinanceSettingsTab />}
+      {tab === 'kpi' && desk && <FinanceKpiTab />}
+      {tab === 'dashboard' && desk && <FinanceDashboardTab />}
       {tab === 'banks' && <Banks data={data} onOpen={setOpen} />}
       {tab === 'books' && <Books data={data} onOpen={setOpen} />}
       {tab === 'papers' && <Papers data={data} onOpen={setOpen} />}
-      {row && <CompanyDrawer row={row} may={mayFor(data.financeRole)} onClose={() => setOpen(null)} />}
+      {(me.user.leadership === 'finance_director' || me.user.opsTier === 'ceo') && <ManagementFeesPanel />}
+      {row && <CompanyDrawer row={row} desk={desk} may={mayFor(data.financeRole)} onClose={() => setOpen(null)} />}
     </div>
   );
 }
@@ -209,7 +243,7 @@ function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void
     <section className="panel">
       <div className="panel-head">
         <h3>Papers overdue or due within {data.rule.packWarnDays} days</h3>
-        <span className="muted small">Data entry prepares, the leader or deputy reviews, the leader sends</span>
+        <span className="muted small">Data entry prepares, the leader or deputy reviews, the leader sends; reviewing and sending need a comment</span>
       </div>
       <div className="list">
         {items.length === 0 && <div className="empty">Nothing due.</div>}
@@ -234,8 +268,10 @@ function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void
   );
 }
 
-function CompanyDrawer({ row: r, may, onClose }: { row: Row; may: FinPackStatus[]; onClose: () => void }) {
+function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk | null; may: FinPackStatus[]; onClose: () => void }) {
   const f = r.status;
+  const d = desk?.companies.find((c) => c.companyId === f.companyId) ?? null;
+  const me = desk?.me ?? null;
   const p = f.posting;
   return (
     <Drawer title={r.companyName} sub={`Team ${f.team} · year ends ${f.fyEnd.split('-').reverse().join('/')}`} onClose={onClose}>
@@ -311,61 +347,73 @@ function CompanyDrawer({ row: r, may, onClose }: { row: Row; may: FinPackStatus[
           </div>
         </div>
       </section>
-      <PackPanel title="For the auditor" companyId={f.companyId} pack="audit" items={f.audit} canSet={r.canSet} may={may} />
-      <PackPanel title="For the tax agent" companyId={f.companyId} pack="tax" items={f.tax} canSet={r.canSet} may={may} />
+      <FinPackPanel title="For the auditor" companyId={f.companyId} pack="audit" items={f.audit} canSet={r.canSet} may={may} meId={me} />
+      <FinPackPanel title="For the tax agent" companyId={f.companyId} pack="tax" items={f.tax} canSet={r.canSet} may={may} meId={me} />
+      {d && (
+        <>
+          <FinPackPanel title={`Bank pack, ${desk!.period}`} companyId={f.companyId} pack="bank" items={d.bank} canSet={d.canAct} may={may} meId={me} />
+          <FinPackPanel title={`Payment pack, ${desk!.period}`} companyId={f.companyId} pack="payment" items={d.payment} canSet={d.canAct} may={may} meId={me} />
+          <FinPackPanel title={`Monthly audit file, ${desk!.period}`} companyId={f.companyId} pack="monthly" items={d.monthly} canSet={d.canAct} may={may} meId={me} />
+        </>
+      )}
     </Drawer>
   );
 }
 
-function PackPanel({
-  title,
-  companyId,
-  pack,
-  items,
-  canSet,
-  may,
-}: {
-  title: string;
-  companyId: string;
-  pack: 'audit' | 'tax';
-  items: FinPackItem[];
-  canSet: boolean;
-  may: FinPackStatus[];
-}) {
-  const act = useAction();
+/** Automation A13 (Fauzan, 2 Nov 2026): one list of what waits for this person today, urgent first. */
+/** Key numbers for the companies the person sees (Fauzan, 2 Nov 2026: A17): from the dashboard, never a ranking. */
+function KeyNumbers({ onGo }: { onGo: () => void }) {
+  const { data } = useLoad(() => api.finDashboard().catch(() => null), []);
+  if (!data || !data.rows.length) return null;
+  const k = (n: number) => `RM${(n / 1000).toLocaleString('en-MY', { maximumFractionDigits: 0 })}k`;
+  // No statement or ageing for the month is unknown, never zero.
+  const cashUnknown = data.rows.filter((r) => r.cash == null).length;
+  const ageUnknown = data.rows.filter((r) => r.over90 == null).length;
+  const all = data.rows.length;
+  return (
+    <div className="kpis" role="button" tabIndex={0} onClick={onGo} onKeyDown={(e) => e.key === 'Enter' && onGo()} style={{ cursor: 'pointer' }}>
+      <Kpi
+        label="Cash in the banks"
+        value={cashUnknown === all ? 'UNKNOWN' : k(data.totals.cash)}
+        tone={cashUnknown === all ? 'unknown' : data.attention.shortOfCash ? 'warn' : 'ok'}
+        note={cashUnknown ? `${cashUnknown} of ${all} with no statement for ${data.period}` : data.attention.shortOfCash ? `${data.attention.shortOfCash} short within 13 weeks` : 'Last statements'}
+      />
+      <Kpi label="Payments due in 7 days" value={k(data.due7)} note="Approved, not yet released" />
+      <Kpi
+        label="Invoices over 90 days"
+        value={ageUnknown === all ? 'UNKNOWN' : k(data.totals.over90)}
+        tone={ageUnknown === all ? 'unknown' : data.totals.over90 ? 'warn' : 'ok'}
+        note={ageUnknown ? `${ageUnknown} of ${all} with no ageing for ${data.period}` : `${data.attention.over90} companies`}
+      />
+      <Kpi label={`Not closed for ${data.period}`} value={data.attention.closeOpen} tone={data.attention.closeOpen ? 'warn' : 'ok'} note={`of ${all} companies`} />
+    </div>
+  );
+}
+
+function FinanceToday({ onGo }: { onGo: (t: FinTarget) => void }) {
+  const { data } = useLoad(() => api.financeToday().catch(() => []), []);
+  if (!data || !data.length) return null;
   return (
     <section className="panel">
       <div className="panel-head">
-        <h3>{title}</h3>
+        <h3>Today</h3>
       </div>
-      <ErrorNotice error={act.error} />
       <div className="list">
-        {items.map((i) => {
-          const next = NEXT[i.status];
-          return (
-            <div key={i.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div>{i.label}</div>
-                <div className="muted small">
-                  Due {dateLabel(i.dueOn)}
-                  {i.by ? ` · ${i.by}, ${dateTimeLabel(i.at!)}` : ''}
-                </div>
-              </div>
-              <div className="row" style={{ gap: 6 }}>
-                <Chip tone={PACK[i.status][0]}>{PACK[i.status][1]}</Chip>
-                {canSet && next && may.includes(next[0]) && (
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy}
-                    onClick={() => act.run(() => api.setFinPack(companyId, pack, i.id, next[0]), `${next[1].replace('Mark ', '')}.`)}
-                  >
-                    {next[1]}
-                  </button>
-                )}
-              </div>
+        {data.map((t, i) => (
+          <div key={i} className="list-item" style={{ display: 'block' }}>
+            <div className="row" style={{ gap: 6 }}>
+              <Chip tone={t.tone === 'crit' ? 'crit' : t.tone === 'warn' ? 'warn' : 'info'}>{t.tone === 'crit' ? 'Urgent' : t.tone === 'warn' ? 'To do' : 'Note'}</Chip>
+              {t.go.tab ? (
+                <button className="link-button" style={{ fontWeight: i === 0 ? 600 : 500 }} onClick={() => onGo({ tab: t.go.tab!, section: t.go.section, companyId: t.go.companyId })}>
+                  {t.title}
+                </button>
+              ) : (
+                <span style={{ fontWeight: i === 0 ? 600 : 500 }}>{t.title}</span>
+              )}
             </div>
-          );
-        })}
+            <div className="muted small">{t.detail}</div>
+          </div>
+        ))}
       </div>
     </section>
   );

@@ -8,8 +8,12 @@ import {
   dateOf,
   fromMs,
   isGroupRole,
+  orgLinksEnabled,
+  withOrgLinks,
   pinKeeper,
   tenantCompanyIds,
+  withRunCompanies,
+  RefusedAfterSave,
   type AuthorityGrant,
   type PinKeeper,
   type User,
@@ -38,6 +42,8 @@ export function apiPinKeeper(env: NodeJS.ProcessEnv = process.env): PinKeeper {
 export class Db implements OnModuleDestroy {
   readonly pool = makePool();
   readonly pins = apiPinKeeper();
+  /** PRIMA_ORG_LINKS=true, read once at start (org-links.ts); off by default. */
+  readonly orgLinks = orgLinksEnabled(process.env);
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
@@ -57,20 +63,57 @@ export class Db implements OnModuleDestroy {
       await client.query('BEGIN');
       const u = await client.query('SELECT data FROM prima.users WHERE id = $1', [userId]);
       if (u.rowCount === 0) throw new UnknownUser();
-      const user = u.rows[0].data as User;
-      if (accessClosed(user, dateOf(clock()))) throw new AccessClosed(user.accessClosedFrom!);
+      const stored = u.rows[0].data as User;
+      if (accessClosed(stored, dateOf(clock()))) throw new AccessClosed(stored.accessClosedFrom!);
       const g = await client.query('SELECT data FROM prima.grants WHERE data->>$1 = $2', ['userId', userId]);
       const grants = g.rows.map((r) => r.data as AuthorityGrant);
-      const companies = tenantCompanyIds(user, grants, dateOf(clock()));
       await client.query('SET LOCAL ROLE prima_app');
+      // A company office also works for the companies its office runs (Fauzan, 3 Nov 2026), as the CEO set them. The
+      // links are read as the app role, before the company wall is set, so the wall and the permission rules agree.
+      // Before the optional module is applied there are none, and every office works only for its own company.
+      const linkStore = new PgStore(client);
+      const user = withRunCompanies(stored, await linkStore.list('companyRunLinks'));
+      const companies = tenantCompanyIds(user, grants, dateOf(clock()));
       await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companies.join(',')]);
       await client.query(`SELECT set_config('app.user_id', $1, true)`, [user.id]);
       await client.query(`SELECT set_config('app.group_user', $1, true)`, [isGroupRole(user) ? 'on' : 'off']);
       await client.query(`SELECT set_config('app.walls', $1, true)`, [dataWalls(user).join(',')]);
-      const store = new PgStore(client);
+      // Hand-overs between departments ride the audit log in this same transaction, when switched on.
+      const store = this.orgLinks ? withOrgLinks(new PgStore(client)) : new PgStore(client);
       const svc = new PrimaService(store, clock);
       svc.pins = this.pins;
+      svc.teamsApprovals = process.env.TEAMS_APPROVALS_READ === 'true';
+      svc.teamsServiceOid = process.env.TEAMS_FLOW_SERVICE_OID ?? '';
       const out = await fn(svc, user, store);
+      await client.query('COMMIT');
+      return out;
+    } catch (e) {
+      // A refusal that must keep what it saved (a lapsed approval returned and logged) commits; all else rolls back.
+      if (e instanceof RefusedAfterSave) await client.query('COMMIT').catch(() => client.query('ROLLBACK').catch(() => undefined));
+      else await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Run one public report-link request (client-share.ts) inside one company only. There is no user: the transaction
+   * drops to prima_app with app.company_ids set to the company named in the signed link, no group access and no
+   * department walls, so row-level security limits the page to that company's records whatever the code asks for.
+   */
+  async asShareLink<R>(companyId: string, fn: (svc: PrimaService, store: Store) => Promise<R>, clock: () => string = nowMyt): Promise<R> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL ROLE prima_app');
+      await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companyId]);
+      await client.query(`SELECT set_config('app.user_id', $1, true)`, ['client-report-link']);
+      await client.query(`SELECT set_config('app.group_user', 'off', true)`);
+      await client.query(`SELECT set_config('app.walls', '', true)`);
+      const store = new PgStore(client);
+      const svc = new PrimaService(store, clock);
+      const out = await fn(svc, store);
       await client.query('COMMIT');
       return out;
     } catch (e) {

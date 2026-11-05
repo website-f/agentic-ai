@@ -1,0 +1,318 @@
+// HTTP server for the CMS app. Two kinds of caller:
+// - Feeds (site gateways, cloud adaptors, Prima): every call signed (X-Api-Key, X-Timestamp, X-Signature), refused if not.
+// - Operators: a personal key per operator for this first version; Microsoft (Entra) sign-in with MFA comes before the
+//   pilot (plan section 7). There is no command route: CMS cannot open gates or arm panels.
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer as createTcpServer, type Server as TcpServer } from 'node:net';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { problems, verify, type CmsEvent } from './event';
+import { directoryProblems, type Directory } from './directory';
+import { Hub, HubError } from './hub';
+import { GateLists, PROFILES, plateEvent, readFromJson, type Vehicle, type Visitor } from './adaptors/anpr';
+import { fixEvents, type Fix, type Route } from './adaptors/tracker';
+import { handleFrame } from './adaptors/sia-dc09';
+import { CSS, PAGE, SCRIPT } from './dashboard';
+
+export const MAX_BODY = 256 * 1024;
+
+export interface ServerConfig {
+  /** Operator key -> operator name. */
+  operators: Map<string, string>;
+  gateway: { key: string; secret: string };
+  prima: { key: string; secret: string };
+}
+
+/** Reads the configuration from the environment. Refuses to start without operator keys and feed secrets. */
+export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfig {
+  const raw = env.CMS_OPERATOR_KEYS;
+  if (!raw) throw new Error('CMS_OPERATOR_KEYS is not set (JSON: {"<key>":"<operator name>"}).');
+  const obj = JSON.parse(raw) as Record<string, string>;
+  const operators = new Map(Object.entries(obj).filter(([k, v]) => k.length >= 24 && typeof v === 'string' && v.trim()));
+  if (!operators.size) throw new Error('CMS_OPERATOR_KEYS has no usable key (each key at least 24 characters).');
+  const need = (n: string) => {
+    const v = env[n];
+    if (!v) throw new Error(`${n} is not set.`);
+    return v;
+  };
+  return {
+    operators,
+    gateway: { key: need('CMS_GATEWAY_KEY'), secret: need('CMS_GATEWAY_SECRET') },
+    prima: { key: need('PRIMA_TO_CMS_KEY'), secret: need('PRIMA_TO_CMS_SECRET') },
+  };
+}
+
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY) {
+        reject(new HttpError(413, 'Body too large.'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+function json(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new HttpError(400, 'Body is not JSON.');
+  }
+}
+
+function send(res: ServerResponse, status: number, body: unknown, type = 'application/json'): void {
+  const text = type === 'application/json' ? JSON.stringify(body) : String(body);
+  res.writeHead(status, {
+    'content-type': `${type}; charset=utf-8`,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
+    'content-security-policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  });
+  res.end(text);
+}
+
+function sameText(a: string, b: string): boolean {
+  return timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+}
+
+export interface AppState {
+  hub: Hub;
+  lists: GateLists;
+  routes: Map<string, Route>;
+  /** Saves the hub (persist.ts). Called before any change is answered 2xx; a failed save answers 503 instead. */
+  persist?: () => void;
+}
+
+export function handler(cfg: ServerConfig, state: AppState, clock: () => number = Date.now) {
+  const { hub, lists, routes } = state;
+  const save = () => {
+    if (!state.persist) return;
+    try {
+      state.persist();
+    } catch {
+      throw new HttpError(503, 'CMS could not save this change; send it again.');
+    }
+  };
+  /** A change is acknowledged only once it is saved. */
+  const saved = (res: ServerResponse, body: unknown) => {
+    save();
+    return send(res, 200, body);
+  };
+
+  const operator = (req: IncomingMessage): string => {
+    const h = String(req.headers.authorization ?? '');
+    const key = h.startsWith('Bearer ') ? h.slice(7) : '';
+    if (key) for (const [k, name] of cfg.operators) if (sameText(k, key)) return name;
+    throw new HttpError(401, 'Operator key not accepted.');
+  };
+
+  const signedBy = (req: IncomingMessage, body: string, who: { key: string; secret: string }) => {
+    if (!verify(req.headers as Record<string, unknown>, body, who.key, who.secret, clock())) throw new HttpError(401, 'Feed key or signature not valid.');
+  };
+
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    try {
+      const url = new URL(req.url ?? '/', 'http://cms.local');
+      const path = url.pathname;
+      if (req.method === 'GET' && path === '/') return send(res, 200, PAGE, 'text/html');
+      if (req.method === 'GET' && path === '/app.js') return send(res, 200, SCRIPT, 'text/javascript');
+      if (req.method === 'GET' && path === '/app.css') return send(res, 200, CSS, 'text/css');
+      if (req.method === 'GET' && path === '/healthz') return send(res, 200, { ok: true });
+
+      if (req.method === 'GET' && path === '/api/state') {
+        operator(req);
+        return send(res, 200, {
+          queue: hub.queue(),
+          notifications: hub.notifications.slice(-50).reverse(),
+          health: hub.deviceHealth(),
+          gaps: hub.gaps.slice(-50).reverse(),
+          refused: hub.refused.slice(-50).reverse(),
+          primaRejected: hub.primaLink.parked.slice(-50).reverse(),
+        });
+      }
+
+      if (req.method === 'GET' && path === '/api/kpis') {
+        operator(req);
+        try {
+          return send(res, 200, hub.kpis({ from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined }));
+        } catch (e) {
+          if (e instanceof HubError) throw new HttpError(400, e.message);
+          throw e;
+        }
+      }
+
+      const alarmAction = /^\/api\/alarms\/([^/]+)\/(acknowledge|actioned|close|escalate)$/.exec(path);
+      if (req.method === 'POST' && alarmAction) {
+        const who = operator(req);
+        const body = json((await readBody(req)) || '{}') as Record<string, string>;
+        const id = decodeURIComponent(alarmAction[1]);
+        try {
+          switch (alarmAction[2]) {
+            case 'acknowledge':
+              return saved(res, hub.acknowledge(id, who));
+            case 'actioned':
+              return saved(res, hub.actioned(id, who, String(body.by ?? '')));
+            case 'close':
+              return saved(res, hub.close(id, who, body.outcome as 'real' | 'false', String(body.note ?? '')));
+            default:
+              return saved(res, { escalatedTo: hub.escalate(id, who, String(body.reason ?? '')) });
+          }
+        } catch (e) {
+          if (e instanceof HubError) throw new HttpError(400, e.message);
+          throw e;
+        }
+      }
+
+      if (req.method === 'POST' && path.startsWith('/ingest/')) {
+        const body = await readBody(req);
+        if (path === '/ingest/directory') {
+          signedBy(req, body, cfg.prima);
+          const d = json(body);
+          const bad = directoryProblems(d);
+          if (bad.length) throw new HttpError(400, bad.slice(0, 10).join('; '));
+          hub.replaceDirectory(d as Directory);
+          return saved(res, { ok: true });
+        }
+        signedBy(req, body, cfg.gateway);
+        const data = json(body) as Record<string, unknown>;
+        switch (path) {
+          case '/ingest/events': {
+            const list = Array.isArray(data.events) ? (data.events as CmsEvent[]) : [];
+            let stored = 0;
+            const refused: string[] = [];
+            for (const e of list) {
+              const bad = problems(e);
+              if (bad.length) {
+                hub.refuse(String((e as Partial<CmsEvent>)?.source ?? 'gateway'), bad.join('; '));
+                refused.push(bad.join('; '));
+                continue;
+              }
+              const r = hub.ingest(e);
+              if (r.stored) stored++;
+              else if (r.refused) refused.push(r.refused.join('; '));
+            }
+            return saved(res, { stored, refused });
+          }
+          case '/ingest/heartbeat':
+            for (const id of Array.isArray(data.deviceIds) ? data.deviceIds : []) if (typeof id === 'string') hub.heartbeat(id, new Date(clock()));
+            return saved(res, { ok: true });
+          case '/ingest/lists/vehicles':
+            lists.setVehicles(Array.isArray(data.vehicles) ? (data.vehicles as Vehicle[]).filter((v) => typeof v?.plate === 'string') : []);
+            return saved(res, { ok: true });
+          case '/ingest/lists/visitors':
+            lists.setVisitors(Array.isArray(data.visitors) ? (data.visitors as Visitor[]).filter((v) => typeof v?.siteId === 'string') : []);
+            return saved(res, { ok: true });
+          case '/ingest/routes':
+            for (const r of Array.isArray(data.routes) ? (data.routes as Route[]) : []) if (typeof r?.trackerId === 'string' && Array.isArray(r.points)) routes.set(r.trackerId, r);
+            return saved(res, { ok: true });
+          case '/ingest/tracker': {
+            const out = fixEvents(data as unknown as Fix, hub.directory, routes.get(String(data.trackerId)), new Date(clock()).toISOString());
+            if ('refused' in out) {
+              hub.refuse('tracker', out.refused);
+              throw new HttpError(400, out.refused);
+            }
+            hub.heartbeat(String(data.trackerId), new Date(clock()));
+            for (const e of out) hub.ingest(e);
+            return saved(res, { events: out.length });
+          }
+          case '/ingest/ja/clock-in':
+            if (!hub.clockIn(String(data.shiftId), String(data.at))) throw new HttpError(400, 'Shift not in the directory, or time not valid.');
+            return saved(res, { ok: true });
+          case '/ingest/ja/checkpoint':
+            if (!hub.checkpoint(String(data.roundId), String(data.at))) throw new HttpError(400, 'Patrol round not in the directory, or time not valid.');
+            return saved(res, { ok: true });
+          default: {
+            const anpr = /^\/ingest\/anpr\/([a-z0-9-]+)$/.exec(path);
+            if (anpr) {
+              const profile = PROFILES[anpr[1]];
+              if (!profile) throw new HttpError(404, `No ANPR profile ${anpr[1]}.`);
+              const read = readFromJson(data, profile);
+              if ('refused' in read) {
+                hub.refuse(`anpr-${anpr[1]}`, read.refused);
+                throw new HttpError(400, read.refused);
+              }
+              const e = plateEvent(read, hub.directory, lists, new Date(clock()).toISOString());
+              if ('refused' in e) {
+                hub.refuse(`anpr-${anpr[1]}`, e.refused);
+                throw new HttpError(400, e.refused);
+              }
+              hub.heartbeat(read.cameraId, new Date(clock()));
+              hub.ingest(e);
+              return saved(res, { verdict: e.detail.verdict, kind: e.kind });
+            }
+          }
+        }
+      }
+      throw new HttpError(404, 'Not found.');
+    } catch (e) {
+      if (e instanceof HttpError) {
+        // Refused feed calls are security evidence: keep them too, but a failed save never changes the answer.
+        if (e.status === 400 && req.method === 'POST') {
+          try {
+            state.persist?.();
+          } catch {
+            /* the next save keeps it */
+          }
+        }
+        return send(res, e.status, { error: e.message });
+      }
+      return send(res, 500, { error: 'Something went wrong.' });
+    }
+  };
+}
+
+export function startHttp(cfg: ServerConfig, state: AppState, port: number): Server {
+  const s = createServer((req, res) => void handler(cfg, state)(req, res));
+  s.listen(port);
+  return s;
+}
+
+/** SIA DC-09 receiver for alarm panels on TCP. Each frame ends with CR; every readable frame gets an ACK, others a NAK. */
+export function startDc09(hub: Hub, port: number, persist?: () => void): TcpServer {
+  const s = createTcpServer((sock) => {
+    let buf = '';
+    sock.setEncoding('latin1');
+    sock.on('data', (chunk: string) => {
+      buf += chunk;
+      if (buf.length > 64 * 1024) return sock.destroy();
+      let end: number;
+      while ((end = buf.indexOf('\r')) >= 0) {
+        const raw = buf.slice(0, end + 1);
+        buf = buf.slice(end + 1);
+        const start = raw.indexOf('\n');
+        const out = handleFrame(start >= 0 ? raw.slice(start) : raw, hub.directory);
+        if (out.deviceId) hub.heartbeat(out.deviceId);
+        if (out.refused) hub.refuse('sia-dc09', out.refused);
+        if (out.event) hub.ingest(out.event);
+        // The panel is told ACK only once the event is saved; without the save it gets no answer and sends again.
+        try {
+          persist?.();
+        } catch {
+          return sock.destroy();
+        }
+        sock.write(out.reply, 'latin1');
+      }
+    });
+    sock.on('error', () => sock.destroy());
+  });
+  s.listen(port);
+  return s;
+}

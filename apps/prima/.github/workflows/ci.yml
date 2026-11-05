@@ -32,7 +32,7 @@ jobs:
       - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs
       - run: npm ci
       - run: node --test scripts/job-emails-vite-startup.test.mjs scripts/website-policy-vite-transform.test.mjs scripts/it-manual-vite-boundary.test.mjs
-      - run: node --test scripts/mail-connection-state.test.mjs scripts/mail-connection-render.test.cjs scripts/connections-state.test.mjs scripts/connections-v2.test.mjs scripts/sharepoint-request-state.test.mjs scripts/sharepoint-request-http.test.mjs scripts/job-email-integration.test.mjs
+      - run: node --test scripts/mail-connection-state.test.mjs scripts/mail-connection-render.test.cjs scripts/connections-state.test.mjs scripts/connections-v2.test.mjs scripts/m365-connections-state.test.mjs scripts/m365-connections-render.test.cjs scripts/sharepoint-request-state.test.mjs scripts/sharepoint-request-http.test.mjs scripts/job-email-integration.test.mjs
       - run: node --test scripts/website-schedule-state.test.mjs scripts/website-policy-ui.test.cjs scripts/website-pilot-ui.test.cjs scripts/it-manual-state.test.mjs scripts/it-manual-render.test.cjs scripts/it-manual-provenance.test.cjs scripts/it-operations-display.test.mjs scripts/it-operations-contract.test.mjs scripts/it-operations-render.test.cjs scripts/it-guide-state.test.mjs scripts/it-guide-render.test.cjs scripts/hr-it-state.test.mjs scripts/hr-it-render.test.cjs scripts/it-onboarding-evidence.test.cjs scripts/it-corrections-state.test.mjs scripts/it-corrections-render.test.cjs scripts/rental-correction-state.test.mjs scripts/rental-correction-render.test.cjs scripts/procurement-state.test.mjs scripts/procurement-render.test.cjs scripts/metrics-state.test.mjs scripts/metrics-render.test.cjs scripts/cleanup-state.test.mjs scripts/cleanup-render.test.cjs
       - run: node --test scripts/drawer-focus.test.mjs scripts/it-buy-render.test.cjs
       - run: node --test scripts/it-extraction-state.test.mjs scripts/it-extraction-render.test.mjs
@@ -46,6 +46,7 @@ jobs:
         run: PRIMA_REVIEWED_CORE_MODULE="$GITHUB_WORKSPACE/packages/core/dist/index.js" node --test scripts/it-import-reviewed-core.test.mjs scripts/it-manual-contract-integration.test.mjs scripts/it-operations-core.test.mjs scripts/hr-it-core.test.mjs scripts/it-corrections-core.test.mjs scripts/rental-correction-core.test.mjs
       - run: npm test -w @prima/core
       - run: npm test -w @prima/api
+      - run: npm test -w @prima/cms
       - run: npm run typecheck -w @prima/web
       - run: npm run build:demo -w @prima/web
       - run: node --test scripts/it-purchase-reason.test.cjs
@@ -59,7 +60,7 @@ jobs:
     # Separate ephemeral runner: no Azure login, deployments, secrets or real data.
     # A draft PR still runs this job after publication is separately authorized.
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,6 +86,7 @@ jobs:
           node scripts/it-extraction-browser-smoke.mjs
           node scripts/it-import-review-browser-smoke.mjs
           node scripts/connections-browser-smoke.mjs
+          node scripts/m365-connections-browser-smoke.mjs
           node scripts/website-policy-browser-smoke.mjs
           node scripts/job-emails-browser.mjs
           node scripts/drawer-browser-smoke.mjs
@@ -96,6 +98,27 @@ jobs:
           node scripts/cleanup-browser-smoke.mjs
           node scripts/hr-it-browser-smoke.mjs
           node scripts/it-onboarding-browser-smoke.mjs
+          node scripts/central-admin-browser-uat.mjs
+      - name: HR journeys on the synthetic demo build (leave; login handover as an ordinary IT account)
+        shell: bash
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          mkdir -p "$RUNNER_TEMP/hr-browser"
+          (cd apps/web && npx vite preview --mode demo --outDir dist-demo --host 127.0.0.1 --port 4179 --strictPort > "$RUNNER_TEMP/hr-browser/preview.log" 2>&1 &)
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:4179/ && break; sleep 1; done
+          node scripts/hr-login-handover-browser-uat.cjs "$RUNNER_TEMP/hr-browser" 2>&1 | tee "$RUNNER_TEMP/hr-browser/login-handover.txt"
+          node scripts/hr-leave-browser-uat.cjs "$RUNNER_TEMP/hr-browser" 2>&1 | tee "$RUNNER_TEMP/hr-browser/leave.txt"
+      - name: Keep the HR browser results and screenshots (synthetic data only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hr-browser-results
+          path: ${{ runner.temp }}/hr-browser
+          retention-days: 14
+          if-no-files-found: warn
+          node scripts/finance-plan3-browser-smoke.mjs
 
   packaged_release:
     runs-on: ubuntu-24.04

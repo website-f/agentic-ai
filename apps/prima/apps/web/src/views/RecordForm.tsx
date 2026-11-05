@@ -3,6 +3,7 @@ import type { RecordKind, RecordValues } from '@prima/core';
 import { api, type RecordFormData } from '../api';
 import { useApp } from '../App';
 import { Drawer, ErrorNotice, Loading, useAction } from '../ui';
+import { RecordGuide } from './GuideCard';
 
 /**
  * Add and Edit buttons for plain records (Fauzan, 27 Oct 2026). One form, built from the record's field list in core;
@@ -97,11 +98,15 @@ function RecordDrawer({ kind, id, companyId: given, onClose }: { kind: RecordKin
 function RecordFields({ form, kind, id, onDone }: { form: RecordFormData; kind: RecordKind; id: string | null; onDone: () => void }) {
   const act = useAction();
   const [values, setValues] = useState<RecordValues>(form.values);
+  // Finance's credit warning before a new post (suggestion 4): the reason to add it anyway is asked only when Prima warns.
+  const [creditReason, setCreditReason] = useState('');
+  const errText = typeof act.error === 'string' ? act.error : (act.error?.message ?? '');
   const creating = kind !== 'company' && (!id || (kind === 'amTenancy' && !form.values.tenant));
   const set = (k: string, v: RecordValues[string]) => setValues({ ...values, [k]: v });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {form.spec.note && <p className="muted small">{form.spec.note}</p>}
+      <RecordGuide kind={form.spec.kind} />
       {form.spec.fields
         .filter((f) => creating || !f.createOnly)
         .filter((f) => kind !== 'amTenancy' || f.key !== 'ended' || !creating)
@@ -153,13 +158,19 @@ function RecordFields({ form, kind, id, onDone }: { form: RecordFormData; kind: 
           );
         })}
       <ErrorNotice error={act.error} />
+      {(creditReason !== '' || /Finance warning/.test(errText)) && (
+        <label className="field">
+          <span>Reason to add it anyway (Finance sees it)</span>
+          <input className="input" value={creditReason} onChange={(e) => setCreditReason(e.target.value)} />
+        </label>
+      )}
       <div>
         <button
           className="btn btn-primary"
           disabled={act.busy}
           onClick={() =>
             act
-              .run(() => api.saveRecord(kind, id, form.companyId, values), (id || kind === 'company') && !creating ? 'Saved.' : `${form.spec.label} added.`)
+              .run(() => api.saveRecord(kind, id, form.companyId, creditReason ? { ...values, creditReason } : values), (id || kind === 'company') && !creating ? 'Saved.' : `${form.spec.label} added.`)
               .then((x) => {
                 if (x) onDone();
               })

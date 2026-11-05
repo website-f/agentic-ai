@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ProofInput, PurCategory } from '@prima/core';
 import { api, type PurBoard, type PurRequestInput } from '../api';
 import { ProofPicker } from './Proof';
+import { DeliveryProofPanel } from './DeliveryProof';
 import { RecordButton } from './RecordForm';
 import { WitnessField, emptyWitness } from './Witness';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -158,6 +159,7 @@ function Requests({ data }: { data: PurBoard }) {
                   {CATEGORY[r.req.category]} · {rm(r.chosen?.amount ?? r.req.total)}
                   {r.chosen ? '' : ' estimated'} · raised by {r.req.raisedBy}, {dateLabel(r.req.at.slice(0, 10))}
                   {r.waiting ? ` · waiting for ${r.waiting}` : ''}
+                  {r.req.status === 'posted' && (r.paid ? (r.paid.status === 'released' ? ` · paid by Finance ${r.paid.releasedOn ? dateLabel(r.paid.releasedOn) : ''}` : ' · Finance paying') : ' · Finance to pay')}
                 </div>
               </div>
               <Chip tone={r.canApprove ? 'warn' : r.tone}>
@@ -241,6 +243,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
         {r.tiers.length > 0 && `Approvals needed: ${r.tiers.map((t) => ({ manager: 'company manager', coo: 'COO', ceo: 'CEO' })[t]).join(', then ')}. `}
         {r.approvals.map((a) => `Approved by ${a.by}, ${dateLabel(a.at.slice(0, 10))}`).join(' · ')}
         {r.rejected ? ` Rejected by ${r.rejected.by}: ${r.rejected.note}` : ''}
+        {(r.rounds ?? []).map((x, i) => ` · Round ${i + 1} (${rm(x.total)}) rejected by ${x.rejected.by}: ${x.rejected.note}; corrected by ${x.reopened.by}: ${x.reopened.note}`).join('')}
         {r.po ? ` · PO ${r.po.ref} ${rm(r.po.amount)}` : ''}
         {r.grn ? ` · received by ${r.grn.by}, ${dateTimeLabel(r.grn.at)}${r.grn.note ? ` (${r.grn.note})` : ''}` : ''}
         {r.invoice
@@ -248,6 +251,13 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
           : ''}
         {r.posted ? ` · SQL Account ${r.posted.sqlRef}` : ''}
       </div>
+      {row.paid && (
+        <div className="notice" data-tone={row.paid.status === 'released' ? 'info' : 'warn'}>
+          {row.paid.status === 'released'
+            ? `Paid by Finance on ${row.paid.releasedOn ? dateLabel(row.paid.releasedOn) : '?'}, bank ref ${row.paid.bankRef ?? '?'} (${row.paid.paymentId})${row.paid.onStatement ? '; seen leaving on the bank statement' : '; waiting to be seen on the bank statement'}.`
+            : `Finance is paying it: ${row.paid.paymentId}, ${row.paid.status}.`}
+        </div>
+      )}
       {r.match && (
         <div className="notice" data-tone={r.match.ok ? 'info' : 'warn'}>
           {r.match.ok ? 'Three-way match passed: order, goods received and e-Invoice agree.' : `Three-way match failed: ${r.match.notes.join(' ')}`}
@@ -388,6 +398,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
           </button>
         </div>
       )}
+      {row.canReopen && <Reopen r={r} />}
       {proc && r.status === 'approved' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <input className="input" aria-label="PO number" placeholder="Purchase order number" value={po} onChange={(e) => setPo(e.target.value)} />
@@ -760,14 +771,73 @@ function NewSupplier({ data, onDone }: { data: PurBoard; onDone: () => void }) {
   );
 }
 
+function GoodwillBilling({ data }: { data: PurBoard }) {
+  if (!data.billing.length) return null;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Goodwill Empire billing to companies (draft for Finance)</h3>
+      </div>
+      <p className="muted small">
+        Rental is counted for items a company's guard holds at month end; a sale is counted in the month the guard acknowledges it. Items still on
+        their way to the guard are not billed yet. This is not an invoice or a payment.
+      </p>
+      {data.billing.map((b) => (
+        <div key={b.month} style={{ marginBottom: 12 }}>
+          <h4>{b.month}</h4>
+          {b.companies.length === 0 ? (
+            <p className="muted small">Nothing to bill.</p>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Items</th>
+                  <th className="num">Total (RM)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {b.companies.map((c) => (
+                  <tr key={c.companyId}>
+                    <td>{c.companyName}</td>
+                    <td className="small">
+                      {c.lines.map((l) => `${l.qty} x ${l.itemName} (${l.kind === 'rental' ? 'rental' : 'sale'}${l.unit == null ? ', price not set' : ''})`).join('; ')}
+                      {c.notYetReceived > 0 && (
+                        <span className="muted">
+                          {c.lines.length ? ' · ' : ''}
+                          {c.notYetReceived} on the way to the guard, not billed
+                        </span>
+                      )}
+                    </td>
+                    <td className="num">
+                      {c.total.toFixed(2)}
+                      {c.missingPrices > 0 && (
+                        <>
+                          {' '}
+                          <Chip tone="warn">{c.missingPrices} price{c.missingPrices > 1 ? 's' : ''} missing</Chip>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function Store({ data }: { data: PurBoard }) {
   const company = isStore(data.roles);
   return (
     <>
+      <GoodwillBilling data={data} />
       {data.losses.length > 0 && (
         <section className="panel">
           <div className="panel-head">
-            <h3>Lost or damaged, for the company manager to confirm</h3>
+            <h3>Lost or damaged, waiting for confirmation</h3>
           </div>
           <div className="list">
             {data.losses.map((l) => (
@@ -831,6 +901,12 @@ function Store({ data }: { data: PurBoard }) {
                   </td>
                   <td className="small">
                     {s.item.lastCount ? `${dateLabel(s.item.lastCount.on)}, counted ${s.item.lastCount.counted}, witness ${s.item.lastCount.witness}` : 'Never'}
+                    {s.item.opening && !s.item.opening.confirmed && (
+                      <>
+                        {' '}
+                        <Chip tone="warn">Opening stock to confirm</Chip>
+                      </>
+                    )}
                     {s.countDiff !== 0 && (
                       <>
                         {' '}
@@ -940,11 +1016,36 @@ function CountButton({ itemId, companyId }: { itemId: string; companyId: string 
   );
 }
 
+type Issue = PurBoard['issues'][number]['issue'];
+
+/** Where a Goodwill item is on its way to the guard (Fauzan, 2 Nov 2026). */
+function handoverStage(i: Issue): string {
+  const h = i.handover;
+  if (!h) return '';
+  if (i.acknowledged) return 'Guard has it';
+  if (!h.om) return `With the store, waiting for ${h.omName}`;
+  if (h.patrol && !h.patrol.step) return `With ${h.omName}, waiting for ${h.patrol.name}`;
+  return `With ${h.patrol ? h.patrol.name : h.omName}, waiting for ${i.personName}`;
+}
+
+function handoverText(i: Issue): string {
+  const h = i.handover!;
+  const d = (at: string) => dateLabel(at.slice(0, 10));
+  return [
+    `OM ${h.omName}${h.om ? ` received ${d(h.om.at)}` : ' not yet'}`,
+    h.patrol ? `patrolling officer ${h.patrol.name}${h.patrol.step ? ` signed ${d(h.patrol.step.at)}` : ' not yet'}` : '',
+    `guard${i.acknowledged && i.confirmedAt ? ` signed ${d(i.confirmedAt)}` : ' not yet'}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn: boolean }) {
   const act = useAction();
   const [condition, setCondition] = useState<'good' | 'worn' | 'damaged' | 'lost'>('good');
   const [note, setNote] = useState('');
   const [open, setOpen] = useState(false);
+  const [proof, setProof] = useState(false);
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
@@ -957,14 +1058,20 @@ function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn:
             {t.issue.serial ? ` · serial ${t.issue.serial}` : ''}
             {t.issue.acknowledged && t.issue.confirmedAt ? ` · confirmed ${dateLabel(t.issue.confirmedAt.slice(0, 10))}` : ''}
           </div>
+          {t.issue.handover && <div className="muted small">{handoverText(t.issue)}</div>}
           {t.issue.disputed && <div className="small">The person says: {t.issue.disputed.note}</div>}
         </div>
         {t.issue.disputed ? (
           <Chip tone="crit">Disputed</Chip>
         ) : !t.issue.acknowledged ? (
-          <Chip tone="warn">Not confirmed</Chip>
+          <Chip tone="warn">{t.issue.handover ? handoverStage(t.issue) : 'Not confirmed'}</Chip>
         ) : (
           <Chip tone="ok">Confirmed</Chip>
+        )}
+        {t.issue.handover && (
+          <button className="btn btn-sm" aria-expanded={proof} onClick={() => setProof(!proof)}>
+            Proof
+          </button>
         )}
         {canReturn && (
           <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -972,6 +1079,7 @@ function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn:
           </button>
         )}
       </div>
+      {proof && <DeliveryProofPanel issueId={t.issue.id} />}
       {open && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <select className="input" aria-label="Condition" value={condition} onChange={(e) => setCondition(e.target.value as typeof condition)}>
@@ -1010,8 +1118,21 @@ function IssueForm({ data }: { data: PurBoard }) {
   const [itemId, setItemId] = useState('');
   const [qty, setQty] = useState('1');
   const [serial, setSerial] = useState('');
-  const people = data.people.filter((p) => p.companyId === companyId && (!find || p.name.toLowerCase().includes(find.toLowerCase()))).slice(0, 50);
+  const [slip, setSlip] = useState<ProofInput[]>([]);
+  // Goodwill's store issues to guards of every company it serves, never to central staff (Fauzan, 2 Nov 2026).
+  const goodwillStore = companyId === 'goodwill';
+  const central = new Set(['pwvsb', 'merdeka', 'goodwill']);
+  const people = data.people
+    .filter((p) => (goodwillStore ? !central.has(p.companyId) : p.companyId === companyId) && (!find || p.name.toLowerCase().includes(find.toLowerCase())))
+    .slice(0, 50);
   const stock = data.stock.filter((s) => s.item.companyId === companyId);
+  // A Goodwill item goes store -> Operations Manager -> patrolling officer -> guard (Fauzan, 2 Nov 2026).
+  const [omUserId, setOmUserId] = useState('');
+  const [patrolPersonId, setPatrolPersonId] = useState('');
+  const receiver = data.people.find((p) => p.id === personId);
+  const needsPatrol = goodwillStore && !!receiver && receiver.role !== 'patrol_officer';
+  const patrols = receiver ? data.people.filter((p) => p.role === 'patrol_officer' && p.companyId === receiver.companyId) : [];
+  const handoverReady = !goodwillStore || (!!omUserId && (!needsPatrol || !!patrolPersonId));
   return (
     <section className="panel">
       <div className="panel-head">
@@ -1059,16 +1180,105 @@ function IssueForm({ data }: { data: PurBoard }) {
           value={serial}
           onChange={(e) => setSerial(e.target.value)}
         />
-        <p className="muted small">The person then confirms they received it in their own details.</p>
+        {goodwillStore ? (
+          <>
+            <select className="input" aria-label="Operations Manager" value={omUserId} onChange={(e) => setOmUserId(e.target.value)}>
+              <option value="">Operations Manager who takes it…</option>
+              {data.govOms.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                  {u.title ? ` (${u.title})` : ''}
+                </option>
+              ))}
+            </select>
+            {needsPatrol && (
+              <select className="input" aria-label="Patrolling officer" value={patrolPersonId} onChange={(e) => setPatrolPersonId(e.target.value)}>
+                <option value="">Patrolling officer who hands it to the guard…</option>
+                {patrols.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="muted small">
+              The Operations Manager confirms receiving it. The patrolling officer and the guard then sign on the OM's screen, or the OM attaches
+              their signed slips and a photo of the guard holding the item. The company is billed once the guard has it.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="muted small">
+              Someone with a Prima account confirms receipt in their own details. For a guard with no Prima account, attach the issue slip they signed.
+            </p>
+            <ProofPicker site={null} refText="Issue slip" items={slip} onChange={setSlip} documentsOnly />
+          </>
+        )}
         <button
           className="btn btn-sm btn-primary"
-          disabled={act.busy || !personId || !itemId}
-          onClick={() => act.run(() => api.stockIssue(companyId, { itemId, personId, qty: Number(qty), serial }), 'Issued. Waiting for the person to confirm.')}
+          disabled={act.busy || !personId || !itemId || !handoverReady}
+          onClick={() =>
+            act.run(
+              async () => {
+                await api.stockIssue(companyId, {
+                  itemId,
+                  personId,
+                  qty: Number(qty),
+                  serial,
+                  ...(goodwillStore ? { omUserId, ...(needsPatrol ? { patrolPersonId } : {}) } : slip.length ? { slip } : {}),
+                });
+                setSlip([]);
+              },
+              goodwillStore
+                ? 'Issued. Waiting for the Operations Manager to confirm.'
+                : slip.length
+                  ? 'Issued with the signed slip.'
+                  : 'Issued. Waiting for the person to confirm.',
+            )
+          }
         >
           Issue
         </button>
         <ErrorNotice error={act.error} />
       </div>
     </section>
+  );
+}
+
+/** Correct a rejected request and send it again: fresh quotes and a fresh approval round; the rejected round is kept. */
+function Reopen({ r }: { r: ReqRow['req'] }) {
+  const act = useAction();
+  const [note, setNote] = useState('');
+  const [lines, setLines] = useState(r.lines.map((l) => ({ ...l, qty: String(l.qty), unitPrice: String(l.unitPrice) })));
+  const put = (i: number, k: 'qty' | 'unitPrice', v: string) => setLines(lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  return (
+    <div className="notice" data-tone="info" style={{ display: 'grid', gap: 6 }}>
+      <div className="small">Correct what the rejection asked for, say what changed, and send it back for fresh quotes and approval.</div>
+      {lines.map((l, i) => (
+        <div key={i} className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="small" style={{ minWidth: 100 }}>
+            {l.item}
+          </span>
+          <input className="input" aria-label={`${l.item} quantity`} inputMode="numeric" value={l.qty} onChange={(e) => put(i, 'qty', e.target.value)} style={{ width: 80 }} />
+          <input className="input" aria-label={`${l.item} estimated price`} inputMode="decimal" value={l.unitPrice} onChange={(e) => put(i, 'unitPrice', e.target.value)} style={{ width: 100 }} />
+        </div>
+      ))}
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <input className="input" aria-label="What was corrected" placeholder="What was corrected (required)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || !note.trim()}
+          onClick={() =>
+            act.run(
+              () => api.purStep(r.id, 'reopen', { note, lines: lines.map((l) => ({ item: l.item, stockItemId: l.stockItemId, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })) }),
+              'Corrected and sent back to Procurement for quotes.',
+            )
+          }
+        >
+          Correct and send again
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }

@@ -1,0 +1,115 @@
+{
+ "at": "2026-11-03T04:37:40.206Z",
+ "one": {
+  "duty": {
+   "status": 200,
+   "kind": "ok",
+   "ms": 72,
+   "kb": 26,
+   "err": null
+  },
+  "dutyTables": [],
+  "clockIn": {
+   "status": 201,
+   "kind": "ok",
+   "ms": 45,
+   "kb": 0,
+   "err": null
+  },
+  "clockInTables": []
+ },
+ "duty": [
+  {
+   "n": 50,
+   "wallMs": 1873,
+   "p50": 1146,
+   "p95": 1860,
+   "max": 1867,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 5560,
+   "p50": 3088,
+   "p95": 5387,
+   "max": 5551,
+   "tally": {
+    "ok": 100,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 200,
+   "wallMs": 9871,
+   "p50": 4500,
+   "p95": 9575,
+   "max": 9841,
+   "tally": {
+    "ok": 200,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  }
+ ],
+ "clock": [
+  {
+   "n": 50,
+   "wallMs": 1274,
+   "p50": 703,
+   "p95": 1221,
+   "max": 1272,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 2202,
+   "p50": 1201,
+   "p95": 2117,
+   "max": 2197,
+   "tally": {
+    "ok": 100,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 200,
+   "wallMs": 4556,
+   "p50": 2434,
+   "p95": 4354,
+   "max": 4550,
+   "tally": {
+    "ok": 200,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  }
+ ]
+}

@@ -1,0 +1,389 @@
+[
+ {
+  "j": "1. New office joiner at Sasa (HR keys once)",
+  "steps": [
+   {
+    "who": "PWVSB HR",
+    "role": "HR Admin, central HR (prepares; the Chief of Staff and Deputy check as HR Director)",
+    "what": "HR adds the joiner (office staff, Sasa)",
+    "ok": true
+   },
+   {
+    "who": "IT Manager (mock)",
+    "role": "IT Manager, Merdeka Network (every company)",
+    "what": "IT Manager sees it in Hand-overs",
+    "ok": true
+   },
+   {
+    "who": "IT Manager (mock)",
+    "role": "IT Manager, Merdeka Network (every company)",
+    "what": "IT Manager closes it with a note only",
+    "ok": false,
+    "msg": "HR has not opened the HR/IT joining request for this person yet. This stays open until they do."
+   },
+   {
+    "who": "Finance Team Leader 1",
+    "role": "Finance Team Leader, Team 1 (payroll and bank)",
+    "what": "Finance Team 1 leader closes the payroll to-do",
+    "ok": true
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Sasa Company Manager sees the joiner notice",
+    "ok": true
+   }
+  ],
+  "handovers": [
+   {
+    "flow": "pay_change",
+    "desk": "finance",
+    "kind": "info",
+    "people": 9,
+    "unassigned": false
+   },
+   {
+    "flow": "staff_join",
+    "desk": "it",
+    "kind": "todo",
+    "people": 6,
+    "unassigned": false
+   },
+   {
+    "flow": "staff_join",
+    "desk": "finance",
+    "kind": "todo",
+    "people": 9,
+    "unassigned": false
+   },
+   {
+    "flow": "staff_join",
+    "desk": "chief_of_staff",
+    "kind": "todo",
+    "people": 2,
+    "unassigned": false
+   },
+   {
+    "flow": "staff_join",
+    "desk": "company_office",
+    "kind": "info",
+    "people": 8,
+    "unassigned": false
+   }
+  ]
+ },
+ {
+  "j": "2. Staff medical claim (Sasa admin executive)",
+  "steps": [
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Admin exec submits a RM120 clinic claim with receipt",
+    "ok": true
+   },
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Admin exec tries to verify own claim",
+    "ok": false,
+    "msg": "Claim not found"
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager (head) verifies with comment",
+    "ok": true
+   },
+   {
+    "who": "PWVSB HR",
+    "role": "HR Admin, central HR (prepares; the Chief of Staff and Deputy check as HR Director)",
+    "what": "HR checks the claim",
+    "ok": true
+   },
+   {
+    "who": "Ahmad Faisal bin Zainal",
+    "role": "Chief Operating Officer (every company)",
+    "what": "COO approves",
+    "ok": true
+   },
+   {
+    "who": "Finance Team Leader 1",
+    "role": "Finance Team Leader, Team 1 (payroll and bank)",
+    "what": "Finance team leader pays with bank ref",
+    "ok": true
+   },
+   {
+    "who": "Sharifah Nadia binti Syed Ali",
+    "role": "Finance Director",
+    "what": "Finance Director pays with bank ref (if leader could not)",
+    "ok": false,
+    "msg": "This claim is already paid."
+   }
+  ],
+  "handovers": [
+   {
+    "flow": "staff_claim",
+    "desk": "finance",
+    "kind": "info",
+    "people": 9,
+    "unassigned": false
+   }
+  ]
+ },
+ {
+  "j": "3. Annual leave (Sasa admin executive)",
+  "steps": [
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Admin exec applies 2 days annual leave",
+    "ok": true
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager approves with reason",
+    "ok": false,
+    "msg": "Not allowed: leave.decide for company co-sasa. Ask the company or check your authority grant."
+   },
+   {
+    "who": "PWVSB HR",
+    "role": "HR Admin, central HR (prepares; the Chief of Staff and Deputy check as HR Director)",
+    "what": "HR approves (if CM could not)",
+    "ok": true
+   }
+  ],
+  "handovers": []
+ },
+ {
+  "j": "4. Serious incident at a Sasa site",
+  "steps": [
+   {
+    "who": "Ganesan a/l Perumal",
+    "role": "Site Officer, Sasa (stationed at 3 sites)",
+    "what": "Site officer raises a P1 case with a gallery photo (not camera)",
+    "ok": false,
+    "msg": "Take the photo with the in-app camera."
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager raises the P1 theft case with document proof",
+    "ok": true
+   },
+   {
+    "who": "Ganesan a/l Perumal",
+    "role": "Site Officer, Sasa (stationed at 3 sites)",
+    "what": "Site officer (stationed) verifies with proof",
+    "ok": true
+   },
+   {
+    "who": "Mohd Rizal bin Jaafar",
+    "role": "Patrolling Officer, Sasa (Selangor)",
+    "what": "Patrolling officer verifies with proof",
+    "ok": true
+   },
+   {
+    "who": "Azman bin Osman",
+    "role": "Operations Manager, Selangor and Kuala Lumpur (all companies in the area)",
+    "what": "OM verifies with proof",
+    "ok": true
+   },
+   {
+    "who": "Rajesh a/l Subramaniam",
+    "role": "Regional Operations Manager, Central (all companies in the region)",
+    "what": "Regional OM resolves with proof",
+    "ok": true
+   }
+  ],
+  "handovers": []
+ },
+ {
+  "j": "5. New client and signed contract at Sasa",
+  "steps": [
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager adds the client",
+    "ok": true
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager records the signed contract",
+    "ok": true
+   }
+  ],
+  "handovers": [
+   {
+    "flow": "client_add",
+    "desk": "finance",
+    "kind": "todo",
+    "people": 9,
+    "unassigned": false
+   },
+   {
+    "flow": "client_add",
+    "desk": "cms",
+    "kind": "info",
+    "people": 1,
+    "unassigned": false
+   },
+   {
+    "flow": "contract_add",
+    "desk": "finance",
+    "kind": "todo",
+    "people": 9,
+    "unassigned": false
+   },
+   {
+    "flow": "contract_add",
+    "desk": "chief_of_staff",
+    "kind": "todo",
+    "people": 2,
+    "unassigned": false
+   },
+   {
+    "flow": "contract_add",
+    "desk": "procurement",
+    "kind": "todo",
+    "people": 1,
+    "unassigned": false
+   },
+   {
+    "flow": "contract_add",
+    "desk": "hr",
+    "kind": "info",
+    "people": 1,
+    "unassigned": false
+   },
+   {
+    "flow": "contract_add",
+    "desk": "cms",
+    "kind": "info",
+    "people": 1,
+    "unassigned": false
+   }
+  ]
+ },
+ {
+  "j": "6. Purchase request (Sasa)",
+  "steps": [
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Admin exec raises a purchase (torchlights)",
+    "ok": true
+   },
+   {
+    "who": "Procurement Executive (mock)",
+    "role": "Procurement and Inventory Executive, PWVSB",
+    "what": "Procurement adds quote 1",
+    "ok": true
+   },
+   {
+    "who": "Procurement Executive (mock)",
+    "role": "Procurement and Inventory Executive, PWVSB",
+    "what": "Procurement adds quote 2",
+    "ok": true
+   },
+   {
+    "who": "Procurement Executive (mock)",
+    "role": "Procurement and Inventory Executive, PWVSB",
+    "what": "Procurement adds quote 3",
+    "ok": true
+   },
+   {
+    "who": "Procurement Executive (mock)",
+    "role": "Procurement and Inventory Executive, PWVSB",
+    "what": "Procurement adds online price",
+    "ok": true
+   },
+   {
+    "who": "Procurement Executive (mock)",
+    "role": "Procurement and Inventory Executive, PWVSB",
+    "what": "Procurement submits for approval",
+    "ok": true
+   },
+   {
+    "who": "Ahmad Faisal bin Zainal",
+    "role": "Chief Operating Officer (every company)",
+    "what": "COO approves with reason",
+    "ok": true
+   },
+   {
+    "who": "Fauzan",
+    "role": "Chief Executive Officer (sees everything)",
+    "what": "CEO approves with reason",
+    "ok": true
+   }
+  ],
+  "handovers": [
+   {
+    "flow": "purchase",
+    "desk": "finance",
+    "kind": "info",
+    "people": 9,
+    "unassigned": false
+   }
+  ]
+ },
+ {
+  "j": "7. IT help request",
+  "steps": [
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Sasa admin exec raises own help request in Prima",
+    "ok": true
+   },
+   {
+    "who": "IT Executive 1 (mock)",
+    "role": "IT Executive, Merdeka Network",
+    "what": "IT executive takes it",
+    "ok": true
+   },
+   {
+    "who": "IT Executive 1 (mock)",
+    "role": "IT Executive, Merdeka Network",
+    "what": "IT executive resolves it",
+    "ok": true
+   },
+   {
+    "who": "Farah Nadia binti Kamal",
+    "role": "Admin Executive, Sasa Security Services Sdn Bhd",
+    "what": "Requester (Sasa admin exec) confirms the fix in Prima",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "j": "8. ACT finding to a Sasa owner",
+  "steps": [
+   {
+    "who": "ACT Director (mock)",
+    "role": "Director, Audit, Compliance and Transformation (ACT), PWVSB",
+    "what": "ACT Director raises a finding for Sasa CM",
+    "ok": true
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager plans the fix",
+    "ok": true
+   },
+   {
+    "who": "Nor Azlina binti Hashim",
+    "role": "Company Manager, Sasa Security Services",
+    "what": "Company Manager marks fixed with proof",
+    "ok": true
+   },
+   {
+    "who": "ACT Director (mock)",
+    "role": "Director, Audit, Compliance and Transformation (ACT), PWVSB",
+    "what": "ACT checks the fix",
+    "ok": true
+   }
+  ]
+ }
+]

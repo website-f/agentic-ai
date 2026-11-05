@@ -25,6 +25,11 @@ describe('pilot routing: the right person has the button at each step', () => {
     expect((await row(coo))?.canCoo ?? false).toBe(false);
     expect(await row(mgr)).toBeUndefined();
     await svc.hrDecideClaim(hr, c.id, true, 'Checked');
+    // The company head verifies too (Fauzan, 2 Nov 2026); only then may the COO approve.
+    expect((await row(coo))?.canCoo ?? false).toBe(false);
+    const head = await svc.user(c.headIds![0]);
+    expect((await row(head))?.canHead).toBe(true);
+    await svc.headVerifyClaim(head, c.id, true, 'Clinic visit on a work day');
     expect((await row(coo))?.canCoo).toBe(true);
     await svc.cooDecideClaim(coo, c.id, true, 'OK');
     expect((await row(fd))?.canPay).toBe(true);
@@ -55,18 +60,25 @@ describe('pilot routing: the right person has the button at each step', () => {
     await svc.setClaimRate(ceo, '2026-11', 'CAR', 0.6);
   });
 
-  it('leave: an IT staff member asks, HR decides', async () => {
+  it('leave: an IT staff member asks, HR decides, the CEO consents for the Vice Chairman (Fauzan, 1 Nov 2026)', async () => {
     const { svc } = fresh();
-    const [hr, ex3, mgr] = await Promise.all(['u-pwvsb-hr', 'u-it-ex3', 'u-it-mgr'].map((id) => svc.user(id)));
+    const [hr, ex3, mgr, ceo] = await Promise.all(['u-pwvsb-hr', 'u-it-ex3', 'u-it-mgr', 'u-fauzan'].map((id) => svc.user(id)));
     const q = await svc.requestLeave(ex3, { personId: ex3.personId!, kind: 'ANNUAL', from: '2026-11-10', to: '2026-11-11', reason: 'Family matter' });
     const hrRow = (await svc.leaveRequests(hr)).rows.find((r) => r.request.id === q.id)!;
     expect(hrRow.canDecide).toBe(true);
     expect(hrRow.mine).toBe(true);
     await expect(svc.leaveRequests(mgr).then((r) => r.rows.some((x) => x.request.id === q.id && x.canDecide))).resolves.toBe(false);
-    await svc.decideLeave(hr, q.id, true, '');
+    await expect(svc.decideLeave(hr, q.id, true, '')).rejects.toThrow(/comment/);
+    await svc.decideLeave(hr, q.id, true, 'Cover arranged');
+    expect((await svc.leaveRequests(hr)).rows.find((r) => r.request.id === q.id)!.canDecide).toBe(false);
+    const ceoRow = (await svc.leaveRequests(ceo)).rows.find((r) => r.request.id === q.id)!;
+    expect(ceoRow.canDecide).toBe(true);
+    expect(ceoRow.waitingWith?.level).toBe('VC');
+    const done = await svc.decideLeave(ceo, q.id, true, 'Consent');
+    expect(done.status).toBe('approved');
   });
 
-  it('IT staff payroll: HR submits, the CEO approves and consents, the Finance Director pays; IT sees only own payslip', async () => {
+  it('IT staff payroll: HR submits, the CEO approves for the Chief of Staff, the COO approves, the Finance Director pays; IT sees only own payslip', async () => {
     const { svc, ds } = fresh();
     const [hr, fd, coo, mgr, ceo] = await Promise.all(['u-pwvsb-hr', 'u-fd', 'u-coo', 'u-it-mgr', 'u-fauzan'].map((id) => svc.user(id)));
     const run = ds.staffPayRuns.find((r) => r.companyId === 'merdeka' && r.stage === 'draft')!;
@@ -78,10 +90,11 @@ describe('pilot routing: the right person has the button at each step', () => {
     expect((await can(ceo)).approve).toBe(true);
     expect((await can(fd)).approve).toBe(false);
     expect((await can(coo)).approve).toBe(false);
-    await svc.staffPayStep(ceo, run.id, 'approve');
-    expect((await can(ceo)).consent).toBe(true);
-    expect((await can(fd)).consent).toBe(false);
-    await svc.staffPayStep(ceo, run.id, 'consent');
+    await svc.staffPayStep(ceo, run.id, 'approve', { note: 'Checked' });
+    expect((await can(coo)).cooApprove).toBe(true);
+    expect((await can(ceo)).cooApprove).toBe(false);
+    expect((await can(fd)).cooApprove).toBe(false);
+    await svc.staffPayStep(coo, run.id, 'coo_approve', { note: 'OK' });
     expect((await can(fd)).pay).toBe(true);
     await svc.staffPayStep(fd, run.id, 'pay', { bankRef: 'MN-SAL-10', paidOn: TODAY, pcbChecked: true });
     await expect(svc.staffPayRun(mgr, run.id)).rejects.toThrow();

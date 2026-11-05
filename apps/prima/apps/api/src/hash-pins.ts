@@ -5,7 +5,7 @@
 //   node dist/src/hash-pins.js --by "<name>" --apply    makes the change, in one transaction, on the audit chain
 // A record with an empty or malformed PIN loses it and gets none: HR sets a new one. The PINs themselves are never
 // printed or logged. Staging started as a clean slate with no guard PINs, so it is expected to find little or nothing.
-import { GROUP_EMPLOYER_ID, IT_COMPANY_ID, PIN_PATTERN, fromMs, isPinHash } from '@prima/core';
+import { CENTRAL_EMPLOYER_IDS, PIN_PATTERN, fromMs, isPinHash } from '@prima/core';
 import { Pool, type PoolClient } from 'pg';
 import { apiPinKeeper } from './db';
 import { PgStore } from './pg-store';
@@ -29,8 +29,8 @@ export async function hashPins(client: PoolClient, by: string, apply: boolean, e
       `SELECT array_agg(DISTINCT c) AS ids FROM (
          SELECT company_id AS c FROM prima.grants
          UNION SELECT jsonb_array_elements_text(data->'companyIds') FROM prima.users
-         UNION SELECT unnest(ARRAY[$1, $2])) x`,
-      [GROUP_EMPLOYER_ID, IT_COMPANY_ID],
+         UNION SELECT unnest($1::text[])) x`,
+      [[...CENTRAL_EMPLOYER_IDS]],
     );
     await client.query(`SELECT set_config('app.company_ids', $1, true)`, [(ids.rows[0].ids ?? []).join(',')]);
     const rows = await client.query(`SELECT id, data->>'pin' AS pin, data->>'pinHash' AS hash FROM prima.people WHERE data ? 'pin' FOR UPDATE`);

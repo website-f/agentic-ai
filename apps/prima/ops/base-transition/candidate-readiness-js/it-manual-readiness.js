@@ -5,7 +5,7 @@ exports.itManualProblems = itManualProblems;
 const it_cleanup_readiness_1 = require("./it-cleanup-readiness");
 const procurement_readiness_1 = require("./procurement-readiness");
 /** Catalog-only readiness. Never migrates, reads work payloads, or exposes database errors. */
-exports.IT_MANUAL_FUNCTION_PINS = { "it_record_permission": "b247f6c91d7c568e54f02c9d23238b5f", "it_register_guard": "071218158b309f08c0ab1a772780c295", "it_manual_receipt_valid": "672403e6b7ae6be3656cf526f0bcdbc9" };
+exports.IT_MANUAL_FUNCTION_PINS = { "it_record_permission": "b247f6c91d7c568e54f02c9d23238b5f", "it_register_guard": "7618c85fedf6e5b4b6a2e604c8e01101", "it_manual_receipt_valid": "672403e6b7ae6be3656cf526f0bcdbc9" };
 const norm = (v) => String(v ?? '').replace(/::text/g, '').replace(/[\s()]/g, '');
 async function itManualProblems(client) {
     try {

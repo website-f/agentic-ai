@@ -7,8 +7,9 @@ import { after, before, describe, it } from 'node:test';
 import { createSign, generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
-import { entraSetup, resetEntraSetup } from '../src/auth';
+import { entraSetup, issueToken, rateIdentity, resetEntraSetup } from '../src/auth';
 import { Db } from '../src/db';
+import { microsoftKeys } from '../src/entra';
 import { linkEntra } from '../src/entra-link';
 import { createApp } from '../src/main';
 import { resetDb } from '../src/reset-db';
@@ -193,6 +194,27 @@ describe('API over HTTP with Microsoft sign-in', () => {
     assert.equal(r.headers.get('x-powered-by'), null);
   });
 
+  it('answers 503, not "sign in again", to every valid sign-in waiting on Microsoft keys that do not answer (Arisha review)', async () => {
+    // A cold key cache and a key endpoint that never answers (time limit 50 ms here): five staff with valid tokens at once.
+    let calls = 0;
+    const hung = ((_url: string, init?: RequestInit) => {
+      calls += 1;
+      return new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+    }) as typeof fetch;
+    resetEntraSetup();
+    entraSetup(microsoftKeys(TENANT, hung, Date.now, 50));
+    try {
+      const got = await Promise.all(Array.from({ length: 5 }, () => call('/api/me', { as: token(CEO) })));
+      assert.equal(calls, 1, 'one shared fetch');
+      assert.deepEqual(got.map((r) => r.status), [503, 503, 503, 503, 503]);
+      for (const r of got) assert.doesNotMatch(r.text, /eyJ|Bearer/);
+    } finally {
+      resetEntraSetup();
+      entraSetup(async (kid) => (kid === 'k1' ? pair.publicKey : null));
+    }
+    assert.equal((await call('/api/me', { as: token(CEO) })).status, 200, 'back to normal once keys answer');
+  });
+
   it('answers bad input with 400 and an unknown record with 404, never a server error', async () => {
     const t = token(CEO);
     const bad = await call('/api/auth/dev-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{not json' });
@@ -202,20 +224,147 @@ describe('API over HTTP with Microsoft sign-in', () => {
 });
 
 describe('request limit', () => {
-  it('answers 429 after the limit and starts again in the next minute, but never limits health checks', () => {
+  const runner =
+    (limit: ReturnType<typeof rateLimit>) =>
+    (path: string, ip: string, auth?: string) =>
+      new Promise<number>((resolve) => {
+        const res = { setHeader: () => undefined, status: (s: number) => ({ json: () => resolve(s) }) };
+        limit({ path, ip, headers: auth ? { authorization: auth } : {} } as never, res as never, () => resolve(200));
+      });
+
+  it('answers 429 after the limit and starts again in the next minute, but never limits health checks', async () => {
     let t = 0;
-    const limit = rateLimit(3, 60_000, () => t);
-    const run = (path = '/api/me', ip = '1.1.1.1') => {
-      let status = 200;
-      let passed = false;
-      const res = { setHeader: () => undefined, status: (s: number) => ((status = s), { json: () => undefined }) };
-      limit({ path, ip } as never, res as never, () => (passed = true));
-      return passed ? 200 : status;
-    };
-    assert.deepEqual([run(), run(), run(), run()], [200, 200, 200, 429]);
-    assert.equal(run('/api/me', '2.2.2.2'), 200, 'another address has its own count');
-    assert.equal(run('/api/health'), 200);
+    const go = runner(rateLimit(3, 60_000, () => t));
+    const run = (path = '/api/me', ip = '1.1.1.1') => go(path, ip);
+    assert.deepEqual([await run(), await run(), await run(), await run()], [200, 200, 200, 429]);
+    assert.equal(await run('/api/me', '2.2.2.2'), 200, 'another address has its own count');
+    assert.equal(await run('/api/health'), 200);
     t = 60_000;
-    assert.equal(run(), 200);
+    assert.equal(await run(), 200);
+  });
+
+  it('counts each verified person on a shared address separately; unverified headers share the address limit', async () => {
+    const t = 0;
+    // Only 'Bearer a' and 'Bearer b' pass the signature check; anything else is unverified.
+    const verified: Record<string, string> = { 'Bearer a': 'dev:u-a', 'Bearer b': 'dev:u-b' };
+    const go = runner(rateLimit(3, 60_000, () => t, 7, (h) => verified[h] ?? null));
+    const run = (auth?: string, ip = '9.9.9.9') => go('/api/home', ip, auth);
+    // Two staff in one office (one public address): each verified person has their own 3.
+    assert.deepEqual([await run('Bearer a'), await run('Bearer a'), await run('Bearer a'), await run('Bearer a')], [200, 200, 200, 429]);
+    assert.deepEqual([await run('Bearer b'), await run('Bearer b'), await run('Bearer b')], [200, 200, 200]);
+    // Rotating made-up headers gains nothing: all unverified requests from the address share one count of 3.
+    const fake = [];
+    for (const h of ['Bearer x1', 'Bearer x2', 'Bearer x3', 'Bearer x4']) fake.push(await run(h, '7.7.7.7'));
+    assert.deepEqual(fake, [200, 200, 200, 429]);
+    assert.equal(await run(undefined, '7.7.7.7'), 429, 'no header shares the same unverified count');
+    // The address as a whole stops at 7 (a, a, a, a, b, b, b already counted).
+    assert.equal(await run('Bearer b'), 429);
+    assert.equal(await run('Bearer c', '8.8.8.8'), 200, 'another address has its own count');
+    // A verified person is counted as themselves even from another address.
+    assert.equal(await run('Bearer a', '6.6.6.6'), 429);
+    // The real identity check: only a correctly signed token names a person.
+    const saved = { a: process.env.ALLOW_DEV_LOGIN, s: process.env.DEV_TOKEN_SECRET };
+    process.env.ALLOW_DEV_LOGIN = 'true';
+    process.env.DEV_TOKEN_SECRET = process.env.DEV_TOKEN_SECRET ?? 'synthetic-rate-test';
+    try {
+      const good = issueToken('u-synthetic');
+      assert.equal(await rateIdentity(`Bearer ${good}`), 'dev:u-synthetic');
+      assert.equal(await rateIdentity(`Bearer ${good.slice(0, -2)}xx`), null);
+      assert.equal(await rateIdentity('Bearer made.up'), null);
+      assert.equal(await rateIdentity('Basic abc'), null);
+    } finally {
+      if (saved.a === undefined) delete process.env.ALLOW_DEV_LOGIN;
+      else process.env.ALLOW_DEV_LOGIN = saved.a;
+      if (saved.s === undefined) delete process.env.DEV_TOKEN_SECRET;
+      else process.env.DEV_TOKEN_SECRET = saved.s;
+    }
+    // A failing identity check counts as unverified, never as an error.
+    const broken = runner(rateLimit(1, 60_000, () => t, 7, () => { throw new Error('keys unavailable'); }));
+    assert.deepEqual([await broken('/api/home', '5.5.5.5', 'Bearer a'), await broken('/api/home', '5.5.5.5', 'Bearer b')], [200, 429]);
+  });
+});
+
+// Arisha review, 3 Nov 2026 (retest of 34d130e): with a real signed Microsoft token through the whole app, a request is
+// verified once (the limiter and AuthGuard share the check), one person cannot pass their limit by sending at once,
+// and a flood of forged tokens beyond the running and waiting slots is refused without being checked.
+describe('request limit with signed Microsoft tokens through the whole app', () => {
+  let app: INestApplication;
+  let base: string;
+  const saved = { ...process.env };
+  const KEYS = ['ENTRA_TENANT_ID', 'ENTRA_SPA_CLIENT_ID', 'ENTRA_API_CLIENT_ID', 'WEB_ORIGIN', 'ALLOW_DEV_LOGIN', 'RATE_LIMIT_PER_MIN', 'RATE_IDENTIFY_CONCURRENCY', 'RATE_IDENTIFY_QUEUE'];
+  let keyCalls = 0;
+  let delayMs = 0;
+  const me = async (tok: string) => (await fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${tok}` } })).status;
+
+  before(async () => {
+    await resetDb(URL_);
+    const db = new Db();
+    const c = await db.pool.connect();
+    try {
+      await linkEntra(c, 'u-fauzan', CEO, 'Test');
+      await linkEntra(c, 'u-it-lead', LEAD, 'Test');
+    } finally {
+      c.release();
+      await db.onModuleDestroy();
+    }
+    // Two calls a minute per person, two sign-in checks at once per address, two more may wait.
+    Object.assign(process.env, {
+      ENTRA_TENANT_ID: TENANT,
+      ENTRA_SPA_CLIENT_ID: SPA,
+      ENTRA_API_CLIENT_ID: API,
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_PER_MIN: '2',
+      RATE_IDENTIFY_CONCURRENCY: '2',
+      RATE_IDENTIFY_QUEUE: '2',
+    });
+    delete process.env.ALLOW_DEV_LOGIN;
+    resetEntraSetup();
+    // Every signature check asks the key source once, so its calls count the checks.
+    entraSetup(async (kid) => {
+      keyCalls += 1;
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      return kid === 'k1' ? pair.publicKey : null;
+    });
+    app = await createApp();
+    await app.listen(0, '127.0.0.1');
+    base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
+  });
+
+  after(async () => {
+    await app?.close();
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    resetEntraSetup();
+  });
+
+  it('checks a signed token once per request: the limiter and AuthGuard share the result', async () => {
+    keyCalls = 0;
+    assert.equal(await me(token(CEO)), 200);
+    assert.equal(keyCalls, 1, 'one signature check, not one in the limiter and another in AuthGuard');
+  });
+
+  it('lets one person through only up to their limit when they send at once', async () => {
+    keyCalls = 0;
+    delayMs = 50;
+    const t = token(LEAD);
+    const got = await Promise.all(Array.from({ length: 4 }, () => me(t)));
+    delayMs = 0;
+    assert.deepEqual([...got].sort(), [200, 200, 429, 429], 'limit 2: two answered, two refused');
+    assert.equal(keyCalls, 4, 'every request was checked once (two running, two waiting), none passed unchecked');
+  });
+
+  it('refuses forged tokens beyond the running and waiting slots without checking them', async () => {
+    keyCalls = 0;
+    delayMs = 100;
+    const [h, b] = token(CEO).split('.');
+    const forged = (i: number) => `${h}.${b}.${Buffer.from(`forged-${i}`).toString('base64url')}`;
+    const got = await Promise.all(Array.from({ length: 10 }, (_, i) => me(forged(i))));
+    delayMs = 0;
+    assert.equal(keyCalls, 4, 'only two running and two waiting were checked');
+    assert.equal(got.filter((s) => s === 200).length, 0, 'no forged token is ever answered');
+    assert.equal(got.filter((s) => s === 429).length, 8, 'six over the queue, then two over the shared unverified limit of 2');
+    assert.equal(got.filter((s) => s === 401).length, 2, 'the two within the unverified limit are refused by AuthGuard, unchecked again');
   });
 });

@@ -22,6 +22,13 @@
  },
  {
   "method": "POST",
+  "path": "api/act/field-checks",
+  "name": "recordActFieldCheck",
+  "doc": "ACT records what it saw in the field at each step of a workflow, every 6 months (Fauzan, 2 Nov 2026).",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/act/findings",
   "name": "raiseActFinding",
   "body": "Record<string, unknown>"
@@ -50,6 +57,151 @@
    "id",
    "action"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/act/investigations",
+  "name": "openActInvestigation",
+  "doc": "ACT investigations (masterplan item 241, Fauzan 3 Nov 2026): ACT only; the service checks job and team.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/act/investigations/:id/:action",
+  "name": "actInvestigationStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/act/investigations/:id/evidence",
+  "name": "addActEvidence",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/act/investigations/:id/evidence/:eid",
+  "name": "actEvidence",
+  "params": [
+   "id",
+   "eid"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/act/report-form",
+  "name": "setActReportForm",
+  "doc": "The ACT Director sets what a department's monthly report must cover (Fauzan, 2 Nov 2026).",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/act/timing",
+  "name": "setActTiming",
+  "doc": "The ACT Director sets a workflow's timing, step by step, after reviewing it (Fauzan, 2 Nov 2026).",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/act/work",
+  "name": "assignActWork",
+  "doc": "The ACT Director gives a workflow audit or a monthly report review to a team (Fauzan, 2 Nov 2026).",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/purchases",
+  "name": "buy",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/purchases/:id/decide",
+  "name": "decideBuy",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/purchases/:id/received",
+  "name": "received",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/purchases/:id/reprice",
+  "name": "reprice",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/am/rent-check",
+  "name": "rentCheck"
+ },
+ {
+  "method": "GET",
+  "path": "api/am/whatsapp",
+  "name": "board"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/whatsapp/run",
+  "name": "run",
+  "doc": "The team checks who is due a reminder now. It sends only when the connector is on; otherwise it only queues."
+ },
+ {
+  "method": "POST",
+  "path": "api/am/whatsapp/units/:id/consent",
+  "name": "consent",
+  "params": [
+   "id"
+  ],
+  "body": "{ on?: unknown; how?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/am/whatsapp/units/:id/reminders/:rid/settle",
+  "name": "settle",
+  "doc": "The team settles a reminder that may or may not have gone (went, send again, or leave it), with a reason.",
+  "params": [
+   "id",
+   "rid"
+  ],
+  "body": "{ outcome?: unknown; reason?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/ammo/:id/count",
+  "name": "countAmmo",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/approval-limits",
+  "name": "approvalLimits"
+ },
+ {
+  "method": "POST",
+  "path": "api/approval-limits",
+  "name": "setApprovalLimits",
   "body": "Record<string, unknown>"
  },
  {
@@ -219,8 +371,21 @@
  },
  {
   "method": "GET",
+  "path": "api/arms/agreements/:id/checklist",
+  "name": "clientChecklist",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/arms/control",
   "name": "armsControl"
+ },
+ {
+  "method": "GET",
+  "path": "api/arms/imports",
+  "name": "imports"
  },
  {
   "method": "POST",
@@ -235,6 +400,14 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/arms/jobs/:id/check",
+  "name": "jobCheck",
+  "params": [
+   "id"
+  ]
+ },
+ {
   "method": "POST",
   "path": "api/arms/jobs/:id/update",
   "name": "updateArmedJob",
@@ -242,6 +415,11 @@
    "id"
   ],
   "body": "{ status?: unknown; note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/arms/legal-flags",
+  "name": "legalFlags"
  },
  {
   "method": "POST",
@@ -261,12 +439,66 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/arms/renewals",
+  "name": "renewals"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/requests",
+  "name": "raise",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/arms/requests/:id/review",
   "name": "reviewArmsRequest",
   "params": [
    "id"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/requests/:id/step",
+  "name": "step",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/suppliers/:id/file",
+  "name": "updateSupplier",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/suppliers/:id/papers",
+  "name": "addPaper",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/arms/suppliers/file",
+  "name": "supplierFile"
+ },
+ {
+  "method": "GET",
+  "path": "api/arms/trading",
+  "name": "trading"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/trading",
+  "name": "setTrading",
   "body": "Record<string, unknown>"
  },
  {
@@ -376,12 +608,6 @@
   "name": "audit"
  },
  {
-  "method": "GET",
-  "path": "api/auth/config",
-  "name": "config",
-  "doc": "How the web app signs people in: the web app's client ID and the API scope. Public identifiers, never secrets."
- },
- {
   "method": "POST",
   "path": "api/branch-actions/:id/review",
   "name": "reviewBranchAction",
@@ -392,11 +618,21 @@
  },
  {
   "method": "POST",
+  "path": "api/branch-settlements/:id/act",
+  "name": "branchSettlementAct",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/branch-settlements/:id/approve",
   "name": "approveBranchSettlement",
   "params": [
    "id"
-  ]
+  ],
+  "body": "{ note?: unknown }"
  },
  {
   "method": "GET",
@@ -425,6 +661,15 @@
   "method": "GET",
   "path": "api/branches",
   "name": "branchBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/branches/:id/act",
+  "name": "branchAct",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -488,6 +733,17 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/ceo/instructions",
+  "name": "ceoInstructions"
+ },
+ {
+  "method": "POST",
+  "path": "api/ceo/instructions",
+  "name": "ceoInstruct",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/claim-rates",
   "name": "setClaimRate",
@@ -512,6 +768,36 @@
    "id"
   ],
   "body": "{ by?: unknown; ok?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/claims/:id/head",
+  "name": "headVerifyClaim",
+  "params": [
+   "id"
+  ],
+  "body": "{ ok?: unknown; note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/claims/receipts",
+  "name": "myReceipts"
+ },
+ {
+  "method": "POST",
+  "path": "api/claims/receipts",
+  "name": "addReceipts",
+  "body": "{ proof?: unknown; reads?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/claims/receipts/:id/:action",
+  "name": "receiptAction",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -547,6 +833,25 @@
    "id"
   ],
   "body": "{ invoicedTo?: unknown; overdueAmount?: unknown; overdueDays?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/complaints",
+  "name": "clientComplaint",
+  "params": [
+   "id"
+  ],
+  "body": "{ from?: unknown; via?: unknown; what?: unknown; siteId?: unknown; proof?: unknown },"
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/complaints/:complaintId/resolve",
+  "name": "resolveClientComplaint",
+  "params": [
+   "id",
+   "complaintId"
+  ],
+  "body": "{ resolution?: unknown; proof?: unknown },"
  },
  {
   "method": "POST",
@@ -591,7 +896,7 @@
   "params": [
    "id"
   ],
-  "body": "{ score?: unknown; comment?: unknown }"
+  "body": "{ score?: unknown; comment?: unknown; from?: unknown; via?: unknown; proof?: unknown },"
  },
  {
   "method": "POST",
@@ -601,6 +906,42 @@
    "id"
   ],
   "body": "{ period?: unknown; proof?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/clients/:id/share-links",
+  "name": "clientShareLinks",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/share-links",
+  "name": "createClientShareLink",
+  "params": [
+   "id"
+  ],
+  "body": "{ recipient?: unknown; from?: unknown; to?: unknown; days?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/clients/:id/share-links/:linkId/preview",
+  "name": "previewClientShareLink",
+  "params": [
+   "id",
+   "linkId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/share-links/:linkId/revoke",
+  "name": "revokeClientShareLink",
+  "params": [
+   "id",
+   "linkId"
+  ],
+  "body": "{ reason?: unknown }"
  },
  {
   "method": "POST",
@@ -652,6 +993,11 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/cms/commissioning",
+  "name": "cmsCommissioning"
+ },
+ {
   "method": "POST",
   "path": "api/cms/roster/plan",
   "name": "planCms",
@@ -674,10 +1020,35 @@
  },
  {
   "method": "POST",
+  "path": "api/cms/shifts/:id/clock-in",
+  "name": "seatClockIn",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
   "path": "api/cms/shifts/:id/handover",
   "name": "cmsHandover",
   "params": [
    "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/companies/:companyId/branch-leads",
+  "name": "branchLeadClaims",
+  "params": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/companies/:companyId/branches",
+  "name": "addBranch",
+  "params": [
+   "companyId"
   ],
   "body": "Record<string, unknown>"
  },
@@ -736,6 +1107,14 @@
  },
  {
   "method": "GET",
+  "path": "api/companies/:id/cit-tender-pack",
+  "name": "citPack",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/companies/:id/commercial",
   "name": "commercial",
   "params": [
@@ -749,6 +1128,45 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/companies/:id/dealer-return",
+  "name": "dealerReturn",
+  "query": [
+   "from",
+   "to"
+  ],
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/companies/:id/office",
+  "name": "companyOffice",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/companies/:id/office/desks",
+  "name": "setOfficeDesks",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/companies/:id/office/run-by",
+  "name": "setCompanyRunBy",
+  "doc": "CEO only: which licensed company's office runs this company (Fauzan, 3 Nov 2026). Reason required, audited.",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -780,6 +1198,15 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "POST",
+  "path": "api/companies/:id/range-sessions",
+  "name": "range",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/companies/:id/sites",
   "name": "sites",
@@ -791,6 +1218,47 @@
   "method": "GET",
   "path": "api/compliance",
   "name": "compliance"
+ },
+ {
+  "method": "POST",
+  "path": "api/connections/m365/:service/check",
+  "name": "check",
+  "params": [
+   "service"
+  ],
+  "body": "unknown"
+ },
+ {
+  "method": "POST",
+  "path": "api/connections/m365/:service/disconnect",
+  "name": "disconnect",
+  "params": [
+   "service"
+  ],
+  "body": "unknown"
+ },
+ {
+  "method": "GET",
+  "path": "api/connections/m365/matrix",
+  "name": "matrix",
+  "doc": "The capability and permission matrix and control ownership: public facts about this build, no tenant values."
+ },
+ {
+  "method": "POST",
+  "path": "api/connections/m365/sharepoint/link",
+  "name": "sharePointLink",
+  "body": "unknown"
+ },
+ {
+  "method": "GET",
+  "path": "api/connections/m365/status",
+  "name": "status"
+ },
+ {
+  "method": "POST",
+  "path": "api/connections/m365/teams/link",
+  "name": "teamsLink",
+  "body": "unknown"
  },
  {
   "method": "GET",
@@ -1023,6 +1491,44 @@
  },
  {
   "method": "POST",
+  "path": "api/contracts/:id/cms-service",
+  "name": "setCmsService",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/contracts/:id/cms-service/accept/:who",
+  "name": "acceptCmsService",
+  "params": [
+   "id",
+   "who"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/contracts/:id/cms-service/contacts/:index/verify",
+  "name": "verifyCmsContact",
+  "params": [
+   "id",
+   "index"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/contracts/:id/cms-service/tests",
+  "name": "recordCmsTest",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/contracts/:id/items/:itemId",
   "name": "setMobItem",
   "params": [
@@ -1087,6 +1593,24 @@
  },
  {
   "method": "POST",
+  "path": "api/corporate/:companyId/file",
+  "name": "saveCompanyFile",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/:companyId/file/check",
+  "name": "checkCompanyFile",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/corporate/:companyId/legal-matters",
   "name": "addLegalMatter",
   "params": [
@@ -1128,6 +1652,11 @@
   "body": "{ decision?: unknown; note?: unknown; clauseRef?: unknown }"
  },
  {
+  "method": "GET",
+  "path": "api/corporate/files",
+  "name": "companyFiles"
+ },
+ {
   "method": "POST",
   "path": "api/corporate/filings/:id/:action",
   "name": "corpFilingStep",
@@ -1141,6 +1670,38 @@
   "method": "POST",
   "path": "api/corporate/legal-matters/:id/:action",
   "name": "legalMatterStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/corporate/panel",
+  "name": "panelBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/panel",
+  "name": "addPanelFirm",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/panel/:id/:action",
+  "name": "panelFirmStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/panel/:id/money/:action",
+  "name": "adviserMoneyStep",
+  "doc": "Masterplan §126: adviser budgets (keeper proposes, Finance Director agrees) and audit/secretary invoices.",
   "params": [
    "id",
    "action"
@@ -1197,6 +1758,25 @@
  },
  {
   "method": "POST",
+  "path": "api/credit/loans/:id/collateral",
+  "name": "creditCorrectCollateral",
+  "params": [
+   "id"
+  ],
+  "body": "{ kind?: unknown; agreementRef?: unknown; reason?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/credit/loans/:id/correct",
+  "name": "creditCorrectRecord",
+  "doc": "Audited correction of a stamp, charge lodgement or signing date already on the loan (credit officer, with a reason).",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/credit/loans/:id/dispute/:action",
   "name": "creditDispute",
   "params": [
@@ -1207,12 +1787,76 @@
  },
  {
   "method": "POST",
+  "path": "api/credit/loans/:id/licence",
+  "name": "creditCheckLenderLicence",
+  "doc": "Masterplan §103: the Deputy Chief of Staff records the KPKT moneylending licence check for a loan.",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/credit/loans/:id/repayments",
   "name": "creditRepayment",
   "params": [
    "id"
   ],
   "body": "{ no?: unknown; amount?: unknown; bankRef?: unknown; paidOn?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/credit/loans/:id/stamped",
+  "name": "creditStamped",
+  "params": [
+   "id"
+  ],
+  "body": "{ ref?: unknown; on?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/critical-roles/:companyId",
+  "name": "addCriticalRole",
+  "doc": "Masterplan §243 critical-role inventory (Arisha main round 5).",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/critical-roles/item/:id/:action",
+  "name": "criticalRoleStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/delegations",
+  "name": "delegationBoard",
+  "doc": "Masterplan §243: the emergency delegation and succession register. A register only; it grants nothing."
+ },
+ {
+  "method": "POST",
+  "path": "api/delegations/:companyId",
+  "name": "addDelegation",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/delegations/item/:id/:action",
+  "name": "delegationStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -1234,6 +1878,22 @@
  },
  {
   "method": "GET",
+  "path": "api/director/digest",
+  "name": "directorDigest"
+ },
+ {
+  "method": "GET",
+  "path": "api/director/legal-flags",
+  "name": "directorLegalFlags"
+ },
+ {
+  "method": "POST",
+  "path": "api/expenses/prefill",
+  "name": "prefillOfficeRequest",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/finance",
   "name": "finBoard"
  },
@@ -1246,7 +1906,232 @@
    "pack",
    "itemId"
   ],
-  "body": "{ status?: unknown },"
+  "body": "{ status?: unknown; comment?: unknown },"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/close/:action",
+  "name": "finCloseStep",
+  "params": [
+   "companyId",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/:companyId/controls",
+  "name": "finControls",
+  "query": [
+   "billPeriod"
+  ],
+  "params": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/controls/:area/:action",
+  "name": "finControlAction",
+  "params": [
+   "companyId",
+   "area",
+   "action"
+  ],
+  "body": "Record<string, unknown>,"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/:companyId/pack",
+  "name": "finPack",
+  "query": [
+   "period"
+  ],
+  "params": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/payments",
+  "name": "finCreatePayment",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/payments/:paymentId/:action",
+  "name": "finPaymentStep",
+  "params": [
+   "companyId",
+   "paymentId",
+   "action"
+  ],
+  "body": "Record<string, unknown>,"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/cash/advances-overdue",
+  "name": "finAdvancesOverdue"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/cash/mine",
+  "name": "finCashMine"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/checks-todo",
+  "name": "finChecksTodo"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/coo",
+  "name": "finCooDesk"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/coo/:companyId/:paymentId/:action",
+  "name": "finCooStep",
+  "params": [
+   "companyId",
+   "paymentId",
+   "action"
+  ],
+  "body": "Record<string, unknown>,"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/dailycash/mine",
+  "name": "finDailyCashMine"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/dashboard",
+  "name": "finDashboard"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/desk",
+  "name": "finDesk"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/kpi",
+  "name": "finKpi",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/management-fee-bills",
+  "name": "managementFeeBills",
+  "query": [
+   "month"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/management-fees",
+  "name": "managementFees"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/management-fees/:companyId",
+  "name": "setManagementFee",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/requests",
+  "name": "finRequests"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/requests/:companyId",
+  "name": "finCreateRequest",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/requests/:companyId/:requestId/:action",
+  "name": "finRequestStep",
+  "params": [
+   "companyId",
+   "requestId",
+   "action"
+  ],
+  "body": "Record<string, unknown>,"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/settings",
+  "name": "finSettings"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/settings",
+  "name": "finSetSettings",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/today",
+  "name": "financeToday"
+ },
+ {
+  "method": "POST",
+  "path": "api/firearms/:id/collect",
+  "name": "collect",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/firearms/:id/deposit",
+  "name": "deposit",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/firearms/:id/found",
+  "name": "found",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/firearms/:id/missing",
+  "name": "missing",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/firearms/:id/police-report",
+  "name": "policeReport",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -1297,6 +2182,35 @@
  },
  {
   "method": "GET",
+  "path": "api/flex",
+  "name": "flexRequests"
+ },
+ {
+  "method": "POST",
+  "path": "api/flex",
+  "name": "requestFlex",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/flex/:id/decide",
+  "name": "decideFlex",
+  "params": [
+   "id"
+  ],
+  "body": "{ approve?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/fw-checks/:id/close",
+  "name": "fwCheckClose",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/fwm",
   "name": "fwmBoard"
  },
@@ -1325,6 +2239,11 @@
   "params": [
    "ref"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/fwm/welfare",
+  "name": "fwmWelfare"
  },
  {
   "method": "GET",
@@ -1437,21 +2356,14 @@
  },
  {
   "method": "GET",
-  "path": "api/health",
-  "name": "health",
-  "doc": "Ready only when the database answers, the schema is in place and the API's own login may read staff accounts."
+  "path": "api/growth",
+  "name": "growth",
+  "doc": "Growth panel for group leadership (Fauzan, 3 Nov 2026): read only, Unknown is never zero."
  },
  {
   "method": "GET",
-  "path": "api/health/release",
-  "name": "release",
-  "doc": "Heavy read-only complete-release diagnostic; no provider/authority readiness claim."
- },
- {
-  "method": "GET",
-  "path": "api/health/schema",
-  "name": "schema",
-  "doc": "Which schema version the database holds (a fingerprint of db/migrations, nothing about the data). The deploy workflow compares it with the version it is about to ship and stops when the CEO must run a migration first."
+  "path": "api/growth/margin",
+  "name": "growthMargin"
  },
  {
   "method": "GET",
@@ -1489,8 +2401,380 @@
  },
  {
   "method": "GET",
+  "path": "api/hr/allowances",
+  "name": "allowanceTypes"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/allowances/staff/:personId",
+  "name": "requestAllowanceChange",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/allowances/types",
+  "name": "saveAllowanceType",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/appraisals",
+  "name": "appraisals"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/appraisals",
+  "name": "openAppraisal",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/appraisals/:id/close",
+  "name": "closeAppraisal",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/appraisals/:id/comment",
+  "name": "commentAppraisal",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/appraisals/:id/rate",
+  "name": "rateAppraisal",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/cases",
+  "name": "hrCases",
+  "query": [
+   "personId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/cases",
+  "name": "openHrCase",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/cases/:id/steps",
+  "name": "hrCaseStep",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/ea",
+  "name": "eaDraft",
+  "query": [
+   "companyId",
+   "year"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/faces",
+  "name": "faceReviews"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/faces/:personId/decide",
+  "name": "decideFace",
+  "params": [
+   "personId"
+  ],
+  "body": "{ approve?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/faces/:personId/remove",
+  "name": "removeFace",
+  "params": [
+   "personId"
+  ],
+  "body": "{ note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/filings",
+  "name": "recordHrFiling",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/guard-training",
+  "name": "guardTraining"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/guard-training/papers",
+  "name": "recordGuardPaper",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/holidays",
+  "name": "publicHolidays",
+  "query": [
+   "year"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/holidays",
+  "name": "addPublicHoliday",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/holidays/:id/remove",
+  "name": "removePublicHoliday",
+  "params": [
+   "id"
+  ],
+  "body": "{ note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/join-leave",
+  "name": "hrJoinLeave"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/leave-settings",
+  "name": "hrLeaveSettings"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/legal",
+  "name": "hrLegalChecks"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/legal/:id",
+  "name": "updateHrLegalCheck",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/movements",
+  "name": "staffMovements"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements",
+  "name": "prepareStaffMovement",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/:id/apply",
+  "name": "applyStaffMovement",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/:id/cancel",
+  "name": "cancelStaffMovement",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/:id/login/authorise",
+  "name": "authoriseMovementLogin",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/:id/login/confirm",
+  "name": "confirmMovementLogin",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/:id/step",
+  "name": "staffMovementStep",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/movements/apply-due",
+  "name": "applyDueStaffMovements",
+  "doc": "Apply approved movements whose date has come (HR or the CEO); each applies once, failures are kept for a retry."
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/osh",
+  "name": "officeOsh"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/osh/assessments",
+  "name": "recordOfficeAssessment",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/osh/coordinator",
+  "name": "appointOshCoordinator",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/osh/incidents",
+  "name": "reportOshIncident",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/osh/incidents/:id/report",
+  "name": "recordOshReport",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/overtime",
+  "name": "staffOvertime"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/overtime",
+  "name": "setStaffOvertime",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/overtime/preview",
+  "name": "overtimePreview",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/people/:personId/leave-days",
+  "name": "setLeaveOverride",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/people/:personId/leaving-guide",
+  "name": "leavingGuide",
+  "params": [
+   "personId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/people/:personId/probation",
+  "name": "decideProbation",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/people/:personId/wfh",
+  "name": "setWfhAllowed",
+  "params": [
+   "personId"
+  ],
+  "body": "{ allow?: unknown; note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/policies",
+  "name": "hrPolicies"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/policies",
+  "name": "publishPolicy",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/policies/:id/acknowledge",
+  "name": "acknowledgePolicy",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/register",
+  "name": "employeeRegister",
+  "query": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/training",
+  "name": "trainingRecords",
+  "query": [
+   "personId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/training",
+  "name": "recordTraining",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/insurance",
   "name": "insurance"
+ },
+ {
+  "method": "POST",
+  "path": "api/insurance-claims/:id/act",
+  "name": "insuranceClaimAct",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -1636,6 +2920,36 @@
  },
  {
   "method": "GET",
+  "path": "api/legal-holds",
+  "name": "legalHoldBoard",
+  "doc": "Masterplan §125 legal hold: PWVSB legal or the Deputy Chief of Staff; group leaders read."
+ },
+ {
+  "method": "POST",
+  "path": "api/legal-holds/:matterId",
+  "name": "placeLegalHold",
+  "params": [
+   "matterId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/legal-holds/item/:id/release",
+  "name": "releaseLegalHold",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/login-handovers",
+  "name": "loginHandovers",
+  "doc": "Login handovers after a transfer: no pay or reasons (IT, HR, the HR Director and the CEO)."
+ },
+ {
+  "method": "GET",
   "path": "api/me",
   "name": "me"
  },
@@ -1643,6 +2957,12 @@
   "method": "GET",
   "path": "api/me/clock",
   "name": "myClock"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/clock/face",
+  "name": "staffFaceCheck",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -1687,6 +3007,17 @@
   "path": "api/me/duty",
   "name": "myDuty",
   "doc": "A guard's own sign-in: their details, reminders, roster, clock record and patrol rounds (view only)."
+ },
+ {
+  "method": "GET",
+  "path": "api/me/face",
+  "name": "myFace"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/face",
+  "name": "registerFace",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -1827,11 +3158,96 @@
  },
  {
   "method": "GET",
+  "path": "api/offices",
+  "name": "companyOffices"
+ },
+ {
+  "method": "GET",
+  "path": "api/ops/government",
+  "name": "govOpsMonitor",
+  "query": [
+   "month"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/ops/private",
+  "name": "privateOpsMonitor",
+  "query": [
+   "month"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/ops/region",
   "name": "regionalOps",
   "query": [
    "region"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/org/guide",
+  "name": "guide",
+  "doc": "Guide cards for me: what to enter, from where, whom to ask, what is reused (read-only help)."
+ },
+ {
+  "method": "POST",
+  "path": "api/org/import/:kind/commit",
+  "name": "commit",
+  "params": [
+   "kind"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/org/import/:kind/preview",
+  "name": "preview",
+  "params": [
+   "kind"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/org/import/:kind/template",
+  "name": "template",
+  "params": [
+   "kind"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/org/inbox",
+  "name": "inbox",
+  "doc": "My hand-overs from other departments.",
+  "query": [
+   "offset"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/org/inbox/:id/close",
+  "name": "close",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/org/inbox/:id/read",
+  "name": "read",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/org/map",
+  "name": "map",
+  "doc": "How departments connect; counts and the late list for ACT and group leadership."
  },
  {
   "method": "GET",
@@ -1922,6 +3338,15 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/people/:id/fw-checks",
+  "name": "fwCheck",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -2064,6 +3489,24 @@
  },
  {
   "method": "POST",
+  "path": "api/purchasing/issues/:id/handover/:step",
+  "name": "handoverStep",
+  "params": [
+   "id",
+   "step"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/purchasing/issues/:id/proof",
+  "name": "deliveryProof",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
   "path": "api/purchasing/issues/:id/return",
   "name": "stockReturn",
   "params": [
@@ -2109,6 +3552,15 @@
    "action"
   ],
   "body": "{ note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/quotations/:id/correct",
+  "name": "correctQuotation",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -2167,6 +3619,21 @@
    "id"
   ],
   "body": "{ note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/renewals",
+  "name": "renewalBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/renewals/:id/:action",
+  "name": "renewalStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "{ index?: unknown; name?: unknown; ref?: unknown; amount?: unknown; on?: unknown; note?: unknown; newExpiresOn?: unknown; ok?: unknown },"
  },
  {
   "method": "GET",
@@ -2447,6 +3914,46 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "POST",
+  "path": "api/staff-pay/employer-nos/:companyId",
+  "name": "setEmployerNos",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/staff-pay/my-zakat",
+  "name": "myZakat"
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-pay/my-zakat",
+  "name": "setMyZakat",
+  "body": "{ body?: unknown; percent?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/staff-pay/stat-tables",
+  "name": "statTables",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-pay/stat-tables",
+  "name": "loadStatTable",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-pay/stat-tables/check",
+  "name": "checkStatTable",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/tender-board",
   "name": "tenderBoard"
@@ -2631,6 +4138,11 @@
   "body": "{ approve?: unknown; note?: unknown }"
  },
  {
+  "method": "GET",
+  "path": "api/transport/board",
+  "name": "transport"
+ },
+ {
   "method": "POST",
   "path": "api/utility-charges/:id/ack",
   "name": "ackUtility",
@@ -2648,9 +4160,57 @@
   "body": "{ decision?: unknown; note?: unknown }"
  },
  {
+  "method": "GET",
+  "path": "api/vacancies",
+  "name": "vacancies"
+ },
+ {
+  "method": "POST",
+  "path": "api/vacancies",
+  "name": "raiseVacancy",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/vacancies/:id/:action",
+  "name": "vacancyStep",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "{ note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/vault-watches/:id/check-in",
+  "name": "watchCheckIn",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/vaults/:id/ammo/receive",
+  "name": "receiveAmmo",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/vaults/:id/count",
   "name": "countVault",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/vaults/:id/register-check",
+  "name": "registerCheck",
   "params": [
    "id"
   ],
@@ -2738,6 +4298,19 @@
  },
  {
   "method": "GET",
+  "path": "api/work/rebalance",
+  "name": "workRebalance",
+  "doc": "Arisha's advice to the manager on moving or readjusting the team's work (Fauzan, 2 Nov 2026). Read only."
+ },
+ {
+  "method": "POST",
+  "path": "api/work/rebalance/ask-ai",
+  "name": "workRebalanceAskAi",
+  "doc": "Ask Arisha AI about one rebalance case (Fauzan, 2 Nov 2026: \"Use ai when needed. We use it in case basis\"). Off unless WORK_REBALANCE_AI_ENABLED=true and Arisha AI itself is on. The service checks the manager, recomputes the case, counts the daily cap and builds a pseudonymised brief; no tools are offered to the model, so it can only answer in words. Names are put back only in the answer returned ",
+  "body": "{ adviceId?: unknown }"
+ },
+ {
+  "method": "GET",
   "path": "api/work/summary",
   "name": "workSummary"
  },
@@ -2746,6 +4319,16 @@
   "path": "api/work/tasks",
   "name": "workTaskAdd",
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/work/tasks/:id/adjust",
+  "name": "workTaskAdjust",
+  "doc": "Readjust: the manager gives a new due time or priority on an open task, with a reason.",
+  "params": [
+   "id"
+  ],
+  "body": "{ dueAt?: unknown; priority?: unknown; reason?: unknown; adviceId?: unknown; expectedVersion?: unknown },"
  },
  {
   "method": "POST",
@@ -2764,6 +4347,16 @@
    "id"
   ],
   "body": "{ reason?: unknown; newDueAt?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/work/tasks/:id/reassign",
+  "name": "workTaskReassign",
+  "doc": "Delegate: the manager moves an open task to someone else in their line, with a reason.",
+  "params": [
+   "id"
+  ],
+  "body": "{ toUserId?: unknown; reason?: unknown; dueAt?: unknown; adviceId?: unknown; expectedVersion?: unknown },"
  },
  {
   "method": "POST",

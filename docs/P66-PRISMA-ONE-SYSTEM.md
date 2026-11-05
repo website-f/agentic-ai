@@ -144,3 +144,25 @@ An agent given a task in the office reads Prima as the person who gave the task.
 - `apps/api/tests/test_p63_microsoft_signin.py`: the Microsoft account is recorded at sign-in, with or without a mailbox.
 - `apps/prima/apps/api/test/office.test.ts`: the same test vector, and every tampering refused.
 - `apps/prima/apps/api/test/rls.test.ts`: office sign-in through the real `AuthGuard` and database (a named record, a missing one, a system feed, outside the pilot, an old call, a system call refused, no secret), and the staff list for the office's system call only.
+
+## Reinstalling Prima
+
+A Prima release that changes Prima's base schema (`db/migrations/001_init.sql`) cannot be set up over the old database; Prima's setup refuses it. Our Prima holds only its sample data (`PRIMA_DATA_MODE=staging-pilot`), so it is reinstalled rather than run through Prima's staged base transition (`ops/base-transition`, meant for a database with real records):
+
+```
+cd /opt/agentic-ai && ./deploy/scripts/prima-reinstall.sh --yes
+```
+
+1. **Backup:** the whole Prima database is saved to `data/backups/prima-<time>.sql.gz`. If the backup fails or comes out empty, nothing is changed.
+2. **Remove:** Prima's containers and its database volume are removed.
+3. **Install:** the base and every module of the release manifest are installed fresh, and Prima's API is started.
+
+Links between office people and Prima staff records keep working, because the sample records keep their ids.
+
+To go back to a backup, restore it into a fresh `prima-db` with the previous Prima image:
+
+```
+gzip -dc data/backups/prima-<time>.sql.gz | docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile prima exec -T prima-db psql -U prima_super -d prima
+```
+
+Once Prima holds real records, use Prima's own base transition instead (`apps/prima/rehearsal/combined/CUTOVER_PLAN.md`).

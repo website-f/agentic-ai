@@ -14,3 +14,6 @@ export const CLIENT_OFFBOARD_STEPS: [string, string][] = [
   ['redeploy', 'Guards redeployed'],
   ['final_bill', 'Final invoice issued'],
 ];
+
+/** How a client gave a rating or a complaint (Fauzan, 2 Nov 2026: client satisfaction monitored). */
+export const CLIENT_VIA = ['meeting', 'visit', 'call', 'email', 'form'] as const;

@@ -139,7 +139,7 @@ describe('IT jobs: the IT Manager checks and accepts all IT work', () => {
     await expect(svc.itAct(lead, 'jobStep', { id: j.id, step: 'return', note: 'Not good enough' })).rejects.toThrow(/IT Manager/);
     expect((await svc.itJobStep(mgr, j.id, 'return', 'Photo of the labels is missing')).status).toBe('returned');
     await svc.itJobStep(ex, j.id, 'submit', 'Photo attached', proof());
-    expect(await svc.itJobStep(mgr, j.id, 'accept')).toMatchObject({ status: 'accepted', acceptedBy: mgr.name });
+    expect(await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).toMatchObject({ status: 'accepted', acceptedBy: mgr.name });
     expect(ds.audit.filter((a) => a.entityId === j.id).map((a) => a.action)).toEqual(['it.job.give', 'it.job.submit', 'it.job.return', 'it.job.submit', 'it.job.accept']);
   });
 
@@ -151,9 +151,9 @@ describe('IT jobs: the IT Manager checks and accepts all IT work', () => {
     const j = await svc.giveItJob(mgr, { kind: 'install', title: 'UAT install NVR', detail: '', priority: 'P2', technical: true, assigneeId: 'u-it-ex2', dueOn: due(3) });
     await svc.itJobStep(ex, j.id, 'submit', 'Installed and recording', proof());
     expect((await rowOf(svc, 'u-it-mgr', j.id)).nextCheck).toMatch(/IT Lead's technical check, then the IT Manager/);
-    await expect(svc.itJobStep(mgr, j.id, 'accept')).rejects.toThrow(/IT Lead checks it first/);
+    await expect(svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).rejects.toThrow(/IT Lead checks it first/);
     await svc.itJobStep(lead, j.id, 'check', 'Footage plays back');
-    expect((await svc.itJobStep(mgr, j.id, 'accept')).status).toBe('accepted');
+    expect((await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).status).toBe('accepted');
   });
 
   it('the IT Lead receives technical jobs; the IT Manager checks the proof and accepts or returns them', async () => {
@@ -279,6 +279,65 @@ describe('IT jobs: the IT Manager checks and accepts all IT work', () => {
     for (const uid of ['u-audit', 'u-pwvsb-hr', 'u-fd', 'u-it-ex1', 'u-fauzan']) {
       await expect(svc.itAct(await svc.user(uid), 'jobStep', { id: j.id, step: 'accept' }), uid).rejects.toThrow();
     }
-    expect((await svc.itJobStep(mgr, j.id, 'accept')).status).toBe('accepted');
+    expect((await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).status).toBe('accepted');
+  });
+});
+
+describe('IT jobs: every acceptance and technical check has a comment (Fauzan, 31 Oct 2026)', () => {
+  it('refuses the IT Manager accepting with an empty or whitespace-only comment, then accepts with a short one', async () => {
+    const { svc, ds } = fresh();
+    const mgr = await svc.user('u-it-mgr');
+    const ex = await svc.user('u-it-ex1');
+    const j = await svc.giveItJob(mgr, { kind: 'task', title: 'UAT comment rule plain job', detail: '', priority: 'P3', technical: false, assigneeId: 'u-it-ex1', dueOn: due(2) });
+    await svc.itJobStep(ex, j.id, 'submit', 'Labels done', proof());
+    for (const blank of ['', '   ', '\n\t ']) {
+      await expect(svc.itJobStep(mgr, j.id, 'accept', blank)).rejects.toThrow(/Say why you are accepting it/);
+      await expect(svc.itAct(mgr, 'jobStep', { id: j.id, step: 'accept', note: blank })).rejects.toThrow(/Say why you are accepting it/);
+    }
+    await expect(svc.itAct(mgr, 'jobStep', { id: j.id, step: 'accept' })).rejects.toThrow(/Say why you are accepting it/);
+    expect(ds.itJobs.find((x) => x.id === j.id)!.status).toBe('submitted');
+    expect(ds.audit.some((a) => a.entityId === j.id && a.action === 'it.job.accept')).toBe(false);
+    // The return path still works, and the job can be submitted again and accepted with a short comment.
+    expect((await svc.itJobStep(mgr, j.id, 'return', 'Photo of the labels is missing')).status).toBe('returned');
+    await svc.itJobStep(ex, j.id, 'submit', 'Photo attached', proof());
+    const ok = await svc.itJobStep(mgr, j.id, 'accept', 'ok');
+    expect(ok).toMatchObject({ status: 'accepted', acceptedBy: mgr.name });
+    expect(ok.log.at(-1)).toMatchObject({ what: 'accept', note: 'ok' });
+    expect(ds.audit.find((a) => a.entityId === j.id && a.action === 'it.job.accept')!.summary).toMatch(/accepted: ok/);
+  });
+
+  it('refuses the IT Lead passing a technical check with an empty or whitespace-only comment; the rest of the sequence is unchanged', async () => {
+    const { svc, ds } = fresh();
+    const mgr = await svc.user('u-it-mgr');
+    const lead = await svc.user('u-it-lead');
+    const ex = await svc.user('u-it-ex2');
+    const j = await svc.giveItJob(mgr, { kind: 'install', title: 'UAT comment rule technical job', detail: '', priority: 'P2', technical: true, assigneeId: 'u-it-ex2', dueOn: due(3) });
+    await svc.itJobStep(ex, j.id, 'submit', 'Installed', proof());
+    for (const blank of ['', '  ', '\t']) {
+      await expect(svc.itJobStep(lead, j.id, 'check', blank)).rejects.toThrow(/Say what you checked/);
+      await expect(svc.itAct(lead, 'jobStep', { id: j.id, step: 'check', note: blank })).rejects.toThrow(/Say what you checked/);
+    }
+    expect(ds.itJobs.find((x) => x.id === j.id)!.status).toBe('submitted');
+    // Sequencing and roles are unchanged: the IT Manager still cannot skip the IT Lead's check, even with a comment.
+    await expect(svc.itJobStep(mgr, j.id, 'accept', 'Looks fine')).rejects.toThrow(/IT Lead checks it first/);
+    await expect(svc.itJobStep(mgr, j.id, 'check', 'Looks fine')).rejects.toThrow(/IT Lead does the technical check/);
+    // The IT Lead can still send it back at the check, and after resubmission pass it with a short comment.
+    expect((await svc.itJobStep(lead, j.id, 'return', 'No playback test recorded')).status).toBe('returned');
+    await svc.itJobStep(ex, j.id, 'submit', 'Playback test attached', proof());
+    expect((await svc.itJobStep(lead, j.id, 'check', 'ok')).status).toBe('checked');
+    for (const blank of ['', ' ']) await expect(svc.itJobStep(mgr, j.id, 'accept', blank)).rejects.toThrow(/Say why you are accepting it/);
+    expect((await svc.itJobStep(mgr, j.id, 'accept', 'Footage verified')).status).toBe('accepted');
+  });
+
+  it('the IT Manager checking the IT Lead’s technical job also needs a comment; self-checks stay refused first', async () => {
+    const { svc } = fresh();
+    const mgr = await svc.user('u-it-mgr');
+    const lead = await svc.user('u-it-lead');
+    const j = await svc.giveItJob(mgr, { kind: 'install', title: 'UAT comment rule lead job', detail: '', priority: 'P2', technical: true, assigneeId: 'u-it-lead', dueOn: due(3) });
+    await svc.itJobStep(lead, j.id, 'submit', 'Firewall rule reviewed', proof());
+    await expect(svc.itJobStep(lead, j.id, 'check', 'Mine is fine')).rejects.toThrow(/own work/);
+    await expect(svc.itJobStep(lead, j.id, 'accept', 'Mine is fine')).rejects.toThrow(/own work/);
+    await expect(svc.itJobStep(mgr, j.id, 'accept', ' ')).rejects.toThrow(/Say why you are accepting it/);
+    expect((await svc.itJobStep(mgr, j.id, 'accept', 'Rule export matches')).status).toBe('accepted');
   });
 });

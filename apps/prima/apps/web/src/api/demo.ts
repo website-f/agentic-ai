@@ -1,9 +1,9 @@
 // In-browser demo: the same PrimaService and rules as the server, running on generated
 // mock data. Changes are kept as a short replay log in this browser only, so a reload
 // keeps what you did today; a new day starts from fresh mock data.
-import { AccessDenied, BadRequest, MemoryStore, NotFound, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, type User } from '@prima/core';
-import type { ProofInput, ReportDef } from '@prima/core';
-import type { ExpenseInput, PdpaCaseInput, PdpaStepName, ProductCertInput, ProductInput, VehicleRequestInput, VehicleWorkInput } from './types';
+import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader } from '@prima/core';
+import type { ProofInput, ReportDef, CmsServiceKind, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction } from '@prima/core';
+import type { ExpenseInput, PdpaCaseInput, PdpaStepName, ProductCertInput, ProductInput, VehicleRequestInput, VehicleWorkInput, ArmsRequestAction, ArmsRequestStepExtra, AmBuyInput, RaiseArmsRequestInput, OfficeDeskInput, WorkAdjustInput, WorkReassignInput, FinControlArea } from './types';
 import { ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput } from './types';
 
 const LOG_KEY = 'prima-demo-log-v1';
@@ -15,6 +15,22 @@ interface LoggedCall {
   userId: string;
   op: string;
   args: unknown[];
+  /** The id of the record this call made, when it made one: later calls in the log that name it are pointed at the
+   * record the replay makes, since ids carry a random part. */
+  made?: string;
+}
+
+const madeId = (out: unknown): string | undefined => {
+  const id = out && typeof out === 'object' ? (out as { id?: unknown }).id : undefined;
+  return typeof id === 'string' ? id : undefined;
+};
+
+/** Replace every string value equal to an id made before the reload with the id the replay made. */
+function remap(v: unknown, ids: Map<string, string>): unknown {
+  if (typeof v === 'string') return ids.get(v) ?? v;
+  if (Array.isArray(v)) return v.map((x) => remap(x, ids));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, remap(x, ids)]));
+  return v;
 }
 
 function readLog(day: string): LoggedCall[] {
@@ -35,6 +51,12 @@ function writeLog(log: LoggedCall[]): void {
   }
 }
 
+/** The hand-over layer's own errors carry their HTTP status. */
+function orgError(e: unknown): never {
+  if (e instanceof OrgLinkError || e instanceof ImportError) throw new ApiError(e.message, e.status);
+  throw e;
+}
+
 function toApiError(e: unknown): never {
   if (e instanceof RuleBlocked) throw new ApiError(e.message, 422, e.findings);
   if (e instanceof AccessDenied) throw new ApiError(e.message, 403);
@@ -44,6 +66,9 @@ function toApiError(e: unknown): never {
 }
 
 type Mutations =
+  | 'orgClose'
+  | 'orgRead'
+  | 'orgImport'
   | 'assign'
   | 'publish'
   | 'lockAttendance'
@@ -59,12 +84,55 @@ type Mutations =
   | 'signOffCase'
   | 'createQuotation'
   | 'quotationAction'
+  | 'correctQuotation'
   | 'updateTender'
   | 'setTenderProtocol'
   | 'doTenderStep'
   | 'staffClockIn'
+  | 'registerFace'
+  | 'staffFaceCheck'
+  | 'decideFace'
+  | 'removeFace'
+  | 'addPublicHoliday'
+  | 'removePublicHoliday'
+  | 'setLeaveOverride'
+  | 'setWfhAllowed'
+  | 'requestFlex'
+  | 'decideFlex'
+  | 'recordHrFiling'
+  | 'openHrCase'
+  | 'hrCaseStep'
+  | 'appointOshCoordinator'
+  | 'recordOfficeAssessment'
+  | 'reportOshIncident'
+  | 'recordOshReport'
+  | 'recordTraining'
+  | 'recordGuardPaper'
+  | 'openAppraisal'
+  | 'rateAppraisal'
+  | 'commentAppraisal'
+  | 'closeAppraisal'
+  | 'publishPolicy'
+  | 'setStaffOvertime'
+  | 'updateHrLegalCheck'
+  | 'acknowledgePolicy'
+  | 'decideProbation'
+  | 'raiseVacancy'
+  | 'vacancyStep'
+  | 'prepareStaffMovement'
+  | 'staffMovementStep'
+  | 'cancelStaffMovement'
+  | 'applyStaffMovement'
+  | 'authoriseMovementLogin'
+  | 'confirmMovementLogin'
+  | 'applyDueStaffMovements'
+  | 'saveAllowanceType'
+  | 'requestAllowanceChange'
+  | 'eaDraft'
+  | 'employeeRegister'
   | 'staffSessionStart'
   | 'acceptConfidentiality'
+  | 'setApprovalLimits'
   | 'staffSessionEnd'
   | 'startSocsoClaim'
   | 'addSocsoDoc'
@@ -82,6 +150,8 @@ type Mutations =
   | 'createFwmTask'
   | 'doneFwmTask'
   | 'reviewFwmTask'
+  | 'recordFwCheck'
+  | 'closeFwCheck'
   | 'addHostelBill'
   | 'requestHostelPayment'
   | 'checkHostelBill'
@@ -91,19 +161,59 @@ type Mutations =
   | 'ackUtilityNotice'
   | 'fileUtilityPaper'
   | 'submitStaffClaim'
+  | 'addReceipts'
+  | 'receiptAction'
+  | 'headVerifyClaim'
   | 'prepareStaffPay'
+  | 'setMyZakat'
+  | 'loadStatTable'
+  | 'checkStatTable'
+  | 'setEmployerNos'
   | 'setFinPack'
+  | 'finCreatePayment'
+  | 'finPaymentStep'
+  | 'finCooStep'
+  | 'finCreateRequest'
+  | 'finRequestStep'
+  | 'finSetSettings'
+  | 'finCloseStep'
+  | 'finControlAction'
   | 'setMobItem'
+  | 'setCmsService'
+  | 'verifyCmsContact'
+  | 'recordCmsTest'
+  | 'acceptCmsService'
   | 'approveBranchSettlement'
+  | 'addBranch'
+  | 'branchAct'
+  | 'branchSettlementAct'
+  | 'insuranceClaimAct'
   | 'raiseItTicket'
   | 'websiteAction'
   | 'websiteSyncFeed'
   | 'corpFilingStep'
+  | 'renewalStep'
+  | 'saveCompanyFile'
+  | 'addPanelFirm'
+  | 'panelFirmStep'
+  | 'adviserMoneyStep'
+  | 'addDelegation'
+  | 'delegationStep'
+  | 'addCriticalRole'
+  | 'placeLegalHold'
+  | 'releaseLegalHold'
+  | 'criticalRoleStep'
+  | 'creditCheckLenderLicence'
+  | 'ceoInstruct'
+  | 'checkCompanyFile'
   | 'runCreditCheck'
   | 'creditDecide'
   | 'creditEnforcementStep'
   | 'creditRepayment'
   | 'creditChargeLodged'
+  | 'creditStamped'
+  | 'creditCorrectCollateral'
+  | 'creditCorrectRecord'
   | 'creditDispute'
   | 'addCreditLoan'
   | 'corpAuditStep'
@@ -112,6 +222,14 @@ type Mutations =
   | 'raiseActFinding'
   | 'actFindingStep'
   | 'recordActAudit'
+  | 'assignActWork'
+  | 'setActReportForm'
+  | 'setActTiming'
+  | 'recordActFieldCheck'
+  | 'openActInvestigation'
+  | 'addActEvidence'
+  | 'actEvidence'
+  | 'actInvestigationStep'
   | 'addActImprovement'
   | 'actImprovementStep'
   | 'amDisposalStep'
@@ -150,6 +268,8 @@ type Mutations =
   | 'purSupplierStep'
   | 'stockIssue'
   | 'confirmMyItem'
+  | 'handoverStep'
+  | 'setManagementFee'
   | 'stockReturn'
   | 'raiseCorpChange'
   | 'decideCorpChange'
@@ -181,15 +301,22 @@ type Mutations =
   | 'openPdpaCase'
   | 'requestVehicle'
   | 'clientStep'
+  | 'setOfficeDesks'
+  | 'setCompanyRunBy'
   | 'clientInvoice'
   | 'setInvoicePortal'
+  | 'createClientShareLink'
+  | 'revokeClientShareLink'
   | 'saveExpense'
+  | 'prefillOfficeRequest'
   | 'submitExpense'
   | 'decideExpense'
   | 'startOffboarding'
   | 'clientContact'
   | 'clientReport'
   | 'clientRating'
+  | 'clientComplaint'
+  | 'resolveClientComplaint'
   | 'clientBilling'
   | 'saveProduct'
   | 'saveProductCert'
@@ -217,6 +344,8 @@ type Mutations =
   | 'workTaskDone'
   | 'workTaskLate'
   | 'workTaskReview'
+  | 'workTaskReassign'
+  | 'workTaskAdjust'
   | 'seenCooNotice'
   | 'helpAsk'
   | 'helpAnswer'
@@ -271,7 +400,17 @@ type Mutations =
   | 'stockCount'
   | 'amDecideReversal'
   | 'reviewFalseAlarm'
-  | 'reviewArmsRequest';
+  | 'reviewArmsRequest'
+  | 'armsRequestStep'
+  | 'raiseArmsRequest'
+  | 'setArmsTrading'
+  | 'amBuyRequest'
+  | 'amBuyDecide'
+  | 'amBuyReceived'
+  | 'amBuyReprice'
+  | 'amWhatsAppConsent'
+  | 'amWhatsAppSettle'
+  | 'amQueueRentReminders';
 
 export class DemoApi implements Api {
   async m365Call(): Promise<unknown> { throw new Error('Microsoft integration requires the signed-in server app.'); }
@@ -288,6 +427,17 @@ export class DemoApi implements Api {
   sharePointCheck(): ReturnType<Api['sharePointCheck']> { return Promise.reject(new ApiError('SharePoint is not configured in the demo.', 503, [])); }
   sharePointLibraries(): ReturnType<Api['sharePointLibraries']> { return Promise.reject(new ApiError('SharePoint is not configured in the demo.', 503, [])); }
   sharePointItems(): ReturnType<Api['sharePointItems']> { return Promise.reject(new ApiError('SharePoint is not configured in the demo.', 503, [])); }
+
+  readonly org: import('./types').OrgClient = {
+    guide: () => this.read(async (s, u) => s.guideCards(u)),
+    inbox: (offset = 0) => this.read((s, u) => s.orgLinks.inbox(u, { offset })).catch(orgError),
+    close: (taskId, outcome, note) => this.write<unknown>('orgClose', [taskId, outcome, note]).catch(orgError),
+    read: (taskId) => this.write<unknown>('orgRead', [taskId]).catch(orgError),
+    map: () => this.read((s, u) => s.orgLinks.map(u)).then((m) => ({ ...m, rollouts: registeredRollouts() })).catch(orgError),
+    importTemplate: (kind) => this.read(async (s) => s.orgImport.template(kind)).catch(orgError),
+    importPreview: (kind, companyId, csv) => this.read((s, u) => s.orgImport.preview(u, kind, companyId, csv)).catch(orgError),
+    importCommit: (kind, companyId, csv, fingerprint) => this.write<unknown>('orgImport', [kind, companyId, csv, fingerprint]).catch(orgError),
+  };
 
   private booted: PrimaService | null = null;
   private store: MemoryStore | null = null;
@@ -316,9 +466,12 @@ export class DemoApi implements Api {
 
   private boot(): void {
     const now = this.realNow();
-    const store = new MemoryStore(generateDataset({ today: dateOf(now), now }));
+    // Hand-overs between departments are on in the test version (org-links.ts); the server needs PRIMA_ORG_LINKS=true.
+    const store = withOrgLinks(new MemoryStore(generateDataset({ today: dateOf(now), now })));
     this.store = store;
     this.booted = new PrimaService(store, () => this.clockOverride ?? this.realNow());
+    // The test link reads the receipt's file name as if it were the receipt (the server uses Azure once set up).
+    this.booted.receiptReader = testReceiptReader;
     this.log = readLog(dateOf(now));
   }
 
@@ -330,16 +483,24 @@ export class DemoApi implements Api {
     // Let the opening screen paint before the mock data is made.
     if (!this.booted) await new Promise((r) => setTimeout(r, 0));
     if (!this.booted) this.boot();
+    const ids = new Map<string, string>();
     for (const call of this.log) {
       this.clockOverride = call.at;
       try {
         const user = await this.svc.user(call.userId);
-        await this.apply(user, call.op as Mutations, call.args);
+        const args = remap(call.args, ids) as unknown[];
+        const out = await this.apply(user, call.op as Mutations, args);
+        const now = madeId(out);
+        if (call.made && now && now !== call.made) ids.set(call.made, now);
+        // The log now names the ids this replay made, which the screens show and later calls use.
+        call.args = args;
+        if (call.made && now) call.made = now;
       } catch {
         /* an action that no longer applies is skipped */
       }
     }
     this.clockOverride = null;
+    if (ids.size) writeLog(this.log);
   }
 
   async demoWitnesses(companyId: string) {
@@ -397,6 +558,8 @@ export class DemoApi implements Api {
         return this.svc.updateCase(u, a[0], a[1], a[2], a[3]);
       case 'createQuotation':
         return this.svc.createQuotation(u, a[0], a[1]);
+      case 'correctQuotation':
+        return this.svc.correctQuotation(u, a[0], a[1]);
       case 'quotationAction':
         return this.svc.quotationAction(u, a[0], a[1], a[2]);
       case 'updateTender':
@@ -405,6 +568,8 @@ export class DemoApi implements Api {
         return this.svc.setTenderProtocol(u, a[0]);
       case 'doTenderStep':
         return this.svc.doTenderStep(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'setApprovalLimits':
+        return this.svc.setApprovalLimits(u, args[0] as Record<string, unknown>);
       case 'acceptConfidentiality':
         return this.svc.acceptConfidentiality(u);
       case 'staffSessionStart':
@@ -413,6 +578,88 @@ export class DemoApi implements Api {
         return this.svc.staffSessionEnd(u);
       case 'staffClockIn':
         return this.svc.staffClockIn(u, a[0]);
+      case 'registerFace':
+        return this.svc.registerFace(u, a[0]);
+      case 'staffFaceCheck':
+        return this.svc.staffFaceCheck(u, a[0]);
+      case 'decideFace':
+        return this.svc.decideFace(u, a[0], a[1], a[2]);
+      case 'removeFace':
+        return this.svc.removeFace(u, a[0], a[1]);
+      case 'addPublicHoliday':
+        return this.svc.addPublicHoliday(u, a[0]);
+      case 'removePublicHoliday':
+        return this.svc.removePublicHoliday(u, a[0], a[1]);
+      case 'setLeaveOverride':
+        return this.svc.setLeaveOverride(u, a[0], a[1], a[2], a[3]);
+      case 'setWfhAllowed':
+        return this.svc.setWfhAllowed(u, a[0], a[1], a[2]);
+      case 'requestFlex':
+        return this.svc.requestFlex(u, a[0]);
+      case 'decideFlex':
+        return this.svc.decideFlex(u, a[0], a[1], a[2]);
+      case 'openHrCase':
+        return this.svc.openHrCase(u, a[0]);
+      case 'hrCaseStep':
+        return this.svc.hrCaseStep(u, a[0], a[1]);
+      case 'appointOshCoordinator':
+        return this.svc.appointOshCoordinator(u, a[0]);
+      case 'recordOfficeAssessment':
+        return this.svc.recordOfficeAssessment(u, a[0]);
+      case 'reportOshIncident':
+        return this.svc.reportOshIncident(u, a[0]);
+      case 'recordOshReport':
+        return this.svc.recordOshReport(u, a[0], a[1]);
+      case 'recordTraining':
+        return this.svc.recordTraining(u, a[0]);
+      case 'recordGuardPaper':
+        return this.svc.recordGuardPaper(u, a[0]);
+      case 'openAppraisal':
+        return this.svc.openAppraisal(u, a[0]);
+      case 'rateAppraisal':
+        return this.svc.rateAppraisal(u, a[0], a[1]);
+      case 'commentAppraisal':
+        return this.svc.commentAppraisal(u, a[0], a[1]);
+      case 'closeAppraisal':
+        return this.svc.closeAppraisal(u, a[0], a[1]);
+      case 'publishPolicy':
+        return this.svc.publishPolicy(u, a[0]);
+      case 'setStaffOvertime':
+        return this.svc.setStaffOvertime(u, a[0]);
+      case 'updateHrLegalCheck':
+        return this.svc.updateHrLegalCheck(u, a[0], a[1]);
+      case 'acknowledgePolicy':
+        return this.svc.acknowledgePolicy(u, a[0]);
+      case 'recordHrFiling':
+        return this.svc.recordHrFiling(u, a[0]);
+      case 'decideProbation':
+        return this.svc.decideProbation(u, a[0], a[1], a[2], a[3]);
+      case 'raiseVacancy':
+        return this.svc.raiseVacancy(u, a[0]);
+      case 'vacancyStep':
+        return this.svc.vacancyStep(u, a[0], a[1], a[2]);
+      case 'prepareStaffMovement':
+        return this.svc.prepareStaffMovement(u, a[0]);
+      case 'staffMovementStep':
+        return this.svc.staffMovementStep(u, a[0], a[1], a[2]);
+      case 'cancelStaffMovement':
+        return this.svc.cancelStaffMovement(u, a[0], a[1]);
+      case 'authoriseMovementLogin':
+        return this.svc.authoriseMovementLogin(u, a[0], a[1], a[2]);
+      case 'confirmMovementLogin':
+        return this.svc.confirmMovementLogin(u, a[0], a[1]);
+      case 'applyStaffMovement':
+        return this.svc.applyStaffMovement(u, a[0]);
+      case 'applyDueStaffMovements':
+        return this.svc.applyDueStaffMovements(u);
+      case 'saveAllowanceType':
+        return this.svc.saveAllowanceType(u, a[0]);
+      case 'requestAllowanceChange':
+        return this.svc.requestAllowanceChange(u, a[0], a[1]);
+      case 'eaDraft':
+        return this.svc.eaDraft(u, a[0], a[1]);
+      case 'employeeRegister':
+        return this.svc.employeeRegister(u, a[0]);
       case 'startSocsoClaim':
         return this.svc.startSocsoClaim(u, a[0], a[1]);
       case 'addSocsoDoc':
@@ -445,6 +692,10 @@ export class DemoApi implements Api {
         return this.svc.doneFwmTask(u, a[0], a[1], a[2]);
       case 'reviewFwmTask':
         return this.svc.reviewFwmTask(u, a[0], a[1], a[2]);
+      case 'recordFwCheck':
+        return this.svc.recordFwCheck(u, a[0], a[1], a[2]);
+      case 'closeFwCheck':
+        return this.svc.closeFwCheck(u, a[0], a[1], a[2]);
       case 'addHostelBill':
         return this.svc.addHostelBill(u, a[0], a[1]);
       case 'requestHostelPayment':
@@ -462,7 +713,15 @@ export class DemoApi implements Api {
       case 'fileUtilityPaper':
         return this.svc.fileUtilityPaper(u, a[0], a[1], a[2]);
       case 'approveBranchSettlement':
-        return this.svc.approveBranchSettlement(u, a[0]);
+        return this.svc.approveBranchSettlement(u, a[0], a[1]);
+      case 'addBranch':
+        return this.svc.addBranch(u, a[0], a[1]);
+      case 'branchAct':
+        return this.svc.branchAct(u, a[0], a[1], a[2]);
+      case 'branchSettlementAct':
+        return this.svc.branchSettlementAct(u, a[0], a[1], a[2]);
+      case 'insuranceClaimAct':
+        return this.svc.insuranceClaimAct(u, a[0], a[1], a[2]);
       case 'runCreditCheck':
         return this.svc.runCreditCheck(u);
       case 'creditDecide':
@@ -471,18 +730,46 @@ export class DemoApi implements Api {
         return this.svc.creditEnforcementStep(u, a[0], a[1], a[2]);
       case 'creditRepayment':
         return this.svc.creditRepayment(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'creditStamped':
+        return this.svc.creditStamped(u, a[0], a[1], a[2]);
+      case 'creditCorrectRecord':
+        return this.svc.creditCorrectRecord(u, a[0], a[1]);
+      case 'creditCorrectCollateral':
+        return this.svc.creditCorrectCollateral(u, a[0], { kind: a[1], agreementRef: a[2], reason: a[3] });
       case 'creditChargeLodged':
         return this.svc.creditChargeLodged(u, a[0], a[1], a[2]);
       case 'creditDispute':
         return this.svc.creditDispute(u, a[0], a[1], a[2]);
       case 'addCreditLoan':
         return this.svc.addCreditLoan(u, a[0], a[1]);
+      case 'orgClose':
+        return this.svc.orgLinks.close(u, a[0], a[1], a[2]);
+      case 'orgRead':
+        return this.svc.orgLinks.markRead(u, a[0]);
+      case 'orgImport':
+        return this.svc.orgImport.commit(u, a[0], a[1], a[2], a[3]);
       case 'raiseActFinding':
         return this.svc.raiseActFinding(u, a[0]);
       case 'actFindingStep':
         return this.svc.actFindingStep(u, a[0], a[1], a[2]);
       case 'recordActAudit':
         return this.svc.recordActAudit(u, a[0]);
+      case 'assignActWork':
+        return this.svc.assignActWork(u, a[0]);
+      case 'setActReportForm':
+        return this.svc.setActReportForm(u, a[0]);
+      case 'setActTiming':
+        return this.svc.setActTiming(u, a[0]);
+      case 'recordActFieldCheck':
+        return this.svc.recordActFieldCheck(u, a[0]);
+      case 'openActInvestigation':
+        return this.svc.openActInvestigation(u, a[0]);
+      case 'addActEvidence':
+        return this.svc.addActEvidence(u, a[0], a[1]);
+      case 'actEvidence':
+        return this.svc.actEvidence(u, a[0], a[1]);
+      case 'actInvestigationStep':
+        return this.svc.actInvestigationStep(u, a[0], a[1]);
       case 'addActImprovement':
         return this.svc.addActImprovement(u, a[0]);
       case 'actImprovementStep':
@@ -563,12 +850,44 @@ export class DemoApi implements Api {
         return this.svc.purSupplierStep(u, a[0], a[1], a[2]);
       case 'confirmMyItem':
         return this.svc.confirmMyItem(u, a[0], a[1], a[2]);
+      case 'handoverStep':
+        return this.svc.handoverStep(u, a[0], a[1], a[2]);
+      case 'setManagementFee':
+        return this.svc.setManagementFee(u, a[0], a[1]);
       case 'stockIssue':
         return this.svc.stockIssue(u, a[0], a[1]);
       case 'stockReturn':
         return this.svc.stockReturn(u, a[0], a[1], a[2]);
       case 'corpFilingStep':
         return this.svc.corpFilingStep(u, a[0], a[1], a[2]);
+      case 'ceoInstruct':
+        return this.svc.ceoInstruct(u, a[0]);
+      case 'addPanelFirm':
+        return this.svc.addPanelFirm(u, a[0]);
+      case 'panelFirmStep':
+        return this.svc.panelFirmStep(u, a[0], a[1], a[2]);
+      case 'adviserMoneyStep':
+        return this.svc.adviserMoneyStep(u, a[0], a[1], a[2]);
+      case 'addDelegation':
+        return this.svc.addDelegation(u, a[0], a[1]);
+      case 'delegationStep':
+        return this.svc.delegationStep(u, a[0], a[1], a[2], a[3]);
+      case 'placeLegalHold':
+        return this.svc.placeLegalHold(u, a[0], a[1]);
+      case 'releaseLegalHold':
+        return this.svc.releaseLegalHold(u, a[0], a[1]);
+      case 'addCriticalRole':
+        return this.svc.addCriticalRole(u, a[0], a[1]);
+      case 'criticalRoleStep':
+        return this.svc.criticalRoleStep(u, a[0], a[1], a[2]);
+      case 'creditCheckLenderLicence':
+        return this.svc.creditCheckLenderLicence(u, a[0], a[1]);
+      case 'saveCompanyFile':
+        return this.svc.saveCompanyFile(u, a[0], a[1]);
+      case 'checkCompanyFile':
+        return this.svc.checkCompanyFile(u, a[0], a[1]);
+      case 'renewalStep':
+        return this.svc.renewalStep(u, a[0], a[1], a[2]);
       case 'raiseCorpChange':
         return this.svc.raiseCorpChange(u, a[0], a[1]);
       case 'decideCorpChange':
@@ -601,6 +920,14 @@ export class DemoApi implements Api {
         return this.svc.reviewBranchAction(u, a[0], a[1], a[2]);
       case 'addBranchAgreement':
         return this.svc.addBranchAgreement(u, a[0], a[1]);
+      case 'setCmsService':
+        return this.svc.setCmsService(u, a[0], a[1]);
+      case 'verifyCmsContact':
+        return this.svc.verifyCmsContact(u, a[0], a[1], a[2], a[3]);
+      case 'recordCmsTest':
+        return this.svc.recordCmsTest(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'acceptCmsService':
+        return this.svc.acceptCmsService(u, a[0], a[1], a[2], a[3]);
       case 'setMobItem':
         return this.svc.setMobItem(u, a[0], a[1], a[2], a[3], a[4]);
       case 'contractStep':
@@ -614,7 +941,35 @@ export class DemoApi implements Api {
       case 'addContractVariation':
         return this.svc.addContractVariation(u, a[0], a[1]);
       case 'setFinPack':
-        return this.svc.setFinPack(u, a[0], a[1], a[2], a[3]);
+        return this.svc.setFinPack(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'finCreatePayment':
+        return this.svc.finance.createPayment(u, a[0], a[1]);
+      case 'finPaymentStep':
+        return this.svc.finance.paymentStep(u, a[0], a[1], a[2], a[3]);
+      case 'finCloseStep':
+        return this.svc.finance.closeStep(u, a[0], a[1], a[2]);
+      case 'finSetSettings':
+        return this.svc.finance.setSettings(u, { values: a[0], comment: a[1] });
+      case 'finCreateRequest':
+        return this.svc.financeRequests.create(u, a[0], a[1]);
+      case 'finRequestStep':
+        return this.svc.financeRequests.step(u, a[0], a[1], a[2], a[3]);
+      case 'finCooStep':
+        return this.svc.finance.cooStep(u, a[0], a[1], a[2], a[3]);
+      case 'finControlAction': {
+        const c = this.svc.financeControls;
+        const fn = { payees: c.payeeAction, statements: c.statementAction, ageing: c.ageingAction, figures: c.figuresAction, coa: c.coaAction, sql: c.sqlAction, sst: c.sstAction, plan: c.planAction, einvoice: c.einvoiceAction, ar: c.arAction, bankrec: c.bankRecAction, regular: c.regularAction, guarantees: c.guaranteeAction, tax: c.taxAction, mandates: c.mandateAction, advances: c.advanceAction, petty: c.pettyAction, cards: c.cardAction, billing: c.billingAction, govt: c.govtAction, moneyin: c.moneyInAction, stamp: c.stampAction, dailycash: c.dailyCashAction, intercompany: c.icAction, cash13: c.cash13Action, pack: c.packAction, hostel: c.hostelAction, deposits: c.depositAction, fd: c.fdAction, charges: c.chargeAction, wht: c.whtAction, schedules: c.scheduleAction, assets: c.assetAction, audit: c.auditAction, credit: c.creditAction, supstatements: c.supplierStatementAction }[a[1] as 'payees'];
+        if (!fn) throw new BadRequest('Unknown area');
+        return fn.call(c, u, a[0], a[2], a[3]);
+      }
+      case 'setMyZakat':
+        return this.svc.setMyZakat(u, a[0]);
+      case 'loadStatTable':
+        return this.svc.loadStatTable(u, a[0]);
+      case 'checkStatTable':
+        return this.svc.checkStatTable(u, a[0]);
+      case 'setEmployerNos':
+        return this.svc.setEmployerNos(u, a[0], a[1]);
       case 'prepareStaffPay':
         return this.svc.prepareStaffPay(u, a[0], a[1]);
       case 'setStaffPayLine':
@@ -625,6 +980,15 @@ export class DemoApi implements Api {
         return this.svc.staffPayExport(u, a[0], a[1]);
       case 'submitStaffClaim':
         return this.svc.submitStaffClaim(u, a[0], a[1]);
+      case 'addReceipts':
+        return this.svc.addReceipts(u, a[0]).then(async (kept) => {
+          for (const r of kept) await this.svc.saveReceiptRead(u, r.id, await this.svc.receiptReader.read(r, this.svc.now()).catch(() => null));
+          return kept;
+        });
+      case 'receiptAction':
+        return this.svc.receiptAction(u, a[0], a[1], a[2]);
+      case 'headVerifyClaim':
+        return this.svc.headVerifyClaim(u, a[0], a[1], a[2]);
       case 'cosDecideClaim':
         return this.svc.cosDecideClaim(u, a[0], a[1], a[2]);
       case 'cooDecideClaim':
@@ -643,12 +1007,22 @@ export class DemoApi implements Api {
         return this.svc.clientInvoice(u, a[0], a[1], a[2], a[3], a[4]);
       case 'setInvoicePortal':
         return this.svc.setInvoicePortal(u, a[0], a[1]);
+      case 'prefillOfficeRequest':
+        return this.svc.prefillOfficeRequest(u, a[0]);
+      case 'createClientShareLink':
+        return this.svc.createClientShareLink(u, a[0], a[1]);
+      case 'revokeClientShareLink':
+        return this.svc.revokeClientShareLink(u, a[0], a[1], a[2]);
       case 'saveExpense':
         return this.svc.saveExpense(u, a[0], a[1]);
       case 'submitExpense':
         return this.svc.submitExpense(u, a[0]);
       case 'decideExpense':
         return this.svc.decideExpense(u, a[0], a[1], a[2]);
+      case 'setOfficeDesks':
+        return this.svc.setOfficeDesks(u, a[0], { desks: a[1], note: a[2] });
+      case 'setCompanyRunBy':
+        return this.svc.setCompanyRunBy(u, a[0], { runByCompanyId: a[1], reason: a[2] });
       case 'clientStep':
         return this.svc.clientStep(u, a[0], a[1], a[2], a[3], a[4]);
       case 'startOffboarding':
@@ -658,7 +1032,11 @@ export class DemoApi implements Api {
       case 'clientReport':
         return this.svc.clientReport(u, a[0], a[1], a[2]);
       case 'clientRating':
-        return this.svc.clientRating(u, a[0], a[1], a[2]);
+        return this.svc.clientRating(u, a[0], a[1], a[2], a[3]);
+      case 'clientComplaint':
+        return this.svc.clientComplaint(u, a[0], a[1]);
+      case 'resolveClientComplaint':
+        return this.svc.resolveClientComplaint(u, a[0], a[1], a[2], a[3]);
       case 'clientBilling':
         return this.svc.clientBilling(u, a[0], a[1]);
       case 'requestVehicle':
@@ -713,6 +1091,10 @@ export class DemoApi implements Api {
         return this.svc.workTaskDone(u, a[0], a[1]);
       case 'workTaskLate':
         return this.svc.workTaskLate(u, a[0], a[1]);
+      case 'workTaskReassign':
+        return this.svc.workTaskReassign(u, a[0], a[1]);
+      case 'workTaskAdjust':
+        return this.svc.workTaskAdjust(u, a[0], a[1]);
       case 'workTaskReview':
         return this.svc.workTaskReview(u, a[0], a[1], a[2]);
       case 'seenCooNotice':
@@ -823,6 +1205,26 @@ export class DemoApi implements Api {
         return this.svc.closeAlarm(u, a[0], a[1], a[2]);
       case 'reviewArmsRequest':
         return this.svc.reviewArmsRequest(u, a[0], a[1], a[2]);
+      case 'raiseArmsRequest':
+        return this.svc.raiseArmsRequest(u, a[0]);
+      case 'armsRequestStep':
+        return this.svc.armsRequestStep(u, a[0], a[1], a[2], a[3]);
+      case 'setArmsTrading':
+        return this.svc.setArmsTrading(u, a[0], a[1]);
+      case 'amBuyRequest':
+        return this.svc.amBuyRequest(u, a[0]);
+      case 'amBuyDecide':
+        return this.svc.amBuyDecide(u, a[0], a[1], a[2], a[3]);
+      case 'amBuyReceived':
+        return this.svc.amBuyReceived(u, a[0], a[1]);
+      case 'amBuyReprice':
+        return this.svc.amBuyReprice(u, a[0], a[1], a[2]);
+      case 'amWhatsAppConsent':
+        return this.svc.amWhatsAppConsent(u, a[0], a[1], a[2]);
+      case 'amWhatsAppSettle':
+        return this.svc.amWhatsAppSettle(u, a[0], a[1], a[2], a[3]);
+      case 'amQueueRentReminders':
+        return this.svc.amQueueRentReminders(u);
       case 'setPatrolInterval':
         return this.svc.setPatrolInterval(u, a[0], a[1]);
     }
@@ -837,7 +1239,7 @@ export class DemoApi implements Api {
     try {
       const out = (await this.apply(u, op, args)) as T;
       const now = this.realNow();
-      this.log.push({ day: dateOf(now), at: now, userId: u.id, op, args });
+      this.log.push({ day: dateOf(now), at: now, userId: u.id, op, args, ...(madeId(out) ? { made: madeId(out) } : {}) });
       writeLog(this.log);
       return out;
     } catch (e) {
@@ -902,6 +1304,190 @@ export class DemoApi implements Api {
   }
   staffSessionEnd() {
     return this.write('staffSessionEnd', []);
+  }
+  myFace() {
+    return this.read((s, u) => s.myFace(u));
+  }
+  registerFace(input: { photo: string; descriptor: number[] }) {
+    return this.write('registerFace', [input]);
+  }
+  staffFaceCheck(input: Parameters<Api['staffFaceCheck']>[0]) {
+    return this.write('staffFaceCheck', [input]);
+  }
+  faceReviews() {
+    return this.read((s, u) => s.faceReviews(u));
+  }
+  decideFace(personId: string, approve: boolean, note: string) {
+    return this.write('decideFace', [personId, approve, note]);
+  }
+  removeFace(personId: string, note: string) {
+    return this.write('removeFace', [personId, note]);
+  }
+  publicHolidays(year?: string) {
+    return this.read((s, u) => s.publicHolidays(u, year));
+  }
+  addPublicHoliday(input: Parameters<Api['addPublicHoliday']>[0]) {
+    return this.write('addPublicHoliday', [input]);
+  }
+  removePublicHoliday(id: string, note: string) {
+    return this.write('removePublicHoliday', [id, note]);
+  }
+  hrLeaveSettings() {
+    return this.read((s, u) => s.hrLeaveSettings(u));
+  }
+  setLeaveOverride(personId: string, kind: Parameters<Api['setLeaveOverride']>[1], days: number | null, note: string) {
+    return this.write('setLeaveOverride', [personId, kind, days, note]);
+  }
+  setWfhAllowed(personId: string, allow: boolean, note: string) {
+    return this.write('setWfhAllowed', [personId, allow, note]);
+  }
+  flexRequests() {
+    return this.read((s, u) => s.flexRequests(u));
+  }
+  requestFlex(input: Parameters<Api['requestFlex']>[0]) {
+    return this.write('requestFlex', [input]);
+  }
+  decideFlex(id: string, approve: boolean, note: string) {
+    return this.write('decideFlex', [id, approve, note]);
+  }
+  hrCases(personId?: string) {
+    return this.read((s, u) => s.hrCases(u, personId));
+  }
+  openHrCase(input: Parameters<Api['openHrCase']>[0]) {
+    return this.write('openHrCase', [input]);
+  }
+  hrCaseStep(id: string, input: Parameters<Api['hrCaseStep']>[1]) {
+    return this.write('hrCaseStep', [id, input]);
+  }
+  officeOsh() {
+    return this.read((s, u) => s.officeOsh(u));
+  }
+  appointOshCoordinator(input: Parameters<Api['appointOshCoordinator']>[0]) {
+    return this.write('appointOshCoordinator', [input]);
+  }
+  recordOfficeAssessment(input: Parameters<Api['recordOfficeAssessment']>[0]) {
+    return this.write('recordOfficeAssessment', [input]);
+  }
+  reportOshIncident(input: Parameters<Api['reportOshIncident']>[0]) {
+    return this.write('reportOshIncident', [input]);
+  }
+  recordOshReport(id: string, input: Parameters<Api['recordOshReport']>[1]) {
+    return this.write('recordOshReport', [id, input]);
+  }
+  guardTraining() {
+    return this.read((s, u) => s.guardTraining(u));
+  }
+  recordGuardPaper(input: Parameters<Api['recordGuardPaper']>[0]) {
+    return this.write('recordGuardPaper', [input]);
+  }
+  trainingRecords(personId?: string) {
+    return this.read((s, u) => s.trainingRecords(u, personId));
+  }
+  recordTraining(input: Parameters<Api['recordTraining']>[0]) {
+    return this.write('recordTraining', [input]);
+  }
+  appraisals() {
+    return this.read((s, u) => s.appraisals(u));
+  }
+  openAppraisal(input: Parameters<Api['openAppraisal']>[0]) {
+    return this.write('openAppraisal', [input]);
+  }
+  rateAppraisal(id: string, input: Parameters<Api['rateAppraisal']>[1]) {
+    return this.write('rateAppraisal', [id, input]);
+  }
+  commentAppraisal(id: string, comment: string) {
+    return this.write('commentAppraisal', [id, comment]);
+  }
+  closeAppraisal(id: string, note: string) {
+    return this.write('closeAppraisal', [id, note]);
+  }
+  hrPolicies() {
+    return this.read((s, u) => s.hrPolicies(u));
+  }
+  publishPolicy(input: Parameters<Api['publishPolicy']>[0]) {
+    return this.write('publishPolicy', [input]);
+  }
+  acknowledgePolicy(id: string) {
+    return this.write('acknowledgePolicy', [id]);
+  }
+  hrLegalChecks() {
+    return this.read((s, u) => s.hrLegalChecks(u));
+  }
+  updateHrLegalCheck(id: string, input: Parameters<Api['updateHrLegalCheck']>[1]) {
+    return this.write('updateHrLegalCheck', [id, input]);
+  }
+  staffOvertime() {
+    return this.read((s, u) => s.staffOvertime(u));
+  }
+  setStaffOvertime(input: Parameters<Api['setStaffOvertime']>[0]) {
+    return this.write('setStaffOvertime', [input]);
+  }
+  overtimePreview(input: Parameters<Api['overtimePreview']>[0]) {
+    return this.read((s, u) => s.overtimePreview(u, input));
+  }
+  hrJoinLeave() {
+    return this.read((s, u) => s.hrJoinLeave(u));
+  }
+  recordHrFiling(input: Parameters<Api['recordHrFiling']>[0]) {
+    return this.write('recordHrFiling', [input]);
+  }
+  eaDraft(companyId: string, year: string) {
+    // Writes an audit entry, so it goes through the write path.
+    return this.write<Awaited<ReturnType<Api['eaDraft']>>>('eaDraft', [companyId, year]);
+  }
+  employeeRegister(companyId: string) {
+    return this.write<Awaited<ReturnType<Api['employeeRegister']>>>('employeeRegister', [companyId]);
+  }
+  decideProbation(personId: string, decision: 'confirm' | 'extend', newEndsOn: string | null, note: string) {
+    return this.write('decideProbation', [personId, decision, newEndsOn, note]);
+  }
+  leavingGuide(personId: string) {
+    return this.read((s, u) => s.leavingGuide(u, personId));
+  }
+  vacancies() {
+    return this.read((s, u) => s.vacancies(u));
+  }
+  staffMovements() {
+    return this.read((s, u) => s.staffMovements(u));
+  }
+  prepareStaffMovement(input: Parameters<Api['prepareStaffMovement']>[0]) {
+    return this.write('prepareStaffMovement', [input]);
+  }
+  staffMovementStep(id: string, approve: boolean, note: string) {
+    return this.write('staffMovementStep', [id, approve, note]);
+  }
+  cancelStaffMovement(id: string, note: string) {
+    return this.write('cancelStaffMovement', [id, note]);
+  }
+  authoriseMovementLogin(id: string, approve: boolean, note: string) {
+    return this.write('authoriseMovementLogin', [id, approve, note]);
+  }
+  loginHandovers() {
+    return this.read((s, u) => s.loginHandovers(u));
+  }
+  confirmMovementLogin(id: string, note: string) {
+    return this.write('confirmMovementLogin', [id, note]);
+  }
+  applyStaffMovement(id: string) {
+    return this.write('applyStaffMovement', [id]);
+  }
+  applyDueStaffMovements() {
+    return this.write<{ applied: string[]; failed: { id: string; message: string }[] }>('applyDueStaffMovements', []);
+  }
+  allowanceTypes() {
+    return this.read((s, u) => s.allowanceTypes(u));
+  }
+  saveAllowanceType(input: Parameters<Api['saveAllowanceType']>[0]) {
+    return this.write('saveAllowanceType', [input]);
+  }
+  requestAllowanceChange(personId: string, input: Parameters<Api['requestAllowanceChange']>[1]) {
+    return this.write('requestAllowanceChange', [personId, input]);
+  }
+  raiseVacancy(input: Parameters<Api['raiseVacancy']>[0]) {
+    return this.write('raiseVacancy', [input]);
+  }
+  vacancyStep(id: string, action: Parameters<Api['vacancyStep']>[1], note: string) {
+    return this.write('vacancyStep', [id, action, note]);
   }
   staffClockIn(input: Parameters<Api['staffClockIn']>[0]) {
     return this.write('staffClockIn', [input]);
@@ -980,6 +1566,19 @@ export class DemoApi implements Api {
   }
   playbookSignOff(userId: string) {
     return this.write('playbookSignOff', [userId]);
+  }
+  workRebalance() {
+    return this.read((s, u) => s.workRebalance(u));
+  }
+  workRebalanceAskAi(_adviceId: string): Promise<{ text: string; source: string }> {
+    // The test version never calls an AI service.
+    return Promise.reject(new Error('Arisha AI is not available in the test version.'));
+  }
+  workTaskReassign(id: string, input: WorkReassignInput) {
+    return this.write('workTaskReassign', [id, input]);
+  }
+  workTaskAdjust(id: string, input: WorkAdjustInput) {
+    return this.write('workTaskAdjust', [id, input]);
   }
   teamWork() {
     return this.read((s, u) => s.teamWork(u));
@@ -1089,6 +1688,15 @@ export class DemoApi implements Api {
   creditRepayment(loanId: string, no: number, amount: number, bankRef: string, paidOn: string) {
     return this.write<unknown>('creditRepayment', [loanId, no, amount, bankRef, paidOn]);
   }
+  creditStamped(loanId: string, ref: string, on: string) {
+    return this.write<unknown>('creditStamped', [loanId, ref, on]);
+  }
+  creditCorrectRecord(loanId: string, input: Parameters<Api['creditCorrectRecord']>[1]) {
+    return this.write<unknown>('creditCorrectRecord', [loanId, input]);
+  }
+  creditCorrectCollateral(loanId: string, kind: Parameters<Api['creditCorrectCollateral']>[1], agreementRef: string | null, reason: string) {
+    return this.write<unknown>('creditCorrectCollateral', [loanId, kind, agreementRef, reason]);
+  }
   creditChargeLodged(loanId: string, ssmRef: string, lodgedOn: string) {
     return this.write<unknown>('creditChargeLodged', [loanId, ssmRef, lodgedOn]);
   }
@@ -1109,6 +1717,31 @@ export class DemoApi implements Api {
   }
   recordActAudit(input: Parameters<Api['recordActAudit']>[0]) {
     return this.write<unknown>('recordActAudit', [input]);
+  }
+  assignActWork(input: Parameters<Api['assignActWork']>[0]) {
+    return this.write<unknown>('assignActWork', [input]);
+  }
+  setActReportForm(input: Parameters<Api['setActReportForm']>[0]) {
+    return this.write<unknown>('setActReportForm', [input]);
+  }
+  setActTiming(input: Parameters<Api['setActTiming']>[0]) {
+    return this.write<unknown>('setActTiming', [input]);
+  }
+  recordActFieldCheck(input: Parameters<Api['recordActFieldCheck']>[0]) {
+    return this.write<unknown>('recordActFieldCheck', [input]);
+  }
+  openActInvestigation(input: Parameters<Api['openActInvestigation']>[0]) {
+    return this.write<unknown>('openActInvestigation', [input]);
+  }
+  addActEvidence(id: string, input: Parameters<Api['addActEvidence']>[1]) {
+    return this.write<unknown>('addActEvidence', [id, input]);
+  }
+  actEvidence(id: string, evidenceId: string) {
+    // Viewing is written in the custody log, so it is a logged call.
+    return this.write<Awaited<ReturnType<Api['actEvidence']>>>('actEvidence', [id, evidenceId]);
+  }
+  actInvestigationStep(id: string, input: Parameters<Api['actInvestigationStep']>[1]) {
+    return this.write<unknown>('actInvestigationStep', [id, input]);
   }
   addActImprovement(input: Parameters<Api['addActImprovement']>[0]) {
     return this.write<unknown>('addActImprovement', [input]);
@@ -1279,8 +1912,14 @@ export class DemoApi implements Api {
   myItems() {
     return this.read((s, u) => s.myItems(u));
   }
+  deliveryProof(issueId: string) {
+    return this.read((s, u) => s.deliveryProof(u, issueId));
+  }
   confirmMyItem(id: string, received: boolean, note: string) {
     return this.write<unknown>('confirmMyItem', [id, received, note]);
+  }
+  handoverStep(id: string, step: Parameters<Api['handoverStep']>[1], input: Parameters<Api['handoverStep']>[2]) {
+    return this.write<unknown>('handoverStep', [id, step, input]);
   }
   purStep(id: string, action: Parameters<Api['purStep']>[1], body: Parameters<Api['purStep']>[2]) {
     return this.write<unknown>('purStep', [id, action, body]);
@@ -1297,8 +1936,74 @@ export class DemoApi implements Api {
   stockReturn(id: string, condition: Parameters<Api['stockReturn']>[1], note: string) {
     return this.write<unknown>('stockReturn', [id, condition, note]);
   }
+  ceoInstructions() {
+    return this.read((s, u) => s.ceoInstructions(u));
+  }
+  ceoInstruct(input: Parameters<Api['ceoInstruct']>[0]) {
+    return this.write<unknown>('ceoInstruct', [input]);
+  }
+  directorLegalFlags() {
+    return this.read((s, u) => s.directorLegalFlags(u));
+  }
+  directorDigest() {
+    return this.read((s, u) => s.directorDigest(u));
+  }
+  panelBoard() {
+    return this.read((s, u) => s.panelBoard(u));
+  }
+  addPanelFirm(input: Parameters<Api['addPanelFirm']>[0]) {
+    return this.write<unknown>('addPanelFirm', [input]);
+  }
+  panelFirmStep(id: string, action: 'review' | 'remove', note: string) {
+    return this.write<unknown>('panelFirmStep', [id, action, note]);
+  }
+  adviserMoneyStep(id: string, action: Parameters<Api['adviserMoneyStep']>[1], body: Parameters<Api['adviserMoneyStep']>[2]) {
+    return this.write<unknown>('adviserMoneyStep', [id, action, body]);
+  }
+  delegationBoard() {
+    return this.read((s, u) => s.delegationBoard(u));
+  }
+  addDelegation(companyId: string, input: Parameters<Api['addDelegation']>[1]) {
+    return this.write<unknown>('addDelegation', [companyId, input]);
+  }
+  delegationStep(id: string, action: Parameters<Api['delegationStep']>[1], note: string, body?: Parameters<Api['delegationStep']>[3]) {
+    return this.write<unknown>('delegationStep', [id, action, note, body ?? {}]);
+  }
+  legalHoldBoard() {
+    return this.read((s, u) => s.legalHoldBoard(u));
+  }
+  placeLegalHold(matterId: string, input: Parameters<Api['placeLegalHold']>[1]) {
+    return this.write<unknown>('placeLegalHold', [matterId, input]);
+  }
+  releaseLegalHold(id: string, reason: string) {
+    return this.write<unknown>('releaseLegalHold', [id, reason]);
+  }
+  addCriticalRole(companyId: string, input: Parameters<Api['addCriticalRole']>[1]) {
+    return this.write<unknown>('addCriticalRole', [companyId, input]);
+  }
+  criticalRoleStep(id: string, action: 'review' | 'retire', body: Parameters<Api['criticalRoleStep']>[2]) {
+    return this.write<unknown>('criticalRoleStep', [id, action, body]);
+  }
+  creditCheckLenderLicence(loanId: string, input: Parameters<Api['creditCheckLenderLicence']>[1]) {
+    return this.write<unknown>('creditCheckLenderLicence', [loanId, input]);
+  }
+  companyFiles() {
+    return this.read((s, u) => s.companyFiles(u));
+  }
+  saveCompanyFile(companyId: string, input: Parameters<Api['saveCompanyFile']>[1]) {
+    return this.write<unknown>('saveCompanyFile', [companyId, input]);
+  }
+  checkCompanyFile(companyId: string, input: Parameters<Api['checkCompanyFile']>[1]) {
+    return this.write<unknown>('checkCompanyFile', [companyId, input]);
+  }
   corpBoard() {
     return this.read((s, u) => s.corpBoard(u));
+  }
+  renewalBoard() {
+    return this.read((s, u) => s.renewalBoard(u));
+  }
+  renewalStep(id: string, action: Parameters<Api['renewalStep']>[1], body: Parameters<Api['renewalStep']>[2] = {}) {
+    return this.write<unknown>('renewalStep', [id, action, body]);
   }
   corpFilingStep(id: string, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: string }) {
     return this.write<unknown>('corpFilingStep', [id, action, body]);
@@ -1475,8 +2180,23 @@ export class DemoApi implements Api {
   itPurchaseStep(id: string, action: Parameters<Api['itPurchaseStep']>[1], body: Parameters<Api['itPurchaseStep']>[2]) {
     return this.write<unknown>('itPurchaseStep', [id, action, body]);
   }
-  approveBranchSettlement(id: string) {
-    return this.write<unknown>('approveBranchSettlement', [id]);
+  approveBranchSettlement(id: string, note: string) {
+    return this.write<unknown>('approveBranchSettlement', [id, note]);
+  }
+  addBranch(companyId: string, input: { name: string; state: string; model: 'A' | 'B' | 'C' }) {
+    return this.write<unknown>('addBranch', [companyId, input]);
+  }
+  branchLeadClaims(companyId: string) {
+    return this.read((s, u) => s.branchLeadClaims(u, companyId));
+  }
+  branchAct(branchId: string, action: string, body: Record<string, unknown>) {
+    return this.write<unknown>('branchAct', [branchId, action, body]);
+  }
+  insuranceClaimAct(claimId: string, action: string, body: Record<string, unknown>) {
+    return this.write<unknown>('insuranceClaimAct', [claimId, action, body]);
+  }
+  branchSettlementAct(id: string, action: 'approve' | 'return' | 'validate' | 'paid', body: Record<string, unknown>) {
+    return this.write<unknown>('branchSettlementAct', [id, action, body]);
   }
   reviewBranchAction(id: string, decision: 'accepted' | 'reversed', note: string) {
     return this.write<unknown>('reviewBranchAction', [id, decision, note]);
@@ -1486,6 +2206,21 @@ export class DemoApi implements Api {
   }
   contracts() {
     return this.read((s, u) => s.contracts(u));
+  }
+  setCmsService(contractId: string, input: Parameters<Api['setCmsService']>[1]) {
+    return this.write<unknown>('setCmsService', [contractId, input]);
+  }
+  recordCmsTest(contractId: string, version: number, service: CmsServiceKind, siteId: string, note: string) {
+    return this.write<unknown>('recordCmsTest', [contractId, version, service, siteId, note]);
+  }
+  verifyCmsContact(contractId: string, index: number, version: number, note: string) {
+    return this.write<unknown>('verifyCmsContact', [contractId, index, version, note]);
+  }
+  acceptCmsService(contractId: string, who: 'operator' | 'client', version: number, input: { note?: string; clientName?: string; ref?: string }) {
+    return this.write<unknown>('acceptCmsService', [contractId, who, version, input]);
+  }
+  cmsCommissioning() {
+    return this.read((s, u) => s.cmsCommissioning(u));
   }
   setMobItem(id: string, itemId: string, status: 'open' | 'done' | 'risk_accepted', note: string, acceptedUntil: string | null) {
     return this.write<unknown>('setMobItem', [id, itemId, status, note, acceptedUntil]);
@@ -1508,8 +2243,71 @@ export class DemoApi implements Api {
   finBoard() {
     return this.read((s, u) => s.finBoard(u));
   }
-  setFinPack(companyId: string, pack: 'audit' | 'tax', itemId: string, status: 'todo' | 'prepared' | 'reviewed' | 'sent') {
-    return this.write<unknown>('setFinPack', [companyId, pack, itemId, status]);
+  setFinPack(companyId: string, pack: FinPackKind, itemId: string, status: 'todo' | 'prepared' | 'reviewed' | 'sent', comment?: string) {
+    return this.write<unknown>('setFinPack', [companyId, pack, itemId, status, comment]);
+  }
+  finDesk() {
+    return this.read((s, u) => s.finance.desk(u));
+  }
+  financeToday() {
+    return this.read((s, u) => s.financeToday(u));
+  }
+  finDailyCashMine() {
+    return this.read((s, u) => s.financeControls.dailyCashMine(u));
+  }
+  finCashMine() {
+    return this.read((s, u) => s.financeControls.cashMine(u));
+  }
+  finAdvancesOverdue() {
+    return this.read((s, u) => s.financeControls.advancesForHr(u));
+  }
+  finCreatePayment(companyId: string, input: Record<string, unknown>) {
+    return this.write<unknown>('finCreatePayment', [companyId, input]);
+  }
+  finSettings() {
+    return this.read((s, u) => s.finance.settingsView(u));
+  }
+  finKpi(period?: string) {
+    return this.read((s, u) => s.financeKpi.view(u, period));
+  }
+  finSetSettings(values: Record<string, unknown>, comment: string) {
+    return this.write<unknown>('finSetSettings', [values, comment]);
+  }
+  finRequests() {
+    return this.read((s, u) => s.financeRequests.list(u));
+  }
+  finCreateRequest(companyId: string, input: Record<string, unknown>) {
+    return this.write<unknown>('finCreateRequest', [companyId, input]);
+  }
+  finRequestStep(companyId: string, requestId: string, action: FinRequestAction, input: Record<string, unknown>) {
+    return this.write<unknown>('finRequestStep', [companyId, requestId, action, input]);
+  }
+  finCooDesk() {
+    return this.read((s, u) => s.finance.cooDesk(u));
+  }
+  finCooStep(companyId: string, paymentId: string, action: 'approve' | 'return', input: Record<string, unknown>) {
+    return this.write<unknown>('finCooStep', [companyId, paymentId, action, input]);
+  }
+  finPaymentStep(companyId: string, paymentId: string, action: FinPaymentAction, input: Record<string, unknown>) {
+    return this.write<unknown>('finPaymentStep', [companyId, paymentId, action, input]);
+  }
+  finCloseStep(companyId: string, action: FinCloseAction, input: Record<string, unknown>) {
+    return this.write<unknown>('finCloseStep', [companyId, action, input]);
+  }
+  finDashboard() {
+    return this.read((s, u) => s.financeControls.dashboard(u));
+  }
+  finChecksTodo() {
+    return this.read((s, u) => s.financeControls.checksTodo(u));
+  }
+  finPack(companyId: string, period?: string) {
+    return this.read((s, u) => s.financeControls.pack(u, companyId, period));
+  }
+  finControls(companyId: string, billPeriod?: string) {
+    return this.read((s, u) => s.financeControls.view(u, companyId, billPeriod));
+  }
+  finControlAction(companyId: string, area: FinControlArea, action: string, input: Record<string, unknown>) {
+    return this.write<unknown>('finControlAction', [companyId, area, action, input]);
   }
   staffPayroll() {
     return this.read((s, u) => s.staffPayroll(u));
@@ -1519,6 +2317,24 @@ export class DemoApi implements Api {
   }
   prepareStaffPay(companyId: string, period: string) {
     return this.write<unknown>('prepareStaffPay', [companyId, period]);
+  }
+  myZakat() {
+    return this.read((s, u) => s.myZakat(u));
+  }
+  setMyZakat(input: { body: string | null; percent?: number }) {
+    return this.write<unknown>('setMyZakat', [input]);
+  }
+  statTables(period?: string) {
+    return this.read((s, u) => s.statTables(u, period));
+  }
+  loadStatTable(input: Parameters<Api['loadStatTable']>[0]) {
+    return this.write<Awaited<ReturnType<Api['loadStatTable']>>>('loadStatTable', [input]);
+  }
+  checkStatTable(input: Parameters<Api['checkStatTable']>[0]) {
+    return this.write<unknown>('checkStatTable', [input]);
+  }
+  setEmployerNos(companyId: string, input: Parameters<Api['setEmployerNos']>[1]) {
+    return this.write<unknown>('setEmployerNos', [companyId, input]);
   }
   setStaffPayLine(runId: string, personId: string, patch: Parameters<Api['setStaffPayLine']>[2]) {
     return this.write<unknown>('setStaffPayLine', [runId, personId, patch]);
@@ -1531,6 +2347,18 @@ export class DemoApi implements Api {
   }
   submitStaffClaim(input: Parameters<Api['submitStaffClaim']>[0], proof: ProofInput[]) {
     return this.write<unknown>('submitStaffClaim', [input, proof]);
+  }
+  myReceipts() {
+    return this.read((s, u) => s.myReceipts(u));
+  }
+  addReceipts(proof: ProofInput[]) {
+    return this.write<unknown>('addReceipts', [proof]);
+  }
+  receiptAction(id: string, action: 'confirm' | 'remove', input: Parameters<Api['receiptAction']>[2]) {
+    return this.write<unknown>('receiptAction', [id, action, input]);
+  }
+  headVerifyClaim(claimId: string, ok: boolean, note: string) {
+    return this.write<unknown>('headVerifyClaim', [claimId, ok, note]);
   }
   decideStaffClaim(claimId: string, by: 'cos' | 'hr' | 'coo' | 'finance', ok: boolean, note: string) {
     if (by === 'finance') return this.write<unknown>('financePayClaim', [claimId, note]);
@@ -1557,8 +2385,25 @@ export class DemoApi implements Api {
   setInvoicePortal(accountId: string, portal: string | null) {
     return this.write<unknown>('setInvoicePortal', [accountId, portal]);
   }
+  // The test build has no server, so a link cannot be opened from outside: staff use Preview to see the client page.
+  clientShareLinks(accountId: string) {
+    return this.read(async (s, u) => ({ ...(await s.clientShareLinks(u, accountId)), linksOn: true }));
+  }
+  async createClientShareLink(accountId: string, input: { recipient: string; from: string; to: string; days: number }) {
+    const r = await this.write<{ link: import('@prima/core').ClientShareLink }>('createClientShareLink', [accountId, input]);
+    return { link: r.link, url: null };
+  }
+  revokeClientShareLink(accountId: string, linkId: string, reason: string) {
+    return this.write<unknown>('revokeClientShareLink', [accountId, linkId, reason]);
+  }
+  previewClientShareLink(accountId: string, linkId: string) {
+    return this.read((s, u) => s.clientShareReport(null, accountId, linkId, u));
+  }
   expenseBoard() {
     return this.read((s, u) => s.expenseBoard(u));
+  }
+  prefillOfficeRequest(input: Parameters<Api['prefillOfficeRequest']>[0]) {
+    return this.write<unknown>('prefillOfficeRequest', [input]);
   }
   saveExpense(input: ExpenseInput, proof: ProofInput[]) {
     return this.write<unknown>('saveExpense', [input, proof]);
@@ -1578,6 +2423,18 @@ export class DemoApi implements Api {
   jaBoard() {
     return this.read((s, u) => s.jaBoard(u));
   }
+  companyOffice(companyId: string) {
+    return this.read((s, u) => s.companyOffice(u, companyId));
+  }
+  companyOffices() {
+    return this.read((s, u) => s.companyOffices(u));
+  }
+  setOfficeDesks(companyId: string, desks: OfficeDeskInput[], note: string) {
+    return this.write<unknown>('setOfficeDesks', [companyId, desks, note]);
+  }
+  setCompanyRunBy(companyId: string, runByCompanyId: string | null, reason: string) {
+    return this.write<unknown>('setCompanyRunBy', [companyId, runByCompanyId, reason]);
+  }
   clientBoard() {
     return this.read((s, u) => s.clientBoard(u));
   }
@@ -1593,8 +2450,14 @@ export class DemoApi implements Api {
   clientReport(accountId: string, period: string, proof: ProofInput[]) {
     return this.write<unknown>('clientReport', [accountId, period, proof]);
   }
-  clientRating(accountId: string, score: number, comment: string) {
-    return this.write<unknown>('clientRating', [accountId, score, comment]);
+  clientRating(accountId: string, score: number, comment: string, input: { from: string; via: 'meeting' | 'visit' | 'call' | 'email' | 'form'; proof?: ProofInput[] }) {
+    return this.write<unknown>('clientRating', [accountId, score, comment, input]);
+  }
+  clientComplaint(accountId: string, input: { from: string; via: 'meeting' | 'visit' | 'call' | 'email' | 'form'; what: string; siteId?: string | null; proof?: ProofInput[] }) {
+    return this.write<unknown>('clientComplaint', [accountId, input]);
+  }
+  resolveClientComplaint(accountId: string, complaintId: string, resolution: string, proof: ProofInput[] = []) {
+    return this.write<unknown>('resolveClientComplaint', [accountId, complaintId, resolution, proof]);
   }
   clientBilling(accountId: string, input: { invoicedTo: string | null; overdueAmount: number; overdueDays: number }) {
     return this.write<unknown>('clientBilling', [accountId, input]);
@@ -1671,6 +2534,15 @@ export class DemoApi implements Api {
   reviewFwmTask(id: string, accept: boolean, note: string) {
     return this.write<unknown>('reviewFwmTask', [id, accept, note]);
   }
+  fwmWelfare() {
+    return this.read((s, u) => s.fwmWelfare(u));
+  }
+  recordFwCheck(personId: string, input: Parameters<Api['recordFwCheck']>[1], proof: ProofInput[]) {
+    return this.write<unknown>('recordFwCheck', [personId, input, proof]);
+  }
+  closeFwCheck(id: string, input: Parameters<Api['closeFwCheck']>[1], proof: ProofInput[]) {
+    return this.write<unknown>('closeFwCheck', [id, input, proof]);
+  }
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.write<unknown>('advanceSocsoClaim', [id, to, input]);
   }
@@ -1701,9 +2573,38 @@ export class DemoApi implements Api {
   home(companyId?: string) {
     return this.read((s, u) => s.home(u, companyId));
   }
+  growth() {
+    return this.read((s, u) => s.growth(u));
+  }
+  approvalLimits() {
+    return this.read((s, u) => s.approvalLimits(u));
+  }
+  setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }) {
+    return this.write('setApprovalLimits', [body]);
+  }
+  growthMargin() {
+    return this.read((s, u) => s.growthMargin(u));
+  }
   regionalOps(region?: string) {
     return this.read((s, u) => s.regionalOps(u, region));
   }
+  govOpsMonitor(month?: string) {
+    return this.read((s, u) => s.govOpsMonitor(u, month));
+  }
+  privateOpsMonitor(month?: string) {
+    return this.read((s, u) => s.privateOpsMonitor(u, month));
+  }
+  managementFees() {
+    return this.read((s, u) => s.managementFees(u));
+  }
+  managementFeeBills(month?: string) {
+    return this.read((s, u) => s.managementFeeBills(u, month));
+  }
+  setManagementFee(companyId: string, input: Parameters<Api['setManagementFee']>[1]) {
+    return this.write<unknown>('setManagementFee', [companyId, input]);
+  }
+
+
   insurance() {
     return this.read((s, u) => s.insurance(u));
   }
@@ -1782,6 +2683,53 @@ export class DemoApi implements Api {
   reviewArmsRequest(id: string, decision: 'pass' | 'return', note: string) {
     return this.write<unknown>('reviewArmsRequest', [id, decision, note]);
   }
+  specialOpsLegalFlags() {
+    return this.read((s, u) => s.specialOpsLegalFlags(u));
+  }
+  raiseArmsRequest(input: RaiseArmsRequestInput) {
+    return this.write<unknown>('raiseArmsRequest', [input]);
+  }
+  armsRequestStep(id: string, action: ArmsRequestAction, reason: string, extra: ArmsRequestStepExtra = {}) {
+    return this.write<unknown>('armsRequestStep', [id, action, reason, extra]);
+  }
+  armsTrading() {
+    return this.read((s, u) => s.armsTrading(u));
+  }
+  setArmsTrading(on: boolean, reason: string) {
+    return this.write<unknown>('setArmsTrading', [on, reason]);
+  }
+  transportBoard() {
+    return this.read((s, u) => s.transportBoard(u));
+  }
+  amRentCheck() {
+    return this.read((s, u) => s.amRentCheck(u));
+  }
+  amBuyRequest(input: AmBuyInput) {
+    return this.write<unknown>('amBuyRequest', [input]);
+  }
+  amBuyDecide(id: string, approve: boolean, reason: string, seenEstCost?: number) {
+    return this.write<unknown>('amBuyDecide', [id, approve, reason, seenEstCost]);
+  }
+  amBuyReceived(id: string, input: { tag: string; cost: number; boughtOn: string }) {
+    return this.write<unknown>('amBuyReceived', [id, input]);
+  }
+  amBuyReprice(id: string, estCost: number, reason: string) {
+    return this.write<unknown>('amBuyReprice', [id, estCost, reason]);
+  }
+  // The demo never sends a WhatsApp message: the connector always shows as not connected.
+  amWhatsApp() {
+    return this.read(async (s, u) => ({ ...(await s.amWhatsAppBoard(u)), connector: { configured: false, switchedOn: false, sending: false, missing: [] as string[] } }));
+  }
+  amWhatsAppConsent(unitId: string, on: boolean, how: string) {
+    return this.write<unknown>('amWhatsAppConsent', [unitId, on, how]);
+  }
+  amWhatsAppSettle(unitId: string, reminderId: string, outcome: 'went' | 'resend' | 'drop', reason: string) {
+    return this.write<unknown>('amWhatsAppSettle', [unitId, reminderId, outcome, reason]);
+  }
+  async amWhatsAppRun() {
+    const r = await this.write<{ queued: number; cancelled: number }>('amQueueRentReminders', []);
+    return { ...r, sent: 0, failed: 0, sending: false };
+  }
   armsControl() {
     return this.read((s, u) => s.armsControl(u));
   }
@@ -1822,6 +2770,9 @@ export class DemoApi implements Api {
 
   createQuotation(companyId: string, input: Parameters<Api['createQuotation']>[1]) {
     return this.write<Awaited<ReturnType<Api['createQuotation']>>>('createQuotation', [companyId, input]);
+  }
+  correctQuotation(id: string, input: Parameters<Api['correctQuotation']>[1]) {
+    return this.write<Awaited<ReturnType<Api['correctQuotation']>>>('correctQuotation', [id, input]);
   }
   quotationAction(id: string, action: Parameters<Api['quotationAction']>[1], note = '') {
     return this.write<Awaited<ReturnType<Api['quotationAction']>>>('quotationAction', [id, action, note]);

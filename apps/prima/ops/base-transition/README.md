@@ -4,7 +4,7 @@ This package adds an operator CLI around the independently reviewed runner. It d
 
 ## Exact scope and pins
 
-Only base `678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b` → `4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe` is admitted. Runner SHA256 is `66640286f3da6aadcc4201e23246c97e74a41acf63d9483d8cc8736bb26349fa`. `artifact-manifest.json` additionally pins this CLI, both SQL files, the readiness manifest, and the complete validator source/compiled closure. No arbitrary SQL file, path, target or revision is accepted.
+Only base `678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b` → `d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283` is admitted. Runner SHA256 is `e470e38f3c308a08e49aa9caa229eaa4563dcdf92ad188322081069fabba938d`. `artifact-manifest.json` additionally pins this CLI, both SQL files, the readiness manifest, and the complete validator source/compiled closure. No arbitrary SQL file, path, target or revision is accepted.
 
 The existing runtime image supplies its lockfile-installed `pg` dependency; plan mode does not load it or establish a connection. The operator entry is `/app/ops/base-transition/cli.cjs` in the packaged image. The API CMD is unchanged.
 

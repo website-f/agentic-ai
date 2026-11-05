@@ -5,6 +5,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/cms/package.json apps/cms/
 RUN npm ci -w @prima/core -w @prima/api
 COPY packages/core packages/core
 COPY apps/api apps/api
@@ -17,6 +18,7 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/cms/package.json apps/cms/
 RUN npm ci --omit=dev -w @prima/core -w @prima/api && npm cache clean --force
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/apps/api/dist apps/api/dist

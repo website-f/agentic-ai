@@ -19,11 +19,14 @@ export const LEAVE_KINDS: LeaveKind[] = [
   "EMERGENCY",
   "UNPAID",
   "ABSENCE_REASON",
+  "MATERNITY",
+  "PATERNITY",
 ];
 
 /**
  * Leave and absence requests waiting for a decision (Fauzan, 25 Oct 2026). Guards and officers: the OM or higher
- * decides; other staff: the HR administrator or higher. Unanswered requests move up a level every 12 hours.
+ * decides; other staff: the HR administrator or higher, then the Vice Chairman consents (Fauzan, 1 Nov 2026).
+ * Unanswered requests move up a level every 12 hours.
  */
 export function LeavePanel({
   companyId,
@@ -68,10 +71,23 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
   const [open, setOpen] = useState(false);
   const act = useAction();
   const q = r.request;
+  const consent = !!r.hrApproval;
+  const authorise = !!r.managerStage;
+  const needsComment = r.staffLeave;
   const decide = (approve: boolean) =>
     act.run(
       () => api.decideLeave(q.id, approve, note),
-      approve ? "Approved." : "Rejected.",
+      approve
+        ? authorise
+          ? "Authorised. HR now decides."
+          : consent
+          ? "Consented. The leave is approved."
+          : r.staffLeave
+            ? "Approved. It now waits for the Vice Chairman's consent."
+            : "Approved."
+        : consent
+          ? "Consent refused. The leave is rejected."
+          : "Rejected.",
     );
   return (
     <div
@@ -98,6 +114,18 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
               ? ` · ${q.proofIds.length} document(s)`
               : " · no document"}
           </div>
+          {r.managerAuthorised && (
+            <div className="muted small">
+              Authorised by the Company Manager ({r.managerAuthorised.by}) on{" "}
+              {dateTimeLabel(r.managerAuthorised.at)}: {r.managerAuthorised.note}
+            </div>
+          )}
+          {r.hrApproval && (
+            <div className="muted small">
+              Approved by HR ({r.hrApproval.by}) on{" "}
+              {dateTimeLabel(r.hrApproval.at)}: {r.hrApproval.note}
+            </div>
+          )}
         </div>
         {r.waitingWith && (
           <Chip
@@ -126,7 +154,11 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
           <input
             className="input"
             aria-label="Decision note"
-            placeholder="Note (required to reject)"
+            placeholder={
+              needsComment
+                ? "Comment (needed to approve or reject; a short one is fine to approve)"
+                : "Note (required to reject)"
+            }
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -134,17 +166,17 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
           <div className="row">
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy}
+              disabled={act.busy || (needsComment && !note.trim())}
               onClick={() => decide(true)}
             >
-              Approve
+              {authorise ? "Authorise" : consent ? "Consent" : "Approve"}
             </button>
             <button
               className="btn btn-sm"
               disabled={act.busy}
               onClick={() => decide(false)}
             >
-              Reject
+              {authorise ? "Refuse" : consent ? "Refuse consent" : "Reject"}
             </button>
           </div>
         </>
@@ -159,21 +191,26 @@ export function LeaveForm({
   staffNo,
   face,
   onDone,
+  prefill,
 }: {
   personId?: string;
   staffNo?: string;
   face?: () => { score: number; live: boolean } | null;
   onDone: () => void;
+  /** A refused request to correct and send again as a new request (the refused one stays on record). */
+  prefill?: { kind: LeaveKind; from: string; to: string; reason: string; illness?: string; clinic?: string; mcNo?: string; correctsId?: string; reusedDocs?: number } | null;
 }) {
   const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
-  const [kind, setKind] = useState<LeaveKind>("ANNUAL");
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
-  const [reason, setReason] = useState("");
+  const [kind, setKind] = useState<LeaveKind>(prefill?.kind ?? "ANNUAL");
+  const [from, setFrom] = useState(prefill?.from ?? today);
+  const [to, setTo] = useState(prefill?.to ?? today);
+  const [reason, setReason] = useState(prefill?.reason ?? "");
   const [proof, setProof] = useState<ProofInput[]>([]);
-  const [illness, setIllness] = useState("");
-  const [clinic, setClinic] = useState("");
-  const [mcNo, setMcNo] = useState("");
+  const [illness, setIllness] = useState(prefill?.illness ?? "");
+  const [clinic, setClinic] = useState(prefill?.clinic ?? "");
+  const [mcNo, setMcNo] = useState(prefill?.mcNo ?? "");
+  // A correction of your own refused request reuses its MC documents (the server checks it is yours and refused).
+  const reused = prefill?.correctsId && (kind === "SICK" || kind === "HOSPITAL") ? (prefill.reusedDocs ?? 0) : 0;
   const act = useAction();
   const needsMc = kind === "SICK" || kind === "HOSPITAL";
   return (
@@ -265,8 +302,13 @@ export function LeaveForm({
         items={proof}
         onChange={setProof}
         documentsOnly
-        required={needsMc}
+        required={needsMc && !reused}
       />
+      {reused > 0 && (
+        <span className="muted small">
+          {reused} document{reused === 1 ? "" : "s"} from the refused request {reused === 1 ? "is" : "are"} kept with this one. Add another only if HR asked for it.
+        </span>
+      )}
       {needsMc && (
         <span className="muted small">
           Attach the medical certificate. Inform the company within 48 hours.
@@ -281,7 +323,7 @@ export function LeaveForm({
             act.busy ||
             reason.trim().length < 3 ||
             (needsMc &&
-              (!proof.length ||
+              ((!proof.length && !reused) ||
                 illness.trim().length < 3 ||
                 clinic.trim().length < 3 ||
                 mcNo.trim().length < 3)) ||
@@ -302,8 +344,9 @@ export function LeaveForm({
                   clinic: needsMc ? clinic : null,
                   mcNo: needsMc ? mcNo : null,
                   proof,
+                  correctsId: prefill?.correctsId ?? null,
                 }),
-              "Request sent. The OM or HR decides; it moves up if nobody does within 12 hours.",
+              "Request sent. The OM decides for guards and officers; for staff, HR decides and the Vice Chairman consents. It moves up if nobody decides within 12 hours.",
             );
             if (r) onDone();
           }}

@@ -5,7 +5,7 @@ import { HrItIntake } from './views/HrItIntake';
 import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Company, User } from '@prima/core';
-import { RULES, hasOwnStaffRecord, isActHead, isGroupLeader, jaOwns, seesArmsDetail } from '@prima/core';
+import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, jaOwns, seesArmsDetail } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
@@ -40,20 +40,25 @@ import { MemosView } from './views/Memos';
 import { PdpaView } from './views/Pdpa';
 import { FleetView } from './views/Fleet';
 import { ClientsView } from './views/Clients';
+import { OfficeView } from './views/Office';
 import { RequestsView } from './views/Requests';
 import { JaView } from './views/Ja';
 import { AssetsView } from './views/Assets';
 import { StaffPayView } from './views/StaffPay';
+import { CooPaymentsView } from './views/CooPayments';
+import { PaymentRequestsView } from './views/PaymentRequests';
 import { FinanceView } from './views/Finance';
 import { ContractsView } from './views/Contracts';
 import { BranchesView } from './views/Branches';
 import { ItView } from './views/It';
+import { RenewalsView } from './views/Renewals';
 import { CorporateView } from './views/Corporate';
 import { CreditView } from './views/Credit';
 import { PurchasingView } from './views/Purchasing';
 import { GovernanceView } from './views/Governance';
 import { GrcView } from './views/Grc';
 import { ActView } from './views/Act';
+import { HandoversView } from './views/Handovers';
 import { ContinuityView } from './views/Continuity';
 import { WebsitesView } from './views/Websites';
 import { ConnectionsView } from './views/Connections';
@@ -96,7 +101,9 @@ export type ViewName =
   | 'pdpa'
   | 'fleet'
   | 'clients'
+  | 'office'
   | 'requests'
+  | 'payreq'
   | 'ja'
   | 'assets'
   | 'staffpay'
@@ -109,11 +116,13 @@ export type ViewName =
   | 'hr-it-intake'
   | 'websites'
   | 'corporate'
+  | 'renewals'
   | 'credit'
   | 'purchasing'
   | 'governance'
   | 'grc'
   | 'act'
+  | 'handovers'
   | 'continuity'
   | 'connections'
   | 'it-extraction';
@@ -133,6 +142,8 @@ interface AppCtx {
   setCompanyId: (id: string) => void;
   go: (r: Route) => void;
   isGroup: boolean;
+  /** Whether this person has the screen in their menu. A link to a screen they do not have is not shown. */
+  canOpen?: (view: ViewName) => boolean;
 }
 
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
@@ -171,6 +182,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'overview', label: 'Group', icon: 'group', roles: ['director', 'pwvsb_officer'] },
   // Company overview: group leadership, the company manager and admin executives only (Fauzan, 26 Oct 2026).
   { view: 'company', label: 'Company today', icon: 'company', roles: ['director', 'company_manager', 'admin_exec'] },
+  // Each company's own office: the Company Manager or GM shares the work out to 2 to 8 executives by desk; group leaders monitor (Fauzan, 2 Nov 2026).
+  { view: 'office', label: 'Company office', icon: 'company', roles: ['director', 'company_manager', 'admin_exec'] },
   { view: 'sites', label: 'Sites', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'roster', label: 'Roster', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'people', label: 'Guards', icon: 'people', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
@@ -237,6 +250,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   },
   // Operation claims (OM to COO) and office needs (company manager to Chief of Staff to COO) (Fauzan, 26 Oct 2026).
   { view: 'requests', label: 'Requests', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
+  // Payment requests (Fauzan, 1 Nov 2026): company head creates, department head, Finance check, COO or FD, Finance pays.
+  { view: 'payreq', label: 'Payment requests', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'fleet', label: 'Vehicles', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // JA Group app (Fauzan, 26 Oct 2026): guard and officer payroll, foreign workers and incidents, read-only from its feed.
   {
@@ -248,7 +263,7 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   },
   // Asset Management (Fauzan, 26 Oct 2026): its team, group leadership and the finance staff who oversee it; no group company.
   { view: 'assets', label: 'Asset Management', icon: 'company', roles: ['director', 'pwvsb_officer'], depts: ['asset', 'finance'] },
-  // Staff payroll (Fauzan, 27 Oct 2026): HR prepares, the Chief of Staff approves, the Vice Chairman consents, Finance pays;
+  // Staff payroll (Fauzan, 27 Oct 2026; 1 Nov 2026): HR prepares, the Chief of Staff approves, the COO approves, Finance pays;
   // every staff member sees their own payslips. Guards and officers are paid from the JA Group app.
   // Finance over SQL Account (Fauzan, 27 Oct 2026): the Finance Director and the CEO see every company, each team its own.
   // Contracts and site mobilisation (V6 amendment): the company runs them, Operations helps, group leadership watches.
@@ -263,15 +278,20 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'grc', label: 'Speak up and assurance', icon: 'audit', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // ACT, Audit, Compliance and Transformation (Fauzan, 27 Oct 2026): ACT's workspace; owners see the findings they must fix.
   { view: 'act', label: 'ACT', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
+  // Hand-overs between departments (Fauzan, 2 Nov 2026: key once, every department gets what it needs).
+  { view: 'handovers', label: 'Hand-overs', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Governance (V7, V8, V12): the mandates PWVSB acts under; legal and the Chief of Staff register, the company board confirms.
   { view: 'governance', label: 'Mandates', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // Company secretary (V9): the company records its filings and board; PWVSB (Chief of Staff, Deputy) approves corporate changes.
   { view: 'corporate', label: 'Company secretary', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Renewals (Central Admin 5C, Fauzan 2 Nov 2026): each company renews its own; Central Admin monitors; ACT audits.
+  { view: 'renewals', label: 'Renewals', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Purchasing and store (V5): the company buys and runs its uniform store; approvals by delegation limits; Finance matches and posts.
   { view: 'purchasing', label: 'Procurement', icon: 'cart', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Continuity: IT keeps three copies of every system in Malaysia and tests restores; group leadership watches.
   { view: 'it-extraction', label: 'AI data preview', icon: 'device', roles: ['director', 'pwvsb_officer'] },
-  { view: 'connections', label: 'Connections', icon: 'device', roles: ['director', 'pwvsb_officer'] },
+  // Microsoft 365 Connections (2 Nov 2026): every office staff member checks their own Outlook, Teams and SharePoint access.
+  { view: 'connections', label: 'Connections', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'continuity', label: 'Continuity', icon: 'device', roles: ['director', 'pwvsb_officer'] },
   { view: 'it', label: 'IT', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // This route exposes only server-scoped coordination/own details, not the IT board or identity grants.
@@ -322,6 +342,7 @@ const VIEW_TOKENS: ViewName[] = [
   'home',
   'overview',
   'company',
+  'office',
   'sites',
   'roster',
   'people',
@@ -365,11 +386,13 @@ const VIEW_TOKENS: ViewName[] = [
   'hr-it-intake',
   'websites',
   'corporate',
+  'renewals',
   'credit',
   'purchasing',
   'governance',
   'grc',
   'act',
+  'handovers',
   'continuity',
   'connections',
   'it-extraction',
@@ -617,7 +640,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     finance: ['finance', 'staffpay', 'assets', 'credit', 'purchasing', 'websites', 'reports', 'meetings', 'clock'],
     it: ['it', 'websites', 'connections', 'continuity', 'reports', 'meetings', 'clock'],
     legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock'],
-    audit: ['act', 'grc', 'audit', 'websites', 'reports', 'meetings', 'clock'],
+    audit: ['act', 'grc', 'audit', 'websites', 'renewals', 'reports', 'meetings', 'clock'],
     // Procurement and Inventory: 1 executive and 2 storekeepers under the OGM (Fauzan, 27 Oct 2026).
     procurement: ['purchasing', 'reports', 'meetings', 'clock'],
   };
@@ -633,13 +656,19 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'fleet' ||
         n.view === 'it' ||
         n.view === 'it-metrics' ||
+        n.view === 'connections' ||
         n.view === 'hr-it-intake' ||
         n.view === 'it-procurement' ||
         n.view === 'grc' ||
         n.view === 'act' ||
+        n.view === 'handovers' ||
         // The IT Manager sees the IT team's clock, view only (Fauzan, 28 Oct 2026).
         (n.view === 'staffclock' && dept === 'it' && me.user.itRole === 'manager') ||
         n.view === 'work' ||
+        // The company secretary monitors SSM filings, view only (Central Admin 5A, Fauzan 1 Nov 2026).
+        (n.view === 'corporate' && !!me.user.corpSecretary) ||
+        // Payment requests: the department heads and Finance checkers who act on them (UAT, 2 Nov 2026).
+        (n.view === 'payreq' && finRequestInMenu(me.user)) ||
         (n.view === 'branchwork' && (dept === 'audit' || dept === 'cms' || ['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? ''))) ||
         (LINE[dept!] ?? ['clock']).includes(n.view)) &&
       // Far branches: the branch manager, the company manager, OM and above, ACT and CMS; not other admin executives.
@@ -647,7 +676,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'it-metrics' || !me.user.integration) &&
       (n.view !== 'hr-it-intake' || !me.user.integration) &&
       (n.view !== 'it-extraction' || (!me.user.integration && me.user.id === 'u-fauzan' && me.user.opsTier === 'ceo')) &&
-      (n.view !== 'connections' || (!me.user.integration && (leader || isActHead(me.user) || dept === 'it'))) &&
+      // Every office staff member checks their own Microsoft 365 connections; the server checks role and identity again.
+      (n.view !== 'connections' || !me.user.integration) &&
       (n.view !== 'branchwork' || role !== 'admin_exec' || !!me.user.branchId) &&
       // Claims: staff with their own record (not guards or officers), HR and the Chief of Staff (Fauzan, 26 Oct 2026).
       (n.view !== 'claims' || (!!me.user.personId && me.user.opsTier !== 'patrol') || dept === 'hr' || dept === 'chief_of_staff') &&
@@ -659,7 +689,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         role === 'company_manager' ||
         (!!me.user.personId && role !== 'supervisor' && me.user.opsTier !== 'patrol')) &&
       // Company secretary: group leadership (the Chief of Staff and Deputy approve changes), the company manager and admin executives.
-      (n.view !== 'corporate' || role !== 'pwvsb_officer' || leader || dept === 'legal') &&
+      (n.view !== 'corporate' || role !== 'pwvsb_officer' || leader || dept === 'legal' || !!me.user.corpSecretary) &&
+      (n.view !== 'renewals' || role !== 'pwvsb_officer' || leader || dept === 'audit') &&
       (n.view !== 'credit' || role !== 'pwvsb_officer' || leader || !!me.user.creditOfficer || dept === 'legal') &&
       (n.view !== 'contracts' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
       // Finance: the Finance Director, the CEO, the Chairman and Vice Chairman, and Finance team members only.
@@ -667,10 +698,14 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         ['finance_director', 'chairman', 'vice_chairman'].includes(me.user.leadership ?? '') ||
         isActHead(me.user) ||
         me.user.opsTier === 'ceo' ||
+        // The COO sees only his payment approvals there (Fauzan, 1 Nov 2026: approval by subject matter).
+        me.user.opsTier === 'coo' ||
         (dept === 'finance' && me.user.financeTeam != null)) &&
       // Hostel bills in operations: the Operations Director and OGM approve; other operations staff do not see them.
       // Vehicles: not for guards and officers (they do not request vehicles here).
       (n.view !== 'fleet' || me.user.opsTier !== 'patrol') &&
+      // A far-branch manager runs the branch, not the company office.
+      (n.view !== 'office' || !me.user.branchId) &&
       (n.view !== 'requests' || dept !== 'operations' || leader || me.user.opsTier === 'om') &&
       (n.view !== 'clients' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director', 'patrol'].includes(me.user.opsTier ?? '')) &&
       // Procurement sits under the OGM, so operations sees it only as OGM or Operations Director.
@@ -739,7 +774,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     window.scrollTo(0, 0);
   }, []);
 
-  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup }), [me, companyId, company, go, isGroup]);
+  const navKey = nav.map((n) => n.view).join(',');
+  const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
+  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen }), [me, companyId, company, go, isGroup, canOpen]);
 
   const view = (() => {
     switch (route.view) {
@@ -801,8 +838,12 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <FleetView />;
       case 'clients':
         return <ClientsView />;
+      case 'office':
+        return <OfficeView />;
       case 'requests':
         return <RequestsView />;
+      case 'payreq':
+        return <PaymentRequestsView />;
       case 'ja':
         return <JaView />;
       case 'assets':
@@ -810,7 +851,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       case 'staffpay':
         return <StaffPayView />;
       case 'finance':
-        return <FinanceView />;
+        return me?.user.opsTier === 'coo' && me.user.role === 'pwvsb_officer' ? <CooPaymentsView /> : <FinanceView />;
       case 'contracts':
         return <ContractsView />;
       case 'branches':
@@ -827,6 +868,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <WebsitesView />;
       case 'corporate':
         return <CorporateView />;
+      case 'renewals':
+        return <RenewalsView />;
       case 'credit':
         return <CreditView />;
       case 'purchasing':
@@ -837,6 +880,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <GrcView />;
       case 'act':
         return <ActView />;
+      case 'handovers':
+        return <HandoversView />;
       case 'continuity':
         return <ContinuityView />;
       case 'it-extraction':
@@ -886,11 +931,13 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     'it',
     'websites',
     'corporate',
+    'renewals',
     'credit',
     'purchasing',
     'governance',
     'grc',
     'act',
+    'handovers',
     'continuity',
     'connections',
   'it-extraction',

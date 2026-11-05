@@ -362,6 +362,23 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
     if (r) onClose();
   };
   const ownQuote = q.preparedById === me.user.id;
+  // A draft or returned quotation's numbers can be corrected with a reason; every change is audited (review, 2 Nov 2026).
+  const [fix, setFix] = useState<null | { guards: string; hoursPerDay: 8 | 12; ratePerGuard: string; validUntil: string; reason: string }>(null);
+  const saveFix = async () => {
+    if (!fix) return;
+    const r = await act.run(
+      () =>
+        api.correctQuotation(q.id, {
+          guards: Number(fix.guards),
+          hoursPerDay: fix.hoursPerDay,
+          ratePerGuard: Number(fix.ratePerGuard),
+          validUntil: fix.validUntil,
+          reason: fix.reason,
+        }),
+      (x) => `${x.ref} corrected.`,
+    );
+    if (r) onClose();
+  };
   return (
     <Drawer title={`${q.ref} · ${q.client}`} sub={<Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>} onClose={onClose}>
       <div className="grid-2">
@@ -416,6 +433,51 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
             Note {q.status === 'awaiting_approval' && can.approve ? '(needed to return it)' : '(optional)'}
           </label>
           <textarea id="q-note" className="textarea" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+      )}
+      {can.prepare && (q.status === 'draft' || q.status === 'returned') && !fix && (
+        <button
+          className="btn btn-sm"
+          onClick={() => setFix({ guards: String(q.guards), hoursPerDay: q.hoursPerDay, ratePerGuard: String(q.ratePerGuard), validUntil: q.validUntil, reason: '' })}
+        >
+          Correct guards, rate or date
+        </button>
+      )}
+      {fix && (
+        <div className="form">
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <label>
+              Guards
+              <input type="number" min={1} max={1000} value={fix.guards} onChange={(e) => setFix({ ...fix, guards: e.target.value })} />
+            </label>
+            <label>
+              Hours a day
+              <select value={fix.hoursPerDay} onChange={(e) => setFix({ ...fix, hoursPerDay: Number(e.target.value) === 8 ? 8 : 12 })}>
+                <option value={8}>8</option>
+                <option value={12}>12</option>
+              </select>
+            </label>
+            <label>
+              Rate per guard (RM a month)
+              <input type="number" min={1} step="0.01" value={fix.ratePerGuard} onChange={(e) => setFix({ ...fix, ratePerGuard: e.target.value })} />
+            </label>
+            <label>
+              Valid until
+              <input type="date" value={fix.validUntil} onChange={(e) => setFix({ ...fix, validUntil: e.target.value })} />
+            </label>
+          </div>
+          <label>
+            Reason for the correction (needed)
+            <input value={fix.reason} maxLength={500} onChange={(e) => setFix({ ...fix, reason: e.target.value })} />
+          </label>
+          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+            <button className="btn btn-sm btn-primary" disabled={act.busy || !fix.reason.trim()} onClick={saveFix}>
+              Save correction
+            </button>
+            <button className="btn btn-sm" onClick={() => setFix(null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <ErrorNotice error={act.error} />

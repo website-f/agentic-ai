@@ -81,15 +81,16 @@ function components(snapshot,boundSession){
     if(name==='../connections/sharepoint/request')return {SharePointRequest:()=>React.createElement('section',null,'Setup request')};
     if(name==='../connections/registry')return {createRegistry,serviceIds};
     if(name==='../connections/session')return {ConnectionCardSession:boundSession?class{constructor(){return boundSession;}}:snapshot?class{getSnapshot=()=>snapshot;subscribe=()=>()=>{};}:ConnectionCardSession};
-    if(name==='../connections/sharepoint/adapter')return {sharePointAdapter:()=>fixture().adapter};throw Error(`Unexpected import ${name}`);
+    if(name==='../connections/sharepoint/adapter')return {sharePointAdapter:()=>fixture().adapter};
+    if(name==='../connections/m365/client')return {m365Client:()=>({})};if(name==='../connections/m365/panel')return {M365ConnectionsPanel:()=>React.createElement('section',{'aria-labelledby':'m365-title'},React.createElement('h2',{id:'m365-title'},'Your Microsoft 365 connections'))};throw Error(`Unexpected import ${name}`);
   };new Function('require','module','exports','React',code)(require,module,module.exports,React);return module.exports;
 }
-test('actual page separates selected Outlook, SharePoint, deferred Power BI and unverified Teams',()=>{
+test('actual page separates selected Outlook, SharePoint, deferred Power BI and the per-person Microsoft 365 connections',()=>{
   const {ConnectionsView}=components();const html=renderToStaticMarkup(React.createElement(ConnectionsView,{userId:'user-a'}));
   for(const label of ['Outlook — selected email on an IT job','SharePoint','Power BI'])assert.ok(html.includes(`>${label}</h2>`));
   assert.match(html,/repeat\(auto-fit, minmax\(min\(100%, 320px\), 1fr\)\)/);assert.equal((html.match(/aria-labelledby="connection-/g)||[]).length,2);
   assert.equal((html.match(/This provider module has not been installed/g)||[]).length,1);
-  assert.match(html,/Outlook selected-email connection/);assert.match(html,/Required for the pilot — connection not verified/);assert.match(html,/Deferred to the last phase/);assert.match(html,/Never paste passwords/);assert.doesNotMatch(html,/<input|type="password"|>Connect<|Verified for you/);
+  assert.match(html,/Outlook selected-email connection/);assert.match(html,/>Your Microsoft 365 connections<\/h2>/);assert.doesNotMatch(html,/Required for the pilot — connection not verified/);assert.match(html,/Deferred to the last phase/);assert.match(html,/Never paste passwords/);assert.doesNotMatch(html,/<input|type="password"|>Connect<|Verified for you/);
 });
 test('actual card reports unavailable rather than NotConfigured after a failed setup request',async()=>{
   const f=fixture({getConfiguration:async()=>{throw Error('raw-secret');}});await f.session.start();const {ConnectionCard}=components(f.session.getSnapshot());const html=renderToStaticMarkup(React.createElement(ConnectionCard,{serviceId:'sharepoint',userId:'user-a',adapter:f.adapter}));assert.match(html,/Status unavailable/);assert.doesNotMatch(html,/Not configured|raw-secret|Verified for you/);

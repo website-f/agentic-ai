@@ -21,7 +21,16 @@ const MEETING_KIND = {
   operations: 'Operations',
   department: 'Department',
   client: 'Client',
+  toolbox: 'Toolbox talk',
   other: 'Other',
+} as const;
+const REPEAT = {
+  '': 'One time',
+  weekly: 'Every week',
+  fortnightly: 'Every 2 weeks',
+  monthly: 'Every month',
+  quarterly: 'Every quarter',
+  yearly: 'Every year',
 } as const;
 
 /** Calendar file Outlook opens; production syncs with the Outlook calendar through Microsoft 365. */
@@ -125,7 +134,15 @@ export function MeetingsView() {
                     {d.start ? ` · ${hhmm(d.start)}–${hhmm(d.end)}` : ''} · {d.detail}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: 4,
+                    flexShrink: 0,
+                  }}
+                >
                   <Chip tone={KIND[d.kind].tone}>{KIND[d.kind].label}</Chip>
                   <button className="btn btn-sm" aria-label={`Add ${d.title} to Outlook`} onClick={() => download([d], 'prima-date.ics')}>
                     Outlook
@@ -188,6 +205,19 @@ function MeetingDrawer({ r, reader, onClose }: { r: Row; reader: Meetings['reade
         <div className="muted small">Organised by {m.organiser}</div>
         {m.attendees.length > 0 && <div className="small">Attending: {m.attendees.join(', ')}</div>}
       </section>
+      {r.carried.length > 0 && (
+        <section>
+          <h3>Open actions from the last meeting</h3>
+          <ul className="small" style={{ margin: 0, paddingLeft: 20 }}>
+            {r.carried.map((a, i) => (
+              <li key={i}>
+                {a.text} · {a.owner}
+                {a.due ? ` · due ${a.due}` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         <h3>Agenda</h3>
         {r.agendaItems.length === 0 ? (
@@ -212,7 +242,13 @@ function MeetingDrawer({ r, reader, onClose }: { r: Row; reader: Meetings['reade
             {m.summary.actions.map((a, i) => (
               <div key={i} className="list-item">
                 <div>
-                  <div style={{ textDecoration: a.done ? 'line-through' : undefined }}>{a.text}</div>
+                  <div
+                    style={{
+                      textDecoration: a.done ? 'line-through' : undefined,
+                    }}
+                  >
+                    {a.text}
+                  </div>
                   <div className="muted small">
                     {a.owner}
                     {a.due ? ` · by ${dateLabel(a.due)}` : ''}
@@ -307,12 +343,29 @@ function PrepChecklist({ r }: { r: Row }) {
       )}
       <div className="list">
         {r.prep.map((x, i) => (
-          <label key={i} className="list-item" style={{ gap: 8, justifyContent: 'flex-start', alignItems: 'flex-start' }}>
+          <label
+            key={i}
+            className="list-item"
+            style={{
+              gap: 8,
+              justifyContent: 'flex-start',
+              alignItems: 'flex-start',
+            }}
+          >
             <input
               type="checkbox"
               checked={x.done}
               disabled={!r.canRun || act.busy}
-              onChange={(e) => act.run(() => api.setMeetingPrep(m.id, { index: i, done: e.target.checked }), e.target.checked ? 'Ticked.' : 'Unticked.')}
+              onChange={(e) =>
+                act.run(
+                  () =>
+                    api.setMeetingPrep(m.id, {
+                      index: i,
+                      done: e.target.checked,
+                    }),
+                  e.target.checked ? 'Ticked.' : 'Unticked.',
+                )
+              }
             />
             <div style={{ minWidth: 0 }}>
               <div>{x.label}</div>
@@ -361,6 +414,8 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
   const [location, setLocation] = useState('');
   const [attendees, setAttendees] = useState('');
   const [agenda, setAgenda] = useState('');
+  const [repeat, setRepeat] = useState<keyof typeof REPEAT>('');
+  const [times, setTimes] = useState('');
   const act = useAction();
   return (
     <Drawer title="New meeting" onClose={onClose}>
@@ -380,7 +435,16 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
         </label>
         <label className="field">
           <span className="label">Kind</span>
-          <select className="select" aria-label="Kind of meeting" value={kind} onChange={(e) => setKind(e.target.value as keyof typeof MEETING_KIND)}>
+          <select
+            className="select"
+            aria-label="Kind of meeting"
+            value={kind}
+            onChange={(e) => {
+              const k = e.target.value as keyof typeof MEETING_KIND;
+              setKind(k);
+              if (k === 'toolbox' && !repeat) setRepeat('fortnightly');
+            }}
+          >
             {Object.entries(MEETING_KIND).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
@@ -403,6 +467,33 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
               <input className="input" type="time" aria-label="End time" value={to} onChange={(e) => setTo(e.target.value)} />
             </label>
           </div>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <label className="field">
+            <span className="label">Repeats</span>
+            <select className="select" aria-label="Repeats" value={repeat} onChange={(e) => setRepeat(e.target.value as keyof typeof REPEAT)}>
+              {Object.entries(REPEAT).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          {repeat && (
+            <label className="field">
+              <span className="label">How many meetings</span>
+              <input
+                className="input"
+                type="number"
+                min={2}
+                max={26}
+                aria-label="How many meetings"
+                placeholder="Default"
+                value={times}
+                onChange={(e) => setTimes(e.target.value)}
+              />
+            </label>
+          )}
         </div>
         <label className="field">
           <span className="label">Where</span>
@@ -450,8 +541,10 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
                       .map((x) => x.trim())
                       .filter(Boolean),
                     agenda,
+                    repeat: repeat || null,
+                    ...(repeat && times ? { times: Number(times) } : {}),
                   }),
-                'Meeting set. Add it to Outlook from the calendar.',
+                repeat ? 'Meetings set. Add them to Outlook from the calendar.' : 'Meeting set. Add it to Outlook from the calendar.',
               );
               if (r) onClose();
             }}

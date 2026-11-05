@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
-import { api, type ClientBoard } from '../api';
+import { api, type ClientBoard, type ClientShareReport } from '../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 
@@ -14,6 +14,13 @@ type Account = ClientBoard['accounts'][number];
 
 const TONE_LABEL: Record<Account['tone'], string> = { crit: 'Needs attention', warn: 'Follow up', unknown: 'Unknown', ok: 'In order' };
 const STAGE_LABEL: Record<Account['stage'], string> = { onboarding: 'Onboarding', active: 'Active', offboarding: 'Offboarding', ended: 'Ended' };
+const VIA: Record<'meeting' | 'visit' | 'call' | 'email' | 'form', string> = {
+  meeting: 'Meeting',
+  visit: 'Visit',
+  call: 'Call',
+  email: 'Email',
+  form: 'Feedback form',
+};
 const MEETING: Record<ClientBoard['opsMeetings'][number]['state'], [Tone, string]> = {
   held: ['ok', 'Held, minutes filed'],
   scheduled: ['warn', 'Scheduled'],
@@ -167,6 +174,10 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
   const [proof, setProof] = useState<ProofInput[]>([]);
   const [score, setScore] = useState(0);
   const [kind, setKind] = useState<'visit' | 'meeting' | 'call'>('visit');
+  const [from, setFrom] = useState('');
+  const [via, setVia] = useState<keyof typeof VIA>('meeting');
+  const ratings = [...a.ratings].sort((x, y) => y.at.localeCompare(x.at));
+  const complaints = [...(a.complaints ?? [])].sort((x, y) => Number(!!x.resolvedAt) - Number(!!y.resolvedAt) || y.at.localeCompare(x.at));
   const prev = new Date(Date.now() + 8 * 3_600_000);
   prev.setUTCDate(0);
   const [period, setPeriod] = useState(prev.toISOString().slice(0, 7));
@@ -238,6 +249,36 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
             : 'none on record'}
         </div>
       </div>
+      <div>
+        <div style={{ fontWeight: 600 }}>Satisfaction and complaints</div>
+        {ratings.length === 0 && <div className="muted">Never rated.</div>}
+        {ratings.slice(0, 3).map((r) => (
+          <div key={r.at}>
+            {r.score} of 5 · {r.from ? `from ${r.from}${r.via ? ` (${VIA[r.via]})` : ''}` : 'who at the client not recorded'} · {r.by}, {dateLabel(r.at.slice(0, 10))}
+            {r.comment ? ` · ${r.comment}` : ''}
+          </div>
+        ))}
+        {complaints.length === 0 && <div className="muted">No complaints on record.</div>}
+        {complaints.slice(0, 5).map((c) => (
+          <div key={c.id} className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Chip tone={c.resolvedAt ? 'ok' : 'warn'}>{c.resolvedAt ? 'Closed' : 'Open'}</Chip>
+            <span>
+              {dateLabel(c.at.slice(0, 10))} · {c.from} ({VIA[c.via]}): {c.what}
+              {c.resolvedAt ? ` · done: ${c.resolution} (${c.resolvedBy}, ${dateLabel(c.resolvedAt.slice(0, 10))})` : ''}
+            </span>
+            {act && !c.resolvedAt && (
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={action.busy || note.trim().length < 3}
+                title="Write what was done in the note"
+                onClick={() => action.run(() => api.resolveClientComplaint(a.id, c.id, note, proof), 'Complaint closed.').then(clear)}
+              >
+                Close (what was done in the note)
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
       {act && (
         <>
           <ProofPicker site={null} refText={a.name.slice(0, 20)} items={proof} onChange={setProof} documentsOnly />
@@ -265,6 +306,30 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
             </button>
           </div>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              className="input"
+              aria-label="Who at the client"
+              placeholder="Who at the client (name, position)"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <select className="select" aria-label="How they said it" value={via} onChange={(e) => setVia(e.target.value as keyof typeof VIA)}>
+              {(Object.keys(VIA) as (keyof typeof VIA)[]).map((k) => (
+                <option key={k} value={k}>
+                  {VIA[k]}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn btn-sm"
+              disabled={action.busy || from.trim().length < 2 || note.trim().length < 3}
+              title="Write the complaint in the note"
+              onClick={() => action.run(() => api.clientComplaint(a.id, { from, via, what: note, proof }), 'Complaint logged.').then(clear)}
+            >
+              Log complaint (in the note)
+            </button>
+          </div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <span>Satisfaction</span>
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} className={`btn btn-sm${score === n ? ' btn-primary' : ''}`} aria-pressed={score === n} onClick={() => setScore(n)}>
@@ -273,8 +338,9 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
             ))}
             <button
               className="btn btn-sm"
-              disabled={action.busy || !score}
-              onClick={() => action.run(() => api.clientRating(a.id, score, note), 'Rating saved.').then(clear)}
+              disabled={action.busy || !score || from.trim().length < 2}
+              title="Fill in who at the client gave it and how"
+              onClick={() => action.run(() => api.clientRating(a.id, score, note, { from, via, proof }), 'Rating saved.').then(clear)}
             >
               Save rating
             </button>
@@ -294,6 +360,7 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
         </>
       )}
       {canBill && <InvoiceForm a={a} />}
+      {canBill && a.stage !== 'ended' && <ShareLinks a={a} />}
       {canBill && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <span>Billing</span>
@@ -391,6 +458,220 @@ function InvoiceForm({ a }: { a: Account }) {
       </div>
       <ErrorNotice error={act.error} />
     </div>
+  );
+}
+
+/**
+ * Client report links (Fauzan, 3 Nov 2026: "Shared report links first"). The company manager makes a read-only link
+ * for one period that expires; the client opens it without a Prima sign-in and sees only its own sites. No staff or
+ * guard names, no case descriptions, no money owed. Any link can be revoked with a reason.
+ */
+function ShareLinks({ a }: { a: Account }) {
+  const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  // Default: last calendar month, so its invoice and report are on the page (only whole months inside the period are).
+  const lastEnd = new Date(Date.now() + 8 * 3_600_000);
+  lastEnd.setUTCDate(0);
+  const prevTo = lastEnd.toISOString().slice(0, 10);
+  const prevFrom = `${prevTo.slice(0, 7)}-01`;
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ recipient: '', from: prevFrom, to: prevTo, days: 7 });
+  const [made, setMade] = useState<{ url: string | null } | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [preview, setPreview] = useState<ClientShareReport | null>(null);
+  const act = useAction();
+  const view = useLoad(() => (open ? api.clientShareLinks(a.id) : Promise.resolve(null)), [a.id, open]);
+  const full = (u: string) => (u.startsWith('/') ? `${window.location.origin}${u}` : u);
+  if (!open)
+    return (
+      <div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
+          Client report links
+        </button>
+      </div>
+    );
+  const d = view.data;
+  return (
+    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontWeight: 600 }}>Client report links</div>
+      <div className="muted">Read-only page for this client: its own sites, patrol scans, supervisor visits, incidents, emergency alerts, complaints and invoices sent. No staff names, no case details, no amounts owed. Invoices show as sent, never as paid. Invoices and monthly reports appear only for months wholly inside the period.</div>
+      {view.error && <ErrorNotice error={{ message: view.error, findings: [] }} />}
+      {!d && !view.error && <Loading what="links" />}
+      {d && !d.linksOn && <div className="muted">Report links are switched off on this server until the link key and public address are set.</div>}
+      {d?.canCreate && d.linksOn && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input className="input" aria-label="Link for" placeholder="Who receives it (name or role)" value={form.recipient} onChange={(e) => setForm({ ...form, recipient: e.target.value })} />
+          <input className="input" type="date" aria-label="Report from" value={form.from} max={today} onChange={(e) => setForm({ ...form, from: e.target.value })} />
+          <input className="input" type="date" aria-label="Report to" value={form.to} max={today} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+          <select className="select" aria-label="Link open for" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}>
+            {[1, 3, 7, 14, 30].map((n) => (
+              <option key={n} value={n}>
+                Open {n} day{n > 1 ? 's' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy || form.recipient.trim().length < 3}
+            onClick={() => act.run(() => api.createClientShareLink(a.id, form), 'Link made.').then((r) => r && setMade({ url: r.url }))}
+          >
+            Make link
+          </button>
+        </div>
+      )}
+      {made && (
+        <div className="card" style={{ padding: 8 }}>
+          {made.url ? (
+            <>
+              <div>Send this link to the client by your usual email. It is shown once here; make a new one if it is lost.</div>
+              <code style={{ wordBreak: 'break-all' }}>{full(made.url)}</code>
+              <div>
+                <button className="btn btn-ghost btn-sm" onClick={() => void navigator.clipboard?.writeText(full(made.url!))}>
+                  Copy link
+                </button>
+              </div>
+            </>
+          ) : (
+            <div>Link made. This test build has no server, so the link cannot be opened from outside: use Preview to see the client page.</div>
+          )}
+        </div>
+      )}
+      {d && d.links.length > 0 && (
+        <div className="table-wrap">
+          <table className="small">
+            <thead>
+              <tr>
+                <th>For</th>
+                <th>Period</th>
+                <th>Open until</th>
+                <th>Opened</th>
+                <th>State</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {[...d.links].reverse().map((l) => (
+                <tr key={l.id}>
+                  <td>{l.recipient}</td>
+                  <td>
+                    {dateLabel(l.from)} to {dateLabel(l.to)}
+                  </td>
+                  <td>{dateLabel(l.expiresOn)}</td>
+                  <td>{l.views ? `${l.views}x, last ${dateTimeLabel(l.lastViewAt!)}` : 'Not yet'}</td>
+                  <td>
+                    {l.revokedAt ? <Chip tone="neutral">Revoked</Chip> : l.live ? <Chip tone="ok">Open</Chip> : <Chip tone="neutral">Expired</Chip>}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => act.run(() => api.previewClientShareLink(a.id, l.id)).then((r) => r && setPreview(r))}>
+                      Preview
+                    </button>
+                    {l.live && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setRevoking(l.id); setReason(''); }}>
+                        Revoke
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {revoking && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <input className="input" aria-label="Why revoke" placeholder="Why (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || reason.trim().length < 5}
+            onClick={() => act.run(() => api.revokeClientShareLink(a.id, revoking, reason), 'Link revoked.').then((r) => r !== undefined && setRevoking(null))}
+          >
+            Revoke link
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setRevoking(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+      {preview && <SharePreview r={preview} onClose={() => setPreview(null)} />}
+    </div>
+  );
+}
+
+/** What the client sees on the link, shown to staff inside Prima. Opening it here is not counted as a client view. */
+function SharePreview({ r, onClose }: { r: ClientShareReport; onClose: () => void }) {
+  return (
+    <Drawer title={`Client page: ${r.clientName}`} sub={`Period ${dateLabel(r.from)} to ${dateLabel(r.to)}. Open until ${dateLabel(r.expiresOn)}. Preview only.`} onClose={onClose}>
+      <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontWeight: 600 }}>Sites</div>
+        <div className="table-wrap">
+          <table className="small">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Patrol checkpoints scanned</th>
+                <th>Supervisor visits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.sites.map((s) => (
+                <tr key={s.name}>
+                  <td>{s.name}</td>
+                  <td>{s.patrolScans}</td>
+                  <td>{s.visits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontWeight: 600 }}>Incidents at the client's sites</div>
+        {r.incidents.length ? (
+          <div className="table-wrap">
+            <table className="small">
+              <thead>
+                <tr>
+                  <th>Ref</th>
+                  <th>Date</th>
+                  <th>Site</th>
+                  <th>Kind</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.incidents.map((c) => (
+                  <tr key={c.ref}>
+                    <td>{c.ref}</td>
+                    <td>{dateLabel(c.on)}</td>
+                    <td>{c.site}</td>
+                    <td>{c.kind}</td>
+                    <td>{c.severity}</td>
+                    <td>{c.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="muted">None in this period.</div>
+        )}
+        <div style={{ fontWeight: 600 }}>Invoices sent</div>
+        {r.invoices.length ? (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {r.invoices.map((x) => (
+              <li key={x.period}>
+                {x.period}: RM {x.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}, {x.sentOn ? `sent ${dateLabel(x.sentOn)}` : 'not yet sent'}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="muted">None recorded for this period.</div>
+        )}
+        <div className="muted">The client page lists invoices sent. It is not a statement of account and does not show payments.</div>
+        <div style={{ fontWeight: 600 }}>Monthly reports</div>
+        <div>{r.reports.length ? r.reports.join(', ') : 'None recorded for this period.'}</div>
+      </div>
+    </Drawer>
   );
 }
 

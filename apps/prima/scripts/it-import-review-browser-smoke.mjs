@@ -20,8 +20,8 @@ const client={capability:async()=>({enabled:mode!=='blocked',permitted:true,resu
 const session=new ImportReviewSession(client,{id:'u-fauzan',opsTier:'ceo'});
 await session.load();session.handoff({extractionId:'synthetic-extraction',kind:'jobs',source:{label:'Synthetic fixture',sha256:'a'.repeat(64),canonicalText:'Synthetic task'},rows:[{row:1,fields:{title:{raw:'Synthetic task',start:0,end:14},doer:{raw:null,start:null,end:null}},errors:[],warnings:[]}],expiresAt:new Date(Date.now()+900000).toISOString(),operationalWrites:0,readyForT9Preview:false,warnings:[]});
 createRoot(document.getElementById('root')).render(<ItImportReview session={session} onBack={()=>{window.__back=true;}}/>);`);
- server = await createServer({ configFile:false, root:dir, esbuild:{jsx:'automatic'}, server:{host:'127.0.0.1',port:0,fs:{allow:[root]}} });
- await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+ server = await createServer({ configFile:false, root:dir, cacheDir: resolve(dir, '.vite-cache'), optimizeDeps: { entries: [resolve(dir, 'main.tsx')], include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] }, esbuild:{jsx:'automatic'}, server:{host:'127.0.0.1',port:0,fs:{allow:[root]}} });
+ await server.listen(); await server.transformRequest('/main.tsx'); await server.waitForRequestsIdle(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
  const installed = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href); const {chromium} = installed.default ?? installed;
  browser = await chromium.launch({headless:true,...(process.env.CHROMIUM_EXECUTABLE?{executablePath:process.env.CHROMIUM_EXECUTABLE}:{}),args:['--no-sandbox']});
  let scenarios=0;

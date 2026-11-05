@@ -1,0 +1,175 @@
+{
+ "at": "2026-11-03T04:11:26.342Z",
+ "base": "http://localhost:3077",
+ "path": "/api/home?companyId=co-sasa",
+ "user": "u-coo (synthetic)",
+ "tally": {
+  "ok": 20,
+  "refused_permission": 0,
+  "refused_input": 0,
+  "server_error": 0,
+  "other": 0
+ },
+ "rows": [
+  {
+   "i": 0,
+   "status": 200,
+   "kind": "ok",
+   "ms": 8494,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 1,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9536,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 2,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9454,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 3,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9273,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 4,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9654,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 5,
+   "status": 200,
+   "kind": "ok",
+   "ms": 8922,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 6,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9158,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 7,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9704,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 8,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9381,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 9,
+   "status": 200,
+   "kind": "ok",
+   "ms": 9493,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 10,
+   "status": 200,
+   "kind": "ok",
+   "ms": 16725,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 11,
+   "status": 200,
+   "kind": "ok",
+   "ms": 16614,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 12,
+   "status": 200,
+   "kind": "ok",
+   "ms": 16756,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 13,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18453,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 14,
+   "status": 200,
+   "kind": "ok",
+   "ms": 17754,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 15,
+   "status": 200,
+   "kind": "ok",
+   "ms": 17103,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 16,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18294,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 17,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18453,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 18,
+   "status": 200,
+   "kind": "ok",
+   "ms": 16784,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 19,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18277,
+   "bytes": 36563,
+   "errorBody": null
+  }
+ ]
+}

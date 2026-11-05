@@ -11,3 +11,13 @@ export function migrationSql(): string {
 export function migrationSha(): string {
   return createHash('sha256').update(migrationSql()).digest('hex');
 }
+
+/** The optional company office module (db/modules/company-office-v1.sql); applied only in an authorized migration. */
+export function companyOfficeModuleSql(): string {
+  return readFileSync(join(__dirname, '../../../../db/modules/company-office-v1.sql'), 'utf8');
+}
+
+/** The optional module for companies run by another company's office (db/modules/company-run-links-v1.sql). */
+export function companyRunLinksModuleSql(): string {
+  return readFileSync(join(__dirname, '../../../../db/modules/company-run-links-v1.sql'), 'utf8');
+}

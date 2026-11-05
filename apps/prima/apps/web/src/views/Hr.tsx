@@ -2,7 +2,15 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { ErrorNotice, Kpi, Loading, useLoad } from '../ui';
 import { LeavePanel } from './Leave';
+import { FlexPanel, HolidaysPanel, HrLeaveSettingsPanel } from './HrLeave';
+import { JoinLeavePanel, VacanciesPanel } from './HrJoinLeave';
+import { StaffMovementPanel } from './HrMovement';
+import { AllowancesPanel } from './HrAllowances';
+import { HrCasesPanel } from './HrCases';
+import { OfficeOshPanel } from './HrOsh';
+import { AppraisalsPanel, HrLegalPanel, OvertimePanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { PayChangesPanel } from './PayChanges';
+import { HrGuide } from './HrGuide';
 
 /** PWVSB central HR monitors every company's workforce papers; each company stays the employer and acts (V7 s.89). */
 export function HrView() {
@@ -110,7 +118,22 @@ export function HrView() {
       </section>
       <p className="muted small">Select a company to see its guards and their papers.</p>
       <PayChangesPanel />
+      <AllowancesPanel />
+      <JoinLeavePanel />
+      <VacanciesPanel />
+      <StaffMovementPanel />
+      <HrCasesPanel />
+      <OfficeOshPanel />
+      <AppraisalsPanel />
+      <TrainingPanel />
+      <PoliciesPanel />
+      <OvertimePanel />
+      <HrLegalPanel />
+      <HrGuide />
       <LeavePanel />
+      <FlexPanel />
+      <HrLeaveSettingsPanel />
+      <HolidaysPanel />
     </div>
   );
 }

@@ -15,7 +15,8 @@ const rm = (n: number | null) =>
 
 /**
  * Basic pay changes (Fauzan, 27 Oct 2026: "need CoS verify"). HR sets the pay on the staff form; it takes effect only
- * when the HR Director, the Chief of Staff or Deputy, verifies it. HR follows its requests here.
+ * when the HR Director, the Chief of Staff or Deputy, verifies it and then the Vice Chairman consents to the amount
+ * (Fauzan, 1 Nov 2026: salary amounts set each year or on review). Every check needs a comment.
  */
 export function PayChangesPanel() {
   const { data, error } = useLoad(() => api.payChanges(), []);
@@ -67,13 +68,18 @@ function PayRow({
   const [open, setOpen] = useState(false);
   const act = useAction();
   const c = r.change;
+  const consent = r.as === "vice_chairman";
   const decide = (verify: boolean) =>
     act.run(
       () => api.decidePayChange(c.id, verify, note),
       verify
         ? c.kind === "BANK"
           ? "Checked. The new account is used once both checks are done."
-          : "Verified. The new pay is on the record."
+          : consent
+            ? c.kind === "ALLOWANCE"
+              ? "Consented. The new allowances are on the record."
+              : "Consented. The new pay is on the record."
+            : "Verified. It now waits for the Vice Chairman's consent."
         : "Rejected.",
     );
   return (
@@ -90,7 +96,9 @@ function PayRow({
             {r.person?.name ?? c.personId} ·{" "}
             {c.kind === "BANK"
               ? `salary account ${c.bankFrom ? `${c.bankFrom.bank} ${c.bankFrom.accountMasked}` : "none"} to ${c.bankTo ? `${c.bankTo.bank} ${c.bankTo.accountMasked}` : "none"}`
-              : `${rm(c.from)} to ${rm(c.to)}`}
+              : c.kind === "ALLOWANCE"
+                ? `monthly allowances ${rm(c.from)} to ${rm(c.to)} a month`
+                : `${rm(c.from)} to ${rm(c.to)}`}
           </div>
           <div className="muted small">
             {r.person
@@ -98,10 +106,19 @@ function PayRow({
               : ""}
             {r.companyName} · from {dateLabel(c.effectiveOn)}
           </div>
+          {c.kind === "ALLOWANCE" && (
+            <div className="small">
+              Now: {(c.allowancesFrom ?? []).map((a) => `${a.label} ${rm(a.amount)}`).join(", ") || "none"}. New:{" "}
+              {(c.allowancesTo ?? []).map((a) => `${a.label} ${rm(a.amount)}`).join(", ") || "none"}.
+            </div>
+          )}
           <div className="small">{c.reason}</div>
           <div className="muted small">
             Asked {dateTimeLabel(c.requestedAt)} by {c.requestedBy}
-            {c.hrDirectorCheck ? ` · HR Director: ${c.hrDirectorCheck.by}` : ""}
+            {c.hrDirectorCheck
+              ? ` · HR Director: ${c.hrDirectorCheck.by}${c.hrDirectorCheck.note ? ` (${c.hrDirectorCheck.note})` : ""}`
+              : ""}
+            {c.vcConsent ? ` · Vice Chairman: ${c.vcConsent.by}` : ""}
             {c.financeCheck ? ` · Finance: ${c.financeCheck.by}` : ""}
             {c.decidedBy
               ? ` · ${c.status} by ${c.decidedBy}${c.note ? `: ${c.note}` : ""}`
@@ -120,14 +137,16 @@ function PayRow({
           {c.status === "pending"
             ? `With ${r.waitingOn}`
             : c.status === "verified"
-              ? "Verified"
+              ? c.applied === null
+                ? `Consented, takes effect ${c.effectiveOn}`
+                : "Verified"
               : "Rejected"}
         </Chip>
       </div>
       {canVerify && r.mine && !open && (
         <div>
           <button className="btn btn-sm" onClick={() => setOpen(true)}>
-            Verify
+            {consent ? "Consent" : "Verify"}
           </button>
         </div>
       )}
@@ -136,7 +155,7 @@ function PayRow({
           <input
             className="input"
             aria-label="Verification note"
-            placeholder="Note (required to reject)"
+            placeholder="Comment (needed to verify or reject; a short one is fine to verify)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -144,10 +163,10 @@ function PayRow({
           <div className="row">
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy}
+              disabled={act.busy || !note.trim()}
               onClick={() => decide(true)}
             >
-              Verify
+              {consent ? "Consent" : "Verify"}
             </button>
             <button
               className="btn btn-sm"

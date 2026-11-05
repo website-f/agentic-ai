@@ -11,6 +11,10 @@ const SKEW_S = 5 * 60;
 /** Keys are fetched again after a day, or sooner when a token names a key we do not hold (at most every 5 minutes). */
 const KEYS_TTL_MS = 24 * 3_600_000;
 const KEYS_RETRY_MS = 5 * 60_000;
+/** During a Microsoft outage, keys already held keep working for up to 3 days after the last good fetch.
+ * PROPOSED (4 Nov 2026): chosen by the build, not decided by the owner; change it here once decided. */
+const KEYS_STALE_MS = 3 * 24 * 3_600_000;
+const KEYS_TIMEOUT_MS = Number(process.env.ENTRA_KEYS_TIMEOUT_MS ?? 5_000);
 
 export interface EntraConfig {
   /** The directory (tenant) ID of the group's Microsoft 365. Not secret. */
@@ -71,14 +75,31 @@ export class EntraTokenError extends Error {
 export type KeySource = (kid: string) => Promise<KeyObject | null>;
 
 /** Microsoft's published signing keys for the tenant, cached. */
-export function microsoftKeys(tenantId: string, fetcher: typeof fetch = fetch, clock: () => number = Date.now): KeySource {
+export function microsoftKeys(
+  tenantId: string,
+  fetcher: typeof fetch = fetch,
+  clock: () => number = Date.now,
+  timeoutMs = KEYS_TIMEOUT_MS,
+): KeySource {
   const url = `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`;
   let keys = new Map<string, KeyObject>();
   let fetchedAt = -Infinity;
   const load = async () => {
-    const res = await fetcher(url);
-    if (!res.ok) throw new Error(`Could not load Microsoft signing keys (${res.status}).`);
-    const body = (await res.json()) as { keys?: (JsonWebKey & { kid?: string; use?: string })[] };
+    // A time limit on Microsoft's key endpoint (Arisha review, 3 Nov 2026): a hung fetch fails after KEYS_TIMEOUT_MS
+    // and the 5-minute retry gap applies. The error names no token or secret.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let body: { keys?: (JsonWebKey & { kid?: string; use?: string })[] };
+    try {
+      const res = await fetcher(url, { signal: ctrl.signal, redirect: 'error' });
+      if (!res.ok) throw new Error(`Could not load Microsoft signing keys (${res.status}).`);
+      body = (await res.json()) as typeof body;
+    } catch (e) {
+      if (ctrl.signal.aborted) throw new Error('Microsoft signing keys did not answer in time.');
+      throw e instanceof Error && e.message.startsWith('Could not load') ? e : new Error('Could not reach Microsoft signing keys.');
+    } finally {
+      clearTimeout(timer);
+    }
     const next = new Map<string, KeyObject>();
     for (const jwk of body.keys ?? []) {
       if (jwk.kty !== 'RSA' || !jwk.kid || (jwk.use && jwk.use !== 'sig')) continue;
@@ -87,10 +108,57 @@ export function microsoftKeys(tenantId: string, fetcher: typeof fetch = fetch, c
     keys = next;
     fetchedAt = clock();
   };
+  // At most one fetch at a time, shared by every request waiting on it, and at most one attempt per KEYS_RETRY_MS
+  // whether it succeeded or failed (Arisha review, 3 Nov 2026: eight forged tokens at once caused eight fetches).
+  // Only an expired cache (24 h) is refreshed without waiting for the retry gap.
+  //
+  // The same answer for every request in the same state (Arisha review, 4 Nov 2026), whether it started the fetch,
+  // waited on it, or came during the retry gap after it:
+  // - a key we hold (fetched in the last KEYS_STALE_MS) is used, even while a refresh fails;
+  // - a key we do not hold is "unknown" (401, sign in again) only when the last attempt to fetch keys succeeded;
+  //   when the last attempt failed it is "keys unavailable" (503, try again in a minute).
+  let inflight: Promise<void> | null = null;
+  let attemptedAt = -Infinity;
+  let lastFailure: Error | null = null;
+  const refresh = () => {
+    if (!inflight) {
+      attemptedAt = clock();
+      inflight = load()
+        .then(
+          () => {
+            lastFailure = null;
+          },
+          (e: unknown) => {
+            lastFailure = e instanceof Error ? e : new Error('Could not reach Microsoft signing keys.');
+            throw lastFailure;
+          },
+        )
+        .finally(() => {
+          inflight = null;
+        });
+    }
+    return inflight;
+  };
   return async (kid) => {
-    const age = clock() - fetchedAt;
-    if (age > KEYS_TTL_MS || (!keys.has(kid) && age > KEYS_RETRY_MS)) await load();
-    return keys.get(kid) ?? null;
+    const now = clock();
+    const held = () => (clock() - fetchedAt <= KEYS_STALE_MS ? keys.get(kid) ?? null : null);
+    const expired = now - fetchedAt > KEYS_TTL_MS;
+    if (!expired && keys.has(kid)) return keys.get(kid)!;
+    if (inflight || now - attemptedAt > KEYS_RETRY_MS) {
+      try {
+        await refresh();
+      } catch (e) {
+        const k = held();
+        if (k) return k;
+        throw e;
+      }
+      return keys.get(kid) ?? null;
+    }
+    // In the retry gap: the outcome of the last attempt decides.
+    const k = held();
+    if (k) return k;
+    if (lastFailure) throw lastFailure;
+    return null;
   };
 }
 

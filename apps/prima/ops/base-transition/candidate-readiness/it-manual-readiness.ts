@@ -2,7 +2,7 @@ import {cleanupOptionalProblems} from './it-cleanup-readiness';
 import type { PoolClient } from 'pg';
 import {procurementProblems} from './procurement-readiness';
 /** Catalog-only readiness. Never migrates, reads work payloads, or exposes database errors. */
-export const IT_MANUAL_FUNCTION_PINS: Record<string,string> = {"it_record_permission": "b247f6c91d7c568e54f02c9d23238b5f", "it_register_guard": "071218158b309f08c0ab1a772780c295", "it_manual_receipt_valid": "672403e6b7ae6be3656cf526f0bcdbc9"};
+export const IT_MANUAL_FUNCTION_PINS: Record<string,string> = {"it_record_permission": "b247f6c91d7c568e54f02c9d23238b5f", "it_register_guard": "7618c85fedf6e5b4b6a2e604c8e01101", "it_manual_receipt_valid": "672403e6b7ae6be3656cf526f0bcdbc9"};
 const norm=(v:unknown)=>String(v??'').replace(/::text/g,'').replace(/[\s()]/g,'');
 export async function itManualProblems(client: Pick<PoolClient,'query'>):Promise<string[]> {
  try {

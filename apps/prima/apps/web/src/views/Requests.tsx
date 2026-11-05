@@ -12,7 +12,11 @@ import { DocList, ProofPicker } from './Proof';
 
 type Row = ExpenseBoard['requests'][number];
 
-const CATEGORY: Record<NonNullable<Row['category']>, string> = { SUPPLIES: 'Office supplies', UTILITIES: 'Office utilities', RENT: 'Office rent' };
+const CATEGORY: Record<NonNullable<Row['category']>, string> = {
+  SUPPLIES: 'Office supplies',
+  UTILITIES: 'Office utilities',
+  RENT: 'Office rent',
+};
 const STATUS: Record<Row['status'], [Tone, string]> = {
   draft: ['neutral', 'Draft'],
   submitted: ['warn', 'Submitted'],
@@ -58,6 +62,7 @@ export function RequestsView() {
               New office request
             </button>
           )}
+          {data.can.office && <Prefill companies={data.companies} />}
         </div>
       )}
       {adding && <ExpenseForm kind={adding} companies={data.companies} onDone={() => setAdding(null)} />}
@@ -141,14 +146,14 @@ function RequestLine({ r, companies }: { r: Row; companies: ExpenseBoard['compan
               <input
                 className="input"
                 aria-label="Note"
-                placeholder="Note (required to send back or reject)"
+                placeholder="Reason (always required; at least 3 letters to send back or reject)"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
               <div className="row" style={{ gap: 6 }}>
                 <button
                   className="btn btn-primary btn-sm"
-                  disabled={act.busy}
+                  disabled={act.busy || !note.trim()}
                   onClick={() => act.run(() => api.decideExpense(r.id, 'approve', note), r.canCos ? 'Approved, sent to the COO.' : 'Approved.')}
                 >
                   Approve
@@ -273,5 +278,33 @@ function ExpenseForm({ kind, companies, row, onDone }: { kind: 'OPS_CLAIM' | 'OF
         </div>
       </div>
     </section>
+  );
+}
+
+/** Central Admin 5F: start this month's rent or utilities from last month's approved request; check, attach the bill, send. */
+function Prefill({ companies }: { companies: { id: string; name: string }[] }) {
+  const act = useAction();
+  const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
+  const start = (category: 'RENT' | 'UTILITIES') =>
+    act.run(() => api.prefillOfficeRequest({ companyId, category, period: thisMonth() }), 'Draft ready: check the amount, attach this month’s bill and send.');
+  return (
+    <>
+      {companies.length > 1 && (
+        <select aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
+      <button className="btn btn-sm" disabled={act.busy || !companyId} onClick={() => start('RENT')}>
+        Rent from last month
+      </button>
+      <button className="btn btn-sm" disabled={act.busy || !companyId} onClick={() => start('UTILITIES')}>
+        Utilities from last month
+      </button>
+      {act.error && <span className="error small">{act.error.message}</span>}
+    </>
   );
 }

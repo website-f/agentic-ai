@@ -27,7 +27,7 @@ export class ItCorrectionService{
  private async actor(user:User,tx=this.store){const u=await tx.get('users',user.id);if(!u||accessClosed(u,dateOf(this.clock()))||!team(u))throw new AccessDenied('view','(only current IT staff may correct operational records)');return u;}
  private async visible(u:User,row:Row,kind:ItCorrectionKind,tx=this.store){const company=kind==='asset'?(row as ItAsset).ownerId:row.manual?.companyId;
   if(company===null||company==='unlinked')return row.manual?.companyId===null;
-  return typeof company==='string'&&u.companyIds.includes(company)&&(kind==='asset'&&isCentralEmployer(company)||!!await tx.get('companies',company));
+  return typeof company==='string'&&u.companyIds.includes(company)&&(isCentralEmployer(company)||!!await tx.get('companies',company));
  }
  private capability(u:User,row:Row,kind:ItCorrectionKind){
   if(kind==='asset')return (row as ItAsset).status==='disposed'?'disposed_record':null;
@@ -85,7 +85,7 @@ export class ItCorrectionService{
     const version=(row.correction?.version??0)+1;if(!Number.isSafeInteger(version))throw new BadRequest('Correction history needs administrative review.');
     const at=new Date(this.clock()).toISOString(),correction={version,at,byId:user.id,reason,requestId,previousHash:i.expectedHash as string};
     writing=true;await inner.update(tables[kind],row.id,{...patch,correction} as never);
-    await inner.audit({at,actor:user.name,companyId:kind==='asset'?((row as ItAsset).ownerId==='unlinked'||isCentralEmployer((row as ItAsset).ownerId)?null:(row as ItAsset).ownerId):row.manual?.companyId??null,action:`it.correction.${kind}`,entity:tables[kind],entityId:row.id,summary:JSON.stringify({reason,version,changes:Object.fromEntries(keys[kind].filter(k=>patch[k]!== (row as unknown as Record<string,unknown>)[k]).map(k=>[k,{before:(row as unknown as Record<string,unknown>)[k],after:patch[k]}]))})});
+    await inner.audit({at,actor:user.name,companyId:kind==='asset'?((row as ItAsset).ownerId==='unlinked'||isCentralEmployer((row as ItAsset).ownerId)?null:(row as ItAsset).ownerId):(isCentralEmployer(row.manual?.companyId)?null:row.manual?.companyId??null),action:`it.correction.${kind}`,entity:tables[kind],entityId:row.id,summary:JSON.stringify({reason,version,changes:Object.fromEntries(keys[kind].filter(k=>patch[k]!== (row as unknown as Record<string,unknown>)[k]).map(k=>[k,{before:(row as unknown as Record<string,unknown>)[k],after:patch[k]}]))})});
     await inner.insert('itManualReceipts',{id:receiptId,userId:user.id,requestId,kind,hash,outcome:'committed',recordId:row.id,version,message:null,at});
     return {...marker(user),requestId,kind,terminal:'committed' as const,recordId:row.id,version,message:null,replayed:false};
    });}catch(e){

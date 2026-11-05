@@ -1,3 +1,4 @@
+import { OpsGuide } from "./OpsGuide";
 import { useEffect, useState } from "react";
 import { api, type AmBoard } from "../api";
 import { FixedAssetsPanel } from "./FixedAssets";
@@ -28,7 +29,9 @@ type Tab =
   | "maintenance"
   | "assets"
   | "books"
-  | "properties";
+  | "properties"
+  | "check"
+  | "buy";
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
   ["units", "Units"],
@@ -38,6 +41,8 @@ const TABS: [Tab, string][] = [
   ["assets", "Assets"],
   ["books", "Depreciation and disposal"],
   ["properties", "Resorts, orchards, training"],
+  ["check", "System check"],
+  ["buy", "Purchases"],
 ];
 const TYPE: Record<AmBoard["byType"][number]["type"], string> = {
   RESIDENTIAL: "Residential",
@@ -134,11 +139,19 @@ export function AssetsView() {
       {tab === "overview" && <Overview data={data} />}
       {tab === "units" && <Units data={data} />}
       {tab === "monthly" && <MonthlyRent data={data} />}
-      {tab === "rent" && <Rent data={data} />}
+      {tab === "rent" && (
+        <>
+          <WhatsAppReminders />
+          <Rent data={data} />
+        </>
+      )}
       {tab === "maintenance" && <Maintenance data={data} />}
       {tab === "assets" && <Assets data={data} />}
       {tab === "books" && <FixedAssetsPanel />}
       {tab === "properties" && <Properties data={data} />}
+      {tab === "check" && <RentCheck />}
+      {tab === "buy" && <Purchases data={data} />}
+      <OpsGuide area="assets" />
     </div>
   );
 }
@@ -1750,6 +1763,335 @@ function PaymentLine({
         </div>
       )}
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * Where the Asset Management system and Prima disagree on rent, status, tenant or paid months (slice 4G). The system's
+ * figures sit beside Prima's and never overwrite them; a month the system shows paid is "reported", not money received.
+ */
+function RentCheck() {
+  const { data, error } = useLoad(() => api.amRentCheck(), []);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="the rent check" />;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Asset Management system against Prima</h2>
+        <span className="muted small">
+          {data.fromSystem} of {data.units} units sent by the system · {data.notFromSystem} not sent yet
+        </span>
+      </div>
+      <div className="list">
+        {data.differences.length === 0 && (
+          <div className="empty">
+            {data.fromSystem ? "No differences." : "The Asset Management system is not connected yet, so there is nothing to compare."}
+          </div>
+        )}
+        {data.differences.map((d, i) => (
+          <div key={i} className="list-item">
+            <div>
+              <div style={{ fontWeight: 600 }}>
+                {d.code} · {d.name}
+              </div>
+              <div className="muted small">
+                Prima: {d.prima} · System: {d.system}
+              </div>
+            </div>
+            <Chip tone="warn">{d.issue}</Chip>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const BUY_STATE: Record<string, { label: string; tone: Tone }> = {
+  buy_requested: { label: "Waiting for a decision", tone: "warn" },
+  buy_approved: { label: "Approved, to buy", tone: "info" },
+  buy_refused: { label: "Refused", tone: "neutral" },
+};
+
+/** Furniture and fittings purchases: the team asks with a reason; the FD (up to the limit) or the COO decides with a reason. */
+function Purchases({ data }: { data: AmBoard }) {
+  const empty = { description: "", category: "FURNITURE" as const, qty: 1, estCost: 0, location: "", ownerEntity: "", reason: "" };
+  const [form, setForm] = useState<{ description: string; category: "FURNITURE" | "FITTING" | "RENOVATION" | "OTHER"; qty: number; estCost: number; location: string; ownerEntity: string; reason: string }>(empty);
+  const [why, setWhy] = useState<Record<string, string>>({});
+  const { run, busy, error } = useAction();
+  const ready = form.description.trim() && form.location.trim() && form.ownerEntity.trim() && form.reason.trim().length >= 3 && form.qty > 0 && form.estCost > 0;
+  return (
+    <>
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Ask to buy</h2>
+          <span className="muted small">The Asset Management team asks. Once bought, the request becomes the asset in the register.</span>
+        </div>
+        <ErrorNotice error={error} />
+        <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+          <input className="input" aria-label="What to buy" placeholder="What to buy" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ flex: 2, minWidth: 180 }} />
+          <select className="input" aria-label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as typeof form.category })}>
+            <option value="FURNITURE">Furniture</option>
+            <option value="FITTING">Fitting</option>
+            <option value="RENOVATION">Renovation</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input className="input" type="number" min={1} aria-label="Quantity" placeholder="Qty" value={form.qty} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} style={{ width: 70 }} />
+          <input className="input" type="number" min={0} aria-label="Estimated cost (RM)" placeholder="Estimated RM" value={form.estCost || ""} onChange={(e) => setForm({ ...form, estCost: Number(e.target.value) })} style={{ width: 120 }} />
+          <input className="input" aria-label="Location" placeholder="Where it goes" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+          <input className="input" aria-label="Owning entity" placeholder="Owning entity" value={form.ownerEntity} onChange={(e) => setForm({ ...form, ownerEntity: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
+          <input className="input" aria-label="Reason" placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} style={{ flex: 2, minWidth: 180 }} />
+          <button className="btn btn-sm btn-primary" disabled={busy || !ready} onClick={() => run(() => api.amBuyRequest(form).then(() => setForm(empty)), "Purchase request sent")}>
+            Ask
+          </button>
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Purchase requests</h2>
+        </div>
+        <div className="list">
+          {data.purchases.length === 0 && <div className="empty">No purchase requests.</div>}
+          {data.purchases.map((a) => {
+            const p = a.purchase!;
+            const st = BUY_STATE[a.status] ?? { label: a.status, tone: "neutral" as Tone };
+            return (
+              <div key={a.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>
+                      {p.qty} × {a.description} · {rm(p.estCost)}
+                    </div>
+                    <div className="muted small">
+                      {a.location} · asked by {p.askedBy} on {dateLabel(p.askedAt.slice(0, 10))}: {p.reason}
+                    </div>
+                    {p.decidedBy && (
+                      <div className="small">
+                        {p.decidedBy}: {p.decisionReason}
+                      </div>
+                    )}
+                  </div>
+                  <Chip tone={st.tone}>{st.label}</Chip>
+                </div>
+                {a.status === "buy_approved" && <ReceiveBought id={a.id} approved={p.estCost} busy={busy} run={run} />}
+                {a.status === "buy_requested" && (
+                  <div className="row" style={{ flexWrap: "wrap" }}>
+                    <input className="input" aria-label={`Reason for ${a.description}`} placeholder="Reason" value={why[a.id] ?? ""} onChange={(e) => setWhy({ ...why, [a.id]: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
+                    <button className="btn btn-sm btn-primary" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, true, why[a.id] ?? "", p.estCost), "Purchase approved")}>
+                      Approve
+                    </button>
+                    <button className="btn btn-sm" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, false, why[a.id] ?? "", p.estCost), "Purchase refused")}>
+                      Refuse
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
+
+const WA_STATUS: Record<string, { label: string; tone: Tone }> = {
+  queued: { label: "Waiting to send", tone: "neutral" },
+  sent: { label: "Sent", tone: "info" },
+  delivered: { label: "Delivered", tone: "ok" },
+  read: { label: "Read", tone: "ok" },
+  failed: { label: "Failed", tone: "crit" },
+  uncertain: { label: "May or may not have gone", tone: "warn" },
+  cancelled: { label: "Cancelled (paid)", tone: "neutral" },
+};
+const WA_STAGE: Record<string, string> = { before: "3 days before", due: "due day", late: "late" };
+
+/**
+ * WhatsApp rent reminders (Fauzan, 2 Nov 2026). Only tenants who agreed are messaged; the team records how they agreed.
+ * Until an owner connects WhatsApp Business, reminders are only planned and the panel says so.
+ */
+function WhatsAppReminders() {
+  const { data, error } = useLoad(() => api.amWhatsApp(), []);
+  const [how, setHow] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState<Record<string, string>>({});
+  const { run, busy, error: actError } = useAction();
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="WhatsApp reminders" />;
+  const c = data.connector;
+  const t = data.timings;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>WhatsApp rent reminders</h2>
+        <Chip tone={c.sending ? "ok" : "unknown"}>{c.sending ? "Connected, sending" : c.configured ? "Set up, switched off" : "Not connected"}</Chip>
+      </div>
+      <p className="muted small">
+        Sent {t.beforeDays} days before rent is due (day {t.dueDay} of the month; reminder days proposed), on the due day, then {t.firstLateDays} days late and every {t.lateEveryDays} days
+        until {t.stopAfterLateDays} days, between {t.sendFromHour} am and {t.sendToHour - 12} pm. Only to tenants who agreed; a tenant who replies STOP is never
+        messaged again. Replies show on the unit. Automatic messages do not replace the team's own update every 10 days.
+        {!c.sending && " Until WhatsApp Business is connected, reminders are planned here but not sent."}
+      </p>
+      <ErrorNotice error={actError} />
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span className="small">
+          {data.agreed} of {data.tenants} tenants agreed{data.failed ? ` · ${data.failed} failed` : ""}
+        </span>
+        <button
+          className="btn btn-sm"
+          disabled={busy}
+          onClick={() =>
+            run(() => api.amWhatsAppRun(), (r) => (r.sending ? `${r.sent} sent, ${r.queued} queued` : `${r.queued} planned (WhatsApp not connected)`))
+          }
+        >
+          Check reminders now
+        </button>
+      </div>
+      {data.owingWithoutConsent.length > 0 && (
+        <>
+          <h3 className="small" style={{ marginTop: 12 }}>
+            Owing rent, not yet agreed to WhatsApp
+          </h3>
+          <div className="list">
+            {data.owingWithoutConsent.slice(0, 30).map((u) => (
+              <div key={u.unitId} className="list-item" style={{ flexWrap: "wrap", gap: 6 }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {u.code} · {u.tenant}
+                  </div>
+                  {!u.hasMobile && <div className="muted small">No Malaysian mobile on file</div>}
+                </div>
+                {u.hasMobile && (
+                  <>
+                    <input
+                      className="input"
+                      aria-label={`How ${u.tenant} agreed`}
+                      placeholder="How they agreed, e.g. signed form"
+                      value={how[u.unitId] ?? ""}
+                      onChange={(e) => setHow({ ...how, [u.unitId]: e.target.value })}
+                      style={{ flex: 1, minWidth: 160 }}
+                    />
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={busy || (how[u.unitId] ?? "").trim().length < 5}
+                      onClick={() => run(() => api.amWhatsAppConsent(u.unitId, true, how[u.unitId] ?? ""), `${u.code}: WhatsApp reminders on`)}
+                    >
+                      Agreed
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {data.agreedUnits.length > 0 && (
+        <>
+          <h3 className="small" style={{ marginTop: 12 }}>
+            Agreed
+          </h3>
+          <div className="list">
+            {data.agreedUnits.slice(0, 50).map((u) => (
+              <div key={u.unitId} className="list-item">
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {u.code} · {u.tenant}
+                  </div>
+                  <div className="muted small">
+                    {u.how} · recorded by {u.by}
+                  </div>
+                </div>
+                <button className="btn btn-sm" disabled={busy} onClick={() => run(() => api.amWhatsAppConsent(u.unitId, false, "Tenant asked to stop"), `${u.code}: WhatsApp reminders stopped`)}>
+                  Stop
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {data.recent.length > 0 && (
+        <>
+          <h3 className="small" style={{ marginTop: 12 }}>
+            Recent reminders
+          </h3>
+          <div className="list">
+            {data.recent.slice(0, 20).map((r) => (
+              <div key={r.id} className="list-item">
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {r.code} · {r.tenant}
+                  </div>
+                  <div className="muted small">
+                    {r.period}, {WA_STAGE[r.stage]} · {rm(r.amount)}
+                    {r.lastError ? ` · ${r.lastError}` : ""}
+                  </div>
+                </div>
+                <Chip tone={(WA_STATUS[r.status] ?? WA_STATUS.queued).tone}>{(WA_STATUS[r.status] ?? WA_STATUS.queued).label}</Chip>
+                {r.status === "uncertain" && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
+                    <input
+                      className="input"
+                      aria-label={`What you checked for ${r.code}`}
+                      placeholder="What you checked (WhatsApp Business inbox, tenant)"
+                      value={checked[r.id] ?? ""}
+                      onChange={(e) => setChecked({ ...checked, [r.id]: e.target.value })}
+                    />
+                    {(
+                      [
+                        ["went", "It went"],
+                        ["resend", "Send again"],
+                        ["drop", "Leave it"],
+                      ] as const
+                    ).map(([o, label]) => (
+                      <button
+                        key={o}
+                        className="btn btn-sm"
+                        disabled={busy || (checked[r.id] ?? "").trim().length < 5}
+                        onClick={() => run(() => api.amWhatsAppSettle(r.unitId, r.id, o, checked[r.id] ?? ""), `${r.code}: ${label.toLowerCase()}`)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Bought: record the tag, the actual cost and the date, and the request becomes the asset. The cost cannot be above what
+ * was approved; if the price went up, ask again at the new amount and it goes back for approval.
+ */
+function ReceiveBought({ id, approved, busy, run }: { id: string; approved: number; busy: boolean; run: ReturnType<typeof useAction>["run"] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [tag, setTag] = useState("");
+  const [cost, setCost] = useState("");
+  const [on, setOn] = useState(today);
+  const [why, setWhy] = useState("");
+  const n = Number(cost);
+  const over = cost !== "" && n > approved;
+  return (
+    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+      <input className="input" aria-label="Asset tag" placeholder="Asset tag" value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 130 }} />
+      <input className="input" type="number" min={0} aria-label="Actual cost (RM)" placeholder={`Actual RM (up to ${rm(approved)})`} value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 170 }} />
+      <input className="input" type="date" aria-label="Bought on" value={on} max={today} onChange={(e) => setOn(e.target.value)} />
+      {!over && (
+        <button className="btn btn-sm btn-primary" disabled={busy || tag.trim().length < 3 || !(n > 0)} onClick={() => run(() => api.amBuyReceived(id, { tag, cost: n, boughtOn: on }), "Received: added to the register")}>
+          Received
+        </button>
+      )}
+      {over && (
+        <>
+          <span className="small">Above the approved {rm(approved)}: it must be approved again.</span>
+          <input className="input" aria-label="Why the price changed" placeholder="Why the price changed" value={why} onChange={(e) => setWhy(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+          <button className="btn btn-sm" disabled={busy || why.trim().length < 5} onClick={() => run(() => api.amBuyReprice(id, n, why), "Sent back for approval at the new amount")}>
+            Ask again at {rm(n)}
+          </button>
+        </>
+      )}
     </div>
   );
 }

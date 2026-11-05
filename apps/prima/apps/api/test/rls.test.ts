@@ -11,7 +11,7 @@ import { extractionAudit } from '../src/arisha-it-extraction-audit';
 import { ItExtractionPreviewService } from '../src/arisha-it-extraction';
 import { officePayload, officeSign } from '../src/office';
 import { OfficeController } from '../src/controllers';
-import { AuthGuard, OfficeSystemGuard, entraSetup, issueToken, resetEntraSetup, userForEntra, verifyFeed, verifyToken } from '../src/auth';
+import { AuthGuard, OfficeSystemGuard, entraSetup, issueToken, pilotAdmits, resetEntraSetup, userForEntra, verifyFeed, verifyToken } from '../src/auth';
 import { linkEntra } from '../src/entra-link';
 import { createHmac, createSign, generateKeyPairSync } from 'node:crypto';
 import type { ExecutionContext } from '@nestjs/common';
@@ -32,13 +32,14 @@ const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:
 process.env.DATABASE_URL = URL;
 process.env.DEV_TOKEN_SECRET = process.env.DEV_TOKEN_SECRET ?? 'test-secret';
 
-async function asApp(companyIds: string, sql: string, params: unknown[] = []) {
+async function asApp(companyIds: string, sql: string, params: unknown[] = [], walls = '') {
   const c = new Client({ connectionString: URL });
   await c.connect();
   try {
     await c.query('BEGIN');
     await c.query('SET LOCAL ROLE prima_app');
     await c.query(`SELECT set_config('app.company_ids', $1, true)`, [companyIds]);
+    await c.query(`SELECT set_config('app.walls', $1, true)`, [walls]);
     const res = await c.query(sql, params);
     await c.query('COMMIT');
     return res;
@@ -308,7 +309,7 @@ describe('database company wall', () => {
     // The first request keeps its transaction open a moment after acting; the second arrives meanwhile.
     const accept = (holdMs: number) =>
       db.asUser('u-it-mgr', async (svc, user) => {
-        const j = await svc.itJobStep(user, row.job.id, 'accept');
+        const j = await svc.itJobStep(user, row.job.id, 'accept', 'Proof checked');
         await new Promise((r) => setTimeout(r, holdMs));
         return j;
       });
@@ -348,6 +349,8 @@ describe('database company wall', () => {
     const res = await asApp(
       'co-inas',
       'SELECT DISTINCT company_id FROM prima.firearms UNION SELECT DISTINCT company_id FROM prima.arms_movements UNION SELECT DISTINCT company_id FROM prima.vaults',
+      [],
+      'arms',
     );
     assert.deepEqual(
       res.rows.map((r) => r.company_id),
@@ -407,8 +410,9 @@ describe('database company wall', () => {
     const r = await db.asUser('u-pwvsb-arms-asst', (svc, user) => svc.reviewArmsRequest(user, req.request.id, 'pass', 'Papers checked'));
     assert.equal(r.state, 'company_auth');
     await assert.rejects(
+      // Another company's manager: the database hides the row, so the request is simply not found.
       db.asUser('u-cm-arsh', (svc, user) => svc.reviewArmsRequest(user, req.request.id, 'pass', '')),
-      /Not allowed/,
+      /Not allowed|not found/,
     );
   });
 
@@ -574,7 +578,8 @@ describe('database company wall', () => {
     assert.equal(rec.companyId, 'co-inas');
     await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.staffClockDetail(u, rec.id)));
     // Central staff clock in from 08:45 in the mock data, so at night clock one in here; already in is fine.
-    await db.asUser('u-pwvsb-doa', (svc, u) => svc.staffClockIn(u, shot)).catch(() => undefined);
+    // A clock photo is used once (insider abuse item 13), so each clock below takes its own picture.
+    await db.asUser('u-pwvsb-doa', (svc, u) => svc.staffClockIn(u, { ...shot, image: img + 'ZG9h' })).catch(() => undefined);
     const hr = await db.asUser('u-pwvsb-hr', (svc, u) => svc.staffClockBoard(u));
     assert.ok(hr.rows.some((r) => r.userId === 'u-cm-inas' && r.status === 'in'));
     assert.ok(hr.rows.some((r) => r.company === 'PWVSB (central)' && r.status === 'in'));
@@ -583,11 +588,11 @@ describe('database company wall', () => {
     assert.equal(central.rows[0].n, 0);
     const sasa = await db.asUser('u-cm-sasa', (svc, u) => svc.staffClockBoard(u));
     assert.ok(sasa.rows.every((r) => r.company.startsWith('Sasa')));
-    const out = await db.asUser('u-cm-inas', (svc, u) => svc.staffClockOut(u, shot));
+    const out = await db.asUser('u-cm-inas', (svc, u) => svc.staffClockOut(u, { ...shot, image: img + 'b3V0' }));
     assert.ok(out.out);
   });
 
-  it('keeps working from home behind the company wall and lets only the right manager answer', async () => {
+  it('keeps working from home behind the company wall and lets only HR answer', async () => {
     // A company manager reads no central staff arrangements in the database itself.
     const central = await asApp('co-sasa', 'SELECT count(*)::int AS n FROM prima.remote_arrangements WHERE company_id IS NULL');
     assert.equal(central.rows[0].n, 0);
@@ -597,7 +602,9 @@ describe('database company wall', () => {
       ['u-ae-arsh'],
     );
     await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.remoteDecide(u, 'wfh-u-ae-arsh-1', true, '')));
-    const ok = await db.asUser('u-cm-arsh', (svc, u) => svc.remoteDecide(u, 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.'));
+    // Only HR answers working from home applications (Fauzan, 2 Nov 2026); the company manager monitors.
+    await assert.rejects(db.asUser('u-cm-arsh', (svc, u) => svc.remoteDecide(u, 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.')));
+    const ok = await db.asUser('u-pwvsb-hr', (svc, u) => svc.remoteDecide(u, 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.'));
     assert.equal(ok.status, 'approved');
     const hr = await db.asUser('u-pwvsb-hr', (svc, u) => svc.remoteBoard(u));
     assert.ok(hr.people.some((p) => p.arrangement.userId === 'u-it-ex1'));
@@ -700,6 +707,42 @@ describe('database company wall', () => {
     );
     await db.asUser('u-fin-t1-de1', (svc, u) => svc.workTaskDone(u, f.id, { note: 'Attached', ref: 'RLS-2' }));
     await assert.rejects(db.asUser('u-coo', (svc, u) => svc.workTaskReview(u, f.id, true, 'Looks right from the bank file.')));
+  });
+
+  it('a manager moves and readjusts work with a reason on PostgreSQL; a colleague cannot (Fauzan, 2 Nov 2026)', async () => {
+    const due = (svc: { now(): string }, days: number) => new Date(Date.parse(svc.now()) + days * 86_400_000).toISOString();
+    const w = await db.asUser('u-it-lead', (svc, u) =>
+      svc.workTaskAdd(u, { userId: 'u-it-ex1', title: 'Rebalance RLS move check', doneMeans: 'Output attached with the reference.', dueAt: due(svc, 2), priority: 'normal' }),
+    );
+    await assert.rejects(db.asUser('u-it-ex2', (svc, u) => svc.workTaskReassign(u, w.id, { expectedVersion: w.version, toUserId: 'u-it-ex2', reason: 'I will take it' })));
+    // Two managers' screens loaded the same version and move at once: exactly one wins, the other is told to reload.
+    const race = await Promise.allSettled([
+      db.asUser('u-it-lead', (svc, u) => svc.workTaskReassign(u, w.id, { expectedVersion: w.version, toUserId: 'u-it-ex3', reason: 'Ex1 is on site all week' })),
+      db.asUser('u-it-mgr', (svc, u) => svc.workTaskReassign(u, w.id, { expectedVersion: w.version, toUserId: 'u-it-ex4', reason: 'Ex4 has room this week' })),
+    ]);
+    assert.equal(race.filter((x) => x.status === 'fulfilled').length, 1, 'one move wins');
+    const lost = race.find((x) => x.status === 'rejected') as PromiseRejectedResult;
+    assert.match(String(lost.reason?.message), /changed since/);
+    const moved = (race.find((x) => x.status === 'fulfilled') as PromiseFulfilledResult<{ userId: string; version: string }>).value;
+    assert.ok(['u-it-ex3', 'u-it-ex4'].includes(moved.userId));
+    const adj = await db.asUser('u-it-lead', (svc, u) =>
+      svc.workTaskAdjust(u, w.id, { expectedVersion: moved.version, priority: 'high', dueAt: due(svc, 3), reason: 'Vendor moved the window' }),
+    );
+    assert.equal(adj.priority, 'high');
+    assert.equal(adj.changes?.length, 2);
+    const mine = await db.asUser(moved.userId, (svc, u) => svc.myWork(u));
+    assert.ok(mine.open.some((t) => t.id === w.id), 'the new person has it');
+    const advice = await db.asUser('u-it-lead', (svc, u) => svc.workRebalance(u));
+    assert.deepEqual(advice.people.map((p) => p.userId).sort(), ['u-it-ex1', 'u-it-ex2', 'u-it-ex3', 'u-it-ex4']);
+  });
+
+  it('caps Arisha AI rebalance asks per manager per day even when they arrive at once (Arisha main review, 2 Nov 2026)', async () => {
+    const r = await db.asUser('u-it-mgr', (svc, u) => svc.workRebalance(u));
+    assert.ok(r.advice.length > 0, 'the synthetic team has at least one case');
+    const id = r.advice[0].id;
+    const asks = await Promise.allSettled(Array.from({ length: 14 }, () => db.asUser('u-it-mgr', (svc, u) => svc.workRebalanceAiCase(u, id))));
+    assert.equal(asks.filter((x) => x.status === 'fulfilled').length, 10, 'exactly the daily cap gets through');
+    for (const x of asks) if (x.status === 'rejected') assert.match(String(x.reason?.message), /10 times today/);
   });
 
   it('serializes competing COO decisions, repeated acknowledgements and a notice arriving during one', async () => {
@@ -806,14 +849,36 @@ describe('database company wall', () => {
     const board = await db.asUser('u-pwvsb-hr', (svc, u) => svc.staffPayroll(u));
     const run = board.runs.find((r) => r.companyId === 'pwvsb' && r.stage === 'submitted')!;
     assert.ok(run);
-    await db.asUser('u-cos', (svc, u) => svc.staffPayStep(u, run.id, 'approve'));
-    await db.asUser('u-vchair', (svc, u) => svc.staffPayStep(u, run.id, 'consent'));
+    // HR Phase 3 (Fauzan, 1 Nov 2026): the Chief of Staff approves, then the COO approves, each with a comment.
+    await db.asUser('u-cos', (svc, u) => svc.staffPayStep(u, run.id, 'approve', { note: 'Checked.' }));
+    await db.asUser('u-coo', (svc, u) => svc.staffPayStep(u, run.id, 'coo_approve', { note: 'Approved.' }));
     const paid = await db.asUser('u-fin-t1-lead', (svc, u) => svc.staffPayStep(u, run.id, 'pay', { bankRef: 'DB-TEST', pcbChecked: true }));
     assert.equal(paid.stage, 'paid');
     const other = await asApp('co-sasa', `SELECT count(*)::int AS n FROM prima.staff_pay_runs WHERE company_id = 'pwvsb'`);
     assert.equal(other.rows[0].n, 0);
     const cm = await db.asUser('u-cm-arsh', (svc, u) => svc.staffPayroll(u));
     assert.ok(cm.runs.every((r) => r.companyId === 'co-arsh'));
+  });
+});
+
+describe('HR rollout switch (HR Phase 3, Fauzan 1 Nov 2026)', () => {
+  const u = (o: Record<string, unknown>) => ({ id: 'x', name: 'X', title: 'X', role: 'pwvsb_officer', companyIds: [], siteIds: [], ...o }) as never;
+  it('admits the Chief of Staff, Deputy and Vice Chairman only when HR_ROLLOUT=true, and leaves the IT pilot as it was', () => {
+    const cos = u({ leadership: 'cos', department: 'chief_of_staff' });
+    const vc = u({ leadership: 'vice_chairman' });
+    const chair = u({ leadership: 'chairman' });
+    const it = u({ department: 'it' });
+    assert.equal(pilotAdmits(cos, {}), false);
+    assert.equal(pilotAdmits(vc, { HR_ROLLOUT: 'false' }), false);
+    assert.equal(pilotAdmits(cos, { HR_ROLLOUT: 'true' }), true);
+    assert.equal(pilotAdmits(vc, { HR_ROLLOUT: 'true' }), true);
+    assert.equal(pilotAdmits(chair, { HR_ROLLOUT: 'true' }), false);
+    assert.equal(pilotAdmits(u({ leadership: 'cos', integration: 'ja' }), { HR_ROLLOUT: 'true' }), false);
+    assert.equal(pilotAdmits(it, {}), true);
+    // The shared department switch: PRIMA_ROLLOUTS=hr is the same as HR_ROLLOUT=true.
+    assert.equal(pilotAdmits(cos, { PRIMA_ROLLOUTS: 'hr' }), true);
+    // An unrelated name does not open HR. (Other departments' rollouts may admit the CoS for their own work, e.g. #52.)
+    assert.equal(pilotAdmits(cos, { PRIMA_ROLLOUTS: 'no_such_department' }), false);
   });
 });
 

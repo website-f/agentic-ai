@@ -16,6 +16,19 @@ function safeErrorCategory(err: unknown): string {
   return 'unexpected';
 }
 
+/**
+ * Every database connection was busy for the whole wait (pg-pool's own fixed message). Read through the property
+ * descriptor so no accessor on an untrusted object runs. Review G2, 3 Nov 2026: shown as "busy, try again", not a crash.
+ */
+function isPoolBusy(err: unknown): boolean {
+  try {
+    if (!(err instanceof Error)) return false;
+    return Object.getOwnPropertyDescriptor(err, 'message')?.value === 'timeout exceeded when trying to connect';
+  } catch {
+    return false;
+  }
+}
+
 /** Maps domain errors to HTTP. Rule blocks return the findings so the screen can show why. */
 @Catch()
 export class DomainErrors implements ExceptionFilter {
@@ -35,6 +48,10 @@ export class DomainErrors implements ExceptionFilter {
       res.status(400).json({ message: err.message });
     } else if (err instanceof UnknownUser) {
       res.status(401).json({ message: 'Sign in again.' });
+    } else if (isPoolBusy(err)) {
+      this.log.error(`server_busy reference=${randomUUID()} category=database_busy`);
+      res.setHeader?.('Retry-After', '5');
+      res.status(503).json({ message: 'Prima is busy right now. Please try again in a few seconds; nothing was changed.' });
     } else {
       this.log.error(`server_error reference=${randomUUID()} category=${safeErrorCategory(err)}`);
       res.status(500).json({ message: 'Something went wrong on the server. It has been logged.' });

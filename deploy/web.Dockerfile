@@ -27,6 +27,7 @@ COPY apps/prima/package.json apps/prima/package-lock.json apps/prima/tsconfig.ba
 COPY apps/prima/packages/core/package.json packages/core/
 COPY apps/prima/apps/api/package.json apps/api/
 COPY apps/prima/apps/web/package.json apps/web/
+COPY apps/prima/apps/cms/package.json apps/cms/
 RUN --mount=type=cache,id=npm,target=/root/.npm \
     npm ci -w @prima/core -w @prima/web --no-audit --no-fund
 COPY apps/prima/packages/core packages/core

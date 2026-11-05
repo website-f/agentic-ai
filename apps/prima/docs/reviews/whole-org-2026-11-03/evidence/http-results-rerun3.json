@@ -1,0 +1,4650 @@
+{
+ "single": [
+  {
+   "role": "CEO",
+   "path": "/api/act",
+   "status": 200,
+   "ms": 102,
+   "kb": 106
+  },
+  {
+   "role": "CEO",
+   "path": "/api/am/rent-check",
+   "status": 200,
+   "ms": 13,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/am/whatsapp",
+   "status": 200,
+   "ms": 27,
+   "kb": 18
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha/draft-form",
+   "status": 400,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"No form called (none).\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha/drafts",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha/finance-papers",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha/it-extraction",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"FORBIDDEN\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arisha/it-import",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Sign in with Microsoft to import IT work.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms",
+   "status": 200,
+   "ms": 34,
+   "kb": 11
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/control",
+   "status": 200,
+   "ms": 387,
+   "kb": 1039
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/imports",
+   "status": 200,
+   "ms": 19,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/legal-flags",
+   "status": 200,
+   "ms": 27,
+   "kb": 15
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/renewals",
+   "status": 200,
+   "ms": 12,
+   "kb": 78
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/suppliers/file",
+   "status": 200,
+   "ms": 4,
+   "kb": 3
+  },
+  {
+   "role": "CEO",
+   "path": "/api/arms/trading",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/assets",
+   "status": 200,
+   "ms": 22,
+   "kb": 669
+  },
+  {
+   "role": "CEO",
+   "path": "/api/assets/fixed",
+   "status": 200,
+   "ms": 21,
+   "kb": 30
+  },
+  {
+   "role": "CEO",
+   "path": "/api/audit",
+   "status": 200,
+   "ms": 137,
+   "kb": 80
+  },
+  {
+   "role": "CEO",
+   "path": "/api/auth/config",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/auth/users",
+   "status": 200,
+   "ms": 45,
+   "kb": 3
+  },
+  {
+   "role": "CEO",
+   "path": "/api/branch-work",
+   "status": 200,
+   "ms": 132,
+   "kb": 341
+  },
+  {
+   "role": "CEO",
+   "path": "/api/branches",
+   "status": 200,
+   "ms": 156,
+   "kb": 251
+  },
+  {
+   "role": "CEO",
+   "path": "/api/cases",
+   "status": 200,
+   "ms": 505,
+   "kb": 1734
+  },
+  {
+   "role": "CEO",
+   "path": "/api/ceo/instructions",
+   "status": 200,
+   "ms": 40,
+   "kb": 5
+  },
+  {
+   "role": "CEO",
+   "path": "/api/claims",
+   "status": 200,
+   "ms": 10,
+   "kb": 11
+  },
+  {
+   "role": "CEO",
+   "path": "/api/claims/receipts",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Staff claims are for office and management staff. Guards and officers have their own rules.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/clients",
+   "status": 200,
+   "ms": 72,
+   "kb": 3743
+  },
+  {
+   "role": "CEO",
+   "path": "/api/cms",
+   "status": 200,
+   "ms": 4901,
+   "kb": 4940
+  },
+  {
+   "role": "CEO",
+   "path": "/api/compliance",
+   "status": 200,
+   "ms": 725,
+   "kb": 32
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/m365/matrix",
+   "status": 200,
+   "ms": 2,
+   "kb": 8
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/m365/status",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/mail/jobs/status",
+   "status": 200,
+   "ms": 7,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/sharepoint",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/sharepoint/requests",
+   "status": 200,
+   "ms": 124,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/connections/teams/status",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/continuity",
+   "status": 200,
+   "ms": 3,
+   "kb": 8
+  },
+  {
+   "role": "CEO",
+   "path": "/api/contracts",
+   "status": 200,
+   "ms": 207,
+   "kb": 10966
+  },
+  {
+   "role": "CEO",
+   "path": "/api/corporate",
+   "status": 200,
+   "ms": 12,
+   "kb": 113
+  },
+  {
+   "role": "CEO",
+   "path": "/api/corporate/audit-legal",
+   "status": 200,
+   "ms": 8,
+   "kb": 78
+  },
+  {
+   "role": "CEO",
+   "path": "/api/corporate/files",
+   "status": 200,
+   "ms": 8,
+   "kb": 22
+  },
+  {
+   "role": "CEO",
+   "path": "/api/corporate/panel",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/credit",
+   "status": 200,
+   "ms": 18,
+   "kb": 301
+  },
+  {
+   "role": "CEO",
+   "path": "/api/delegations",
+   "status": 200,
+   "ms": 23,
+   "kb": 191
+  },
+  {
+   "role": "CEO",
+   "path": "/api/director/digest",
+   "status": 200,
+   "ms": 75,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/director/legal-flags",
+   "status": 200,
+   "ms": 31,
+   "kb": 41
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance",
+   "status": 200,
+   "ms": 20,
+   "kb": 173
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/cash/advances-overdue",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/cash/mine",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/checks-todo",
+   "status": 200,
+   "ms": 168,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/coo",
+   "status": 403,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/dailycash/mine",
+   "status": 200,
+   "ms": 7,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/dashboard",
+   "status": 200,
+   "ms": 124,
+   "kb": 14
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/desk",
+   "status": 200,
+   "ms": 80,
+   "kb": 561
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/kpi",
+   "status": 200,
+   "ms": 6,
+   "kb": 2
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/management-fee-bills",
+   "status": 200,
+   "ms": 13250,
+   "kb": 68
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/management-fees",
+   "status": 200,
+   "ms": 14,
+   "kb": 4
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/requests",
+   "status": 200,
+   "ms": 7,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/settings",
+   "status": 200,
+   "ms": 7,
+   "kb": 6
+  },
+  {
+   "role": "CEO",
+   "path": "/api/finance/today",
+   "status": 200,
+   "ms": 270,
+   "kb": 2
+  },
+  {
+   "role": "CEO",
+   "path": "/api/fleet",
+   "status": 200,
+   "ms": 42,
+   "kb": 39
+  },
+  {
+   "role": "CEO",
+   "path": "/api/flex",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/fwm",
+   "status": 200,
+   "ms": 130,
+   "kb": 737
+  },
+  {
+   "role": "CEO",
+   "path": "/api/governance",
+   "status": 200,
+   "ms": 23,
+   "kb": 81
+  },
+  {
+   "role": "CEO",
+   "path": "/api/grc",
+   "status": 200,
+   "ms": 63,
+   "kb": 410
+  },
+  {
+   "role": "CEO",
+   "path": "/api/group/overview",
+   "status": 200,
+   "ms": 753,
+   "kb": 36
+  },
+  {
+   "role": "CEO",
+   "path": "/api/health",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/health/company-office",
+   "status": 200,
+   "ms": 8,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/health/org-links",
+   "status": 200,
+   "ms": 7,
+   "kb": 2
+  },
+  {
+   "role": "CEO",
+   "path": "/api/health/release",
+   "status": 200,
+   "ms": 5,
+   "kb": 2
+  },
+  {
+   "role": "CEO",
+   "path": "/api/health/schema",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/home",
+   "status": 200,
+   "ms": 17435,
+   "kb": 39
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hostels",
+   "status": 200,
+   "ms": 30,
+   "kb": 305
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr",
+   "status": 200,
+   "ms": 102,
+   "kb": 14
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/appraisals",
+   "status": 200,
+   "ms": 4,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/cases",
+   "status": 200,
+   "ms": 15,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/ea",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/faces",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/guard-training",
+   "status": 200,
+   "ms": 103,
+   "kb": 328
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/holidays",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/join-leave",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/leave-settings",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/legal",
+   "status": 200,
+   "ms": 209,
+   "kb": 3
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/osh",
+   "status": 200,
+   "ms": 43,
+   "kb": 9
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/overtime",
+   "status": 200,
+   "ms": 38,
+   "kb": 40
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/policies",
+   "status": 200,
+   "ms": 39,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/register",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/hr/training",
+   "status": 200,
+   "ms": 39,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/insurance",
+   "status": 200,
+   "ms": 93,
+   "kb": 264
+  },
+  {
+   "role": "CEO",
+   "path": "/api/integrations/whatsapp/v1/webhook",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not a valid webhook check.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/it",
+   "status": 200,
+   "ms": 122,
+   "kb": 1769
+  },
+  {
+   "role": "CEO",
+   "path": "/api/it/plan",
+   "status": 200,
+   "ms": 36,
+   "kb": 21
+  },
+  {
+   "role": "CEO",
+   "path": "/api/ja",
+   "status": 200,
+   "ms": 6,
+   "kb": 25
+  },
+  {
+   "role": "CEO",
+   "path": "/api/leave",
+   "status": 200,
+   "ms": 7719,
+   "kb": 38
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me",
+   "status": 200,
+   "ms": 7,
+   "kb": 6
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/clock",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/confidentiality",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/duty",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"This screen is for a guard or officer, about their own record.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/face",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (no staff record). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/items",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/remote",
+   "status": 200,
+   "ms": 30,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/me/work",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (guards see their duties in the JA app). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/meetings",
+   "status": 200,
+   "ms": 20,
+   "kb": 128
+  },
+  {
+   "role": "CEO",
+   "path": "/api/memos",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "CEO",
+   "path": "/api/offices",
+   "status": 200,
+   "ms": 9160,
+   "kb": 135
+  },
+  {
+   "role": "CEO",
+   "path": "/api/ops/government",
+   "status": 200,
+   "ms": 2871,
+   "kb": 865
+  },
+  {
+   "role": "CEO",
+   "path": "/api/ops/private",
+   "status": 200,
+   "ms": 9157,
+   "kb": 3631
+  },
+  {
+   "role": "CEO",
+   "path": "/api/ops/region",
+   "status": 200,
+   "ms": 4172,
+   "kb": 627
+  },
+  {
+   "role": "CEO",
+   "path": "/api/org/guide",
+   "status": 200,
+   "ms": 7,
+   "kb": 110
+  },
+  {
+   "role": "CEO",
+   "path": "/api/org/inbox",
+   "status": 500,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/org/map",
+   "status": 500,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/pay-changes",
+   "status": 200,
+   "ms": 47,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/pdpa",
+   "status": 200,
+   "ms": 3,
+   "kb": 28
+  },
+  {
+   "role": "CEO",
+   "path": "/api/pdpa/rights",
+   "status": 200,
+   "ms": 4,
+   "kb": 34
+  },
+  {
+   "role": "CEO",
+   "path": "/api/products",
+   "status": 200,
+   "ms": 3,
+   "kb": 5
+  },
+  {
+   "role": "CEO",
+   "path": "/api/purchasing",
+   "status": 200,
+   "ms": 262,
+   "kb": 595
+  },
+  {
+   "role": "CEO",
+   "path": "/api/records/kinds",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/remote",
+   "status": 200,
+   "ms": 282,
+   "kb": 15
+  },
+  {
+   "role": "CEO",
+   "path": "/api/renewals",
+   "status": 200,
+   "ms": 6,
+   "kb": 72
+  },
+  {
+   "role": "CEO",
+   "path": "/api/reports",
+   "status": 200,
+   "ms": 7,
+   "kb": 55
+  },
+  {
+   "role": "CEO",
+   "path": "/api/requests",
+   "status": 200,
+   "ms": 4,
+   "kb": 22
+  },
+  {
+   "role": "CEO",
+   "path": "/api/socso",
+   "status": 200,
+   "ms": 66,
+   "kb": 93
+  },
+  {
+   "role": "CEO",
+   "path": "/api/staff-clock",
+   "status": 200,
+   "ms": 24,
+   "kb": 34
+  },
+  {
+   "role": "CEO",
+   "path": "/api/staff-pay",
+   "status": 200,
+   "ms": 50,
+   "kb": 49
+  },
+  {
+   "role": "CEO",
+   "path": "/api/staff-pay/my-zakat",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (only office staff paid through Prima choose a zakat deduction). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CEO",
+   "path": "/api/staff-pay/stat-tables",
+   "status": 200,
+   "ms": 8,
+   "kb": 52
+  },
+  {
+   "role": "CEO",
+   "path": "/api/tender-board",
+   "status": 200,
+   "ms": 367,
+   "kb": 108
+  },
+  {
+   "role": "CEO",
+   "path": "/api/tender-groups",
+   "status": 200,
+   "ms": 13,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/tender-protocol",
+   "status": 200,
+   "ms": 3,
+   "kb": 9
+  },
+  {
+   "role": "CEO",
+   "path": "/api/transport/board",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/vacancies",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CEO",
+   "path": "/api/websites",
+   "status": 200,
+   "ms": 64,
+   "kb": 527
+  },
+  {
+   "role": "CEO",
+   "path": "/api/websites-powerbi",
+   "status": 200,
+   "ms": 29,
+   "kb": 54
+  },
+  {
+   "role": "CEO",
+   "path": "/api/work/rebalance",
+   "status": 200,
+   "ms": 2706,
+   "kb": 59
+  },
+  {
+   "role": "CEO",
+   "path": "/api/work/summary",
+   "status": 200,
+   "ms": 1136,
+   "kb": 17
+  },
+  {
+   "role": "CEO",
+   "path": "/api/work/team",
+   "status": 200,
+   "ms": 189,
+   "kb": 25
+  },
+  {
+   "role": "COO",
+   "path": "/api/act",
+   "status": 200,
+   "ms": 67,
+   "kb": 106
+  },
+  {
+   "role": "COO",
+   "path": "/api/am/rent-check",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/am/whatsapp",
+   "status": 200,
+   "ms": 6,
+   "kb": 18
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha/draft-form",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"No form called (none).\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha/drafts",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha/finance-papers",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha/it-extraction",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"FORBIDDEN\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/arisha/it-import",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Sign in with Microsoft to import IT work.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms",
+   "status": 200,
+   "ms": 29,
+   "kb": 11
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/control",
+   "status": 200,
+   "ms": 334,
+   "kb": 1039
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/imports",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/legal-flags",
+   "status": 200,
+   "ms": 25,
+   "kb": 15
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/renewals",
+   "status": 200,
+   "ms": 11,
+   "kb": 78
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/suppliers/file",
+   "status": 200,
+   "ms": 3,
+   "kb": 3
+  },
+  {
+   "role": "COO",
+   "path": "/api/arms/trading",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/assets",
+   "status": 200,
+   "ms": 18,
+   "kb": 669
+  },
+  {
+   "role": "COO",
+   "path": "/api/assets/fixed",
+   "status": 200,
+   "ms": 14,
+   "kb": 30
+  },
+  {
+   "role": "COO",
+   "path": "/api/audit",
+   "status": 200,
+   "ms": 123,
+   "kb": 80
+  },
+  {
+   "role": "COO",
+   "path": "/api/auth/config",
+   "status": 200,
+   "ms": 1,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/auth/users",
+   "status": 200,
+   "ms": 46,
+   "kb": 3
+  },
+  {
+   "role": "COO",
+   "path": "/api/branch-work",
+   "status": 200,
+   "ms": 133,
+   "kb": 341
+  },
+  {
+   "role": "COO",
+   "path": "/api/branches",
+   "status": 200,
+   "ms": 142,
+   "kb": 251
+  },
+  {
+   "role": "COO",
+   "path": "/api/cases",
+   "status": 200,
+   "ms": 114,
+   "kb": 1699
+  },
+  {
+   "role": "COO",
+   "path": "/api/ceo/instructions",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (CEO instructions). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/claims",
+   "status": 200,
+   "ms": 8,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/claims/receipts",
+   "status": 200,
+   "ms": 9,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/clients",
+   "status": 200,
+   "ms": 75,
+   "kb": 3743
+  },
+  {
+   "role": "COO",
+   "path": "/api/cms",
+   "status": 200,
+   "ms": 4807,
+   "kb": 4940
+  },
+  {
+   "role": "COO",
+   "path": "/api/compliance",
+   "status": 200,
+   "ms": 693,
+   "kb": 32
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/m365/matrix",
+   "status": 200,
+   "ms": 3,
+   "kb": 8
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/m365/status",
+   "status": 200,
+   "ms": 8,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/mail/jobs/status",
+   "status": 200,
+   "ms": 8,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/sharepoint",
+   "status": 200,
+   "ms": 11,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/sharepoint/requests",
+   "status": 200,
+   "ms": 85,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/connections/teams/status",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/continuity",
+   "status": 200,
+   "ms": 3,
+   "kb": 8
+  },
+  {
+   "role": "COO",
+   "path": "/api/contracts",
+   "status": 200,
+   "ms": 200,
+   "kb": 10966
+  },
+  {
+   "role": "COO",
+   "path": "/api/corporate",
+   "status": 200,
+   "ms": 10,
+   "kb": 113
+  },
+  {
+   "role": "COO",
+   "path": "/api/corporate/audit-legal",
+   "status": 200,
+   "ms": 7,
+   "kb": 78
+  },
+  {
+   "role": "COO",
+   "path": "/api/corporate/files",
+   "status": 200,
+   "ms": 9,
+   "kb": 22
+  },
+  {
+   "role": "COO",
+   "path": "/api/corporate/panel",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/credit",
+   "status": 200,
+   "ms": 10,
+   "kb": 301
+  },
+  {
+   "role": "COO",
+   "path": "/api/delegations",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/director/digest",
+   "status": 200,
+   "ms": 31,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/director/legal-flags",
+   "status": 200,
+   "ms": 27,
+   "kb": 41
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/cash/advances-overdue",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (HR and Finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/cash/mine",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/checks-todo",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/coo",
+   "status": 200,
+   "ms": 7,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/dailycash/mine",
+   "status": 200,
+   "ms": 8,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/dashboard",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/desk",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/kpi",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/management-fee-bills",
+   "status": 200,
+   "ms": 13188,
+   "kb": 68
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/management-fees",
+   "status": 403,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/requests",
+   "status": 200,
+   "ms": 8,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/settings",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/finance/today",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/fleet",
+   "status": 200,
+   "ms": 57,
+   "kb": 39
+  },
+  {
+   "role": "COO",
+   "path": "/api/flex",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/fwm",
+   "status": 200,
+   "ms": 134,
+   "kb": 737
+  },
+  {
+   "role": "COO",
+   "path": "/api/governance",
+   "status": 200,
+   "ms": 21,
+   "kb": 81
+  },
+  {
+   "role": "COO",
+   "path": "/api/grc",
+   "status": 200,
+   "ms": 57,
+   "kb": 410
+  },
+  {
+   "role": "COO",
+   "path": "/api/group/overview",
+   "status": 200,
+   "ms": 697,
+   "kb": 36
+  },
+  {
+   "role": "COO",
+   "path": "/api/health",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/health/company-office",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/health/org-links",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/health/release",
+   "status": 200,
+   "ms": 2,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/health/schema",
+   "status": 200,
+   "ms": 1,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/home",
+   "status": 200,
+   "ms": 1600,
+   "kb": 38
+  },
+  {
+   "role": "COO",
+   "path": "/api/hostels",
+   "status": 200,
+   "ms": 12,
+   "kb": 305
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr",
+   "status": 200,
+   "ms": 106,
+   "kb": 14
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/appraisals",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/cases",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (HR cases). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/ea",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/faces",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/guard-training",
+   "status": 200,
+   "ms": 97,
+   "kb": 327
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/holidays",
+   "status": 200,
+   "ms": 5,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/join-leave",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/leave-settings",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/legal",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/osh",
+   "status": 403,
+   "ms": 35,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/overtime",
+   "status": 200,
+   "ms": 40,
+   "kb": 40
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/policies",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/register",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/hr/training",
+   "status": 200,
+   "ms": 41,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/insurance",
+   "status": 200,
+   "ms": 94,
+   "kb": 264
+  },
+  {
+   "role": "COO",
+   "path": "/api/integrations/whatsapp/v1/webhook",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not a valid webhook check.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/it",
+   "status": 200,
+   "ms": 92,
+   "kb": 1710
+  },
+  {
+   "role": "COO",
+   "path": "/api/it/plan",
+   "status": 200,
+   "ms": 33,
+   "kb": 21
+  },
+  {
+   "role": "COO",
+   "path": "/api/ja",
+   "status": 200,
+   "ms": 6,
+   "kb": 25
+  },
+  {
+   "role": "COO",
+   "path": "/api/leave",
+   "status": 200,
+   "ms": 7514,
+   "kb": 38
+  },
+  {
+   "role": "COO",
+   "path": "/api/me",
+   "status": 200,
+   "ms": 8,
+   "kb": 6
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/clock",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/confidentiality",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/duty",
+   "status": 200,
+   "ms": 605,
+   "kb": 10
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/face",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/items",
+   "status": 200,
+   "ms": 10,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/remote",
+   "status": 200,
+   "ms": 29,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/me/work",
+   "status": 200,
+   "ms": 167,
+   "kb": 9
+  },
+  {
+   "role": "COO",
+   "path": "/api/meetings",
+   "status": 200,
+   "ms": 19,
+   "kb": 128
+  },
+  {
+   "role": "COO",
+   "path": "/api/memos",
+   "status": 200,
+   "ms": 4,
+   "kb": 1
+  },
+  {
+   "role": "COO",
+   "path": "/api/offices",
+   "status": 200,
+   "ms": 8746,
+   "kb": 135
+  },
+  {
+   "role": "COO",
+   "path": "/api/ops/government",
+   "status": 200,
+   "ms": 2516,
+   "kb": 865
+  },
+  {
+   "role": "COO",
+   "path": "/api/ops/private",
+   "status": 200,
+   "ms": 10188,
+   "kb": 3631
+  },
+  {
+   "role": "COO",
+   "path": "/api/ops/region",
+   "status": 200,
+   "ms": 4148,
+   "kb": 627
+  },
+  {
+   "role": "COO",
+   "path": "/api/org/guide",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "COO",
+   "path": "/api/org/inbox",
+   "status": 500,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/org/map",
+   "status": 500,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/pay-changes",
+   "status": 200,
+   "ms": 49,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/pdpa",
+   "status": 200,
+   "ms": 3,
+   "kb": 28
+  },
+  {
+   "role": "COO",
+   "path": "/api/pdpa/rights",
+   "status": 200,
+   "ms": 3,
+   "kb": 34
+  },
+  {
+   "role": "COO",
+   "path": "/api/products",
+   "status": 200,
+   "ms": 3,
+   "kb": 5
+  },
+  {
+   "role": "COO",
+   "path": "/api/purchasing",
+   "status": 200,
+   "ms": 256,
+   "kb": 595
+  },
+  {
+   "role": "COO",
+   "path": "/api/records/kinds",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/remote",
+   "status": 200,
+   "ms": 268,
+   "kb": 15
+  },
+  {
+   "role": "COO",
+   "path": "/api/renewals",
+   "status": 200,
+   "ms": 5,
+   "kb": 72
+  },
+  {
+   "role": "COO",
+   "path": "/api/reports",
+   "status": 200,
+   "ms": 7,
+   "kb": 44
+  },
+  {
+   "role": "COO",
+   "path": "/api/requests",
+   "status": 200,
+   "ms": 3,
+   "kb": 22
+  },
+  {
+   "role": "COO",
+   "path": "/api/socso",
+   "status": 200,
+   "ms": 62,
+   "kb": 93
+  },
+  {
+   "role": "COO",
+   "path": "/api/staff-clock",
+   "status": 200,
+   "ms": 23,
+   "kb": 34
+  },
+  {
+   "role": "COO",
+   "path": "/api/staff-pay",
+   "status": 200,
+   "ms": 50,
+   "kb": 50
+  },
+  {
+   "role": "COO",
+   "path": "/api/staff-pay/my-zakat",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/staff-pay/stat-tables",
+   "status": 200,
+   "ms": 8,
+   "kb": 52
+  },
+  {
+   "role": "COO",
+   "path": "/api/tender-board",
+   "status": 200,
+   "ms": 365,
+   "kb": 108
+  },
+  {
+   "role": "COO",
+   "path": "/api/tender-groups",
+   "status": 200,
+   "ms": 11,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/tender-protocol",
+   "status": 200,
+   "ms": 3,
+   "kb": 9
+  },
+  {
+   "role": "COO",
+   "path": "/api/transport/board",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "COO",
+   "path": "/api/vacancies",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "COO",
+   "path": "/api/websites",
+   "status": 200,
+   "ms": 66,
+   "kb": 510
+  },
+  {
+   "role": "COO",
+   "path": "/api/websites-powerbi",
+   "status": 200,
+   "ms": 27,
+   "kb": 54
+  },
+  {
+   "role": "COO",
+   "path": "/api/work/rebalance",
+   "status": 200,
+   "ms": 1695,
+   "kb": 33
+  },
+  {
+   "role": "COO",
+   "path": "/api/work/summary",
+   "status": 200,
+   "ms": 1133,
+   "kb": 17
+  },
+  {
+   "role": "COO",
+   "path": "/api/work/team",
+   "status": 200,
+   "ms": 352,
+   "kb": 43
+  },
+  {
+   "role": "FD",
+   "path": "/api/act",
+   "status": 200,
+   "ms": 71,
+   "kb": 106
+  },
+  {
+   "role": "FD",
+   "path": "/api/am/rent-check",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/am/whatsapp",
+   "status": 200,
+   "ms": 6,
+   "kb": 18
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha/draft-form",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"No form called (none).\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha/drafts",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha/finance-papers",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha/it-extraction",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"FORBIDDEN\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arisha/it-import",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Sign in with Microsoft to import IT work.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms",
+   "status": 403,
+   "ms": 8,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (any). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/control",
+   "status": 403,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (group). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/imports",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (imports). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/legal-flags",
+   "status": 200,
+   "ms": 6,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/renewals",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (renewals). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/suppliers/file",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (suppliers). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/arms/trading",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/assets",
+   "status": 200,
+   "ms": 17,
+   "kb": 669
+  },
+  {
+   "role": "FD",
+   "path": "/api/assets/fixed",
+   "status": 200,
+   "ms": 13,
+   "kb": 30
+  },
+  {
+   "role": "FD",
+   "path": "/api/audit",
+   "status": 200,
+   "ms": 121,
+   "kb": 80
+  },
+  {
+   "role": "FD",
+   "path": "/api/auth/config",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/auth/users",
+   "status": 200,
+   "ms": 35,
+   "kb": 3
+  },
+  {
+   "role": "FD",
+   "path": "/api/branch-work",
+   "status": 200,
+   "ms": 134,
+   "kb": 341
+  },
+  {
+   "role": "FD",
+   "path": "/api/branches",
+   "status": 200,
+   "ms": 145,
+   "kb": 251
+  },
+  {
+   "role": "FD",
+   "path": "/api/cases",
+   "status": 200,
+   "ms": 99,
+   "kb": 1699
+  },
+  {
+   "role": "FD",
+   "path": "/api/ceo/instructions",
+   "status": 403,
+   "ms": 7,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (CEO instructions). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/claims",
+   "status": 200,
+   "ms": 7,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/claims/receipts",
+   "status": 200,
+   "ms": 9,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/clients",
+   "status": 200,
+   "ms": 61,
+   "kb": 3743
+  },
+  {
+   "role": "FD",
+   "path": "/api/cms",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/compliance",
+   "status": 200,
+   "ms": 682,
+   "kb": 32
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/m365/matrix",
+   "status": 200,
+   "ms": 2,
+   "kb": 8
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/m365/status",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/mail/jobs/status",
+   "status": 200,
+   "ms": 7,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/sharepoint",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/sharepoint/requests",
+   "status": 200,
+   "ms": 78,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/connections/teams/status",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/continuity",
+   "status": 200,
+   "ms": 3,
+   "kb": 8
+  },
+  {
+   "role": "FD",
+   "path": "/api/contracts",
+   "status": 200,
+   "ms": 172,
+   "kb": 10966
+  },
+  {
+   "role": "FD",
+   "path": "/api/corporate",
+   "status": 200,
+   "ms": 9,
+   "kb": 113
+  },
+  {
+   "role": "FD",
+   "path": "/api/corporate/audit-legal",
+   "status": 200,
+   "ms": 6,
+   "kb": 78
+  },
+  {
+   "role": "FD",
+   "path": "/api/corporate/files",
+   "status": 200,
+   "ms": 10,
+   "kb": 22
+  },
+  {
+   "role": "FD",
+   "path": "/api/corporate/panel",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/credit",
+   "status": 200,
+   "ms": 9,
+   "kb": 301
+  },
+  {
+   "role": "FD",
+   "path": "/api/delegations",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/director/digest",
+   "status": 200,
+   "ms": 20,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/director/legal-flags",
+   "status": 200,
+   "ms": 30,
+   "kb": 41
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance",
+   "status": 200,
+   "ms": 18,
+   "kb": 173
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/cash/advances-overdue",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/cash/mine",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/checks-todo",
+   "status": 200,
+   "ms": 166,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/coo",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/dailycash/mine",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/dashboard",
+   "status": 200,
+   "ms": 118,
+   "kb": 14
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/desk",
+   "status": 200,
+   "ms": 75,
+   "kb": 561
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/kpi",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/management-fee-bills",
+   "status": 200,
+   "ms": 12176,
+   "kb": 68
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/management-fees",
+   "status": 200,
+   "ms": 9,
+   "kb": 4
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/requests",
+   "status": 200,
+   "ms": 6,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/settings",
+   "status": 200,
+   "ms": 6,
+   "kb": 6
+  },
+  {
+   "role": "FD",
+   "path": "/api/finance/today",
+   "status": 200,
+   "ms": 258,
+   "kb": 5
+  },
+  {
+   "role": "FD",
+   "path": "/api/fleet",
+   "status": 200,
+   "ms": 39,
+   "kb": 39
+  },
+  {
+   "role": "FD",
+   "path": "/api/flex",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/fwm",
+   "status": 200,
+   "ms": 100,
+   "kb": 738
+  },
+  {
+   "role": "FD",
+   "path": "/api/governance",
+   "status": 200,
+   "ms": 22,
+   "kb": 81
+  },
+  {
+   "role": "FD",
+   "path": "/api/grc",
+   "status": 200,
+   "ms": 54,
+   "kb": 410
+  },
+  {
+   "role": "FD",
+   "path": "/api/group/overview",
+   "status": 200,
+   "ms": 711,
+   "kb": 36
+  },
+  {
+   "role": "FD",
+   "path": "/api/health",
+   "status": 200,
+   "ms": 1,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/health/company-office",
+   "status": 200,
+   "ms": 4,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/health/org-links",
+   "status": 200,
+   "ms": 3,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/health/release",
+   "status": 200,
+   "ms": 3,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/health/schema",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/home",
+   "status": 200,
+   "ms": 1621,
+   "kb": 32
+  },
+  {
+   "role": "FD",
+   "path": "/api/hostels",
+   "status": 200,
+   "ms": 13,
+   "kb": 305
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr",
+   "status": 200,
+   "ms": 96,
+   "kb": 14
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/appraisals",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/cases",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (HR cases). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/ea",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/faces",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/guard-training",
+   "status": 200,
+   "ms": 94,
+   "kb": 328
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/holidays",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/join-leave",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/leave-settings",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/legal",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/osh",
+   "status": 403,
+   "ms": 35,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/overtime",
+   "status": 200,
+   "ms": 35,
+   "kb": 40
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/policies",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/register",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/hr/training",
+   "status": 200,
+   "ms": 37,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/insurance",
+   "status": 200,
+   "ms": 81,
+   "kb": 264
+  },
+  {
+   "role": "FD",
+   "path": "/api/integrations/whatsapp/v1/webhook",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Not a valid webhook check.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/it",
+   "status": 200,
+   "ms": 79,
+   "kb": 838
+  },
+  {
+   "role": "FD",
+   "path": "/api/it/plan",
+   "status": 200,
+   "ms": 30,
+   "kb": 10
+  },
+  {
+   "role": "FD",
+   "path": "/api/ja",
+   "status": 200,
+   "ms": 6,
+   "kb": 25
+  },
+  {
+   "role": "FD",
+   "path": "/api/leave",
+   "status": 200,
+   "ms": 7582,
+   "kb": 38
+  },
+  {
+   "role": "FD",
+   "path": "/api/me",
+   "status": 200,
+   "ms": 8,
+   "kb": 6
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/clock",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/confidentiality",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/duty",
+   "status": 200,
+   "ms": 614,
+   "kb": 10
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/face",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/items",
+   "status": 200,
+   "ms": 9,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/remote",
+   "status": 200,
+   "ms": 28,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/me/work",
+   "status": 200,
+   "ms": 136,
+   "kb": 14
+  },
+  {
+   "role": "FD",
+   "path": "/api/meetings",
+   "status": 200,
+   "ms": 16,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/memos",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "FD",
+   "path": "/api/offices",
+   "status": 200,
+   "ms": 8380,
+   "kb": 136
+  },
+  {
+   "role": "FD",
+   "path": "/api/ops/government",
+   "status": 200,
+   "ms": 2500,
+   "kb": 865
+  },
+  {
+   "role": "FD",
+   "path": "/api/ops/private",
+   "status": 200,
+   "ms": 9104,
+   "kb": 3631
+  },
+  {
+   "role": "FD",
+   "path": "/api/ops/region",
+   "status": 200,
+   "ms": 4007,
+   "kb": 627
+  },
+  {
+   "role": "FD",
+   "path": "/api/org/guide",
+   "status": 200,
+   "ms": 6,
+   "kb": 2
+  },
+  {
+   "role": "FD",
+   "path": "/api/org/inbox",
+   "status": 500,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/org/map",
+   "status": 500,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/pay-changes",
+   "status": 200,
+   "ms": 48,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/pdpa",
+   "status": 200,
+   "ms": 3,
+   "kb": 28
+  },
+  {
+   "role": "FD",
+   "path": "/api/pdpa/rights",
+   "status": 200,
+   "ms": 3,
+   "kb": 34
+  },
+  {
+   "role": "FD",
+   "path": "/api/products",
+   "status": 200,
+   "ms": 4,
+   "kb": 5
+  },
+  {
+   "role": "FD",
+   "path": "/api/purchasing",
+   "status": 200,
+   "ms": 227,
+   "kb": 596
+  },
+  {
+   "role": "FD",
+   "path": "/api/records/kinds",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/remote",
+   "status": 200,
+   "ms": 270,
+   "kb": 15
+  },
+  {
+   "role": "FD",
+   "path": "/api/renewals",
+   "status": 200,
+   "ms": 4,
+   "kb": 72
+  },
+  {
+   "role": "FD",
+   "path": "/api/reports",
+   "status": 200,
+   "ms": 7,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/requests",
+   "status": 200,
+   "ms": 3,
+   "kb": 22
+  },
+  {
+   "role": "FD",
+   "path": "/api/socso",
+   "status": 200,
+   "ms": 62,
+   "kb": 83
+  },
+  {
+   "role": "FD",
+   "path": "/api/staff-clock",
+   "status": 200,
+   "ms": 24,
+   "kb": 34
+  },
+  {
+   "role": "FD",
+   "path": "/api/staff-pay",
+   "status": 200,
+   "ms": 49,
+   "kb": 50
+  },
+  {
+   "role": "FD",
+   "path": "/api/staff-pay/my-zakat",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/staff-pay/stat-tables",
+   "status": 200,
+   "ms": 8,
+   "kb": 52
+  },
+  {
+   "role": "FD",
+   "path": "/api/tender-board",
+   "status": 200,
+   "ms": 372,
+   "kb": 108
+  },
+  {
+   "role": "FD",
+   "path": "/api/tender-groups",
+   "status": 200,
+   "ms": 13,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/tender-protocol",
+   "status": 200,
+   "ms": 3,
+   "kb": 9
+  },
+  {
+   "role": "FD",
+   "path": "/api/transport/board",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "FD",
+   "path": "/api/vacancies",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "FD",
+   "path": "/api/websites",
+   "status": 200,
+   "ms": 68,
+   "kb": 509
+  },
+  {
+   "role": "FD",
+   "path": "/api/websites-powerbi",
+   "status": 200,
+   "ms": 29,
+   "kb": 54
+  },
+  {
+   "role": "FD",
+   "path": "/api/work/rebalance",
+   "status": 200,
+   "ms": 394,
+   "kb": 16
+  },
+  {
+   "role": "FD",
+   "path": "/api/work/summary",
+   "status": 200,
+   "ms": 1124,
+   "kb": 16
+  },
+  {
+   "role": "FD",
+   "path": "/api/work/team",
+   "status": 200,
+   "ms": 317,
+   "kb": 36
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/act",
+   "status": 200,
+   "ms": 21,
+   "kb": 5
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/am/rent-check",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Asset Management). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/am/whatsapp",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Asset Management). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha/draft-form",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"No form called (none).\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha/drafts",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha/finance-papers",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha/it-extraction",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"FORBIDDEN\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arisha/it-import",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Sign in with Microsoft to import IT work.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms",
+   "status": 200,
+   "ms": 7,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/control",
+   "status": 403,
+   "ms": 4,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (group). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/imports",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (imports). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/legal-flags",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (legal flags: the directors only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/renewals",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (renewals). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/suppliers/file",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (suppliers). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/arms/trading",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/assets",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Asset Management). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/assets/fixed",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (fixed assets). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/audit",
+   "status": 200,
+   "ms": 13,
+   "kb": 79
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/auth/config",
+   "status": 200,
+   "ms": 1,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/auth/users",
+   "status": 200,
+   "ms": 37,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/branch-work",
+   "status": 200,
+   "ms": 26,
+   "kb": 9
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/branches",
+   "status": 200,
+   "ms": 6,
+   "kb": 7
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/cases",
+   "status": 200,
+   "ms": 18,
+   "kb": 10
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/ceo/instructions",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (CEO instructions). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/claims",
+   "status": 200,
+   "ms": 5,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/claims/receipts",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/clients",
+   "status": 200,
+   "ms": 27,
+   "kb": 144
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/cms",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/compliance",
+   "status": 200,
+   "ms": 26,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/m365/matrix",
+   "status": 200,
+   "ms": 1,
+   "kb": 8
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/m365/status",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/mail/jobs/status",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/sharepoint",
+   "status": 200,
+   "ms": 10,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/sharepoint/requests",
+   "status": 200,
+   "ms": 34,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/connections/teams/status",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/continuity",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (continuity). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/contracts",
+   "status": 200,
+   "ms": 12,
+   "kb": 419
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/corporate",
+   "status": 200,
+   "ms": 3,
+   "kb": 4
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/corporate/audit-legal",
+   "status": 200,
+   "ms": 2,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/corporate/files",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/corporate/panel",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/credit",
+   "status": 200,
+   "ms": 3,
+   "kb": 9
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/delegations",
+   "status": 200,
+   "ms": 16,
+   "kb": 9
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/director/digest",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Director Office digest). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/director/legal-flags",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (legal flags: the directors only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/cash/advances-overdue",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (HR and Finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/cash/mine",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/checks-todo",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/coo",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/dailycash/mine",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/dashboard",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/desk",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/kpi",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Finance KPIs: team leader, Finance Director, CEO, COO, ACT Director and HR). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/management-fee-bills",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Finance, the COO, the OGM or the Operations Director). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/management-fees",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/requests",
+   "status": 200,
+   "ms": 4,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/settings",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/finance/today",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (finance). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/fleet",
+   "status": 200,
+   "ms": 3,
+   "kb": 5
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/flex",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/fwm",
+   "status": 200,
+   "ms": 19,
+   "kb": 27
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/governance",
+   "status": 200,
+   "ms": 16,
+   "kb": 6
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/grc",
+   "status": 200,
+   "ms": 16,
+   "kb": 35
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/group/overview",
+   "status": 200,
+   "ms": 21,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/health",
+   "status": 200,
+   "ms": 1,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/health/company-office",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/health/org-links",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/health/release",
+   "status": 200,
+   "ms": 2,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/health/schema",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/home",
+   "status": 200,
+   "ms": 212,
+   "kb": 13
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hostels",
+   "status": 200,
+   "ms": 8,
+   "kb": 25
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr",
+   "status": 403,
+   "ms": 6,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (any). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/appraisals",
+   "status": 200,
+   "ms": 2,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/cases",
+   "status": 200,
+   "ms": 13,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/ea",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/faces",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/guard-training",
+   "status": 200,
+   "ms": 7,
+   "kb": 176
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/holidays",
+   "status": 200,
+   "ms": 3,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/join-leave",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/leave-settings",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/legal",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/osh",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/overtime",
+   "status": 200,
+   "ms": 2,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/policies",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/register",
+   "status": 400,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"companyId is missing or too long\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/hr/training",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/insurance",
+   "status": 200,
+   "ms": 12,
+   "kb": 9
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/integrations/whatsapp/v1/webhook",
+   "status": 403,
+   "ms": 1,
+   "kb": 0,
+   "body": "{\"message\":\"Not a valid webhook check.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/it",
+   "status": 200,
+   "ms": 26,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/it/plan",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (IT plan). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/ja",
+   "status": 200,
+   "ms": 6,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/leave",
+   "status": 200,
+   "ms": 41,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me",
+   "status": 200,
+   "ms": 4,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/clock",
+   "status": 200,
+   "ms": 3,
+   "kb": 5
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/confidentiality",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/duty",
+   "status": 200,
+   "ms": 44,
+   "kb": 10
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/face",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/items",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/remote",
+   "status": 200,
+   "ms": 10,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/me/work",
+   "status": 200,
+   "ms": 32,
+   "kb": 15
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/meetings",
+   "status": 200,
+   "ms": 8,
+   "kb": 5
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/memos",
+   "status": 200,
+   "ms": 3,
+   "kb": 1
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/offices",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (group data: leadership only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/ops/government",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: ops.region for company (Government Operations). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/ops/private",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: ops.region for company (Private Operations). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/ops/region",
+   "status": 403,
+   "ms": 8,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: ops.region for company (any). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/org/guide",
+   "status": 200,
+   "ms": 2,
+   "kb": 40
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/org/inbox",
+   "status": 500,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/org/map",
+   "status": 200,
+   "ms": 2,
+   "kb": 15
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/pay-changes",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.pay for company (pay changes). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/pdpa",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (PDPA). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/pdpa/rights",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (PDPA). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/products",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (products). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/purchasing",
+   "status": 200,
+   "ms": 4,
+   "kb": 50
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/records/kinds",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/remote",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/renewals",
+   "status": 200,
+   "ms": 2,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/reports",
+   "status": 200,
+   "ms": 5,
+   "kb": 3
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/requests",
+   "status": 200,
+   "ms": 2,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/socso",
+   "status": 200,
+   "ms": 6,
+   "kb": 5
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/staff-clock",
+   "status": 200,
+   "ms": 16,
+   "kb": 6
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/staff-pay",
+   "status": 200,
+   "ms": 4,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/staff-pay/my-zakat",
+   "status": 200,
+   "ms": 3,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/staff-pay/stat-tables",
+   "status": 200,
+   "ms": 3,
+   "kb": 49
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/tender-board",
+   "status": 403,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: commercial.view for company (tender board). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/tender-groups",
+   "status": 200,
+   "ms": 5,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/tender-protocol",
+   "status": 200,
+   "ms": 2,
+   "kb": 9
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/transport/board",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: view for company (Transport). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/vacancies",
+   "status": 200,
+   "ms": 2,
+   "kb": 0
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/websites",
+   "status": 200,
+   "ms": 74,
+   "kb": 27
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/websites-powerbi",
+   "status": 400,
+   "ms": 3,
+   "kb": 0,
+   "body": "{\"message\":\"Only group management and the IT Head read the website report feed.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/work/rebalance",
+   "status": 200,
+   "ms": 66,
+   "kb": 2
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/work/summary",
+   "status": 403,
+   "ms": 2,
+   "kb": 0,
+   "body": "{\"message\":\"Not allowed: hr.monitor for company (group leadership only). Ask the company or check your authority grant.\"}"
+  },
+  {
+   "role": "CompanyMgr",
+   "path": "/api/work/team",
+   "status": 200,
+   "ms": 71,
+   "kb": 20
+  }
+ ],
+ "conc": [
+  {
+   "n": 10,
+   "wallMs": 19132,
+   "p50": 4060,
+   "p95": 4720,
+   "max": 19131,
+   "tally": {
+    "ok": 6,
+    "refused_permission": 1,
+    "refused_input": 3,
+    "busy": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": [
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-10. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    }
+   ]
+  },
+  {
+   "n": 25,
+   "wallMs": 32550,
+   "p50": 7674,
+   "p95": 28654,
+   "max": 32545,
+   "tally": {
+    "ok": 15,
+    "refused_permission": 2,
+    "refused_input": 8,
+    "busy": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": [
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-10. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-21. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    }
+   ]
+  },
+  {
+   "n": 50,
+   "wallMs": 34125,
+   "p50": 10030,
+   "p95": 16583,
+   "max": 34123,
+   "tally": {
+    "ok": 18,
+    "refused_permission": 2,
+    "refused_input": 8,
+    "busy": 22,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": [
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-10. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-21. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    }
+   ]
+  },
+  {
+   "n": 100,
+   "wallMs": 34960,
+   "p50": 10053,
+   "p95": 16013,
+   "max": 34958,
+   "tally": {
+    "ok": 18,
+    "refused_permission": 2,
+    "refused_input": 8,
+    "busy": 72,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": [
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-10. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 403,
+     "kind": "refused_permission",
+     "body": "{\"message\":\"Not allowed: view for company co-21. Ask the company or check your authority grant.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 400,
+     "kind": "refused_input",
+     "body": "{\"message\":\"This job has its own board.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    },
+    {
+     "status": 503,
+     "kind": "busy",
+     "body": "{\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+    }
+   ]
+  }
+ ],
+ "singleTally": {
+  "ok": 424,
+  "refused_permission": 94,
+  "refused_input": 19,
+  "busy": 0,
+  "server_error": 7,
+  "other": 0
+ }
+}

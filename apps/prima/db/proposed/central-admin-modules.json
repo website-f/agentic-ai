@@ -1,0 +1,67 @@
+{
+  "status": "WIRED into db/release-manifest.json (Arisha main review round 2, 2 Nov 2026): both modules are pinned there and checked by the release gate. This file keeps the install order, dependencies, catalogue checks and rollback notes; its hashes must equal the manifest. Not installed anywhere. No install, migration or deploy is authorized by this file. Fauzan 2 Nov 2026 14:09Z: include both modules in the release.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email"
+  ],
+  "modules": [
+    {
+      "id": "central_admin_walls",
+      "path": "db/modules/central-admin-walls-v1.sql",
+      "sha256": "180d296df38cf76a9c0c8fb11c52750d2d7e69d703c5df380d691ab0369e2041",
+      "requires": [],
+      "catalog": "apps/api/src/central-admin-readiness.ts centralAdminWallsProblems",
+      "uses": [
+        "prima.has_wall (base)",
+        "prima.corp_profiles, corp_filings, corp_changes, corp_audits, legal_matters, gov_mandates (base)"
+      ],
+      "rollback": "DROP POLICY central_admin_wall on the six tables (the base company wall stays)."
+    },
+    {
+      "id": "central_admin_panel",
+      "path": "db/modules/central-admin-panel-v1.sql",
+      "sha256": "0942afb070a6d7fb472de43cb4eb1cf680ea6f75092da3a238160e3f1c31f2a6",
+      "requires": [
+        "central_admin_walls"
+      ],
+      "catalog": "apps/api/src/central-admin-readiness.ts centralAdminPanelProblems",
+      "uses": [
+        "prima.has_wall (base)",
+        "role prima_app (base)"
+      ],
+      "rollback": "Keep the table (firm records are never deleted); the API falls back to rule COR-SECRETARY when the table is absent."
+    },
+    {
+      "id": "central_admin_delegations",
+      "path": "db/modules/central-admin-delegations-v1.sql",
+      "sha256": "1b5b2cd56433765ec05b1a095071dd987db9bdb528dc02a440b05b90878d8b61",
+      "requires": [],
+      "catalog": "apps/api/src/central-admin-readiness.ts centralAdminDelegationsProblems",
+      "uses": [
+        "prima.has_wall, prima.visible_companies (base)",
+        "role prima_app (base)"
+      ],
+      "rollback": "Keep the tables (lines and critical posts are never deleted); the API says the register is not set up when a table is absent."
+    },
+    {
+      "id": "central_admin_legal_holds",
+      "path": "db/modules/central-admin-legal-holds-v1.sql",
+      "sha256": "77a6e2efccc07ef426919fbf240c15cfdba880f700dbcb936bf0567ad2c49dc2",
+      "requires": [],
+      "catalog": "apps/api/src/central-admin-readiness.ts centralAdminLegalHoldsProblems",
+      "uses": [
+        "prima.has_wall, prima.visible_companies (base)",
+        "role prima_app (base)",
+        "base tables evidence_docs, evidence_photos, cases, contracts, corp_profiles, people, insurance_claims (trigger lh_preserve)"
+      ],
+      "rollback": "Keep the tables (holds and versions are never deleted). Dropping the lh_preserve triggers stops preservation; that needs PWVSB legal's agreement first."
+    }
+  ]
+}

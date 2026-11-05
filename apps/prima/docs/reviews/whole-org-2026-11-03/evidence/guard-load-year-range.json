@@ -1,0 +1,185 @@
+{
+ "at": "2026-11-03T04:48:12.014Z",
+ "one": {
+  "duty": {
+   "status": 200,
+   "kind": "ok",
+   "ms": 115,
+   "kb": 27,
+   "err": null
+  },
+  "dutyTables": [
+   {
+    "t": "shifts",
+    "rows": 1045499
+   },
+   {
+    "t": "attendance",
+    "rows": 207004
+   },
+   {
+    "t": "users",
+    "rows": 9366
+   },
+   {
+    "t": "people",
+    "rows": 9132
+   },
+   {
+    "t": "scans",
+    "rows": 6136
+   },
+   {
+    "t": "grants",
+    "rows": 5451
+   },
+   {
+    "t": "credentials",
+    "rows": 1102
+   },
+   {
+    "t": "sites",
+    "rows": 270
+   }
+  ],
+  "clockIn": {
+   "status": 201,
+   "kind": "ok",
+   "ms": 70,
+   "kb": 0,
+   "err": null
+  },
+  "clockInTables": [
+   {
+    "t": "shifts",
+    "rows": 23634
+   },
+   {
+    "t": "attendance",
+    "rows": 11440
+   },
+   {
+    "t": "users",
+    "rows": 9365
+   },
+   {
+    "t": "grants",
+    "rows": 7268
+   },
+   {
+    "t": "credentials",
+    "rows": 551
+   },
+   {
+    "t": "people",
+    "rows": 198
+   },
+   {
+    "t": "cases",
+    "rows": 13
+   },
+   {
+    "t": "audit",
+    "rows": 2
+   }
+  ]
+ },
+ "duty": [
+  {
+   "n": 50,
+   "wallMs": 2682,
+   "p50": 1778,
+   "p95": 2662,
+   "max": 2675,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 11571,
+   "p50": 7114,
+   "p95": 11246,
+   "max": 11558,
+   "tally": {
+    "ok": 88,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 12,
+    "other": 0
+   },
+   "errors": [
+    "503 {\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+   ]
+  },
+  {
+   "n": 200,
+   "wallMs": 13350,
+   "p50": 11075,
+   "p95": 12148,
+   "max": 13331,
+   "tally": {
+    "ok": 111,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 89,
+    "other": 0
+   },
+   "errors": [
+    "503 {\"message\":\"Prima is busy right now. Please try again in a few seconds; nothing was changed.\"}"
+   ]
+  }
+ ],
+ "clock": [
+  {
+   "n": 50,
+   "wallMs": 1293,
+   "p50": 755,
+   "p95": 1237,
+   "max": 1290,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 2433,
+   "p50": 1262,
+   "p95": 2332,
+   "max": 2430,
+   "tally": {
+    "ok": 100,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 200,
+   "wallMs": 4825,
+   "p50": 2580,
+   "p95": 4645,
+   "max": 4810,
+   "tally": {
+    "ok": 200,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  }
+ ]
+}

@@ -9,7 +9,7 @@ const MAX_BYTES = 700_000;
 let testFiles = 0;
 const MAX_ITEMS = 3;
 
-function readAsDataUrl(f: Blob): Promise<string> {
+export function readAsDataUrl(f: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
@@ -19,7 +19,7 @@ function readAsDataUrl(f: Blob): Promise<string> {
 }
 
 /** Pictures of a letter or certificate are scaled down to a JPEG that fits the limit. */
-async function shrinkImage(dataUrl: string): Promise<string> {
+export async function shrinkImage(dataUrl: string): Promise<string> {
   const img = new Image();
   await new Promise((ok, bad) => {
     img.onload = ok;

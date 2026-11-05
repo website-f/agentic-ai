@@ -43,7 +43,13 @@ export function MyRemoteSection() {
   const { data, error } = useLoad(() => api.myRemote(), []);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="working from home" />;
-  if (!data.eligible) return null;
+  if (!data.eligible)
+    return data.notEligible?.startsWith('HR has not opened') ? (
+      <section className="panel">
+        <h3>Working from home</h3>
+        <p className="muted small">{data.notEligible}</p>
+      </section>
+    ) : null;
   const cur = data.current;
   return (
     <section className="panel">

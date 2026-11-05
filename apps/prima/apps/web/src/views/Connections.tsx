@@ -8,6 +8,8 @@ import { createRegistry, serviceIds } from '../connections/registry';
 import { ConnectionCardSession } from '../connections/session';
 import { SharePointRequest } from '../connections/sharepoint/request';
 import { sharePointAdapter } from '../connections/sharepoint/adapter';
+import { m365Client } from '../connections/m365/client';
+import { M365ConnectionsPanel } from '../connections/m365/panel';
 
 const titles = { mail: 'Mail', sharepoint: 'SharePoint', powerbi: 'Power BI' };
 export function ConnectionCard({ serviceId, userId, adapter }: { serviceId: ServiceId; userId: string; adapter?: Adapter }) {
@@ -50,13 +52,17 @@ export function ConnectionCard({ serviceId, userId, adapter }: { serviceId: Serv
 export function ConnectionsView({ userId }: { userId: string }) {
   const registry = useMemo(() => createRegistry([sharePointAdapter(api)]), [userId]);
   const selectedMail = useMemo(()=>jobEmailClient((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
+  const m365 = useMemo(()=>m365Client((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
+  // Server app only: sign in to Microsoft again (with any claims challenge). The demo has no Microsoft sign-in.
+  const reauthenticate = useMemo(()=>{const r=(api as { m365Reauthenticate?: (claims?: string) => Promise<void> }).m365Reauthenticate;return r?(claims?: string)=>r.call(api,claims):undefined;},[]);
   return <div className="page" data-no-translate>
     <div className="page-head"><h1>Connections</h1><p className="muted">Use your existing Microsoft sign-in to check approved access. These controls do not register accounts, grant consent or connect the whole organization.</p>
       <p className="notice" data-tone="info">Opening this page reads Prima setup status only. Provider reads require explicit actions. Names may be sensitive: no document body, download, import, email reply or AI transfer. Never paste passwords, tokens or client secrets here.</p></div>
+    <M365ConnectionsPanel key={`${userId}:m365`} userId={userId} client={m365} reauthenticate={reauthenticate} />
+    <h2>Details and setup requests</h2>
     <SharePointRequest key={userId} client={api} userId={userId} />
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16 }}>
       {serviceIds.map(serviceId => serviceId==='mail'?<MailConnectionCard key={`${userId}:mail`} userId={userId} client={selectedMail}/>:<ConnectionCard key={`${userId}:${serviceId}`} serviceId={serviceId} userId={userId} adapter={registry.get(serviceId)} />)}
-      <section className="panel" aria-labelledby="teams-pilot-title"><h2 id="teams-pilot-title">Teams</h2><p className="notice" data-tone="info">Required for the pilot — connection not verified. A trusted, scope-approved Teams reader is not yet available in this app.</p><p>This informational card does not read chats or channels, grant access, send messages, ingest files or apply Finance approvals. A setup-status endpoint alone is not a working Teams connection.</p></section>
     </div>
   </div>;
 }

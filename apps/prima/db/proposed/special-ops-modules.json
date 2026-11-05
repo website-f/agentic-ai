@@ -1,0 +1,49 @@
+{
+  "status": "PROPOSED, not installed, not in db/release-manifest.json. Arisha main review 2 Nov 2026 asked for a packaging proposal; no install, migration, grant or deploy is authorized by this file. Fauzan approves any install directly.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email",
+    "central_admin_walls",
+    "central_admin_panel",
+    "central_admin_delegations",
+    "central_admin_legal_holds",
+    "company_office",
+    "company_run_links",
+    "org_links"
+  ],
+  "modules": [
+    {
+      "id": "special_ops",
+      "version": 1,
+      "path": "db/modules/special-ops-v1.sql",
+      "sha256": "429e6a832a36fd32125ad96534ed84b5b3b2156ea4b8a349831ee13fcf76b335",
+      "requires": [],
+      "switch": "Rollout key special_ops (registerRollout in packages/core/src/special-ops.ts; legacy SPECIAL_OPS_ROLLOUT=true), off by default; switch on only after the install and an empty specialOpsModuleProblems",
+      "catalog": "apps/api/src/special-ops-readiness.ts specialOpsModuleProblems",
+      "uses": [
+        "prima.has_wall (base)",
+        "role prima_app (base)",
+        "prima.vaults, firearms, arms_movements, armed_jobs, dealer_licences, vault_watches, vault_events, ammo_stocks, arms_agreements, arms_requests, arms_suppliers, supplier_items, cms_staff, cms_shifts (base)"
+      ],
+      "changes": [
+        "RESTRICTIVE policy arms_wall (has_wall('arms')) on the 10 arms tables, on top of the base company wall",
+        "RLS enabled and forced, policy dept_wall on arms_suppliers and supplier_items (arms) and cms_staff and cms_shifts (cms)",
+        "GRANT INSERT, UPDATE on arms_suppliers, supplier_items, cms_staff to prima_app (no DELETE, no TRUNCATE)"
+      ],
+      "rollback": "DROP POLICY arms_wall on the 10 tables and dept_wall on the 4 tables; ALTER TABLE ... NO FORCE ROW LEVEL SECURITY, DISABLE ROW LEVEL SECURITY on the 4 tables (as in the base); REVOKE INSERT, UPDATE on the 3 tables. No data is changed by install or rollback. Rollback is written here only; it has not been run.",
+      "boundaries": [
+        "Install by the database owner only (run-db-migration.sh, CEO-only), after the base and the five manifest modules.",
+        "Not needed by the IT pilot; the Special Ops screens stay off (rollout key special_ops) until the owner switches them on.",
+        "No new tables. No SECURITY DEFINER function, no role change, no DELETE grant."
+      ],
+      "repeatSafe": true
+    }
+  ]
+}

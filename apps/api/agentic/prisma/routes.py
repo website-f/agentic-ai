@@ -17,9 +17,9 @@ _ROUTE = re.compile(r"@(Get|Post)\(\s*(?:'([^']*)')?\s*\)")
 _GUARD = re.compile(r"@UseGuards\((\w+)\)")
 _DOC = re.compile(r"/\*\*(.*?)\*/\s*$", re.S)
 _METHOD = re.compile(r"^\s*(?:async\s+)?(\w+)\s*\(", re.M)
-# Signed system feeds (their own keys), the office's own staff list and development sign-in:
-# never through the office.
-_SKIP_GUARDS = {"FeedGuard", "DoorFeedGuard", "PlannerFeedGuard", "OfficeSystemGuard"}
+# Only what a signed-in person can do: controllers behind Prima's AuthGuard. Signed system feeds and
+# webhooks, the office's own staff list, public share links, health and sign-in are left out.
+_PERSON_GUARD = "AuthGuard"
 _SKIP_PATHS = ("api/auth/dev-login", "api/auth/users")
 
 
@@ -53,7 +53,7 @@ def build(src: Path) -> list[dict[str, object]]:
             block = text[c.start() : starts[i + 1].start() if i + 1 < len(starts) else len(text)]
             head = block[: block.find("class ")]
             guard = _GUARD.search(head)
-            if guard and guard.group(1) in _SKIP_GUARDS:
+            if not guard or guard.group(1) != _PERSON_GUARD:
                 continue
             for r in _ROUTE.finditer(block):
                 path = "/".join(x for x in (c.group(1), r.group(2) or "") if x)
@@ -91,6 +91,11 @@ def catalog() -> tuple[dict[str, object], ...]:
 _WORD = re.compile(r"[a-z0-9]+")
 
 
+def _words_of(row: dict[str, object], keys: tuple[str, ...]) -> set[str]:
+    raw = " ".join(str(row.get(k, "")) for k in keys)
+    return set(_WORD.findall(re.sub(r"([a-z])([A-Z])", r"\1 \2", raw).lower()))
+
+
 def find(query: str, method: str = "", limit: int = 25) -> list[dict[str, object]]:
     """The catalog rows that best match the words in `query` (path, name and doc)."""
     words = [w for w in _WORD.findall(query.lower()) if len(w) > 1]
@@ -98,16 +103,22 @@ def find(query: str, method: str = "", limit: int = 25) -> list[dict[str, object
     for row in catalog():
         if method and row["method"] != method.upper():
             continue
-        raw = " ".join(str(row.get(k, "")) for k in ("path", "name", "doc"))
-        hay = re.sub(r"([a-z])([A-Z])", r"\1 \2", raw).lower()  # staffPay -> staff pay
-        hay_words = set(_WORD.findall(hay))
-        score = sum(2 if w in hay_words else 1 for w in words if w in hay)
+        # What the action is (its path and name) counts most, its description less, a part-word
+        # least. staffPay reads as "staff pay".
+        head = _words_of(row, ("path", "name"))
+        doc = _words_of(row, ("doc",))
+        score = sum(
+            4 if w in head else 1.5 if w in doc else 0.5 if any(w in h for h in head) else 0
+            for w in words
+        )
         if score or not words:
             scored.append((score, row))
-    scored.sort(key=lambda x: (-x[0], str(x[1]["path"])))
+    # Equal scores: the most direct action (the shortest path) first.
+    scored.sort(key=lambda x: (-x[0], len(str(x[1]["path"])), str(x[1]["path"])))
     return [r for _, r in scored[:limit]]
 
 
 if __name__ == "__main__":
     out = build(Path(sys.argv[1]))
-    sys.stdout.write(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    # Bytes, so the file is UTF-8 whatever the console's code page (Windows).
+    sys.stdout.buffer.write((json.dumps(out, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))

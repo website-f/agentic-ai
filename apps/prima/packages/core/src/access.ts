@@ -2,6 +2,8 @@
 // Director Office see a company only through a dated authority grant, and act on it only
 // with an 'act' grant. The database enforces the same walls with row-level security.
 
+import { registeredWallsOf } from './walls';
+import { isCompanySecretary } from './central-admin';
 import type { AuthorityGrant, Id, IsoDate, Person, User } from './types';
 
 export type Action =
@@ -53,7 +55,9 @@ export type Action =
    * Approve or reject leave and absence reasons: the Operations Manager or higher only (Fauzan, 25 Oct 2026), under
    * the company's management agreement. Unanswered requests move up a level every 12 hours (rule LEAVE-ESCALATE).
    */
-  | 'leave.decide';
+  | 'leave.decide'
+  /** Share the company office's work out to desks: the company's own Company Manager or GM only (Fauzan, 2 Nov 2026). */
+  | 'office.desks';
 
 const COMPANY_ROLE_ACTIONS: Record<User['role'], Action[]> = {
   director: [],
@@ -179,16 +183,52 @@ export const GROUP_EMPLOYER_ID = 'pwvsb';
  */
 export const IT_COMPANY_ID = 'merdeka';
 export const IT_COMPANY_NAME = 'Merdeka Network Sdn Bhd';
-/** PWVSB and Merdeka Network employ central staff; neither is a licensed security company. */
+/**
+ * Goodwill Empire Sdn Bhd (Fauzan, 2 Nov 2026): the Government Operations department's company, a wholly owned PWVSB
+ * subsidiary. It employs the OGM's team (HQ and seven regions) and the inventory and store team, and owns the
+ * operational equipment it issues to guards and bills to the companies. Not a licensed security company.
+ */
+export const GOV_OPS_COMPANY_ID = 'goodwill';
+export const GOV_OPS_COMPANY_NAME = 'Goodwill Empire Sdn Bhd';
+/**
+ * Sasa Team Sdn Bhd (Fauzan, 2 Nov 2026): the private-sector operations company, a wholly owned PWVSB subsidiary and a
+ * different company from Sasa Security Services. It employs the Operations Director's team (Regional OMs, OMs and admin
+ * staff) and runs private-sector operations for the group companies for a management fee. It has no inventory: all
+ * equipment comes from the Goodwill store. Not a licensed security company.
+ */
+export const PRIVATE_OPS_COMPANY_ID = 'sasateam';
+export const PRIVATE_OPS_COMPANY_NAME = 'Sasa Team Sdn Bhd';
+/** The operations company that runs a site's sector and bills the management fee for it. */
+export type OpsCompanyId = typeof GOV_OPS_COMPANY_ID | typeof PRIVATE_OPS_COMPANY_ID;
+export function opsCompanyOf(sector: 'government' | 'private' | null | undefined): OpsCompanyId {
+  return sector === 'government' ? GOV_OPS_COMPANY_ID : PRIVATE_OPS_COMPANY_ID;
+}
+/** The central employers that are not licensed security companies. */
+export const CENTRAL_EMPLOYER_IDS: readonly Id[] = [GROUP_EMPLOYER_ID, IT_COMPANY_ID, GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID];
+/** PWVSB, Merdeka Network and Goodwill Empire employ central staff; none is a licensed security company. */
 export function isCentralEmployer(id: Id | null | undefined): boolean {
-  return id === GROUP_EMPLOYER_ID || id === IT_COMPANY_ID;
+  return !!id && CENTRAL_EMPLOYER_IDS.includes(id);
 }
 export function centralStaffName(id: Id): string {
-  return id === IT_COMPANY_ID ? `${IT_COMPANY_NAME} (IT team)` : 'PWVSB (central staff)';
+  return id === IT_COMPANY_ID
+    ? `${IT_COMPANY_NAME} (IT team)`
+    : id === GOV_OPS_COMPANY_ID
+      ? `${GOV_OPS_COMPANY_NAME} (Government Operations)`
+      : id === PRIVATE_OPS_COMPANY_ID
+        ? `${PRIVATE_OPS_COMPANY_NAME} (Private Operations)`
+        : 'PWVSB (central staff)';
 }
-/** The name of an employer that is not a security company: PWVSB or Merdeka Network. */
+/** The name of an employer that is not a security company: PWVSB, Merdeka Network or Goodwill Empire. */
 export function centralEmployerName(id: Id): string | null {
-  return id === GROUP_EMPLOYER_ID ? 'PWVSB' : id === IT_COMPANY_ID ? IT_COMPANY_NAME : null;
+  return id === GROUP_EMPLOYER_ID
+    ? 'PWVSB'
+    : id === IT_COMPANY_ID
+      ? IT_COMPANY_NAME
+      : id === GOV_OPS_COMPANY_ID
+        ? GOV_OPS_COMPANY_NAME
+        : id === PRIVATE_OPS_COMPANY_ID
+          ? PRIVATE_OPS_COMPANY_NAME
+          : null;
 }
 /** The one branch of PWVSB's own central staff (head office). */
 export const PWVSB_HQ_BRANCH = 'br-pwvsb-hq';
@@ -220,13 +260,13 @@ export function visibleCompanyIds(user: User, grants: AuthorityGrant[], today: I
 export function tenantCompanyIds(user: User, grants: AuthorityGrant[], today: IsoDate): Id[] {
   if (user.role === 'guard') return user.companyIds;
   // Central staff can read PWVSB's own staff rows at the database; the service still shows each person only their own.
-  return isGroupRole(user) ? [...visibleCompanyIds(user, grants, today), GROUP_EMPLOYER_ID, IT_COMPANY_ID] : visibleCompanyIds(user, grants, today);
+  return isGroupRole(user) ? [...visibleCompanyIds(user, grants, today), ...CENTRAL_EMPLOYER_IDS] : visibleCompanyIds(user, grants, today);
 }
 
 export function can(user: User, grants: AuthorityGrant[], today: IsoDate, action: Action, companyId: Id, siteId?: Id | null): boolean {
   if (isGroupRole(user)) {
     // PWVSB is itself the employer of the central staff: its HR and group leadership need no grant to see them.
-    const ownStaff = (companyId === GROUP_EMPLOYER_ID || companyId === IT_COMPANY_ID) && (isGroupLeader(user) || user.department === 'hr');
+    const ownStaff = isCentralEmployer(companyId) && (isGroupLeader(user) || user.department === 'hr');
     const gs: AuthorityGrant[] = ownStaff
       ? [{ id: 'own-staff', userId: user.id, companyId, scope: 'monitor', basis: 'PWVSB is the employer', validFrom: today, validTo: today }]
       : activeGrants(user, grants, today).filter((g) => g.companyId === companyId);
@@ -335,6 +375,20 @@ export function actRole(user: User): 'act' | 'leader' | null {
   return null;
 }
 
+/** The ACT job of a department member (Director, Auditor or Enforcement), from server identity only. */
+export function actJobOf(user: User): 'director' | 'auditor' | 'enforcement' | null {
+  if (actRole(user) !== 'act') return null;
+  if (user.actRole === 'lead') return 'director';
+  if (user.actRole === 'auditor') return 'auditor';
+  if (user.actRole === 'enforcement') return 'enforcement';
+  return null;
+}
+
+/** Who can be named the owner of an ACT finding: company managers and central staff outside ACT. */
+export function actCanOwnFindings(user: User): boolean {
+  return !user.integration && (user.role === 'company_manager' || user.role === 'director' || (user.role === 'pwvsb_officer' && user.department !== 'audit'));
+}
+
 /** PDPA: the PDPA officer runs it; group leadership and the Operations Director monitor it. */
 export function pdpaRole(user: User): 'officer' | 'monitor' | null {
   if (user.role === 'pwvsb_officer' && user.department === 'pdpa') return 'officer';
@@ -359,6 +413,67 @@ export function canCloseAccess(user: User): boolean {
   return (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
 }
 
+/**
+ * Central Admin database walls (5A part 2). These records already sit behind the company wall; these walls also keep
+ * them from central departments that have a company grant for other work (HR, FWM, arms, CMS, transport and others)
+ * and from site staff. The service still decides who may change what.
+ */
+
+/** Company secretary records (profiles, filings, changes, audits): the company's managers and admin executives, Corporate
+ * Admin and the Chief of Staff, the company secretary, group leaders, PWVSB legal, and ACT (reads them to audit). */
+export function seesCorporate(user: User): boolean {
+  if (user.integration) return false;
+  if (user.role === 'company_manager' || user.role === 'admin_exec') return true;
+  if (isGroupLeader(user) || isCompanySecretary(user)) return true;
+  return user.department === 'legal' || !!actRole(user);
+}
+
+/** Legal matters are need-to-know: the same people, except the company secretary. */
+export function seesLegal(user: User): boolean {
+  return seesCorporate(user) && !isCompanySecretary(user);
+}
+
+/** Mandates (management agreements, board mandates): PWVSB legal, group leaders and the company manager. */
+export function seesMandates(user: User): boolean {
+  if (user.integration) return false;
+  if (user.role === 'company_manager' || isGroupLeader(user)) return true;
+  return user.department === 'legal';
+}
+
+/**
+ * HR legal points (review, 2 Nov 2026): only the authorized directors, the HR Director (Chief of Staff or Deputy) and
+ * the CEO. Never staff, HR officers or company managers; routine screens show no legal notice.
+ */
+export function seesHrLegal(user: User): boolean {
+  return !user.integration && (isHrDirector(user) || user.opsTier === 'ceo');
+}
+
+/** HR database wall: full IC or passport numbers. HR, the HR Director (Chief of Staff and Deputy) and the CEO. */
+export function seesStaffIds(user: User): boolean {
+  if (user.integration) return false;
+  return (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
+}
+
+/** HR database wall: full salary accounts. The same people, plus Finance. */
+export function seesStaffAccounts(user: User): boolean {
+  if (user.integration) return false;
+  return seesStaffIds(user) || user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null);
+}
+
+/**
+ * A company manager sees (never changes) the full IC and salary account of their own company's staff (Fauzan, 1 Nov
+ * 2026). The database lets them read only rows of the companies in app.company_ids.
+ */
+export function seesOwnCompanyStaffNumbers(user: User): boolean {
+  return !user.integration && user.role === 'company_manager';
+}
+
+/** Whether this person may read one staff member's full numbers: the HR wall, or that staff member's company manager. */
+export function seesStaffNumbersOf(user: User, companyId: string, which: 'ids' | 'accounts'): boolean {
+  if (which === 'ids' ? seesStaffIds(user) : seesStaffAccounts(user)) return true;
+  return seesOwnCompanyStaffNumbers(user) && user.companyIds.includes(companyId);
+}
+
 export type DataWall =
   /** Asset Management records: read. ACT reads them too, to audit (actSignals); it never writes them. */
   | 'asset_read'
@@ -368,7 +483,54 @@ export type DataWall =
   | 'pdpa'
   | 'bcm'
   /** May close a leaver's access (prima.close_access in the database). */
-  | 'offboard';
+  | 'offboard'
+  /** Central Admin 5A part 2: company secretary records, legal matters and mandates. */
+  | 'corporate'
+  | 'legal'
+  | 'mandates'
+  /** HR wall: full IC or passport numbers (prima.staff_ids). */
+  | 'staff_ids'
+  /** HR wall: full salary accounts (prima.staff_accounts). */
+  | 'staff_accounts'
+  /** Read only: full numbers of the staff of the companies this person manages (company managers). */
+  | 'staff_company'
+  /** HR and the HR Director: registered faces for clock in (prima.staff_faces). */
+  | 'staff_faces'
+  /** HR, the HR Director and the CEO: confidential HR cases, such as sexual harassment complaints (prima.hr_cases). */
+  | 'hr_cases'
+  /** FWM: read the passport numbers of foreign workers (slice 3G). */
+  | 'fw_ids'
+  /** The JA Group app feed: writes the guard rows of the HR wall it is the source for (slice 3G). */
+  | 'guard_feed'
+  /** The HR Director and the CEO: HR legal points to verify (prima.hr_legal_checks). */
+  | 'hr_legal'
+  /** Staff movements with proposed pay and private reasons: HR, the HR Director, the CEO, the Vice Chairman and company heads (row narrowed by company). */
+  | 'staff_movements'
+  /** Login handovers after a transfer, without pay or reasons: IT, HR, the HR Director and the CEO (prima.login_handovers). */
+  | 'login_handover'
+  /** A wall a department registered with registerWall() (walls.ts). */
+  | (string & { readonly registeredWall?: true });
+
+/**
+ * Staff movements carry the proposed pay and the private reason (Arisha main review, 3 Nov 2026): HR, the HR Director,
+ * the CEO, the Vice Chairman and company heads (the receiving or sending company only, by row). Nobody else, IT included.
+ */
+export function seesStaffMovements(user: User): boolean {
+  if (user.integration) return false;
+  return (
+    (user.role === 'pwvsb_officer' && user.department === 'hr') ||
+    isHrDirector(user) ||
+    user.opsTier === 'ceo' ||
+    (user.role === 'pwvsb_officer' && user.leadership === 'vice_chairman') ||
+    user.role === 'company_manager'
+  );
+}
+
+/** Login handovers after a transfer (no pay, no reasons): IT does the account work; HR, the HR Director and the CEO follow. */
+export function seesLoginHandovers(user: User): boolean {
+  if (user.integration) return false;
+  return user.department === 'it' || (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
+}
 
 /** The department walls this person passes, sent to the database with every request. */
 export function dataWalls(user: User): DataWall[] {
@@ -380,6 +542,25 @@ export function dataWalls(user: User): DataWall[] {
   if (pdpaRole(user)) out.push('pdpa');
   if (bcmRole(user)) out.push('bcm');
   if (canCloseAccess(user)) out.push('offboard');
+  // Walls a department registered from its own module (walls.ts registerWall); never one already listed.
+  for (const w of registeredWallsOf(user)) if (!out.includes(w as DataWall)) out.push(w as DataWall);
+  // Walls a department registered from its own module (walls.ts registerWall); never one already listed.
+  for (const w of registeredWallsOf(user)) if (!out.includes(w as DataWall)) out.push(w as DataWall);
+  // The Asset Management developer system's feed (Special Ops slice 4G) reads and updates the units it reports.
+  if (user.integration === 'am' || user.integration === 'whatsapp') out.push('asset_read', 'asset_write');
+  if (seesCorporate(user)) out.push('corporate');
+  if (seesLegal(user)) out.push('legal');
+  if (seesMandates(user)) out.push('mandates');
+  if (seesStaffIds(user)) out.push('staff_ids');
+  if (seesStaffAccounts(user)) out.push('staff_accounts');
+  if (seesOwnCompanyStaffNumbers(user)) out.push('staff_company');
+  if (!user.integration && ((user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user))) out.push('staff_faces');
+  if (!user.integration && ((user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo')) out.push('hr_cases');
+  if (!user.integration && user.role === 'pwvsb_officer' && user.department === 'fwm' && user.fwmRole !== 'despatch') out.push('fw_ids');
+  if (user.integration === 'ja') out.push('guard_feed');
+  if (seesHrLegal(user)) out.push('hr_legal');
+  if (seesStaffMovements(user)) out.push('staff_movements');
+  if (seesLoginHandovers(user)) out.push('login_handover');
   return out;
 }
 
@@ -395,4 +576,9 @@ export class AccessClosed extends AccessDenied {
     this.message = `This Prima account was closed from ${from}. If you still work here, ask HR.`;
     this.name = 'AccessClosed';
   }
+}
+
+/** Arms Control (and directors) run the CMS desk and review arms requests. Shared by the service and the guide cards. */
+export function canRunCms(user: User): boolean {
+  return user.role === 'director' || (user.role === 'pwvsb_officer' && user.department === 'arms_control');
 }

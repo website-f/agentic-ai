@@ -2,7 +2,7 @@
 // data first, real data later). 38 companies; the three pilots get full detail. All people,
 // clients and sites are fictional. Same seed + same "today" always gives the same data.
 
-import { GROUP_EMPLOYER_ID, IT_COMPANY_ID, hasOwnStaffRecord } from './access';
+import { GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, IT_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, hasOwnStaffRecord } from './access';
 import { itPurchaseRequest } from './purchase';
 import { appendAudit, sha256Hex } from './audit';
 import { DEMO_PIN_KEEPER, demoPin, demoPinSalt } from './pin';
@@ -76,6 +76,7 @@ import type {
   IsoDate,
   IsoDateTime,
   Person,
+  PublicHoliday,
   FwmTask,
   HostelBill,
   LeaveKind,
@@ -447,7 +448,9 @@ export const PLACEHOLDER_REPORTS: ReportDef[] = [
     from: 'department',
     department: 'arms_control',
     frequency: 'monthly',
-    dueDay: 5,
+    dueDay: RULES.monthlyReport.value.dueDay,
+    sections: RULES.monthlyReport.value.sections,
+    checks: RULES.monthlyReport.value.checks['arms_control'],
     active: true,
   },
   {
@@ -457,7 +460,9 @@ export const PLACEHOLDER_REPORTS: ReportDef[] = [
     from: 'department',
     department: 'chief_of_staff',
     frequency: 'monthly',
-    dueDay: 5,
+    dueDay: RULES.monthlyReport.value.dueDay,
+    sections: RULES.monthlyReport.value.sections,
+    checks: RULES.monthlyReport.value.checks['chief_of_staff'],
     active: true,
   },
   {
@@ -471,6 +476,39 @@ export const PLACEHOLDER_REPORTS: ReportDef[] = [
     active: true,
   },
 ];
+
+/**
+ * Every central department sends a monthly report (Fauzan, 2 Nov 2026), due on the 25th of the next month, on the
+ * standard form the ACT Director keeps (rule RPT-MONTHLY). Arms Control and the Chief of Staff already have theirs above.
+ */
+export const DEPARTMENT_MONTHLY_REPORTS: ReportDef[] = (
+  [
+    ['operations', 'Operations'],
+    ['hr', 'Human Resources'],
+    ['cms', 'CMS command centre'],
+    ['director_office', 'Director Office'],
+    ['fwm', 'Foreign Worker Management'],
+    ['pdpa', 'PDPA'],
+    ['transport', 'Transport'],
+    ['asset', 'Asset Management'],
+    ['finance', 'Finance'],
+    ['it', 'IT'],
+    ['legal', 'Legal'],
+    ['audit', 'ACT'],
+    ['procurement', 'Procurement and Inventory'],
+  ] as [NonNullable<User['department']>, string][]
+).map(([department, label]) => ({
+  id: `dept-${department}-monthly`,
+  name: `${label} monthly report`,
+  detail: 'Standard monthly department report (proposed form, ACT decides the sections).',
+  from: 'department' as const,
+  department,
+  frequency: 'monthly' as const,
+  dueDay: RULES.monthlyReport.value.dueDay,
+  sections: RULES.monthlyReport.value.sections,
+  checks: RULES.monthlyReport.value.checks[department] ?? [],
+  active: true,
+}));
 
 /**
  * The JKR security tender QT260000000027957 as the Director Office's tender-specific checklist V2.0 (discussion of
@@ -693,6 +731,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     socsoClaims: [],
     fwRenewals: [],
     fwmTasks: [],
+    fwWelfareChecks: [],
     locationPings: [],
     hostels: [],
     hostelStays: [],
@@ -705,12 +744,32 @@ export function generateDataset(opts: SeedOptions): Dataset {
     products: [],
     clientAccounts: [],
     expenseRequests: [],
+    companyDesks: [],
+    companyRunLinks: [],
     jaRecords: [],
     jaSyncs: [],
     amUnits: [],
     amWorkOrders: [],
     amAssets: [],
     amDepnPostings: [],
+    staffIds: [],
+    staffAccounts: [],
+    staffFaces: [],
+    publicHolidays: [],
+    allowanceTypes: [],
+    flexRequests: [],
+    vacancies: [],
+    staffMovements: [],
+    loginHandovers: [],
+    hrFilings: [],
+    hrCases: [],
+    officeOsh: [],
+    staffTraining: [],
+    staffAppraisals: [],
+    hrPolicies: [],
+    staffOvertime: [],
+    hrLegalChecks: [],
+    policyAcks: [],
     actFindings: [],
     actAudits: [],
     actImprovements: [],
@@ -740,7 +799,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itRentalRates: [],
     itAssetInspections: [],
     itOperationalReceipts: [],
-    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [],
+    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [],
     itMetricStreams: [], itMetricReceipts: [], itMetricTargets: [], itMetricCalendars: [],
     itPurchaseFinanceAuthorities: [], itProcurementPackets: [], itProcurementReceipts: [],
     itRentalCorrectionRequests: [], itRentalCorrectionReviews: [], itRentalReplacements: [], itRentalReplacementPayments: [], itRentalCorrectionReceipts: [],
@@ -758,6 +817,11 @@ export function generateDataset(opts: SeedOptions): Dataset {
     webNotices: [],
     webSettings: [],
     corpProfiles: [],
+    panelFirms: [],
+    delegations: [],
+    criticalRoles: [],
+    legalHolds: [],
+    legalHoldVersions: [],
     creditLoans: [],
     creditDefaults: [],
     purSuppliers: [],
@@ -2260,6 +2324,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       });
     });
   }
+  // Each firearm's calibre, so rounds issued and returned move its vault's ledger (Special Ops slice 4B).
+  for (const f of ds.firearms) f.calibre = CALIBRE[f.kind];
   // One Arrow Shield return came back a round short and nobody opened a case.
   const returned = ds.armsMovements.filter((m) => m.returnedAt && toMs(m.returnedAt) <= nowMsArms).sort((a, b) => b.returnedAt!.localeCompare(a.returnedAt!));
   const shortReturn = returned.find((m) => m.companyId === 'co-arsh') ?? returned[0];
@@ -3017,49 +3083,43 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
-    // Internal audit (V15): checks the proof behind each obligation and handles speak-up reports. Mock name.
-    // ACT, Audit, Compliance and Transformation (Fauzan, 27 Oct 2026): a Lead and a Deputy, each with an Assistant
-    // cum Enforcement. Mock names.
+    // Internal audit (V15): checks the proof behind each obligation and handles speak-up reports. Mock names.
+    // ACT, Audit, Compliance and Transformation (Fauzan, 2 Nov 2026): 1 Director and 2 teams, each with 1 Auditor and
+    // 1 Enforcement officer. The Director keeps the record u-audit (actRole 'lead') used by the Arisha leadership pilot.
     {
       id: 'u-audit',
-      name: 'ACT Lead (mock)',
-      title: 'Lead, Audit, Compliance and Transformation (ACT), PWVSB',
+      name: 'ACT Director (mock)',
+      title: 'Director, Audit, Compliance and Transformation (ACT), PWVSB',
       role: 'pwvsb_officer',
       department: 'audit',
       actRole: 'lead',
       companyIds: [],
       siteIds: [],
     },
-    {
-      id: 'u-act-la',
-      name: 'ACT Assistant to the Lead (mock)',
-      title: 'Assistant cum Enforcement to the ACT Lead, PWVSB',
-      role: 'pwvsb_officer',
-      department: 'audit',
-      actRole: 'assistant',
-      companyIds: [],
-      siteIds: [],
-    },
-    {
-      id: 'u-act-dep',
-      name: 'ACT Deputy (mock)',
-      title: 'Deputy, Audit, Compliance and Transformation (ACT), PWVSB',
-      role: 'pwvsb_officer',
-      department: 'audit',
-      actRole: 'deputy',
-      companyIds: [],
-      siteIds: [],
-    },
-    {
-      id: 'u-act-da',
-      name: 'ACT Assistant to the Deputy (mock)',
-      title: 'Assistant cum Enforcement to the ACT Deputy, PWVSB',
-      role: 'pwvsb_officer',
-      department: 'audit',
-      actRole: 'assistant',
-      companyIds: [],
-      siteIds: [],
-    },
+    ...([1, 2] as const).flatMap((team) => [
+      {
+        id: `u-act-aud${team}`,
+        name: `ACT Auditor, Team ${team} (mock)`,
+        title: `Auditor, ACT Team ${team}, PWVSB`,
+        role: 'pwvsb_officer' as const,
+        department: 'audit' as const,
+        actRole: 'auditor' as const,
+        actTeam: team,
+        companyIds: [],
+        siteIds: [],
+      },
+      {
+        id: `u-act-enf${team}`,
+        name: `ACT Enforcement Officer, Team ${team} (mock)`,
+        title: `Enforcement Officer, ACT Team ${team}, PWVSB`,
+        role: 'pwvsb_officer' as const,
+        department: 'audit' as const,
+        actRole: 'enforcement' as const,
+        actTeam: team,
+        companyIds: [],
+        siteIds: [],
+      },
+    ]),
     // Procurement and Inventory (Fauzan, 27 Oct 2026): under the OGM, monitored by the COO and CEO. Mock names.
     {
       id: 'u-proc-exec',
@@ -3101,6 +3161,44 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
+    // Special Ops feeds (slices 4E, 4F, 4G, 2 Nov 2026): system sign-ins, never people and never on the sign-in screen.
+    {
+      id: 'u-cms-link',
+      name: 'CMS Command Centre app link',
+      title: 'System: sends CMS events and closed alarms, reads the CMS directory',
+      role: 'pwvsb_officer',
+      integration: 'cms',
+      companyIds: [],
+      siteIds: [],
+    },
+    {
+      id: 'u-tracker-feed',
+      name: 'Vehicle tracker feed',
+      title: 'System: sends vehicle tracker positions',
+      role: 'pwvsb_officer',
+      integration: 'tracker',
+      companyIds: [],
+      siteIds: [],
+    },
+    {
+      id: 'u-am-feed',
+      name: 'Asset Management system feed',
+      title: "System: sends the developer system's units, rents and reported payments",
+      role: 'pwvsb_officer',
+      integration: 'am',
+      companyIds: [],
+      siteIds: [],
+    },
+    // WhatsApp rent reminders (Fauzan, 2 Nov 2026): the sender and the WhatsApp webhook act as this system sign-in.
+    {
+      id: 'u-whatsapp-link',
+      name: 'WhatsApp rent reminders',
+      title: 'System: sends rent reminders to tenants who agreed, and records what WhatsApp reports back',
+      role: 'pwvsb_officer',
+      integration: 'whatsapp',
+      companyIds: [],
+      siteIds: [],
+    },
     // The JA Group app's feed (Fauzan, 26 Oct 2026): a system sign-in, never a person and never on the sign-in screen.
     {
       id: 'u-ja-sync',
@@ -3139,6 +3237,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
       role: 'pwvsb_officer',
       department: 'chief_of_staff',
       leadership: 'deputy_cos',
+      companyIds: [],
+      siteIds: [],
+    },
+    {
+      id: 'u-cosec',
+      name: 'Permata Management (mock)',
+      title: 'Company secretary (monitors SSM filings, view only)',
+      role: 'pwvsb_officer',
+      corpSecretary: true,
       companyIds: [],
       siteIds: [],
     },
@@ -3383,12 +3490,14 @@ export function generateDataset(opts: SeedOptions): Dataset {
       'u-vchair',
       'u-fd',
       'u-dcos',
+      'u-cosec',
       'u-credit',
       'u-legal',
       'u-audit',
-      'u-act-la',
-      'u-act-dep',
-      'u-act-da',
+      'u-act-aud1',
+      'u-act-enf1',
+      'u-act-aud2',
+      'u-act-enf2',
       'u-proc-exec',
       'u-proc-store1',
       'u-proc-store2',
@@ -3439,6 +3548,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyId: cid,
       scope: 'monitor',
       basis: 'Transport department, management agreement with PWVSB (to be verified)',
+      validFrom: grantFrom,
+      validTo: grantTo,
+    });
+    ds.grants.push({
+      id: `gr-cms-link-${cid}`,
+      userId: 'u-cms-link',
+      companyId: cid,
+      scope: 'monitor',
+      basis: 'CMS Command Centre app link (system), Special Ops slice 4E, 2 Nov 2026',
       validFrom: grantFrom,
       validTo: grantTo,
     });
@@ -3799,6 +3917,16 @@ export function generateDataset(opts: SeedOptions): Dataset {
       const p = ds.people.find((x) => x.id === u.personId);
       if (p) p.companyId = IT_COMPANY_ID;
     }
+    // The OGM's team and the inventory and store team are employed by Goodwill Empire Sdn Bhd (Fauzan, 2 Nov 2026).
+    for (const u of ds.users.filter((x) => x.personId && (x.opsTier === 'ogm' || x.department === 'procurement'))) {
+      const p = ds.people.find((x) => x.id === u.personId);
+      if (p) p.companyId = GOV_OPS_COMPANY_ID;
+    }
+    // The Operations Director's private-sector team is employed by Sasa Team Sdn Bhd (Fauzan, 2 Nov 2026).
+    for (const u of ds.users.filter((x) => x.personId && (x.opsTier === 'ops_director' || (x.department === 'operations' && x.opsSector === 'private')))) {
+      const p = ds.people.find((x) => x.id === u.personId);
+      if (p) p.companyId = PRIVATE_OPS_COMPANY_ID;
+    }
     // One pay change waiting for the Chief of Staff to verify (Fauzan, 27 Oct 2026: "need CoS verify"). Mock.
     const raise = ds.people.find((p) => p.companyId === GROUP_EMPLOYER_ID && p.jobTitle?.startsWith('Finance Data Entry'));
     if (raise?.basicPay)
@@ -3978,7 +4106,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
   // Reports to the Director Office (Fauzan, 25 Oct 2026). Proposed list until the Director Office sets its own. The
   // pilots have sent most of the last periods; a few are late or missing to show both.
   {
-    ds.reportDefs.push(...PLACEHOLDER_REPORTS);
+    ds.reportDefs.push(...PLACEHOLDER_REPORTS, ...DEPARTMENT_MONTHLY_REPORTS);
     const rrng = new Rng(MASTER_SEED + 131);
     const nowMs = toMs(now);
     const managers: Record<string, string> = { 'co-sasa': 'Nor Azlina binti Hashim', 'co-arsh': 'Kenny Lau Chee Wah', 'co-inas': 'Mohd Shukri bin Ahmad' };
@@ -3989,7 +4117,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
       operations: 'PWVSB Operations',
     };
     const pilots = ds.companies.filter((c) => c.isPilot).map((c) => c.id);
-    for (const def of PLACEHOLDER_REPORTS) {
+    for (const def of [...PLACEHOLDER_REPORTS, ...DEPARTMENT_MONTHLY_REPORTS]) {
       const senders: { companyId: string | null; department: NonNullable<User['department']> | null; by: string }[] =
         def.from === 'company'
           ? pilots.map((id) => ({ companyId: id, department: null, by: managers[id] ?? 'Company manager' }))
@@ -4011,6 +4139,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
             note: lateDays ? 'Sent late, figures waited on the bank statement' : '',
             docIds: [],
             file: null,
+            // Most monthly department reports cover the whole form; some leave a section out, for ACT to see.
+            ...(def.sections ? { sectionsCovered: roll < 30 ? def.sections.slice(0, -2) : def.sections } : {}),
           });
         }
       }
@@ -4527,6 +4657,16 @@ export function generateDataset(opts: SeedOptions): Dataset {
       door(proc, 'out', toMs(myt(y, '12:58')));
       door(proc, 'in', toMs(myt(y, '13:55')));
       door(proc, 'out', toMs(myt(y, '17:52')));
+    }
+  }
+
+  // Mock EPF, SOCSO and income tax numbers for office staff (2 Nov 2026), so the contribution files have them. Not real.
+  {
+    const nrng = new Rng(MASTER_SEED + 137);
+    for (const p of ds.people.filter((x) => x.role === 'office')) {
+      p.epfNo ??= String(nrng.int(10000000, 99999999));
+      p.socsoNo ??= p.nationality === 'MY' ? `${p.idMasked.replace(/\D/g, '').slice(0, 6)}${nrng.int(100000, 999999)}` : `F${nrng.int(10000000, 99999999)}`;
+      p.taxNo ??= `IG${nrng.int(10000000000, 99999999999)}`;
     }
   }
 
@@ -5324,6 +5464,26 @@ export function generateDataset(opts: SeedOptions): Dataset {
         hrDecision: null,
         createdAt: fromMs(nowMs - 3 * 86_400_000),
       });
+    // Synthetic pattern for the ACT anomaly finder (masterplan item 241): the same clinic receipt claimed a second time.
+    if (sasaO1)
+      ds.staffClaims.push({
+        id: `scl-${sasaO1.id}-seed-2`,
+        companyId: sasaO1.companyId,
+        personId: sasaO1.id,
+        personName: sasaO1.name,
+        userId: 'u-cm-sasa',
+        kind: 'MEDICAL',
+        date: addDays(today, -4),
+        amount: 120,
+        allowed: 120,
+        receiptIds: [],
+        note: 'Clinic visit (mock duplicate for the ACT anomaly test)',
+        travel: null,
+        status: 'submitted',
+        cosApproval: null,
+        hrDecision: null,
+        createdAt: fromMs(nowMs - 2 * 86_400_000),
+      });
     const arshO2 = ds.people.find((p) => p.id === 'pr-arsh-o2');
     if (arshO2)
       ds.staffClaims.push({
@@ -5869,7 +6029,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     const step = (by: string, byId: string, days: number, hour: number, note = '') => ({ by, byId, at: at(days, hour), note });
     const HR = ['PWVSB HR', 'u-pwvsb-hr'] as const;
     const COS = [ds.users.find((u) => u.id === 'u-cos')?.name ?? 'Chief of Staff', 'u-cos'] as const;
-    const VC = [ds.users.find((u) => u.id === 'u-vchair')?.name ?? 'Vice Chairman', 'u-vchair'] as const;
+    const COO = [ds.users.find((u) => u.id === 'u-coo')?.name ?? 'COO', 'u-coo'] as const;
     const FIN = ['Finance Team Leader 1', 'u-fin-t1-lead'] as const;
     const daysInto = Number(today.slice(8, 10));
     const build = (cid: string, per: string) =>
@@ -5896,7 +6056,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         prepared: step(...HR, daysInto + 3, 10),
         submitted: step(...HR, daysInto + 2, 16),
         approved: step(...COS, daysInto + 1, 11),
-        consented: step(...VC, daysInto, 15, 'Consented.'),
+        cooApproved: step(...COO, daysInto, 15, 'Approved.'),
         paid: {
           ...step(...FIN, paidDay, 10),
           bankRef: `M2U-PAY-${prev.replace('-', '')}-${String(k + 1).padStart(3, '0')}`,
@@ -5906,8 +6066,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
         returns: [],
       });
     });
-    // This month: PWVSB waits for the Chief of Staff, Sasa for the Vice Chairman, Arrow Shield for Finance, Inas is a draft.
-    const plan: Record<string, StaffPayRun['stage']> = { pwvsb: 'submitted', 'co-sasa': 'approved', 'co-arsh': 'consented', 'co-inas': 'draft' };
+    // This month: PWVSB waits for the Chief of Staff, Sasa for the COO, Arrow Shield for Finance, Inas is a draft.
+    const plan: Record<string, StaffPayRun['stage']> = { pwvsb: 'submitted', 'co-sasa': 'approved', 'co-arsh': 'coo_approved', 'co-inas': 'draft' };
     for (const cid of employers) {
       const stage = plan[cid] ?? 'draft';
       const lines = build(cid, period);
@@ -5919,8 +6079,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
         lines,
         prepared: step(...HR, 3, 10),
         submitted: stage === 'draft' ? null : step(...HR, 2, 16),
-        approved: ['approved', 'consented'].includes(stage) ? step(...COS, 1, 11) : null,
-        consented: stage === 'consented' ? step(...VC, 0, 9, 'Consented.') : null,
+        approved: ['approved', 'coo_approved'].includes(stage) ? step(...COS, 1, 11, 'Checked against the staff list.') : null,
+        cooApproved: stage === 'coo_approved' ? step(...COO, 0, 9, 'Approved.') : null,
         paid: null,
         returns:
           cid === 'co-inas'
@@ -5988,6 +6148,14 @@ export function generateDataset(opts: SeedOptions): Dataset {
         ['FS-06', 'Bank in the books agrees with the reconciliations'],
         ['FS-07', 'Customer ledger agrees with the general ledger'],
         ['FS-08', 'Supplier ledger agrees with the general ledger'],
+        // Demo results for the other statement tests (masterplan item 76); real months use reviewed figures.
+        ['FS-03', 'Profit or loss agrees with the retained earnings movement'],
+        ['FS-04', 'Cash-flow statement rolls from opening to closing cash'],
+        ['FS-05', 'Cash-flow closing cash agrees with the balance sheet'],
+        ['FS-09', 'Fixed asset register agrees with the ledger'],
+        ['FS-10', 'Stock agrees with the ledger'],
+        ['FS-11', 'Intercompany balances agreed on both sides'],
+        ['FS-12', 'Tax, payroll deductions, SST, loans, deposits and provisions agree with their schedules'],
       ].map(([id, label]) => ({
         id,
         label,
@@ -6049,6 +6217,259 @@ export function generateDataset(opts: SeedOptions): Dataset {
         tax: taxItems,
       });
     });
+    // Finance Phase 2 (31 Oct 2026): a few payments for Team 1 at each step, so each person has something to act on.
+    // Test data only; no random numbers are drawn here, so the rest of the dataset stays the same.
+    {
+      const t1 = ds.finStatus.filter((f) => f.team === 1).slice(0, 2);
+      const DE = { by: 'Finance Data Entry 1.1', byId: 'u-fin-t1-de1' };
+      const DEP = { by: 'Finance Deputy 1', byId: 'u-fin-t1-dep' };
+      const LEAD = { by: 'Finance Team Leader 1', byId: 'u-fin-t1-lead' };
+      const FD = { by: 'Sharifah Nadia binti Syed Ali', byId: 'u-fd' };
+      const at = (h: number) => fromMs(nowMs - h * 3_600_000);
+      const ymd = today.replace(/-/g, '');
+      const mk = (
+        f: (typeof t1)[number],
+        n: number,
+        payee: string,
+        payeeKind: 'supplier' | 'statutory' | 'payroll' | 'tax' | 'intercompany' | 'other',
+        purpose: string,
+        amount: number,
+        steps: { step: 'prepared' | 'reviewed' | 'approved' | 'released'; who: { by: string; byId: string }; h: number; comment: string }[],
+      ) => {
+        const last = steps[steps.length - 1].step;
+        return {
+          id: `pay-${f.companyId}-${ymd}-${String(n).padStart(3, '0')}`,
+          companyId: f.companyId,
+          period: today.slice(0, 7),
+          payee,
+          payeeKind,
+          purpose,
+          amount,
+          dueOn: addMonths(today, 0).slice(0, 8) + '28',
+          bankId: f.banks[0].id,
+          sqlRef: `PV-${f.companyId.replace(/^co-/, '').toUpperCase()}-${String(1000 + n)}`,
+          evidence: [`Invoice ${payee.split(' ')[0]}-${n} (mock).pdf`],
+          needs: 'director' as 'leader' | 'director' | 'ceo' | 'coo',
+          subject: 'finance' as 'finance' | 'transport',
+          status: last,
+          steps: steps.map((x) => ({ step: x.step, by: x.who.by, byId: x.who.byId, at: at(x.h), comment: x.comment })),
+          bankRef: last === 'released' ? `M2U-${ymd}-${n} (mock)` : null,
+          releasedOn: last === 'released' ? dateOf(at(steps[steps.length - 1].h)) : null,
+          payeeId: payeeFor(f, payee),
+          payeeBank:
+            last === 'approved' || last === 'released'
+              ? (() => {
+                  const pe = f.payees!.find((x) => x.id === payeeFor(f, payee))!;
+                  return { bank: pe.bank, accountLast4: pe.accountLast4, accountName: pe.accountName };
+                })()
+              : null,
+        };
+      };
+      // Verified payees (paid to the right person). Uniform Maju's bank details changed and wait for a call-back.
+      const PAYEES: [string, 'supplier' | 'statutory' | 'tax' | 'other', string, string][] = [
+        ['Syarikat Bekalan Pejabat (mock)', 'supplier', '201901000001 (mock)', 'Maybank'],
+        ['Uniform Maju Sdn Bhd (mock)', 'supplier', '201501000002 (mock)', 'CIMB Bank'],
+        ['Kenderaan Ronda Sdn Bhd (mock)', 'supplier', '201801000003 (mock)', 'Public Bank'],
+        ['Tenaga Nasional Berhad (mock)', 'other', '199001009294 (mock)', 'Maybank'],
+        ['Lembaga Hasil Dalam Negeri (mock)', 'tax', 'LHDN (mock)', 'CIMB Bank'],
+        ['KWSP (mock)', 'statutory', 'KWSP (mock)', 'Maybank'],
+        ['Jabatan Kastam Diraja Malaysia (mock)', 'tax', 'RMCD (mock)', 'Bank Islam'],
+      ];
+      const payeeFor = (f: (typeof t1)[number], name: string) => `payee-${f.companyId}-${String(PAYEES.findIndex((x) => x[0] === name) + 1).padStart(3, '0')}`;
+      t1.forEach((f) => {
+        f.payees = PAYEES.map(([name, kind, regNo, bank], j) => {
+          const changed = j === 1;
+          return {
+            id: `payee-${f.companyId}-${String(j + 1).padStart(3, '0')}`,
+            name,
+            kind,
+            regNo,
+            bank,
+            accountLast4: String(1000 + j * 1111).slice(-4),
+            accountName: name.replace(' (mock)', '').toUpperCase(),
+            status: changed ? ('pending' as const) : ('verified' as const),
+            entered: { ...(changed ? DEP : LEAD), at: at(changed ? 3 : 900), comment: changed ? 'Letter from supplier dated today asks to change account (mock)' : 'Supplier registration form (mock)' },
+            verified: changed
+              ? null
+              : { ...DEP, at: at(890), comment: 'Confirmed by phone.', method: 'callback' as const, contact: 'Accounts clerk (mock)', numberSource: 'Number on the signed supply contract (mock)' },
+            history: changed ? [{ bank: 'Maybank', accountLast4: '0001', accountName: 'UNIFORM MAJU SDN BHD', until: at(3), by: DEP.by }] : [],
+          };
+        });
+        f.sst = { registered: f.companyId !== 'pwvsb', sstNo: f.companyId !== 'pwvsb' ? `W10-1808-3100${String(t1.indexOf(f)).padStart(4, '0')} (mock)` : null, cycleStartMonth: 1, last12Months: null, returns: [] };
+        // e-Invoice (1 Nov 2026): in scope through the group (a related company has revenue of RM3 million or more).
+        f.einvoice = {
+          setup: {
+            required: true,
+            basis: 'Own turnover above RM3 million (each company is its own entity) (mock)',
+            startOn: '2024-08-01',
+            via: 'sql_account',
+            revenue: 12_000_000,
+            set: { ...LEAD, at: at(2000), comment: '' },
+          },
+          months: [],
+        };
+        // Invoice problems (1 Nov 2026): the year to 31 Dec 2025 is audited; two stuck invoices to show the process.
+        f.auditedTo = { date: '2025-12-31', set: { ...FD, at: at(3000), comment: 'Audit report signed by the external auditor (mock)' } };
+        const inv = (d: number) => addDays(today, -d);
+        f.arCases = [
+          {
+            id: `ar-${f.companyId}-1`,
+            invoiceNo: `IV-${f.companyId.slice(-2).toUpperCase()}-0712`,
+            invoiceDate: inv(100),
+            customer: 'Pengurusan Bangunan Seri (mock)',
+            amount: 48_600,
+            outstanding: 48_600,
+            eInvoiceUuid: null,
+            reason: 'wrong_payer',
+            detail: 'Site management changed in June; the new managing agent pays, the old one refuses the invoice (mock).',
+            status: 'open',
+            opened: { ...DE, at: at(24 * 40), comment: '' },
+            log: [{ kind: 'call', text: 'Called the new managing agent; they need the invoice in their name (mock).', ...DEP, at: at(24 * 35) }],
+            nextOn: inv(20),
+            reissue: null,
+            provision: null,
+            writeOff: null,
+          },
+          {
+            id: `ar-${f.companyId}-3`,
+            invoiceNo: `IV-${f.companyId.slice(-2).toUpperCase()}-0402`,
+            invoiceDate: inv(210),
+            customer: 'Jabatan Kerja Raya Negeri (mock)',
+            amount: 136_800,
+            outstanding: 136_800,
+            eInvoiceUuid: null,
+            reason: 'govt_late',
+            detail: 'Government site: payment voucher still being processed by the department (mock).',
+            status: 'open',
+            opened: { ...DE, at: at(24 * 120), comment: '' },
+            log: [{ kind: 'call', text: 'Department finance says the voucher is with the state treasury (mock).', ...DEP, at: at(24 * 12) }],
+            nextOn: addDays(today, 18),
+            reissue: null,
+            provision: null,
+            writeOff: null,
+          },
+          {
+            id: `ar-${f.companyId}-2`,
+            invoiceNo: `IV-${f.companyId.slice(-2).toUpperCase()}-0311`,
+            invoiceDate: '2025-11-30',
+            customer: 'Kilang Plastik Jaya Sdn Bhd (mock)',
+            amount: 22_140,
+            outstanding: 22_140,
+            eInvoiceUuid: null,
+            reason: 'insolvent',
+            detail: 'Customer wound up; liquidator appointed (mock).',
+            status: 'open',
+            opened: { ...DE, at: at(24 * 200), comment: '' },
+            log: [
+              { kind: 'demand_letter', text: 'Letter of demand sent by the company lawyer (mock).', ...DEP, at: at(24 * 150) },
+              { kind: 'lawyer', text: 'Proof of debt filed with the liquidator (mock).', ...LEAD, at: at(24 * 10) },
+            ],
+            nextOn: null,
+            reissue: null,
+            provision: null,
+            writeOff: null,
+          },
+        ];
+      });
+      // Regular payments and guarantees (Fauzan, 2 Nov 2026): a sample on one company of team 1 only.
+      {
+        const f = t1.find((x) => x.companyId !== GROUP_EMPLOYER_ID) ?? t1[0];
+        const first = `${addMonths(today, -2).slice(0, 7)}`;
+        const reg = (n: number, x: Partial<NonNullable<typeof f.regular>[number]> & Pick<NonNullable<typeof f.regular>[number], 'kind' | 'name' | 'payeeId' | 'reference'>) => ({
+          id: `reg-${f.companyId}-${String(n).padStart(3, '0')}`,
+          companyId: f.companyId,
+          payee: f.payees!.find((p) => p.id === x.payeeId)!.name,
+          body: null,
+          zakatFor: null,
+          method: 'transfer' as const,
+          bankId: f.banks[0].id,
+          every: 'monthly' as const,
+          dueDay: 15,
+          firstDue: `${first}-15`,
+          lastDue: null,
+          amount: null,
+          financed: null,
+          expiresOn: null,
+          subject: 'finance' as const,
+          status: 'active' as const,
+          added: { ...DE, at: at(24 * 70), comment: '' },
+          checked: { ...DEP, at: at(24 * 69), comment: 'Agreed to the agreement or letter (mock)' },
+          ended: null,
+          dues: [],
+          ...x,
+        });
+        const pid = (name: string) => payeeFor(f, name);
+        f.regular = [
+          reg(1, { kind: 'hire_purchase', name: 'Patrol van hire purchase (mock)', payeeId: pid('Kenderaan Ronda Sdn Bhd (mock)'), reference: 'HP-778812 (mock)', method: 'direct_debit', dueDay: 5, firstDue: `${first}-05`, lastDue: addDays(today, 365 * 3), amount: 2_150, financed: { principal: 98_000, instalments: 48, security: 'Van VEX 1234 (mock)' }, subject: 'transport' }),
+          reg(2, { kind: 'bill', name: 'Office electricity (mock)', payeeId: pid('Tenaga Nasional Berhad (mock)'), reference: 'TNB 2200-1234 (mock)', dueDay: 20, firstDue: `${first}-20` }),
+          reg(3, { kind: 'statutory', body: 'EPF', name: 'EPF contributions (mock)', payeeId: pid('KWSP (mock)'), reference: 'Employer no 12345678 (mock)' }),
+          reg(4, { kind: 'statutory', body: 'LHDN PCB', name: 'PCB (monthly tax deductions) (mock)', payeeId: pid('Lembaga Hasil Dalam Negeri (mock)'), reference: 'E 1234567-08 (mock)' }),
+          reg(5, { kind: 'loan', name: 'Office building loan (mock)', payeeId: pid('Syarikat Bekalan Pejabat (mock)'), reference: 'TL-55021 (mock)', method: 'direct_debit', dueDay: 1, firstDue: `${first}-01`, lastDue: addDays(today, 365 * 15), amount: 8_900, financed: { principal: 1_200_000, instalments: 240, security: 'Office lot, Shah Alam (mock)' }, status: 'pending', checked: null }),
+        ];
+        f.guarantees = [
+          {
+            id: `gtee-${f.companyId}-001`,
+            companyId: f.companyId,
+            kind: 'IG',
+            issuer: 'Insurans Jaminan Berhad (mock)',
+            number: 'IG-2025-0091 (mock)',
+            beneficiary: 'Hospital client (mock)',
+            purpose: 'Guarding contract 2025-2026 (mock)',
+            amount: 50_000,
+            collateral: 15_000,
+            bankId: f.banks[0].id,
+            issuedOn: addDays(today, -400),
+            expiresOn: addDays(today, -20),
+            status: 'active',
+            added: { ...DE, at: at(24 * 400), comment: 'IG letter (mock).pdf' },
+            checked: { ...DEP, at: at(24 * 399), comment: 'Agreed to the insurer letter (mock)' },
+            release: null,
+            claim: null,
+            refund: null,
+            called: null,
+            extensions: [],
+          },
+        ];
+      }
+      t1.forEach((f, i) => {
+        const o = i * 10;
+        f.payments = [
+          mk(f, o + 1, 'Syarikat Bekalan Pejabat (mock)', 'supplier', 'Office supplies, October', 4_820.5, [{ step: 'prepared', who: DE, h: 5, comment: '' }]),
+          mk(f, o + 2, 'Uniform Maju Sdn Bhd (mock)', 'supplier', 'Guard uniforms, batch 3', 18_400, [
+            { step: 'prepared', who: DE, h: 30, comment: '' },
+            { step: 'reviewed', who: DEP, h: 20, comment: 'Matches the PO and the delivery order.' },
+          ]),
+          // Transport is a department the COO monitors, so the COO (or the CEO) approves it (Fauzan, 1 Nov 2026).
+          {
+            ...mk(f, o + 3, 'Kenderaan Ronda Sdn Bhd (mock)', 'supplier', 'Patrol vehicle lease, quarter 4', 120_000, [
+              { step: 'prepared', who: DE, h: 50, comment: '' },
+              { step: 'reviewed', who: DEP, h: 40, comment: 'Lease schedule checked.' },
+            ]),
+            subject: 'transport' as const,
+            needs: 'coo' as const,
+          },
+          mk(f, o + 4, 'Tenaga Nasional Berhad (mock)', 'other', 'Office electricity, September', 2_310.4, [
+            { step: 'prepared', who: DE, h: 70, comment: '' },
+            { step: 'reviewed', who: DEP, h: 60, comment: 'Bill checked.' },
+            { step: 'approved', who: LEAD, h: 50, comment: 'OK to pay.' },
+          ]),
+          mk(f, o + 5, 'Lembaga Hasil Dalam Negeri (mock)', 'tax', 'CP204 instalment', 35_000, [
+            { step: 'prepared', who: DE, h: 200, comment: '' },
+            { step: 'reviewed', who: DEP, h: 190, comment: 'Instalment per CP204 schedule.' },
+            { step: 'approved', who: FD, h: 180, comment: 'Approved.' },
+            { step: 'released', who: LEAD, h: 170, comment: '' },
+          ]),
+          ...(i === 0
+            ? [
+                mk(f, o + 6, 'KWSP (mock)', 'statutory', 'Group EPF contributions, October', 650_000, [
+                  { step: 'prepared', who: DE, h: 10, comment: '' },
+                  { step: 'reviewed', who: LEAD, h: 6, comment: 'Agrees to the payroll summary.' },
+                ]),
+              ]
+            : []),
+        ];
+      });
+    }
   }
 
   // Contracts and site mobilisation (V6 amendment): one contract per pilot client account, plus two new sites being
@@ -6822,6 +7243,25 @@ export function generateDataset(opts: SeedOptions): Dataset {
     const FIRMS = ['Secretary firm A (mock)', 'Secretary firm B (mock)', 'Secretary firm C (mock)'];
     const AUDITORS = ['Audit firm 1 (mock)', 'Audit firm 2 (mock)', 'Audit firm 3 (mock)', 'Audit firm 4 (mock)'];
     const ty = Number(today.slice(0, 4));
+    // The audit firm panel as staff would key it in (mock names); law firms come from the same screen.
+    AUDITORS.forEach((name, i) =>
+      ds.panelFirms.push({
+        id: `pf-audit-${i + 1}`,
+        kind: 'AUDIT',
+        name,
+        regNo: `AF ${String(1000 + i)} (mock)`,
+        contact: 'Partner (mock)',
+        feeBasis: 'Yearly fee per company (mock)',
+        appointedOn: `${ty - 1}-01-15`,
+        reviewOn: i === 3 ? addDays(today, -10) : `${ty + 1}-01-15`,
+        status: 'active',
+        addedBy: 'Deputy Chief of Staff (mock)',
+        addedById: 'u-dcos',
+        at: `${ty - 1}-01-15T09:00:00+08:00`,
+        reviews: [],
+        removed: null,
+      }),
+    );
     ds.companies.forEach((c, i) => {
       const incorporatedOn = `${2003 + (i % 18)}-${String((i % 12) + 1).padStart(2, '0')}-${String(((i * 7) % 27) + 1).padStart(2, '0')}`;
       const fyeMonth = [12, 6, 3, 9][i % 4];
@@ -8035,8 +8475,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
       detail: '',
       severity: 'medium',
       evidence: 'Sample of records checked (mock)',
-      raisedBy: 'ACT Assistant to the Lead (mock)',
-      raisedById: 'u-act-la',
+      raisedBy: 'ACT Auditor, Team 1 (mock)',
+      raisedById: 'u-act-aud1',
+      // The Director gave the sample findings out across both teams (Fauzan, 2 Nov 2026).
+      team: n % 2 === 1 ? 1 : 2,
       raisedAt: at(20),
       dueOn: addDays(today, 10),
       plan: null,
@@ -8102,7 +8544,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         dueOn: addDays(today, -1),
         plan: { rootCause: 'No reminder', solution: 'Prima reminder at month 9', targetOn: addDays(today, -20), by: 'Mohd Shukri bin Ahmad', at: at(50) },
         fix: { proof: 'All 4 guards booked for CSG (mock)', by: 'Mohd Shukri bin Ahmad', at: at(30) },
-        checks: [{ ok: true, note: 'Bookings seen with the training provider (mock)', by: 'ACT Assistant to the Deputy (mock)', at: at(28) }],
+        checks: [{ ok: true, note: 'Bookings seen with the training provider (mock)', by: 'ACT Auditor, Team 2 (mock)', at: at(28) }],
       }),
     );
     ds.actAudits.push(
@@ -8111,7 +8553,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         area: 'ATTENDANCE',
         companyId: 'co-sasa',
         doneOn: addDays(today, -25),
-        by: 'ACT Assistant to the Lead (mock)',
+        by: 'ACT Auditor, Team 1 (mock)',
         result: 'findings',
         note: 'Sample of 40 replacements (mock)',
         findingIds: ['act-f-1'],
@@ -8121,7 +8563,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         area: 'BILLING',
         companyId: 'co-arsh',
         doneOn: addDays(today, -20),
-        by: 'ACT Deputy (mock)',
+        by: 'ACT Auditor, Team 2 (mock)',
         result: 'findings',
         note: 'September invoices (mock)',
         findingIds: ['act-f-2'],
@@ -8131,7 +8573,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         area: 'PURCHASING',
         companyId: null,
         doneOn: addDays(today, -20),
-        by: 'ACT Assistant to the Deputy (mock)',
+        by: 'ACT Auditor, Team 2 (mock)',
         result: 'findings',
         note: 'Purchases above RM5,000 (mock)',
         findingIds: ['act-f-3'],
@@ -8141,7 +8583,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         area: 'ARMS',
         companyId: 'co-arsh',
         doneOn: addDays(today, -230),
-        by: 'ACT Lead (mock)',
+        by: 'ACT Director (mock)',
         result: 'clean',
         note: 'Vault count and movement log (mock)',
         findingIds: [],
@@ -8151,7 +8593,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         area: 'PDPA',
         companyId: null,
         doneOn: addDays(today, -90),
-        by: 'ACT Deputy (mock)',
+        by: 'ACT Auditor, Team 2 (mock)',
         result: 'clean',
         note: 'Consent forms and access requests (mock)',
         findingIds: [],
@@ -8165,10 +8607,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
       findingIds: ['act-f-1'],
       ownerUserId: 'u-coo',
       ownerName: 'Ahmad Faisal bin Zainal',
-      ledBy: 'ACT Lead (mock)',
+      ledBy: 'ACT Director (mock)',
       targetOn: addDays(today, 30),
       steps: [
-        { text: 'Agree the rule with Operations and HR', doneOn: addDays(today, -5), by: 'ACT Lead (mock)' },
+        { text: 'Agree the rule with Operations and HR', doneOn: addDays(today, -5), by: 'ACT Director (mock)' },
         { text: 'Block the roster screen when vetting is missing', doneOn: null, by: null },
         { text: 'Brief all Operations Managers', doneOn: null, by: null },
       ],
@@ -8215,6 +8657,47 @@ export function generateDataset(opts: SeedOptions): Dataset {
     m.returnCheck = m.returnedAt ? (tagOf.get(m.firearmId) ? 'rfid' : 'manual') : null;
   });
 
+  // Public holidays (slice 3C, mock): the Act's fixed days that fall on a fixed date, for this year and next. HR enters
+  // the rest of the gazetted list (Hari Raya, Chinese New Year, Deepavali and the state days) each year.
+  for (const y of [Number(today.slice(0, 4)), Number(today.slice(0, 4)) + 1]) {
+    const firstMondayJune = (() => {
+      for (let d = 1; d <= 7; d++) if (new Date(Date.UTC(y, 5, d)).getUTCDay() === 1) return `${y}-06-0${d}`;
+      return `${y}-06-01`;
+    })();
+    const fixed: [string, string, PublicHoliday['compulsory']][] = [
+      [`${y}-05-01`, 'Labour Day', 'LABOUR_DAY'],
+      [firstMondayJune, "Agong's birthday", 'AGONG_BIRTHDAY'],
+      [`${y}-08-31`, 'National Day', 'NATIONAL_DAY'],
+      [`${y}-09-16`, 'Malaysia Day', 'MALAYSIA_DAY'],
+    ];
+    for (const [date, name, compulsory] of fixed)
+      ds.publicHolidays.push({ id: `ph-${date}`, date, name, states: null, compulsory, addedBy: 'Prima (mock)', addedById: 'mock', addedAt: `${y - 1}-12-01T09:00:00+08:00`, note: 'Fixed by the Act (mock list)', removed: null });
+  }
+  // Allowance list (Fauzan, 3 Nov 2026; synthetic). The ticks here are test entries only: HR sets the real list and
+  // confirms each tick against the law. Existing staff allowances carry no type, so payroll figures do not change.
+  for (const [id, name, frequency, usual, epf, socso] of [
+    ['alw-phone', 'Phone allowance', 'monthly', 150, true, true],
+    ['alw-car', 'Car allowance', 'monthly', 600, true, true],
+    ['alw-travel', 'Travel allowance (test entry)', 'both', null, false, false],
+    ['alw-acting', 'Acting allowance', 'both', null, true, true],
+  ] as const)
+    ds.allowanceTypes.push({
+      id,
+      name,
+      frequency,
+      usualAmount: usual,
+      cap: null,
+      epf,
+      socso,
+      pcb: true,
+      hrd: epf,
+      basis: 'Synthetic test entry: HR confirms the ticks against the law before use.',
+      active: true,
+      addedBy: 'Prima (mock)',
+      addedById: 'mock',
+      addedAt: `${today.slice(0, 4)}-01-02T09:00:00+08:00`,
+      changes: [],
+    });
   // Group website management: sample domains, websites, reviews and checks (Fauzan, 27 Oct 2026).
   seedWebsites(ds, today, now);
   // Working from home (Fauzan, 27 Oct 2026; mock). Two central staff work from home every weekday: the IT Executive
@@ -8252,6 +8735,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
         decidedAt: status === 'approved' ? fromMs(nowMs - (appliedDaysAgo - 2) * 86_400_000) : null,
         decisionNote: status === 'approved' ? 'Approved for three months, then reviewed.' : '',
       });
+      // Only staff HR has allowed may work from home (Fauzan, 2 Nov 2026).
+      const per = ds.people.find((p) => p.id === u.personId);
+      if (per) per.wfhAllowed = { by: 'HR (mock)', byId: 'mock-hr', at: applied, note: 'Work can be done from home (mock).' };
       return id;
     };
     const clock = (u: User, date: string, inAt: string, outAt: string | null) => {
@@ -8690,7 +9176,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     };
     const om = (state: string) => ds.users.find((u) => u.opsTier === 'om' && (u.areaStates ?? []).includes(state)) ?? null;
     const rom = (state: string) => ds.users.find((u) => u.opsTier === 'regional' && (u.regionIds ?? []).some((x) => regionOfState(state)?.id === x)) ?? null;
-    const act = ds.users.find((u) => u.id === 'u-act-la')!;
+    const act = ds.users.find((u) => u.id === 'u-act-aud1')!;
     const cms = ds.users.find((u) => u.department === 'cms')!;
     for (const b of ds.branches) {
       const bm = ds.users.find((u) => u.branchId === b.id)!;
@@ -8743,6 +9229,39 @@ export function generateDataset(opts: SeedOptions): Dataset {
     }
   }
 
+  // ----- Company offices (Fauzan, 2 Nov 2026: 1 Company Manager or GM and 2 to 8 executives). Mock names only. -----
+  // Added last so every earlier generator stays stable. The other 35 companies have no office accounts yet (Unknown).
+  const officeExecs: [string, string, string][] = [
+    ['u-ae-sasa', 'Farah Nadia binti Kamal', 'co-sasa'],
+    ['u-ae-sasa-2', 'Aina Sofea binti Rahim', 'co-sasa'],
+    ['u-ae-sasa-3', 'Priya a/p Subramaniam', 'co-sasa'],
+    ['u-ae-arsh-2', 'Wong Jia Hui', 'co-arsh'],
+    ['u-ae-inas', 'Lim Mei Ling', 'co-inas'],
+  ];
+  officeExecs.forEach(([id, name, companyId], k) => {
+    if (ds.users.some((u) => u.id === id)) return;
+    const co = ds.companies.find((c) => c.id === companyId);
+    // Every staff sign-in has its own record (Fauzan, 26 Oct 2026): the company employs its office executives.
+    const personId = `pr-office-${id.slice(2)}`;
+    ds.people.push({
+      id: personId,
+      companyId,
+      branchId: ds.branches.find((b) => b.companyId === companyId)!.id,
+      staffNo: `OFC${String(k + 1).padStart(3, '0')}`,
+      name,
+      nationality: 'MY',
+      idMasked: `9${k}0${k + 1}15-**-***${k}`,
+      dob: `199${k}-0${k + 1}-15`,
+      phone: `012-77${k} 40${k}0`,
+      role: 'office',
+      status: 'active',
+      hiredOn: addDays(today, -(200 + 150 * k)),
+      faceEnrolledOn: null,
+      basicPay: 3200,
+      jobTitle: 'Admin Executive',
+    });
+    ds.users.push({ id, name, title: `Admin Executive, ${co?.name ?? companyId}`, role: 'admin_exec', companyIds: [companyId], siteIds: [], personId });
+  });
   // Test PINs are kept only as hashes, as real ones are (pin.ts); testers work them out from the staff number.
   for (const p of ds.people) if (p.staffNo) p.pinHash = DEMO_PIN_KEEPER.hash(demoPin(p.staffNo), demoPinSalt(p.id));
   return ds;

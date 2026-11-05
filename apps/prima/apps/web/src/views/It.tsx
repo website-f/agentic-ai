@@ -10,6 +10,7 @@ import { AssignPick, Jobs, MyWork, Systems, Team } from './ItWork';
 import { AwayPanel, BuyFlow, ItAudit, ItTenders, LogTicket, RecordConfirm } from './ItPilot';
 import { WebsitesView } from './Websites';
 import { ItPlanView } from './ItPlan';
+import { LoginHandoverPanel } from './LoginHandover';
 import { ItImport } from './ItImport';
 import { ItManualPanel, manualItVisible } from './ItManual';
 import { ItOperations } from './ItOperations';
@@ -146,6 +147,7 @@ export function ItView() {
           <Kpi label="Joiners or leavers late" value={k.onboardingLate} tone={k.onboardingLate ? 'crit' : 'ok'} />
         </div>
       )}
+      {(staff || me.user.opsTier === 'ceo') && <LoginHandoverPanel />}
       <div className="tabbar" role="tablist" aria-label="IT sections" style={{ flexWrap: 'wrap' }}>
         {tabs.map(([t, l]) => (
           <button key={t} role="tab" aria-selected={current === t} onClick={() => setTab(t)}>

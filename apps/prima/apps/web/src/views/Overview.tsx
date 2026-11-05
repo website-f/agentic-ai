@@ -107,7 +107,7 @@ export function Overview() {
                   </td>
                   <td className="num">{n(r.credentialIssues)}</td>
                   <td>{r.canAct ? <Chip tone="info">Act</Chip> : <Chip tone="neutral">Monitor</Chip>}</td>
-                  <td><RecordButton kind="company" companyId={r.company.id} label="Verify company" /></td>
+                  <td><RecordButton kind="company" companyId={r.company.id} label="Company record" /></td>
                 </tr>
               ))}
             </tbody>

@@ -10,7 +10,7 @@ const dir = await mkdtemp(resolve(root, '.connections-browser-'));
 const apiCode = `
 export class ApiError extends Error { constructor(message,status=500,findings=[]){super(message);this.status=status;this.findings=findings;} }
 const time='2026-10-31T00:00:00.000Z';
-const f=window.__connectionsFixture={configured:false,userId:'synthetic-a',setupRequests:[],mailCalls:[],mailSetup:null,calls:[],pending:[],holdNext:null,nextPatch:null};
+const f=window.__connectionsFixture={configured:false,userId:'synthetic-a',setupRequests:[],mailCalls:[],m365Calls:[],mailSetup:null,calls:[],pending:[],holdNext:null,nextPatch:null};
 f.release=async(index,patch={})=>{const item=f.pending[index];if(!item)throw Error('Unknown synthetic request');item.resolve({...item.value,...patch});await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));};
 function respond(kind,args,value){
  const result={serviceId:'sharepoint',userId:f.userId,...value,...(f.nextPatch?.kind===kind?f.nextPatch.value:{})};
@@ -20,7 +20,7 @@ function respond(kind,args,value){
  return Promise.resolve(result);
 }
 export const api={
- m365Call:async(expectedUserId,method,path,body)=>{if(expectedUserId!==f.userId)throw Error('Wrong mail owner');f.mailCalls.push({method,path,body});if(method==='GET'&&path==='/connections/mail/jobs/status')return{serviceId:'mail',userId:f.userId,status:'NotConfigured',keepDays:30,setupReason:'FeatureDisabled',providerVerified:false,setupRequest:f.mailSetup};if(method==='POST'&&path==='/connections/mail/jobs/setup'){f.mailSetup={ticketId:'mail-setup',ticketRef:'IT-MAIL-SYNTHETIC',status:'open'};return{serviceId:'mail',userId:f.userId,requestId:body.requestId,replayed:false,...f.mailSetup};}throw Error('Unapproved synthetic mail action');},
+ m365Call:async(expectedUserId,method,path,body)=>{if(expectedUserId!==f.userId)throw Error('Wrong mail owner');if(path.startsWith('/connections/m365/')){f.m365Calls.push({method,path,body});if(method==='GET'&&path==='/connections/m365/status')return{userId:f.userId,services:['outlook','teams','sharepoint'].map(service=>({service,state:'not_configured',reason:'FeatureDisabled',resources:[],actions:[]})),teamsApprovals:{state:'not_built',canApplyApprovals:false}};if(method==='GET'&&path==='/connections/m365/matrix')throw Error('Guidance unavailable in this fixture');throw Error('Unapproved synthetic M365 action');}f.mailCalls.push({method,path,body});if(method==='GET'&&path==='/connections/mail/jobs/status')return{serviceId:'mail',userId:f.userId,status:'NotConfigured',keepDays:30,setupReason:'FeatureDisabled',providerVerified:false,setupRequest:f.mailSetup};if(method==='POST'&&path==='/connections/mail/jobs/setup'){f.mailSetup={ticketId:'mail-setup',ticketRef:'IT-MAIL-SYNTHETIC',status:'open'};return{serviceId:'mail',userId:f.userId,requestId:body.requestId,replayed:false,...f.mailSetup};}throw Error('Unapproved synthetic mail action');},
  sharePointRequestPreview:url=>respond('setupPreview',[url],{status:'RequestPreview',canonicalUrl:'https://example.sharepoint.com/sites/IT/Documents',host:'example.sharepoint.com',kind:'library'}),
  sharePointRequest:(url,requestId,expectedUserId)=>{if(expectedUserId!==f.userId)throw Error('Wrong setup owner');const receipt={requestId,id:'ticket-synthetic',reference:'IT-SYNTHETIC',status:'open',at:time};f.setupRequests.push(receipt);return respond('setupRequest',[url,requestId],receipt);},
  sharePointRequests:()=>respond('setupList',[],{requests:f.setupRequests}),
@@ -33,8 +33,8 @@ let server, browser;
 try {
   await writeFile(resolve(dir, 'index.html'), '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/main.tsx"></script></body></html>');
   await writeFile(resolve(dir, 'main.tsx'), `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{ConnectionsView}from'../apps/web/src/views/Connections';import '../apps/web/src/styles.css';function Fixture(){const[userId,setUserId]=useState('synthetic-a');window.__setConnectionUser=id=>{window.__connectionsFixture.userId=id;setUserId(id);};return <ConnectionsView key={userId} userId={userId}/>;}createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);`);
-  server = await createServer({ configFile: false, root: dir, esbuild: { jsx: 'automatic' }, server: { host: '127.0.0.1', port: 0, fs: { allow: [root] } }, plugins: [{ name: 'synthetic-connections-api', enforce: 'pre', resolveId(id, importer) { if ((id === '../api' && importer?.endsWith('/views/Connections.tsx')) || (id === './api' && importer?.endsWith('/src/ui.tsx'))) return '\0synthetic-connections-api'; }, load(id) { if (id === '\0synthetic-connections-api') return apiCode; } }] });
-  await server.listen();
+  server = await createServer({ configFile: false, root: dir, cacheDir:resolve(dir,'.vite-cache'),optimizeDeps:{entries:[resolve(dir,'main.tsx')],include:['react','react-dom/client','react/jsx-runtime','react/jsx-dev-runtime']},esbuild: { jsx: 'automatic' }, server: { host: '127.0.0.1', port: 0, fs: { allow: [root] } }, plugins: [{ name: 'synthetic-connections-api', enforce: 'pre', resolveId(id, importer) { if ((id === '../api' && importer?.endsWith('/views/Connections.tsx')) || (id === './api' && importer?.endsWith('/src/ui.tsx'))) return '\0synthetic-connections-api'; }, load(id) { if (id === '\0synthetic-connections-api') return apiCode; } }] });
+  await server.listen();await server.transformRequest('/main.tsx');await server.waitForRequestsIdle();
   const address = server.httpServer.address(); const origin = `http://127.0.0.1:${address.port}`;
   const response = await fetch(origin + '/main.tsx'); assert.equal(response.status, 200); const entry = await response.text();
   assert(entry.includes('ConnectionsView')); assert(entry.includes('StrictMode'));
@@ -62,6 +62,10 @@ try {
       const mail = page.getByRole('region', { name: 'Outlook selected-email connection', exact: true });
       const bi = page.getByRole('region', { name: 'Power BI', exact: true });
       await sp.getByText('SharePoint is not configured for this app.', { exact: false }).waitFor();
+      const m365 = page.getByRole('region', { name: 'Your Microsoft 365 connections', exact: true });
+      for (const name of ['Outlook', 'Teams', 'SharePoint']) await m365.getByRole('status', { name: `${name} status: Not configured`, exact: true }).waitFor();
+      assert.equal(await m365.getByRole('button', { name: 'Check', exact: true }).count(), 0, 'Not configured offers no Microsoft check');
+      assert.equal(await page.evaluate(() => window.__connectionsFixture.m365Calls.some(c => c.method !== 'GET')), false, 'Opening the page reads Prima status only');
       await bi.getByText('Not configured', { exact: true }).waitFor(); assert.equal(await bi.getByRole('button').count(), 0);
       await mail.getByText('Not configured', { exact: true }).waitFor(); await mail.getByRole('button',{name:'Refresh Outlook setup status'}).click(); await mail.getByRole('button',{name:'Request selected-email setup'}).waitFor(); assert.equal(await mail.getByRole('button',{name:'Check my access'}).count(),0); assert.equal(await mail.getByRole('button',{name:'Send',exact:true}).count(),0);
       assert.equal(await page.evaluate(() => window.__connectionsFixture.calls.some(c => c.kind !== 'configuration')), false, 'StrictMode mount must not read provider metadata');

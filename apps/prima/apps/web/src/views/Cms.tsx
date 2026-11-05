@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type Cms, type CmsSettingsPatch } from "../api";
 import { useApp } from "../App";
-import { ATTENDANCE_ISSUE_LABEL, type AttendanceIssueView } from "@prima/core";
+import { ATTENDANCE_ISSUE_LABEL, CMS_SERVICE_KINDS, type AttendanceIssueView } from "@prima/core";
 import {
   Chip,
   ErrorNotice,
@@ -24,7 +24,8 @@ type Tab =
   | "phones"
   | "settings"
   | "duties"
-  | "staff";
+  | "staff"
+  | "commissioning";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "now", label: "Now" },
@@ -35,6 +36,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
   { id: "duties", label: "What CMS does" },
   { id: "staff", label: "Staff" },
+  { id: "commissioning", label: "Commissioning" },
 ];
 
 const POST: Record<Cms["staff"][number]["posts"][number], string> = {
@@ -181,6 +183,7 @@ export function CmsView() {
       {tab === "settings" && <Settings data={data} />}
       {tab === "duties" && <Duties data={data} />}
       {tab === "staff" && <Staff data={data} />}
+      {tab === "commissioning" && <Commissioning />}
     </div>
   );
 }
@@ -898,6 +901,7 @@ const ALARM: Record<Cms["ops"]["alarms"][number]["alarm"]["kind"], string> = {
   FIRE: "Fire alarm",
   CAMERA_TAMPER: "Camera tamper",
   LINK_LOST: "Site link lost",
+  CMS_EVENT: "CMS event",
 };
 
 const secs = (n: number) =>
@@ -1189,6 +1193,345 @@ const MONITORING: Record<
   not_linked: { label: "Not linked", tone: "unknown" },
 };
 
+const CONTACT_ROLE: Record<string, string> = {
+  site_supervisor: "Site supervisor",
+  company_manager: "Company manager",
+  regional_om: "Regional OM",
+};
+
+/**
+ * Masterplan §191: CMS operators verify each call-out contact with a test call; Arms Control accepts the service once
+ * every contact is verified and the sites are linked. The company records the signed scope and the client's acceptance.
+ */
+function Commissioning() {
+  const { data, error } = useLoad(() => api.cmsCommissioning(), []);
+  const act = useAction();
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="commissioning" />;
+  const key = (id: string, i: number | "accept") => `${id}:${i}`;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Commissioning: signed CMS service per contract</h2>
+        <span className="muted small">
+          Verify each contact by a test call and record a test of each signed
+          service at each site. CCTV and alarm tests are checked against
+          Prima&apos;s records; attendance and patrol run in the JA app, so the
+          operator attests them. Accepting needs all of these.
+        </span>
+      </div>
+      <div className="panel-body" style={{ display: "grid", gap: 12 }}>
+        <ErrorNotice error={act.error} />
+        {data.rows.length === 0 && (
+          <p className="muted">No contract has a signed CMS scope yet.</p>
+        )}
+        {data.rows.map((r) => {
+          const svc = r.service;
+          return (
+            <div
+              key={r.contractId}
+              className="list-item"
+              style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+            >
+              <div
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 6,
+                }}
+              >
+                <b>
+                  {r.ref} · {r.clientName} · {r.companyName}
+                </b>
+                <Chip tone={r.gaps.length ? "warn" : "ok"}>
+                  {r.gaps.length ? `${r.gaps.length} to do` : "Commissioned"}
+                </Chip>
+              </div>
+              <div className="muted small">
+                Scope v{svc.version}, signed {dateLabel(svc.signedOn)} by{" "}
+                {svc.clientSignatory} (ref {svc.signedRef}).{" "}
+                {r.siteNames
+                  .map((x) => `${x.name} ${x.from}-${x.to}`)
+                  .join("; ")}
+              </div>
+              {svc.contacts.map((c, i) => (
+                <div
+                  key={i}
+                  className="row small"
+                  style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}
+                >
+                  <span style={{ minWidth: 220 }}>
+                    {CONTACT_ROLE[c.role]}: {c.name}
+                  </span>
+                  {c.verifiedAt ? (
+                    <Chip tone="ok">Verified by {c.verifiedBy}</Chip>
+                  ) : c.userId === data.userId ? (
+                    <span className="muted">
+                      Another operator verifies your number
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        className="input"
+                        aria-label={`How ${c.name} was verified`}
+                        placeholder="Test call answered, number confirmed"
+                        value={notes[key(r.contractId, i)] ?? ""}
+                        onChange={(e) =>
+                          setNotes({
+                            ...notes,
+                            [key(r.contractId, i)]: e.target.value,
+                          })
+                        }
+                      />
+                      <button
+                        className="btn btn-sm"
+                        disabled={act.busy}
+                        onClick={() =>
+                          act.run(
+                            () =>
+                              api.verifyCmsContact(
+                                r.contractId,
+                                i,
+                                svc.version,
+                                notes[key(r.contractId, i)] ?? "",
+                              ),
+                            "Contact verified.",
+                          )
+                        }
+                      >
+                        Mark verified
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {svc.services.flatMap((service) =>
+                r.siteNames.map((site) => {
+                  const done = (svc.tests ?? []).find(
+                    (t) => t.service === service && t.siteId === site.siteId,
+                  );
+                  const k = `${r.contractId}:test:${service}:${site.siteId}`;
+                  return (
+                    <div
+                      key={k}
+                      className="row small"
+                      style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}
+                    >
+                      <span style={{ minWidth: 220 }}>
+                        Test: {CMS_SERVICE_KINDS[service]}, {site.name}
+                      </span>
+                      {done ? (
+                        <Chip tone={done.basis === "prima_record" ? "ok" : "warn"}>
+                          {done.basis === "prima_record"
+                            ? `Checked in Prima, by ${done.by}`
+                            : `Operator attested, by ${done.by}`}
+                        </Chip>
+                      ) : (
+                        <>
+                          <input
+                            className="input"
+                            aria-label={`Test of ${CMS_SERVICE_KINDS[service]} at ${site.name}`}
+                            placeholder="What was tested and what CMS saw"
+                            value={notes[k] ?? ""}
+                            onChange={(e) => setNotes({ ...notes, [k]: e.target.value })}
+                          />
+                          <button
+                            className="btn btn-sm"
+                            disabled={act.busy}
+                            onClick={() =>
+                              act.run(
+                                () =>
+                                  api.recordCmsTest(
+                                    r.contractId,
+                                    svc.version,
+                                    service,
+                                    site.siteId,
+                                    notes[k] ?? "",
+                                  ),
+                                "Test recorded.",
+                              )
+                            }
+                          >
+                            Record test
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                }),
+              )}
+              {r.gaps.length > 0 && (
+                <ul className="small" style={{ margin: 0 }}>
+                  {r.gaps.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              )}
+              {data.canAccept && !svc.operatorAcceptance && (
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  <input
+                    className="input"
+                    aria-label="Reason for accepting"
+                    placeholder="Reason for accepting for CMS"
+                    value={notes[key(r.contractId, "accept")] ?? ""}
+                    onChange={(e) =>
+                      setNotes({
+                        ...notes,
+                        [key(r.contractId, "accept")]: e.target.value,
+                      })
+                    }
+                  />
+                  <button
+                    className="btn btn-sm"
+                    disabled={act.busy}
+                    onClick={() =>
+                      act.run(
+                        () =>
+                          api.acceptCmsService(
+                            r.contractId,
+                            "operator",
+                            svc.version,
+                            { note: notes[key(r.contractId, "accept")] ?? "" },
+                          ),
+                        "Accepted for CMS.",
+                      )
+                    }
+                  >
+                    Accept for CMS
+                  </button>
+                </div>
+              )}
+              {svc.operatorAcceptance && (
+                <div className="small">
+                  Accepted for CMS by {svc.operatorAcceptance.by}.{" "}
+                  {svc.clientAcceptance
+                    ? `Client accepted (${svc.clientAcceptance.clientName}, ref ${svc.clientAcceptance.ref}).`
+                    : "Waiting for the company to record the client's acceptance."}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+const kpiTime = (sec: number | null) =>
+  sec === null
+    ? "-"
+    : sec < 120
+      ? `${sec} s`
+      : `${Math.round(sec / 6) / 10} min`;
+
+/** Masterplan §195: how fast alarms are acknowledged, and how much of the linked site equipment CMS can actually see. */
+function CmsResponseKpis({ k }: { k: Cms["ops"]["kpis"] }) {
+  const cov = k.coverage;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Response and coverage, last 24 hours</h2>
+        <span className="muted small">
+          Target: acknowledge within {k.targetSec} s (CMS setting). Unknown is
+          never counted as online.
+        </span>
+      </div>
+      <div className="panel-body">
+        <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
+          <span>Alarms: {k.all.alarms}</span>
+          <span>Acknowledge, median: {kpiTime(k.all.ackMedianSec)}</span>
+          <span>90% within: {kpiTime(k.all.ackP90Sec)}</span>
+          <span
+            style={
+              k.all.ackOverTarget
+                ? { color: "var(--warn)", fontWeight: 600 }
+                : undefined
+            }
+          >
+            Over target: {k.all.ackOverTarget}
+          </span>
+          <span
+            style={
+              k.all.waitingOverTarget
+                ? { color: "var(--crit)", fontWeight: 600 }
+                : undefined
+            }
+          >
+            Waiting over target now: {k.all.waitingOverTarget}
+          </span>
+          <span>
+            False alarms: {k.all.falseAlarms}
+            {k.all.falseRatePct === null ? "" : ` (${k.all.falseRatePct}%)`}
+          </span>
+        </div>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Linked systems: {cov.online} online, {cov.offline} offline,{" "}
+          <b>{cov.unknown} unknown</b>
+          {cov.unknownPct === null ? "" : ` (${cov.unknownPct}%)`} of{" "}
+          {cov.linkedSystems}. Sites not linked to CMS: {cov.sitesNotLinked}.
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Contracted monitoring: {k.contracted.contractedMin} min signed,{" "}
+          {k.contracted.reachableMin} min with CMS evidence a linked system
+          was up,{" "}
+          {k.contracted.downMin} min down,{" "}
+          <b>{k.contracted.unknownMin} min unknown</b>
+          {k.contracted.reachablePct === null
+            ? ""
+            : ` (${k.contracted.reachablePct}% of signed minutes)`}
+          .
+          {k.contracted.contractsWithoutScope > 0 &&
+            ` ${k.contracted.contractsWithoutScope} live or mobilising contract(s) have no signed CMS scope.`}
+        </p>
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          These counts are each system&apos;s last reported status and
+          Prima&apos;s own alarm records. Contracted minutes count as up only
+          while the CMS app&apos;s reports (sent every 5 minutes, each good for
+          15) show a linked system up; time with no report is unknown. None of
+          this shows guards on post, or that recordings are complete and
+          intact.
+        </p>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th className="num">Alarms</th>
+              <th className="num">Acknowledge, median</th>
+              <th className="num">Over target</th>
+              <th className="num">Waiting now</th>
+              <th className="num">False rate</th>
+              <th className="num">Systems unknown</th>
+              <th className="num">Sites not linked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {k.byCompany.map((c) => (
+              <tr key={c.companyId}>
+                <td>{c.companyName}</td>
+                <td className="num">{c.alarms}</td>
+                <td className="num">{kpiTime(c.ackMedianSec)}</td>
+                <td className="num">{c.ackOverTarget}</td>
+                <td className="num">{c.waitingOverTarget}</td>
+                <td className="num">
+                  {c.falseRatePct === null ? "-" : `${c.falseRatePct}%`}
+                </td>
+                <td className="num">
+                  {c.coverage.unknown} of {c.coverage.linkedSystems}
+                </td>
+                <td className="num">{c.coverage.sitesNotLinked}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function Sites({ data }: { data: Cms }) {
   const [all, setAll] = useState(false);
   const [company, setCompany] = useState("");
@@ -1251,6 +1594,7 @@ function Sites({ data }: { data: Cms }) {
           </table>
         </div>
       </section>
+      <CmsResponseKpis k={data.ops.kpis} />
       <section className="panel">
         <div className="panel-head">
           <h2>Sites</h2>

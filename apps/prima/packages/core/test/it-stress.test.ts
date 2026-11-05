@@ -53,8 +53,8 @@ describe('IT pilot under load and bad input', () => {
     const { svc, ds } = fresh();
     const mgr = await svc.user('u-it-mgr');
     const j = ds.itJobs.find((x) => x.status === 'submitted' && !x.technical)!;
-    await svc.itJobStep(mgr, j.id, 'accept');
-    await expect(svc.itJobStep(mgr, j.id, 'accept')).rejects.toThrow(/not waiting/);
+    await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked');
+    await expect(svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).rejects.toThrow(/not waiting/);
     const ex = await svc.user('u-it-ex2');
     const p = ds.itPurchases.find((x) => x.status === 'finance')!;
     if (!p.finance) await svc.itBuyStep(ex, p.id, 'finance', { ref: 'Teams Approvals: test' });

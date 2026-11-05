@@ -8,6 +8,7 @@ import { SocsoTab } from './Socso';
 import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory } from './HrFile';
 import { SHIFT_STATE } from './shared';
 import { RecordButton } from './RecordForm';
+import { GuardTrainingPanel } from './HrDevelop';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
   const { companyId: chosen, me } = useApp();
@@ -67,6 +68,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" />
         </div>
       </div>
+      <GuardTrainingPanel />
       <section className="panel">
         {!data && <Loading what="guards" />}
         {data && (
@@ -472,6 +474,7 @@ export function HoursTab({ d, self }: { d: GuardProfile; self?: boolean }) {
 
 export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: string; self?: boolean }) {
   const [asking, setAsking] = useState(false);
+  const [redo, setRedo] = useState<{ kind: (typeof d.leave.requests)[number]['kind']; from: string; to: string; reason: string; illness?: string; clinic?: string; mcNo?: string; correctsId?: string; reusedDocs?: number } | null>(null);
   const b = d.leave.balances;
   return (
     <>
@@ -483,6 +486,8 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
         />
         <Kpi label="Sick days left" value={b.sick.left} note={`${b.sick.taken} of ${b.sick.entitled} taken`} tone={b.sick.left ? 'ok' : 'warn'} />
         <Kpi label="With hospitalisation" value={b.hospital.left} note={`of ${b.hospital.entitled} days a year`} />
+        {b.maternity.entitled > 0 && <Kpi label="Maternity leave" value={b.maternity.entitled} note={b.maternity.taken ? `${b.maternity.taken} taken this year` : 'consecutive days a birth'} />}
+        {b.paternity.entitled > 0 && <Kpi label="Paternity leave" value={b.paternity.entitled - b.paternity.taken} note={`of ${b.paternity.entitled} days a birth`} />}
       </div>
       <p className="muted small">
         {b.years} year{b.years === 1 ? '' : 's'} of service. {b.note ? `${b.note} ` : ''}
@@ -495,13 +500,13 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
           </button>
         </div>
       )}
-      {asking && <LeaveForm personId={personId} onDone={() => setAsking(false)} />}
+      {asking && <LeaveForm key={redo ? `${redo.from}-${redo.to}` : 'new'} personId={personId} prefill={redo} onDone={() => (setAsking(false), setRedo(null))} />}
       <section>
         <h3>Requests</h3>
         <div className="list">
           {d.leave.requests.length === 0 && <div className="empty">No requests yet.</div>}
           {d.leave.requests.map((q) => (
-            <div key={q.id} className="list-item">
+            <div key={q.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
               <div>
                 <div>
                   {LEAVE_LABEL[q.kind]} · {dateLabel(q.from)}
@@ -511,10 +516,35 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
                   {q.illness ? `${q.illness}${q.clinic ? `, ${q.clinic}` : ''} · ` : ''}
                   {q.reason}
                   {q.decidedBy ? ` · ${q.status} by ${q.decidedBy}` : ''}
+                  {q.decisionNote ? `: ${q.decisionNote}` : ''}
                   {q.proofIds.length ? ` · ${q.kind === 'SICK' || q.kind === 'HOSPITAL' ? 'MC' : 'document'} uploaded` : ''}
                 </div>
               </div>
-              <Chip tone={q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'crit' : 'warn'}>{q.status}</Chip>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+                <Chip tone={q.status === 'approved' ? 'ok' : q.status === 'rejected' ? 'crit' : 'warn'}>{q.status}</Chip>
+                {q.status === 'rejected' && d.access.requestLeave && !asking && !d.leave.requests.some((x) => x.correctsId === q.id) && (
+                  <button
+                    className="btn btn-sm"
+                    title="Opens a new request with these details for you to correct; the refused one stays on record"
+                    onClick={() =>
+                      (setRedo({
+                        kind: q.kind,
+                        from: q.from,
+                        to: q.to,
+                        reason: q.reason,
+                        illness: q.illness,
+                        clinic: q.clinic,
+                        mcNo: q.mcNo,
+                        // Your own refused request: its MC documents are reused, not uploaded again (the server checks).
+                        ...(self ? { correctsId: q.id, reusedDocs: q.proofIds.length } : {}),
+                      }),
+                      setAsking(true))
+                    }
+                  >
+                    Correct and send again
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { api, type FwmBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
+import { FwmWelfarePanel } from './FwmWelfare';
 
 /**
  * Foreign Worker Management (Fauzan, 26 Oct 2026). FWM renews every foreign worker's papers and sends the OMs dated
@@ -30,7 +31,7 @@ function stageTone(i: Item): Tone {
 
 export function FwmView() {
   const { data, error } = useLoad(() => api.fwmBoard(), []);
-  const [tab, setTab] = useState<'papers' | 'year10' | 'tasks' | null>(null);
+  const [tab, setTab] = useState<'papers' | 'year10' | 'tasks' | 'welfare' | null>(null);
   const [mine, setMine] = useState(true);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="foreign workers" />;
@@ -77,7 +78,14 @@ export function FwmView() {
           Tasks
           {openTasks > 0 && <span className="tab-count">{openTasks}</span>}
         </button>
+        {board && (
+          <button role="tab" aria-selected={view === 'welfare'} onClick={() => setTab('welfare')}>
+            Recruitment and welfare
+          </button>
+        )}
       </div>
+
+      {view === 'welfare' && <FwmWelfarePanel />}
 
       {view === 'papers' && (
         <section className="panel">

@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RENTAL_CORRECTION_PINS = void 0;
 exports.rentalCorrectionProblems = rentalCorrectionProblems;
 const it_cleanup_readiness_1 = require("./it-cleanup-readiness");
-exports.RENTAL_CORRECTION_PINS = { "rc_hash": "983c0267f94a613629b2764a17a8daeb", "rc_role": "89bef70616c6f7e2c7d95a43cfb9b470", "rc_scope": "3173bc9b19692b70d66ec8a58cd51ab7", "rc_visible": "136a51225464482982e2e28c4f03e302", "rc_current": "d46cd3210fb2130ad7cb9420e8e5d4d8", "rc_guard": "85924c5d1dab85c1f30380079a78ff19", "rc_original_payment_guard": "6bb473fec837311806398743679cc664", "rc_visible_receipt": "9765f3b89476fc7b7ab10d51b245ebac" };
+exports.RENTAL_CORRECTION_PINS = { "rc_hash": "983c0267f94a613629b2764a17a8daeb", "rc_role": "89bef70616c6f7e2c7d95a43cfb9b470", "rc_scope": "c5f4d3a5a507422dc4d08d28e0315c6a", "rc_visible": "136a51225464482982e2e28c4f03e302", "rc_current": "d46cd3210fb2130ad7cb9420e8e5d4d8", "rc_guard": "85924c5d1dab85c1f30380079a78ff19", "rc_original_payment_guard": "6bb473fec837311806398743679cc664", "rc_visible_receipt": "9765f3b89476fc7b7ab10d51b245ebac" };
 const tables = ['it_rental_correction_requests', 'it_rental_correction_reviews', 'it_rental_replacements', 'it_rental_replacement_payments', 'it_rental_correction_receipts'];
 const norm = (x) => String(x ?? '').replace(/::text/g, '').replace(/[\s()]/g, '');
 /** Catalog only. No schema installation or private work data reads. */

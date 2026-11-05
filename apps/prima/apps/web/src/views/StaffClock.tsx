@@ -4,6 +4,12 @@ import { api, type MyStaffClock, type StaffClockBoard } from '../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { gps, type Fix } from './Camera';
 import { MyRemoteSection, RemoteBoardView } from './Remote';
+import { FaceCapture } from './FaceCheck';
+import { FlexPanel } from './HrLeave';
+import { OfficeOshPanel } from './HrOsh';
+import { AppraisalsPanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
+import { HrGuide } from './HrGuide';
+import { useApp } from '../App';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
   NO_GPS: 'No location',
@@ -14,6 +20,7 @@ const FLAG_LABEL: Record<StaffClockFlag, string> = {
   PHONE_TIME_OFF: 'Phone time off',
   NO_SIGN_OUT: 'Did not sign out',
   LEFT_BEFORE_SIGN_OUT: 'Left the office before signing out',
+  FACE_PENDING: 'Face check not done',
 };
 const FLAG_TONE: Partial<Record<StaffClockFlag, Tone>> = { PHOTO_ONLY: 'neutral', NO_GPS: 'warn', AWAY_FROM_BASE: 'warn' };
 const LOCATION: Record<'tracked' | 'away' | 'unknown' | 'off' | 'desk' | 'remote', { label: string; tone: Tone }> = {
@@ -150,7 +157,14 @@ export function MyClockView() {
         )}
         <ErrorNotice error={act.error} />
       </section>
+      <MyFacePanel faceEnrolled={data.faceEnrolled} pending={!!open?.flags.includes('FACE_PENDING')} />
       <MyRemoteSection />
+      <FlexPanel />
+      <OfficeOshPanel coordinatorOnly />
+      <PoliciesPanel mine />
+      <AppraisalsPanel mine />
+      <TrainingPanel mine />
+      <HrGuide staffSide />
       <section className="panel">
         <h3>Last 7 days</h3>
         <div className="list">
@@ -270,6 +284,7 @@ export function StaffClockBoardView() {
           {data.viewOnly && <p className="notice">You see your IT team's clock, view only.</p>}
         </div>
       </div>
+      <FaceReviewsPanel />
       <div className="seg" style={{ marginBottom: 10, alignSelf: 'flex-start' }}>
         <button aria-pressed={tab === 'clock'} onClick={() => setTab('clock')}>
           Clock today
@@ -416,6 +431,16 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
               </Chip>
             ))}
           </div>
+          {data.clock.faceCheck && (
+            <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+              <div className="label">Face check after sign-in (spot-check: the phone does the matching)</div>
+              <img src={data.clock.faceCheck.image} alt="Face check photo" style={{ maxWidth: 240, borderRadius: 8 }} />
+              <span>
+                {time(data.clock.faceCheck.receivedAt)} server time · match {data.clock.faceCheck.face ? `${Math.round(data.clock.faceCheck.face.score * 100)}%` : 'none'}
+                {data.clock.faceCheck.face && !data.clock.faceCheck.face.live ? ' · face did not move' : ''}
+              </span>
+            </div>
+          )}
           <div className="grid-2">
             {(['in', 'out'] as const).map((k) => {
               const s = data.clock[k];
@@ -481,5 +506,120 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
         </>
       )}
     </Drawer>
+  );
+}
+
+/**
+ * Face recognition for clock in (Fauzan, 2 Nov 2026; free engine on the phone). Register once, HR approves the photo,
+ * then each sign-in asks for a quick face check. The photo is kept for HR to spot-check.
+ */
+function MyFacePanel({ faceEnrolled, pending }: { faceEnrolled: boolean; pending: boolean }) {
+  const mine = useLoad(() => api.myFace(), []);
+  const act = useAction();
+  const f = mine.data;
+  if (!f) return null;
+  return (
+    <section className="panel">
+      <h3>Face recognition</h3>
+      {faceEnrolled && pending && (
+        <>
+          <p className="small">You are clocked in from your sign-in. Confirm it is you with a quick face check.</p>
+          <FaceCapture
+            label="Check my face"
+            busy={act.busy}
+            onCapture={(r) =>
+              void act.run(
+                () =>
+                  api.staffFaceCheck({
+                    image: r.photo,
+                    capturedAt: new Date().toISOString(),
+                    lat: null,
+                    lng: null,
+                    accuracyM: null,
+                    face: { score: 0, live: r.live },
+                    descriptor: r.descriptor,
+                  }),
+                'Face checked.',
+              )
+            }
+          />
+        </>
+      )}
+      {faceEnrolled && !pending && <p className="muted small">Your face is registered. Each sign-in asks for a quick face check.</p>}
+      {!faceEnrolled && f.status === 'pending' && <p className="small">Your face is registered and waiting for HR to approve it. Until then you clock in with a photo.</p>}
+      {!faceEnrolled && (f.status === 'none' || f.status === 'refused') && (
+        <>
+          {f.status === 'refused' && f.note && (
+            <div className="notice small" data-tone="warn">
+              HR: {f.note}
+            </div>
+          )}
+          <p className="small">Register your face once. HR looks at the photo and approves it; after that each sign-in asks for a quick face check.</p>
+          <FaceCapture
+            label="Register my face"
+            busy={act.busy}
+            onCapture={(r) => void act.run(() => api.registerFace({ photo: r.photo, descriptor: r.descriptor }), 'Sent to HR to approve.').then(() => mine.reload())}
+          />
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </section>
+  );
+}
+
+/** HR approves each registered face after looking at the photo, with a comment. Nobody approves their own. */
+function FaceReviewsPanel() {
+  const { me } = useApp();
+  const u = me.user;
+  const reviews = (u.role === 'pwvsb_officer' && u.department === 'hr') || u.leadership === 'cos' || u.leadership === 'deputy_cos';
+  const list = useLoad(() => (reviews ? api.faceReviews() : Promise.resolve(null)), [reviews]);
+  const [note, setNote] = useState<Record<string, string>>({});
+  const act = useAction();
+  if (!reviews || !list.data || list.data.pending.length === 0) return null;
+  return (
+    <section className="panel">
+      <h3>Faces waiting for HR ({list.data.pending.length})</h3>
+      <p className="muted small">Check the photo is the staff member before approving. The phone does the matching, so spot-check clock-in photos too.</p>
+      <div className="list">
+        {list.data.pending.map((r) => (
+          <div key={r.personId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <div style={{ fontWeight: 600 }}>
+              {r.name} {r.staffNo ? `(${r.staffNo})` : ''} {r.jobTitle ? `· ${r.jobTitle}` : ''}
+            </div>
+            {r.photo && <img src={r.photo} alt={`Face registered by ${r.name}`} style={{ maxWidth: 200, borderRadius: 6 }} />}
+            {r.own ? (
+              <div className="muted small">Your own face: someone else in HR approves it.</div>
+            ) : (
+              <>
+                <input
+                  className="input"
+                  placeholder="Comment (needed)"
+                  aria-label={`Comment for ${r.name}`}
+                  value={note[r.personId] ?? ''}
+                  onChange={(e) => setNote((x) => ({ ...x, [r.personId]: e.target.value }))}
+                />
+                <div className="row" style={{ gap: 6 }}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={act.busy || !(note[r.personId] ?? '').trim()}
+                    onClick={() => void act.run(() => api.decideFace(r.personId, true, note[r.personId] ?? ''), 'Face approved.').then(() => list.reload())}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={act.busy || !(note[r.personId] ?? '').trim()}
+                    onClick={() => void act.run(() => api.decideFace(r.personId, false, note[r.personId] ?? ''), 'Face refused.').then(() => list.reload())}
+                  >
+                    Refuse
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <ErrorNotice error={act.error} />
+    </section>
   );
 }

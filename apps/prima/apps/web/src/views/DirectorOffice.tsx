@@ -1,4 +1,5 @@
 import { JointTenders } from './JointTenders';
+import { DirectorDesk } from './DirectorDesk';
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useLoad } from '../ui';
@@ -47,6 +48,7 @@ export function DirectorOfficeView() {
         />
         <Kpi label="No arahan petender yet" value={live.filter((r) => !r.hasArahan).length} tone={live.some((r) => !r.hasArahan) ? 'warn' : 'ok'} />
       </div>
+      <DirectorDesk />
       <JointTenders board={data} />
       <section className="panel">
         <div className="panel-head">

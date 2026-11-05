@@ -1,7 +1,7 @@
 'use strict';
 // Explicit operator entry only. Never imported by API startup. No provisioning or retries.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const OLD='678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b',NEXT='4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe',RUNNER='66640286f3da6aadcc4201e23246c97e74a41acf63d9483d8cc8736bb26349fa';
+const OLD='678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b',NEXT='d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283',RUNNER='e470e38f3c308a08e49aa9caa229eaa4563dcdf92ad188322081069fabba938d';
 const HOST='psql-prima-staging-sea.postgres.database.azure.com';
 const validators=['hr-it-readiness','it-cleanup-readiness','it-manual-readiness','it-operations-readiness','it-workflow-metrics-readiness','procurement-readiness','rental-correction-readiness'];
 const paths=['cli.cjs','base-transition.cjs','live.sql','candidate.sql','readiness-manifest.json',...validators.flatMap(n=>['candidate-readiness/'+n+'.ts','candidate-readiness-js/'+n+'.js'])].sort();

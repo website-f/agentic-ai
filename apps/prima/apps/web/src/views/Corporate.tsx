@@ -2,15 +2,21 @@ import { useState } from 'react';
 import type { CorpChangeKind } from '@prima/core';
 import { api, type CorpBoard } from '../api';
 import { AuditLegalKpis, AuditPanel, LegalPanel } from './AuditLegal';
+import { CompanyFilePanel } from './CompanyFile';
+import { PanelFirmsPanel } from './PanelFirms';
+import { DelegationsPanel } from './Delegations';
+import { LegalHoldsPanel } from './LegalHolds';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { CentralAdminGuide } from './CentralAdminGuide';
 
 /**
- * Company secretary (V9). Each company keeps its own licensed secretary, filings and board, and records each filing
- * here. Any change to a company's corporate structure needs PWVSB approval (Chief of Staff or Deputy), citing the
- * signed clause, before the board acts (Fauzan, 24 Oct 2026). Prima never lodges, signs or files.
+ * Company secretary (V9). Each company keeps its own licensed secretary, filings and board. Head office Corporate Admin
+ * (the Deputy Chief of Staff) records each filing here; the company and the company secretary view them (Central Admin
+ * 5A, Fauzan 1 Nov 2026). Any change to a company's corporate structure needs PWVSB approval (the Deputy Chief of Staff,
+ * with a reason), citing the signed clause, before the board acts (Fauzan, 24 Oct 2026). Prima never lodges, signs or files.
  */
 
-type Tab = 'filings' | 'changes' | 'audit' | 'legal' | 'companies';
+type Tab = 'filings' | 'changes' | 'audit' | 'legal' | 'companies' | 'files' | 'panel' | 'delegations';
 type FilingRow = CorpBoard['filings'][number];
 type ChangeRow = CorpBoard['changes'][number];
 
@@ -71,6 +77,9 @@ export function CorporateView() {
             ['audit', 'Audit'],
             ['legal', 'Legal matters'],
             ['companies', 'Companies'],
+            ['files', 'Company files'],
+            ['panel', 'Panel firms'],
+            ['delegations', 'Delegations'],
           ] as [Tab, string][]
         )
           .filter(([t]) => (t !== 'audit' && t !== 'legal') || al.data)
@@ -80,18 +89,27 @@ export function CorporateView() {
             </button>
           ))}
       </div>
+      {(tab === 'files' || tab === 'panel' || tab === 'delegations') && <CentralAdminGuide view="corporate" tab={tab} />}
       {tab === 'filings' && <Filings data={data} />}
       {tab === 'changes' && <Changes data={data} />}
       {tab === 'audit' && al.data && <AuditPanel data={al.data} />}
-      {tab === 'legal' && al.data && <LegalPanel data={al.data} />}
+      {tab === 'legal' && al.data && (
+        <>
+          <LegalPanel data={al.data} />
+          <LegalHoldsPanel />
+        </>
+      )}
       {tab === 'companies' && <Companies data={data} />}
+      {tab === 'files' && <CompanyFilePanel />}
+      {tab === 'panel' && <PanelFirmsPanel />}
+      {tab === 'delegations' && <DelegationsPanel />}
     </div>
   );
 }
 
 /** PWVSB legal sees the audit and legal tabs only, not filings or structure changes. */
 function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof api.corpAuditLegal>>> }) {
-  const [tab, setTab] = useState<'legal' | 'audit'>('legal');
+  const [tab, setTab] = useState<'legal' | 'audit' | 'panel'>('legal');
   return (
     <div className="page">
       <div className="page-head">
@@ -109,8 +127,20 @@ function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof 
         <button role="tab" aria-selected={tab === 'audit'} onClick={() => setTab('audit')}>
           Audit
         </button>
+        <button role="tab" aria-selected={tab === 'panel'} onClick={() => setTab('panel')}>
+          Panel firms
+        </button>
       </div>
-      {tab === 'legal' ? <LegalPanel data={data} /> : <AuditPanel data={data} />}
+      {tab === 'legal' ? (
+        <>
+          <LegalPanel data={data} />
+          <LegalHoldsPanel />
+        </>
+      ) : tab === 'audit' ? (
+        <AuditPanel data={data} />
+      ) : (
+        <PanelFirmsPanel />
+      )}
     </div>
   );
 }
@@ -140,7 +170,8 @@ function FilingLine({ f: row }: { f: FilingRow }) {
   const act = useAction();
   const [ref, setRef] = useState('');
   const f = row.filing;
-  const works = row.role === 'manager' || row.role === 'staff';
+  // Head office Corporate Admin (the Deputy Chief of Staff) records filings; the company and the secretary view them.
+  const works = row.role === 'owner';
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
@@ -201,7 +232,7 @@ function FilingLine({ f: row }: { f: FilingRow }) {
 }
 
 function Changes({ data }: { data: CorpBoard }) {
-  const mine = data.companies.filter((c) => c.role === 'manager');
+  const mine = data.companies.filter((c) => c.role === 'manager' || c.role === 'owner');
   const [form, setForm] = useState(false);
   return (
     <section className="panel">
@@ -214,8 +245,8 @@ function Changes({ data }: { data: CorpBoard }) {
         )}
       </div>
       <p className="muted small">
-        The company manager asks, the Chief of Staff or Deputy approves for PWVSB citing the signed clause, then the board acts and the company files with SSM
-        within {data.rule.changeFileDays} days. Statutory deadlines are never held back.
+        The company manager asks, the Deputy Chief of Staff approves for PWVSB with a reason and the signed clause (the Chief of Staff monitors), then the board
+        acts and head office Corporate Admin files with SSM within {data.rule.changeFileDays} days. Statutory deadlines are never held back.
       </p>
       {form && <ChangeForm companies={mine} onDone={() => setForm(false)} />}
       <div className="list">
@@ -261,11 +292,11 @@ function ChangeLine({ c: row }: { c: ChangeRow }) {
             value={clause}
             onChange={(e) => setClause(e.target.value)}
           />
-          <input className="input" aria-label="Note" placeholder="Note (needed to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Reason" placeholder="Reason (always required)" value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="row" style={{ gap: 6 }}>
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy || !clause.trim()}
+              disabled={act.busy || !clause.trim() || !note.trim()}
               onClick={() => act.run(() => api.decideCorpChange(c.id, 'approve', note, clause), 'Approved for PWVSB.')}
             >
               Approve

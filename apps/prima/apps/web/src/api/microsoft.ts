@@ -56,6 +56,15 @@ export class MicrosoftSignIn {
     }
   }
 
+  /**
+   * Sign in again for this account, e.g. after expiry, revoked consent or a claims challenge (MFA, Conditional Access,
+   * continuous access evaluation). The claims string comes from Microsoft via Prima and is only passed back to Microsoft.
+   */
+  reauthenticate(claims?: string): Promise<void> {
+    const account = this.account() ?? undefined;
+    return this.app.acquireTokenRedirect({ scopes: [this.scope], account, ...(claims ? { claims } : {}), redirectStartPage: `${window.location.origin}/` });
+  }
+
   signOut(): Promise<void> {
     return this.app.logoutRedirect({ account: this.account() ?? undefined });
   }

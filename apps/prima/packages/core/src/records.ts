@@ -1,4 +1,6 @@
+import { REGIONS } from './regions';
 import type { Dataset, IsoDate } from './types';
+import { isRealDate } from './time';
 
 /**
  * Add and edit forms for the records each department keeps (Fauzan, 27 Oct 2026: "check all system, where suppose to
@@ -88,9 +90,9 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
     label: 'Company master record',
     table: 'companies',
     companyScoped: true,
-    keptBy: 'CEO (master-data onboarding only)',
+    keptBy: 'Head of Company (draft), Deputy Chief of Staff (checks against SSM), CEO',
     screen: 'Group today, Companies',
-    note: 'Updates the existing company ID in place. Company code, linked staff, contracts, and historical records remain unchanged. CEO must check the source document before marking verified; no personal director IDs or bank data.',
+    note: 'Updates the existing company ID in place. Company code, linked staff, contracts, and historical records remain unchanged. The Head of Company saves a draft; the Deputy Chief of Staff (never the person who saved the draft) or the CEO checks the SSM source document before marking verified; no personal director IDs or bank data.',
     fields: [
       text('name', 'Registered company name', true),
       text('ssmNo', 'SSM registration number', true),
@@ -101,8 +103,8 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       text('headOfCompany', 'Head of company'),
       text('sourceRef', 'Source document reference', true, 'Name and reference of the SSM document reviewed. Do not paste personal IDs or upload confidential documents into AI chat.'),
       pick('verificationStatus', 'Source review status', [
-        ['draft', 'Pending CEO verification'],
-        ['verified', 'CEO verified against source'],
+        ['draft', 'Draft, waiting for the SSM check'],
+        ['verified', 'Checked against the SSM source'],
       ]),
     ],
   },
@@ -118,7 +120,11 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       text('name', 'Site name', true),
       text('client', 'Client', true),
       { key: 'address', label: 'Address', type: 'textarea', required: true },
-      ref('branchId', 'Branch', 'branches'),
+      ref('branchId', 'Branch', 'branches', false),
+      {
+        ...pick('state', 'State', REGIONS.flatMap((r) => r.states.map((st) => [st, st] as [string, string])), false),
+        help: 'Needed when the site has no branch: the OM and Regional OM for this state then cover it.',
+      },
       num('lat', 'Latitude', true, -90, 90),
       num('lng', 'Longitude', true, -180, 180),
       num('geofenceM', 'Clock-in area (metres)', true, 30, 2000),
@@ -180,7 +186,15 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
         ['MOF_REGISTRATION', 'MOF registration'],
         ['INSURANCE', 'Insurance'],
         ['SSM_ANNUAL_RETURN', 'SSM annual return'],
+        ['MAJLIS_PREMISE', 'Council premise licence'],
+        ['MAJLIS_SIGNBOARD', 'Council signboard licence'],
+        ['VENDOR_PANEL', 'Vendor registration (client or agency panel)'],
+        ['ISO_CERT', 'ISO certification'],
+        ['FIRE_CERT', 'Fire certificate'],
+        ['OTHER_COMPLIANCE', 'Other compliance'],
       ]),
+      text('title', 'Which one', false, 'For example "MBPJ premise licence, Petaling Jaya office", "Petronas vendor panel", "ISO 9001".'),
+      text('issuer', 'Issued by', false),
       text('reference', 'Reference number', true),
       date('expiresOn', 'Expires on', false, 'Leave empty only if not known: it then shows as Unknown, never green.'),
     ],
@@ -232,18 +246,9 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       text('ref', 'Claim reference', true),
       { key: 'what', label: 'What happened', type: 'textarea', required: true },
       date('incidentOn', 'Incident on', true),
-      date('notifiedOn', 'Insurer told on'),
       num('amountClaimed', 'Amount claimed (RM)', true),
-      pick('status', 'Status', [
-        ['to_notify', 'To notify the insurer'],
-        ['notified', 'Notified'],
-        ['documents', 'Sending documents'],
-        ['assessing', 'Insurer assessing'],
-        ['settled', 'Settled'],
-        ['rejected', 'Rejected'],
-      ]),
-      num('settledAmount', 'Settled amount (RM)'),
-      date('settledOn', 'Settled on'),
+      // Telling the insurer, documents, the insurer's answer and money received are claim steps with their own
+      // checks (masterplan 61), not fields anyone keeping the record may type.
     ],
   },
   insuranceGuarantee: {
@@ -321,6 +326,17 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       ]),
       text('size', 'Size'),
       yesNo('consumable', 'Used up (not returned)'),
+      pick(
+        'charge',
+        'Goodwill charges the company',
+        [
+          ['rental', 'Monthly rental'],
+          ['sale', 'One-off sale'],
+        ],
+        false,
+      ),
+      { ...num('rentalMonthly', 'Rental per month (RM)'), help: 'Set by the Inventory Manager only. Left empty, the bill shows the price as missing.' },
+      { ...num('salePrice', 'Sale price (RM)'), help: 'Set by the Inventory Manager only. Left empty, the bill shows the price as missing.' },
       num('reorderAt', 'Reorder when stock falls to', true),
       { ...num('onHand', 'Opening stock counted', true), createOnly: true, help: 'Only when the item is first added, from a physical count.' },
     ],
@@ -784,7 +800,7 @@ export function checkRecordValues(spec: RecordKindSpec, raw: RecordValues, creat
       else if (f.max !== undefined && n > f.max) problems.push(`${f.label} must be at most ${f.max}.`);
       values[f.key] = n;
     } else if (f.type === 'date') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v))) problems.push(`${f.label} must be a date.`);
+      if (!isRealDate(String(v))) problems.push(`${f.label} must be a real date.`);
       values[f.key] = String(v) as IsoDate;
     } else if (f.type === 'select') {
       if (!f.options!.some(([k]) => k === v)) problems.push(`Choose ${f.label.toLowerCase()} from the list.`);

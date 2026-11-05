@@ -14,6 +14,24 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/** How often a report is due, in words (Fauzan, 2 Nov 2026: recurring or one time). */
+function when(d: { frequency: string; dueDay: number; dueOn?: string | null }): string {
+  switch (d.frequency) {
+    case 'weekly':
+      return `Weekly, due ${DAY[d.dueDay]}`;
+    case 'fortnightly':
+      return `Every 2 weeks, due ${DAY[d.dueDay]} of the second week`;
+    case 'quarterly':
+      return `Quarterly, due on day ${d.dueDay} of the month after the quarter`;
+    case 'yearly':
+      return `Yearly, due ${d.dueOn ? d.dueOn.slice(5) : 'on the set date'} each year`;
+    case 'once':
+      return `One time, due ${d.dueOn ?? 'on the set date'}`;
+    default:
+      return `Monthly, due on day ${d.dueDay} of the next month`;
+  }
+}
+
 /** Weekly and monthly reports to the Director Office (Fauzan, 25 Oct 2026): what you must send, and for the Director Office, who has sent. */
 export function ReportsView() {
   const { data, error } = useLoad(() => api.reports(), []);
@@ -74,15 +92,17 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
   const [sending, setSending] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
+  const [covered, setCovered] = useState<string[]>([]);
   const act = useAction();
   const p = m.periods.find((x) => x.period === sending);
+  const sections = m.def.sections ?? [];
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
       <div>
         <div style={{ fontWeight: 600 }}>{m.def.name}</div>
         <div className="muted small">
           {m.companyName ? `${m.companyName} · ` : ''}
-          {m.def.frequency === 'weekly' ? `Weekly, due ${DAY[m.def.dueDay]}` : `Monthly, due on day ${m.def.dueDay} of the next month`} · {m.def.detail}
+          {when(m.def)} · {m.def.detail}
         </div>
       </div>
       <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
@@ -105,6 +125,21 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
             Send {m.def.name} for {p.label} (due {dateLabel(p.due)})
           </div>
           <ProofPicker site={null} refText="Report" items={proof} onChange={setProof} documentsOnly required />
+          {sections.length > 0 && (
+            <fieldset style={{ display: 'grid', gap: 4, border: 0, padding: 0, margin: 0 }}>
+              <legend className="small">Standard form (set by ACT): tick each section your report covers</legend>
+              {sections.map((x) => (
+                <label key={x} className="small" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                  <input
+                    type="checkbox"
+                    checked={covered.includes(x)}
+                    onChange={(e) => setCovered(e.target.checked ? [...covered, x] : covered.filter((y) => y !== x))}
+                  />
+                  {x}
+                </label>
+              ))}
+            </fieldset>
+          )}
           <input className="input" aria-label="Report note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
           <ErrorNotice error={act.error} />
           <div>
@@ -113,13 +148,21 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
               disabled={act.busy || !proof.length}
               onClick={async () => {
                 const r = await act.run(
-                  () => api.submitReport({ defId: m.def.id, period: p.period, companyId: m.companyId, note, proof }),
+                  () =>
+                    api.submitReport({
+                      defId: m.def.id,
+                      period: p.period,
+                      companyId: m.companyId,
+                      note,
+                      proof,
+                    }),
                   'Report sent to the Director Office.',
                 );
                 if (r) {
                   setSending(null);
                   setProof([]);
                   setNote('');
+                  setCovered([]);
                 }
               }}
             >
@@ -145,7 +188,12 @@ function Board({ board }: { board: NonNullable<Reports['board']> }) {
           <div key={b.def.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
             <button
               className="list-button"
-              style={{ textAlign: 'left', background: 'none', border: 0, padding: 0 }}
+              style={{
+                textAlign: 'left',
+                background: 'none',
+                border: 0,
+                padding: 0,
+              }}
               onClick={() => setOpen(open === b.def.id ? null : b.def.id)}
             >
               <div style={{ fontWeight: 600 }}>{b.def.name}</div>
@@ -204,7 +252,16 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
     <Drawer title="Report list" sub="Who sends what, how often and when it is due. A report taken off the list keeps its history." onClose={onDone}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {defs.map((d, i) => (
-          <div key={d.id || `new-${i}`} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10 }}>
+          <div
+            key={d.id || `new-${i}`}
+            className="panel"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              padding: 10,
+            }}
+          >
             <input className="input" aria-label="Report name" placeholder="Report name" value={d.name} onChange={(e) => set(i, { name: e.target.value })} />
             <input
               className="input"
@@ -223,7 +280,11 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
                   className="select"
                   aria-label="Department"
                   value={d.department ?? ''}
-                  onChange={(e) => set(i, { department: (e.target.value || undefined) as Def['department'] })}
+                  onChange={(e) =>
+                    set(i, {
+                      department: (e.target.value || undefined) as Def['department'],
+                    })
+                  }
                 >
                   <option value="">Choose the department</option>
                   {departments.map((x) => (
@@ -237,24 +298,37 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
                 className="select"
                 aria-label="How often"
                 value={d.frequency}
-                onChange={(e) => set(i, { frequency: e.target.value as Def['frequency'], dueDay: 1 })}
+                onChange={(e) =>
+                  set(i, {
+                    frequency: e.target.value as Def['frequency'],
+                    dueDay: 1,
+                  })
+                }
               >
                 <option value="weekly">Weekly</option>
+                <option value="fortnightly">Every 2 weeks</option>
                 <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+                <option value="once">One time</option>
               </select>
-              <select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
-                {d.frequency === 'weekly'
-                  ? DAY.slice(1).map((x, k) => (
-                      <option key={x} value={k + 1}>
-                        Due {x}
-                      </option>
-                    ))
-                  : Array.from({ length: 28 }, (_, k) => (
-                      <option key={k} value={k + 1}>
-                        Due day {k + 1} of the next month
-                      </option>
-                    ))}
-              </select>
+              {d.frequency === 'yearly' || d.frequency === 'once' ? (
+                <input className="input" type="date" aria-label="Due date" value={d.dueOn ?? ''} onChange={(e) => set(i, { dueOn: e.target.value })} />
+              ) : (
+                <select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
+                  {d.frequency === 'weekly' || d.frequency === 'fortnightly'
+                    ? DAY.slice(1).map((x, k) => (
+                        <option key={x} value={k + 1}>
+                          Due {x}
+                        </option>
+                      ))
+                    : Array.from({ length: 28 }, (_, k) => (
+                        <option key={k} value={k + 1}>
+                          Due day {k + 1} of the {d.frequency === 'quarterly' ? 'month after the quarter' : 'next month'}
+                        </option>
+                      ))}
+                </select>
+              )}
               <button className="btn btn-sm" onClick={() => setDefs(defs.filter((_, j) => j !== i))}>
                 Take off the list
               </button>
@@ -264,7 +338,20 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
         <button
           className="btn btn-sm"
           disabled={defs.length >= 40}
-          onClick={() => setDefs([...defs, { id: '', name: '', detail: '', from: 'company', frequency: 'monthly', dueDay: 7, active: true }])}
+          onClick={() =>
+            setDefs([
+              ...defs,
+              {
+                id: '',
+                name: '',
+                detail: '',
+                from: 'company',
+                frequency: 'monthly',
+                dueDay: 7,
+                active: true,
+              },
+            ])
+          }
         >
           Add a report
         </button>

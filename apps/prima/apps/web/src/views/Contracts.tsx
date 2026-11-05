@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { BILLING_METHOD_LABEL, MOB_WORKSTREAM_LABEL, type BillingMethod, type ContractState } from '@prima/core';
+import { BILLING_METHOD_LABEL, CMS_SERVICE_KINDS, MOB_WORKSTREAM_LABEL, type BillingMethod, type CmsServiceKind, type ContractState } from '@prima/core';
 import { api, type ContractBoard } from '../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 
 /**
  * Contracts and site mobilisation (V3, V6 amendment). A signed contract or letter of award opens mobilisation against
- * 11 workstreams; the company manager signs the Site Ready-to-Operate Certificate once every critical item is done;
+ * 12 workstreams (W12 CMS activation, masterplan §191); the company manager signs the Site Ready-to-Operate Certificate once every critical item is done;
  * reviews follow at day 1, 7, 14 and 30. Billing follows the contract's method and changes only by a signed variation.
  */
 
@@ -49,7 +49,7 @@ export function ContractsView() {
         <div>
           <h1>Contracts</h1>
           <p className="muted">
-            Each site is mobilised against 11 workstreams and goes live only with the Site Ready-to-Operate Certificate. Reviews follow at day 1, 7, 14 and 30.
+            Each site is mobilised against 12 workstreams (the 12th is CMS activation) and goes live only with the Site Ready-to-Operate Certificate. Reviews follow at day 1, 7, 14 and 30.
             The billing method changes only by a signed variation.
           </p>
         </div>
@@ -246,6 +246,7 @@ function ContractDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) 
           ))}
         </div>
       </section>
+      {c.mobilisation.some((i) => i.check === 'cms_activation') && <CmsServicePanel row={r} manager={manager && c.state !== 'terminated'} />}
       {['active', 'suspended'].includes(c.state) && (
         <section className="panel">
           <div className="panel-head">
@@ -311,6 +312,13 @@ function MobLine({
             {i.by ? ` · ${i.by}` : ''}
             {i.status === 'risk_accepted' ? ` · risk accepted until ${dateLabel(i.acceptedUntil)}: ${i.note}` : ''}
           </div>
+          {i.check === 'cms_activation' && i.status === 'open' && (
+            <div className="muted small">
+              Prima checks this before it can be marked done: each site has a CCTV or alarm panel linked and tested, CMS has heard from it in the last 24
+              hours (a test alarm counts), and CMS has a site supervisor, the company manager and a Regional OM to call. It is a technical check only:
+              it does not confirm a signed CMS service scope, the client's or operator's acceptance, or that the phone numbers were verified.
+            </div>
+          )}
         </div>
         <Chip tone={i.status === 'done' ? 'ok' : late ? 'crit' : i.status === 'risk_accepted' ? 'warn' : 'neutral'}>
           {i.status === 'done' ? 'Done' : late ? 'Overdue' : i.status === 'risk_accepted' ? 'Risk accepted' : 'Open'}
@@ -493,7 +501,7 @@ function NewContractForm({ options, onDone }: { options: ContractBoard['canAdd']
   return (
     <Drawer
       title="New contract"
-      sub="Record the signed contract or letter of award. Mobilisation opens with all 11 workstreams due against the start date."
+      sub="Record the signed contract or letter of award. Mobilisation opens with all 12 workstreams due against the start date."
       onClose={onDone}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -628,5 +636,140 @@ function NewContractForm({ options, onDone }: { options: ContractBoard['canAdd']
         <ErrorNotice error={act.error} />
       </div>
     </Drawer>
+  );
+}
+
+const CONTACT_ROLE: Record<string, string> = { site_supervisor: 'Site supervisor', company_manager: 'Company manager', regional_om: 'Regional OM' };
+
+/**
+ * Masterplan §191: the signed CMS service for this contract. The company manager records the signed scope and, after
+ * CMS (Arms Control) accepts, the client's acceptance. CMS operators verify the contacts from the CMS screen.
+ */
+function CmsServicePanel({ row: r, manager }: { row: Row; manager: boolean }) {
+  const c = r.contract;
+  const svc = c.cmsService ?? null;
+  const act = useAction();
+  const [editing, setEditing] = useState(false);
+  const [sites, setSites] = useState(() => r.siteNames.map((x) => ({ siteId: x.id, on: true, from: '00:00', to: '24:00' })));
+  const [services, setServices] = useState<CmsServiceKind[]>(['cctv', 'alarm']);
+  const [signedRef, setSignedRef] = useState('');
+  const [signatory, setSignatory] = useState('');
+  const [signedOn, setSignedOn] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [clientRef, setClientRef] = useState('');
+  const name = (id: string) => r.siteNames.find((x) => x.id === id)?.name ?? id;
+  const save = () =>
+    act.run(
+      () =>
+        api.setCmsService(c.id, {
+          sites: sites.filter((x) => x.on).map(({ siteId, from, to }) => ({ siteId, from, to })),
+          services,
+          signedRef,
+          clientSignatory: signatory,
+          signedOn,
+        }),
+      'CMS service scope recorded.',
+    ).then((x) => x && setEditing(false));
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>CMS service</h3>
+        <span className="muted small">Signed scope, contacts verified by CMS, CMS acceptance, then the client&apos;s acceptance</span>
+      </div>
+      <div className="panel-body" style={{ display: 'grid', gap: 8 }}>
+        <ErrorNotice error={act.error} />
+        {!c.siteIds.length && <p className="muted small">Add the contract&apos;s sites first.</p>}
+        {svc ? (
+          <>
+            <div className="small">
+              Scope v{svc.version}: {svc.services.map((x) => CMS_SERVICE_KINDS[x]).join(', ')}. Signed {dateLabel(svc.signedOn)} by {svc.clientSignatory}, ref{' '}
+              {svc.signedRef}. Recorded by {svc.recordedBy}.
+            </div>
+            <div className="list">
+              {svc.sites.map((x) => (
+                <div key={x.siteId} className="small">
+                  {name(x.siteId)}: watched {x.from} to {x.to} MYT
+                </div>
+              ))}
+            </div>
+            <div className="list">
+              {svc.contacts.map((x, i) => (
+                <div key={i} className="row small" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                  <span>
+                    {CONTACT_ROLE[x.role]}
+                    {x.siteId ? ` (${name(x.siteId)})` : ''}: {x.name}
+                  </span>
+                  <Chip tone={x.verifiedAt ? 'ok' : 'warn'}>{x.verifiedAt ? `Verified by ${x.verifiedBy}` : 'Not verified by CMS yet'}</Chip>
+                </div>
+              ))}
+            </div>
+            <div className="small">
+              Acceptance tests: {(svc.tests ?? []).length} of {svc.services.length * svc.sites.length} recorded by CMS
+              {(svc.tests ?? []).some((t) => t.basis === 'operator_attested') ? ' (attendance and patrol tests are attested by the operator; Prima cannot see the JA app)' : ''}
+              <br />
+              CMS acceptance: {svc.operatorAcceptance ? `${svc.operatorAcceptance.by}, ${dateTimeLabel(svc.operatorAcceptance.at)}: ${svc.operatorAcceptance.note}` : 'not yet'}
+              <br />
+              Client acceptance:{' '}
+              {svc.clientAcceptance ? `${svc.clientAcceptance.clientName}, ref ${svc.clientAcceptance.ref} (recorded by ${svc.clientAcceptance.recordedBy})` : 'not yet'}
+            </div>
+            {manager && svc.operatorAcceptance && !svc.clientAcceptance && (
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <input className="input" aria-label="Client name" placeholder="Client's name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+                <input className="input" aria-label="Acceptance reference" placeholder="Reference of their written acceptance" value={clientRef} onChange={(e) => setClientRef(e.target.value)} />
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy}
+                  onClick={() => act.run(() => api.acceptCmsService(c.id, 'client', svc.version, { clientName, ref: clientRef }), 'Client acceptance recorded.')}
+                >
+                  Record client acceptance
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted small">No signed CMS service scope yet.</p>
+        )}
+        {manager && c.siteIds.length > 0 && !editing && (
+          <div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
+              {svc ? 'Record a new signed scope (starts the checks again)' : 'Record the signed CMS scope'}
+            </button>
+          </div>
+        )}
+        {editing && (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {sites.map((x, i) => (
+              <div key={x.siteId} className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <label className="small">
+                  <input type="checkbox" checked={x.on} onChange={(e) => setSites(sites.map((y, j) => (j === i ? { ...y, on: e.target.checked } : y)))} /> {name(x.siteId)}
+                </label>
+                <input className="input" style={{ width: 80 }} aria-label={`From, ${name(x.siteId)}`} value={x.from} onChange={(e) => setSites(sites.map((y, j) => (j === i ? { ...y, from: e.target.value } : y)))} />
+                <span className="small">to</span>
+                <input className="input" style={{ width: 80 }} aria-label={`To, ${name(x.siteId)}`} value={x.to} onChange={(e) => setSites(sites.map((y, j) => (j === i ? { ...y, to: e.target.value } : y)))} />
+              </div>
+            ))}
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+              {(Object.keys(CMS_SERVICE_KINDS) as CmsServiceKind[]).map((k) => (
+                <label key={k} className="small">
+                  <input type="checkbox" checked={services.includes(k)} onChange={(e) => setServices(e.target.checked ? [...services, k] : services.filter((x) => x !== k))} />{' '}
+                  {CMS_SERVICE_KINDS[k]}
+                </label>
+              ))}
+            </div>
+            <input className="input" aria-label="Signed document reference" placeholder="Signed CMS service document reference" value={signedRef} onChange={(e) => setSignedRef(e.target.value)} />
+            <input className="input" aria-label="Client signatory" placeholder="Client signatory's name" value={signatory} onChange={(e) => setSignatory(e.target.value)} />
+            <input className="input" type="date" aria-label="Signed on" value={signedOn} onChange={(e) => setSignedOn(e.target.value)} />
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm" disabled={act.busy} onClick={save}>
+                Save signed scope
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

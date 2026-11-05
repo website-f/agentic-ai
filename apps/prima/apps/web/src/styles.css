@@ -1198,6 +1198,11 @@ button.list-item:last-child {
   padding-right: max(8px, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
+  /* A long menu scrolls inside the sheet; without this the top items sat above the screen on a phone (browser run, 2 Nov 2026). */
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .sheet-item {
   display: flex;

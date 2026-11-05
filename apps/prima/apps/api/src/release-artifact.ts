@@ -7,6 +7,15 @@ export const MODULE_SPECS=[
  {id:'cleanup',path:'db/modules/it-cleanup-v1.sql',requires:['procurement','rental_corrections']},
  {id:'metrics',path:'db/modules/it-workflow-metrics-v1.sql',requires:[]},
  {id:'job_email',path:'apps/api/src/connections-mail/job-email-v2.sql',requires:[]},
+ {id:'central_admin_walls',path:'db/modules/central-admin-walls-v1.sql',requires:[]},
+ {id:'central_admin_panel',path:'db/modules/central-admin-panel-v1.sql',requires:['central_admin_walls']},
+ {id:'central_admin_delegations',path:'db/modules/central-admin-delegations-v1.sql',requires:[]},
+ {id:'central_admin_legal_holds',path:'db/modules/central-admin-legal-holds-v1.sql',requires:[]},
+ {id:'company_office',path:'db/modules/company-office-v1.sql',requires:[]},
+ {id:'company_run_links',path:'db/modules/company-run-links-v1.sql',requires:['company_office']},
+ {id:'org_links',path:'db/modules/org-links-v1.sql',requires:[]},
+ {id:'special_ops',path:'db/modules/special-ops-v1.sql',requires:[]},
+ {id:'fw_welfare',path:'db/modules/fw-welfare-v1.sql',requires:[]},
 ] as const;
 export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};

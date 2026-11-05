@@ -1,12 +1,12 @@
 {
   "version": 1,
   "oldSha": "678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b",
-  "newSha": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe",
-  "runnerSha": "66640286f3da6aadcc4201e23246c97e74a41acf63d9483d8cc8736bb26349fa",
+  "newSha": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283",
+  "runnerSha": "e470e38f3c308a08e49aa9caa229eaa4563dcdf92ad188322081069fabba938d",
   "files": [
     {
       "path": "base-transition.cjs",
-      "sha256": "66640286f3da6aadcc4201e23246c97e74a41acf63d9483d8cc8736bb26349fa"
+      "sha256": "e470e38f3c308a08e49aa9caa229eaa4563dcdf92ad188322081069fabba938d"
     },
     {
       "path": "candidate-readiness-js/hr-it-readiness.js",
@@ -14,11 +14,11 @@
     },
     {
       "path": "candidate-readiness-js/it-cleanup-readiness.js",
-      "sha256": "d87cb61417351252f24ef566da52616659dfb98971f66e948b2f8367e56bbe57"
+      "sha256": "5a0ce38bc754c19e1d73d19817c6f7ca2ba47fc02adb4a10291f23c1cc5c9643"
     },
     {
       "path": "candidate-readiness-js/it-manual-readiness.js",
-      "sha256": "9d07236c69058827120cd3af8ef1745554897714589921b80fef7628b82f4d2d"
+      "sha256": "487bcbb23b83cda59e5969911e5e274909205ce173956b93e283eaaa20b3d8d6"
     },
     {
       "path": "candidate-readiness-js/it-operations-readiness.js",
@@ -34,7 +34,7 @@
     },
     {
       "path": "candidate-readiness-js/rental-correction-readiness.js",
-      "sha256": "6953eece51a88c5f1d2954f74959da95064e4fe37b436db7f413bc15a5f71450"
+      "sha256": "e88511395ae465bbdf49e3f6425a55fdd3d386c0ef3c3db23e8531363fb25290"
     },
     {
       "path": "candidate-readiness/hr-it-readiness.ts",
@@ -42,11 +42,11 @@
     },
     {
       "path": "candidate-readiness/it-cleanup-readiness.ts",
-      "sha256": "c19aba7d5cb68778669ce8728be0185da36407c52c66dd472e4c787b0218ea48"
+      "sha256": "c7105f9af8fc9469cef6ada8944b2fc27b51b45e2d2cce4cac30a7f968e36649"
     },
     {
       "path": "candidate-readiness/it-manual-readiness.ts",
-      "sha256": "6d1425ccdaf8435691c7abe6fe2e50feb1e4f72dcfadfb0aa32da32770d4b098"
+      "sha256": "f7ad9c634ae80cd400b0563565ee6e8a08ba003eaf4fb569184d1abedb831212"
     },
     {
       "path": "candidate-readiness/it-operations-readiness.ts",
@@ -62,15 +62,15 @@
     },
     {
       "path": "candidate-readiness/rental-correction-readiness.ts",
-      "sha256": "b4877f2ce441d4da5d58a9f7dccf0e2aeabd0d4906664ae231ced82445fe6203"
+      "sha256": "8396bcd63f547374f42b5e3e22ef6c869710a6ad522e7ca99b8c0b887af67388"
     },
     {
       "path": "candidate.sql",
-      "sha256": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe"
+      "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
     },
     {
       "path": "cli.cjs",
-      "sha256": "376fe68ba3f74273b5634c480c59dcff188b7424d0578cac5094dfb4cb43f1bd"
+      "sha256": "91e84b2f580c133b99380551687323ead906f57304e611a2a9c9d06f3354879c"
     },
     {
       "path": "live.sql",
@@ -78,7 +78,7 @@
     },
     {
       "path": "readiness-manifest.json",
-      "sha256": "294f46e3a469639265e9791d7dcb03ef9d06913dd72ba539b2edabc4565287cb"
+      "sha256": "48373f43239f8bc7f5ddb5c1045d98c7cbd627102157f9d2b2f7fc36541fc493"
     }
   ]
 }

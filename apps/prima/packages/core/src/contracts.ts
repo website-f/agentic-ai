@@ -1,7 +1,7 @@
 import { addDays } from './time';
 import type { ContractReview, ContractVersion, IsoDate, MobItem, MobWorkstream } from './types';
 
-/** The 11 mobilisation workstreams (V6 amendment, proposed wording until Operations confirms it). */
+/** The mobilisation workstreams (V6 amendment, proposed wording until Operations confirms it; W12 masterplan §191). */
 export const MOB_WORKSTREAM_LABEL: Record<MobWorkstream, string> = {
   W1: 'Contract and award papers',
   W2: 'Client onboarding',
@@ -14,7 +14,11 @@ export const MOB_WORKSTREAM_LABEL: Record<MobWorkstream, string> = {
   W9: 'Equipment and uniforms',
   W10: 'Arms',
   W11: 'Billing set-up',
+  W12: 'CMS activation',
 };
+
+/** The CMS activation item (masterplan §191). Kept last so the ids of the items before it never change. */
+export const CMS_ACTIVATION_LABEL = 'CMS activation (technical): site CCTV or alarm panel linked and tested, a signal received by CMS, call-out contacts named';
 
 /** [workstream, item, days from start, critical, armed sites only]. */
 const MOB_TEMPLATE: [MobWorkstream, string, number, boolean, boolean][] = [
@@ -30,6 +34,7 @@ const MOB_TEMPLATE: [MobWorkstream, string, number, boolean, boolean][] = [
   ['W10', 'Armed posts: permits, vault and firearm issue plan', -3, true, true],
   ['W11', 'Billing method, rates and SQL Account customer set up', 0, false, false],
   ['W11', 'First invoice checked against the contract', 30, false, false],
+  ['W12', CMS_ACTIVATION_LABEL, -1, false, false],
 ];
 
 export function mobilisationFor(startOn: IsoDate, armed: boolean): MobItem[] {
@@ -45,6 +50,7 @@ export function mobilisationFor(startOn: IsoDate, armed: boolean): MobItem[] {
     at: null,
     note: '',
     acceptedUntil: null,
+    ...(workstream === 'W12' ? { check: 'cms_activation' as const } : {}),
   }));
 }
 

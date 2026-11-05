@@ -1,0 +1,21 @@
+// Per-table database reads for one leader home on the local stress database (synthetic). Local only.
+import pg from '/home/claude/prima-secure-app/node_modules/pg/lib/index.js';
+const who = process.argv[2] ?? 'u-coo';
+const c = new pg.Client({ connectionString: 'postgres://postgres:postgres@localhost:5432/prima_stress' });
+await c.connect();
+const snap = async () => new Map((await c.query('select relname, seq_tup_read, idx_tup_fetch, seq_scan, idx_scan from pg_stat_user_tables')).rows.map((r) => [r.relname, r]));
+const BASE = 'http://localhost:3077';
+const r = await fetch(BASE + '/api/auth/dev-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: who }) });
+const { token } = await r.json();
+await new Promise((r) => setTimeout(r, 800));
+const a = await snap();
+const t = performance.now();
+const x = await fetch(BASE + '/api/home?companyId=co-sasa', { headers: { authorization: 'Bearer ' + token } });
+await x.text();
+const ms = Math.round(performance.now() - t);
+await new Promise((r) => setTimeout(r, 800));
+const z = await snap();
+const d = [...z.entries()].map(([k, v]) => { const o = a.get(k); return { t: k, seq: v.seq_tup_read - o.seq_tup_read, seqScans: v.seq_scan - o.seq_scan, idx: (v.idx_tup_fetch ?? 0) - (o.idx_tup_fetch ?? 0), idxScans: (v.idx_scan ?? 0) - (o.idx_scan ?? 0) }; });
+console.log(who, x.status, ms, 'ms');
+for (const e of d.sort((p, q) => q.seq + q.idx - (p.seq + p.idx)).slice(0, 15)) console.log(String(e.seq).padStart(9), 'seq rows', String(e.seqScans).padStart(6), 'scans', String(e.idx).padStart(9), 'idx rows', String(e.idxScans).padStart(7), 'idx scans', e.t);
+await c.end();

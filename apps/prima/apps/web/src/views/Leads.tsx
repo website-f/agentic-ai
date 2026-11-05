@@ -371,7 +371,17 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
     estMonthly: '',
     nextOn: '',
     nextWhat: '',
+    branchId: '',
   });
+  // Masterplan 147: a branch may originate a lead; the licensed company still contracts.
+  const branches = useLoad(
+    () =>
+      api
+        .branchBoard()
+        .then((b) => b.rows.filter((r) => r.branch.companyId === companyId && ['active', 'step_in'].includes(r.status)).map((r) => r.branch))
+        .catch(() => []),
+    [companyId],
+  );
   return (
     <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
       <input
@@ -395,6 +405,16 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
         value={f.source}
         onChange={(e) => setF({ ...f, source: e.target.value })}
       />
+      {(branches.data ?? []).length > 0 && (
+        <select className="input" aria-label="Branch that found it" value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>
+          <option value="">Head office (no branch)</option>
+          {(branches.data ?? []).map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         className="input"
         aria-label="Guards"
@@ -428,6 +448,7 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
                   guardsEst: Number(f.guardsEst),
                   estMonthly: f.estMonthly.trim() ? Number(f.estMonthly) : null,
                   nextOn: f.nextOn || null,
+                  branchId: f.branchId || null,
                 }),
               'Lead opened.',
             )

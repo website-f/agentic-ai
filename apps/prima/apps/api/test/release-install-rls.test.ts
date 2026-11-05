@@ -29,9 +29,9 @@ before(async()=>{const admin=new Client({connectionString:base});await admin.con
  process.env.PRIMA_API_DB_USER=RUNTIME;pool=new Pool({connectionString:url(RUNTIME),max:1});
 });
 after(async()=>{if(oldLogin===undefined)delete process.env.PRIMA_API_DB_USER;else process.env.PRIMA_API_DB_USER=oldLogin;await pool?.end();await owner?.end();const c=new Client({connectionString:base});await c.connect();try{await c.query(`DROP DATABASE IF EXISTS ${DB} WITH(FORCE)`);}finally{await c.end();}});
-it('base-only is not release-ready; each explicit selected install verifies and all five yield restricted runtime readiness',async()=>{
+it('base-only is not release-ready; each explicit selected install verifies and all eight yield restricted runtime readiness',async()=>{
  assert.equal((await state()).ready,false);
- for(const m of artifact.manifest.modules){const result=await installSelectedModule(owner,input(m.id));assert.equal(result.status,'installed');const current=await state();if(m.id!=='job_email')assert.equal(current.ready,false);}
+ for(const m of artifact.manifest.modules){const result=await installSelectedModule(owner,input(m.id));assert.equal(result.status,'installed');const current=await state();if(m.id!==artifact.manifest.modules.at(-1)!.id)assert.equal(current.ready,false);}
  const ready=await state();assert.deepEqual(ready.codes,[]);assert.equal(ready.ready,true);
  for(const m of artifact.manifest.modules)assert.equal((await installSelectedModule(owner,input(m.id))).status,'already_installed');
 });

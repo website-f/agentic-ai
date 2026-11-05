@@ -1,0 +1,181 @@
+{
+ "at": "2026-11-03T04:59:05.925Z",
+ "one": {
+  "duty": {
+   "status": 200,
+   "kind": "ok",
+   "ms": 68,
+   "kb": 26,
+   "err": null
+  },
+  "dutyTables": [
+   {
+    "t": "attendance",
+    "rows": 201889
+   },
+   {
+    "t": "shifts",
+    "rows": 99415
+   },
+   {
+    "t": "users",
+    "rows": 9366
+   },
+   {
+    "t": "people",
+    "rows": 8344
+   },
+   {
+    "t": "scans",
+    "rows": 6136
+   },
+   {
+    "t": "grants",
+    "rows": 5451
+   },
+   {
+    "t": "credentials",
+    "rows": 1102
+   },
+   {
+    "t": "checkpoints",
+    "rows": 176
+   }
+  ],
+  "clockIn": {
+   "status": 201,
+   "kind": "ok",
+   "ms": 48,
+   "kb": 0,
+   "err": null
+  },
+  "clockInTables": [
+   {
+    "t": "shifts",
+    "rows": 23634
+   },
+   {
+    "t": "attendance",
+    "rows": 11443
+   },
+   {
+    "t": "users",
+    "rows": 9365
+   },
+   {
+    "t": "grants",
+    "rows": 7268
+   },
+   {
+    "t": "credentials",
+    "rows": 551
+   },
+   {
+    "t": "people",
+    "rows": 198
+   },
+   {
+    "t": "cases",
+    "rows": 16
+   },
+   {
+    "t": "audit",
+    "rows": 2
+   }
+  ]
+ },
+ "duty": [
+  {
+   "n": 50,
+   "wallMs": 855,
+   "p50": 545,
+   "p95": 814,
+   "max": 849,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 1815,
+   "p50": 1051,
+   "p95": 1784,
+   "max": 1809,
+   "tally": {
+    "ok": 100,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 200,
+   "wallMs": 3026,
+   "p50": 1408,
+   "p95": 2915,
+   "max": 3016,
+   "tally": {
+    "ok": 200,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  }
+ ],
+ "clock": [
+  {
+   "n": 50,
+   "wallMs": 1147,
+   "p50": 659,
+   "p95": 1099,
+   "max": 1145,
+   "tally": {
+    "ok": 50,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 100,
+   "wallMs": 2359,
+   "p50": 1332,
+   "p95": 2279,
+   "max": 2355,
+   "tally": {
+    "ok": 100,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  },
+  {
+   "n": 200,
+   "wallMs": 4701,
+   "p50": 2490,
+   "p95": 4531,
+   "max": 4694,
+   "tally": {
+    "ok": 200,
+    "refused_permission": 0,
+    "refused_input": 0,
+    "server_error": 0,
+    "other": 0
+   },
+   "errors": []
+  }
+ ]
+}

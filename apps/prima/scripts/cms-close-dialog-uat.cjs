@@ -1,0 +1,54 @@
+// Run: npm run build -w @prima/cms; node scripts/cms-close-dialog-uat.cjs apps/cms <out-dir>. Local only, port 8097, not wired to CI.
+// Browser check of the CMS operator close dialog (synthetic sample directory, in memory, local only).
+const path = require('node:path');
+const D = path.resolve(process.argv[2], 'dist/src');
+const OUT = process.argv[3];
+const { Hub } = require(D + '/hub.js');
+const { demoDirectory } = require(D + '/demo.js');
+const { makeEvent } = require(D + '/event.js');
+const { startHttp } = require(D + '/server.js');
+const { GateLists } = require(D + '/adaptors/anpr.js');
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const dir = demoDirectory();
+  const hub = new Hub(dir);
+  // Two different sites, so the two events are two alarms (the same device and kind would fold into one alarm).
+  const sites = dir.sites.filter((s) => dir.devices.some((d) => d.siteId === s.id)).slice(0, 2);
+  ['uat-a', 'uat-b'].forEach((id, i) => { const site = sites[i]; const dev = dir.devices.find((d) => d.siteId === site.id); hub.ingest(makeEvent({ id, kind: 'INTRUSION', companyId: site.companyId, siteId: site.id, deviceId: dev.id, source: 'uat', summary: 'Intrusion ' + id, detail: {} })); });
+  const key = 'uat-operator-key-0123456789abcdef';
+  const srv = startHttp({ operators: new Map([[key, 'UAT operator']]), gateway: { key: 'g'.repeat(24), secret: 's'.repeat(24) }, prima: { key: 'p'.repeat(24), secret: 'q'.repeat(24) } }, { hub, lists: new GateLists(), routes: new Map() }, 8097);
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+  const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  p.on('dialog', (d) => d.accept('UAT'));
+  const res = []; const ok = (n) => { res.push(n); console.log('ok ' + res.length + ' ' + n); };
+  await p.goto('http://localhost:8097/');
+  await p.fill('#token', 'wrong-key-wrong-key-wrong-key'); await p.click('#signin button');
+  await p.waitForTimeout(500); assert.ok(await p.isVisible('#signin')); ok('A wrong operator key is refused');
+  await p.fill('#token', key); await p.click('#signin button');
+  await p.waitForSelector('#queue tr'); const rows = () => p.locator('#queue tr').count();
+  const open0 = await rows(); assert.ok(open0 >= 2); ok('Operator signs in and sees ' + open0 + ' open alarms');
+  const row = p.locator('#queue tr', { hasText: 'Intrusion uat-a' });
+  await row.getByRole('button', { name: 'Close' }).click(); await p.waitForSelector('#closeDialog[open]');
+  await p.screenshot({ path: OUT + '/cms-01-close-dialog.png' });
+  await p.click('#closeCancel'); await p.waitForTimeout(300);
+  assert.equal(await p.isVisible('#closeDialog'), false); assert.equal(await rows(), open0); ok('Cancel closes the dialog and the alarm stays open');
+  await row.getByRole('button', { name: 'Close' }).click(); await p.fill('#closeNote', 'Checked camera'); await p.click('#closeOk'); await p.waitForTimeout(300);
+  assert.ok(await p.isVisible('#closeDialog')); ok('Close without choosing real or false is not sent (dialog stays)');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300); assert.equal(await rows(), open0); ok('Escape keeps the alarm open');
+  await row.getByRole('button', { name: 'Close' }).click(); await p.check('input[value=false]'); await p.click('#closeOk'); await p.waitForTimeout(300);
+  assert.ok(await p.isVisible('#closeDialog')); ok('Close without a note is not sent');
+  await p.fill('#closeNote', 'Cat on the fence, camera checked'); await p.click('#closeOk');
+  await p.waitForFunction((n) => document.querySelectorAll('#queue tr').length === n, open0 - 1);
+  const a = [...hub.alarms.values()].find((x) => x.eventIds.includes('uat-a'));
+  assert.equal(a.state, 'closed'); assert.equal(a.outcome, 'false'); assert.match(a.closingNote, /Cat on the fence/); ok('False alarm closes with its note');
+  const row2 = p.locator('#queue tr', { hasText: 'Intrusion uat-b' });
+  await row2.getByRole('button', { name: 'Close' }).click(); await p.check('input[value=real]'); await p.fill('#closeNote', 'Person seen at gate'); await p.click('#closeOk');
+  await p.waitForFunction((n) => document.querySelectorAll('#queue tr').length === n, open0 - 2);
+  const bAl = [...hub.alarms.values()].find((x) => x.eventIds.includes('uat-b')); assert.equal(bAl.outcome, 'real'); assert.ok(hub.closedToPrima.length >= 2); ok('Real alarm closes and both closes wait in the outbox for Prima');
+  assert.ok(hub.audit.some((x) => /close/.test(x.action))); ok('Operator closes are in the audit');
+  await p.screenshot({ path: OUT + '/cms-02-after-closes.png' });
+  assert.deepEqual(errs, []); ok('No page errors');
+  require('node:fs').writeFileSync(OUT + '/results.json', JSON.stringify(res, null, 2));
+  await b.close(); srv.close(); process.exit(0);
+})().catch((e) => { console.log('FAIL ' + e.message); process.exit(1); });

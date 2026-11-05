@@ -1,4 +1,7 @@
-import type { HomeItem, HomeLink } from '@prima/core';
+import { isGroupLeader, type HomeItem, type HomeLink } from '@prima/core';
+import { GrowthPanel } from './Growth';
+import { ApprovalLimitsPanel } from './ApprovalLimits';
+import { setFinTarget } from '../finTarget';
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Kpi, Loading, useLoad } from '../ui';
@@ -21,7 +24,8 @@ export function HomeView() {
       </div>
     );
   const open = (l: HomeLink) => {
-    if (l.companyId) setCompanyId(l.companyId);
+    if (l.view === 'finance' && l.tab) setFinTarget({ tab: l.tab, section: l.section, companyId: l.companyId });
+    else if (l.companyId) setCompanyId(l.companyId);
     go({ view: l.view, siteId: l.siteId, personId: l.personId, caseId: l.caseId, tenderId: l.tenderId });
   };
   const list = (title: string, items: HomeItem[], empty: string) => {
@@ -64,6 +68,9 @@ export function HomeView() {
           </button>
         ))}
       </div>
+      {/* Growth for group leadership (Fauzan, 3 Nov 2026): after the decisions and key numbers, before the monitor list. */}
+      {isGroupLeader(me.user) && !companyScoped && <GrowthPanel />}
+      {me.user.opsTier === 'ceo' && !companyScoped && <ApprovalLimitsPanel />}
       {data.watch
         ? list(data.watchTitle ?? 'Monitor', data.watch, 'Nothing to watch right now.')
         : list(data.todoTitle ?? 'To do now', data.todo, 'Nothing needs you right now.')}

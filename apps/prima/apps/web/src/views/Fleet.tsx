@@ -44,9 +44,13 @@ export function FleetView() {
         ['vehicles', 'Vehicles', 0],
         ['requests', 'Requests', data.requests.filter((r) => r.status === 'requested').length],
         ['monitor', 'Monitor', 0],
+        ['hours', 'Trips and driving hours', 0],
       ]
     : data.role === 'cms'
-      ? [['monitor', 'Monitor', 0]]
+      ? [
+          ['monitor', 'Monitor', 0],
+          ['hours', 'Trips and driving hours', 0],
+        ]
       : data.role === 'pdpa'
         ? [
             ['consent', 'Driver consent', data.consentNeeded.length],
@@ -91,6 +95,7 @@ export function FleetView() {
       {view === 'vehicles' && <Vehicles data={data} edit={data.role === 'transport'} />}
       {view === 'requests' && <Requests data={data} edit={data.role === 'transport'} />}
       {view === 'monitor' && <Monitor rows={data.board} />}
+      {view === 'hours' && <TripsAndHours />}
       {view === 'consent' && <Consent data={data} />}
       {view === 'mine' && <Mine data={data} />}
     </div>
@@ -482,5 +487,81 @@ function Mine({ data }: { data: FleetBoard }) {
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Live trips from the vehicle trackers and each driver's hours today (slice 4F). Positions are kept only while a
+ * vehicle is out on a trip. The hour limits are proposals until Transport confirms them.
+ */
+function TripsAndHours() {
+  const { data, error } = useLoad(() => api.transportBoard(), []);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="trips" />;
+  const h = (min: number) => `${Math.round(min / 6) / 10} h`;
+  return (
+    <>
+      {data.alerts.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Driver alerts</h2>
+          </div>
+          <div className="list">
+            {data.alerts.map((a, i) => (
+              <div key={i} className="list-item">
+                <div>
+                  <div style={{ fontWeight: 600 }}>{a.title}</div>
+                  <div className="muted small">{a.detail}</div>
+                </div>
+                <Chip tone={a.tone}>{a.tone === 'crit' ? 'Stop' : 'Break'}</Chip>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      <section className="panel">
+        <div className="panel-head">
+          <h2>On the road</h2>
+          <span className="muted small">
+            Proposed limits: {h(data.rule.maxDayMin)} a day, a {data.rule.breakMin} minute break after {h(data.rule.maxStretchMin)}, {data.rule.speedLimitKmh} km/h
+          </span>
+        </div>
+        <div className="list">
+          {data.onTheRoad.length === 0 && <div className="empty">No vehicle out now.</div>}
+          {data.onTheRoad.map((v) => (
+            <div key={v.vehicleId} className="list-item">
+              <div>
+                <div style={{ fontWeight: 600 }}>
+                  {v.plate} · {v.driver}
+                </div>
+                <div className="muted small">
+                  {v.trip ? `${v.trip.km} km since ${dateTimeLabel(v.trip.start)} · top ${v.trip.maxKmh} km/h${v.trip.overSpeed ? ` · ${v.trip.overSpeed} over-speed` : ''}` : 'Tracker not sending'}
+                </div>
+              </div>
+              <Chip tone={v.trip?.panicAt ? 'crit' : v.tracker === 'live' ? 'ok' : 'unknown'}>{v.trip?.panicAt ? 'Panic' : v.tracker}</Chip>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Driving hours today</h2>
+        </div>
+        <div className="list">
+          {data.hours.length === 0 && <div className="empty">No driving recorded today.</div>}
+          {data.hours.map((d) => (
+            <div key={d.driverUserId} className="list-item">
+              <div>
+                <div style={{ fontWeight: 600 }}>{d.driver}</div>
+                <div className="muted small">
+                  {h(d.drivingMin)} driven · {h(d.stretchMin)} since the last break · {d.vehicles.join(', ')}
+                </div>
+              </div>
+              <Chip tone={d.overDay ? 'crit' : d.needsBreak ? 'warn' : 'ok'}>{d.overDay ? 'Over the day' : d.needsBreak ? 'Break due' : 'Fine'}</Chip>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }

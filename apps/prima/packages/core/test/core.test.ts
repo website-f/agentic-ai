@@ -548,13 +548,20 @@ describe('HR monitoring and arms control', () => {
     expect(b.agreements.some((a) => a.agreement.setup?.siteVaultId && a.setupStep === 'live')).toBe(true);
     expect(b.alerts.some((a) => a.kind === 'Register book' && a.companyId === 'co-arsh')).toBe(true);
     const bg = b.jobs.find((j) => j.job.ref === 'SASA-BODYGUARD-006');
-    if (bg && bg.job.status !== 'completed') expect(b.alerts.some((a) => a.kind === 'Interstate' && a.title.startsWith('SASA-BODYGUARD-006'))).toBe(true);
+    // Police paperwork is a legal point for the directors only (Fauzan, 2 Nov 2026): never an alert on the staff board.
+    expect(b.alerts.some((a) => a.kind === 'Interstate' || a.kind === 'Police notice')).toBe(false);
+    const ceo = await svc.user('u-fauzan');
+    if (bg && bg.job.status !== 'completed') expect((await svc.specialOpsLegalFlags(ceo)).rows.some((f) => f.kind === 'ARMED_JOB_CROSS_STATE' && f.title.startsWith('SASA-BODYGUARD-006'))).toBe(true);
     const cit = b.jobs.find((j) => j.job.ref === 'SASA-CIT-001');
     if (cit) expect(cit.police.needsApproval && !!cit.police.approval).toBe(true);
     // A move that reaches the physical step with no police notice is flagged.
     Object.assign(ds.armsRequests.find((r) => r.kind === 'MOVE')!, { state: 'approved' });
     const after = await svc.armsControl(arms);
-    expect(after.alerts.some((a) => a.kind === 'Police notice' && a.title.startsWith('AR-0001'))).toBe(true);
+    expect(after.alerts.some((a) => a.kind === 'Police notice')).toBe(false);
+    const flag = (await svc.specialOpsLegalFlags(ceo)).rows.find((f) => f.kind === 'ARMS_MOVE_POLICE' && f.title.startsWith('AR-0001'));
+    expect(flag?.status).toBe('open');
+    expect(flag?.records[0].entity).toBe('arms_request');
+    await expect(svc.specialOpsLegalFlags(arms)).rejects.toBeInstanceOf(AccessDenied);
   });
 
   it('lets only authorised company staff issue from a client-site safe', () => {
@@ -1352,6 +1359,10 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     const g = ds.people.find((p) => p.companyId === 'co-sasa' && p.branchId === site.branchId && p.role === 'guard' && p.status === 'active')!;
     const base = { staffNo: g.staffNo, face: { score: 0.93, live: true }, from: addDays(TODAY, 3), to: addDays(TODAY, 4), reason: 'Family wedding' };
     await expect(svc.requestLeave(dev, { ...base, kind: 'SICK' })).rejects.toThrow(/medical certificate/);
+    // Insider abuse item 16: another guard's staff number with a face that does not match, or no face, is refused.
+    await expect(svc.requestLeave(dev, { ...base, face: { score: 0.2, live: true }, kind: 'ANNUAL' })).rejects.toThrow(/face was not confirmed/);
+    await expect(svc.requestLeave(dev, { ...base, face: null, kind: 'ANNUAL' })).rejects.toThrow(/face was not confirmed/);
+    expect((await svc.leaveRequests(await svc.user('u-fauzan'))).rows.some((r) => r.request.personId === g.id && r.request.from === base.from)).toBe(false);
     const q = await svc.requestLeave(dev, { ...base, kind: 'ANNUAL' });
     expect(q.status).toBe('pending');
     expect(q.days).toBe(2);
@@ -1380,7 +1391,20 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     const { svc, ds } = fresh();
     const office = ds.leaveRequests.find((q) => q.status === 'pending' && ds.people.find((p) => p.id === q.personId)!.role === 'office')!;
     await expect(svc.decideLeave(await svc.user('u-rom-central'), office.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.decideLeave(await svc.user('u-pwvsb-hr'), office.id, true, '')).status).toBe('approved');
+    // Fauzan, 3 Nov 2026: the Company Manager authorises first (licensed company staff); HR cannot act before that,
+    // and a manager of another company cannot authorise.
+    const cm = ds.users.find((u) => u.role === 'company_manager' && u.companyIds.includes(office.companyId) && u.personId !== office.personId)!;
+    const otherCm = ds.users.find((u) => u.role === 'company_manager' && !u.companyIds.includes(office.companyId))!;
+    await expect(svc.decideLeave(await svc.user('u-pwvsb-hr'), office.id, true, 'Cover arranged')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideLeave(otherCm, office.id, true, 'Not mine')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideLeave(cm, office.id, true, '')).rejects.toThrow();
+    const auth = await svc.decideLeave(cm, office.id, true, 'Desk covered by the backup');
+    expect(auth.status).toBe('pending');
+    expect(auth.managerAuthorised?.byId).toBe(cm.id);
+    await expect(svc.decideLeave(cm, office.id, true, 'Again')).rejects.toBeInstanceOf(AccessDenied);
+    // HR Phase 3 (Fauzan, 1 Nov 2026): HR approves with a comment, then the Vice Chairman consents.
+    expect((await svc.decideLeave(await svc.user('u-pwvsb-hr'), office.id, true, 'Cover arranged')).status).toBe('pending');
+    expect((await svc.decideLeave(await svc.user('u-vchair'), office.id, true, 'Consent')).status).toBe('approved');
     const reason = ds.leaveRequests.find((q) => q.kind === 'ABSENCE_REASON' && q.status === 'pending')!;
     const before = (await svc.attendanceIssues(['co-sasa'], reason.from, reason.from)).find((i) => i.personId === reason.personId && i.issue === 'NO_SHOW');
     const p = ds.people.find((x) => x.id === reason.personId)!;
@@ -1806,8 +1830,8 @@ describe("Guard's own view (Fauzan, 25 Oct 2026)", () => {
     expect(q.companyId).toBe('pwvsb');
     const hr = await svc.user('u-pwvsb-hr');
     expect((await svc.leaveRequests(hr)).rows.some((r) => r.request.id === q.id && r.canDecide)).toBe(true);
-    await expect(svc.decideLeave(hr, q.id, true, '')).resolves.toBeDefined();
-    const own = await svc.requestLeave(hr, { personId: hr.personId!, kind: 'ANNUAL', from: addDays(TODAY, 12), to: addDays(TODAY, 12), reason: 'Errand' });
+    await expect(svc.decideLeave(hr, q.id, true, 'OK')).resolves.toBeDefined();
+    const own = await svc.requestLeave(hr, { personId: hr.personId!, kind: 'ANNUAL', from: addDays(TODAY, 14), to: addDays(TODAY, 14), reason: 'Errand' });
     await expect(svc.decideLeave(hr, own.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
     // Another person's record stays closed.
     await expect(svc.guardProfile(doa, hr.personId!)).rejects.toThrow();
@@ -1906,7 +1930,9 @@ describe('Staff clock (Fauzan, 26 Oct 2026)', () => {
     const mine = await svc.myStaffClock(ae);
     expect(mine.open!.id).toBe(rec.id);
     expect(mine.state).toBe('tracked');
-    const out = await svc.staffClockOut(ae, { image: img, capturedAt: NOW, lat: null, lng: null, accuracyM: null, face: null });
+    // Insider abuse item 13: a clock photo is used once; the same picture again is refused.
+    await expect(svc.staffClockOut(ae, { image: img, capturedAt: NOW, lat: null, lng: null, accuracyM: null, face: null })).rejects.toThrow(/already used/);
+    const out = await svc.staffClockOut(ae, { image: img + 'Zg', capturedAt: NOW, lat: null, lng: null, accuracyM: null, face: null });
     expect(out.flags).toContain('NO_GPS');
     await expect(svc.staffPing(ae, { lat: 3, lng: 101, accuracyM: 10 })).rejects.toThrow(/only while/);
   });
@@ -2293,6 +2319,9 @@ describe('Staff claims (Fauzan, 26 Oct 2026)', () => {
     const coo = await svc.user('u-coo');
     await expect(svc.cooDecideClaim(coo, far.id, true, '')).rejects.toThrow(/HR checks/);
     expect((await svc.hrDecideClaim(hr, far.id, true, '')).status).toBe('hr_checked');
+    // The company head verifies too (Fauzan, 2 Nov 2026).
+    await expect(svc.cooDecideClaim(await svc.user('u-coo'), far.id, true, '')).rejects.toThrow(/company head/);
+    await svc.headVerifyClaim(await svc.user(far.headIds![0]), far.id, true, 'Client visit confirmed');
     await expect(svc.cooDecideClaim(hr, far.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.home(coo)).todo.some((i) => i.tag === 'Claims')).toBe(true);
     expect((await svc.staffClaims(coo)).queue.find((r) => r.claim.id === far.id)!.canCoo).toBe(true);
@@ -2553,8 +2582,8 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     await expect(svc.clientContact(cm, acct.id, 'visit', 'Met the PIC')).rejects.toBeInstanceOf(AccessDenied);
     for (const s of acct.onboarding.filter((x) => !x.doneAt)) await svc.clientStep(om, acct.id, 'onboarding', s.key, 'Done', [proof()]);
     expect((await svc.clientBoard(om)).accounts.find((a) => a.id === acct.id)!.stage).toBe('active');
-    await expect(svc.clientRating(om, acct.id, 2, '')).rejects.toThrow(/unhappy/);
-    await svc.clientRating(om, acct.id, 2, 'Late shift change');
+    await expect(svc.clientRating(om, acct.id, 2, '', { from: 'Synthetic PIC', via: 'meeting' })).rejects.toThrow(/unhappy/);
+    await svc.clientRating(om, acct.id, 2, 'Late shift change', { from: 'Synthetic PIC', via: 'meeting' });
     expect((await svc.clientBoard(coo)).accounts.find((a) => a.id === acct.id)!.issues.some((i) => /Unhappy client/.test(i.what))).toBe(true);
     // Offboarding: the notice needs the paper; all steps done ends the account.
     await svc.startOffboarding(om, acct.id, 'Contract not renewed');
@@ -2613,7 +2642,9 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     await svc.decideExpense(coo, claim.id, 'return', 'Split the toll by site');
     await expect(svc.decideExpense(coo, claim.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
     await svc.submitExpense(om, claim.id);
-    expect((await svc.decideExpense(coo, claim.id, 'approve', '')).status).toBe('approved');
+    // Every approval carries a reason (Fauzan, 31 Oct 2026).
+    await expect(svc.decideExpense(coo, claim.id, 'approve', '  ')).rejects.toThrow(/reason/);
+    expect((await svc.decideExpense(coo, claim.id, 'approve', 'Receipts match')).status).toBe('approved');
     await expect(svc.saveExpense(cm, { kind: 'OPS_CLAIM', companyId: 'co-sasa', period: '2026-08', lines: [{ item: 'X', amount: 1 }] })).rejects.toBeInstanceOf(
       AccessDenied,
     );
@@ -2630,8 +2661,9 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     await expect(svc.decideExpense(coo, off.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.decideExpense(dcos, off.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.home(cos)).todo.some((i) => i.tag === 'Office request')).toBe(true);
-    expect((await svc.decideExpense(cos, off.id, 'approve', '')).status).toBe('cos_approved');
-    expect((await svc.decideExpense(coo, off.id, 'approve', '')).status).toBe('approved');
+    await expect(svc.decideExpense(cos, off.id, 'approve', '')).rejects.toThrow(/reason/);
+    expect((await svc.decideExpense(cos, off.id, 'approve', 'Needed for the office')).status).toBe('cos_approved');
+    expect((await svc.decideExpense(coo, off.id, 'approve', 'OK')).status).toBe('approved');
     // Rent needs no asset confirmation.
     const rent = await svc.saveExpense(
       cm,
@@ -2647,7 +2679,7 @@ describe('JA Group app feed (Fauzan, 26 Oct 2026)', () => {
   it('shows JA data read-only by role, flags late payroll and treats a silent feed as unknown', async () => {
     const { svc } = fresh();
     const ceo = await svc.jaBoard(await svc.user('u-fauzan'));
-    expect(ceo.datasets.sort()).toEqual(['incident', 'payroll', 'worker']);
+    expect(ceo.datasets.sort()).toEqual(['guard', 'incident', 'payroll', 'worker']);
     expect(ceo.payroll.some((p) => p.companyId === 'co-arsh' && p.late)).toBe(true);
     const inas = ceo.feeds.find((f) => f.dataset === 'worker')!.companies.find((c) => c.companyId === 'co-inas')!;
     expect(inas.state).toBe('stale');
@@ -2746,25 +2778,27 @@ describe('Asset Management (Fauzan, 26 Oct 2026)', () => {
 
 describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
   it('works EPF, SOCSO, EIS and a PCB estimate at the October 2026 rates', () => {
-    expect(epfShare(3000, 35, 'MY')).toEqual({ ee: 330, er: 390 });
+    expect(epfShare(3000, 35, 'MY')).toMatchObject({ ee: 330, er: 390 });
     // RM20 bands up to RM5,000: RM3,010 is worked on RM3,020 and rounded up to the ringgit.
-    expect(epfShare(3010, 35, 'MY')).toEqual({ ee: 333, er: 393 });
-    expect(epfShare(6500, 35, 'MY')).toEqual({ ee: 715, er: 780 });
-    expect(epfShare(3000, 61, 'MY')).toEqual({ ee: 0, er: 120 });
-    expect(epfShare(3000, 35, 'NP')).toEqual({ ee: 60, er: 60 });
-    expect(socsoShare(3000, 35)).toEqual({ ee: 15, er: 52.5 });
-    expect(socsoShare(8000, 35)).toEqual({ ee: 30, er: 105 });
-    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 6, er: 6 });
+    expect(epfShare(3010, 35, 'MY')).toMatchObject({ ee: 333, er: 393 });
+    expect(epfShare(6500, 35, 'MY')).toMatchObject({ ee: 715, er: 780 });
+    expect(epfShare(3000, 61, 'MY')).toMatchObject({ ee: 0, er: 120 });
+    expect(epfShare(3000, 35, 'NP')).toMatchObject({ ee: 60, er: 60 });
+    // From 2 Nov 2026 SOCSO and EIS come from PERKESO's table row (band RM2,900.01-3,000), not a bare percentage.
+    expect(socsoShare(3000, 35)).toMatchObject({ ee: 14.75, er: 51.65, band: 'RM2,900.01-3,000.00' });
+    expect(socsoShare(8000, 35)).toMatchObject({ ee: 29.75, er: 104.15 });
+    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 5.9, er: 5.9 });
     expect(eisShare(3000, 60, 'MY')).toEqual({ ee: 0, er: 0 });
     // Low pay: the RM400 rebate wipes the tax out, and PCB under RM10 is not deducted.
     expect(pcbEstimate(3000, 330, 21)).toBe(0);
     expect(pcbEstimate(10900, 1199, 42)).toBeCloseTo(1146.88, 1);
   });
 
-  it('runs HR, then the Chief of Staff, then the Vice Chairman, then Finance, and nobody skips a step', async () => {
+  it('runs HR, then the Chief of Staff, then the COO, then Finance, and nobody skips a step (approvals changed 1 Nov 2026)', async () => {
     const { svc } = fresh();
     const hr = await svc.user('u-pwvsb-hr');
     const cos = await svc.user('u-cos');
+    const coo = await svc.user('u-coo');
     const vc = await svc.user('u-vchair');
     const fin = await svc.user('u-fin-t1-lead');
     const board = await svc.staffPayroll(hr);
@@ -2772,11 +2806,15 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect(board.employers.map((e) => e.companyId)).toEqual(expect.arrayContaining(['pwvsb', 'co-sasa', 'co-arsh', 'co-inas']));
     expect(board.employers.every((e) => !e.lastLate)).toBe(true);
     const id = (c: string) => `sp-${c}-2026-10`;
-    // The Vice Chairman cannot consent before the Chief of Staff approves.
-    await expect(svc.staffPayStep(vc, id('pwvsb'), 'consent')).rejects.toBeInstanceOf(BadRequest);
-    await svc.staffPayStep(cos, id('pwvsb'), 'approve');
-    await svc.staffPayStep(vc, id('pwvsb'), 'consent');
-    // Files only once consented; Finance pays with the bank reference and the PCB checked.
+    // The COO cannot approve before the Chief of Staff; the Vice Chairman no longer has a monthly step.
+    await expect(svc.staffPayStep(coo, id('pwvsb'), 'coo_approve', { note: 'OK' })).rejects.toBeInstanceOf(BadRequest);
+    await expect(svc.staffPayStep(cos, id('pwvsb'), 'approve')).rejects.toThrow(/comment/);
+    await svc.staffPayStep(cos, id('pwvsb'), 'approve', { note: 'Checked against the staff list' });
+    await expect(svc.staffPayStep(vc, id('pwvsb'), 'coo_approve', { note: 'OK' })).rejects.toBeInstanceOf(BadRequest);
+    await expect(svc.staffPayStep(coo, id('pwvsb'), 'coo_approve')).rejects.toThrow(/comment/);
+    const second = await svc.staffPayStep(coo, id('pwvsb'), 'coo_approve', { note: 'Approved' });
+    expect(second.cooApproved?.note).toBe('Approved');
+    // Files only once the COO has approved; Finance pays with the bank reference and the PCB checked.
     const bank = await svc.staffPayExport(fin, id('pwvsb'), 'bank');
     expect(bank.body.split('\n')[0]).toBe('Staff no,Name,Bank,Account,Amount,Reference');
     const sql = await svc.staffPayExport(fin, id('pwvsb'), 'sql');
@@ -2792,8 +2830,8 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     const paid = await svc.staffPayStep(fin, id('pwvsb'), 'pay', { bankRef: 'M2U-TEST-1', pcbChecked: true });
     expect(paid.stage).toBe('paid');
     // A return needs a reason and clears the approvals.
-    await expect(svc.staffPayStep(vc, id('co-sasa'), 'return')).rejects.toThrow(/change/);
-    const back = await svc.staffPayStep(vc, id('co-sasa'), 'return', { note: 'Check the car allowance.' });
+    await expect(svc.staffPayStep(coo, id('co-sasa'), 'return')).rejects.toThrow(/change/);
+    const back = await svc.staffPayStep(coo, id('co-sasa'), 'return', { note: 'Check the car allowance.' });
     expect(back.stage).toBe('draft');
     expect(back.approved).toBeNull();
     // HR cannot submit a month with a staff member who has no salary account.
@@ -2836,11 +2874,12 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
       return [...h.todo, ...(h.watch ?? [])].filter((t) => t.tag === 'Staff payroll').map((t) => t.title);
     };
     expect((await tags('u-cos')).some((t) => t.includes('approve'))).toBe(true);
-    expect((await tags('u-vchair')).some((t) => t.includes('consent'))).toBe(true);
+    expect((await tags('u-coo')).some((t) => t.includes('approve as COO'))).toBe(true);
+    expect((await tags('u-vchair')).length).toBe(0);
     expect((await tags('u-fd')).some((t) => t.includes('pay through the bank'))).toBe(true);
-    // In the pilot the CEO approves and consents for the Chief of Staff and Vice Chairman, so their turns show too.
+    // In the pilot the CEO approves for the Chief of Staff, so that turn shows too.
     expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 7th'))).toBe(false);
-    await store.update('staffPayRuns', 'sp-co-inas-2026-09', { stage: 'consented', paid: null });
+    await store.update('staffPayRuns', 'sp-co-inas-2026-09', { stage: 'coo_approved', paid: null });
     expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 7th'))).toBe(true);
   });
 });
@@ -2880,14 +2919,18 @@ describe('Finance monitor (Fauzan, 27 Oct 2026)', () => {
     await expect(svc.setFinPack(de, cid, 'tax', 'tax-ea', 'reviewed')).rejects.toThrow(/team leader or deputy/);
     await svc.setFinPack(de, cid, 'tax', 'tax-ea', 'prepared');
     await expect(svc.setFinPack(await svc.user('u-fin-t1-dep'), cid, 'tax', 'tax-ea', 'sent')).rejects.toThrow(/sends/);
-    await svc.setFinPack(await svc.user('u-fin-t1-dep'), cid, 'tax', 'tax-ea', 'reviewed');
-    const sent = await svc.setFinPack(await svc.user('u-fin-t1-lead'), cid, 'tax', 'tax-ea', 'sent');
+    // Phase 2 (31 Oct 2026): reviewing and sending need a comment.
+    await expect(svc.setFinPack(await svc.user('u-fin-t1-dep'), cid, 'tax', 'tax-ea', 'reviewed')).rejects.toThrow(/comment/);
+    await svc.setFinPack(await svc.user('u-fin-t1-dep'), cid, 'tax', 'tax-ea', 'reviewed', 'Checked against the payroll.');
+    const sent = await svc.setFinPack(await svc.user('u-fin-t1-lead'), cid, 'tax', 'tax-ea', 'sent', 'Sent to the tax agent.');
     expect(sent.status).toBe('sent');
-    // No skipping a step, no other team's books, and the CEO watches without changing papers.
+    // No skipping a step and no other team's books. Phase 2 (31 Oct 2026): the CEO has full authority alongside the
+    // Finance Director, so the CEO may move a paper; the Chairman still only watches.
     await store.update('finStatus', row.status.id, { tax: row.status.tax.map((i) => (i.id === 'tax-forme' ? { ...i, status: 'todo' as const } : i)) });
     await expect(svc.setFinPack(await svc.user('u-fin-t1-lead'), cid, 'tax', 'tax-forme', 'reviewed')).rejects.toThrow(/prepared first/);
     await expect(svc.setFinPack(await svc.user('u-fin-t2-lead'), cid, 'tax', 'tax-forme', 'prepared')).rejects.toThrow(/not found/);
-    await expect(svc.setFinPack(await svc.user('u-fauzan'), cid, 'tax', 'tax-forme', 'prepared')).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.setFinPack(await svc.user('u-fauzan'), cid, 'tax', 'tax-forme', 'prepared')).status).toBe('prepared');
+    await expect(svc.setFinPack(await svc.user('u-chair'), cid, 'tax', 'tax-forme', 'reviewed', 'ok')).rejects.toBeInstanceOf(AccessDenied);
   });
 });
 
@@ -2997,10 +3040,10 @@ describe('Branches (V11, V12, V12.1)', () => {
     const board = await svc.branchBoard(cm);
     const held = board.rows.find((r) => r.branch.id === 'br-inas-3')!;
     expect(held.holds[0]).toMatch(/CONTRACT REVIEW/);
-    await expect(svc.approveBranchSettlement(cm, held.settlement!.id)).rejects.toThrow(/Held/);
+    await expect(svc.approveBranchSettlement(cm, held.settlement!.id, 'Checked the month')).rejects.toThrow(/Held/);
     const sasa = await svc.user('u-cm-sasa');
     const ok = (await svc.branchBoard(sasa)).rows.find((r) => r.canApprove)!;
-    const approved = await svc.approveBranchSettlement(sasa, ok.settlement!.id);
+    const approved = await svc.approveBranchSettlement(sasa, ok.settlement!.id, 'Checked the month');
     expect(approved.status).toBe('approved');
     const q = ok.queue[0];
     await expect(svc.reviewBranchAction(sasa, q.action.id, 'reversed', '')).rejects.toThrow(/why/);
@@ -3020,7 +3063,7 @@ describe('Branches (V11, V12, V12.1)', () => {
     expect(v2.version).toBe(2);
     // An admin executive sees the branch but cannot decide; another company's manager does not see it.
     await expect(svc.reviewBranchAction(await svc.user('u-ae-arsh'), 'ba-br-arsh-1-1', 'accepted', '')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.approveBranchSettlement(cm, ok.settlement!.id)).rejects.toThrow(/not found/);
+    await expect(svc.approveBranchSettlement(cm, ok.settlement!.id, 'Checked the month')).rejects.toThrow(/not found/);
     // PWVSB sees what the companies leave unreviewed past 7 days.
     const home = await svc.home(await svc.user('u-fauzan'));
     expect([...home.todo, ...(home.watch ?? [])].some((t) => t.tag === 'Branch')).toBe(true);
@@ -3158,7 +3201,7 @@ describe('IT pilot: jobs, proof, oversight and system ownership (Fauzan, 28 Oct 
     // The same file again is refused; new proof is needed.
     await expect(svc.itJobStep(ex, j.id, 'submit', 'Again', [p])).rejects.toThrow(/already given/);
     await svc.itJobStep(ex, j.id, 'submit', 'Signed sheet attached', [proof()]);
-    const ok = await svc.itJobStep(mgr, j.id, 'accept');
+    const ok = await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked');
     expect(ok).toMatchObject({ status: 'accepted', acceptedBy: mgr.name });
     expect(ok.log.map((l) => l.what)).toEqual(['start', 'submit', 'return', 'submit', 'accept']);
     // The proof file can be opened by the COO, who monitors.
@@ -3176,10 +3219,10 @@ describe('IT pilot: jobs, proof, oversight and system ownership (Fauzan, 28 Oct 
     const ex = await svc.user('u-it-ex2');
     const j = await svc.giveItJob(lead, { kind: 'install', title: 'Install NVR at the Inas office', detail: '', priority: 'P2', technical: true, assigneeId: 'u-it-ex2', dueOn: due(5) });
     await svc.itJobStep(ex, j.id, 'submit', 'Installed and recording', [proof()]);
-    await expect(svc.itJobStep(mgr, j.id, 'accept')).rejects.toThrow(/IT Lead checks it first/);
+    await expect(svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).rejects.toThrow(/IT Lead checks it first/);
     await expect(svc.itJobStep(mgr, j.id, 'check')).rejects.toThrow(/IT Lead does the technical check/);
     expect((await svc.itJobStep(lead, j.id, 'check', 'Footage plays back')).status).toBe('checked');
-    expect((await svc.itJobStep(mgr, j.id, 'accept')).status).toBe('accepted');
+    expect((await svc.itJobStep(mgr, j.id, 'accept', 'Proof checked')).status).toBe('accepted');
   });
 
   it('a job is changed only with a reason, and the change is kept', async () => {
@@ -3278,7 +3321,8 @@ describe('Company secretary (V9)', () => {
     await expect(svc.decideCorpChange(cm, c.id, 'approve', '', 'cl. 7')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.decideCorpChange(dcos, c.id, 'approve', '', '')).rejects.toThrow(/clause/);
     await expect(svc.decideCorpChange(await svc.user('u-fauzan'), c.id, 'approve', '', 'cl. 7')).rejects.toBeInstanceOf(AccessDenied);
-    await svc.decideCorpChange(dcos, c.id, 'approve', '', 'Management agreement cl. 7.2');
+    await expect(svc.decideCorpChange(dcos, c.id, 'approve', '', 'Management agreement cl. 7.2')).rejects.toThrow(/reason/);
+    await svc.decideCorpChange(dcos, c.id, 'approve', 'Board seat agreed', 'Management agreement cl. 7.2');
     expect((await svc.home(cm)).todo.some((t) => t.tag === 'Company secretary' && t.detail.includes('board resolution'))).toBe(true);
     const done = await svc.recordCorpBoard(cm, c.id, 'BR/1', '2026-11-01');
     const f = (await svc.corpBoard(cm)).filings.find((x) => x.filing.id === done.filingId)!;
@@ -3288,19 +3332,20 @@ describe('Company secretary (V9)', () => {
   it('keeps a lodged filing awaiting acknowledgement until the SSM receipt is recorded', async () => {
     const { svc } = fresh();
     const ae = await svc.user('u-ae-arsh');
+    const dcos = await svc.user('u-dcos');
     const b = await svc.corpBoard(ae);
     expect(b.filings.every((f) => f.filing.companyId === 'co-arsh')).toBe(true);
     const f = b.filings.find((x) => x.filing.status === 'open')!;
-    await expect(svc.corpFilingStep(ae, f.filing.id, 'lodge', {})).rejects.toThrow(/MBRS/);
-    await expect(svc.corpFilingStep(ae, f.filing.id, 'receipt', { ref: 'R1' })).rejects.toThrow(/open/);
-    await svc.corpFilingStep(ae, f.filing.id, 'lodge', { ref: 'MBRS-1' });
+    // Head office Corporate Admin records filings (Central Admin 5A, Fauzan 1 Nov 2026); the company only views.
+    await expect(svc.corpFilingStep(ae, f.filing.id, 'prepare')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.corpFilingStep(dcos, f.filing.id, 'lodge', {})).rejects.toThrow(/MBRS/);
+    await expect(svc.corpFilingStep(dcos, f.filing.id, 'receipt', { ref: 'R1' })).rejects.toThrow(/open/);
+    await svc.corpFilingStep(dcos, f.filing.id, 'lodge', { ref: 'MBRS-1' });
     const after = (await svc.corpBoard(ae)).filings.find((x) => x.filing.id === f.filing.id)!;
     expect(after.label).toBe('Awaiting SSM acknowledgement');
     expect(after.tone).not.toBe('ok');
-    await svc.corpFilingStep(ae, f.filing.id, 'receipt', { ref: 'SSM-1' });
+    await svc.corpFilingStep(dcos, f.filing.id, 'receipt', { ref: 'SSM-1' });
     expect((await svc.corpBoard(ae)).filings.find((x) => x.filing.id === f.filing.id)!.tone).toBe('ok');
-    // PWVSB watches but never records a company's filing.
-    await expect(svc.corpFilingStep(await svc.user('u-dcos'), f.filing.id, 'prepare')).rejects.toBeInstanceOf(AccessDenied);
     const ceo = await svc.corpBoard(await svc.user('u-fauzan'));
     expect(ceo.kpis.overdue).toBeGreaterThan(0);
   });
@@ -3458,7 +3503,8 @@ describe('Governance and authority (V7, V8, V12)', () => {
     const inas = () => b.coverage.find((c) => c.companyId === 'co-inas')!;
     expect(inas().liveMandates).toBe(0);
     expect(inas().areas.every((a) => a.status === 'unknown')).toBe(true);
-    await svc.govMandateStep(legal, 'gm-co-inas-1', 'verify', {});
+    await expect(svc.govMandateStep(legal, 'gm-co-inas-1', 'verify', {})).rejects.toThrow(/reason/);
+    await svc.govMandateStep(legal, 'gm-co-inas-1', 'verify', { note: 'Signed copy matches' });
     b = await svc.govBoard(legal);
     expect(inas().areas.find((a) => a.area === 'OPERATIONS')!.status).toBe('act');
     expect(inas().areas.find((a) => a.area === 'ARMS')!.status).toBe('unknown');
@@ -3475,7 +3521,7 @@ describe('Governance and authority (V7, V8, V12)', () => {
     await expect(svc.govMandateStep(legal, m.id, 'verify', {})).rejects.toThrow(/not confirmed/);
     await expect(svc.govMandateStep(cm, m.id, 'confirm', {})).rejects.toThrow(/resolution/);
     await svc.govMandateStep(cm, m.id, 'confirm', { resolutionRef: 'BR/INAS/2026/07' });
-    await expect(svc.govMandateStep(legal, m.id, 'verify', {})).rejects.toThrow(/other than/);
+    await expect(svc.govMandateStep(legal, m.id, 'verify', { note: 'x' })).rejects.toThrow(/other than/);
     await expect(svc.govMandateStep(cos, m.id, 'verify', {})).rejects.toThrow();
   });
 
@@ -3818,43 +3864,313 @@ describe('Staff clock from sign-in to sign-out (Fauzan, 27 Oct 2026)', () => {
 });
 
 describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () => {
-  it('has a Lead and a Deputy, each with an Assistant cum Enforcement, watching every company', async () => {
+  it('has 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer, watching every company (Fauzan, 2 Nov 2026)', async () => {
     const { svc, ds } = fresh();
     const act = ds.users.filter((u) => u.department === 'audit');
-    expect(act.map((u) => u.actRole).sort()).toEqual(['assistant', 'assistant', 'deputy', 'lead']);
-    const b = await svc.actBoard(await svc.user('u-act-da'));
-    expect(b.signals.length).toBeGreaterThan(5);
+    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead']);
+    const b = await svc.actBoard(await svc.user('u-act-enf2'));
+    expect(b.job).toBe('enforcement');
+    expect(b.myTeam).toBe(2);
+    expect(b.structure!.teams.map((t) => [t.auditor?.id, t.enforcement?.id])).toEqual([
+      ['u-act-aud1', 'u-act-enf1'],
+      ['u-act-aud2', 'u-act-enf2'],
+    ]);
+    expect(b.structure!.director?.id).toBe('u-audit');
+    // Both teams cover every workflow (Fauzan, 2 Nov 2026): no workflow is tied to a team.
+    expect(b.rule.areas.every((a) => !('team' in a))).toBe(true);
+    expect(b.signals.length).toBeGreaterThan(15);
+    for (const s of b.signals) expect(b.rule.areas.some((a) => a.id === s.area)).toBe(true);
     expect(b.plan.find((p) => p.area.id === 'ROSTER')!.state).toBe('never');
     expect(b.findings.find((f) => f.finding.id === 'act-f-1')!.escalatedTo).toBe('Chief of Staff');
+    expect(b.canCheck).toBe(false);
+    expect((await svc.actBoard(await svc.user('u-act-aud1'))).canCheck).toBe(true);
   });
 
-  it('lets the owner plan and fix, ACT check, and only the Lead or Deputy close a high finding', async () => {
+  it('lets the owner plan and fix, the Auditor check, and only the Director close a high finding', async () => {
     const { svc } = fresh();
-    const la = await svc.user('u-act-la');
+    const aud = await svc.user('u-act-aud1');
+    const enf = await svc.user('u-act-enf1');
     const cm = await svc.user('u-cm-arsh');
-    const f = await svc.raiseActFinding(la, {
+    const f = await svc.raiseActFinding(enf, {
       companyId: 'co-arsh',
       area: 'ARMS',
       source: 'workflow_audit',
       title: 'Vault key log not signed',
       detail: '',
       severity: 'high',
-      evidence: 'Log pages 4-6',
+      evidence: 'Log pages 4-6 (spot check)',
       ownerUserId: cm.id,
     });
+    expect(f.team).toBe(1); // the raiser's team keeps it
     await expect(svc.actFindingStep(await svc.user('u-cm-sasa'), f.id, 'plan', { rootCause: 'x', solution: 'y', targetOn: '2026-11-01' })).rejects.toThrow();
     await expect(svc.actFindingStep(cm, f.id, 'fixed', { proof: 'p' })).rejects.toThrow(/cause/);
     await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No second signer', solution: 'Two signatures per opening', targetOn: '2026-11-01' });
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Log with two signatures since 1 Nov' });
-    await expect(svc.actFindingStep(await svc.user('u-act-da'), f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Lead or Deputy/);
-    const failed = await svc.actFindingStep(await svc.user('u-act-da'), f.id, 'check', { ok: false, note: 'One opening unsigned' });
+    await expect(svc.actFindingStep(enf, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Only an ACT Auditor or the ACT Director can check a fix/);
+    await expect(svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Director/);
+    const failed = await svc.actFindingStep(aud, f.id, 'check', { ok: false, note: 'One opening unsigned' });
     expect(failed.status).toBe('planned');
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Corrected' });
-    const closed = await svc.actFindingStep(await svc.user('u-act-dep'), f.id, 'check', { ok: true, note: 'Seen' });
+    const closed = await svc.actFindingStep(await svc.user('u-audit'), f.id, 'check', { ok: true, note: 'Seen' });
     expect(closed.status).toBe('closed');
     const mine = await svc.actBoard(cm);
     expect(mine.findings.every((r) => r.finding.ownerUserId === cm.id)).toBe(true);
     await expect(svc.actBoard(await svc.user('u-cm-inas').then((u) => ({ ...u, id: 'nobody' })))).rejects.toThrow();
+  });
+
+  it('raises a finding from a monitor signal with server-filled evidence, once', async () => {
+    const { svc } = fresh();
+    const aud = await svc.user('u-act-aud2');
+    const b = await svc.actBoard(aud);
+    const s = b.signals.find((x) => x.count > 0 && !x.coveredBy.length)!;
+    expect(s).toBeTruthy();
+    const f = await svc.raiseActFinding(aud, {
+      companyId: null,
+      area: 'IT', // ignored: the signal decides the workflow
+      source: 'manual',
+      title: s.label,
+      detail: '',
+      severity: 'medium',
+      evidence: '',
+      ownerUserId: 'u-cos',
+      signalKey: s.key,
+    });
+    expect(f.area).toBe(s.area);
+    expect(f.source).toBe('monitor');
+    expect(f.evidence).toContain(`${s.count} ×`);
+    expect(f.team).toBe(2);
+    // The Director's own findings wait for the Director to give them to a team; only the Director can.
+    const dir = await svc.user('u-audit');
+    const d = await svc.raiseActFinding(dir, { companyId: null, area: 'IT', source: 'manual', title: 'Backup test missing', detail: '', severity: 'low', evidence: 'No restore test record', ownerUserId: 'u-cos' });
+    expect(d.team).toBeNull();
+    expect((await svc.actBoard(dir)).kpis.toAssign).toBeGreaterThan(0);
+    await expect(svc.actFindingStep(aud, d.id, 'assign', { team: 1 })).rejects.toThrow(/Director/);
+    expect((await svc.actFindingStep(dir, d.id, 'assign', { team: 1 })).team).toBe(1);
+    await expect(
+      svc.raiseActFinding(aud, { companyId: null, area: s.area, source: 'monitor', title: 'again', detail: '', severity: 'low', evidence: '', ownerUserId: 'u-cos', signalKey: s.key }),
+    ).rejects.toThrow(/already covers/);
+    const after = await svc.actBoard(aud);
+    expect(after.signals.find((x) => x.key === s.key)!.coveredBy).toEqual([f.ref]);
+    await expect(
+      svc.raiseActFinding(aud, { companyId: null, area: 'IT', source: 'monitor', title: 'x', detail: '', severity: 'low', evidence: '', ownerUserId: 'u-cos', signalKey: 'nope' }),
+    ).rejects.toThrow(/Unknown monitor signal/);
+    await expect(
+      svc.raiseActFinding(await svc.user('u-cm-arsh'), { companyId: null, area: 'IT', source: 'manual', title: 'x', detail: '', severity: 'low', evidence: 'e', ownerUserId: 'u-cos' }),
+    ).rejects.toThrow();
+  });
+
+  it('queues follow-ups for Enforcement when an owner is late, and records each chase', async () => {
+    const { svc, store } = fresh();
+    const enf = await svc.user('u-act-enf1');
+    const f = await svc.raiseActFinding(await svc.user('u-act-aud1'), {
+      companyId: 'co-sasa',
+      area: 'ATTENDANCE',
+      source: 'workflow_audit',
+      title: 'Late sign-outs not explained',
+      detail: '',
+      severity: 'low',
+      evidence: 'Sample of 20 days',
+      ownerUserId: 'u-cm-sasa',
+    });
+    // Not yet: the owner has the plan window.
+    expect((await svc.actBoard(enf)).findings.find((r) => r.finding.id === f.id)!.followUp).toBeNull();
+    await store.update('actFindings', f.id, { raisedAt: '2026-10-01T02:00:00.000Z', dueOn: '2026-10-20' });
+    const row = (await svc.actBoard(enf)).findings.find((r) => r.finding.id === f.id)!;
+    expect(row.followUp).toBe('overdue');
+    // ACT staff have no general home board; their to-do list comes from the ACT feed.
+    const todo = await (svc as unknown as { actHome: (u: typeof enf) => Promise<{ detail: string }[]> }).actHome(enf);
+    expect(todo.some((i) => i.detail.includes('follow up'))).toBe(true);
+    await expect(svc.actFindingStep(enf, f.id, 'follow_up', { method: 'fax', note: 'x' })).rejects.toThrow(/how you followed up/);
+    await expect(svc.actFindingStep(await svc.user('u-cm-sasa'), f.id, 'follow_up', { method: 'call', note: 'x' })).rejects.toThrow();
+    const done = await svc.actFindingStep(enf, f.id, 'follow_up', { method: 'visit', note: 'OM promised plan by Friday', nextOn: '2026-12-01' });
+    expect(done.followUps).toHaveLength(1);
+    expect((await svc.actBoard(enf)).findings.find((r) => r.finding.id === f.id)!.followUp).toBeNull();
+    // The owner never sees ACT's chase log.
+    expect((await svc.actBoard(await svc.user('u-cm-sasa'))).findings.find((r) => r.finding.id === f.id)!.finding.followUps).toBeUndefined();
+    // Enforcement does not record workflow audits; the Auditor does.
+    await expect(svc.recordActAudit(enf, { area: 'ATTENDANCE', companyId: null, doneOn: '2026-11-01', result: 'clean', note: 'x' })).rejects.toThrow();
+  });
+
+  it('lets the Director distribute audits and monthly report reviews, and monitors every department report (Fauzan, 2 Nov 2026)', async () => {
+    const { svc } = fresh();
+    const dir = await svc.user('u-audit');
+    const aud1 = await svc.user('u-act-aud1');
+    const aud2 = await svc.user('u-act-aud2');
+    const b = await svc.actBoard(dir);
+    expect(b.canAssign).toBe(true);
+    // Every department shows up; one with no monthly report set is never green.
+    const depts = new Set(b.reports.filter((r) => r.senderKind === 'department').map((r) => r.department));
+    expect(depts.has('it')).toBe(true);
+    // Every department sends a monthly report on the standard form, due on the 25th of the next month.
+    const deptRows = b.reports.filter((r) => r.senderKind === 'department');
+    expect(deptRows.every((r) => r.status !== 'no_report')).toBe(true);
+    expect(b.reportForms.every((f) => f.dueDay === 25 && f.sections.length >= 3)).toBe(true);
+    expect(b.signals.find((x) => x.key === 'reports_late')!.count).toBeGreaterThan(0);
+    // Only the Director gives work out.
+    await expect(svc.assignActWork(aud1, { kind: 'workflow', team: 1, area: 'PAYROLL' })).rejects.toThrow(/Director/);
+    await expect(svc.assignActWork(dir, { kind: 'workflow', team: 3, area: 'PAYROLL' })).rejects.toThrow(/Team 1 or Team 2/);
+    const w = await svc.assignActWork(dir, { kind: 'workflow', team: 1, area: 'PAYROLL', note: 'Check October EPF' });
+    await expect(svc.assignActWork(dir, { kind: 'workflow', team: 2, area: 'PAYROLL' })).rejects.toThrow(/already given/);
+    const rep = b.reports.find((r) => r.senderKind === 'department' && r.defId && r.period)!;
+    const rw = await svc.assignActWork(dir, { kind: 'report_review', team: 2, defId: rep.defId, period: rep.period });
+    expect(rw.area).toBe('REPORTING');
+    const after = await svc.actBoard(aud2);
+    expect(after.work.map((x) => x.audit.id).sort()).toEqual([rw.id, w.id].sort());
+    expect(after.reports.find((r) => r.key === rep.key)!.review!.status).toBe('assigned');
+    // Team 2 cannot record Team 1's audit; Team 1's Auditor can, and the plan then counts it.
+    await expect(svc.recordActAudit(aud2, { area: 'PAYROLL', companyId: null, doneOn: '2026-10-25', result: 'clean', note: 'x', assignmentId: w.id })).rejects.toThrow(/Team 1/);
+    await svc.recordActAudit(aud1, { area: 'PAYROLL', companyId: null, doneOn: '2026-10-25', result: 'clean', note: 'EPF matched the bank file', assignmentId: w.id });
+    await svc.recordActAudit(aud2, { area: 'REPORTING', companyId: null, doneOn: '2026-10-25', result: 'findings', note: 'Headcount differs from HR records', assignmentId: rw.id });
+    const done = await svc.actBoard(dir);
+    expect(done.work).toHaveLength(0);
+    expect(done.plan.find((p) => p.area.id === 'PAYROLL')!.last!.by).toBe(aud1.name);
+    expect(done.reports.find((r) => r.key === rep.key)!.review!.result).toBe('findings');
+    await expect(svc.recordActAudit(aud1, { area: 'PAYROLL', companyId: null, doneOn: '2026-10-25', result: 'clean', note: 'again', assignmentId: w.id })).rejects.toThrow(/not open/);
+  });
+
+  it('lets only the ACT Director set each monthly report form, and shows the sections a report leaves out (Fauzan, 2 Nov 2026)', async () => {
+    const { svc, store } = fresh();
+    const dir = await svc.user('u-audit');
+    const form = { department: 'it', sections: ['Summary', 'Tickets and speed', 'Devices and rentals', 'Help needed'], checks: ['Tickets against the IT board'], note: 'IT pilot form' };
+    await expect(svc.setActReportForm(await svc.user('u-act-aud1'), form)).rejects.toThrow(/Director/);
+    await expect(svc.setActReportForm(dir, { ...form, sections: ['One'] })).rejects.toThrow(/three sections/);
+    await expect(svc.setActReportForm(dir, { ...form, department: 'nowhere' })).rejects.toThrow(/department/);
+    const def = await svc.setActReportForm(dir, form);
+    expect(def.sections).toEqual(form.sections);
+    expect(def.dueDay).toBe(25);
+    expect(def.formBy!.by).toBe(dir.name);
+    // A department report that leaves out sections shows the gap to ACT.
+    const period = (await svc.actBoard(dir)).reports.find((r) => r.defId === def.id)!.period!;
+    const subs = await store.list('reportSubmissions', { defId: def.id, period });
+    for (const x of subs) await store.update('reportSubmissions', x.id, { sectionsCovered: ['Summary'] });
+    if (!subs.length)
+      await store.insert('reportSubmissions', { id: 'rs-test-it', defId: def.id, period, companyId: null, department: 'it', by: 'IT (synthetic)', at: NOW, note: '', docIds: [], file: null, sectionsCovered: ['Summary'] });
+    const row = (await svc.actBoard(dir)).reports.find((r) => r.defId === def.id)!;
+    expect(row.form).toEqual({ total: 4, covered: 1, missing: ['Tickets and speed', 'Devices and rentals', 'Help needed'] });
+  });
+
+  it('refuses owners from another company and ACT staff from the other team (Arisha main review, 2 Nov 2026)', async () => {
+    const { svc } = fresh();
+    const aud1 = await svc.user('u-act-aud1');
+    const base = { area: 'BILLING', source: 'workflow_audit' as const, title: 'Invoice sent late', detail: '', severity: 'medium' as const, evidence: 'Invoices for October' };
+    // Wrong company: Sasa's manager cannot own an Arsh finding; a company manager cannot own a PWVSB department finding.
+    await expect(svc.raiseActFinding(aud1, { ...base, companyId: 'co-arsh', ownerUserId: 'u-cm-sasa' })).rejects.toThrow(/works in that company/);
+    await expect(svc.raiseActFinding(aud1, { ...base, companyId: null, ownerUserId: 'u-cm-sasa' })).rejects.toThrow(/PWVSB owner/);
+    // A PWVSB central owner fits any company; the company's own manager fits it.
+    await svc.raiseActFinding(aud1, { ...base, companyId: 'co-arsh', ownerUserId: 'u-cos' });
+    const f = await svc.raiseActFinding(aud1, { ...base, companyId: 'co-arsh', ownerUserId: 'u-cm-arsh' });
+    expect(f.team).toBe(1);
+    // Wrong team: Team 2 cannot follow up or check Team 1's finding; the Director can.
+    const cm = await svc.user('u-cm-arsh');
+    await expect(svc.actFindingStep(await svc.user('u-act-enf2'), f.id, 'follow_up', { method: 'call', note: 'x' })).rejects.toThrow(/with Team 1/);
+    await svc.actFindingStep(await svc.user('u-act-enf1'), f.id, 'follow_up', { method: 'call', note: 'Manager will plan by Friday' });
+    await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No billing calendar', solution: 'Calendar by the 5th', targetOn: '2026-11-20' });
+    await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'November invoices sent on the 5th' });
+    await expect(svc.actFindingStep(await svc.user('u-act-aud2'), f.id, 'check', { ok: true, note: 'x' })).rejects.toThrow(/with Team 1/);
+    // An unassigned finding (raised by the Director) waits for the Director before any team acts.
+    const dir = await svc.user('u-audit');
+    const d = await svc.raiseActFinding(dir, { ...base, companyId: 'co-arsh', ownerUserId: 'u-cm-arsh' });
+    await expect(svc.actFindingStep(await svc.user('u-act-enf1'), d.id, 'follow_up', { method: 'call', note: 'x' })).rejects.toThrow(/not given this finding to a team/);
+    // Refusals read as plain reasons, not as a missing company grant.
+    await expect(svc.actFindingStep(await svc.user('u-act-enf1'), f.id, 'check', { ok: true, note: 'x' })).rejects.toThrow(/^Only an ACT Auditor/);
+    const closed = await svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'Seen the November invoices' });
+    expect(closed.status).toBe('closed');
+  });
+
+  it('lets the team Auditor send a high finding back but only the Director close it', async () => {
+    const { svc } = fresh();
+    const aud1 = await svc.user('u-act-aud1');
+    const dir = await svc.user('u-audit');
+    const cm = await svc.user('u-cm-arsh');
+    const f = await svc.raiseActFinding(aud1, { companyId: 'co-arsh', area: 'ARMS', source: 'workflow_audit', title: 'Rounds not counted', detail: '', severity: 'high', evidence: 'Vault log 3 Nov', ownerUserId: cm.id });
+    await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No count sheet', solution: 'Count sheet each shift', targetOn: '2026-11-10' });
+    await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Count sheets' });
+    await expect(svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'ok' })).rejects.toThrow(/Only the ACT Director can close a high finding/);
+    expect((await svc.actFindingStep(aud1, f.id, 'check', { ok: false, note: 'Two shifts missing' })).status).toBe('planned');
+    await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'All shifts counted' });
+    const board = await svc.actBoard(aud1);
+    expect(board.canCloseHigh).toBe(false);
+    expect((await svc.actBoard(dir)).canCloseHigh).toBe(true);
+    const done = await svc.actFindingStep(dir, f.id, 'check', { ok: true, note: 'Counted 7 days of sheets' });
+    expect(done.status).toBe('closed');
+    expect(done.checks.map((c) => c.ok)).toEqual([false, true]);
+  });
+
+  it('never shows a monthly report as on time when sections of its form are missing', async () => {
+    const { svc, store } = fresh();
+    const dir = await svc.user('u-audit');
+    const b0 = await svc.actBoard(dir);
+    const row0 = b0.reports.find((r) => r.defId === 'dept-finance-monthly')!;
+    const def = (await store.get('reportDefs', 'dept-finance-monthly'))!;
+    for (const x of await store.list('reportSubmissions', { defId: def.id, period: row0.period! })) await store.delete('reportSubmissions', x.id);
+    await store.insert('reportSubmissions', { id: 'rs-test-fin', defId: def.id, period: row0.period!, companyId: null, department: 'finance', by: 'Finance (synthetic)', at: NOW, note: '', docIds: [], file: null, sectionsCovered: def.sections!.slice(0, 2) });
+    let row = (await svc.actBoard(dir)).reports.find((r) => r.defId === def.id)!;
+    expect(row.status).toBe('incomplete');
+    expect(row.form!.covered).toBe(2);
+    // An old submission with no sections ticked is incomplete too, never green.
+    await store.update('reportSubmissions', 'rs-test-fin', { sectionsCovered: undefined } as never);
+    row = (await svc.actBoard(dir)).reports.find((r) => r.defId === def.id)!;
+    expect(row.status).toBe('incomplete');
+    await store.update('reportSubmissions', 'rs-test-fin', { sectionsCovered: def.sections });
+    row = (await svc.actBoard(dir)).reports.find((r) => r.defId === def.id)!;
+    expect(['on_time', 'late']).toContain(row.status);
+  });
+
+  it('lets only the ACT Director time a workflow step by step after a review, walks it through, and checks it in the field every 6 months (Fauzan, 2 Nov 2026)', async () => {
+    const { svc } = fresh();
+    const dir = await svc.user('u-audit');
+    const aud1 = await svc.user('u-act-aud1');
+    const enf2 = await svc.user('u-act-enf2');
+    const segments = [
+      { step: 'Ticket reaches IT Executive', target: 2, unit: 'hours', key: 'it-ex-queue' },
+      { step: 'Fix done', target: 1, unit: 'days', key: null },
+    ];
+    // No review yet: the timing must rest on a finished ACT audit of that workflow.
+    await expect(svc.setActTiming(dir, { area: 'IT', auditMonths: 6, segments, reviewId: 'nope', reason: 'From review' })).rejects.toThrow(/Review the workflow first/);
+    const review = await svc.recordActAudit(aud1, { area: 'IT', companyId: null, doneOn: '2026-10-20', result: 'clean', note: 'Walked 20 tickets' });
+    await expect(svc.setActTiming(aud1, { area: 'IT', auditMonths: 6, segments, reviewId: review.id, reason: 'x' })).rejects.toThrow(/Only the ACT Director/);
+    await expect(svc.setActTiming(dir, { area: 'IT', auditMonths: 6, segments: [{ step: 'x', target: 0, unit: 'hours' }], reviewId: review.id, reason: 'x y' })).rejects.toThrow(/Step 1/);
+    // Unset timing never reads as zero.
+    expect(await svc.workStandardHours()).toEqual({});
+    await svc.setActTiming(dir, { area: 'IT', auditMonths: 6, segments, reviewId: review.id, reason: 'Review showed 2 hours is enough' });
+    expect(await svc.workStandardHours()).toEqual({ 'it-ex-queue': 2 });
+    const b = await svc.actBoard(enf2);
+    const it = b.plan.find((p) => p.area.id === 'IT')!;
+    expect(it.area.months).toBe(6);
+    expect(it.timing!.defaultMonths).toBe(12);
+    expect(it.walkthrough.map((w) => w.step)).toEqual(['Ticket reaches IT Executive', 'Fix done']);
+    expect(it.field.state).toBe('never');
+    expect(b.kpis.fieldChecksDue).toBeGreaterThan(0);
+    // Any ACT job checks in the field; a slower step shows against its timing.
+    await expect(svc.recordActFieldCheck(await svc.user('u-cm-sasa'), { area: 'IT', doneOn: '2026-10-25', where: 'HQ', observed: [], result: 'clean', note: 'x' })).rejects.toThrow(/Only ACT staff/);
+    const fc = await svc.recordActFieldCheck(enf2, {
+      area: 'IT',
+      doneOn: '2026-10-25',
+      where: 'PWVSB HQ IT desk',
+      observed: [{ step: 'Ticket reaches IT Executive', actual: 3, unit: 'hours', note: 'Queue not watched after lunch' }],
+      result: 'findings',
+      note: 'First step slower than timed',
+    });
+    expect(fc.field!.observed[0].target).toBe(2);
+    const after = (await svc.actBoard(dir)).plan.find((p) => p.area.id === 'IT')!;
+    expect(after.field.state).toBe('ok');
+    expect(after.field.dueOn).toBe('2027-04-26'); // 6 months as 183 days, like the audit plan
+  });
+
+  it('walks a timing through working hours only', async () => {
+    const { simulateWorkflow } = await import('../src/reports');
+    // Friday 16:30 + 2 hours: 1 hour Friday, 1 hour Monday morning; then 1 working day ends Tuesday 09:30.
+    const w = simulateWorkflow(
+      [
+        { step: 'a', target: 2, unit: 'hours' },
+        { step: 'b', target: 1, unit: 'days' },
+      ],
+      '2026-10-30T16:30',
+    );
+    expect(w).toEqual([
+      { step: 'a', target: 2, unit: 'hours', startsAt: '2026-10-30T16:30', dueAt: '2026-11-02T09:30' },
+      { step: 'b', target: 1, unit: 'days', startsAt: '2026-11-02T09:30', dueAt: '2026-11-03T09:30' },
+    ]);
   });
 
   it('needs the COO or CEO to approve an improvement before steps are ticked', async () => {
@@ -4003,7 +4319,10 @@ describe('HR and operations retest fixes (Fauzan, 27 Oct 2026)', () => {
     const forCos = (await svc.leaveRequests(cos, {})).rows.find((r) => r.request.id === q.id)!;
     expect(forCos.canDecide).toBe(true);
     expect(forCos.waitingWith!.label).toBe('HR Admin');
-    await svc.decideLeave(dcos, q.id, true, '');
+    await svc.decideLeave(dcos, q.id, true, 'Cover arranged');
+    // The Deputy stands in as HR Director (Fauzan, 1 Nov 2026); the Vice Chairman then consents.
+    expect(ds.leaveRequests.find((r) => r.id === q.id)!.status).toBe('pending');
+    await svc.decideLeave(await svc.user('u-vchair'), q.id, true, 'Consent');
     expect(ds.leaveRequests.find((r) => r.id === q.id)!.status).toBe('approved');
   });
 
@@ -4047,12 +4366,15 @@ describe('HR and operations retest fixes (Fauzan, 27 Oct 2026)', () => {
     // HR cannot verify; the Chief of Staff can.
     const pc = ds.payChanges.find((c) => c.personId === p.id && c.kind === 'PAY')!;
     const bc = ds.payChanges.find((c) => c.personId === p.id && c.kind === 'BANK')!;
-    await svc.decidePayChange(cos, bc.id, true, '');
-    await svc.decidePayChange(await svc.user('u-fd'), bc.id, true, '');
+    await svc.decidePayChange(cos, bc.id, true, 'Bank letter seen');
+    await svc.decidePayChange(await svc.user('u-fd'), bc.id, true, 'Account checked');
     expect(ds.people.find((x) => x.id === p.id)!.bank).toEqual({ bank: 'Maybank', accountMasked: '****5566' });
     await expect(svc.decidePayChange(hr, pc.id, true, '')).rejects.toThrow(/Someone else/);
     expect((await svc.payChanges(cos)).rows.find((r) => r.change.id === pc.id)!.mine).toBe(true);
     await svc.decidePayChange(cos, pc.id, true, 'Matches the offer letter');
+    // The salary amount then needs the Vice Chairman's consent (Fauzan, 1 Nov 2026).
+    expect(ds.people.find((x) => x.id === p.id)!.basicPay).toBeUndefined();
+    await svc.decidePayChange(await svc.user('u-vchair'), pc.id, true, 'Consent');
     expect(ds.people.find((x) => x.id === p.id)!.basicPay).toBe(3500);
     // A raise waits again; the old pay stays meanwhile.
     const values = (await svc.recordForm(hr, 'officeStaff', p.id, null)).values;
@@ -4136,12 +4458,12 @@ describe('Working from home (Fauzan, 27 Oct 2026)', () => {
     expect(poor.today!.status.plan).toBe('missed');
     expect(good.talk).toBe(false);
     expect(poor.talk).toBe(true);
-    // Central HR answers central staff; an Arrow Shield admin executive is answered by their company manager.
+    // Only HR answers applications, for central and company staff alike (Fauzan, 2 Nov 2026).
     expect(hr.applications.find((a) => a.arrangement.userId === 'u-fin-t1-de1')!.canDecide).toBe(true);
-    expect(hr.applications.find((a) => a.arrangement.userId === 'u-ae-arsh')!.canDecide).toBe(false);
+    expect(hr.applications.find((a) => a.arrangement.userId === 'u-ae-arsh')!.canDecide).toBe(true);
     const cm = await svc.remoteBoard(await svc.user('u-cm-arsh'));
     expect(cm.people).toHaveLength(0);
-    expect(cm.applications.map((a) => [a.arrangement.userId, a.canDecide])).toEqual([['u-ae-arsh', true]]);
+    expect(cm.applications.map((a) => [a.arrangement.userId, a.canDecide])).toEqual([['u-ae-arsh', false]]);
     await expect(svc.remoteBoard(await svc.user('u-ae-arsh'))).rejects.toBeInstanceOf(AccessDenied);
     // The board shows a home worker as working from home, not as an unknown location.
     const clock = await svc.staffClockBoard(await svc.user('u-pwvsb-hr'));
@@ -4169,19 +4491,26 @@ describe('Working from home (Fauzan, 27 Oct 2026)', () => {
       place: { label: 'Home', lat: 3.2, lng: 101.7 },
       noticeAccepted: false,
     };
+    // Blocked until HR opens working from home for this staff member (Fauzan, 2 Nov 2026).
+    await expect(svc.remoteApply(ex, { ...input, noticeAccepted: true })).rejects.toThrow(/HR has not opened/);
+    const hr = await svc.user('u-pwvsb-hr');
+    await expect(svc.setWfhAllowed(ex, ex.personId!, true, 'Long commute')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setWfhAllowed(hr, ex.personId!, true, '')).rejects.toThrow(/reason|comment/i);
+    await svc.setWfhAllowed(hr, ex.personId!, true, 'Desk work, can be done from home.');
     await expect(svc.remoteApply(ex, input)).rejects.toThrow(/notice/);
     const a = await svc.remoteApply(ex, { ...input, noticeAccepted: true });
     expect(a.days).toEqual([2, 4]);
     expect(a.answerBy).toBe(addDays(TODAY, 60));
     await expect(svc.remoteApply(ex, { ...input, noticeAccepted: true })).rejects.toThrow(/waiting/);
     await expect(svc.remoteDecide(ex, a.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
-    const hr = await svc.user('u-pwvsb-hr');
     await expect(svc.remoteDecide(hr, a.id, false, 'no')).rejects.toThrow(/grounds/);
     // Approving someone not yet ready (D5) needs a written exception.
     expect((await svc.remoteDecide(hr, a.id, true, 'Approved: long commute, reviewed in one month.')).status).toBe('approved');
     const cm = await svc.user('u-cm-sasa');
     await expect(svc.remoteDecide(cm, 'wfh-u-ae-arsh-1', true, '')).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.remoteDecide(await svc.user('u-cm-arsh'), 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.')).decidedBy).toBeTruthy();
+    // The company manager no longer answers; HR does.
+    await expect(svc.remoteDecide(await svc.user('u-cm-arsh'), 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.')).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.remoteDecide(hr, 'wfh-u-ae-arsh-1', true, 'Approved for Wednesdays.')).decidedBy).toBeTruthy();
     // A manager ends an arrangement only in writing.
     await expect(svc.remoteEnd(hr, a.id, '')).rejects.toThrow(/writing/);
     expect((await svc.remoteEnd(ex, a.id, '')).status).toBe('ended');
@@ -4265,13 +4594,16 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     expect((await svc.myDuty(staff)).reminders.some((r) => /salary account/.test(r.text) && r.text.includes('****6789'))).toBe(true);
     await expect(svc.decidePayChange(hr, bc.id, true, '')).rejects.toThrow(/Someone else/);
     await expect(svc.decidePayChange(staff, bc.id, true, '')).rejects.toThrow(/your own/);
-    await svc.decidePayChange(cos, bc.id, true, '');
-    await expect(svc.decidePayChange(cos, bc.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.decidePayChange(cos, bc.id, true, 'Bank letter seen');
+    await expect(svc.decidePayChange(cos, bc.id, true, 'Again')).rejects.toBeInstanceOf(AccessDenied);
     expect(ds.people.find((p) => p.id === person.id)!.bank ?? null).toEqual(before);
     await svc.decidePayChange(fd, bc.id, true, 'Bank letter seen');
     const after = ds.people.find((p) => p.id === person.id)!;
     expect(after.bank).toEqual({ bank: 'CIMB', accountMasked: '****6789' });
-    expect(after.bankAccountFull).toBe('800123456789');
+    // The full number sits behind the HR wall, never on the person record or the change.
+    expect(after.bankAccountFull ?? null).toBeNull();
+    expect(ds.staffAccounts.find((a) => a.personId === person.id)).toMatchObject({ accountFull: '800123456789', pending: null });
+    expect(JSON.stringify(ds.payChanges.find((c) => c.id === bc.id))).not.toContain('800123456789');
     expect(after.bankChangedOn).toBe(TODAY);
     expect(ds.audit.some((e) => e.action === 'pay.bank.verify' && e.summary.includes('now in use'))).toBe(true);
     expect(verifyChain(ds.audit)).toBeNull();
@@ -4289,7 +4621,7 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     await expect(svc.decidePayChange(cos, pc.id, true, '')).rejects.toThrow(/your own/);
     await expect(svc.decidePayChange(dcos, pc.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
     const row = (await svc.payChanges(vc)).rows.find((r) => r.change.id === pc.id)!;
-    expect(row.waitingOn).toBe('Vice Chairman');
+    expect(row.waitingOn).toBe('Vice Chairman (consent)');
     expect(row.mine).toBe(true);
     await svc.decidePayChange(vc, pc.id, true, 'Board approved');
     expect(ds.people.find((p) => p.id === cos.personId)!.basicPay).toBe(Number(values.basicPay) + 2000);
@@ -4313,15 +4645,22 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     for (const p of ds.people.filter((x) => x.companyId === GROUP_EMPLOYER_ID && !x.bank)) p.bank = { bank: 'Maybank', accountMasked: '****0001' };
     await svc.prepareStaffPay(hr, GROUP_EMPLOYER_ID, period);
     await svc.staffPayStep(hr, run.id, 'submit');
-    await svc.staffPayStep(await svc.user('u-cos'), run.id, 'approve');
-    await svc.staffPayStep(await svc.user('u-vchair'), run.id, 'consent');
+    await svc.staffPayStep(await svc.user('u-cos'), run.id, 'approve', { note: 'Checked' });
+    await svc.staffPayStep(await svc.user('u-coo'), run.id, 'coo_approve', { note: 'OK' });
     await expect(svc.staffPayExport(hr, run.id, 'bank')).rejects.toBeInstanceOf(AccessDenied);
     const fd = await svc.user('u-fd');
     const view = await svc.staffPayRun(fd, run.id);
     expect(view.can.bankFile).toBe(true);
     expect(view.control.code).toMatch(/^[0-9A-F]{12}$/);
+    // The bank needs full account numbers: Finance's file reads them from behind the HR wall (1 Nov 2026).
+    const lines = (await svc.staffPayRun(fd, run.id)).run.lines;
+    const [l1, l2] = lines;
+    ds.staffAccounts.push({ id: l1.personId, personId: l1.personId, companyId: GROUP_EMPLOYER_ID, accountFull: `1234567${l1.bank!.accountMasked.slice(-4)}`, pending: null, updatedAt: NOW, updatedBy: 'test' });
     const file = await svc.staffPayExport(fd, run.id, 'bank');
     expect(JSON.stringify(file)).toContain(`check ${view.control.code}`);
+    expect(file.body).toContain(`1234567${l1.bank!.accountMasked.slice(-4)}`);
+    // A line without a verified full number is marked, never paid blind.
+    expect(file.body.split('\n').find((r) => r.startsWith(l2.staffNo))).toContain('MISSING: ask HR');
   });
 
   it('refuses old, double and self-approved claims, and trips not approved before they were made', async () => {
@@ -4480,12 +4819,14 @@ describe('IT pilot: buying, eP tenders in minutes, stand-in and logged requests 
     const fd = await svc.user('u-fauzan');
     const act = await svc.user('u-audit');
     const hr = await svc.user('u-pwvsb-hr');
-    // Staff payroll: HR submits; the CEO approves and consents for the Chief of Staff and Vice Chairman (Fauzan, 28 Oct 2026).
+    // Staff payroll: HR submits; the CEO approves for the Chief of Staff (Fauzan, 28 Oct 2026); the COO approves second
+    // and the CEO cannot take that step too (Fauzan, 1 Nov 2026).
     const run = ds.staffPayRuns.find((r) => r.stage === 'draft' && r.lines.length && r.lines.every((l) => l.bank));
     if (run) {
       await svc.staffPayStep(hr, run.id, 'submit');
-      await svc.staffPayStep(fd, run.id, 'approve');
-      expect((await svc.staffPayStep(fd, run.id, 'consent')).stage).toBe('consented');
+      await svc.staffPayStep(fd, run.id, 'approve', { note: 'Checked' });
+      await expect(svc.staffPayStep(fd, run.id, 'coo_approve', { note: 'OK' })).rejects.toBeInstanceOf(BadRequest);
+      expect((await svc.staffPayStep(await svc.user('u-coo'), run.id, 'coo_approve', { note: 'OK' })).stage).toBe('coo_approved');
       expect(ds.audit.some((e) => /CEO for the Chief of Staff \(pilot\)/.test(e.summary))).toBe(true);
     }
     expect(isGroupLeader(act)).toBe(true);
@@ -4850,7 +5191,7 @@ describe('staff login retest (27 Oct 2026): work no role could start', () => {
     };
     await expect(svc.planArmedJob(sv, job)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.planArmedJob(cm, { ...job, detail: 'Carrying RM 500000' })).rejects.toThrow(/cash amounts/);
-    await expect(svc.planArmedJob(cm, { ...job, states: [arms.homeState ?? 'Selangor', 'Johor'] })).rejects.toThrow(/police approval/);
+    // No police approval yet is a directors' legal point, not a block on booking (Fauzan, 2 Nov 2026); see special-ops-4b-4h.
     const planned = await svc.planArmedJob(cm, job);
     expect(planned.status).toBe('scheduled');
     await expect(svc.planArmedJob(cm, { ...job, client: 'Another bank' })).rejects.toThrow(/Already on another armed job/);
@@ -4863,7 +5204,8 @@ describe('staff login retest (27 Oct 2026): work no role could start', () => {
     });
     expect(away.policeApproval!.ref).toBe('PDRM/APP/1');
     await expect(svc.updateArmedJob(cm, planned.id, 'completed', '')).rejects.toThrow(/Say what happened/);
-    await svc.updateArmedJob(cm, planned.id, 'in_progress', 'Left the base on time');
+    // Slice 4D: the job cannot start while it is a no-go (here: no client agreement, police notice or cover on file).
+    await expect(svc.updateArmedJob(cm, planned.id, 'in_progress', 'Left the base on time')).rejects.toThrow(/Client agreement/);
     await svc.updateArmedJob(cm, planned.id, 'completed', 'All drops done, firearms back');
     await expect(svc.updateArmedJob(cm, planned.id, 'delayed', 'Late')).rejects.toThrow(/already completed/);
     expect((await svc.arms(cm, 'co-sasa')).jobs.find((j) => j.job.id === planned.id)!.job.status).toBe('completed');
@@ -5048,7 +5390,7 @@ describe('Remote and branch work plan (Fauzan, 27 Oct 2026)', () => {
     await expect(svc.branchVisitRecord(await svc.user('u-om-johor'), 'br-arsh-2', { kind: 'om', ...findings })).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.branchVisitRecord(await svc.user('u-om-johor'), 'br-sasa-3', { kind: 'om', ...findings })).announced).toBe(true);
     expect((await svc.branchVisitRecord(await svc.user('u-rom-north'), 'br-arsh-2', { kind: 'rom', ...findings })).kind).toBe('rom');
-    expect((await svc.branchVisitRecord(await svc.user('u-act-la'), 'br-arsh-2', { kind: 'act', ...findings })).announced).toBe(false);
+    expect((await svc.branchVisitRecord(await svc.user('u-act-aud1'), 'br-arsh-2', { kind: 'act', ...findings })).announced).toBe(false);
     const cms = await svc.user('u-cms-head');
     const spot = { kind: 'spot' as const, result: 'issues' as const, findings: 'Video call: guard not at post at 02:10.', proof: null };
     const month = (await svc.branchWork(cms)).branches.find((b) => b.id === 'br-inas-3')!.spotsThisMonth;

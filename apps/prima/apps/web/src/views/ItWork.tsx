@@ -293,7 +293,17 @@ export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onCl
               className="input"
               aria-label="Note"
               placeholder={
-                c.submit ? 'What was done (needed to submit)' : coo && (c.accept || c.back) ? 'Why you decide in place of the person in charge (needed)' : c.accept || c.back ? 'What is missing (needed to send back)' : 'Note or update'
+                c.submit
+                  ? 'What was done (needed to submit)'
+                  : coo && (c.accept || c.back)
+                    ? 'Why you decide in place of the person in charge (needed)'
+                    : c.check
+                      ? 'What you checked (needed to pass the check), or what is missing (to send back)'
+                      : c.accept
+                        ? 'Why you accept it (needed), or what is missing (to send back)'
+                        : c.back
+                          ? 'What is missing (needed to send back)'
+                          : 'Note or update'
               }
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -311,12 +321,12 @@ export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onCl
                 </button>
               )}
               {c.check && (
-                <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => void step('check', 'Technical check passed.')}>
+                <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => void step('check', 'Technical check passed.')}>
                   Technical check passed
                 </button>
               )}
               {c.accept && (
-                <button className="btn btn-sm btn-primary" disabled={act.busy || (coo && !note.trim())} onClick={() => void step('accept', 'Accepted.')}>
+                <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => void step('accept', 'Accepted.')}>
                   Accept
                 </button>
               )}

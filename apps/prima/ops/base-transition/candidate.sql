@@ -37,7 +37,15 @@ BEGIN
                            'vaults','firearms','arms_movements','armed_jobs','dealer_licences','vault_watches',
                            'vault_events','ammo_stocks','arms_agreements','arms_requests',
                            'insurance_policies','insurance_claims','insurance_guarantees','phone_extensions','phone_calls','site_systems','site_alarms','attendance_followups','evidence_photos','site_visits','evidence_docs','leave_requests','socso_claims','fw_renewals','fwm_tasks',
-                           'hostels','hostel_stays','hostel_bills','utility_charges','staff_claims','trip_approvals','ja_records','staff_pay_runs','fin_status','contracts','branch_settlements','branch_actions','corp_profiles','corp_filings','corp_changes','credit_loans','credit_defaults','pur_suppliers','pur_requests','stock_items','stock_issues','gov_mandates','grc_obligations','osh_assessments','corp_audits','legal_matters','sales_leads','pay_changes']
+                           'hostels','hostel_stays','hostel_bills','utility_charges','staff_claims','trip_approvals','ja_records','staff_pay_runs','fin_status','contracts','branch_settlements','branch_actions','corp_profiles','corp_filings','corp_changes','credit_loans','credit_defaults','pur_suppliers','pur_requests','stock_items','stock_issues','gov_mandates','grc_obligations','osh_assessments','corp_audits','legal_matters','sales_leads','pay_changes',
+                           -- HR Phase 3, slice 3B (Fauzan, 2 Nov 2026): vacancies and statutory HR filings per employer.
+                           'vacancies','hr_filings',
+                           -- HR Phase 3, office OSH (Fauzan, 2 Nov 2026): coordinator, office risk assessments, DOSH reports.
+                           'office_osh',
+                           -- HR Phase 3, slice 3F (Fauzan, 2 Nov 2026): training, appraisals, policy acknowledgements.
+                           'staff_training','staff_appraisals','policy_acks',
+                           -- HR, staff movement (Fauzan, 3 Nov 2026): promotion, transfer to another group company, secondment.
+                           'staff_movements']
   LOOP
     EXECUTE format($f$
       CREATE TABLE IF NOT EXISTS prima.%1$I (
@@ -782,7 +790,7 @@ BEGIN
    company := OLD.data->>'ownerId';
    IF company='unlinked' THEN
     IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb THEN RAISE EXCEPTION 'Unlinked stock needs manual provenance' USING ERRCODE='23514'; END IF;
-   ELSIF company IS NULL OR NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=company))) THEN
+   ELSIF company IS NULL OR NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=company))) THEN
     RAISE EXCEPTION 'Correction company is unavailable' USING ERRCODE='23514';
    END IF;
    allowed := ARRAY['serial','model','location','warrantyTo'];
@@ -803,7 +811,7 @@ BEGIN
   ELSE RAISE EXCEPTION 'This record has no correction path' USING ERRCODE='23514';
   END IF;
   IF TG_TABLE_NAME<>'it_assets' THEN
-   IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb AND NOT EXISTS(SELECT 1 FROM prima.companies co JOIN prima.users u ON u.id=current_setting('app.user_id',true) WHERE co.id=OLD.data#>>'{manual,companyId}' AND u.data->'companyIds' ? co.id) THEN
+   IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb AND NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? (OLD.data#>>'{manual,companyId}') AND (OLD.data#>>'{manual,companyId}' IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=OLD.data#>>'{manual,companyId}'))) THEN
     RAISE EXCEPTION 'Correction company is unavailable' USING ERRCODE='23514'; END IF;
   END IF;
   IF (NEW.data-(allowed||ARRAY['correction'])) IS DISTINCT FROM (OLD.data-(allowed||ARRAY['correction']))
@@ -950,7 +958,7 @@ BEGIN
       (coalesce(m->'checkedById','null'::jsonb) <> 'null'::jsonb OR coalesce(m->'guidanceById','null'::jsonb) <> 'null'::jsonb) THEN
     RAISE EXCEPTION 'Guidance starts unconfirmed' USING ERRCODE='23514'; END IF;
    IF NOT (m ? 'companyId') OR jsonb_typeof(m->'companyId') NOT IN ('null','string') OR
-      (TG_TABLE_NAME IN ('it_assets','it_onboarding') AND NEW.data->>'ownerId' IS DISTINCT FROM coalesce(m->>'companyId','unlinked')) OR (m->'companyId' <> 'null'::jsonb AND NOT EXISTS (SELECT 1 FROM prima.companies c WHERE c.id=m->>'companyId')) THEN
+      (TG_TABLE_NAME IN ('it_assets','it_onboarding') AND NEW.data->>'ownerId' IS DISTINCT FROM coalesce(m->>'companyId','unlinked')) OR (m->'companyId' <> 'null'::jsonb AND m->>'companyId' NOT IN ('pwvsb','merdeka','goodwill','sasateam') AND NOT EXISTS (SELECT 1 FROM prima.companies c WHERE c.id=m->>'companyId')) THEN
     RAISE EXCEPTION 'Manual company association must be a known company or explicitly pending' USING ERRCODE='23514'; END IF;
   END IF;
  END IF;
@@ -1314,6 +1322,116 @@ BEGIN
     $f$, t);
   END LOOP;
 END $$;
+
+-- HR database wall (HR Phase 3, slice 3A part 3, 1 Nov 2026). A staff member's full IC or passport number and full
+-- salary account sit in their own tables, never on the person record the company and other departments read.
+-- staff_ids: HR, the HR Director (Chief of Staff and Deputy) and the CEO ('staff_ids' wall).
+-- staff_accounts: the same people plus Finance ('staff_accounts' wall), for the supplier fraud check and to finish a
+-- verified salary account change. A company manager ('staff_company' wall) reads both for their own company's staff only. The API sets the walls (packages/core/src/access.ts, seesStaffIds/seesStaffAccounts).
+-- Rows written before this wall keep their numbers on the person record until HR next saves it; staging began on a
+-- clean slate with no staff records.
+CREATE TABLE IF NOT EXISTS prima.staff_ids (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+CREATE TABLE IF NOT EXISTS prima.staff_accounts (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+DO $$
+DECLARE
+  w record;
+BEGIN
+  FOR w IN SELECT * FROM (VALUES ('staff_ids', 'staff_ids'), ('staff_accounts', 'staff_accounts')) AS v(tbl, wall)
+  LOOP
+    EXECUTE format($f$
+      ALTER TABLE prima.%1$I ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE prima.%1$I FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS hr_wall ON prima.%1$I;
+      DROP POLICY IF EXISTS company_manager_read ON prima.%1$I;
+      CREATE POLICY hr_wall ON prima.%1$I USING (prima.has_wall(%2$L)) WITH CHECK (prima.has_wall(%2$L));
+      -- A company manager reads (never writes) the numbers of their own company's staff (Fauzan, 1 Nov 2026).
+      CREATE POLICY company_manager_read ON prima.%1$I FOR SELECT
+        USING (prima.has_wall('staff_company') AND data->>'companyId' = ANY (prima.visible_companies()));
+      -- Slice 3G (guard records from JA, Fauzan 2 Nov 2026): the JA feed ('guard_feed') keeps guard rows only, never
+      -- an office staff member's, and only for the companies it is granted.
+      DROP POLICY IF EXISTS guard_feed ON prima.%1$I;
+      CREATE POLICY guard_feed ON prima.%1$I
+        USING (prima.has_wall('guard_feed') AND data->>'guard' = 'true' AND data->>'companyId' = ANY (prima.visible_companies()))
+        WITH CHECK (prima.has_wall('guard_feed') AND data->>'guard' = 'true' AND data->>'companyId' = ANY (prima.visible_companies()));
+      GRANT SELECT, INSERT, UPDATE ON prima.%1$I TO prima_app;
+    $f$, w.tbl, w.wall);
+  END LOOP;
+END $$;
+-- FWM reads foreign workers' passport numbers (slice 3G), never an account and never a Malaysian's IC.
+DROP POLICY IF EXISTS fw_ids_read ON prima.staff_ids;
+CREATE POLICY fw_ids_read ON prima.staff_ids FOR SELECT USING (prima.has_wall('fw_ids') AND data->>'foreign' = 'true' AND data->>'companyId' = ANY (prima.visible_companies()));
+
+-- Registered faces for staff clock in (Fauzan, 2 Nov 2026; free engine on the phone). The staff member reads and writes
+-- their own row (registering, and the server scoring each face check as them); HR and the HR Director ('staff_faces'
+-- wall) read every row and approve. Nobody else, company managers included, reads a face.
+CREATE TABLE IF NOT EXISTS prima.staff_faces (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+ALTER TABLE prima.staff_faces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.staff_faces FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS face_wall ON prima.staff_faces;
+CREATE POLICY face_wall ON prima.staff_faces
+  USING (prima.has_wall('staff_faces') OR data->>'userId' = current_setting('app.user_id', true))
+  WITH CHECK (prima.has_wall('staff_faces') OR (data->>'userId' = current_setting('app.user_id', true) AND data->>'status' = 'pending'));
+GRANT SELECT, INSERT, UPDATE ON prima.staff_faces TO prima_app;
+
+-- Public holidays (HR Phase 3, slice 3C, Fauzan 2 Nov 2026): group-wide, read by everyone who signs in; HR keeps them.
+CREATE TABLE IF NOT EXISTS prima.public_holidays (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+GRANT SELECT, INSERT, UPDATE ON prima.public_holidays TO prima_app;
+-- Staff handbook, code of conduct and IT-use policies (slice 3F): group-wide text every office staff member reads.
+CREATE TABLE IF NOT EXISTS prima.hr_policies (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+GRANT SELECT, INSERT, UPDATE ON prima.hr_policies TO prima_app;
+-- Allowance list (Fauzan, 3 Nov 2026): group-wide names, caps and EPF/SOCSO/PCB/HRD ticks HR keeps. No person's pay here;
+-- each staff member's allowances stay on their record and change only through a verified, consented pay change.
+CREATE TABLE IF NOT EXISTS prima.allowance_types (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+GRANT SELECT, INSERT, UPDATE ON prima.allowance_types TO prima_app;
+-- Staff overtime settings (slice 3D): one group-wide row, off until HR sets it. No figures about any one person's pay.
+CREATE TABLE IF NOT EXISTS prima.staff_overtime (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+GRANT SELECT, INSERT, UPDATE ON prima.staff_overtime TO prima_app;
+-- HR legal points for the directors (review, 2 Nov 2026): only the HR Director and the CEO ('hr_legal' wall).
+CREATE TABLE IF NOT EXISTS prima.hr_legal_checks (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+ALTER TABLE prima.hr_legal_checks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.hr_legal_checks FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS hr_legal_wall ON prima.hr_legal_checks;
+CREATE POLICY hr_legal_wall ON prima.hr_legal_checks USING (prima.has_wall('hr_legal')) WITH CHECK (prima.has_wall('hr_legal'));
+GRANT SELECT, INSERT, UPDATE ON prima.hr_legal_checks TO prima_app;
+-- Staff movement (3 Nov 2026): the receiving or host company head also reads and accepts it (not insert, never delete).
+DROP POLICY IF EXISTS movement_receiving_read ON prima.staff_movements;
+CREATE POLICY movement_receiving_read ON prima.staff_movements FOR SELECT USING (data->>'toCompanyId' = ANY (prima.visible_companies()));
+DROP POLICY IF EXISTS movement_receiving_accept ON prima.staff_movements;
+CREATE POLICY movement_receiving_accept ON prima.staff_movements FOR UPDATE
+  USING (data->>'toCompanyId' = ANY (prima.visible_companies()))
+  WITH CHECK (data->>'toCompanyId' = ANY (prima.visible_companies()));
+-- Movements carry proposed pay and private reasons (review, 3 Nov 2026): on top of the company rows, only those passing
+-- the 'staff_movements' wall (HR, the HR Director, the CEO, the Vice Chairman, company heads) read or write them.
+DROP POLICY IF EXISTS movement_wall ON prima.staff_movements;
+CREATE POLICY movement_wall ON prima.staff_movements AS RESTRICTIVE
+  USING (prima.has_wall('staff_movements')) WITH CHECK (prima.has_wall('staff_movements'));
+-- Login handovers after a transfer: no pay or reasons; IT, HR, the HR Director and the CEO ('login_handover' wall).
+CREATE TABLE IF NOT EXISTS prima.login_handovers (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+ALTER TABLE prima.login_handovers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.login_handovers FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS login_handover_wall ON prima.login_handovers;
+CREATE POLICY login_handover_wall ON prima.login_handovers USING (prima.has_wall('login_handover')) WITH CHECK (prima.has_wall('login_handover'));
+GRANT SELECT, INSERT, UPDATE ON prima.login_handovers TO prima_app;
+-- Flexible hours and days requests (Employment Act s.60P; slice 3C): the same wall as working from home.
+CREATE TABLE IF NOT EXISTS prima.flex_requests (id text PRIMARY KEY, company_id text, data jsonb NOT NULL);
+ALTER TABLE prima.flex_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.flex_requests FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS flex_request_wall ON prima.flex_requests;
+CREATE POLICY flex_request_wall ON prima.flex_requests
+  USING (company_id = ANY (prima.visible_companies())
+         OR (company_id IS NULL AND current_setting('app.group_user', true) = 'on')
+         OR data->>'userId' = current_setting('app.user_id', true));
+GRANT SELECT, INSERT, UPDATE ON prima.flex_requests TO prima_app;
+-- HR cases (slice 3E, Fauzan 2 Nov 2026): each staff member's discipline and complaint file, behind the company
+-- wall; confidential cases (sexual harassment) also need the 'hr_cases' wall (HR, the HR Director, the CEO).
+CREATE TABLE IF NOT EXISTS prima.hr_cases (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id));
+ALTER TABLE prima.hr_cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.hr_cases FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS hr_case_wall ON prima.hr_cases;
+CREATE POLICY hr_case_wall ON prima.hr_cases
+  USING (company_id = ANY (prima.visible_companies()) AND (coalesce(data->>'confidential', 'false') <> 'true' OR prima.has_wall('hr_cases')))
+  WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.has_wall('hr_cases'));
+GRANT SELECT, INSERT, UPDATE ON prima.hr_cases TO prima_app;
 
 -- Offboarding (pre-publication review R3, Fauzan 31 Oct 2026). The API may read accounts and grants but never change
 -- them, except through this one function: it closes an account from a day and ends its company grants the day before.

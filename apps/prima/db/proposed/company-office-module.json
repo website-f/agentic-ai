@@ -1,0 +1,59 @@
+{
+  "status": "PROPOSED, not installed, not in db/release-manifest.json. No install, migration or deploy is authorized by this file; the release owner packages it and Fauzan approves the install (he said yes on 2 Nov 2026, through the release path after the combined review).",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email",
+    "central_admin_walls",
+    "central_admin_panel",
+    "central_admin_delegations",
+    "central_admin_legal_holds"
+  ],
+  "modules": [
+    {
+      "id": "company_office",
+      "version": 1,
+      "path": "db/modules/company-office-v1.sql",
+      "sha256": "9fd6a94554eafa913d05fbbc282408a673cb868a3ca1a11a221df327f5d834e9",
+      "requires": [],
+      "switch": "None separate: the API detects prima.company_desks. Before the install every desk shows 'not shared out' and saving is refused; after the install and a clean GET /api/health/company-office the office works.",
+      "catalog": "apps/api/src/company-office-readiness.ts companyOfficeProblems",
+      "uses": [
+        "prima.visible_companies() (base)",
+        "role prima_app (base)",
+        "prima.audit (base, written by the API)"
+      ],
+      "definer": "None.",
+      "repeatSafe": true,
+      "rollback": "Revoke INSERT, UPDATE on prima.company_desks from prima_app (the office goes read-only and saving fails with a plain message). Keep the table: desk splits are company records and their history is in the audit log."
+    },
+    {
+      "id": "company_run_links",
+      "version": 1,
+      "path": "db/modules/company-run-links-v1.sql",
+      "sha256": "66d5eeb9a710ff82c8911814b37f36b272064ba4593d9fd9807a7552dadd2bf5",
+      "requires": [
+        "company_office"
+      ],
+      "approval": "Fauzan said yes on 3 Nov 2026 07:53Z (decision card: 'Yes, via the release path'). Still installed only through the release path after the combined review, with the release owner's packaging; this file authorizes no install by itself.",
+      "switch": "None separate: the API detects prima.company_run_links. Before the install no company is run by another office (every office works only for its own company) and the setting is refused with a plain message; after the install and a clean runLinks block in GET /api/health/company-office the Chief of Staff (or CEO) can set links.",
+      "catalog": "apps/api/src/company-office-readiness.ts companyRunLinkProblems",
+      "uses": [
+        "prima.visible_companies() (base)",
+        "prima.users (base, read by the Chief of Staff / CEO write policies)",
+        "role prima_app (base)",
+        "prima.audit (base, written by the API)"
+      ],
+      "definer": "None.",
+      "repeatSafe": true,
+      "rollback": "Revoke INSERT, UPDATE on prima.company_run_links from prima_app (links freeze; the setting fails with a plain message). To end every arrangement at once, the Chief of Staff sets each company back to its own office, or the release owner revokes SELECT so the API reads no links. Keep the table: the history is in the audit log.",
+      "upgrade": "Repeat-safe and safe over the earlier review draft (751a045): its policy names run_links_ceo_insert/update are dropped. No prior install is known."
+    }
+  ]
+}

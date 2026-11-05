@@ -3,7 +3,7 @@
 const crypto=require('node:crypto');const fs=require('node:fs');const path=require('node:path');
 const OLD='678910162fcf0d878b128df61d291f4742c836b4846c36519e8d9c934598071b';
 const HOST='psql-prima-staging-sea.postgres.database.azure.com';
-const NEXT='4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe';
+const NEXT='d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283';
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const md5=s=>crypto.createHash('md5').update(s).digest('hex');
 class Refusal extends Error{constructor(code){super(code);this.code=code;}}
@@ -49,7 +49,7 @@ async function catalog(c,model,owner){
 }
 
 
-function verifyReadinessBytes(){const manifest=fs.readFileSync(path.join(__dirname,'readiness-manifest.json'));need(sha(manifest)==='294f46e3a469639265e9791d7dcb03ef9d06913dd72ba539b2edabc4565287cb','READINESS_ARTIFACT_MISMATCH');for(const f of JSON.parse(manifest).files){const p=path.join(__dirname,f.path);need(!fs.lstatSync(p).isSymbolicLink()&&sha(fs.readFileSync(p))===f.sha256,'READINESS_ARTIFACT_MISMATCH');}}
+function verifyReadinessBytes(){const manifest=fs.readFileSync(path.join(__dirname,'readiness-manifest.json'));need(sha(manifest)==='48373f43239f8bc7f5ddb5c1045d98c7cbd627102157f9d2b2f7fc36541fc493','READINESS_ARTIFACT_MISMATCH');for(const f of JSON.parse(manifest).files){const p=path.join(__dirname,f.path);need(!fs.lstatSync(p).isSymbolicLink()&&sha(fs.readFileSync(p))===f.sha256,'READINESS_ARTIFACT_MISMATCH');}}
 const indexNorm=s=>String(s??'').replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|::text|[\s()]/g,t=>t.startsWith("'")||t.startsWith('"')?t:'');
 async function verifyOldStructures(c,model,owner){
  const names=sorted(model.tables.keys());

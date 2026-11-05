@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   isGroupLeader,
   type StaffPayLine,
@@ -12,6 +12,8 @@ import {
 } from "../api";
 import { useApp } from "../App";
 import { PayChangesPanel } from "./PayChanges";
+import { StatTablesView } from "./StatTables";
+import { AdvancesOverdue } from "./FinanceCash";
 import {
   Chip,
   Drawer,
@@ -27,15 +29,15 @@ import {
 
 /**
  * Staff payroll (Fauzan, 27 Oct 2026). Guards and officers are paid from the JA Group app; staff are paid here. HR
- * prepares each employer's month, the Chief of Staff approves, the Vice Chairman consents, then Finance pays through the
- * bank and posts to SQL Account. Prima drafts the files; it never pays or files anything itself.
+ * prepares each employer's month, the Chief of Staff approves, then the COO approves (Fauzan, 1 Nov 2026), then Finance
+ * pays through the bank and posts to SQL Account. Each approval needs a comment. Prima drafts the files; it never pays or files anything itself.
  */
 
 const STAGE: Record<StaffPayStage, [Tone, string]> = {
   draft: ["neutral", "Draft with HR"],
   submitted: ["warn", "With the Chief of Staff"],
-  approved: ["warn", "With the Vice Chairman"],
-  consented: ["info", "With Finance to pay"],
+  approved: ["warn", "With the COO"],
+  coo_approved: ["info", "With Finance to pay"],
   paid: ["ok", "Paid"],
 };
 const FILES: [StaffPayFile, string][] = [
@@ -44,6 +46,7 @@ const FILES: [StaffPayFile, string][] = [
   ["epf", "EPF list"],
   ["socso", "SOCSO and EIS list"],
   ["pcb", "PCB list"],
+  ["zakat", "Zakat list by body"],
 ];
 const rm = (n: number) =>
   `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -62,7 +65,7 @@ export function StaffPayView() {
     me.user.department === "hr" ||
     isGroupLeader(me.user) ||
     me.user.department === "finance";
-  const [tab, setTab] = useState<"runs" | "mine" | null>(null);
+  const [tab, setTab] = useState<"runs" | "mine" | "tables" | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="staff payroll" />;
@@ -73,7 +76,7 @@ export function StaffPayView() {
         <h1>Staff payroll</h1>
         <p className="muted">
           For staff only; guards and officers are paid from the JA Group app. HR
-          prepares, the Chief of Staff approves, the Vice Chairman consents, and
+          prepares, the Chief of Staff approves, then the COO approves, and
           Finance pays through the bank and posts to SQL Account. Wages are due
           by the {data.rule.payByDay}th of the next month.
         </p>
@@ -94,11 +97,21 @@ export function StaffPayView() {
           >
             My payslips
           </button>
+          <button
+            role="tab"
+            aria-selected={current === "tables"}
+            onClick={() => setTab("tables")}
+          >
+            EPF and SOCSO tables
+          </button>
         </div>
       )}
       {current === "runs" && seesPayChanges && <PayChangesPanel />}
+      {current === "runs" && seesPayChanges && <AdvancesOverdue />}
       {current === "runs" ? (
         <Runs data={data} onOpen={setOpen} />
+      ) : current === "tables" ? (
+        <StatTablesView />
       ) : (
         <Mine data={data} />
       )}
@@ -237,6 +250,25 @@ function Runs({
   );
 }
 
+const REMIT: Record<
+  | "not_listed"
+  | "no_bill"
+  | "to_prepare"
+  | "prepared"
+  | "approved"
+  | "paid"
+  | "late",
+  [Tone, string]
+> = {
+  not_listed: ["neutral", "Not on Finance's list"],
+  no_bill: ["neutral", "Waiting for the file"],
+  to_prepare: ["info", "Finance to prepare"],
+  prepared: ["info", "Being approved"],
+  approved: ["warn", "Approved, to pay"],
+  paid: ["ok", "Paid"],
+  late: ["crit", "Late"],
+};
+
 function RunDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
   const { data, error } = useLoad(() => api.staffPayRun(runId), [runId]);
   const [slip, setSlip] = useState<StaffPayLine | null>(null);
@@ -286,6 +318,9 @@ function RunBody({
   const [note, setNote] = useState("");
   const [bankRef, setBankRef] = useState("");
   const [pcbChecked, setPcbChecked] = useState(false);
+  // HR's allowance list, read once for the one-off pickers on a draft month.
+  const alw = useLoad(() => (can.prepare ? api.allowanceTypes().catch(() => null) : Promise.resolve(null)), [can.prepare]);
+  const oneOffTypes = (alw.data?.types ?? []).filter((t) => t.active && t.frequency !== "monthly");
   const download = async (kind: StaffPayFile) => {
     const f = await act.run(
       () => api.staffPayExport(run.id, kind),
@@ -303,7 +338,7 @@ function RunBody({
     ["Prepared by HR", run.prepared],
     ["Submitted by HR", run.submitted],
     ["Approved by the Chief of Staff", run.approved],
-    ["Consented by the Vice Chairman", run.consented],
+    ["Approved by the COO", run.cooApproved],
     ["Paid by Finance", run.paid],
   ];
   return (
@@ -323,12 +358,10 @@ function RunBody({
           note="Finance checks in LHDN e-PCB"
         />
       </div>
-      {data.ownLine && (data.role === "cos" || data.role === "vc") && (
+      {data.ownLine && (data.role === "cos" || data.role === "coo") && (
         <div className="notice" data-tone="info">
           Your own salary is in this month. The{" "}
-          {data.role === "cos"
-            ? "Vice Chairman's consent"
-            : "Chief of Staff's approval"}{" "}
+          {data.role === "cos" ? "COO's approval" : "Chief of Staff's approval"}{" "}
           is the second check on it.
         </div>
       )}
@@ -361,9 +394,19 @@ function RunBody({
         </div>
       </section>
       <ErrorNotice error={act.error} />
+      {data.blockers.length > 0 && (
+        <section className="panel" aria-label="Before submitting">
+          <h2>Before this month can be submitted</h2>
+          {data.blockers.map((b) => (
+            <div key={b} className="small" style={{ color: "var(--warn, #b45309)" }}>
+              {b}
+            </div>
+          ))}
+        </section>
+      )}
       {(can.submit ||
         can.approve ||
-        can.consent ||
+        can.cooApprove ||
         can.pay ||
         can.return ||
         can.prepare) && (
@@ -391,11 +434,15 @@ function RunBody({
                 </label>
               </>
             )}
-            {can.return && (
+            {(can.return || can.approve || can.cooApprove) && (
               <input
                 className="input"
-                aria-label="Note"
-                placeholder="What needs to change (to return)"
+                aria-label="Comment"
+                placeholder={
+                  can.approve || can.cooApprove
+                    ? "Comment (needed to approve; a short one is fine), or what needs to change (to return)"
+                    : "What needs to change (to return)"
+                }
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -432,29 +479,29 @@ function RunBody({
               {can.approve && (
                 <button
                   className="btn btn-primary btn-sm"
-                  disabled={act.busy}
+                  disabled={act.busy || !note.trim()}
                   onClick={() =>
                     act.run(
-                      () => api.staffPayStep(run.id, "approve", {}),
-                      "Approved, sent to the Vice Chairman.",
+                      () => api.staffPayStep(run.id, "approve", { note }),
+                      "Approved, sent to the COO.",
                     )
                   }
                 >
                   Approve
                 </button>
               )}
-              {can.consent && (
+              {can.cooApprove && (
                 <button
                   className="btn btn-primary btn-sm"
-                  disabled={act.busy}
+                  disabled={act.busy || !note.trim()}
                   onClick={() =>
                     act.run(
-                      () => api.staffPayStep(run.id, "consent", {}),
-                      "Consented, Finance can pay.",
+                      () => api.staffPayStep(run.id, "coo_approve", { note }),
+                      "Approved, Finance can pay.",
                     )
                   }
                 >
-                  Consent
+                  Approve as COO
                 </button>
               )}
               {can.pay && (
@@ -493,6 +540,59 @@ function RunBody({
           </div>
         </section>
       )}
+      {data.directorChecks.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3>For directors to verify</h3>
+            <Chip tone="warn">{`${data.directorChecks.length} unresolved`}</Chip>
+          </div>
+          <p className="muted small" style={{ padding: "0 12px" }}>
+            Shown only to directors. Payroll carries on as normal; these stay
+            unresolved until the published table is loaded and checked, or
+            the PCB is entered from LHDN's e-PCB.
+          </p>
+          <div className="list">
+            {data.directorChecks.map((x) => (
+              <div key={x.key} className="list-item" style={{ display: "block" }}>
+                <div className="row" style={{ justifyContent: "space-between", gap: 6 }}>
+                  <span>{x.text}</span>
+                  <Chip tone="warn">{x.status}</Chip>
+                </div>
+                <div className="muted small">
+                  Source: {x.source} · Affects: {x.affected} · Responsible:{" "}
+                  {x.responsible}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {data.remittances.length > 0 &&
+        ["approved", "consented", "paid"].includes(data.run.stage) && (
+          <section className="panel">
+            <div className="panel-head">
+              <h3>Contributions and zakat, paid by Finance</h3>
+            </div>
+            <p className="muted small" style={{ padding: "0 12px" }}>
+              What this payroll owes EPF, PERKESO, LHDN, HRD Corp and the zakat
+              bodies, due the month after. Shown from Finance's records; nothing
+              to do here.
+            </p>
+            <div className="list">
+              {data.remittances.map((x) => (
+                <div key={x.body} className="list-item">
+                  <span>
+                    {x.body} · due {dateLabel(x.dueOn)}
+                    {x.amount != null && ` · RM${x.amount.toFixed(2)}`}
+                    {x.paidOn && ` · paid ${dateLabel(x.paidOn)}`}
+                    {x.seenInBank && " · seen in the bank"}
+                  </span>
+                  <Chip tone={REMIT[x.state][0]}>{REMIT[x.state][1]}</Chip>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       {can.export && (
         <section className="panel">
           <div className="panel-head">
@@ -580,6 +680,8 @@ function RunBody({
                 </div>
               ))}
               {can.prepare && <PcbEdit runId={run.id} line={l} />}
+              {can.prepare && <OneOffEdit runId={run.id} line={l} types={oneOffTypes} />}
+              {can.prepare && l.partMonth && <PartPayEdit runId={run.id} line={l} />}
             </div>
           ))}
         </div>
@@ -624,19 +726,132 @@ function PcbEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
   );
 }
 
+/**
+ * Part-month pay (Arisha main review, 3 Nov 2026): no proration rule is set, so HR enters the basic and the fixed
+ * allowances for the days worked, with how it was worked out. The month cannot be submitted until every such line has it.
+ */
+function PartPayEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
+  const act = useAction();
+  const [basic, setBasic] = useState(line.partPay ? String(line.partPay.basic) : "");
+  const [allow, setAllow] = useState(line.partPay ? String(line.partPay.allowances) : "");
+  const [note, setNote] = useState(line.partPay?.note ?? "");
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      <span className="small">
+        Part month {dateLabel(line.partMonth!.from)} to {dateLabel(line.partMonth!.to)}:
+      </span>
+      <input className="input" style={{ maxWidth: 130 }} inputMode="decimal" aria-label={`Part-month basic for ${line.name}`} placeholder="Basic, RM" value={basic} onChange={(e) => setBasic(e.target.value)} />
+      <input className="input" style={{ maxWidth: 150 }} inputMode="decimal" aria-label={`Part-month allowances for ${line.name}`} placeholder="Fixed allowances, RM" value={allow} onChange={(e) => setAllow(e.target.value)} />
+      <input className="input" style={{ maxWidth: 260 }} aria-label={`How the part-month pay was worked out for ${line.name}`} placeholder="How it was worked out" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button
+        className="btn btn-sm"
+        disabled={act.busy || basic.trim() === "" || note.trim().length < 5}
+        onClick={() =>
+          act.run(
+            () => api.setStaffPayLine(runId, line.personId, { partPay: { basic: Number(basic), allowances: allow.trim() === "" ? 0 : Number(allow), note } }),
+            "Part-month pay saved.",
+          )
+        }
+      >
+        Save part-month pay
+      </button>
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * One-off allowances in the month come from HR's allowance list (Fauzan, 3 Nov 2026), so each keeps its EPF, SOCSO,
+ * PCB and HRD ticks. A one-off on HR's own line is flagged for the Chief of Staff and the COO.
+ */
+function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: StaffPayLine; types: { id: string; name: string }[] }) {
+  const act = useAction();
+  const [typeId, setTypeId] = useState("");
+  const [amount, setAmount] = useState("");
+  const extra = line.allowanceLines.filter((a) => !a.fixed);
+  const save = (next: { label: string; amount: number; typeId?: string | null }[], msg: string) =>
+    act.run(() => api.setStaffPayLine(runId, line.personId, { extra: next }), msg);
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      {extra.map((a, i) => (
+        <span key={i} className="small">
+          One-off: {a.label} {rm(a.amount)}{" "}
+          <button className="btn btn-sm btn-ghost" disabled={act.busy} onClick={() => save(extra.filter((_, k) => k !== i), "One-off removed.")}>
+            Remove
+          </button>
+        </span>
+      ))}
+      {oneOff.length > 0 && (
+        <>
+          <select className="input" style={{ maxWidth: 220 }} aria-label={`One-off allowance for ${line.name}`} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+            <option value="">One-off allowance</option>
+            {oneOff.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="input"
+            style={{ maxWidth: 120 }}
+            inputMode="decimal"
+            aria-label={`One-off amount for ${line.name}`}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || !typeId || !(Number(amount) > 0)}
+            onClick={async () => {
+              const r = await save([...extra, { label: "", amount: Number(amount), typeId }], "One-off added.");
+              if (r) {
+                setTypeId("");
+                setAmount("");
+              }
+            }}
+          >
+            Add one-off
+          </button>
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * Fauzan, 2 Nov 2026 (slice 3F): payslips are delivered in the app and staff download them. The file is the payslip
+ * as shown, as a page the staff member can keep or print to PDF. Nothing leaves the phone.
+ */
+function downloadSlip(node: HTMLElement | null, period: string) {
+  if (!node) return;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${period}</title><style>body{font-family:system-ui,sans-serif;max-width:640px;margin:24px auto;padding:0 16px;color:#111}.list-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ddd}.muted{color:#555}h3{margin:0 0 4px}</style></head><body>${node.innerHTML}</body></html>`;
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payslip-${period}.html`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function Mine({ data }: { data: StaffPayBoard }) {
   const [open, setOpen] = useState<number | null>(null);
+  const slipRef = useRef<HTMLDivElement>(null);
   if (!data.mine.length)
     return (
-      <section className="panel">
-        <div className="empty">
-          No payslips yet. They appear here once Finance has paid the month.
-        </div>
-      </section>
+      <>
+        <MyZakat />
+        <section className="panel">
+          <div className="empty">
+            No payslips yet. They appear here once Finance has paid the month.
+          </div>
+        </section>
+      </>
     );
   const slip = open == null ? null : data.mine[open];
   return (
     <>
+      <MyZakat />
       <section className="panel">
         <div className="list">
           {data.mine.map((m, i) => (
@@ -661,11 +876,20 @@ function Mine({ data }: { data: StaffPayBoard }) {
           sub={slip.companyName}
           onClose={() => setOpen(null)}
         >
-          <Payslip
-            line={slip.line}
-            period={slip.period}
-            companyName={slip.companyName}
-          />
+          <div ref={slipRef}>
+            <Payslip
+              line={slip.line}
+              period={slip.period}
+              companyName={slip.companyName}
+            />
+          </div>
+          <button
+            className="btn btn-sm"
+            style={{ marginTop: 8 }}
+            onClick={() => downloadSlip(slipRef.current, slip.period)}
+          >
+            Download payslip
+          </button>
         </Drawer>
       )}
     </>
@@ -724,10 +948,16 @@ function Payslip({
         )}
         {row("EIS (employee)", l.eisEe, true)}
         {row(
-          l.pcbSource === "estimate" ? "PCB (estimate)" : "PCB",
+          `${l.pcbSource === "estimate" ? "PCB (estimate)" : "PCB"}${(l.zakat ?? 0) > 0 ? `, after zakat rebate of ${rm(Math.min(l.zakat ?? 0, l.pcbBeforeZakat ?? 0))}` : ""}`,
           l.pcb,
           true,
         )}
+        {(l.zakat ?? 0) > 0 &&
+          row(
+            `Zakat to ${l.zakatBody} (${l.zakatPercent}%, your choice)`,
+            l.zakat ?? 0,
+            true,
+          )}
         {l.claims > 0 && row("Claims paid back", l.claims)}
         <div className="list-item" style={{ fontWeight: 700 }}>
           <span>Net pay</span>
@@ -809,5 +1039,111 @@ function SocsoColumns({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** The staff member's own zakat deduction (Fauzan, 2 Nov 2026): which body and what percentage of gross pay. */
+function MyZakat() {
+  const { data, error, reload } = useLoad(
+    () => api.myZakat().catch(() => null),
+    [],
+  );
+  const act = useAction();
+  const [body, setBody] = useState<string | null>(null);
+  const [pct, setPct] = useState<string | null>(null);
+  if (error || !data) return null;
+  const b = body ?? data.choice?.body ?? "";
+  const p = pct ?? String(data.choice?.percent ?? data.usualPercent);
+  const est =
+    data.basicPay && b ? (data.basicPay * Number(p || 0)) / 100 : null;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>My zakat deduction</h3>
+        <span className="muted small">
+          {data.choice
+            ? `${data.choice.percent}% to ${data.choice.body}`
+            : "None"}
+        </span>
+      </div>
+      <p className="muted small" style={{ padding: "0 12px" }}>
+        Your choice: the zakat body and the percentage of your gross pay. It is
+        deducted from your salary, paid by the company to the body, and your PCB
+        goes down by the same amount. It applies from the next payroll HR
+        prepares. Only you can change or stop it.
+      </p>
+      <div style={{ padding: "0 12px 12px" }}>
+        <label className="field">
+          <span>Zakat body</span>
+          <select
+            className="select"
+            value={b}
+            onChange={(e) => setBody(e.target.value)}
+          >
+            <option value="">No zakat deduction</option>
+            {data.bodies.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        {b && (
+          <label className="field">
+            <span>
+              Percentage of gross pay ({data.minPercent}% to {data.maxPercent}%)
+            </span>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={p}
+              onChange={(e) => setPct(e.target.value)}
+            />
+          </label>
+        )}
+        {est != null && (
+          <p className="muted small">
+            About {rm(Math.round(est * 100) / 100)} a month on your basic pay.
+          </p>
+        )}
+        <button
+          className="btn btn-primary"
+          disabled={act.busy}
+          onClick={async () => {
+            const ok = await act.run(
+              () =>
+                api.setMyZakat(
+                  b ? { body: b, percent: Number(p) } : { body: null },
+                ),
+              b
+                ? "Saved. It applies from the next payroll."
+                : "Zakat deduction stopped from the next payroll.",
+            );
+            if (ok) {
+              setBody(null);
+              setPct(null);
+              reload();
+            }
+          }}
+        >
+          {b
+            ? "Save my choice"
+            : data.choice
+              ? "Stop my zakat deduction"
+              : "Save"}
+        </button>
+        <ErrorNotice error={act.error} />
+        {data.history.length > 0 && (
+          <div className="muted small" style={{ paddingTop: 8 }}>
+            Changes:{" "}
+            {data.history
+              .slice(0, 4)
+              .map(
+                (h) =>
+                  `${dateLabel(h.at.slice(0, 10))} ${h.body ? `${h.percent}% ${h.body}` : "stopped"}`,
+              )
+              .join(" · ")}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

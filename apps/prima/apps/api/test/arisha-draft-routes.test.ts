@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { BadRequestException } from '@nestjs/common';
 import { AppController } from '../src/controllers';
 import type { Db } from '../src/db';
 import type { PrimaService, User } from '@prima/core';
@@ -70,4 +71,15 @@ it('submission records unverified preparation and rejects extra origin claims be
     assert.throws(()=>controller.arishaSubmitDraft('authenticated',{payload:{type:'record'},companyId:null,[key]:'arisha'} as never),/Unsupported/);
   }
   assert.equal(calls,2);
+
+});
+
+describe('Arisha form kind input', () => {
+  it('answers a missing or unknown form kind as an input error (400), not a server error', async () => {
+    const svc = { arishaDrafts: { form: async () => assert.fail('the service must not be reached') } } as unknown as PrimaService;
+    const db = { asUser: async (_uid: string, fn: (s: PrimaService, u: User) => Promise<unknown>) => fn(svc, { id: 'u-coo' } as User) } as unknown as Db;
+    const controller = new AppController(db);
+    for (const kind of [undefined as unknown as string, '', 'not-a-form'])
+      await assert.rejects(controller.arishaDraftForm('authenticated-coo', kind), (e: unknown) => e instanceof BadRequestException && e.getStatus() === 400);
+  });
 });

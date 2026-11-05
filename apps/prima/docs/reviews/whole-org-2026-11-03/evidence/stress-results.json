@@ -1,0 +1,9335 @@
+{
+ "scale": {
+  "baseGenMs": 306,
+  "scaleMs": 653,
+  "companies": 38,
+  "people": 8337,
+  "guardsApprox": 7930,
+  "sites": 1855,
+  "shifts": 78131,
+  "attendance": 37999,
+  "totalRows": 233720
+ },
+ "reads": [
+  {
+   "role": "CEO",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "CEO",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "CEO",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "CEO",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "CEO",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "CEO",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "CEO",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 717
+  },
+  {
+   "role": "CEO",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for a guard or officer, about their own record."
+  },
+  {
+   "role": "CEO",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (no staff record). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CEO",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "CEO",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CEO",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "CEO",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 36
+  },
+  {
+   "role": "CEO",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "CEO",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "CEO",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "CEO",
+   "path": "myWork",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (guards see their duties in the JA app). Ask the company or check your"
+  },
+  {
+   "role": "CEO",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 162
+  },
+  {
+   "role": "CEO",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "CEO",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 88
+  },
+  {
+   "role": "CEO",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "CEO",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "CEO",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 30
+  },
+  {
+   "role": "CEO",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "CEO",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 25
+  },
+  {
+   "role": "CEO",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "CEO",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CEO",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 25
+  },
+  {
+   "role": "CEO",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 222
+  },
+  {
+   "role": "CEO",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "CEO",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "CEO",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "CEO",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "CEO",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "CEO",
+   "path": "contracts",
+   "label": "person",
+   "ms": 31
+  },
+  {
+   "role": "CEO",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "CEO",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 30
+  },
+  {
+   "role": "CEO",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "CEO",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 11
+  },
+  {
+   "role": "CEO",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 15
+  },
+  {
+   "role": "CEO",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 10
+  },
+  {
+   "role": "CEO",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (only office staff paid through Prima choose a zakat deduction). Ask t"
+  },
+  {
+   "role": "CEO",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0,
+   "refused": "Staff claims are for office and management staff. Guards and officers have their own rules."
+  },
+  {
+   "role": "CEO",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "CEO",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "CEO",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 3090
+  },
+  {
+   "role": "CEO",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "CEO",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "compliance",
+   "label": "person",
+   "ms": 718
+  },
+  {
+   "role": "CEO",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 47
+  },
+  {
+   "role": "CEO",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "insurance",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "CEO",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 142
+  },
+  {
+   "role": "CEO",
+   "path": "cms",
+   "label": "person",
+   "ms": 872
+  },
+  {
+   "role": "CEO",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CEO",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 54
+  },
+  {
+   "role": "CEO",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "CEO",
+   "path": "meetings",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "reports",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "CEO",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "CEO",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 56
+  },
+  {
+   "role": "CEO",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 16
+  },
+  {
+   "role": "CEO",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "CEO",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "CEO",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "CEO",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 630
+  },
+  {
+   "role": "CEO",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 587
+  },
+  {
+   "role": "CEO",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 2
+  },
+  {
+   "role": "CEO",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1434
+  },
+  {
+   "role": "CEO",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1408
+  },
+  {
+   "role": "CEO",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 32
+  },
+  {
+   "role": "CEO",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 28
+  },
+  {
+   "role": "CEO",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 20
+  },
+  {
+   "role": "CEO",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 14
+  },
+  {
+   "role": "COO",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "COO",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "COO",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "COO",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "COO",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "COO",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "COO",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 737
+  },
+  {
+   "role": "COO",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 40
+  },
+  {
+   "role": "COO",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "COO",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 36
+  },
+  {
+   "role": "COO",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "COO",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "COO",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "COO",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 13
+  },
+  {
+   "role": "COO",
+   "path": "myWork",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "COO",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 106
+  },
+  {
+   "role": "COO",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "COO",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 91
+  },
+  {
+   "role": "COO",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "COO",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "COO",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 23
+  },
+  {
+   "role": "COO",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "COO",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "COO",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "COO",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "COO",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 25
+  },
+  {
+   "role": "COO",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 174
+  },
+  {
+   "role": "COO",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "COO",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "COO",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "COO",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "COO",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "COO",
+   "path": "contracts",
+   "label": "person",
+   "ms": 31
+  },
+  {
+   "role": "COO",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "COO",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "COO",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "COO",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 11
+  },
+  {
+   "role": "COO",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 3020
+  },
+  {
+   "role": "COO",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "COO",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "compliance",
+   "label": "person",
+   "ms": 733
+  },
+  {
+   "role": "COO",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 43
+  },
+  {
+   "role": "COO",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "COO",
+   "path": "insurance",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "COO",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 136
+  },
+  {
+   "role": "COO",
+   "path": "cms",
+   "label": "person",
+   "ms": 814
+  },
+  {
+   "role": "COO",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "COO",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 43
+  },
+  {
+   "role": "COO",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "COO",
+   "path": "meetings",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "COO",
+   "path": "reports",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "COO",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "COO",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 57
+  },
+  {
+   "role": "COO",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 16
+  },
+  {
+   "role": "COO",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 16
+  },
+  {
+   "role": "COO",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "COO",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "COO",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "COO",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "COO",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "COO",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 600
+  },
+  {
+   "role": "COO",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 564
+  },
+  {
+   "role": "COO",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "COO",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1126
+  },
+  {
+   "role": "COO",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1113
+  },
+  {
+   "role": "COO",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 31
+  },
+  {
+   "role": "COO",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 29
+  },
+  {
+   "role": "COO",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 19
+  },
+  {
+   "role": "COO",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "FD",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "FD",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "FD",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "FD",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "FD",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "FD",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "FD",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 728
+  },
+  {
+   "role": "FD",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 39
+  },
+  {
+   "role": "FD",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "FD",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 36
+  },
+  {
+   "role": "FD",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "FD",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "FD",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "FD",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "FD",
+   "path": "myWork",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "FD",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 22
+  },
+  {
+   "role": "FD",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 16
+  },
+  {
+   "role": "FD",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 78
+  },
+  {
+   "role": "FD",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "FD",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "FD",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "FD",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "FD",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 20
+  },
+  {
+   "role": "FD",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "FD",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "FD",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 23
+  },
+  {
+   "role": "FD",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 161
+  },
+  {
+   "role": "FD",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "FD",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "FD",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "FD",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "FD",
+   "path": "contracts",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "FD",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "FD",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 23
+  },
+  {
+   "role": "FD",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "FD",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "FD",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 15
+  },
+  {
+   "role": "FD",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "FD",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "FD",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "FD",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 2748
+  },
+  {
+   "role": "FD",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "FD",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "compliance",
+   "label": "person",
+   "ms": 703
+  },
+  {
+   "role": "FD",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 46
+  },
+  {
+   "role": "FD",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "insurance",
+   "label": "person",
+   "ms": 16
+  },
+  {
+   "role": "FD",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 129
+  },
+  {
+   "role": "FD",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "FD",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 64
+  },
+  {
+   "role": "FD",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 57
+  },
+  {
+   "role": "FD",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 16
+  },
+  {
+   "role": "FD",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "FD",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "FD",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 580
+  },
+  {
+   "role": "FD",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 534
+  },
+  {
+   "role": "FD",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "FD",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1086
+  },
+  {
+   "role": "FD",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1079
+  },
+  {
+   "role": "FD",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 30
+  },
+  {
+   "role": "FD",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 27
+  },
+  {
+   "role": "FD",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "FD",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "CoS",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "CoS",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "CoS",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "CoS",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "CoS",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "CoS",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 686
+  },
+  {
+   "role": "CoS",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 39
+  },
+  {
+   "role": "CoS",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 28
+  },
+  {
+   "role": "CoS",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "CoS",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 11
+  },
+  {
+   "role": "CoS",
+   "path": "myWork",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 21
+  },
+  {
+   "role": "CoS",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 14
+  },
+  {
+   "role": "CoS",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 79
+  },
+  {
+   "role": "CoS",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "CoS",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 20
+  },
+  {
+   "role": "CoS",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 21
+  },
+  {
+   "role": "CoS",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 26
+  },
+  {
+   "role": "CoS",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 161
+  },
+  {
+   "role": "CoS",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CoS",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CoS",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "CoS",
+   "path": "contracts",
+   "label": "person",
+   "ms": 26
+  },
+  {
+   "role": "CoS",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "CoS",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "CoS",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CoS",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "CoS",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 2914
+  },
+  {
+   "role": "CoS",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "CoS",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "compliance",
+   "label": "person",
+   "ms": 715
+  },
+  {
+   "role": "CoS",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 44
+  },
+  {
+   "role": "CoS",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "CoS",
+   "path": "insurance",
+   "label": "person",
+   "ms": 18
+  },
+  {
+   "role": "CoS",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 130
+  },
+  {
+   "role": "CoS",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "CoS",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "CoS",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 56
+  },
+  {
+   "role": "CoS",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 16
+  },
+  {
+   "role": "CoS",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "CoS",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CoS",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CoS",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CoS",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CoS",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "CoS",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 594
+  },
+  {
+   "role": "CoS",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 593
+  },
+  {
+   "role": "CoS",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "CoS",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1141
+  },
+  {
+   "role": "CoS",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1187
+  },
+  {
+   "role": "CoS",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 31
+  },
+  {
+   "role": "CoS",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 28
+  },
+  {
+   "role": "CoS",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CoS",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "DCoS",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 704
+  },
+  {
+   "role": "DCoS",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 38
+  },
+  {
+   "role": "DCoS",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 29
+  },
+  {
+   "role": "DCoS",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "DCoS",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "DCoS",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 13
+  },
+  {
+   "role": "DCoS",
+   "path": "myWork",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 79
+  },
+  {
+   "role": "DCoS",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "DCoS",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "DCoS",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "DCoS",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 22
+  },
+  {
+   "role": "DCoS",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "DCoS",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "DCoS",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 170
+  },
+  {
+   "role": "DCoS",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "DCoS",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "DCoS",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "DCoS",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "DCoS",
+   "path": "contracts",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "DCoS",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "DCoS",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "DCoS",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "DCoS",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "DCoS",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 2903
+  },
+  {
+   "role": "DCoS",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "DCoS",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "compliance",
+   "label": "person",
+   "ms": 698
+  },
+  {
+   "role": "DCoS",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 42
+  },
+  {
+   "role": "DCoS",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "DCoS",
+   "path": "insurance",
+   "label": "person",
+   "ms": 28
+  },
+  {
+   "role": "DCoS",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 129
+  },
+  {
+   "role": "DCoS",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "DCoS",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 64
+  },
+  {
+   "role": "DCoS",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 56
+  },
+  {
+   "role": "DCoS",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 16
+  },
+  {
+   "role": "DCoS",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "DCoS",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "DCoS",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "DCoS",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "DCoS",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "DCoS",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "DCoS",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 594
+  },
+  {
+   "role": "DCoS",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 558
+  },
+  {
+   "role": "DCoS",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "DCoS",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1094
+  },
+  {
+   "role": "DCoS",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1090
+  },
+  {
+   "role": "DCoS",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 30
+  },
+  {
+   "role": "DCoS",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 27
+  },
+  {
+   "role": "DCoS",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "DCoS",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "Chairman",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 694
+  },
+  {
+   "role": "Chairman",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for a guard or officer, about their own record."
+  },
+  {
+   "role": "Chairman",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (no staff record). Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "Chairman",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "Chairman",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "Chairman",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "Chairman",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "Chairman",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "Chairman",
+   "path": "myWork",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (guards see their duties in the JA app). Ask the company or check your"
+  },
+  {
+   "role": "Chairman",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 80
+  },
+  {
+   "role": "Chairman",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "Chairman",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "Chairman",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 20
+  },
+  {
+   "role": "Chairman",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "Chairman",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 21
+  },
+  {
+   "role": "Chairman",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "Chairman",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 23
+  },
+  {
+   "role": "Chairman",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 161
+  },
+  {
+   "role": "Chairman",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "Chairman",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "Chairman",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "Chairman",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "Chairman",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "Chairman",
+   "path": "contracts",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "Chairman",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "Chairman",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "Chairman",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "Chairman",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "Chairman",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (only office staff paid through Prima choose a zakat deduction). Ask t"
+  },
+  {
+   "role": "Chairman",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0,
+   "refused": "Staff claims are for office and management staff. Guards and officers have their own rules."
+  },
+  {
+   "role": "Chairman",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "Chairman",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "Chairman",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 2973
+  },
+  {
+   "role": "Chairman",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "Chairman",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "compliance",
+   "label": "person",
+   "ms": 729
+  },
+  {
+   "role": "Chairman",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 45
+  },
+  {
+   "role": "Chairman",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "Chairman",
+   "path": "insurance",
+   "label": "person",
+   "ms": 16
+  },
+  {
+   "role": "Chairman",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 131
+  },
+  {
+   "role": "Chairman",
+   "path": "cms",
+   "label": "person",
+   "ms": 789
+  },
+  {
+   "role": "Chairman",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "Chairman",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 42
+  },
+  {
+   "role": "Chairman",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "Chairman",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "Chairman",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 64
+  },
+  {
+   "role": "Chairman",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 57
+  },
+  {
+   "role": "Chairman",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 15
+  },
+  {
+   "role": "Chairman",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 16
+  },
+  {
+   "role": "Chairman",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "Chairman",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "Chairman",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "Chairman",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "Chairman",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "Chairman",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 616
+  },
+  {
+   "role": "Chairman",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 619
+  },
+  {
+   "role": "Chairman",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "Chairman",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1103
+  },
+  {
+   "role": "Chairman",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1181
+  },
+  {
+   "role": "Chairman",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 32
+  },
+  {
+   "role": "Chairman",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 29
+  },
+  {
+   "role": "Chairman",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 19
+  },
+  {
+   "role": "Chairman",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 14
+  },
+  {
+   "role": "ViceChair",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 703
+  },
+  {
+   "role": "ViceChair",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for a guard or officer, about their own record."
+  },
+  {
+   "role": "ViceChair",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (no staff record). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ViceChair",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "ViceChair",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ViceChair",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ViceChair",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 34
+  },
+  {
+   "role": "ViceChair",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "ViceChair",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "ViceChair",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ViceChair",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ViceChair",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "ViceChair",
+   "path": "myWork",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (guards see their duties in the JA app). Ask the company or check your"
+  },
+  {
+   "role": "ViceChair",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 82
+  },
+  {
+   "role": "ViceChair",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ViceChair",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ViceChair",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 24
+  },
+  {
+   "role": "ViceChair",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ViceChair",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "ViceChair",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ViceChair",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ViceChair",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "ViceChair",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 171
+  },
+  {
+   "role": "ViceChair",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ViceChair",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "ViceChair",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ViceChair",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "ViceChair",
+   "path": "contracts",
+   "label": "person",
+   "ms": 23
+  },
+  {
+   "role": "ViceChair",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "ViceChair",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "ViceChair",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (only office staff paid through Prima choose a zakat deduction). Ask t"
+  },
+  {
+   "role": "ViceChair",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0,
+   "refused": "Staff claims are for office and management staff. Guards and officers have their own rules."
+  },
+  {
+   "role": "ViceChair",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ViceChair",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 3101
+  },
+  {
+   "role": "ViceChair",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 11
+  },
+  {
+   "role": "ViceChair",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "compliance",
+   "label": "person",
+   "ms": 784
+  },
+  {
+   "role": "ViceChair",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 45
+  },
+  {
+   "role": "ViceChair",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "ViceChair",
+   "path": "insurance",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "ViceChair",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 132
+  },
+  {
+   "role": "ViceChair",
+   "path": "cms",
+   "label": "person",
+   "ms": 809
+  },
+  {
+   "role": "ViceChair",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ViceChair",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 42
+  },
+  {
+   "role": "ViceChair",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "ViceChair",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "ViceChair",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 57
+  },
+  {
+   "role": "ViceChair",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 15
+  },
+  {
+   "role": "ViceChair",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 16
+  },
+  {
+   "role": "ViceChair",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "ViceChair",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "ViceChair",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "ViceChair",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "ViceChair",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 656
+  },
+  {
+   "role": "ViceChair",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 574
+  },
+  {
+   "role": "ViceChair",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "ViceChair",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1351
+  },
+  {
+   "role": "ViceChair",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1354
+  },
+  {
+   "role": "ViceChair",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 31
+  },
+  {
+   "role": "ViceChair",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 27
+  },
+  {
+   "role": "ViceChair",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 19
+  },
+  {
+   "role": "ViceChair",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "ACT",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "ACT",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "ACT",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "ACT",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "ACT",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "ACT",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "ACT",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 703
+  },
+  {
+   "role": "ACT",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 40
+  },
+  {
+   "role": "ACT",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "ACT",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ACT",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ACT",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 28
+  },
+  {
+   "role": "ACT",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "ACT",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "ACT",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ACT",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ACT",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "ACT",
+   "path": "myWork",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "ACT",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "ACT",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "ACT",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 81
+  },
+  {
+   "role": "ACT",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ACT",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ACT",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "ACT",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "ACT",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 21
+  },
+  {
+   "role": "ACT",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ACT",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "ACT",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 169
+  },
+  {
+   "role": "ACT",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "ACT",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "ACT",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ACT",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "ACT",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ACT",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "ACT",
+   "path": "contracts",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "ACT",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "ACT",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "ACT",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ACT",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ACT",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ACT",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "ACT",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 3017
+  },
+  {
+   "role": "ACT",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "ACT",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "compliance",
+   "label": "person",
+   "ms": 711
+  },
+  {
+   "role": "ACT",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 43
+  },
+  {
+   "role": "ACT",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "ACT",
+   "path": "insurance",
+   "label": "person",
+   "ms": 18
+  },
+  {
+   "role": "ACT",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 132
+  },
+  {
+   "role": "ACT",
+   "path": "cms",
+   "label": "person",
+   "ms": 787
+  },
+  {
+   "role": "ACT",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "ACT",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 41
+  },
+  {
+   "role": "ACT",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "ACT",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "ACT",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "ACT",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 56
+  },
+  {
+   "role": "ACT",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 15
+  },
+  {
+   "role": "ACT",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 15
+  },
+  {
+   "role": "ACT",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0
+  },
+  {
+   "role": "ACT",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 630
+  },
+  {
+   "role": "ACT",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 573
+  },
+  {
+   "role": "ACT",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 1
+  },
+  {
+   "role": "ACT",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 1098
+  },
+  {
+   "role": "ACT",
+   "path": "home",
+   "label": "co-17",
+   "ms": 1099
+  },
+  {
+   "role": "ACT",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 30
+  },
+  {
+   "role": "ACT",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 30
+  },
+  {
+   "role": "ACT",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 20
+  },
+  {
+   "role": "ACT",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 14
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 21
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 47
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myWork",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 11
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (group leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (fixed assets). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.pay for company (pay changes). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (continuity). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Director Office digest). Ask the company or check your authority gran"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "contracts",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (products). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "compliance",
+   "label": "person",
+   "ms": 19
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "insurance",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Transport). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company (tender board). Ask the company or check your authority gra"
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 65
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 15
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 205
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 1
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 111
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "home",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 29
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 20
+  },
+  {
+   "role": "CompanyMgrSasa",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 39
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 33
+  },
+  {
+   "role": "OpsDirector",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "OpsDirector",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (working from home). Ask the company or check your authority gra"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myWork",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "OpsDirector",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 33
+  },
+  {
+   "role": "OpsDirector",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "OpsDirector",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (group leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "OpsDirector",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "OpsDirector",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (foreign workers). Ask the company or check your authority grant"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (branches). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PWVSB credit). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for ACT and for the owners of ACT findings."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (fixed assets). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.pay for company (pay changes). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (audit and legal). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (continuity). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (governance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 184
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myItems",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "OpsDirector",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Director Office digest). Ask the company or check your authority gran"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (panel firms). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (each company renews; Central Admin monitors). Ask the company or chec"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "contracts",
+   "label": "person",
+   "ms": 25
+  },
+  {
+   "role": "OpsDirector",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "OpsDirector",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (claims and requests). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 18
+  },
+  {
+   "role": "OpsDirector",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "compliance",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 46
+  },
+  {
+   "role": "OpsDirector",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "insurance",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: insurance.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: hr.monitor for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Transport). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company (tender board). Ask the company or check your authority gra"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "OpsDirector",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 18
+  },
+  {
+   "role": "OpsDirector",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 16
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OpsDirector",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "home",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 30
+  },
+  {
+   "role": "OpsDirector",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 28
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OpsDirector",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "OGM",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "OGM",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "OGM",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "OGM",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "OGM",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "OGM",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OGM",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 40
+  },
+  {
+   "role": "OGM",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (registered faces). Ask the company or check your authority gran"
+  },
+  {
+   "role": "OGM",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (leave settings). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: hr.monitor for company (office safety). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 33
+  },
+  {
+   "role": "OGM",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "OGM",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (joining and leaving). Ask the company or check your authority g"
+  },
+  {
+   "role": "OGM",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (vacancies). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "OGM",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (working from home). Ask the company or check your authority gra"
+  },
+  {
+   "role": "OGM",
+   "path": "myWork",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "OGM",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 8
+  },
+  {
+   "role": "OGM",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "OGM",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (group leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OGM",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 7
+  },
+  {
+   "role": "OGM",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "OGM",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (foreign workers). Ask the company or check your authority grant"
+  },
+  {
+   "role": "OGM",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (branches). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PWVSB credit). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for ACT and for the owners of ACT findings."
+  },
+  {
+   "role": "OGM",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (fixed assets). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.pay for company (pay changes). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (audit and legal). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (continuity). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (governance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 177
+  },
+  {
+   "role": "OGM",
+   "path": "myItems",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "OGM",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "OGM",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Director Office digest). Ask the company or check your authority gran"
+  },
+  {
+   "role": "OGM",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (panel firms). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (each company renews; Central Admin monitors). Ask the company or chec"
+  },
+  {
+   "role": "OGM",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "OGM",
+   "path": "contracts",
+   "label": "person",
+   "ms": 27
+  },
+  {
+   "role": "OGM",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (HR and Finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "OGM",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (products). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (claims and requests). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "OGM",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OGM",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 17
+  },
+  {
+   "role": "OGM",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "compliance",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "OGM",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 54
+  },
+  {
+   "role": "OGM",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "OGM",
+   "path": "insurance",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: insurance.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: hr.monitor for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "OGM",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Transport). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company (tender board). Ask the company or check your authority gra"
+  },
+  {
+   "role": "OGM",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "OGM",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "OGM",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "OGM",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 51
+  },
+  {
+   "role": "OGM",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 18
+  },
+  {
+   "role": "OGM",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OGM",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OGM",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OGM",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "OGM",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "OGM",
+   "path": "home",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "OGM",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 33
+  },
+  {
+   "role": "OGM",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 36
+  },
+  {
+   "role": "OGM",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "OGM",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "guideCards",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "orgLinks.inbox",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "orgLinks.map",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "svc.acceptConfidentiality",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'acceptConfidentiality')"
+  },
+  {
+   "role": "HR",
+   "path": "svc.staffSessionStart",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionStart')"
+  },
+  {
+   "role": "HR",
+   "path": "svc.staffSessionEnd",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'staffSessionEnd')"
+  },
+  {
+   "role": "HR",
+   "path": "svc.runCreditCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'runCreditCheck')"
+  },
+  {
+   "role": "HR",
+   "path": "svc.plannerSync",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'plannerSync')"
+  },
+  {
+   "role": "HR",
+   "path": "svc.amQueueRentReminders",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'amQueueRentReminders')"
+  },
+  {
+   "role": "HR",
+   "path": "groupOverview",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "HR",
+   "path": "myDuty",
+   "label": "person",
+   "ms": 40
+  },
+  {
+   "role": "HR",
+   "path": "myStaffClock",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "confidentiality",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "myFace",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "faceReviews",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "hrLeaveSettings",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "flexRequests",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "officeOsh",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "HR",
+   "path": "guardTraining",
+   "label": "person",
+   "ms": 31
+  },
+  {
+   "role": "HR",
+   "path": "appraisals",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "hrPolicies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "hrLegalChecks",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (HR legal points: directors only). Ask the company or check your"
+  },
+  {
+   "role": "HR",
+   "path": "staffOvertime",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "hrJoinLeave",
+   "label": "person",
+   "ms": 2
+  },
+  {
+   "role": "HR",
+   "path": "vacancies",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "myRemote",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "HR",
+   "path": "remoteBoard",
+   "label": "person",
+   "ms": 12
+  },
+  {
+   "role": "HR",
+   "path": "myWork",
+   "label": "person",
+   "ms": 4
+  },
+  {
+   "role": "HR",
+   "path": "workRebalance",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "teamWork",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "workSummary",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (group leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "HR",
+   "path": "branchWork",
+   "label": "person",
+   "ms": 9
+  },
+  {
+   "role": "HR",
+   "path": "socsoClaims",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "HR",
+   "path": "fwmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: hr.monitor for company (foreign workers). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "hostelBoard",
+   "label": "person",
+   "ms": 5
+  },
+  {
+   "role": "HR",
+   "path": "staffClaims",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "branchBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (branches). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "creditBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PWVSB credit). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "actBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "This screen is for ACT and for the owners of ACT findings."
+  },
+  {
+   "role": "HR",
+   "path": "fixedAssets",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (fixed assets). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "payChanges",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "arishaDrafts.list",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "recordKindsFor",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "corpAuditLegal",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (audit and legal). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "bcmBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (continuity). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "pdpaRights",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "grcBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "govBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (governance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "purBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (procurement). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "myItems",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "ceoInstructions",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (CEO instructions). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "directorLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "HR",
+   "path": "directorDigest",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Director Office digest). Ask the company or check your authority gran"
+  },
+  {
+   "role": "HR",
+   "path": "panelBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (panel firms). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "delegationBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "companyFiles",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "corpBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company secretary). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "renewalBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (each company renews; Central Admin monitors). Ask the company or chec"
+  },
+  {
+   "role": "HR",
+   "path": "itBoard",
+   "label": "person",
+   "ms": 3
+  },
+  {
+   "role": "HR",
+   "path": "websites.board",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "svc.websites.board",
+   "label": "person",
+   "ms": 0,
+   "refused": "Cannot read properties of undefined (reading 'websites')"
+  },
+  {
+   "role": "HR",
+   "path": "contracts",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (contracts). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "finBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "finance.desk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "financeToday",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "financeControls.dailyCashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "financeControls.cashMine",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "financeControls.advancesForHr",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "finance.settingsView",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "financeRequests.list",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "finance.cooDesk",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (COO payment approvals). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "financeControls.dashboard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "financeControls.checksTodo",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (finance). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "staffPayroll",
+   "label": "person",
+   "ms": 6
+  },
+  {
+   "role": "HR",
+   "path": "myZakat",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "myReceipts",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "productBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (products). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "expenseBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (claims and requests). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "amBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "jaBoard",
+   "label": "person",
+   "ms": 1
+  },
+  {
+   "role": "HR",
+   "path": "companyOffices",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "HR",
+   "path": "clientBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (clients). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "fleetBoard",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "pdpaBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (PDPA). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "memos",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "compliance",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (group data: leadership only). Ask the company or check your authority"
+  },
+  {
+   "role": "HR",
+   "path": "auditLog",
+   "label": "person",
+   "ms": 45
+  },
+  {
+   "role": "HR",
+   "path": "managementFees",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (the Finance Director or the CEO). Ask the company or check your autho"
+  },
+  {
+   "role": "HR",
+   "path": "insurance",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: insurance.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "hrMonitor",
+   "label": "person",
+   "ms": 136
+  },
+  {
+   "role": "HR",
+   "path": "cms",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: cms.desk for company (CMS). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "specialOpsLegalFlags",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (legal flags: the directors only). Ask the company or check your autho"
+  },
+  {
+   "role": "HR",
+   "path": "armsTrading",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (arms trading). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "transportBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Transport). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "amRentCheck",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "amWhatsAppBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: view for company (Asset Management). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "armsControl",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company (group). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "armsOverview",
+   "label": "person",
+   "ms": 1,
+   "refused": "Not allowed: arms.view for company (any). Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "meetings",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "reports",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "tenderGroups",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "tenderBoard",
+   "label": "person",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company (tender board). Ask the company or check your authority gra"
+  },
+  {
+   "role": "HR",
+   "path": "tenderProtocol",
+   "label": "person",
+   "ms": 0
+  },
+  {
+   "role": "HR",
+   "path": "companyDashboard",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "HR",
+   "path": "companyDashboard",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (company overview: leadership, company manager and admin executives on"
+  },
+  {
+   "role": "HR",
+   "path": "sites",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (not your line of work). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "sites",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (not your line of work). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "HR",
+   "path": "arishaDrafts.financeModelOptions",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "HR",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "HR",
+   "path": "arishaDrafts.financePapers",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (draft action not permitted). Ask the company or check your authority "
+  },
+  {
+   "role": "HR",
+   "path": "salesLeads",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "salesLeads",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "companyOffice",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "companyOffice",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "commercial",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "commercial",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: commercial.view for company co-17. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "home",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "HR",
+   "path": "home",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "This job has its own board."
+  },
+  {
+   "role": "HR",
+   "path": "attendanceAlerts",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: view for company (not your line of work). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "attendanceAlerts",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: view for company (not your line of work). Ask the company or check your authority grant"
+  },
+  {
+   "role": "HR",
+   "path": "arms",
+   "label": "co-sasa",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-sasa. Ask the company or check your authority grant."
+  },
+  {
+   "role": "HR",
+   "path": "arms",
+   "label": "co-17",
+   "ms": 0,
+   "refused": "Not allowed: arms.view for company co-17. Ask the company or check your authority grant."
+  }
+ ],
+ "writes": {
+  "itJobs400ConcurrentMs": 13,
+  "allLeadersHomeAtOnceMs": 9774,
+  "hundredHomesAtOnceMs": 79270,
+  "handoverInboxCOOms": 0,
+  "auditRowsAfter": 3894
+ },
+ "errors": []
+}

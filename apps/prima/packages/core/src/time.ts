@@ -85,3 +85,11 @@ export function addWorkingDays(d: IsoDate, n: number): IsoDate {
   }
   return cur;
 }
+
+/** A real calendar date in YYYY-MM-DD form: 2026-02-31 or 2026-13-01 is refused, not rolled over. */
+export function isRealDate(v: unknown): v is IsoDate {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}

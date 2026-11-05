@@ -2,6 +2,7 @@ import { api, type ArmsControl } from '../api';
 import { useApp } from '../App';
 import { useState } from 'react';
 import { RecordButton } from './RecordForm';
+import { OpsGuide } from './OpsGuide';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 
 export type ArmsTab =
@@ -17,7 +18,9 @@ export type ArmsTab =
   | 'police'
   | 'tenders'
   | 'suppliers'
-  | 'companies';
+  | 'trading'
+  | 'companies'
+  | 'legal';
 
 export const ARMS_TABS: { id: ArmsTab; label: string }[] = [
   { id: 'alerts', label: 'Alerts' },
@@ -32,7 +35,9 @@ export const ARMS_TABS: { id: ArmsTab; label: string }[] = [
   { id: 'police', label: 'Police and KDN' },
   { id: 'tenders', label: 'Tenders' },
   { id: 'suppliers', label: 'Suppliers' },
+  { id: 'trading', label: 'Trading' },
   { id: 'companies', label: 'Companies' },
+  { id: 'legal', label: 'Legal points (directors)' },
 ];
 
 const JOB_LABEL: Record<ArmsControl['jobs'][number]['job']['kind'], string> = {
@@ -92,7 +97,7 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
         <Kpi label="CMS gaps now" value={t.cmsGapsNow} tone={t.cmsGapsNow ? 'crit' : 'ok'} note={`${t.cmsWeekGaps} shifts uncovered this week`} />
       </div>
       <div className="tabbar" role="tablist" aria-label="Arms control sections">
-        {ARMS_TABS.map((x) => (
+        {ARMS_TABS.filter((x) => x.id !== 'legal' || data.canSeeLegalFlags).map((x) => (
           <button key={x.id} role="tab" aria-selected={tab === x.id} onClick={() => onTab(x.id)}>
             {x.label}
             {x.id === 'alerts' && data.alerts.length > 0 && <span className="tab-count">{data.alerts.length}</span>}
@@ -108,12 +113,19 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
       {tab === 'log' && <Log data={data} />}
       {tab === 'ammo' && <Ammo data={data} />}
       {tab === 'jobs' && <Jobs data={data} />}
-      {tab === 'requests' && <Requests data={data} />}
+      {tab === 'requests' && (
+        <>
+          <Requests data={data} />
+          <OpsGuide area="arms" />
+        </>
+      )}
       {tab === 'renewals' && <Renewals data={data} />}
       {tab === 'clients' && <Agreements data={data} />}
       {tab === 'police' && <Police data={data} />}
       {tab === 'tenders' && <Tenders data={data} />}
       {tab === 'suppliers' && <Suppliers data={data} />}
+      {tab === 'trading' && <Trading />}
+      {tab === 'legal' && data.canSeeLegalFlags && <LegalFlags />}
     </>
   );
 }
@@ -338,12 +350,11 @@ function Jobs({ data }: { data: ArmsControl }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
               <Chip tone={JOB_STATUS[job.status].tone}>{JOB_STATUS[job.status].label}</Chip>
-              <Chip tone={police.notice ? 'ok' : job.status === 'completed' ? 'neutral' : 'crit'}>
-                {police.notice ? 'Police notified' : 'Police not notified'}
-              </Chip>
+              {/* The police reference is a task to record here; whether it is legally in order is for the directors' view. */}
+              <Chip tone={police.notice ? 'ok' : 'neutral'}>{police.notice ? `Police notice ${police.notice.ref}` : 'Police notice: to record'}</Chip>
               {police.needsApproval && (
-                <Chip tone={police.approval ? 'ok' : job.status === 'completed' ? 'neutral' : 'crit'}>
-                  {police.approval ? `Approved to ${police.away.join(', ')}` : `No approval for ${police.away.join(', ')}`}
+                <Chip tone={police.approval ? 'ok' : 'neutral'}>
+                  {police.approval ? `Approval to ${police.away.join(', ')} ${police.approval.ref}` : `Approval to ${police.away.join(', ')}: to record`}
                 </Chip>
               )}
             </div>
@@ -359,7 +370,7 @@ function Renewals({ data }: { data: ArmsControl }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Renewals and servicing</h2>
-        <span className="muted small">Firearm licences expire 30 June (Arms Act s.4). Unknown is never counted as fine.</span>
+        <span className="muted small">Firearm licences run to 30 June. Unknown is never counted as fine.</span>
       </div>
       <div className="list">
         {data.renewals.length === 0 && <div className="empty">Nothing due.</div>}
@@ -706,13 +717,16 @@ function Ammo({ data }: { data: ArmsControl }) {
   );
 }
 
-const REQUEST_KIND: Record<ArmsControl['requests'][number]['request']['kind'], string> = {
+export const REQUEST_KIND: Record<ArmsControl['requests'][number]['request']['kind'], string> = {
   ACQUIRE: 'Buy',
   MOVE: 'Move',
   TRANSFER: 'Transfer between companies',
   SERVICE: 'Service',
   DISPOSE: 'Dispose',
   LOSS_REPORT: 'Loss report',
+  TRADE_BUY: 'Trade: buy stock',
+  TRADE_SELL: 'Trade: sell',
+  IMPORT: 'Import',
 };
 
 /** Arms requests on the ten-step path (V14 s.223). Arms Control reviews; the licensed company authorises. */
@@ -748,13 +762,9 @@ function Requests({ data }: { data: ArmsControl }) {
                           {r.request.fromState} to {r.request.toState}
                         </span>
                       )}
-                      <Chip tone={r.police.notice ? 'ok' : 'warn'}>
-                        {r.police.notice ? `Police notified ${r.police.notice.ref}` : 'Police notice needed before moving'}
-                      </Chip>
+                      <Chip tone={r.police.notice ? 'ok' : 'neutral'}>{r.police.notice ? `Police notice ${r.police.notice.ref}` : 'Police notice: to record'}</Chip>
                       {r.police.interstate && (
-                        <Chip tone={r.police.approval ? 'ok' : 'warn'}>
-                          {r.police.approval ? `Police approval ${r.police.approval.ref}` : 'Police approval needed: another state'}
-                        </Chip>
+                        <Chip tone={r.police.approval ? 'ok' : 'neutral'}>{r.police.approval ? `Police approval ${r.police.approval.ref}` : 'Police approval: to record'}</Chip>
                       )}
                     </div>
                   )}
@@ -775,36 +785,201 @@ function Requests({ data }: { data: ArmsControl }) {
                   <span key={s.id} title={s.label} style={{ flex: 1, height: 4, borderRadius: 2, background: i < r.step ? 'var(--accent)' : 'var(--line)' }} />
                 ))}
               </div>
-              {mine && (
-                <div className="row" style={{ flexWrap: 'wrap' }}>
-                  <input
-                    className="input"
-                    aria-label={`Note on ${r.request.ref}`}
-                    placeholder="Note (needed to send back)"
-                    value={note[r.request.id] ?? ''}
-                    onChange={(e) => setNote({ ...note, [r.request.id]: e.target.value })}
-                    style={{ flex: 1, minWidth: 160 }}
-                  />
-                  <button
-                    className="btn btn-sm btn-primary"
-                    disabled={busy}
-                    onClick={() => run(() => api.reviewArmsRequest(r.request.id, 'pass', note[r.request.id] ?? ''), `${r.request.ref} passed to the company`)}
-                  >
-                    Pass to company
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    disabled={busy || !(note[r.request.id] ?? '').trim()}
-                    onClick={() => run(() => api.reviewArmsRequest(r.request.id, 'return', note[r.request.id] ?? ''), `${r.request.ref} sent back`)}
-                  >
-                    Send back
-                  </button>
-                </div>
+              {r.request.state === 'draft' && <Resubmit id={r.request.id} label={r.request.ref} quantity={r.request.quantity ?? null} estCost={r.request.estCost ?? null} busy={busy} run={run} />}
+              {r.request.state !== 'closed' && r.request.state !== 'draft' && (
+                <StepActions
+                  id={r.request.id}
+                  label={r.request.ref}
+                  state={r.request.state}
+                  note={note[r.request.id] ?? ''}
+                  onNote={(v) => setNote({ ...note, [r.request.id]: v })}
+                  busy={busy}
+                  run={run}
+                />
               )}
             </div>
           );
         })}
       </div>
+    </section>
+  );
+}
+
+type Step = ArmsControl['requests'][number]['request']['state'];
+type StepAction = Parameters<typeof api.armsRequestStep>[1];
+
+/**
+ * The buttons for the step a request is at. Anyone who sees the request sees them; the server decides who may press
+ * (Arms Control reviews, the licensed company authorises, Legal clears, the COO or CEO approves spend, someone other
+ * than the requester verifies). Every decision takes a reason.
+ */
+const STEP_ACTIONS: Partial<Record<Step, { action: StepAction; label: string; primary?: boolean; needsReason?: boolean; police?: boolean }[]>> = {
+  submitted: [
+    { action: 'pass', label: 'Pass to company', primary: true, needsReason: true },
+    { action: 'return', label: 'Send back', needsReason: true },
+  ],
+  arms_review: [
+    { action: 'pass', label: 'Pass to company', primary: true, needsReason: true },
+    { action: 'return', label: 'Send back', needsReason: true },
+  ],
+  company_auth: [
+    { action: 'authorise', label: 'Authorise', primary: true, needsReason: true },
+    { action: 'refuse', label: 'Refuse', needsReason: true },
+  ],
+  legal_check: [
+    { action: 'legal_ok', label: 'Legal: clear', primary: true, needsReason: true },
+    { action: 'legal_stop', label: 'Legal: stop', needsReason: true },
+  ],
+  regulator_pending: [
+    { action: 'police', label: 'Record PDRM / KDN reference', primary: true, police: true },
+    { action: 'spend', label: 'Approve the spend', needsReason: true },
+  ],
+  approved: [{ action: 'verify', label: 'Verify (not the requester)', primary: true, needsReason: true }],
+  verified: [{ action: 'reconcile', label: 'Reconcile the register', primary: true }],
+  reconciled: [{ action: 'close', label: 'Close', primary: true }],
+};
+
+export function StepActions(props: { id: string; label: string; state: Step; note: string; onNote: (v: string) => void; busy: boolean; run: ReturnType<typeof useAction>['run'] }) {
+  const { id, label, state, note, onNote, busy, run } = props;
+  const actions = STEP_ACTIONS[state] ?? [];
+  if (!actions.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div className="row" style={{ flexWrap: 'wrap' }}>
+      <input
+        className="input"
+        aria-label={`Reason or reference for ${label}`}
+        placeholder={actions.some((a) => a.police) ? 'Reason, or the PDRM / KDN reference' : 'Reason (needed for a decision)'}
+        value={note}
+        onChange={(e) => onNote(e.target.value)}
+        style={{ flex: 1, minWidth: 160 }}
+      />
+      {actions.map((a) => (
+        <button
+          key={a.action}
+          className={`btn btn-sm${a.primary ? ' btn-primary' : ''}`}
+          disabled={busy || ((a.needsReason || a.police) && note.trim().length < 3)}
+          onClick={() =>
+            run(
+              () => api.armsRequestStep(id, a.action, a.police ? '' : note, a.police ? { policeApproval: { ref: note.trim(), on: today } } : {}),
+              `${label}: ${a.label.toLowerCase()} recorded`,
+            )
+          }
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A request Arms Control sent back: the requester corrects it and sends it again, saying what changed. */
+export function Resubmit(props: { id: string; label: string; quantity: number | null; estCost: number | null; busy: boolean; run: ReturnType<typeof useAction>['run'] }) {
+  const { id, label, busy, run } = props;
+  const [why, setWhy] = useState('');
+  const [qty, setQty] = useState(props.quantity == null ? '' : String(props.quantity));
+  const [cost, setCost] = useState(props.estCost == null ? '' : String(props.estCost));
+  const changes = {
+    ...(qty !== (props.quantity == null ? '' : String(props.quantity)) ? { quantity: qty === '' ? null : Number(qty) } : {}),
+    ...(cost !== (props.estCost == null ? '' : String(props.estCost)) ? { estCost: cost === '' ? null : Number(cost) } : {}),
+  };
+  return (
+    <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+      <span className="small">Sent back for correction.</span>
+      <input className="input" type="number" min={1} aria-label={`Quantity for ${label}`} placeholder="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 100 }} />
+      <input className="input" type="number" min={0} aria-label={`Cost for ${label}`} placeholder="Cost RM" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 110 }} />
+      <input className="input" aria-label={`What was corrected on ${label}`} placeholder="What you corrected" value={why} onChange={(e) => setWhy(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+      <button className="btn btn-sm btn-primary" disabled={busy || why.trim().length < 3} onClick={() => run(() => api.armsRequestStep(id, 'resubmit', why, { changes }), `${label} sent again to Arms Control`)}>
+        Correct and resubmit
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Legal points for the directors only (Fauzan, 2 Nov 2026). Staff screens show the task; here each open point has its
+ * source, the records it touches, the responsible director, its status and history. Open is never shown as compliant.
+ */
+function LegalFlags() {
+  const { data, error } = useLoad(() => api.specialOpsLegalFlags(), []);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="legal points" />;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Legal points for the directors</h2>
+        <span className="muted small">{data.totals.open} open. Seen only by the group directors; staff screens show the task without legal notices.</span>
+      </div>
+      <div className="list">
+        {data.rows.length === 0 && <div className="empty">No open legal points from Special Ops.</div>}
+        {data.rows.map((f) => (
+          <div key={f.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 600 }}>{f.title}</div>
+              <Chip tone="warn">Open, not verified</Chip>
+            </div>
+            <div className="muted small">
+              {f.companyName} · since {dateLabel(f.since)} · responsible: {f.responsible}
+              {f.responsibleAssumed ? ' (assumed, to confirm)' : ''}
+            </div>
+            <div className="small">Source: {f.source}</div>
+            <div className="small">Records: {f.records.map((r) => r.label).join('; ')}</div>
+            <div className="small">{f.detail}</div>
+            {f.history.length > 0 && (
+              <details className="small">
+                <summary>History ({f.history.length})</summary>
+                <ul style={{ margin: '4px 0 0 18px' }}>
+                  {f.history.map((h, i) => (
+                    <li key={i}>
+                      {h.at.slice(0, 16).replace('T', ' ')} · {h.actor}: {h.summary}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Arms trading and import (4H): built, off until the CEO switches it on with an approved dealer licence. */
+function Trading() {
+  const { data, error, reload } = useLoad(() => api.armsTrading(), []);
+  const [reason, setReason] = useState('');
+  const act = useAction();
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="arms trading" />;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Arms trading and import</h2>
+        <Chip tone={data.on ? 'warn' : 'neutral'}>{data.on ? 'On' : 'Off'}</Chip>
+      </div>
+      <p className="muted small">
+        Buying and selling trade stock and importing (Port Klang or KLIA, after the CPO, with KDN papers) are built but stay off until the CEO switches them on. While off, every trading
+        request is refused and the refusal is logged.
+      </p>
+      {data.by && (
+        <div className="small">
+          Last switched by {data.by}
+          {data.at ? ` on ${dateLabel(data.at.slice(0, 10))}` : ''}: {data.reason}
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+      {data.canSwitch && (
+        <div className="row" style={{ flexWrap: 'wrap', marginTop: 8 }}>
+          <input className="input" aria-label="Reason" placeholder="Reason, for example the dealer licence reference" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy || reason.trim().length < 5}
+            onClick={() => act.run(() => api.setArmsTrading(!data.on, reason).then(() => { setReason(''); reload(); }), data.on ? 'Arms trading switched off' : 'Arms trading switched on')}
+          >
+            {data.on ? 'Switch off' : 'Switch on'}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -886,7 +1061,7 @@ function Agreements({ data }: { data: ArmsControl }) {
   );
 }
 
-/** What the police check first (Arms Act 1960, KDN Circular 1/2006). The company files; Arms Control makes sure it happens. */
+/** Police and KDN tasks. The company files; Arms Control makes sure it happens. Legal citations stay in the directors' view. */
 function Police({ data }: { data: ArmsControl }) {
   const p = data.police;
   return (
@@ -894,7 +1069,7 @@ function Police({ data }: { data: ArmsControl }) {
       <section className="panel">
         <div className="panel-head">
           <h2>Police reports for missing firearms</h2>
-          <span className="muted small">Arms Act s.7(1): within {p.reportDays} days of finding out, at the nearest police station</span>
+          <span className="muted small">Report within {p.reportDays} days of finding out, at the nearest police station</span>
         </div>
         <div className="list">
           {p.reports.length === 0 && <div className="empty">No firearm is missing.</div>}
@@ -920,7 +1095,7 @@ function Police({ data }: { data: ArmsControl }) {
       <section className="panel">
         <div className="panel-head">
           <h2>Firearms to deposit with the police</h2>
-          <span className="muted small">Arms Act s.27(1): licence expired or revoked, deposit without unnecessary delay</span>
+          <span className="muted small">Licence expired or revoked: deposit without delay</span>
         </div>
         <div className="list">
           {p.deposits.length === 0 && <div className="empty">Every firearm has a current licence.</div>}
@@ -970,7 +1145,7 @@ function Police({ data }: { data: ArmsControl }) {
       <section className="panel">
         <div className="panel-head">
           <h2>Annual firearms return to KDN, {p.year}</h2>
-          <span className="muted small">KDN Circular 1/2006: number and type every year. Prepared here; the company checks and files it.</span>
+          <span className="muted small">Number and type every year. Prepared here; the company checks and files it.</span>
         </div>
         <div className="table-wrap">
           <table>

@@ -433,7 +433,7 @@ export function lineManagerOf(u: User, users: User[]): { manager: User | null; a
   if (u.fwmRole === 'manager') return pick(cos);
   if (u.procRole === 'storekeeper') return pick(() => find((x) => x.procRole === 'executive'));
   if (u.procRole === 'executive') return pick(() => find((x) => x.opsTier === 'ogm'));
-  if (u.actRole === 'assistant' || u.actRole === 'deputy') return pick(() => find((x) => x.actRole === 'lead'));
+  if (u.actRole === 'auditor' || u.actRole === 'enforcement') return pick(() => find((x) => x.actRole === 'lead'));
   if (u.actRole === 'lead') return pick(ceo);
   if (u.opsTier === 'om') return pick(() => find((x) => x.opsTier === 'regional' && (x.regionIds ?? []).some((r) => (u.regionIds ?? []).includes(r))));
   if (u.opsTier === 'regional') return pick(() => find((x) => x.opsTier === 'ops_director'));

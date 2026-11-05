@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { hrItProblems } from './hr-it-readiness';
 import { itOperationsProblems } from './it-operations-readiness';
 import { itManualProblems } from './it-manual-readiness';
-import { GENESIS_HASH, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Row, type Store, type TableName, type ItTicket } from '@prima/core';
+import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket } from '@prima/core';
 import type { PoolClient } from 'pg';
 
 const TABLE: Record<TableName, string> = {
@@ -65,6 +65,7 @@ const TABLE: Record<TableName, string> = {
   socsoClaims: 'prima.socso_claims',
   fwRenewals: 'prima.fw_renewals',
   fwmTasks: 'prima.fwm_tasks',
+  fwWelfareChecks: 'prima.fw_welfare_checks',
   hostels: 'prima.hostels',
   hostelStays: 'prima.hostel_stays',
   hostelBills: 'prima.hostel_bills',
@@ -77,6 +78,11 @@ const TABLE: Record<TableName, string> = {
   branchSettlements: 'prima.branch_settlements',
   branchActions: 'prima.branch_actions',
   corpProfiles: 'prima.corp_profiles',
+  panelFirms: 'prima.panel_firms',
+  delegations: 'prima.delegations',
+  criticalRoles: 'prima.critical_roles',
+  legalHolds: 'prima.legal_holds',
+  legalHoldVersions: 'prima.legal_hold_versions',
   creditLoans: 'prima.credit_loans',
   creditDefaults: 'prima.credit_defaults',
   purSuppliers: 'prima.pur_suppliers',
@@ -119,6 +125,7 @@ const TABLE: Record<TableName, string> = {
   itProcurementPackets:'prima.it_procurement_packets',
   itProcurementReceipts:'prima.it_procurement_receipts',
   itCleanupNominations:'prima.it_cleanup_nominations',itCleanupArchives:'prima.it_cleanup_archives',itCleanupReceipts:'prima.it_cleanup_receipts',itCleanupPlanBindings:'prima.it_cleanup_plan_bindings',
+  orgEvents:'prima.org_events',orgTasks:'prima.org_tasks',orgNotices:'prima.org_notices',orgImports:'prima.org_imports',
   hrItRequests:'prima.hr_it_requests', hrItApprovals:'prima.hr_it_approvals', hrItDelegations:'prima.hr_it_delegations', hrItAuthorityMappings:'prima.hr_it_authority_mappings', hrItReceipts:'prima.hr_it_receipts',
   confidentialityAcks: 'prima.confidentiality_acks',
   itAccounts: 'prima.it_accounts',
@@ -134,6 +141,24 @@ const TABLE: Record<TableName, string> = {
   bcmSystems: 'prima.bcm_systems',
   bcmDrills: 'prima.bcm_drills',
   amDepnPostings: 'prima.am_depn_postings',
+  staffIds: 'prima.staff_ids',
+  staffAccounts: 'prima.staff_accounts',
+  staffFaces: 'prima.staff_faces',
+  publicHolidays: 'prima.public_holidays',
+  allowanceTypes: 'prima.allowance_types',
+  flexRequests: 'prima.flex_requests',
+  vacancies: 'prima.vacancies',
+  staffMovements: 'prima.staff_movements',
+  loginHandovers: 'prima.login_handovers',
+  hrFilings: 'prima.hr_filings',
+  hrCases: 'prima.hr_cases',
+  officeOsh: 'prima.office_osh',
+  staffTraining: 'prima.staff_training',
+  staffAppraisals: 'prima.staff_appraisals',
+  hrPolicies: 'prima.hr_policies',
+  staffOvertime: 'prima.staff_overtime',
+  hrLegalChecks: 'prima.hr_legal_checks',
+  policyAcks: 'prima.policy_acks',
   doorEvents: 'prima.door_events',
   actFindings: 'prima.act_findings',
   actAudits: 'prima.act_audits',
@@ -142,6 +167,8 @@ const TABLE: Record<TableName, string> = {
   products: 'prima.products',
   clientAccounts: 'prima.client_accounts',
   expenseRequests: 'prima.expense_requests',
+  companyDesks: 'prima.company_desks',
+  companyRunLinks: 'prima.company_run_links',
   jaRecords: 'prima.ja_records',
   jaSyncs: 'prima.ja_syncs',
   amUnits: 'prima.am_units',
@@ -166,8 +193,24 @@ const TABLE: Record<TableName, string> = {
   audit: 'prima.audit',
 };
 
+/**
+ * Large tenant tables whose company_id column is held equal to data->>'companyId' by a CHECK constraint (001_init.sql,
+ * tenant table loop). Their companyId filter uses the btree company index: through the GIN index the same filter cost
+ * about 0.14 s per company at group scale (whole-organisation review G2, 3 Nov 2026).
+ */
+// Under the company wall (row-level security) PostgreSQL may use an index only for conditions it knows cannot leak
+// rows: plain column comparisons such as company_id = $1 or id = ANY($1). Conditions on JSON fields (data->>'x',
+// data @> ...) are checked only after the wall, row by row (review, 3 Nov 2026). So company and id filters below go to
+// the plain columns, and callers add a company filter wherever they know it.
+const COMPANY_INDEXED = new Set<TableName>(['branches', 'sites', 'posts', 'people', 'credentials', 'licences', 'shifts', 'attendance', 'cases', 'firearms', 'armsMovements', 'contracts', 'staffClaims', 'finStatus']);
+
 /** Tables whose rows carry companyId in a company_id column. */
 const HAS_COMPANY_COLUMN = new Set<TableName>([
+  'delegations',
+  'criticalRoles',
+  'legalHolds',
+  'legalHoldVersions',
+  'companyDesks',
   'payChanges',
   'creditLoans',
   'creditDefaults',
@@ -193,6 +236,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'socsoClaims',
   'fwRenewals',
   'fwmTasks',
+  'fwWelfareChecks',
   'hostels',
   'hostelStays',
   'hostelBills',
@@ -204,6 +248,15 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'locationPings',
   'remoteArrangements',
   'remoteDays',
+  'flexRequests',
+  'vacancies',
+  'staffMovements',
+  'hrFilings',
+  'hrCases',
+  'officeOsh',
+  'staffTraining',
+  'staffAppraisals',
+  'policyAcks',
   'workTasks',
   'workCheckIns',
   'helpRequests',
@@ -256,6 +309,21 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
  */
 export class PgStore implements Store {
   constructor(private client: PoolClient) {}
+
+  private officeReady: boolean | null = null;
+  /** Whether the optional company office module (db/modules/company-office-v1.sql) is applied in this database. */
+  async companyOfficeReady(): Promise<boolean> {
+    if (this.officeReady === null)
+      this.officeReady = (await this.client.query("SELECT to_regclass('prima.company_desks') IS NOT NULL AS ok")).rows[0].ok === true;
+    return this.officeReady;
+  }
+  private runLinksReady: boolean | null = null;
+  /** Whether the optional module for companies run by another office (db/modules/company-run-links-v1.sql) is applied. */
+  async companyRunLinksReady(): Promise<boolean> {
+    if (this.runLinksReady === null)
+      this.runLinksReady = (await this.client.query("SELECT to_regclass('prima.company_run_links') IS NOT NULL AS ok")).rows[0].ok === true;
+    return this.runLinksReady;
+  }
   private cleanupPresence?:Promise<boolean>;
   async itCleanupProblems(){return [...new Set([...(await cleanupSchemaProblems(this.client)),...(await itManualProblems(this.client)),...(await itOperationsProblems(this.client)),...(await procurementProblems(this.client)),...(await rentalCorrectionProblems(this.client))])];}
   private cleanupInstalled(){return this.cleanupPresence??=(async()=>{
@@ -281,12 +349,39 @@ export class PgStore implements Store {
     return result.rows[0].data as ItTicket;
   }
 
-  async list<T extends TableName>(table: T, filter?: Filter<T>): Promise<Row<T>[]> {
+  async hasTable(table: TableName): Promise<boolean> {
+    const r = await this.client.query('SELECT to_regclass($1) IS NOT NULL AS present', [TABLE[table]]);
+    return r.rows[0]?.present === true;
+  }
+
+  async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]> {
+    // Before the optional module is applied there are simply no desks; querying the missing table would abort the request.
+    if (table === 'companyDesks' && !(await this.companyOfficeReady())) return [];
+    if (table === 'companyRunLinks' && !(await this.companyRunLinksReady())) return [];
     const where: string[] = [];
     const params: unknown[] = [];
     const contains: Record<string, unknown> = {};
+    const companyIndexed = COMPANY_INDEXED.has(table);
     for (const [key, value] of Object.entries(filter ?? {})) {
       if (value === undefined) continue;
+      if (companyIndexed && key === 'companyId' && typeof value === 'string') {
+        params.push(value);
+        where.push(`company_id = $${params.length}`);
+        continue;
+      }
+      if (companyIndexed && key === 'companyId' && Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+        if (value.length === 0) return [];
+        params.push(value);
+        where.push(`company_id = ANY($${params.length}::text[])`);
+        continue;
+      }
+      // Rows by id on a company table go through the primary key (the base schema checks data->>'id' = id on these tables).
+      if (companyIndexed && key === 'id' && Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+        if (value.length === 0) return [];
+        params.push(value);
+        where.push(`id = ANY($${params.length}::text[])`);
+        continue;
+      }
       if (Array.isArray(value)) {
         if (value.length === 0) return [];
         params.push(value.map(String));
@@ -299,6 +394,21 @@ export class PgStore implements Store {
       params.push(JSON.stringify(contains));
       where.push(`data @> $${params.length}::jsonb`);
     }
+    // A date window (core Range): the field name is letters only; the bounds are parameters, compared as text like the
+    // in-memory store. A row without the field is left out (NULL never compares true).
+    if (range) {
+      const f = String(range.field).replace(/[^A-Za-z]/g, '');
+      if (!f) throw new Error('Range field missing.');
+      where.push(`jsonb_typeof(data->'${f}') = 'string'`);
+      if (range.from !== undefined) {
+        params.push(String(range.from));
+        where.push(`data->>'${f}' >= $${params.length}`);
+      }
+      if (range.before !== undefined) {
+        params.push(String(range.before));
+        where.push(`data->>'${f}' < $${params.length}`);
+      }
+    }
     const order = table === 'audit' ? ' ORDER BY seq' : '';
     const sql = `SELECT data FROM ${TABLE[table]}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}${order}`;
     const res = await this.client.query(sql, params);
@@ -306,6 +416,8 @@ export class PgStore implements Store {
   }
 
   async get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined> {
+    if (table === 'companyDesks' && !(await this.companyOfficeReady())) return undefined;
+    if (table === 'companyRunLinks' && !(await this.companyRunLinksReady())) return undefined;
     const key = table === 'audit' ? 'seq' : 'id';
     const res = await this.client.query(`SELECT data FROM ${TABLE[table]} WHERE ${key} = $1`, [table === 'audit' ? Number(id) : id]);
     return res.rows[0]?.data as Row<T> | undefined;
@@ -324,13 +436,45 @@ export class PgStore implements Store {
 
   async itManualProblems(): Promise<string[]> { return itManualProblems(this.client); }
 
+  /** The Finance team recorded for a company (hand-over receivers); the number only, read by the module's function. */
+  async orgFinanceTeam(companyId: Id): Promise<number | null> {
+    const r = await this.client.query('SELECT prima.org_finance_team($1) AS team', [companyId]);
+    const t = r.rows[0]?.team;
+    return Number.isInteger(t) ? t : null;
+  }
+
+  /** The office running a company (hand-over receivers), read by the module's function; null before run links exist. */
+  async orgRunBy(companyId: Id): Promise<Id | null> {
+    const r = await this.client.query('SELECT prima.org_run_by($1) AS run_by', [companyId]);
+    const v = r.rows[0]?.run_by;
+    return typeof v === 'string' && v ? v : null;
+  }
+
   async lock<T extends TableName>(table: T, id: Id): Promise<void> {
     if (table === 'audit') return;
+    // Company-wide branch keys (invoice numbers, SQL project codes): one company-scoped transaction lock, since two
+    // branches have two different rows and a row lock alone cannot keep a key unique across them.
+    if (table === 'branches' && id.startsWith('company-keys:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`branch-keys:${id}`]);
+      return;
+    }
     // Immutable rental ledgers intentionally have no UPDATE privilege. Serialize
     // their decisions with the same transaction lock as the service and SQL guards,
     // rather than SELECT FOR UPDATE (which requires that forbidden privilege).
     if (table === 'itRentalCorrectionRequests' || table === 'itRentalReplacements') {
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['it-manual:create']);
+      return;
+    }
+    // Central Admin: one SQL Account payables reference per entity is checked across firms, so linking serializes on
+    // the billed entity rather than on a row (Arisha main round 5b).
+    if (table === 'panelFirms' && id.startsWith('ap:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`central-admin:${id}`]);
+      return;
+    }
+    // The per-manager Arisha AI quota for rebalancing (Arisha main review, 2 Nov 2026): one counter per user id, held
+    // until the request's transaction ends, so parallel asks are counted one after the other.
+    if (table === 'users' && id.startsWith('rebalance-ai:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
       return;
     }
     if (table === 'itSettings' && id.startsWith('it-manual:')) {
@@ -344,7 +488,26 @@ export class PgStore implements Store {
     if (table === 'arishaDrafts') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`arisha-draft:${id}`]);
     if (table === 'itImportReviews') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`it-import-review:${id}`]);
     // Website cycle creation and reminder dedupe serialize even before the singleton settings row exists.
+    // Opening an ACT investigation serializes numbering and the one-open-file-per-anomaly check before any row exists.
+    if (table === 'actAudits' && id === 'act-investigation:open') {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
+      return;
+    }
+    // Office desks serialize per company, even before the first desk row exists.
+    if (table === 'companyDesks' && !(await this.companyOfficeReady())) throw new Error('Company office module not installed');
+    if (table === 'companyDesks') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`company-desks:${id}`]);
+    // One lock for every run link: the one-level rule reads all links, so two CEO changes must not interleave.
+    if (table === 'companyRunLinks') {
+      if (!(await this.companyRunLinksReady())) throw new Error('Company run links module not installed');
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['company-run-links']);
+      return;
+    }
     if (table === 'webSettings') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`web-settings:${id}`]);
+    // Leave: "a refusal is corrected once" and "one MC is used once" serialize on a key, not a row (Arisha review, 3 Nov 2026).
+    if (table === 'leaveRequests' && /^leave-(correct|mc):/.test(id)) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
+      return;
+    }
     await this.client.query(`SELECT 1 FROM ${TABLE[table]} WHERE id = $1 FOR UPDATE`, [id]);
   }
 
@@ -423,15 +586,22 @@ export class PgStore implements Store {
   }
 
   async transaction<R>(fn: (store: Store) => Promise<R>): Promise<R> {
-    // Each request already runs in one transaction; a savepoint keeps a failed unit from
-    // leaving half its writes behind.
+    // Each request already runs in one transaction; a savepoint keeps a failed unit from leaving half its writes behind.
+    // ROLLBACK TO keeps the savepoint, so a failed unit's savepoint is released straight after: otherwise an outer
+    // unit's rollback would stop at that leftover and keep everything written before it (PR #56, 05b4a4a). The shared
+    // name stays so units that run side by side on one connection still release cleanly.
     await this.client.query('SAVEPOINT unit');
     try {
       const out = await fn(this);
       await this.client.query('RELEASE SAVEPOINT unit');
       return out;
     } catch (e) {
-      await this.client.query('ROLLBACK TO SAVEPOINT unit');
+      // A refusal that keeps what it saved (a lapsed approval returned and logged) releases the savepoint instead.
+      if (e instanceof RefusedAfterSave) await this.client.query('RELEASE SAVEPOINT unit');
+      else {
+        await this.client.query('ROLLBACK TO SAVEPOINT unit');
+        await this.client.query('RELEASE SAVEPOINT unit');
+      }
       throw e;
     }
   }

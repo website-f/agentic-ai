@@ -1,0 +1,41 @@
+{
+  "status": "PROPOSED, not installed, not in db/release-manifest.json. No install, migration or deploy is authorized by this file; the release owner packages it and Fauzan approves the install.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "d1a9ec22ffeb955a5228e9fc578a65b940e8730037c9d134aa3037f097c6a283"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email",
+    "central_admin_walls",
+    "central_admin_panel",
+    "central_admin_delegations",
+    "central_admin_legal_holds",
+    "company_office",
+    "company_run_links"
+  ],
+  "modules": [
+    {
+      "id": "org_links",
+      "version": 1,
+      "path": "db/modules/org-links-v1.sql",
+      "sha256": "e7613deb45b3c02c7933436b0ee6bd044ba995515796d6e3010aaf883bae7294",
+      "requires": [],
+      "switch": "PRIMA_ORG_LINKS=true, set only after the install and a clean GET /api/health/org-links",
+      "catalog": "apps/api/src/org-links-readiness.ts orgLinksProblems",
+      "uses": [
+        "prima.audit and prima.audit_head() advisory lock (base)",
+        "prima.users (base)",
+        "prima.has_wall('act') (base)",
+        "role prima_app (base)",
+        "prima.hr_it_requests (base; read by org_joining_state as owner)"
+      ],
+      "definer": "Owner-run checks (yes/no or one word, never rows): org_event_matches_audit, org_task_matches_event, org_notice_matches_task, org_finance_team and org_run_by (the office running a company, or null) callable by prima_app; org_is_this_transactions_audit, org_desk_people (receiver ids) and org_joining_state (ready/waiting/cancelled/missing) internal; the org_task_guard trigger runs as owner to ask org_joining_state. Four plain catalogue checks generated from core constants, org_flow_starts, org_flow_target_ok and org_flow_to_keyer (ORG_FLOWS) and org_central_employer (isCentralEmployer), internal.",
+      "repeatSafe": true,
+      "rollback": "Set PRIMA_ORG_LINKS=false (the API stops writing hand-overs). Keep the tables: hand-overs and import receipts are records and are never deleted."
+    }
+  ]
+}

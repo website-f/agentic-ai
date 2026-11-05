@@ -1,0 +1,175 @@
+{
+ "at": "2026-11-03T03:56:13.704Z",
+ "base": "http://localhost:3077",
+ "path": "/api/home?companyId=co-sasa",
+ "user": "u-coo (synthetic)",
+ "tally": {
+  "ok": 10,
+  "refused_permission": 0,
+  "refused_input": 0,
+  "server_error": 10,
+  "other": 0
+ },
+ "rows": [
+  {
+   "i": 0,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18140,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 1,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18138,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 2,
+   "status": 200,
+   "kind": "ok",
+   "ms": 17963,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 3,
+   "status": 200,
+   "kind": "ok",
+   "ms": 17941,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 4,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18072,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 5,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18142,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 6,
+   "status": 200,
+   "kind": "ok",
+   "ms": 17997,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 7,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18112,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 8,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18037,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 9,
+   "status": 200,
+   "kind": "ok",
+   "ms": 18115,
+   "bytes": 36563,
+   "errorBody": null
+  },
+  {
+   "i": 10,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10057,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 11,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10058,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 12,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10058,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 13,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10058,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 14,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10059,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 15,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10059,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 16,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10063,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 17,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10064,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 18,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10064,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  },
+  {
+   "i": 19,
+   "status": 500,
+   "kind": "server_error",
+   "ms": 10065,
+   "bytes": 69,
+   "errorBody": "{\"message\":\"Something went wrong on the server. It has been logged.\"}"
+  }
+ ]
+}

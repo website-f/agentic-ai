@@ -33,7 +33,7 @@ describe('Arisha four-leader onboarding pilot', () => {
 
   it('advertises only role-scoped summary and finance tools', () => {
     const names = (u: typeof ceo | typeof finance | typeof coo | typeof act) => arishaToolsFor(u).map((t) => t.name);
-    assert.deepEqual(names(finance), ['executive_summary', 'finance_papers', 'prepare_finance_paper']);
+    assert.deepEqual(names(finance), ['task_guide', 'executive_summary', 'finance_papers', 'prepare_finance_paper']);
     assert.equal(names(coo).includes('finance_papers'), false);
     assert.equal(names(coo).includes('prepare_record'), true);
     assert.equal(names(act).includes('finance_papers'), true);

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { hasOwnStaffRecord, isGroupLeader, type ScoreState } from '@prima/core';
-import { api, type BranchWork, type MyWork, type PersonWork, type TeamWork, type WorkSummary } from '../api';
+import { api, type BranchWork, type MyWork, type PersonWork, type TeamWork, type WorkRebalance, type WorkSummary } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { EvidenceCamera } from './Camera';
 import { CooNoticesPanel } from './CooNotices';
 import { Readiness } from './Remote';
+import { CentralAdminGuide } from './CentralAdminGuide';
+import { MyCash } from './FinanceCash';
 
 type Task = MyWork['open'][number];
 
@@ -16,7 +18,7 @@ const STATE: Record<Task['state'], { label: string; tone: Tone }> = {
   waiting_review: { label: 'Waiting for review', tone: 'neutral' },
   accepted: { label: 'Accepted', tone: 'ok' },
 };
-const SOURCE: Record<Task['source'], string> = { playbook: 'Playbook', assigned: 'From manager', meeting: 'From a meeting', own: 'Own task' };
+const SOURCE: Record<Task['source'], string> = { playbook: 'Playbook', assigned: 'From manager', meeting: 'From a meeting', own: 'Own task', ceo: 'CEO instruction' };
 const SCORE: Record<ScoreState, { label: string; tone: Tone }> = {
   green: { label: 'Green', tone: 'ok' },
   amber: { label: 'Amber', tone: 'warn' },
@@ -42,15 +44,17 @@ export function WorkView() {
   const leader = isGroupLeader(me.user);
   const team = useLoad(() => api.teamWork(), []);
   const hasTeam = (team.data?.people.length ?? 0) > 0 || (team.data?.help.length ?? 0) > 0;
-  const tabs: { key: 'mine' | 'team' | 'summary'; label: string }[] = [
+  const tabs: { key: 'mine' | 'team' | 'rebalance' | 'summary'; label: string }[] = [
     ...(own ? [{ key: 'mine' as const, label: 'My work' }] : []),
     ...(hasTeam ? [{ key: 'team' as const, label: `My team (${team.data!.people.length})` }] : []),
+    ...(hasTeam ? [{ key: 'rebalance' as const, label: 'Rebalance (Arisha advice)' }] : []),
     ...(leader ? [{ key: 'summary' as const, label: 'Monday summary' }] : []),
   ];
-  const [tab, setTab] = useState<'mine' | 'team' | 'summary' | null>(null);
+  const [tab, setTab] = useState<'mine' | 'team' | 'rebalance' | 'summary' | null>(null);
   const cur = tab ?? tabs[0]?.key ?? 'mine';
   return (
     <>
+      <CentralAdminGuide view="work" />
       {tabs.length > 1 && (
         <div className="seg" style={{ marginBottom: 10, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
           {tabs.map((t) => (
@@ -62,6 +66,7 @@ export function WorkView() {
       )}
       {cur === 'mine' && own && <MyWorkTab />}
       {cur === 'team' && team.data && <TeamTab data={team.data} />}
+      {cur === 'rebalance' && hasTeam && <RebalanceTab />}
       {cur === 'summary' && leader && <SummaryTab />}
       {!own && !leader && !hasTeam && team.data && <div className="empty">No work screen for this sign-in.</div>}
     </>
@@ -121,6 +126,7 @@ function MyWorkTab() {
         <OwnTaskForm userId={me.user.id} />
       </section>
       <HelpPanel data={data} />
+      <MyCash />
       {data.waitingReview.length > 0 && (
         <section className="panel">
           <h3>Waiting for your manager’s review</h3>
@@ -230,6 +236,7 @@ function MyTaskRow({ t }: { t: Task }) {
       <div className="small">
         <strong>Done means:</strong> {t.doneMeans}
       </div>
+      <LastChange t={t} />
       {t.review?.verdict === 'returned' && (
         <div className="notice small" data-tone="warn">
           {t.review.by}: {t.review.note}
@@ -650,6 +657,8 @@ function ReviewTaskRow({ t, cooCheck }: { t: Task; cooCheck: PersonWork['cooChec
           {t.evidence.ref ? ` (${t.evidence.ref})` : ''} · {t.onTime ? 'on time' : 'late'}
         </div>
       )}
+      <LastChange t={t} />
+      {(t.state === 'open' || t.state === 'overdue' || t.state === 'returned') && <MoveOrAdjust t={t} />}
       {t.state === 'waiting_review' && cooCheck !== 'not_monitored' && (
         <>
           <input
@@ -678,6 +687,228 @@ function ReviewTaskRow({ t, cooCheck }: { t: Task; cooCheck: PersonWork['cooChec
         </>
       )}
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/** The manager's last move or readjust of a task, with the reason (Fauzan, 2 Nov 2026). */
+function LastChange({ t }: { t: Task }) {
+  const c = t.changes?.[t.changes.length - 1];
+  if (!c) return null;
+  const when = `${dateLabel(c.at.slice(0, 10))} ${hhmm(c.at)}`;
+  return (
+    <div className="notice small" data-tone="info">
+      {c.kind === 'reassign' ? `${c.by} moved this from ${c.fromName} to ${c.toName}` : `${c.by} changed the ${c.dueTo !== c.dueFrom ? 'due time' : 'priority'}`} ({when}): {c.reason}
+    </div>
+  );
+}
+
+/** Delegate (move to someone else in your line) or readjust (new due time or priority), always with a reason. */
+function MoveOrAdjust({
+  t,
+  preset,
+  onDone,
+}: {
+  t: { id: string; title: string; version: string; userId?: string; priority?: 'high' | 'normal' };
+  preset?: { action: 'reassign' | 'adjust'; toUserId: string | null; newDueAt: string | null; adviceId: string };
+  onDone?: () => void;
+}) {
+  const [open, setOpen] = useState(!!preset);
+  const [mode, setMode] = useState<'reassign' | 'adjust'>(preset?.action ?? 'reassign');
+  const [to, setTo] = useState(preset?.toUserId ?? '');
+  const toLocal = (iso: string) => new Date(Date.parse(iso) + 8 * 3_600_000).toISOString().slice(0, 16);
+  const [when, setWhen] = useState(preset?.newDueAt ? toLocal(preset.newDueAt) : '');
+  const [priority, setPriority] = useState<'' | 'high' | 'normal'>('');
+  const [reason, setReason] = useState('');
+  const team = useLoad(() => (open ? api.workRebalance() : Promise.resolve(null)), [open]);
+  const act = useAction();
+  if (!open)
+    return (
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>
+        Move or readjust
+      </button>
+    );
+  const people = (team.data?.people ?? []).filter((p) => p.userId !== t.userId);
+  const submit = () =>
+    act.run(
+      () =>
+        mode === 'reassign'
+          ? api.workTaskReassign(t.id, { toUserId: to, reason, dueAt: when ? fromLocal(when) : null, adviceId: preset?.adviceId ?? null, expectedVersion: t.version })
+          : api.workTaskAdjust(t.id, {
+              dueAt: when ? fromLocal(when) : null,
+              priority: priority || null,
+              reason,
+              adviceId: preset?.adviceId ?? null,
+              expectedVersion: t.version,
+            }),
+      mode === 'reassign' ? 'Task moved.' : 'Task readjusted.',
+    ).then((r) => {
+      if (r !== undefined) onDone?.();
+    });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="seg" style={{ alignSelf: 'flex-start' }}>
+        <button aria-pressed={mode === 'reassign'} onClick={() => setMode('reassign')}>
+          Move to someone else
+        </button>
+        <button aria-pressed={mode === 'adjust'} onClick={() => setMode('adjust')}>
+          Readjust
+        </button>
+      </div>
+      {mode === 'reassign' && (
+        <select className="input" aria-label="Move to" value={to} onChange={(e) => setTo(e.target.value)}>
+          <option value="">Choose who takes it</option>
+          {people.map((p) => (
+            <option key={p.userId} value={p.userId}>
+              {p.name} · {p.openTasks} open{p.overdue ? `, ${p.overdue} overdue` : ''}
+              {p.awaySoon ? ` · leave ${p.awaySoon.from}` : ''}
+            </option>
+          ))}
+        </select>
+      )}
+      <label className="small">
+        {mode === 'reassign' ? 'New due time (needed if it is already overdue)' : 'New due time'}
+        <input className="input" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+      </label>
+      {mode === 'adjust' && (
+        <select className="input" aria-label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as '' | 'high' | 'normal')}>
+          <option value="">Keep the priority{t.priority ? ` (${t.priority})` : ''}</option>
+          <option value="high">High priority</option>
+          <option value="normal">Normal priority</option>
+        </select>
+      )}
+      <input className="input" placeholder="Reason (needed; a short one is fine)" aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <div className="row" style={{ gap: 6 }}>
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || reason.trim().length < 5 || (mode === 'reassign' ? !to : !when && !priority)}
+          onClick={submit}
+        >
+          {mode === 'reassign' ? 'Move it' : 'Save the change'}
+        </button>
+        <button className="btn btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+// ---------- Rebalance with Arisha's advice (Fauzan, 2 Nov 2026) ----------
+
+const ROOM: Record<WorkRebalance['people'][number]['room'], { label: string; tone: Tone }> = {
+  room: { label: 'Has room', tone: 'ok' },
+  busy: { label: 'Busy', tone: 'neutral' },
+  overloaded: { label: 'Overloaded', tone: 'warn' },
+  away: { label: 'On leave', tone: 'info' },
+};
+const KIND: Record<WorkRebalance['advice'][number]['kind'], string> = {
+  cover_leave: 'Leave cover',
+  overdue_stuck: 'Overdue, needs a decision',
+  overloaded: 'Share the load',
+  at_risk: 'Tight on time',
+};
+
+function RebalanceTab() {
+  const { data, error } = useLoad(() => api.workRebalance(), []);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="Arisha's advice" />;
+  return (
+    <>
+      <section className="panel">
+        <h3>Arisha’s advice</h3>
+        <p className="muted small">{data.basis} It is a prompt for you, never a finding about the person.</p>
+        <div className="list">
+          {data.advice.length === 0 && (
+            <div className="empty">
+              {data.coverage.people === 0
+                ? 'Nobody in your line yet, so there is no advice.'
+                : `No rule fired on the tasks Prima holds. This is not a finding that the work is fair or on time: ${data.coverage.unknownUsualTime} of ${data.coverage.people} people have too few finished tasks for a usual time (UNKNOWN), ${data.coverage.openWithoutActTiming} of ${data.coverage.openTasks} open tasks have no ACT timing, and work outside Prima is not counted.`}
+            </div>
+          )}
+          {data.advice.map((a) => (
+            <AdviceRow key={a.id} a={a} ai={data.ai} />
+          ))}
+        </div>
+      </section>
+      <section className="panel">
+        <h3>Your team’s load</h3>
+        <p className="muted small">
+          Open tasks (high priority counts twice); team average {data.teamLoadAverage ?? 'UNKNOWN'}. Usual time is from getting a task to finishing it, over the last{' '}
+          {data.rules.lookBackDays} days; under {data.rules.minFinished} finished tasks it is UNKNOWN.
+        </p>
+        <div className="list">
+          {data.people.length === 0 && <div className="empty">Nobody reports to you.</div>}
+          {data.people.map((p) => (
+            <div key={p.userId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontWeight: 600 }}>{p.name}</div>
+                <Chip tone={ROOM[p.room].tone}>{ROOM[p.room].label}</Chip>
+              </div>
+              <div className="muted small">{p.title}</div>
+              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                <Chip tone="neutral">{p.openTasks} open</Chip>
+                {p.overdue > 0 && <Chip tone="crit">{p.overdue} overdue</Chip>}
+                <Chip tone="neutral">{p.typicalHours === null ? 'Usual time UNKNOWN' : `Usually ${p.typicalHours} h per task`}</Chip>
+                {p.awaySoon && (
+                  <Chip tone="info">
+                    Leave {p.awaySoon.from}
+                    {p.awaySoon.to !== p.awaySoon.from ? ` to ${p.awaySoon.to}` : ''}
+                    {p.awaySoon.approved ? '' : ' (asked)'}
+                  </Chip>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function AdviceRow({ a, ai }: { a: WorkRebalance['advice'][number]; ai: boolean }) {
+  const [doing, setDoing] = useState(false);
+  const [aiAnswer, setAiAnswer] = useState<{ text: string; source: string } | null>(null);
+  const ask = useAction();
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ fontWeight: 600, minWidth: 0 }}>{a.advice}</div>
+        <Chip tone={a.level === 'act_now' ? 'warn' : 'neutral'}>{KIND[a.kind]}</Chip>
+      </div>
+      <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+        {a.why.map((w) => (
+          <li key={w}>{w}</li>
+        ))}
+      </ul>
+      {aiAnswer && (
+        <div className="notice small" data-tone="info" style={{ whiteSpace: 'pre-wrap' }}>
+          <strong>{aiAnswer.source}:</strong> {aiAnswer.text || 'No answer.'}
+        </div>
+      )}
+      {ai && !aiAnswer && (
+        <button
+          className="btn btn-sm"
+          style={{ alignSelf: 'flex-start' }}
+          disabled={ask.busy}
+          onClick={() => ask.run(() => api.workRebalanceAskAi(a.id)).then((r) => r && setAiAnswer(r))}
+        >
+          {ask.busy ? 'Asking Arisha AI…' : 'Ask Arisha AI about this case'}
+        </button>
+      )}
+      <ErrorNotice error={ask.error} />
+      {doing ? (
+        <MoveOrAdjust
+          t={{ id: a.taskId, title: a.taskTitle, version: a.taskVersion, userId: a.userId }}
+          preset={{ action: a.suggest.action, toUserId: a.suggest.toUserId, newDueAt: a.suggest.newDueAt, adviceId: a.id }}
+          onDone={() => setDoing(false)}
+        />
+      ) : (
+        <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setDoing(true)}>
+          {a.suggest.action === 'reassign' ? 'Review and move' : 'Review and readjust'}
+        </button>
+      )}
     </div>
   );
 }

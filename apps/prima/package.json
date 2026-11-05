@@ -6,11 +6,12 @@
   "workspaces": [
     "packages/core",
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "apps/cms"
   ],
   "scripts": {
     "build": "npm run build -w @prima/core && npm run build -w @prima/api && VITE_ALLOW_SAME_ORIGIN_API=true npm run build -w @prima/web",
-    "test": "npm test -w @prima/core && npm test -w @prima/api",
+    "test": "npm test -w @prima/core && npm test -w @prima/api && npm test -w @prima/cms",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:reset": "npm run db:reset -w @prima/api",
     "dev:api": "npm run start:dev -w @prima/api",

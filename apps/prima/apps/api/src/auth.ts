@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, ServiceUnavailableException, UnauthorizedException, createParamDecorator } from '@nestjs/common';
-import { RULES, accessClosed, dateOf, fromMs, inPilot, type User } from '@prima/core';
+import { RULES, accessClosed, dateOf, fromMs, inPilot, rolloutAdmits, rolloutsOn, type User } from '@prima/core';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
 import { Db } from './db';
@@ -101,9 +101,65 @@ function admitted(user: User): User {
   // Offboarding: a closed account is refused before anything else is checked or shown.
   if (accessClosed(user, dateOf(fromMs(Date.now()))))
     throw new ForbiddenException(`This Prima account was closed from ${user.accessClosedFrom}. If you still work here, ask HR.`);
-  if (pilotSignInOnly() && !inPilot(user)) throw new ForbiddenException('You are not part of the pilot yet.');
+  if (pilotSignInOnly() && !pilotAdmits(user)) throw new ForbiddenException('You are not part of the pilot yet.');
   if (!leadershipOnboardingPermits(user)) throw new ForbiddenException('Prima is in leadership-only onboarding mode.');
   return user;
+}
+
+/**
+ * Who may sign in while the IT pilot is on: pilot users, plus the people of every department rollout the CEO has
+ * started (PRIMA_ROLLOUTS, see packages/core/src/rollouts.ts). A department adds itself with registerRollout() in its
+ * own module; this function does not change per department.
+ */
+export function pilotAdmits(user: User, env: Record<string, string | undefined> = process.env): boolean {
+  return inPilot(user) || rolloutAdmits(user, rolloutsOn(env));
+}
+
+/** The one sign-in check of a request (Arisha review, 3 Nov 2026): run once, shared by the rate limit and AuthGuard. */
+export type SignInCheck =
+  | { kind: 'none' }
+  | { kind: 'entra'; who: EntraIdentity; token: string }
+  | { kind: 'dev'; userId: string }
+  | { kind: 'invalid'; microsoft: boolean }
+  | { kind: 'unavailable' };
+const signInChecks = new WeakMap<object, { header: string; check: Promise<SignInCheck> }>();
+const MAX_AUTH_HEADER = 8192;
+
+async function runSignInCheck(header: string): Promise<SignInCheck> {
+  if (header.length > MAX_AUTH_HEADER) return { kind: 'invalid', microsoft: false };
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return { kind: 'none' };
+  const setup = entraSetup();
+  if (setup && token.split('.').length === 3) {
+    try {
+      return { kind: 'entra', who: await verifyEntraToken(token, setup.cfg, setup.keys), token };
+    } catch (e) {
+      if (e instanceof EntraTokenError) return { kind: 'invalid', microsoft: true };
+      // Microsoft's signing keys could not be fetched: a passing outage, not the person's fault. No token is logged.
+      console.error(`Microsoft sign-in check failed: ${(e as Error).message}`);
+      return { kind: 'unavailable' };
+    }
+  }
+  const userId = devLoginOn() && process.env.DEV_TOKEN_SECRET ? verifyToken(token) : null;
+  return userId ? { kind: 'dev', userId } : { kind: 'invalid', microsoft: false };
+}
+
+/** The request's sign-in check: verified at most once per request, whoever asks first. */
+export function signInCheck(req: object, header: string): Promise<SignInCheck> {
+  const had = signInChecks.get(req);
+  if (had && had.header === header) return had.check;
+  const check = runSignInCheck(header);
+  signInChecks.set(req, { header, check });
+  return check;
+}
+
+/**
+ * Who a request is for the rate limit (security.ts): a verified Microsoft sign-in or a verified development token,
+ * otherwise null. The same check is reused by AuthGuard, so a request is never verified twice.
+ */
+export async function rateIdentity(header: string, req: object = {}): Promise<string | null> {
+  const c = await signInCheck(req, header);
+  return c.kind === 'entra' ? `entra:${c.who.tid}:${c.who.oid}` : c.kind === 'dev' ? `dev:${c.userId}` : null;
 }
 
 /**
@@ -130,7 +186,7 @@ export class AuthGuard implements CanActivate {
     // Never trust a header/body property or a reused development request as an OBO assertion.
     verifiedEntraAssertions.delete(req);
     delete req.office;
-    // The Agentic Office (office.ts): a signed call naming a Microsoft account. Once the headers are present the call
+    // The Agentic Office (office.ts): a signed call naming a staff record. Once the headers are present the call
     // must verify; it never falls through to another way in.
     if (isOfficeCall(req.headers as Record<string, unknown>)) {
       const call = verifyOffice(req.headers as Record<string, unknown>, req.method, req.originalUrl, (req as AuthedRequest & { rawBody?: Buffer }).rawBody);
@@ -141,24 +197,16 @@ export class AuthGuard implements CanActivate {
       return true;
     }
     const header = req.headers.authorization ?? '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-    const setup = entraSetup();
-    if (setup && token.split('.').length === 3) {
-      let who: EntraIdentity;
-      try {
-        who = await verifyEntraToken(token, setup.cfg, setup.keys);
-      } catch (e) {
-        if (e instanceof EntraTokenError) throw new UnauthorizedException('Sign in again with Microsoft.');
-        // Microsoft's signing keys could not be fetched: a passing outage, not the person's fault.
-        console.error(`Microsoft sign-in check failed: ${(e as Error).message}`);
-        throw new ServiceUnavailableException('Microsoft sign-in cannot be checked right now. Try again in a minute.');
-      }
-      req.userId = (await userForEntra(this.db, who)).id;
-      verifiedEntraAssertions.set(req, Object.freeze({ userId: req.userId, oid: who.oid, tenantId: who.tid, accessToken: token }));
+    const c = await signInCheck(req, header);
+    if (c.kind === 'unavailable') throw new ServiceUnavailableException('Microsoft sign-in cannot be checked right now. Try again in a minute.');
+    if (c.kind === 'invalid' && c.microsoft) throw new UnauthorizedException('Sign in again with Microsoft.');
+    if (c.kind === 'entra') {
+      req.userId = (await userForEntra(this.db, c.who)).id;
+      verifiedEntraAssertions.set(req, Object.freeze({ userId: req.userId, oid: c.who.oid, tenantId: c.who.tid, accessToken: c.token }));
       return true;
     }
-    const userId = token && devLoginOn() ? verifyToken(token) : null;
-    if (!userId) throw new UnauthorizedException('Sign in again.');
+    if (c.kind !== 'dev') throw new UnauthorizedException('Sign in again.');
+    const userId = c.userId;
     if (process.env.LEADERSHIP_ONBOARDING_ONLY === 'true') {
       const user = await this.db.asUser(userId, async (_svc, u) => u);
       if (!leadershipOnboardingPermits(user)) throw new ForbiddenException('Prima is in leadership-only onboarding mode.');

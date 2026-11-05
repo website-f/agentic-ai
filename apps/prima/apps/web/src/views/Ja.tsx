@@ -8,9 +8,9 @@ import { Chip, ErrorNotice, Kpi, Loading, Sev, dateLabel, dateTimeLabel, useLoad
  * feed is late shows as unknown, never as fine.
  */
 
-type Tab = 'feed' | 'payroll' | 'worker' | 'incident';
+type Tab = 'feed' | 'payroll' | 'worker' | 'incident' | 'guard';
 
-const DATASET: Record<JaBoard['datasets'][number], string> = { payroll: 'Payroll', worker: 'Foreign workers', incident: 'Incidents' };
+const DATASET: Record<JaBoard['datasets'][number], string> = { payroll: 'Payroll', worker: 'Foreign workers', incident: 'Incidents', guard: 'Guards', paySummary: 'Guard pay' };
 const PAY: Record<JaBoard['payroll'][number]['status'], [Tone, string]> = {
   draft: ['neutral', 'Draft'],
   approved: ['warn', 'Approved, not paid'],
@@ -31,7 +31,7 @@ export function JaView() {
   const [tab, setTab] = useState<Tab | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="JA Group app data" />;
-  const tabs: Tab[] = [...(data.syncs.length || data.datasets.length > 1 ? (['feed'] as Tab[]) : []), ...data.datasets];
+  const tabs: Tab[] = [...(data.syncs.length || data.datasets.length > 1 ? (['feed'] as Tab[]) : []), ...data.datasets.filter((d): d is Exclude<typeof d, 'paySummary'> => d !== 'paySummary')];
   const current = tab && tabs.includes(tab) ? tab : tabs[0];
   const stale = data.feeds.flatMap((f) => f.companies.filter((c) => c.state !== 'ok'));
   const openBig = data.incidents.filter((i) => i.status === 'open' && (i.severity === 'P1' || i.severity === 'P2')).length;
@@ -66,6 +66,12 @@ export function JaView() {
           />
         )}
         {data.datasets.includes('incident') && <Kpi label="Open P1 or P2" value={openBig} tone={openBig ? 'crit' : 'ok'} />}
+        {data.datasets.includes('guard') && (
+          <Kpi label="Active guards" value={data.guards.reduce((n, g) => n + g.active, 0)} tone={data.guards.some((g) => g.stale) ? 'unknown' : 'ok'} note="From JA" />
+        )}
+        {data.datasets.includes('guard') && data.belowMinimumWage.length > 0 && (
+          <Kpi label="Below minimum wage" value={data.belowMinimumWage.length} tone="crit" note="Basic pay in JA" />
+        )}
       </div>
       {tabs.length > 1 && (
         <div className="tabbar" role="tablist" aria-label="JA data">
@@ -80,6 +86,7 @@ export function JaView() {
       {current === 'payroll' && <PayrollPanel data={data} />}
       {current === 'worker' && <PapersPanel data={data} />}
       {current === 'incident' && <IncidentsPanel data={data} />}
+      {current === 'guard' && <GuardsPanel data={data} />}
     </div>
   );
 }
@@ -288,5 +295,52 @@ function Contributions({ rows }: { rows: JaBoard['payroll'] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Guards from JA (slice 3G, Fauzan 2 Nov 2026): each guard is keyed once in JA and filed here as the person record HR,
+ * the company and Operations read. Full IC and salary account stay behind the HR wall.
+ */
+function GuardsPanel({ data }: { data: JaBoard }) {
+  return (
+    <>
+      <section className="panel">
+        <div className="panel-head">
+          <h3>Guards by company</h3>
+        </div>
+        <div className="list">
+          {data.guards.length === 0 && <div className="empty">No guard records received yet.</div>}
+          {data.guards.map((g) => (
+            <div key={g.companyId} className="list-item">
+              <div>{g.companyName}</div>
+              <span className="small">
+                {g.active} active · {g.suspended} suspended · {g.left} left · {g.foreign} foreign {g.stale && <Chip tone="unknown">feed late</Chip>}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+      {data.belowMinimumWage.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3>Basic pay below the minimum wage</h3>
+            <Chip tone="crit">{data.belowMinimumWage.length}</Chip>
+          </div>
+          <div className="list">
+            {data.belowMinimumWage.map((g) => (
+              <div key={`${g.companyId}-${g.staffNo}`} className="list-item">
+                <div>
+                  {g.name} <span className="muted small">{g.staffNo} · {g.companyName}</span>
+                </div>
+                <span className="small">
+                  {rm(g.basicPay)} against {rm(g.minimum)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
   );
 }

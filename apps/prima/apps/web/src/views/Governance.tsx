@@ -161,7 +161,7 @@ function MandateLine({ r, data }: { r: Row; data: GovBoard }) {
               <input className="input" aria-label="Verification note" placeholder="What you checked" value={text} onChange={(e) => setText(e.target.value)} />
               <button
                 className="btn btn-sm btn-primary"
-                disabled={act.busy}
+                disabled={act.busy || !text.trim()}
                 onClick={() => act.run(() => api.govMandateStep(m.id, 'verify', { note: text }), 'Verified.')}
               >
                 Signed copy verified

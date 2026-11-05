@@ -2377,7 +2377,7 @@ export class WebsiteService {
         'verify',
       );
       if (next === 'compliance') {
-        const act = (await tx.list('users', {})).filter((u) => u.department === 'audit' && (u.actRole === 'lead' || u.actRole === 'deputy')).map((u) => u.id);
+        const act = (await tx.list('users', {})).filter((u) => u.department === 'audit' && (u.actRole === 'lead' || u.actRole === 'auditor')).map((u) => u.id);
         await this.notify(tx, act, `Licence or certification claim to verify on a company website (${r.quarter})`, { kind: 'review', id: r.id });
       } else if (next === 'approval') await this.notify(tx, [o.approverId], `Website review waiting for your approval (${r.quarter})`, { kind: 'review', id: r.id });
       else await this.notify(tx, [o.itAdminId], `Website changes verified: prepare the preview (${r.quarter})`, { kind: 'review', id: r.id });

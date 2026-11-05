@@ -26,3 +26,12 @@ test('logging only uses fixed classifications and never invokes arbitrary code a
   assert.match(String(a.logged[0]),/category=unexpected$/);assert.match(String(b.logged[0]),/category=unexpected$/);
   assert.notEqual(a.logged[0],b.logged[0]);assert.ok(!JSON.stringify([a,b]).includes('PRIVATE'));
 });
+test('a busy connection pool answers 503 "try again", logs a fixed category and leaks nothing', () => {
+  const r = run(new Error('timeout exceeded when trying to connect'));
+  assert.equal(r.status, 503);
+  assert.match(String((r.body as { message: string }).message), /busy/);
+  assert.match(String(r.logged[0]), /^server_busy reference=[0-9a-f-]{36} category=database_busy$/);
+  // Anything else, even with similar words, stays a plain 500.
+  assert.equal(run(new Error('timeout exceeded when trying to connect PRIVATE')).status, 500);
+  assert.equal(run({ message: 'timeout exceeded when trying to connect' }).status, 500);
+});

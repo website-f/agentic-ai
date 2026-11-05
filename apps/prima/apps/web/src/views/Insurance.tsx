@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RecordButton } from './RecordForm';
 import { api, type Insurance } from '../api';
 import { useApp } from '../App';
-import { Chip, ErrorNotice, ExpiryChip, Kpi, Loading, dateLabel, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, ExpiryChip, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 
 type Tab = 'alerts' | 'policies' | 'premiums' | 'claims' | 'guarantees' | 'companies';
 
@@ -22,6 +22,7 @@ const CLAIM_STATUS: Record<Insurance['claims'][number]['claim']['status'], { lab
   notified: { label: 'Insurer told', tone: 'info' },
   documents: { label: 'Sending documents', tone: 'info' },
   assessing: { label: 'Adjuster assessing', tone: 'info' },
+  offered: { label: 'Insurer offered', tone: 'warn' },
   settled: { label: 'Settled', tone: 'ok' },
   rejected: { label: 'Rejected', tone: 'neutral' },
 };
@@ -226,6 +227,8 @@ function Premiums({ data }: { data: Insurance }) {
 }
 
 function Claims({ data }: { data: Insurance }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = data.claims.find((r) => r.claim.id === openId) ?? null;
   return (
     <section className="panel">
       <div className="panel-head">
@@ -255,13 +258,132 @@ function Claims({ data }: { data: Insurance }) {
               </div>
               <div className="row" style={{ gap: 6 }}>
                 <Chip tone={s.tone}>{s.label}</Chip>
-                <RecordButton kind="insuranceClaim" id={r.claim.id} />
+                {!r.covered && <Chip tone="warn">Outside cover dates</Chip>}
+                <button className="btn btn-sm" onClick={() => setOpenId(r.claim.id)}>
+                  Steps
+                </button>
+                {r.claim.status === 'to_notify' && <RecordButton kind="insuranceClaim" id={r.claim.id} />}
               </div>
             </div>
           );
         })}
       </div>
+      {open && <ClaimDrawer row={open} onClose={() => setOpenId(null)} />}
     </section>
+  );
+}
+
+type ClaimRow = Insurance['claims'][number];
+
+/** Masterplan 61: each claim step is recorded by a person with its reference. Prima never contacts the insurer. */
+function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }) {
+  const act = useAction();
+  const c = r.claim;
+  const [f, setF] = useState<Record<string, string>>({});
+  const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const input = (k: string, label: string, type = 'text') => <input className="input" type={type} aria-label={label} placeholder={label} value={f[k] ?? ''} onChange={set(k)} />;
+  const step = (action: string, body: Record<string, unknown>, done: string) =>
+    act.run(() => api.insuranceClaimAct(c.id, action, body), done).then((x) => x !== undefined && setF({}));
+  const keep = r.can.keep;
+  return (
+    <Drawer title={c.ref} sub={`${r.companyName} · ${r.policyLabel}`} onClose={onClose}>
+      <section className="panel">
+        <p className="small muted">Staff record each step with its reference. Prima does not contact the insurer, accept offers by itself or receive money.</p>
+        {!r.covered && <div className="notice" data-tone="warn">The incident date is outside the policy period. Check cover with the insurer or broker.</div>}
+        <div className="list">
+          <div className="list-item"><span>Claimed</span><span>{rm(c.amountClaimed)}</span></div>
+          {c.insurerRef && <div className="list-item"><span>Insurer reference</span><span>{c.insurerRef} ({c.notifyHow})</span></div>}
+          {c.offer && <div className="list-item"><span>Offer</span><span>{rm(c.offer.amount)} · {c.offer.ref}</span></div>}
+          {c.accepted && <div className="list-item"><span>Accepted by</span><span>{c.accepted.by}: {c.accepted.note}</span></div>}
+          {c.received && <div className="list-item"><span>Money received</span><span>{dateLabel(c.received.on)} · {c.received.bankRef} · {c.received.by}</span></div>}
+          {c.rejection && <div className="list-item"><span>Rejected</span><span>{c.rejection.reason} ({c.rejection.ref})</span></div>}
+          {c.appeal && <div className="list-item"><span>Appeal</span><span>{c.appeal.reason}</span></div>}
+        </div>
+        {(c.status === 'notified' || c.status === 'documents') && (
+          <>
+            <h3>Documents</h3>
+            <div className="list">
+              {(c.docs ?? []).map((d) => (
+                <div className="list-item" key={d.name}><span>{d.name}</span><span className="small">{d.ref}</span></div>
+              ))}
+            </div>
+            {r.missingDocs.length > 0 && <div className="notice">Usually still needed: {r.missingDocs.join(', ')}. The insurer&apos;s own list wins.</div>}
+          </>
+        )}
+        {keep && c.status === 'to_notify' && (
+          <div className="list" style={{ gap: 6 }}>
+            {input('on', 'Date the insurer was told', 'date')}
+            {input('insurerRef', 'Insurer claim reference')}
+            {input('how', 'How (email, letter, portal, broker)')}
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('notify', { on: f.on, insurerRef: f.insurerRef, how: f.how }, 'Recorded: insurer told.')}>Record insurer told</button>
+          </div>
+        )}
+        {keep && (c.status === 'notified' || c.status === 'documents') && (
+          <div className="list" style={{ gap: 6 }}>
+            <select className="select" aria-label="Document" value={f.name ?? ''} onChange={set('name')}>
+              <option value="">Choose or type a document</option>
+              {r.typicalDocs.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            {input('name', 'Document name')}
+            {input('ref', 'Document reference or file number')}
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('add_doc', { name: f.name, ref: f.ref }, 'Document added.')}>Add document</button>
+            {c.status === 'documents' && (
+              <>
+                {input('on', 'Date documents went to the insurer', 'date')}
+                <button className="btn btn-primary btn-sm" disabled={act.busy || r.missingDocs.length > 0} onClick={() => step('submit', { on: f.on }, 'Sent for assessment.')}>Sent for assessment</button>
+              </>
+            )}
+          </div>
+        )}
+        {keep && c.status === 'assessing' && (
+          <div className="list" style={{ gap: 6 }}>
+            {input('amount', 'Amount offered (RM)')}
+            {input('ref', 'Offer or discharge letter reference')}
+            {input('on', 'Offer date', 'date')}
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('offer', { amount: Number(f.amount), ref: f.ref, on: f.on }, 'Offer recorded. The company manager accepts it.')}>Record offer</button>
+          </div>
+        )}
+        {r.can.accept && c.status === 'offered' && !c.accepted && (
+          <div className="list" style={{ gap: 6 }}>
+            {input('note', 'Comment (why the company accepts)')}
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('accept', { note: f.note }, 'Offer accepted. Finance records the money when it arrives.')}>Accept offer for the company</button>
+          </div>
+        )}
+        {r.can.receive && c.status === 'offered' && c.accepted && (
+          <div className="list" style={{ gap: 6 }}>
+            {input('bankRef', 'Bank statement reference')}
+            {input('on', 'Date money reached the bank', 'date')}
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('received', { bankRef: f.bankRef, on: f.on }, 'Money received recorded. Claim settled.')}>Record money received</button>
+          </div>
+        )}
+        {keep && ['notified', 'documents', 'assessing', 'offered'].includes(c.status) && !c.accepted && (
+          <details>
+            <summary className="small">Insurer rejected the claim</summary>
+            <div className="list" style={{ gap: 6 }}>
+              {input('reason', "Insurer's reason")}
+              {input('ref', 'Letter reference')}
+              {input('on', 'Date', 'date')}
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => step('reject', { reason: f.reason, ref: f.ref, on: f.on }, 'Rejection recorded.')}>Record rejection</button>
+            </div>
+          </details>
+        )}
+        {r.can.accept && c.status === 'rejected' && !c.appeal && (
+          <div className="list" style={{ gap: 6 }}>
+            {input('reason', 'Grounds for appeal')}
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('appeal', { reason: f.reason }, 'Appeal recorded.')}>Appeal (once)</button>
+          </div>
+        )}
+        <ErrorNotice error={act.error} />
+        <h3>History</h3>
+        <div className="list">
+          {(c.steps ?? []).map((s, i) => (
+            <div className="list-item small" key={i}><span>{dateTimeLabel(s.at)} · {s.by}</span><span>{s.what}{s.note ? `: ${s.note}` : ''}</span></div>
+          ))}
+        </div>
+      </section>
+    </Drawer>
   );
 }
 
@@ -351,8 +473,10 @@ function Companies({ data }: { data: Insurance }) {
                         ? 'expired'
                         : 'unknown'
                   : 'unknown'}{' '}
-                · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown · Armed-service cover: {r.armsInsurance} client agreements,{' '}
-                {r.armsInsuranceDue} due or unknown
+                · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown ·{' '}
+                {data.armedCoverOnArmsBoard
+                  ? 'Armed-service and cash-in-transit cover: checked on the Arms Control board'
+                  : `Armed-service cover: ${r.armsInsurance} client agreements, ${r.armsInsuranceDue} due or unknown`}
               </div>
             </div>
           ) : (

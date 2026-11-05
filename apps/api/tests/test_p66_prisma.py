@@ -114,7 +114,7 @@ def test_the_catalog_is_prima_s_api():
     assert ("GET", "api/staff-pay") in paths and ("GET", "api/companies/:id/attendance") in paths
     # The signed feeds, the office's own staff list and development sign-in are never offered.
     assert not any(
-        str(p).startswith(("api/integrations", "api/auth/dev-login", "api/office"))
+        str(p).startswith(("api/integrations", "api/auth/dev-login", "api/office/"))
         for _, p in paths
     )
     assert routes.find("apply leave")[0]["path"].startswith("api/leave")

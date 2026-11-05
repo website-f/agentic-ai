@@ -1,9 +1,18 @@
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, ExpiryChip, Kpi, Loading, Sev, dateLabel, hhmm, useLoad } from '../ui';
+import { VacanciesPanel } from './HrJoinLeave';
+import { StaffMovementPanel } from './HrMovement';
 
 export function CompanyView() {
-  const { companyId, go } = useApp();
+  const { companyId, go, me } = useApp();
+  // HR asks the company head to sign vacancies and to accept staff moving in; the head cannot open the HR screen.
+  const headHr = me.user.role === 'company_manager' ? (
+    <>
+      <VacanciesPanel />
+      <StaffMovementPanel onlyIfAny />
+    </>
+  ) : null;
   const { data, error } = useLoad(() => api.dashboard(companyId), [companyId]);
   if (error)
     return (
@@ -29,6 +38,7 @@ export function CompanyView() {
           </div>
         </div>
         <Licences licences={row.licences} />
+        {headHr}
       </div>
     );
   }
@@ -149,6 +159,7 @@ export function CompanyView() {
       </div>
 
       <Licences licences={row.licences} />
+      {headHr}
     </div>
   );
 }

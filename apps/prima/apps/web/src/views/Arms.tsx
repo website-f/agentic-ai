@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { REGIONS, type ArmedJobKind, type ArmedJobStatus, type ArmsOverdueState, type FirearmStatus } from '@prima/core';
 import { api, type ArmsDetail } from '../api';
 import { useApp } from '../App';
-import { ArmsControlBoard, type ArmsTab } from './ArmsControl';
+import { ArmsControlBoard, REQUEST_KIND, Resubmit, StepActions, type ArmsTab } from './ArmsControl';
+import { OpsGuide } from './OpsGuide';
 import { RecordButton } from './RecordForm';
 import { WitnessField, emptyWitness } from './Witness';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Kpi, Loading, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
@@ -13,6 +14,8 @@ const FIREARM_STATUS: Record<FirearmStatus, { label: string; tone: Tone }> = {
   MAINTENANCE: { label: 'Maintenance', tone: 'neutral' },
   UNVERIFIED: { label: 'Unverified', tone: 'crit' },
   LOST: { label: 'Lost', tone: 'crit' },
+  DEPOSITED: { label: 'With the police', tone: 'neutral' },
+  OFF_REGISTER: { label: 'Off the register', tone: 'neutral' },
 };
 
 const OVERDUE: Record<ArmsOverdueState, { label: string; tone: Tone }> = {
@@ -332,6 +335,8 @@ function CompanyArms({ companyId }: { companyId: string }) {
         </section>
       )}
       {me.user.role !== 'supervisor' && <ArmedJobs data={data} canPlan={can} />}
+      {me.user.role !== 'supervisor' && <CompanyRequests data={data} />}
+      <OpsGuide area="arms" />
       {!can && <p className="muted small">You can view this. Only the company's manager or the site supervisor issues, receives and counts firearms.</p>}
 
       {issue && (
@@ -543,6 +548,164 @@ const JOB_STATUS: Record<ArmedJobStatus, { label: string; tone: Tone }> = {
 const ALL_STATES = REGIONS.flatMap((r) => r.states);
 
 /** The company's armed jobs: plan them and record how each goes. Arms Control and CMS watch the same jobs. */
+type RaiseKind = 'ACQUIRE' | 'SERVICE' | 'DISPOSE' | 'LOSS_REPORT';
+
+/**
+ * The company's arms requests (review, 2 Nov 2026): the company raises a request, Arms Control reviews it, the company
+ * manager (holder of the A licence) authorises it, and a request sent back is corrected and sent again here. The server
+ * decides who may press each button; nobody decides their own request.
+ */
+function CompanyRequests({ data }: { data: ArmsDetail }) {
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [raising, setRaising] = useState(false);
+  const { run, busy, error } = useAction();
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Arms requests</h3>
+          <div className="muted small">Buy, service, dispose of or report the loss of firearms. Arms Control reviews; the company manager authorises.</div>
+        </div>
+        {data.can.raise && (
+          <button className="btn btn-primary btn-sm" onClick={() => setRaising(true)}>
+            New arms request
+          </button>
+        )}
+      </div>
+      <ErrorNotice error={error} />
+      <div className="list">
+        {data.requests.length === 0 && <div className="empty">No arms requests in the last 30 days.</div>}
+        {data.requests.map((r) => {
+          const step = data.requestSteps.find((s) => s.id === r.request.state);
+          return (
+            <div key={r.request.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{r.request.title}</div>
+                  <div className="muted small">
+                    {r.request.ref} · {REQUEST_KIND[r.request.kind]} · raised by {r.request.raisedBy}
+                    {r.request.quantity ? ` · ${r.request.quantity} pcs` : ''}
+                    {r.request.estCost ? ` · RM${r.request.estCost}` : ''}
+                  </div>
+                </div>
+                <Chip tone={r.request.state === 'draft' ? 'warn' : r.request.state === 'closed' ? 'neutral' : 'info'}>{r.request.state === 'draft' ? 'Sent back' : (step?.label ?? r.request.state)}</Chip>
+              </div>
+              {r.last && (
+                <div className="small">
+                  Last: {r.last.by}, {r.last.action.replace('_', ' ')}
+                  {r.last.reason ? `: ${r.last.reason}` : ''}
+                </div>
+              )}
+              {r.request.state === 'draft' && r.mine && (
+                <Resubmit id={r.request.id} label={r.request.ref} quantity={r.request.quantity ?? null} estCost={r.request.estCost ?? null} busy={busy} run={run} />
+              )}
+              {r.request.state === 'company_auth' && data.can.authorise && !r.mine && (
+                <StepActions id={r.request.id} label={r.request.ref} state={r.request.state} note={note[r.request.id] ?? ''} onNote={(v) => setNote({ ...note, [r.request.id]: v })} busy={busy} run={run} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {raising && <RaiseRequestDrawer data={data} onClose={() => setRaising(false)} />}
+    </section>
+  );
+}
+
+function RaiseRequestDrawer({ data, onClose }: { data: ArmsDetail; onClose: () => void }) {
+  const [kind, setKind] = useState<RaiseKind>('ACQUIRE');
+  const [title, setTitle] = useState('');
+  const [why, setWhy] = useState('');
+  const [qty, setQty] = useState('');
+  const [calibre, setCalibre] = useState('');
+  const [cost, setCost] = useState('');
+  const [picked, setPicked] = useState<string[]>([]);
+  const act = useAction();
+  const buying = kind === 'ACQUIRE';
+  const choices = data.firearms.filter((f) => f.firearm.status !== 'OFF_REGISTER' && f.firearm.ownership !== 'TRADE');
+  const ready = title.trim().length >= 4 && why.trim().length >= 3 && (buying ? Number(qty) >= 1 : picked.length > 0);
+  return (
+    <Drawer title="New arms request" onClose={onClose}>
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>What is it for</span>
+        <select className="input" value={kind} onChange={(e) => (setKind(e.target.value as RaiseKind), setPicked([]))}>
+          {(['ACQUIRE', 'SERVICE', 'DISPOSE', 'LOSS_REPORT'] as const).map((k) => (
+            <option key={k} value={k}>
+              {REQUEST_KIND[k]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Short title</span>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Buy 500 rounds for the CIT team" />
+      </label>
+      <label className="field">
+        <span>Why, and what papers you have</span>
+        <textarea className="input" rows={3} value={why} onChange={(e) => setWhy(e.target.value)} placeholder="e.g. Monthly range practice; supplier quotation attached to the file" />
+      </label>
+      {buying ? (
+        <>
+          <label className="field">
+            <span>Quantity</span>
+            <input className="input" type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Calibre or model (optional)</span>
+            <input className="input" value={calibre} onChange={(e) => setCalibre(e.target.value)} placeholder="e.g. 12 gauge" />
+          </label>
+          <label className="field">
+            <span>Estimated cost, RM (optional)</span>
+            <input className="input" type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} />
+          </label>
+        </>
+      ) : (
+        <fieldset className="field">
+          <legend>Firearms</legend>
+          {choices.length === 0 && <div className="muted small">No firearms on this company's register.</div>}
+          {choices.map((f) => (
+            <label key={f.firearm.id} className="row small" style={{ gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={picked.includes(f.firearm.id)}
+                onChange={(e) => setPicked(e.target.checked ? [...picked, f.firearm.id] : picked.filter((x) => x !== f.firearm.id))}
+              />
+              {f.firearm.tag} · {f.firearm.kind} · {f.firearm.serialMasked}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !ready}
+          onClick={() =>
+            act.run(
+              () =>
+                api.raiseArmsRequest({
+                  companyId: data.company.id,
+                  kind,
+                  title: title.trim(),
+                  note: why.trim(),
+                  firearmIds: buying ? [] : picked,
+                  quantity: buying ? Number(qty) : null,
+                  calibre: buying && calibre.trim() ? calibre.trim() : null,
+                  estCost: buying && cost !== '' ? Number(cost) : null,
+                }),
+              'Sent to Arms Control',
+            ).then((r) => r && onClose())
+          }
+        >
+          Send to Arms Control
+        </button>
+      </div>
+    </Drawer>
+  );
+}
+
 function ArmedJobs({ data, canPlan }: { data: ArmsDetail; canPlan: boolean }) {
   const [planning, setPlanning] = useState(false);
   return (
@@ -708,8 +871,8 @@ function PlanJobDrawer({ data, onClose }: { data: ArmsDetail; onClose: () => voi
         </div>
         {away.length > 0 && (
           <>
-            <div className="notice" data-tone="warn">
-              Arms leave {data.homeState} for {away.join(', ')}. Record the police approval first.
+            <div className="muted small">
+              Arms leave {data.homeState} for {away.join(', ')}. Record the police approval reference here when you have it.
             </div>
             <input
               className="input"

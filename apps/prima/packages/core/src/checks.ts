@@ -103,6 +103,14 @@ export function deployability(person: Person, credentials: Credential[], on: Iso
       ruleId: RULES.maxGuardAge.id,
     });
   }
+  if (armed && person.role !== 'office' && RULES.armsLocalOnly.value && person.nationality !== 'MY') {
+    findings.push({
+      level: 'block',
+      code: 'FOREIGN_ARMED',
+      message: `${person.name} is not Malaysian. Only Malaysian guards may work an armed post.`,
+      ruleId: RULES.armsLocalOnly.id,
+    });
+  }
   const latest = latestCredentials(credentials.filter((c) => c.personId === person.id));
   for (const type of requiredCredentials(person, armed)) {
     const r = checkRequirement(person, latest, type, on);
@@ -468,6 +476,8 @@ export function armsIssueCheck(args: {
   const st = credentialStatus(permit, 'FIREARM_PERMIT', today);
   if (st.status === 'UNKNOWN' || st.status === 'OVERDUE') block('NO_PERMIT', `${person.name} has no valid firearm permit.`);
   if (person.status !== 'active') block('NOT_ACTIVE', `${person.name} is ${person.status}.`);
+  if (RULES.armsLocalOnly.value && person.nationality !== 'MY')
+    block('FOREIGN_GUARD', `${person.name} is not Malaysian. Firearms are never issued to a foreign guard.`, 'ARMS-LOCAL-ONLY');
   if (vault.authorisedUsers && !vault.authorisedUsers.includes(issuer))
     block('NOT_AUTHORISED_USER', `${issuer} is not on the authorised list for ${vault.name}.`);
   const scan = normaliseRfid(args.rfidScan);
