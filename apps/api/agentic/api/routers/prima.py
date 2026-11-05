@@ -23,7 +23,8 @@ router = APIRouter(prefix="/api/prima", tags=["prima"])
 def _refused(e: PrimaError) -> JSONResponse:
     # Prima's own error shape ({message}), so its screens show it like their own.
     return JSONResponse(
-        {"message": render(e.message), "statusCode": e.status}, status_code=e.status
+        {"message": render(e.message), "statusCode": e.status, "code": e.code},
+        status_code=e.status,
     )
 
 
@@ -34,7 +35,10 @@ async def status(
     """For the Prima page: is Prima here, and who it knows this person as."""
     ws = principal.workspace_id
     if not client.enabled(ws):
-        return {"enabled": False, "running": False, "linked": False, "me": None, "problem": ""}
+        return {
+            "enabled": False, "running": False, "linked": False, "me": None, "problem": "",
+            "needs_microsoft": False,
+        }  # fmt: skip
     try:
         ans = await client.call(
             db, workspace_id=ws, user_id=principal.user.id, method="GET", path="api/me"
@@ -46,6 +50,7 @@ async def status(
             "linked": False,
             "me": None,
             "problem": render(e.message),
+            "needs_microsoft": e.code == "microsoft_needed",
         }
     if ans.status == 200:
         data = ans.json()
@@ -55,7 +60,10 @@ async def status(
             if isinstance(user, dict)
             else None
         )
-        return {"enabled": True, "running": True, "linked": True, "me": me, "problem": ""}
+        return {
+            "enabled": True, "running": True, "linked": True, "me": me, "problem": "",
+            "needs_microsoft": False,
+        }  # fmt: skip
     problem = ""
     try:
         data = ans.json()
@@ -68,6 +76,7 @@ async def status(
         "linked": False,
         "me": None,
         "problem": problem or tr("Prima did not open for this account."),
+        "needs_microsoft": False,
     }
 
 

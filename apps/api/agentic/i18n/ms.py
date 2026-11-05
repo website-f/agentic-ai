@@ -1850,4 +1850,8 @@ MS: dict[str, str] = {
         "Rekod Prima itu sudah dipautkan kepada orang lain dalam pejabat."
     ),
     "That Prima record does not exist.": "Rekod Prima itu tidak wujud.",
+    "Connect your Microsoft work account to the office to open Prima. It takes one sign-in with Microsoft.": (  # noqa: E501
+        "Sambungkan akaun kerja Microsoft anda ke pejabat untuk membuka Prima. Ia hanya perlu "
+        "satu log masuk dengan Microsoft."
+    ),
 }

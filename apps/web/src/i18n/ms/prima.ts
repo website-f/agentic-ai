@@ -59,4 +59,11 @@ export const PRIMA: Record<string, string> = {
   "Prima record for {name}": "Rekod Prima untuk {name}",
   "Link {name}": "Pautkan {name}",
   "Back to Prima": "Kembali ke Prima",
+  // P70: Microsoft first.
+  "Connect your Microsoft account to open Prima": "Sambungkan akaun Microsoft anda untuk membuka Prima",
+  "Prima and the office are one system and know you by your Microsoft work account. Sign in with Microsoft once; you come straight back to Prima.":
+    "Prima dan pejabat adalah satu sistem dan mengenali anda melalui akaun kerja Microsoft anda. Log masuk dengan Microsoft sekali; anda terus kembali ke Prima.",
+  "Connect Microsoft": "Sambungkan Microsoft",
+  "Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.":
+    "Prima dibuka dengan log masuk pejabat anda sebaik sahaja akaun kerja Microsoft anda disambungkan ke pejabat. Kali pertama, pejabat mencari rekod staf Prima anda melalui akaun itu atau nama tepat anda; jika tidak pasti, pemilik pejabat memilihnya di halaman ini.",
 };

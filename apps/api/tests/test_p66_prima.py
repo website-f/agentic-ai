@@ -30,6 +30,7 @@ from .test_office_roles import member
 
 SECRET = "o" * 40
 OID = "0a0a0a0a-0000-4000-8000-000000000001"
+OWNER_OID = "0a0a0a0a-0000-4000-8000-0000000000aa"  # recorded on no Prima record
 PRIMA_SRC = Path(__file__).resolve().parents[2] / "prima" / "apps" / "api" / "src"
 STAFF = [
     {
@@ -190,8 +191,18 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     assert rows[owner_id]["suggestion"] == "u-owner" and rows[aina_id]["suggestion"] is None
     assert {r["id"] for r in d["staff"]} == {s["id"] for s in STAFF}
 
-    # The owner just opens Prima: the only record with their exact name is theirs, so they are
-    # in at once, with no click and no second sign-in.
+    # P70: Prima and the office are one: not connected to Microsoft yet, Prima asks for that
+    # first, and nothing is sent as anyone.
+    n = len(prima_on)
+    s = (await client.get("/api/prima/status")).json()
+    assert s["needs_microsoft"] and not s["linked"] and "Connect your Microsoft" in s["problem"]
+    r = await client.get("/api/prima/api/me")
+    assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+    assert len(prima_on) == n
+
+    # Connected (another Microsoft account than any IT recorded in Prima): the only record with
+    # their exact name is theirs, so they are in at once, with no click and no second sign-in.
+    await _microsoft("owner@example.com", OWNER_OID)
     s = (await client.get("/api/prima/status")).json()
     assert s["linked"] and s["me"]["name"] == "Owner One"
     async with SessionLocal() as db:
@@ -201,11 +212,11 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     assert prima_on[-1].headers["x-office-via"] == "person"
     assert prima_on[-1].headers["x-forwarded-for"]
 
-    # No sure match for Aina by name ("Aina" here, "Aina Binti Ali" in Prima): she is told the
-    # owner links her, and nothing is sent as anyone.
+    # Aina has not connected Microsoft: asked to, before anything else.
     async with SessionLocal() as db:
-        with pytest.raises(PrimaError):
+        with pytest.raises(PrimaError) as e:
             await prima.link_for(db, ws, aina_id)
+        assert e.value.code == "microsoft_needed"
     r = await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     assert r.json() == {"linked": 0}
 
@@ -246,6 +257,7 @@ async def test_only_the_owner_links_people(client, prima_on):
 
 async def test_prima_screens_through_the_office(client, prima_on):
     await office(client)
+    await _microsoft("owner@example.com", OWNER_OID)
     await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
 
     # Writes carry the office's CSRF token, like every other screen, and the exact body.
@@ -275,7 +287,10 @@ async def test_not_set_up_means_no_prima(client, monkeypatch):
     monkeypatch.setattr(settings, "prima_url", "")
     await office(client)
     s = (await client.get("/api/prima/status")).json()
-    assert s == {"enabled": False, "running": False, "linked": False, "me": None, "problem": ""}
+    assert s == {
+        "enabled": False, "running": False, "linked": False, "me": None, "problem": "",
+        "needs_microsoft": False,
+    }  # fmt: skip
     assert (await client.get("/api/prima/api/me")).status_code == 404
 
 
@@ -288,6 +303,7 @@ async def _ctx(db, agent_id: str, person: str | None, task: Task | None = None) 
 async def test_the_ai_works_in_prima_as_the_person_who_asked(client, prima_on):
     o = await office(client)
     agent = await new_agent(client, o, "Chief of Staff", dept="Finance")
+    await _microsoft("owner@example.com", OWNER_OID)
     await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     owner_id, _ = await _ids("owner@example.com")
 
@@ -331,6 +347,7 @@ async def test_a_task_given_in_the_office_reads_prima_as_whoever_gave_it(client,
     Prima with the rights of the person who gave it."""
     o = await office(client)
     agent = await new_agent(client, o, "Ops Analyst", dept="Finance")
+    await _microsoft("owner@example.com", OWNER_OID)
     await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     t = await new_task(client, agent, "Attendance and leave summary", "This week, for co-1.")
     async with SessionLocal() as db:

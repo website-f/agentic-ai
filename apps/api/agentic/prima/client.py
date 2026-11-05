@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..i18n import Msg
-from ..models import PrimaLink
+from ..models import Membership, PrimaLink
 from ..services import audit
 
 transport: httpx.AsyncBaseTransport | None = None
@@ -56,10 +56,11 @@ MAX_BODY = 3 * 1024 * 1024  # Prima's own JSON limit (photos and proofs as data 
 class PrimaError(Exception):
     """A refusal before Prima was asked (not linked, not running, a path it never serves)."""
 
-    def __init__(self, status: int, message: Msg) -> None:
+    def __init__(self, status: int, message: Msg, code: str = "") -> None:
         super().__init__(str(message))
         self.status = status
         self.message = message
+        self.code = code  # "microsoft_needed": the screen offers Connect Microsoft
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,18 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     and can change every link on the Prima page."""
     from . import people  # late: people builds on this module
 
+    # P70: Prima and the office are one system, and Prima knows people by their Microsoft work
+    # account: no way in (screens or the AI) until the person has connected it in the office.
+    m = await db.get(Membership, (workspace_id, user_id))
+    if m is None or not m.ms_oid:
+        raise PrimaError(
+            403,
+            Msg(
+                "Connect your Microsoft work account to the office to open Prima. It takes one "
+                "sign-in with Microsoft."
+            ),
+            code="microsoft_needed",
+        )
     link = await db.get(PrimaLink, (workspace_id, user_id))
     if link is not None:
         return link

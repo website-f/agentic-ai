@@ -6,7 +6,8 @@
  * office menu; on a phone (Prima has its own bottom tabs) it opens full screen. Its SOPs and
  * workflows are in the Library, and the AI works in Prima for whoever asks it, as them. */
 import {
-  ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, ShieldCheckIcon, UsersThreeIcon, WarningCircleIcon,
+  ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon, UsersThreeIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
@@ -29,6 +30,8 @@ interface PrimaStatus {
   linked: boolean;
   me: { name?: string; title?: string; role?: string } | null;
   problem: string;
+  /** P70: Prima and the office are one; Prima opens once the person's Microsoft account is connected. */
+  needs_microsoft: boolean;
 }
 
 const statusQuery = {
@@ -85,6 +88,8 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
       <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
         description={t("Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more. Staff do the daily work there; your AI follows the same SOPs and workflows from the Library.")} />
 
+      {s?.needs_microsoft ? <ConnectMicrosoft email={me.user.email} /> : null}
+
       <Section title={t("Status")}>
         {loading ? <Skeleton className="h-16" /> : (
           <div className="grid gap-3">
@@ -94,7 +99,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
                 : s.running
                   ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {t("Running on this server")}</Pill>
                   : <Pill tone="warn"><WarningCircleIcon size={13} weight="fill" /> {t("Not running right now")}</Pill>}
-              {s?.running ? <Pill tone="warn">{t("Your account is not linked yet")}</Pill> : null}
+              {s?.running && !s.needs_microsoft ? <Pill tone="warn">{t("Your account is not linked yet")}</Pill> : null}
             </div>
             {s?.problem ? <p className="text-[13px] text-muted">{s.problem}</p> : null}
           </div>
@@ -104,7 +109,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
       {owner && s?.enabled ? <PeopleSection /> : null}
 
       <Section title={t("How you get in")}>
-        <p className="text-[13px]">{t("Prima opens with your office sign-in. The first time, the office finds your Prima staff record by your Microsoft account or your exact name; if it cannot be sure, the office owner picks it on this page.")}</p>
+        <p className="text-[13px]">{t("Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.")}</p>
         <a href={PREVIEW} className="mt-3 grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface p-4 hover:border-accent/40">
           <span className="flex items-center gap-2 text-[14.5px] font-semibold"><EyeIcon size={18} className="text-accent" /> {t("Preview with sample data")}</span>
           <span className="text-[12.5px] text-muted">{t("The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.")}</span>
@@ -199,5 +204,29 @@ function PeopleSection() {
         <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prima", search: {} })}>{t("Back to Prima")}</Button>
       </div>
     </Section>
+  );
+}
+
+/** P70: one sign-in with Microsoft connects the account; it comes back here and Prima opens. */
+function ConnectMicrosoft({ email }: { email: string }) {
+  const t = useT();
+  const connect = useMutation({
+    mutationFn: () => api<{ url: string }>("/api/auth/microsoft/start", "POST", { email, next: "/prima" }),
+    onSuccess: (r) => {
+      window.location.href = r.url;
+    },
+  });
+  return (
+    <section className="grid gap-4 rounded-[var(--radius-lg)] border border-accent/30 bg-accent-soft/50 p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+      <span className="grid size-11 place-items-center rounded-[var(--radius-md)] bg-accent text-accent-fg"><MicrosoftOutlookLogoIcon size={22} weight="fill" /></span>
+      <div className="grid gap-1">
+        <h2 className="text-[15.5px] font-semibold">{t("Connect your Microsoft account to open Prima")}</h2>
+        <p className="text-[13px] text-muted">{t("Prima and the office are one system and know you by your Microsoft work account. Sign in with Microsoft once; you come straight back to Prima.")}</p>
+        {connect.error ? <p className="text-[13px] text-danger">{errorMessage(connect.error)}</p> : null}
+      </div>
+      <Button size="lg" disabled={connect.isPending} onClick={() => connect.mutate()}>
+        <LinkIcon size={16} /> {t("Connect Microsoft")}
+      </Button>
+    </section>
   );
 }
