@@ -303,6 +303,8 @@ export class OfficeController {
         title: u.title,
         role: u.role,
         entraOid: u.entraOid ? u.entraOid.toLowerCase() : null,
+        // P74: the office opens Prima for its owner as Prima's top record (CEO, else COO).
+        top: u.opsTier === 'ceo' ? 'ceo' : u.opsTier === 'coo' ? 'coo' : null,
         canSignIn: !accessClosed(u, today) && (!pilotSignInOnly() || pilotAdmits(u)),
       };
     });

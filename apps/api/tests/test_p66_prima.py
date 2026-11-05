@@ -175,6 +175,17 @@ def test_suggestions_pick_only_a_sure_match():
         Person("us-3", "Ahmad", "h@x", "staff", None, None),  # two Prima records named Ahmad
     ]
     assert suggestions(people, rec) == {"us-1": "u-owner", "us-2": "u-aina"}
+    # P74: the office's owner opens Prima as its top record (the CEO's), whatever their name;
+    # a second owner gets the COO's; nobody else ever gets them.
+    ceo = StaffRecord("u-ceo", "Fauzan", "CEO", "director", None, True, top="ceo")
+    coo = StaffRecord("u-coo", "Ahmad Faisal", "COO", "director", None, True, top="coo")
+    owners = [
+        Person("us-o1", "Fitri", "f@x", "owner", None, None),
+        Person("us-o2", "Siti", "s@x", "owner", None, None),
+        Person("us-s", "Staff One", "x@x", "staff", None, None),
+    ]
+    got = suggestions(owners, [*rec, ceo, coo])
+    assert got["us-o1"] == "u-ceo" and got["us-o2"] == "u-coo" and "us-s" not in got
     assert name_key("Mohd. Fauzan  bin Ali") == name_key("mohd fauzan bin ali")
 
 

@@ -104,6 +104,9 @@ class StaffRecord:
     role: str
     entra_oid: str | None
     can_sign_in: bool
+    # P74: "ceo" / "coo" for Prima's top leadership records (the office's owner opens Prima
+    # as one of them), else None.
+    top: str | None = None
 
 
 def _not_linked() -> PrimaError:
@@ -130,6 +133,7 @@ async def staff() -> list[StaffRecord]:
             role=str(r.get("role") or ""),
             entra_oid=(str(r["entraOid"]).lower() if r.get("entraOid") else None),
             can_sign_in=bool(r.get("canSignIn")),
+            top=(str(r["top"]) if r.get("top") in ("ceo", "coo") else None),
         )
         for r in (rows if isinstance(rows, list) else [])
         if isinstance(r, dict) and r.get("id")
@@ -165,7 +169,13 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     me = next((p for p in persons if p.user_id == user_id), None)
     if record is None or me is None:
         raise _not_linked()
-    how = "microsoft" if me.ms_oid and record.entra_oid == me.ms_oid else "name"
+    how = (
+        "microsoft"
+        if me.ms_oid and record.entra_oid == me.ms_oid
+        else "owner"
+        if me.role == "owner" and record.top
+        else "name"
+    )
     link = PrimaLink(
         workspace_id=workspace_id,
         user_id=user_id,
