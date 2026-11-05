@@ -387,3 +387,69 @@ def test_saved_before_p62_the_two_switches_become_one_choice():
     assert tunnel.mode_of(ws) == tunnel.Mode("pc", ["eperolehan.gov.my"])  # P69: the default
     ws.settings = {"web_route": {"mode": "pc", "sites": ["*"]}}
     assert tunnel.mode_of(ws).sites == ["eperolehan.gov.my"]  # a computer never takes every site
+
+
+async def test_p72_each_persons_work_goes_through_their_own_pc(client, llm, temporal):
+    """P72: ePerolehan work runs on the PC of the person it is for: a personal AI's owner, or
+    whoever gave a shared agent its task. Never another person's PC; the office's own work
+    (no person) alone uses the company's chosen one."""
+    from agentic.core.valkey import valkey
+    from agentic.devices.core import online_key
+    from agentic.models import Agent
+
+    from .test_office_roles import member
+
+    o = await office(client)
+    await member(client, "aina@example.com", "staff", branch_id=o["branch"]["id"])
+    owner_id, ws_id = await ids_of("owner@example.com")
+    aina_id, _ = await ids_of("aina@example.com")
+    async with SessionLocal() as db:
+        mine = Device(workspace_id=ws_id, user_id=owner_id, name="Owner PC", token_hash="h-owner",
+                      tunnel_hosts=["eperolehan.gov.my"])  # fmt: skip
+        hers = Device(workspace_id=ws_id, user_id=aina_id, name="Aina PC", token_hash="h-aina",
+                      tunnel_hosts=["eperolehan.gov.my"])  # fmt: skip
+        db.add_all([mine, hers])
+        await db.commit()
+        mine_id, hers_id = mine.id, hers.id
+    for d in (mine_id, hers_id):
+        await valkey().set(online_key(d), "1", ex=60)
+
+    twin = await personal_agent(o, owner_id, ws_id, is_twin=True)
+    async with SessionLocal() as db:
+        shared = Agent(workspace_id=ws_id, branch_id=o["branch"]["id"], slug="tender-clerk",
+                       name="Tender Clerk", role="Tenders")  # fmt: skip
+        db.add(shared)
+        await db.commit()
+        shared_id = shared.id
+
+    # The owner's own AI: the owner's PC, nobody else's.
+    r = await tunnel.route(ws_id, "www.eperolehan.gov.my", twin.id)
+    assert (r.kind, r.device_id) == ("computer", mine_id)
+    # A shared agent working on Aina's task: Aina's PC.
+    await tunnel.remember_person(shared_id, aina_id)
+    r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
+    assert (r.kind, r.device_id) == ("computer", hers_id)
+    # Aina's PC off: refused by name, never the owner's PC instead.
+    await valkey().delete(online_key(hers_id))
+    r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
+    assert r.kind == "refuse" and "Aina PC" in r.why and "offline" in r.why
+    # A person with no PC: told to link their own.
+    await tunnel.remember_person(shared_id, owner_id)
+    async with SessionLocal() as db:
+        d = await db.get(Device, mine_id)
+        d.tunnel_hosts = []
+        await db.commit()
+    r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
+    assert r.kind == "refuse" and "has not allowed it yet" in r.why
+    # The office's own work (no person): the company's choice, here none ready -> refused.
+    await tunnel.remember_person(shared_id, None)
+    r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
+    assert r.kind == "refuse"
+    # Other sites are not the gateway's.
+    assert (await tunnel.route(ws_id, "example.com", twin.id)).kind == "server"
+    # The browser's login names its agent; a forged one is ignored.
+    user = f"{ws_id}.{twin.id}"
+    good = base64.b64encode(f"{user}:{tunnel.sign(user)}".encode()).decode()
+    assert tunnel._credentials({"proxy-authorization": f"Basic {good}"}) == (ws_id, twin.id)
+    bad = base64.b64encode(f"{ws_id}.{shared_id}:{tunnel.sign(user)}".encode()).decode()
+    assert tunnel._credentials({"proxy-authorization": f"Basic {bad}"}) is None

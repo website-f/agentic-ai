@@ -546,8 +546,11 @@ class Machine:
                     # P58: the workspace's signed proxy credentials, so the egress proxy can
                     # hand its chosen sites to the company-computer gateway; a page cannot set
                     # or read them. Without a workspace, "-" (never tunnelled).
+                    # P72: "ws_id.agent_id", so the gateway uses the agent's person's own
+                    # computer (agent ids are letters, digits and "_": the dot is safe).
                     ws = self.workspace_id or "-"
-                    opts["proxy"] = {"server": PROXY, "username": ws, "password": proxy_sign(ws)}
+                    user = f"{ws}.{self.agent_id}" if self.workspace_id else ws
+                    opts["proxy"] = {"server": PROXY, "username": user, "password": proxy_sign(user)}
                     opts["firefox_user_prefs"] = {**PROXY_PREFS, **DOWNLOAD_PREFS}
                 else:
                     opts["firefox_user_prefs"] = dict(DOWNLOAD_PREFS)

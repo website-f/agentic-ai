@@ -208,15 +208,20 @@ async def _session(ctx: Any) -> str:
     device_id: str | None = getattr(ctx.task, "device_id", None)
     channel = ""
     sites: list[str] | None = None
+    # P72: whose work this is: the agent's person, else who gave the task. The gateway uses
+    # that person's own computer for the sites sent through a computer (ePerolehan).
+    from ..devices import tunnel
+    from ..teams import allowance
+
+    person = ctx.agent.owner_user_id or await allowance.person_of_task(ctx.db, ctx.task)
+    await tunnel.remember_person(ctx.agent.id, person)
     if not device_id:
         # P59: a task only on the sites the company sends through one of its computers opens
         # its browser on that computer's screen, so the person there sees the work happen.
-        from ..devices import tunnel
-
-        device_id, why = await tunnel.screen_for(ctx.db, ctx.agent.workspace_id, allowed)
+        device_id, why = await tunnel.screen_for(ctx.db, ctx.agent.workspace_id, allowed, person)
         if why:
             raise BrowsersBusy(
-                f"The site is used from the company's chosen computer, and {why}. Tell the "
+                f"This site is used from the person's own computer, and {why}. Tell the "
                 "person; do not switch to another browser."
             )
         sites = allowed if device_id else None
@@ -804,7 +809,7 @@ async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
     # say why, rather than a bare connection error, and never another way round.
     from ..devices import tunnel
 
-    why = await tunnel.unavailable(ctx.agent.workspace_id, host_of(url))
+    why = await tunnel.unavailable(ctx.agent.workspace_id, host_of(url), ctx.agent.id)
     if why:
         return (
             f"Error: {host_of(url)} cannot be opened right now: {why}. The company chose how "

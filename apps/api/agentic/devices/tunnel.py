@@ -151,6 +151,82 @@ async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[
     return ""
 
 
+# P72: whose work it is, for the gateway (which sees only the browser's agent). browser_tools sets
+# it when an agent's browser starts for a task: the task's person.
+PERSON_KEY = "browser:person:{agent_id}"
+PERSON_TTL = 6 * 3600
+
+
+async def remember_person(agent_id: str, person: str | None) -> None:
+    from ..core.valkey import valkey
+
+    key = PERSON_KEY.format(agent_id=agent_id)
+    if person:
+        await valkey().set(key, person, ex=PERSON_TTL)
+    else:
+        await valkey().delete(key)
+
+
+async def person_of_agent(db: Any, agent_id: str) -> str | None:
+    """The person an agent's browser works for: a personal AI's owner, else whoever gave the
+    task it is on now (remember_person); None for the office's own work."""
+    from ..core.valkey import valkey
+    from ..models import Agent
+
+    if not agent_id:
+        return None
+    a = await db.get(Agent, agent_id)
+    if a is not None and a.owner_user_id:
+        return a.owner_user_id
+    v = await valkey().get(PERSON_KEY.format(agent_id=agent_id))
+    return str(v) if v else None
+
+
+async def person_computer(
+    db: Any, workspace_id: str, person: str, sites: list[str]
+) -> tuple[str, str]:
+    """P72: (device id, "") of the person's OWN linked computer that has allowed every one of
+    `sites` and is online now (most recently seen first), or ("", why)."""
+    from ..models import User
+
+    rows = (
+        await db.scalars(
+            select(Device)
+            .where(
+                Device.workspace_id == workspace_id,
+                Device.user_id == person,
+                Device.revoked_at.is_(None),
+            )
+            .order_by(Device.last_seen_at.desc().nullslast())
+        )
+    ).all()
+    u = await db.get(User, person)
+    who = (u.name if u else "") or "the person"
+    if not rows:
+        return "", (
+            f"{who} has no linked PC. ePerolehan work runs on their own PC: link it on Staff "
+            "computers (download Agentic Office PC), then press Allow on it"
+        )
+    ready = [
+        d
+        for d in rows
+        if not d.paused and all(core.host_in(x, d.tunnel_hosts or []) for x in sites)
+    ]
+    if not ready:
+        d = rows[0]
+        return "", (
+            f"{d.name} ({who}'s PC) is paused"
+            if d.paused
+            else f"{d.name} ({who}'s PC) has not allowed it yet: on that PC, press Allow on the "
+            "Agentic Office page"
+        )
+    online = await core.online_ids([d.id for d in ready])
+    d = next((d for d in ready if d.id in online), None)
+    if d is None:
+        return "", f"{ready[0].name} ({who}'s PC) is offline: turn it on and open Agentic Office PC"
+    return d.id, ""
+
+
 async def any_computer(db: Any, workspace_id: str, host: str) -> str:
     """P69: with no computer chosen, a linked one that has allowed `host` and is online now
     (most recently seen first), or ""."""
@@ -166,8 +242,10 @@ async def any_computer(db: Any, workspace_id: str, host: str) -> str:
     return next((d.id for d in ready if d.id in online), "")
 
 
-def _credentials(headers: dict[str, str]) -> str | None:
-    """The workspace id from a valid Proxy-Authorization (Basic ws_id:signature)."""
+def _credentials(headers: dict[str, str]) -> tuple[str, str] | None:
+    """(workspace id, agent id) from a valid Proxy-Authorization: Basic "ws_id.agent_id"
+    (P72: the browser names its agent, so the agent's person's own computer is used) or
+    "ws_id" (no agent), with the signature of that whole name."""
     auth = headers.get("proxy-authorization", "")
     if not auth.lower().startswith("basic "):
         return None
@@ -175,7 +253,10 @@ def _credentials(headers: dict[str, str]) -> str | None:
         user, _, pw = base64.b64decode(auth[6:].strip()).decode().partition(":")
     except Exception:  # noqa: BLE001 - not base64 / not text
         return None
-    return user if user and hmac.compare_digest(sign(user), pw) else None
+    if not user or not hmac.compare_digest(sign(user), pw):
+        return None
+    ws_id, _, agent_id = user.partition(".")
+    return ws_id, agent_id
 
 
 @dataclass
@@ -190,8 +271,10 @@ class Route:
     site: str = ""
 
 
-async def route(workspace_id: str, host: str) -> Route:
-    """The way out for a connection to `host` (P62: the chosen one, or refused)."""
+async def route(workspace_id: str, host: str, agent_id: str = "") -> Route:
+    """The way out for a connection to `host` (P62: the chosen one, or refused). P72: through
+    a computer, it is the agent's person's OWN linked computer; only the office's own work
+    (no person) uses the company's chosen one."""
     async with SessionLocal() as db:
         ws = await db.get(Workspace, workspace_id)
         m = mode_of(ws)
@@ -199,6 +282,12 @@ async def route(workspace_id: str, host: str) -> Route:
             return Route("server", "not routed")
         site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
         if m.mode == "pc":
+            person = await person_of_agent(db, agent_id)
+            if person:
+                device_id, why = await person_computer(db, workspace_id, person, [host])
+                if why:
+                    return Route("refuse", why)
+                return Route("computer", device_id=device_id, site=site)
             device_id = setting(ws).device_id or await any_computer(db, workspace_id, host)
             why = await computer_down(db, workspace_id, device_id, [host])
             if why == "no computer is chosen":
@@ -222,13 +311,13 @@ async def route(workspace_id: str, host: str) -> Route:
         return Route("proxy", proxies=px.proxies, site=site)
 
 
-async def unavailable(workspace_id: str, host: str) -> str:
+async def unavailable(workspace_id: str, host: str, agent_id: str = "") -> str:
     """Why `host` cannot be opened now the chosen way ("" when it can): told to the agent
     before its browser tries, instead of a bare connection error."""
     if not workspace_id or not host:
         return ""
     try:
-        r = await route(workspace_id, host)
+        r = await route(workspace_id, host, agent_id)
     except Exception:  # noqa: BLE001 - the gateway decides again for real
         return ""
     return r.why if r.kind == "refuse" else ""
@@ -287,11 +376,12 @@ async def handle(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
             return
         host, _, port_s = parts[1].rpartition(":")
         port = int(port_s) if port_s.isdigit() else 0
-        ws_id = _credentials(headers)
-        if ws_id is None or port != 443 or not host:
+        who = _credentials(headers)
+        if who is None or port != 443 or not host:
             await _reply(w, 409, "not tunnelled")  # the egress proxy goes on as usual
             return
-        way = await route(ws_id, host)
+        ws_id, agent_id = who
+        way = await route(ws_id, host, agent_id)
         if way.kind == "proxy":
             await _through_proxy(ws_id, way, host, port, r, w)
             return
@@ -500,15 +590,20 @@ async def check(workspace_id: str, site: str) -> dict[str, Any]:
     return {**out, "error": err}
 
 
-async def screen_for(db: Any, workspace_id: str, sites: list[str] | None) -> tuple[str, str]:
+async def screen_for(
+    db: Any, workspace_id: str, sites: list[str] | None, person: str | None = None
+) -> tuple[str, str]:
     """P59: (device id, "") when a task that works only on `sites` should open its browser on
-    the workspace's chosen computer; ("", why) when it should but cannot; ("", "") to use the
-    server's browser."""
+    a computer's screen; ("", why) when it should but cannot; ("", "") to use the server's
+    browser. P72: the task's person's OWN computer; the company's chosen one only for the
+    office's own work (no person)."""
     if not sites:
         return "", ""
     ws = await db.get(Workspace, workspace_id)
     st, m = setting(ws), mode_of(ws)
     if not (m.mode == "pc" and st.show and all(m.covers(s) for s in sites)):
         return "", ""
+    if person:
+        return await person_computer(db, workspace_id, person, sites)
     why = await computer_down(db, workspace_id, st.device_id, sites)
     return ("", why) if why else (st.device_id, "")
