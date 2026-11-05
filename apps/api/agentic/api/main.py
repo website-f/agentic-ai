@@ -470,3 +470,8 @@ app.include_router(erasure_router.router)
 from .routers import prima as prima_router  # noqa: E402
 
 app.include_router(prima_router.router)
+
+# P73: feedback from the floating button on every page, read by the developer.
+from .routers import feedback as feedback_router  # noqa: E402
+
+app.include_router(feedback_router.router)

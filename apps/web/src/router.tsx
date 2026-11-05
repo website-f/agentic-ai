@@ -10,6 +10,7 @@ import {
   useRouter,
   type ParsedLocation,
 } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 import { safeFrom } from "@/components/chat/links";
 import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
 
@@ -97,7 +98,23 @@ const page = {
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
   deals: lazyRouteComponent(() => import("@/pages/deals"), "DealsPage"),
   money: lazyRouteComponent(() => import("@/pages/money"), "MoneyPage"),
+  feedbacks: lazyRouteComponent(() => import("@/pages/feedbacks"), "FeedbacksPage"),
 };
+
+// P73: the floating feedback button, over every signed-in page (its own chunk, loaded after
+// the page; it shows only while the developer has feedback switched on).
+const FeedbackHost = lazy(() => import("@/components/feedback/host").then((m) => ({ default: m.FeedbackHost })));
+
+function Root() {
+  return (
+    <>
+      <Outlet />
+      <Suspense fallback={null}>
+        <FeedbackHost />
+      </Suspense>
+    </>
+  );
+}
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const num = (v: unknown) => (v ? Number(v) : undefined);
@@ -131,7 +148,7 @@ function RootError({ error }: { error: unknown }) {
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
-  component: Outlet,
+  component: Root,
   errorComponent: RootError,
   notFoundComponent: NotFoundPage,
 });
@@ -821,6 +838,17 @@ const explorerRoute = createRoute({
   component: page.explorer,
 });
 
+// P73: what people sent from the feedback button; the developer's page (feedback.manage).
+const feedbacksRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/feedbacks",
+  validateSearch: (s: Record<string, unknown>): { f?: string } => ({ f: str(s.f) }),
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("feedback.manage")) throw redirect({ to: "/" });
+  },
+  component: page.feedbacks,
+});
+
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
   const item = ALL_NAV.find((n) => n.to === path)!;
@@ -907,6 +935,7 @@ const routeTree = rootRoute.addChildren([
     contactDetailRoute,
     dealsRoute,
     moneyRoute,
+    feedbacksRoute,
   ]),
 ]);
 

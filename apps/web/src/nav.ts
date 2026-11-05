@@ -23,6 +23,7 @@ import {
   BuildingsIcon,
   CalendarCheckIcon,
   ChatsCircleIcon,
+  ChatTeardropTextIcon,
   TreeStructureIcon,
   ClockCounterClockwiseIcon,
   DeskIcon,
@@ -115,7 +116,8 @@ export type AppPath =
   | "/timetable"
   | "/tutorial"
   | "/guide"
-  | "/present";
+  | "/present"
+  | "/feedbacks";
 
 export interface NavItem {
   to: AppPath;
@@ -259,6 +261,15 @@ export const NAV: NavSection[] = [
       { to: "/schedules", advanced: true, label: msg("Schedules"), icon: CalendarCheckIcon, perm: "office.view", blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
       { to: "/mcp-servers", advanced: true, label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect tools from other systems (MCP): a tracker, a CRM, or your own server. Agents ask before every call.") },
       { to: "/activity", advanced: true, label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
+    ],
+  },
+  // P73: only the system's developer (feedback.manage) sees this group.
+  {
+    title: msg("Developer"),
+    hint: msg("What people say about the system, from the feedback button on every page."),
+    open: "all",
+    items: [
+      { to: "/feedbacks", label: msg("Feedbacks"), icon: ChatTeardropTextIcon, perm: "feedback.manage", blurb: msg("Everything people sent from the feedback button: notes and marked-up screenshots of any page. Move each along, answer it, switch the button on or off and write the house rules.") },
     ],
   },
   {

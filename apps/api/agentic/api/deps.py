@@ -256,6 +256,24 @@ async def current_principal(request: Request, db: AsyncSession = Depends(get_db)
     return principal
 
 
+# P73: the system's developer is an owner the operator marked (`python -m agentic.admin
+# make-developer`): everything an owner has, plus the Feedbacks page. Never set from the app,
+# so no one can make themselves or anyone else a developer through it.
+DEVELOPER_PERMISSION = "feedback.manage"
+
+
+def is_developer(user: User | None, role: str) -> bool:
+    return bool(user is not None and user.is_developer and role == "owner")
+
+
+async def require_developer(principal: Principal = Depends(current_principal)) -> Principal:
+    if not is_developer(principal.user, principal.role):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "forbidden", "Only the system's developer can do this."
+        )
+    return principal
+
+
 def require(permission: str):
     async def checker(principal: Principal = Depends(current_principal)) -> Principal:
         if not can(principal.role, permission):

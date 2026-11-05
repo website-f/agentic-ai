@@ -49,8 +49,11 @@ import { FOLDER_BROWSER } from "./folder-browser";
 import { ERASE } from "./erase";
 import { TWO_FACTOR } from "./two-factor";
 import { EXPLORER } from "./explorer";
+import { FEEDBACK } from "./feedback";
 
 export const MS: Record<string, string> = {
+  // P73: first, so an existing translation of the same English always wins.
+  ...FEEDBACK,
   ...COMMON,
   ...SHELL,
   ...WORK,

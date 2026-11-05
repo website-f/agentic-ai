@@ -61,6 +61,9 @@ class User(Timestamps, Base):
     totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
     recovery_codes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    # P73: the system's developer: with an owner's role, also the Feedbacks page (what people
+    # send from the floating feedback button). Set only by `python -m agentic.admin`.
+    is_developer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class Membership(Timestamps, Base):
@@ -2582,3 +2585,6 @@ class PrimaLink(Timestamps, Base):
 
 # P57: export and erase a workspace (agentic/erasure/models.py).
 from ..erasure.models import ErasureRecord, WorkspaceExport  # noqa: E402, F401
+
+# P73: feedback from the floating button, read by the developer (agentic/feedback/models.py).
+from ..feedback.models import Feedback  # noqa: E402, F401

@@ -25,7 +25,8 @@ export interface Scope {
 
 export interface Me {
   // P57: two_factor_setup_required = the company asks for two-step sign-in and it is not set up.
-  user: { id: string; email: string; name: string; must_change_password: boolean; two_factor_enabled?: boolean; two_factor_setup_required?: boolean };
+  // P73: is_developer = the system's developer (an owner who also has the Feedbacks page).
+  user: { id: string; email: string; name: string; must_change_password: boolean; two_factor_enabled?: boolean; two_factor_setup_required?: boolean; is_developer?: boolean };
   workspace: { id: string; name: string; slug: string; timezone: string };
   role: Role;
   permissions: string[];

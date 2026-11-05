@@ -19,6 +19,24 @@ MS: dict[str, str] = {
     ),
     "Set a new password before continuing.": "Tetapkan kata laluan baharu sebelum teruskan.",
     "Your role ({role}) cannot do this.": "Peranan anda ({role}) tidak boleh buat ini.",
+    # ------------------------------------------------------------ P73 feedback (routers/feedback)
+    "Only the system's developer can do this.": "Hanya pembangun sistem boleh buat ini.",
+    "Feedback is switched off right now.": "Maklum balas sedang dimatikan.",
+    "The screenshot must be a PNG, JPEG or WebP image.": (
+        "Tangkapan skrin mesti imej PNG, JPEG atau WebP."
+    ),
+    "That screenshot is too large (6 MB at most).": (
+        "Tangkapan skrin itu terlalu besar (paling banyak 6 MB)."
+    ),
+    "Take the screenshot first, or send it as general feedback.": (
+        "Ambil tangkapan skrin dahulu, atau hantar sebagai maklum balas umum."
+    ),
+    "Write a few words about what you noticed.": "Tulis sedikit tentang apa yang anda perasan.",
+    "That is a lot of feedback in one hour. Thank you! Try again a little later.": (
+        "Banyak maklum balas dalam sejam. Terima kasih! Cuba lagi sekejap lagi."
+    ),
+    "That feedback is not here.": "Maklum balas itu tiada di sini.",
+    "That feedback has no screenshot.": "Maklum balas itu tiada tangkapan skrin.",
     "Send requests as application/json.": "Hantar permintaan sebagai application/json.",
     "Reload the page and try again.": "Muat semula halaman dan cuba lagi.",
     "Some fields need fixing.": "Ada medan yang perlu dibetulkan.",

@@ -12,10 +12,12 @@ from ...models import AuthSession, Membership, PushSubscription, User, Workspace
 from ...services import audit, loginguard, two_factor
 from ...services.text import slugify
 from ..deps import (
+    DEVELOPER_PERMISSION,
     Principal,
     api_error,
     clear_session_cookies,
     client_ip,
+    is_developer,
     principal_allow_pw_change,
     start_session,
 )
@@ -52,6 +54,7 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
             must_change_password=user.must_change_password,
             two_factor_enabled=two_factor.enabled(user),
             two_factor_setup_required=two_factor.due(user, role, ws.settings),
+            is_developer=is_developer(user, role),
         ),
         workspace=WorkspaceOut(id=ws.id, name=ws.name, slug=ws.slug, timezone=ws.timezone),
         role=role,  # type: ignore[arg-type]
@@ -62,11 +65,13 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
 async def _extra_permissions(
     db: AsyncSession, workspace_id: str, user_id: str, role: str
 ) -> set[str]:
-    """P50: the CRM is the owner's, and anyone the owner shared part of it with."""
+    """P50: the CRM is the owner's, and anyone the owner shared part of it with.
+    P73: the developer (an owner marked by the operator) also manages feedback."""
     from ...models import CrmAccess
 
     if role == "owner":
-        return {"crm.access"}
+        user = await db.get(User, user_id)
+        return {"crm.access"} | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
     shared = await db.scalar(
         select(CrmAccess.id)
         .where(CrmAccess.workspace_id == workspace_id, CrmAccess.user_id == user_id)

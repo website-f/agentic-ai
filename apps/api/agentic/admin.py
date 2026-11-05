@@ -3,6 +3,8 @@
     docker compose exec api python -m agentic.admin reset-password owner@example.com
     docker compose exec api python -m agentic.admin sessions-revoke owner@example.com
     docker compose exec api python -m agentic.admin reset-2fa owner@example.com
+    docker compose exec api python -m agentic.admin make-developer dev@example.com --name "Dev"
+    docker compose exec api python -m agentic.admin developer-off dev@example.com
     docker compose exec api python -m agentic.admin stuck-tasks [--fail]
     docker compose exec -e AGENTIC_OLD_MASTER_KEY=... api python -m agentic.admin rotate-master-key
     docker compose exec api python -m agentic.admin rotate-master-key --from-dev
@@ -12,6 +14,11 @@ credentials, vault logins, the web-push key) from the old master key to the one 
 with now (AGENTIC_MASTER_KEY). Only the per-secret data keys are re-wrapped; no secret is
 ever decrypted. --from-dev takes the key a dev install derived from its secret key
 (AGENTIC_OLD_SECRET_KEY, default the dev one): use it when moving dev data to production.
+
+make-developer (P73) marks the system's developer: an owner of the workspace who also has the
+Feedbacks page. A new email gets an account with a one-time password (printed once, changed at
+the first sign-in); an existing person is made owner of the workspace. Only this command sets
+it, so no one can make themselves a developer from the app.
 
 Every change is written to the audit log as actor `system:admin-cli`.
 """
@@ -87,6 +94,76 @@ async def reset_2fa(email: str) -> None:
             await audit.record(db, m.workspace_id, ACTOR, "auth.2fa_reset", target=user.id)
         await db.commit()
     print(f"Two-step sign-in is off for {u.email}. All their sessions were ended.")
+
+
+async def make_developer(email: str, name: str | None, workspace: str | None) -> None:
+    """P73: the developer is an owner who also reads and answers feedback."""
+    email = email.strip().lower()
+    if "@" not in email:
+        sys.exit("Give the developer's email address.")
+    async with SessionLocal() as db:
+        spaces = (await db.scalars(select(Workspace).order_by(Workspace.created_at))).all()
+        if workspace:
+            spaces = [w for w in spaces if workspace in (w.slug, w.id)]
+        if not spaces:
+            sys.exit(f"No workspace {workspace}." if workspace else "No workspace yet.")
+        if len(spaces) > 1:
+            names = ", ".join(w.slug for w in spaces)
+            sys.exit(f"More than one workspace ({names}): pick one with --workspace <slug>.")
+        ws = spaces[0]
+        user = await db.scalar(select(User).where(User.email == email))
+        password: str | None = None
+        if user is None:
+            password = temp_password()
+            user = User(
+                email=email,
+                name=(name or email.split("@")[0]).strip()[:120],
+                password_hash=hash_password(password),
+                must_change_password=True,
+            )
+            db.add(user)
+            await db.flush()
+        elif name:
+            user.name = name.strip()[:120]
+        user.is_developer = True
+        user.is_active = True
+        m = await db.get(Membership, (ws.id, user.id))
+        before_role = m.role if m else None
+        if m is None:
+            db.add(Membership(workspace_id=ws.id, user_id=user.id, role="owner"))
+        else:
+            m.role = "owner"
+            m.branch_id = None
+            m.department_id = None
+        await db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
+        await audit.record(
+            db,
+            ws.id,
+            ACTOR,
+            "member.developer_on",
+            target=user.id,
+            before={"role": before_role},
+            after={"email": email, "role": "owner", "developer": True},
+        )
+        await db.commit()
+    print(f"{email} is the developer of {ws.name} (owner, plus the Feedbacks page).")
+    if password:
+        print(f"One-time password: {password}")
+        print("They choose their own password at the first sign-in.")
+    else:
+        print("Their password did not change. Their sessions were ended: sign in again.")
+
+
+async def developer_off(email: str) -> None:
+    u = await _user(email)
+    async with SessionLocal() as db:
+        user = await db.get(User, u.id)
+        assert user is not None
+        user.is_developer = False
+        for m in (await db.scalars(select(Membership).where(Membership.user_id == user.id))).all():
+            await audit.record(db, m.workspace_id, ACTOR, "member.developer_off", target=user.id)
+        await db.commit()
+    print(f"{u.email} is no longer the developer (their role did not change).")
 
 
 async def revoke_sessions(email: str) -> None:
@@ -188,6 +265,11 @@ def main() -> None:
     sub.add_parser("reset-password").add_argument("email")
     sub.add_parser("sessions-revoke").add_argument("email")
     sub.add_parser("reset-2fa").add_argument("email")
+    md = sub.add_parser("make-developer")
+    md.add_argument("email")
+    md.add_argument("--name", default=None)
+    md.add_argument("--workspace", default=None, help="slug, when there is more than one")
+    sub.add_parser("developer-off").add_argument("email")
     st = sub.add_parser("stuck-tasks")
     st.add_argument("--fail", action="store_true", help="mark them failed so they can be retried")
     rk = sub.add_parser("rotate-master-key")
@@ -202,6 +284,10 @@ def main() -> None:
                 await revoke_sessions(a.email)
             elif a.cmd == "reset-2fa":
                 await reset_2fa(a.email)
+            elif a.cmd == "make-developer":
+                await make_developer(a.email, a.name, a.workspace)
+            elif a.cmd == "developer-off":
+                await developer_off(a.email)
             elif a.cmd == "rotate-master-key":
                 await rotate_master_key(a.from_dev)
             else:

@@ -58,6 +58,8 @@ class UserOut(BaseModel):
     # P57: two-step sign-in is on; the workspace asks for it and it is not set up yet.
     two_factor_enabled: bool = False
     two_factor_setup_required: bool = False
+    # P73: the system's developer (an owner who also has the Feedbacks page).
+    is_developer: bool = False
 
 
 class WorkspaceOut(BaseModel):
