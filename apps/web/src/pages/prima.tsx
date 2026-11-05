@@ -4,13 +4,15 @@
  * with Microsoft and IT recorded that account in Prima; the owner links everyone else here, with
  * the likely record already picked, in one click. Prima opens as its own full page (P71), a
  * module of the office with "Back to the office" in its menu. Its SOPs and
- * workflows are in the Library, and the AI works in Prima for whoever asks it, as them. */
+ * workflows are in the Library, and the AI works in Prima for whoever asks it, as them.
+ * P75: anyone with no Prima record of their own gets their own account the first time they open
+ * Prima, in the Prima company the owner set for their branch here ("Prima companies"). */
 import {
   ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon, UsersThreeIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { Page, PageHeader, Section } from "@/components/page";
@@ -33,6 +35,8 @@ interface PrimaStatus {
   problem: string;
   /** P70: Prima and the office are one; Prima opens once the person's Microsoft account is connected. */
   needs_microsoft: boolean;
+  /** Why Prima did not open: "microsoft_needed", "company_needed" (P75: the owner sets the branch's company). */
+  code?: string;
 }
 
 const statusQuery = {
@@ -78,6 +82,8 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const owner = me.permissions.includes("org.manage");
+  const search = useSearch({ strict: false }) as { people?: number };
+  const companyNeeded = s?.code === "company_needed";
   return (
     <Page>
       <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
@@ -97,10 +103,12 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
               {s?.running && !s.needs_microsoft ? <Pill tone="warn">{t("Your account is not linked yet")}</Pill> : null}
             </div>
             {s?.problem ? <p className="text-[13px] text-muted">{s.problem}</p> : null}
+            {companyNeeded && !owner ? <p className="text-[13px]">{t("Ask the office owner to set which Prima company your branch is. Prima then makes your own account the next time you open it.")}</p> : null}
           </div>
         )}
       </Section>
 
+      {owner && s?.enabled && (search.people || companyNeeded) ? <CompaniesSection /> : null}
       {owner && s?.enabled ? <PeopleSection /> : null}
 
       <Section title={t("How you get in")}>
@@ -128,7 +136,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
 interface StaffRow { id: string; name: string; title: string; role: string; can_sign_in: boolean; linked_to: string | null }
 interface PersonRow {
   user_id: string; name: string; email: string; role: string; microsoft: boolean;
-  link: { prima_user_id: string; prima_name: string; how: "microsoft" | "name" | "owner" } | null;
+  link: { prima_user_id: string; prima_name: string; how: "microsoft" | "name" | "owner" | "auto" } | null;
   suggestion: string | null;
 }
 interface PeopleData { staff: StaffRow[]; people: PersonRow[] }
@@ -179,7 +187,7 @@ function PeopleSection() {
                   <div className="truncate text-[12px] text-muted">{p.email}</div>
                 </div>
                 {p.link
-                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : p.link.how === "name" ? t("Linked by name") : t("Linked")}</Pill>
+                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : p.link.how === "name" ? t("Linked by name") : p.link.how === "auto" ? t("Own Prima account") : t("Linked")}</Pill>
                   : p.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : null}
                 <Select size="sm" className="w-64" label={t("Prima record for {name}", { name: p.name })} value={value} options={options}
                   disabled={linkOne.isPending}
@@ -198,6 +206,60 @@ function PeopleSection() {
       <div className="mt-3">
         <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prima", search: {} })}>{t("Back to Prima")}</Button>
       </div>
+    </Section>
+  );
+}
+
+interface BranchRow { id: string; name: string; company_id: string | null; suggestion: string | null }
+interface CompaniesData { companies: { id: string; name: string }[]; branches: BranchRow[] }
+
+/** P75: the owner says once which Prima company each office branch is. Anyone with no Prima
+ * record of their own then gets their own account there, from their office role. */
+function CompaniesSection() {
+  const t = useT();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["prima", "companies"], queryFn: () => api<CompaniesData>("/api/prima/companies") });
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const save = useMutation({
+    mutationFn: (companies: Record<string, string | null>) => api("/api/prima/companies", "PUT", { companies }),
+    onSuccess: () => {
+      setPicked({});
+      void qc.invalidateQueries({ queryKey: ["prima"] });
+    },
+  });
+  const d = q.data;
+  const valueOf = (b: BranchRow) => picked[b.id] ?? b.company_id ?? b.suggestion ?? NONE;
+  const changes: Record<string, string | null> = {};
+  for (const b of d?.branches ?? []) {
+    const v = valueOf(b);
+    const now = v === NONE ? null : v;
+    if (now !== b.company_id) changes[b.id] = now;
+  }
+  const options = [
+    { value: NONE, label: t("Not set") },
+    ...(d?.companies ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.id })),
+  ];
+  const error = q.error ?? save.error;
+  return (
+    <Section title={t("Prima companies")}
+      actions={<Button size="sm" disabled={!Object.keys(changes).length || save.isPending} onClick={() => save.mutate(changes)}>{t("Save")}</Button>}>
+      <p className="mb-3 text-[13px] text-muted">{t("Which Prima company each branch is. Anyone with no Prima record of their own gets their own Prima account in their branch's company the first time they open Prima, with access from their office role.")}</p>
+      {error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(error)}</p> : null}
+      {q.isLoading ? <Skeleton className="h-16" /> : (
+        <div className="grid gap-2">
+          {(d?.branches ?? []).map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
+              <div className="min-w-0 flex-1 truncate text-[14px] font-medium">{b.name}</div>
+              {b.company_id
+                ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {t("Company set")}</Pill>
+                : b.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : <Pill tone="warn">{t("Not set")}</Pill>}
+              <Select size="sm" className="w-64" label={t("Prima company for {name}", { name: b.name })} value={valueOf(b)} options={options}
+                disabled={save.isPending}
+                onValueChange={(v) => setPicked((x) => ({ ...x, [b.id]: v }))} />
+            </div>
+          ))}
+        </div>
+      )}
     </Section>
   );
 }

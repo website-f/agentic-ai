@@ -31,6 +31,7 @@ from .test_office_roles import member
 SECRET = "o" * 40
 OID = "0a0a0a0a-0000-4000-8000-000000000001"
 OWNER_OID = "0a0a0a0a-0000-4000-8000-0000000000aa"  # recorded on no Prima record
+COMPANIES = [{"id": "co-maju", "name": "Maju Sdn Bhd"}, {"id": "co-lain", "name": "Lain Security"}]
 PRIMA_SRC = Path(__file__).resolve().parents[2] / "prima" / "apps" / "api" / "src"
 STAFF = [
     {
@@ -73,7 +74,9 @@ def prima_on(monkeypatch):
     monkeypatch.setattr(settings, "prima_url", "http://prima.test:3000")
     monkeypatch.setattr(settings, "prima_secret", SECRET)
     monkeypatch.setattr(settings, "prima_workspace", "")
+    monkeypatch.setattr(settings, "prima_accounts_url", "http://prima-accounts:3100")
     seen: list[httpx.Request] = []
+    made: dict[str, dict] = {}  # P75: accounts the accounts service made
 
     def handler(req: httpx.Request) -> httpx.Response:
         seen.append(req)
@@ -85,10 +88,23 @@ def prima_on(monkeypatch):
         want = hmac.new(SECRET.encode(), head + req.content, hashlib.sha256).hexdigest()
         if h["x-office-signature"] != want:
             return httpx.Response(401, json={"message": "bad signature"})
+        if req.url.host == "prima-accounts":
+            # P75: Prima's accounts service takes only the office's own system call.
+            assert url == "/accounts" and req.method == "POST"
+            assert h["x-office-via"] == "system" and h["x-office-user"] == ""
+            body = json.loads(req.content)
+            rid = "u-off-" + body["officeUserId"]
+            made[rid] = {"id": rid, "name": body["name"], "title": body["title"],
+                         "role": body["role"], "companyIds": body["companyIds"],
+                         "entraOid": None, "canSignIn": True}  # fmt: skip
+            return httpx.Response(200, json={**made[rid], "created": True, "closed": False})
         if url == "/api/office/staff":
             assert h["x-office-via"] == "system" and h["x-office-user"] == ""
-            return httpx.Response(200, json=STAFF)
-        who = next((s for s in STAFF if s["id"] == h["x-office-user"]), None)
+            return httpx.Response(200, json=[*STAFF, *made.values()])
+        if url == "/api/office/companies":
+            assert h["x-office-via"] == "system" and h["x-office-user"] == ""
+            return httpx.Response(200, json=COMPANIES)
+        who = next((s for s in [*STAFF, *made.values()] if s["id"] == h["x-office-user"]), None)
         if who is None:
             return httpx.Response(403, json={"message": "no such record"})
         if url == "/api/me":
@@ -382,3 +398,130 @@ async def test_no_prima_tools_without_prima(client, monkeypatch):
         names = {t["function"]["name"] for t in offered_tools(a)}
         assert not names & {"prima_find", "prima_read", "prima_record"}
         assert (await policy.evaluate(a, "prima_read", {"path": "api/me"})).effect == "deny"
+
+
+# ---------------------------------------------------------------- P75 automatic Prima accounts
+
+
+def _accounts(seen: list[httpx.Request]) -> list[dict]:
+    return [json.loads(r.content) for r in seen if r.url.host == "prima-accounts"]
+
+
+async def _map_branch(client, branch_id: str) -> None:
+    d = (await client.get("/api/prima/companies")).json()
+    row = next(b for b in d["branches"] if b["id"] == branch_id)
+    assert row["company_id"] is None and row["suggestion"] == "co-maju"
+    assert d["companies"] == COMPANIES
+    r = await client.put(
+        "/api/prima/companies", json={"companies": {branch_id: row["suggestion"]}},
+        headers=csrf(client),
+    )  # fmt: skip
+    assert r.status_code == 200, r.text
+    d = (await client.get("/api/prima/companies")).json()
+    row = next(b for b in d["branches"] if b["id"] == branch_id)
+    assert row["company_id"] == "co-maju" and row["suggestion"] is None
+
+
+async def test_staff_open_prima_with_their_own_account(client, prima_on):
+    from .test_office_roles import signed_in
+
+    o = await office(client)
+    bid = o["branch"]["id"]
+    await _map_branch(client, bid)
+    siti = await member(client, "siti@example.com", "staff", branch_id=bid)
+    await member(client, "boss@example.com", "branch_manager", branch_id=bid)
+    await _microsoft("siti@example.com", "0a0a0a0a-0000-4000-8000-0000000000b1")
+    await _microsoft("boss@example.com", "0a0a0a0a-0000-4000-8000-0000000000b2")
+    siti_id, ws = await _ids("siti@example.com")
+    boss_id, _ = await _ids("boss@example.com")
+
+    # Siti has no Prima record: opening Prima makes her own account, in her branch's company,
+    # as central staff (self-service), and links it. Nobody links anything.
+    c = await signed_in("siti@example.com", siti["temp_password"])
+    try:
+        s = (await c.get("/api/prima/status")).json()
+        assert s["linked"] and s["me"]["name"] == "Siti", s
+        r = await c.get("/api/prima/api/leave")
+        assert r.json()["as"] == f"u-off-{siti_id}"
+    finally:
+        await c.aclose()
+    assert _accounts(prima_on) == [
+        {"officeUserId": siti_id, "name": "Siti", "title": "Staff", "role": "pwvsb_officer",
+         "companyIds": ["co-maju"]},
+    ]  # fmt: skip
+    async with SessionLocal() as db:
+        link = await db.get(PrimaLink, (ws, siti_id))
+        assert (link.prima_user_id, link.how) == (f"u-off-{siti_id}", "auto")
+        # A branch manager gets the company's manager view (admin_exec), once.
+        link = await prima.link_for(db, ws, boss_id)
+        assert (link.prima_user_id, link.how) == (f"u-off-{boss_id}", "auto")
+        await prima.link_for(db, ws, boss_id)
+    acc = _accounts(prima_on)
+    assert len(acc) == 2 and acc[1]["role"] == "admin_exec"
+    assert acc[1]["title"] == "Branch manager" and acc[1]["companyIds"] == ["co-maju"]
+    # An office account is never suggested to anyone else by name.
+    d = (await client.get("/api/prima/people")).json()
+    assert all(not (p["suggestion"] or "").startswith("u-off-") for p in d["people"])
+
+
+async def test_an_unmapped_branch_asks_the_owner_for_its_company(client, prima_on):
+    from .test_office_roles import signed_in
+
+    o = await office(client)
+    m = await member(
+        client, "rina@example.com", "supervisor",
+        branch_id=o["branch"]["id"], department_id=o["depts"]["Finance"],
+    )  # fmt: skip
+    await _microsoft("rina@example.com", "0a0a0a0a-0000-4000-8000-0000000000b3")
+    c = await signed_in("rina@example.com", m["temp_password"])
+    try:
+        s = (await c.get("/api/prima/status")).json()
+        assert not s["linked"] and s["code"] == "company_needed"
+        assert "which Prima company Maju Sdn Bhd is" in s["problem"]
+        r = await c.get("/api/prima/api/me")
+        assert r.status_code == 403 and r.json()["code"] == "company_needed"
+    finally:
+        await c.aclose()
+    assert _accounts(prima_on) == []
+    rina_id, ws = await _ids("rina@example.com")
+    async with SessionLocal() as db:
+        assert await db.get(PrimaLink, (ws, rina_id)) is None
+
+
+async def test_only_the_owner_sets_the_branch_companies(client, prima_on):
+    from agentic.models import AuditLog
+
+    from .test_office_roles import signed_in
+
+    o = await office(client)
+    bid = o["branch"]["id"]
+    m = await member(client, "staff2@example.com", "staff", branch_id=bid)
+    bad = await client.put(
+        "/api/prima/companies", json={"companies": {bid: "co-nowhere"}}, headers=csrf(client)
+    )
+    assert bad.status_code == 400
+    bad = await client.put(
+        "/api/prima/companies", json={"companies": {"br_other": "co-maju"}}, headers=csrf(client)
+    )
+    assert bad.status_code == 400
+    _, ws = await _ids("owner@example.com")
+    async with SessionLocal() as db:
+        assert "prima_companies" not in ((await db.get(Workspace, ws)).settings or {})
+    c = await signed_in("staff2@example.com", m["temp_password"])
+    try:
+        assert (await c.get("/api/prima/companies")).status_code == 403
+        r = await c.put(
+            "/api/prima/companies", json={"companies": {bid: "co-maju"}}, headers=csrf(c)
+        )
+        assert r.status_code == 403
+    finally:
+        await c.aclose()
+    r = await client.put(
+        "/api/prima/companies", json={"companies": {bid: "co-lain"}}, headers=csrf(client)
+    )
+    assert r.json() == {"ok": True, "companies": {bid: "co-lain"}}
+    async with SessionLocal() as db:
+        rows = (
+            await db.scalars(select(AuditLog).where(AuditLog.action == "prima.companies"))
+        ).all()
+        assert len(rows) == 1 and rows[0].after == {bid: "co-lain"}

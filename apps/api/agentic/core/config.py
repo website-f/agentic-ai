@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     prima_url: str = ""
     prima_secret: str = ""
     prima_workspace: str = ""
+    # P75: Prima's accounts service (apps/prima/apps/api/src/office-accounts.ts, inside the
+    # stack): makes each office person's own Prima account the first time they open Prima,
+    # with access from their office role. Signed like every other office call.
+    prima_accounts_url: str = "http://prima-accounts:3100"
     minutes_max_mb: int = Field(default=1024, ge=1, le=10_240)
     minutes_max_hours: float = Field(default=4.0, gt=0, le=12)
 

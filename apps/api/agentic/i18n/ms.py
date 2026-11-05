@@ -1872,4 +1872,18 @@ MS: dict[str, str] = {
         "Sambungkan akaun kerja Microsoft anda ke pejabat untuk membuka Prima. Ia hanya perlu "
         "satu log masuk dengan Microsoft."
     ),
+    # ------------------------------------------------------------ P75 automatic Prima accounts
+    "Prima could not make your account. Ask the office owner to check it.": (
+        "Prima tidak dapat membuat akaun anda. Minta pemilik pejabat menyemaknya."
+    ),
+    "Prima does not know which company you work in yet. Ask the office owner to give you a branch.": (  # noqa: E501
+        "Prima belum tahu syarikat tempat anda bekerja. Minta pemilik pejabat memberi anda "
+        "cawangan."
+    ),
+    'Prima does not know which company {branch} is yet. The office owner sets "which Prima company {branch} is" on the Prima page.': (  # noqa: E501
+        "Prima belum tahu {branch} ialah syarikat yang mana. Pemilik pejabat menetapkan "
+        '"syarikat Prima yang mana {branch}" di halaman Prima.'
+    ),
+    "That branch is not in this office.": "Cawangan itu tiada dalam pejabat ini.",
+    "That Prima company does not exist.": "Syarikat Prima itu tidak wujud.",
 }

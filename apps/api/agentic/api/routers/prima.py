@@ -4,17 +4,25 @@ Prima's screens at /prima/ call /api/prima/api/... with the office session (and 
 token, like every other screen); each call goes on to Prima signed for the person signed in.
 Prima's answer, refusals included, comes back as it is, so Prima decides what anyone sees.
 /api/prima/people: the owner links the office's people to Prima's staff records (P67).
+/api/prima/companies: the owner says which Prima company each office branch is (P75): anyone
+with no Prima record of their own gets their own account in that company.
 """
+
+from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
+from ...models import Branch, Workspace
 from ...prima import client, people
 from ...prima.client import PrimaError
+from ...services import audit
 from ..deps import Principal, client_ip, current_principal, require
 
 router = APIRouter(prefix="/api/prima", tags=["prima"])
@@ -51,6 +59,7 @@ async def status(
             "me": None,
             "problem": render(e.message),
             "needs_microsoft": e.code == "microsoft_needed",
+            "code": e.code,
         }
     if ans.status == 200:
         data = ans.json()
@@ -111,7 +120,7 @@ async def people_list(
     except PrimaError as e:
         return _refused(e)
     persons = await people.people(db, principal.workspace_id)
-    guess = people.suggestions(persons, staff)
+    guess = people.suggestions(persons, client.matchable(staff))
     linked = {p.link.prima_user_id: p.user_id for p in persons if p.link}
     return {
         "staff": [_staff_row(r, linked.get(r.id)) for r in staff],
@@ -166,7 +175,9 @@ async def people_link_suggested(
     except PrimaError as e:
         return _refused(e)
     by_id = {r.id: r for r in staff}
-    guess = people.suggestions(await people.people(db, principal.workspace_id), staff)
+    guess = people.suggestions(
+        await people.people(db, principal.workspace_id), client.matchable(staff)
+    )
     done = 0
     for user_id, rid in guess.items():
         try:
@@ -175,6 +186,108 @@ async def people_link_suggested(
         except PrimaError:
             await db.rollback()
     return {"linked": done}
+
+
+# ---------------------------------------------------------------- P75 branches and companies
+
+
+class CompaniesIn(BaseModel):
+    # {office branch id: Prima company id, or null to clear}
+    companies: dict[str, str | None] = Field(max_length=500)
+
+
+def _similar(a: str, b: str) -> float:
+    ka, kb = people.name_key(a), people.name_key(b)
+    if not ka or not kb:
+        return 0.0
+    if ka in kb or kb in ka:
+        return 1.0
+    return SequenceMatcher(None, ka, kb).ratio()
+
+
+def _suggest(branch: str, companies: list[client.Company]) -> str | None:
+    """The Prima company whose name is clearly the branch's, else none."""
+    scored = sorted(((_similar(branch, c.name), c.id) for c in companies), reverse=True)
+    if not scored or scored[0][0] < 0.6:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None  # two equally likely: the owner picks
+    return scored[0][1]
+
+
+async def _branches(db: AsyncSession, ws_id: str) -> list[Branch]:
+    return list(
+        (
+            await db.scalars(
+                select(Branch).where(Branch.workspace_id == ws_id).order_by(Branch.name)
+            )
+        ).all()
+    )
+
+
+@router.get("/companies")
+async def companies_list(
+    principal: Principal = Depends(require("org.manage")), db: AsyncSession = Depends(get_db)
+) -> object:
+    """Each office branch beside Prima's companies: the saved one, else the likely one."""
+    ws_id = principal.workspace_id
+    if not client.enabled(ws_id):
+        return _refused(PrimaError(404, Msg("Prima is not set up on this server.")))
+    try:
+        found = await client.companies()
+    except PrimaError as e:
+        return _refused(e)
+    saved = client.company_map(await db.get(Workspace, ws_id))
+    known = {c.id for c in found}
+    return {
+        "companies": [{"id": c.id, "name": c.name} for c in found],
+        "branches": [
+            {
+                "id": b.id,
+                "name": b.name,
+                "company_id": saved.get(b.id) if saved.get(b.id) in known else None,
+                "suggestion": None if saved.get(b.id) in known else _suggest(b.name, found),
+            }
+            for b in await _branches(db, ws_id)
+        ],
+    }
+
+
+@router.put("/companies")
+async def companies_save(
+    body: CompaniesIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> object:
+    ws_id = principal.workspace_id
+    if not client.enabled(ws_id):
+        return _refused(PrimaError(404, Msg("Prima is not set up on this server.")))
+    try:
+        known = {c.id for c in await client.companies()}
+    except PrimaError as e:
+        return _refused(e)
+    branches = {b.id for b in await _branches(db, ws_id)}
+    for branch_id, company_id in body.companies.items():
+        if branch_id not in branches:
+            return _refused(PrimaError(400, Msg("That branch is not in this office.")))
+        if company_id is not None and company_id not in known:
+            return _refused(PrimaError(400, Msg("That Prima company does not exist.")))
+    ws = await db.get(Workspace, ws_id)
+    assert ws is not None
+    before = client.company_map(ws)
+    after = {k: v for k, v in before.items() if k in branches}
+    for branch_id, company_id in body.companies.items():
+        if company_id:
+            after[branch_id] = company_id
+        else:
+            after.pop(branch_id, None)
+    ws.settings = {**(ws.settings or {}), client.COMPANIES_KEY: after}
+    flag_modified(ws, "settings")
+    await audit.record(
+        db, ws_id, principal.actor, "prima.companies", target=ws_id, before=before, after=after
+    )
+    await db.commit()
+    return {"ok": True, "companies": after}
 
 
 async def _forward(request: Request, path: str, principal: Principal, db: AsyncSession) -> Response:

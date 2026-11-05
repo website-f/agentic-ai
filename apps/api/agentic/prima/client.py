@@ -12,22 +12,30 @@ applying its own sign-in rules, roles, record rules and row-level security to th
 signature covers the time, the method, the path with its query, the record, through what
 (person, agent:<name>, or system for the staff list), and the exact body bytes.
 
+P75: anyone else (no sure match, not the owner) gets their own Prima account the first time
+they open Prima, made by Prima's accounts service (office-accounts.ts, settings.
+prima_accounts_url) with access from their office role (prima_role) in the Prima company the
+owner set for their branch (workspace settings "prima_companies"). Linked with how="auto".
+
 Tests swap in a fake Prima: `client.transport = httpx.MockTransport(handler)`.
 """
 
 import hashlib
 import hmac
+import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..i18n import Msg
-from ..models import Membership, PrimaLink
+from ..i18n.labels import role_label
+from ..models import Branch, Membership, PrimaLink, Workspace
 from ..services import audit
 
 transport: httpx.AsyncBaseTransport | None = None
@@ -51,6 +59,16 @@ PROMPT_NOTE = (
     "deductions, discipline and contracts stay with the people Prima names."
 )
 MAX_BODY = 3 * 1024 * 1024  # Prima's own JSON limit (photos and proofs as data URLs)
+# P75: office accounts (office-accounts.ts) are always "u-off-<office user id>".
+OFFICE_ACCOUNT_PREFIX = "u-off-"
+# Workspace settings key: {office branch id: Prima company id}, set by the owner.
+COMPANIES_KEY = "prima_companies"
+# The Prima role of an office role (least privilege, Prima's packages/core/src/access.ts): a
+# branch manager gets the company's manager view without its decisions (admin_exec: the company
+# overview, not commercial approval, arms, discipline or staff numbers); everyone else, admins
+# included, is central staff (pwvsb_officer) with no grant or department: their own record,
+# clock, leave and claims, and no HR or pay wall. The owner opens Prima as its top record.
+PRIMA_ROLES = {"branch_manager": "admin_exec"}
 
 
 class PrimaError(Exception):
@@ -109,6 +127,27 @@ class StaffRecord:
     top: str | None = None
 
 
+@dataclass(frozen=True)
+class Company:
+    id: str
+    name: str
+
+
+def prima_role(office_role: str) -> str:
+    return PRIMA_ROLES.get(office_role, "pwvsb_officer")
+
+
+def matchable(records: list[StaffRecord]) -> list[StaffRecord]:
+    """Records the office may match people to by account or name: never an office account
+    (P75), which belongs to the one office person it was made for."""
+    return [r for r in records if not r.id.startswith(OFFICE_ACCOUNT_PREFIX)]
+
+
+def company_map(ws: Workspace | None) -> dict[str, str]:
+    raw = ((ws.settings if ws else None) or {}).get(COMPANIES_KEY) or {}
+    return {str(k): str(v) for k, v in raw.items() if v} if isinstance(raw, dict) else {}
+
+
 def _not_linked() -> PrimaError:
     return PrimaError(
         403,
@@ -140,6 +179,117 @@ async def staff() -> list[StaffRecord]:
     ]
 
 
+async def companies() -> list[Company]:
+    """Prima's companies, id and name only (the office's own signed call), for the owner to say
+    which Prima company each office branch is."""
+    ans = await _send("GET", "/api/office/companies", "", "system", b"", "")
+    if ans.status != 200:
+        raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
+    rows = ans.json()
+    return [
+        Company(id=str(r["id"]), name=str(r.get("name") or r["id"]))
+        for r in (rows if isinstance(rows, list) else [])
+        if isinstance(r, dict) and r.get("id")
+    ]
+
+
+async def create_account(
+    *, office_user_id: str, name: str, title: str, role: str, company_ids: list[str]
+) -> str:
+    """Make (or bring up to date) this person's own Prima account; its Prima id. A system call
+    to Prima's accounts service, signed like every other ("/accounts")."""
+    body = json.dumps(
+        {
+            "officeUserId": office_user_id,
+            "name": name[:120],
+            "title": title[:120],
+            "role": role,
+            "companyIds": company_ids,
+        },
+        separators=(",", ":"),
+    ).encode()
+    ans = await _send("POST", "/accounts", "", "system", body, "", base=settings.prima_accounts_url)
+    data = ans.json() if ans.status in (200, 400) else None
+    rid = str(data.get("id") or "") if isinstance(data, dict) else ""
+    if ans.status == 200 and rid.startswith(OFFICE_ACCOUNT_PREFIX):
+        return rid
+    if ans.status == 400:
+        raise PrimaError(
+            403, Msg("Prima could not make your account. Ask the office owner to check it.")
+        )
+    raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
+
+
+async def _own_account(db: AsyncSession, m: Membership, name: str) -> PrimaLink:
+    """P75: the person's own Prima account, in the Prima company of their branch."""
+    branch_id = m.branch_id
+    if branch_id is None:
+        # Someone with no branch in an office of one branch works in that branch.
+        only = (
+            await db.scalars(
+                select(Branch.id).where(Branch.workspace_id == m.workspace_id).limit(2)
+            )
+        ).all()
+        branch_id = only[0] if len(only) == 1 else None
+    if branch_id is None:
+        raise PrimaError(
+            403,
+            Msg(
+                "Prima does not know which company you work in yet. Ask the office owner to give "
+                "you a branch."
+            ),
+            code="company_needed",
+        )
+    company = company_map(await db.get(Workspace, m.workspace_id)).get(branch_id)
+    if not company:
+        branch = await db.get(Branch, branch_id)
+        raise PrimaError(
+            403,
+            Msg(
+                "Prima does not know which company {branch} is yet. The office owner sets "
+                '"which Prima company {branch} is" on the Prima page.',
+                branch=branch.name if branch else "",
+            ),
+            code="company_needed",
+        )
+    role = prima_role(m.role)
+    rid = await create_account(
+        office_user_id=m.user_id,
+        name=name,
+        title=str(role_label(m.role)),
+        role=role,
+        company_ids=[company],
+    )
+    link = PrimaLink(
+        workspace_id=m.workspace_id,
+        user_id=m.user_id,
+        prima_user_id=rid,
+        prima_name=name[:200],
+        how="auto",
+        linked_by="auto:account",
+    )
+    db.add(link)
+    try:
+        await db.commit()
+    except IntegrityError:  # opened twice at once: the other request linked it
+        await db.rollback()
+        got = await db.get(PrimaLink, (m.workspace_id, m.user_id))
+        if got is None:
+            raise _not_linked() from None
+        return got
+    await audit.record(
+        db,
+        m.workspace_id,
+        "system:prima",
+        "prima.account",
+        target=m.user_id,
+        after={"prima_user_id": rid, "role": role, "company": company},
+        note=f"Own Prima account {rid} made for them ({role} in {company})",
+    )
+    await db.commit()
+    return link
+
+
 async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLink:
     """This person's Prima record. Made here, the first time they open Prima, when the match is
     sure (people.suggestions): the record IT gave their verified Microsoft account, else the
@@ -162,13 +312,19 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     link = await db.get(PrimaLink, (workspace_id, user_id))
     if link is not None:
         return link
-    records = await staff()
+    records = matchable(await staff())
     persons = await people.people(db, workspace_id)
     rid = people.suggestions(persons, records).get(user_id)
     record = next((r for r in records if r.id == rid), None)
     me = next((p for p in persons if p.user_id == user_id), None)
-    if record is None or me is None:
+    if me is None:
         raise _not_linked()
+    if record is None:
+        # P75: no record of their own in Prima: they get one, from their office role. The
+        # owner opens Prima as its top record (P74), never as a made account.
+        if me.role == "owner":
+            raise _not_linked()
+        return await _own_account(db, m, me.name)
     how = (
         "microsoft"
         if me.ms_oid and record.entra_oid == me.ms_oid
@@ -217,7 +373,9 @@ def sign(ts: str, method: str, url: str, user: str, via: str, body: bytes) -> st
     return hmac.new(settings.prima_secret.encode(), head + body, hashlib.sha256).hexdigest()
 
 
-async def _send(method: str, url: str, user: str, via: str, body: bytes, client_ip: str) -> Answer:
+async def _send(
+    method: str, url: str, user: str, via: str, body: bytes, client_ip: str, base: str = ""
+) -> Answer:
     ts = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     headers = {
         "x-office-ts": ts,
@@ -234,7 +392,10 @@ async def _send(method: str, url: str, user: str, via: str, body: bytes, client_
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT, transport=transport) as http:
             r = await http.request(
-                method, settings.prima_url.rstrip("/") + url, headers=headers, content=body or None
+                method,
+                (base or settings.prima_url).rstrip("/") + url,
+                headers=headers,
+                content=body or None,
             )
     except httpx.HTTPError as e:
         raise PrimaError(

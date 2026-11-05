@@ -67,4 +67,13 @@ export const PRIMA: Record<string, string> = {
   "Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.":
     "Prima dibuka dengan log masuk pejabat anda sebaik sahaja akaun kerja Microsoft anda disambungkan ke pejabat. Kali pertama, pejabat mencari rekod staf Prima anda melalui akaun itu atau nama tepat anda; jika tidak pasti, pemilik pejabat memilihnya di halaman ini.",
   "Opening Prima…": "Membuka Prima…",
+  // P75: automatic Prima accounts, in the Prima company of each branch.
+  "Prima companies": "Syarikat Prima",
+  "Which Prima company each branch is. Anyone with no Prima record of their own gets their own Prima account in their branch's company the first time they open Prima, with access from their office role.":
+    "Syarikat Prima yang mana bagi setiap cawangan. Sesiapa yang tiada rekod Prima sendiri mendapat akaun Prima sendiri dalam syarikat cawangannya kali pertama mereka membuka Prima, dengan akses mengikut peranan mereka di pejabat.",
+  "Prima company for {name}": "Syarikat Prima untuk {name}",
+  "Company set": "Syarikat ditetapkan",
+  "Own Prima account": "Akaun Prima sendiri",
+  "Ask the office owner to set which Prima company your branch is. Prima then makes your own account the next time you open it.":
+    "Minta pemilik pejabat menetapkan syarikat Prima bagi cawangan anda. Prima kemudian membuat akaun anda sendiri apabila anda membukanya semula.",
 };

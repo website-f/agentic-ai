@@ -2562,13 +2562,14 @@ class PrimaLink(Timestamps, Base):
     Prima's sign-in: every call it signs names this record, and Prima applies its own rules to
     it. Made automatically the first time they open Prima when the match is sure: the record IT
     gave their verified Microsoft account (how="microsoft") or the only record with exactly
-    their name (how="name"); or by the owner on the Prima page (how="owner"). One record per
+    their name (how="name"); or by the owner on the Prima page (how="owner"); or (P75) their own
+    Prima account, made the first time they open Prima (how="auto"). One record per
     person and one person per record."""
 
     __tablename__ = "prima_links"
     __table_args__ = (
         UniqueConstraint("workspace_id", "prima_user_id", name="uq_prima_links_record"),
-        CheckConstraint("how IN ('microsoft', 'name', 'owner')", name="ck_prima_links_how"),
+        CheckConstraint("how IN ('microsoft', 'name', 'owner', 'auto')", name="ck_prima_links_how"),
     )
 
     workspace_id: Mapped[str] = mapped_column(

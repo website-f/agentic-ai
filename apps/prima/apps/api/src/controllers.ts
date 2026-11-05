@@ -309,6 +309,37 @@ export class OfficeController {
       };
     });
   }
+
+  /**
+   * P75: the group's companies (id and name only), so the office's owner can say which Prima company each office branch
+   * is; office accounts (office-accounts.ts) are made in that company. Companies sit behind the company wall, so the
+   * read runs as prima_app with the wall opened for the companies the group knows: every company a grant or a staff
+   * record names (each company has its grants from the first setup on).
+   */
+  @Get('companies')
+  async companies() {
+    const client = await this.db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const named = await client.query(
+        `SELECT company_id AS id FROM prima.grants
+         UNION SELECT jsonb_array_elements_text(data->'companyIds') FROM prima.users WHERE jsonb_typeof(data->'companyIds') = 'array'`,
+      );
+      await client.query('SET LOCAL ROLE prima_app');
+      await client.query(`SELECT set_config('app.company_ids', $1, true)`, [named.rows.map((r) => String(r.id)).join(',')]);
+      await client.query(`SELECT set_config('app.user_id', '', true)`);
+      await client.query(`SELECT set_config('app.group_user', 'off', true)`);
+      await client.query(`SELECT set_config('app.walls', '', true)`);
+      const res = await client.query(`SELECT id, data->>'name' AS name FROM prima.companies ORDER BY data->>'name', id`);
+      await client.query('COMMIT');
+      return res.rows.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id) }));
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 @Controller('api')
