@@ -47,14 +47,15 @@ export const PRISMA: Record<string, string> = {
     "Pautkan akaun Microsoft setiap orang kepada pengguna Prima mereka, satu baris setiap orang di pelayan:",
   // P67: the owner links people to their Prima staff records.
   "People in Prima": "Orang dalam Prima",
-  "Prima opens with your office sign-in once you are linked to your Prima staff record. If you sign in with Microsoft and IT recorded your account in Prima, that happens by itself; otherwise the office owner links you on this page.":
-    "Prima dibuka dengan log masuk pejabat anda sebaik sahaja anda dipautkan kepada rekod staf Prima anda. Jika anda log masuk dengan Microsoft dan IT telah merekod akaun anda dalam Prima, ia berlaku dengan sendiri; jika tidak, pemilik pejabat memautkan anda di halaman ini.",
+  "Prima opens with your office sign-in. The first time, the office finds your Prima staff record by your Microsoft account or your exact name; if it cannot be sure, the office owner picks it on this page.":
+    "Prima dibuka dengan log masuk pejabat anda. Kali pertama, pejabat mencari rekod staf Prima anda melalui akaun Microsoft atau nama tepat anda; jika tidak pasti, pemilik pejabat memilihnya di halaman ini.",
   "Link all suggested ({n})": "Pautkan semua cadangan ({n})",
-  "Who in the office is which Prima staff record. It decides whose pay, leave and HR records each person (and their AI) can see, so check the picks before linking. People who sign in with Microsoft are linked by themselves when IT recorded their account in Prima.":
-    "Siapa dalam pejabat ialah rekod staf Prima yang mana. Ia menentukan rekod gaji, cuti dan HR siapa yang boleh dilihat oleh setiap orang (dan AI mereka), jadi semak pilihan sebelum memautkan. Orang yang log masuk dengan Microsoft dipautkan dengan sendiri apabila IT telah merekod akaun mereka dalam Prima.",
+  "Who in the office is which Prima staff record. People are linked by themselves when the match is sure (their Microsoft account, or the only record with their exact name); pick the record for anyone else. A link decides whose pay, leave and HR records each person, and their AI, can see.":
+    "Siapa dalam pejabat ialah rekod staf Prima yang mana. Orang dipautkan dengan sendiri apabila padanan pasti (akaun Microsoft mereka, atau satu-satunya rekod dengan nama tepat mereka); pilih rekod untuk orang lain. Pautan menentukan rekod gaji, cuti dan HR siapa yang boleh dilihat oleh setiap orang, dan AI mereka.",
   "Not linked": "Belum dipautkan",
   "cannot sign in yet": "belum boleh log masuk",
   "Linked by Microsoft": "Dipautkan melalui Microsoft",
+  "Linked by name": "Dipautkan melalui nama",
   "Prima record for {name}": "Rekod Prima untuk {name}",
   "Link {name}": "Pautkan {name}",
   "Back to Prima": "Kembali ke Prima",

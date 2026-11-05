@@ -104,7 +104,7 @@ function PrismaSetup({ status: s, loading }: { status?: PrimaStatus; loading: bo
       {owner && s?.enabled ? <PeopleSection /> : null}
 
       <Section title={t("How you get in")}>
-        <p className="text-[13px]">{t("Prima opens with your office sign-in once you are linked to your Prima staff record. If you sign in with Microsoft and IT recorded your account in Prima, that happens by itself; otherwise the office owner links you on this page.")}</p>
+        <p className="text-[13px]">{t("Prima opens with your office sign-in. The first time, the office finds your Prima staff record by your Microsoft account or your exact name; if it cannot be sure, the office owner picks it on this page.")}</p>
         <a href={PREVIEW} className="mt-3 grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface p-4 hover:border-accent/40">
           <span className="flex items-center gap-2 text-[14.5px] font-semibold"><EyeIcon size={18} className="text-accent" /> {t("Preview with sample data")}</span>
           <span className="text-[12.5px] text-muted">{t("The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.")}</span>
@@ -128,7 +128,7 @@ function PrismaSetup({ status: s, loading }: { status?: PrimaStatus; loading: bo
 interface StaffRow { id: string; name: string; title: string; role: string; can_sign_in: boolean; linked_to: string | null }
 interface PersonRow {
   user_id: string; name: string; email: string; role: string; microsoft: boolean;
-  link: { prima_user_id: string; prima_name: string; how: "microsoft" | "owner" } | null;
+  link: { prima_user_id: string; prima_name: string; how: "microsoft" | "name" | "owner" } | null;
   suggestion: string | null;
 }
 interface PeopleData { staff: StaffRow[]; people: PersonRow[] }
@@ -160,7 +160,7 @@ function PeopleSection() {
   return (
     <Section title={t("People in Prima")}
       actions={<Button size="sm" disabled={!waiting || linkAll.isPending} onClick={() => linkAll.mutate()}><LinkIcon size={15} /> {t("Link all suggested ({n})", { n: waiting })}</Button>}>
-      <p className="mb-3 text-[13px] text-muted">{t("Who in the office is which Prima staff record. It decides whose pay, leave and HR records each person (and their AI) can see, so check the picks before linking. People who sign in with Microsoft are linked by themselves when IT recorded their account in Prima.")}</p>
+      <p className="mb-3 text-[13px] text-muted">{t("Who in the office is which Prima staff record. People are linked by themselves when the match is sure (their Microsoft account, or the only record with their exact name); pick the record for anyone else. A link decides whose pay, leave and HR records each person, and their AI, can see.")}</p>
       {error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(error)}</p> : null}
       {q.isLoading ? <Skeleton className="h-24" /> : (
         <div className="grid gap-2">
@@ -179,7 +179,7 @@ function PeopleSection() {
                   <div className="truncate text-[12px] text-muted">{p.email}</div>
                 </div>
                 {p.link
-                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : t("Linked")}</Pill>
+                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : p.link.how === "name" ? t("Linked by name") : t("Linked")}</Pill>
                   : p.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : null}
                 <Select size="sm" className="w-64" label={t("Prima record for {name}", { name: p.name })} value={value} options={options}
                   disabled={linkOne.isPending}

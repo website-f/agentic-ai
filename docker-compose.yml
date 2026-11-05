@@ -709,6 +709,9 @@ services:
       # P66: the office's signed calls (apps/prima/apps/api/src/office.ts). Same value as the
       # api's AGENTIC_PRIMA_SECRET.
       OFFICE_SIGNING_SECRET: ${PRIMA_OFFICE_SECRET:-prima-office-dev-secret-0123456789abcdef}
+      # P68: everyone linked in the office opens Prima (not only the pilot group). The pilot's
+      # own workflow rules are unchanged. false = only the pilot group signs in again.
+      PRIMA_SIGNIN_EVERYONE: ${PRIMA_SIGNIN_EVERYONE:-true}
     depends_on:
       prima-setup: { condition: service_completed_successfully }
     healthcheck:

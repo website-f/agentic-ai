@@ -965,6 +965,16 @@ describe('Microsoft sign-in links to one staff record', () => {
       await assert.rejects(guard.canActivate(office({ user: 'u-nobody' }).c), /no longer exists/);
       await assert.rejects(guard.canActivate(office({ user: 'u-ja-sync' }).c), /system feed/);
       await assert.rejects(guard.canActivate(office({ user: 'u-rom-central' }).c), /not part of the pilot/);
+      // P68: with everyone signing in from the office, the pilot no longer keeps them out (closed accounts still do).
+      process.env.PRIMA_SIGNIN_EVERYONE = 'true';
+      try {
+        const rom = office({ user: 'u-rom-central' });
+        assert.equal(await guard.canActivate(rom.c), true);
+        assert.equal(rom.req.userId, 'u-rom-central');
+        assert.equal((await new OfficeController(db).staff()).find((x) => x.id === 'u-rom-central')?.canSignIn, true);
+      } finally {
+        delete process.env.PRIMA_SIGNIN_EVERYONE;
+      }
 
       // The staff list for linking: only for the office's own system call.
       const sys = office({ user: '', via: 'system' });

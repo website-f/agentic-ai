@@ -105,6 +105,23 @@ Prima's Microsoft-only features still need Prima's own Microsoft token, so they 
 
 They say so when opened.
 
+## P68: straight in, and a cleaner Prima
+
+**Straight in.** Signing in to the office is enough. The first time someone opens **Prisma**, the office links them when the match is sure: their Microsoft account recorded in Prima, or the only Prima record with exactly their name while nobody else in the office has it. Their link shows as "Linked by Microsoft" or "Linked by name". The owner can change or clear any link on **People in Prima**, and links anyone without a sure match there.
+
+**Everyone, not only the pilot.** `PRIMA_SIGNIN_EVERYONE` (default `true` in docker-compose.yml) lets every linked staff record sign in. It changes nothing else: the pilot's own workflow rules stay as they are, and closed accounts are still refused. Set it to `false` to let only the pilot group in again.
+
+**The look, checked screen by screen** on a computer and a phone, in light and dark (`apps/prima/apps/web/src/styles.css`, `App.tsx`):
+- **Menu:** grouped into sections (Today, Operations, People and HR, Business and finance, Compliance and governance, IT and systems), on the rail and in the phone's **More** sheet, which now scrolls.
+- **Page head:** one left-aligned column (title, explanation, notices) instead of a title and a floating paragraph side by side.
+- **Number tiles:** fill the row with lines only between tiles, no grey gaps, and long amounts wrap instead of being cut.
+- **Lists:** a status tag moves under the text when there is no room, instead of running off the screen.
+- **Tables:** headings in sentence case that never wrap, numbers lined up, a readable name column, and wide tables scroll inside their panel.
+- **Section tabs:** scroll sideways on a phone instead of piling up in rows.
+- **Buttons, fields and tabs:** a steady height (40px touch targets on phones), hover, press and focus states.
+- **Phone top bar:** fits on one line; Sign out lives in **More**.
+- **Panels:** text inside never touches the edge.
+
 ## Tasks and reports from Prima
 
 An agent given a task in the office reads Prima as the person who gave the task. A scheduled task reads as whoever made the schedule. So "summarise this week's attendance and the leave waiting for co-1" works the same in a task as in chat:

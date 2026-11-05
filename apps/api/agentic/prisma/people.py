@@ -1,11 +1,11 @@
-"""P67: who in the office is which Prima staff record (models.PrismaLink).
+"""P67/P68: who in the office is which Prima staff record (models.PrismaLink).
 
-People link themselves without doing anything when they signed in with Microsoft and IT had
-recorded that account in Prima (client.link_for). For everyone else the owner's Prisma page
-lists the office's people beside Prima's records, with the likely record already picked (the
-same Microsoft account, else the one record with exactly the same name), and one button links
-them all. A guess is never linked on its own: a link decides whose pay, leave and HR records
-someone sees, so a person confirms it.
+Nobody runs a script or signs in twice. The first time someone opens Prima, the office links
+them when the match is sure (client.link_for): the record IT gave their verified Microsoft
+account, else the only Prima record with exactly their name while nobody else in the office has
+that name. Anyone without a sure match is listed on the owner's Prisma page beside Prima's
+records; the owner picks their record there, and can change or clear any link, including the
+automatic ones.
 """
 
 import re

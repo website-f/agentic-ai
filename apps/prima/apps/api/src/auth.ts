@@ -101,9 +101,17 @@ function admitted(user: User): User {
   // Offboarding: a closed account is refused before anything else is checked or shown.
   if (accessClosed(user, dateOf(fromMs(Date.now()))))
     throw new ForbiddenException(`This Prima account was closed from ${user.accessClosedFrom}. If you still work here, ask HR.`);
-  if (RULES.pilot.value.on && !inPilot(user)) throw new ForbiddenException('You are not part of the pilot yet.');
+  if (pilotSignInOnly() && !inPilot(user)) throw new ForbiddenException('You are not part of the pilot yet.');
   if (!leadershipOnboardingPermits(user)) throw new ForbiddenException('Prima is in leadership-only onboarding mode.');
   return user;
+}
+
+/**
+ * Whether only the pilot group may sign in. PRIMA_SIGNIN_EVERYONE=true (the Agentic Office, P68: everyone opens Prima
+ * from their office sign-in) lets every linked staff record in; the pilot's own workflow rules are unchanged.
+ */
+export function pilotSignInOnly(env: NodeJS.ProcessEnv = process.env): boolean {
+  return RULES.pilot.value.on && env.PRIMA_SIGNIN_EVERYONE !== 'true';
 }
 
 /** The staff record the Agentic Office named on a verified call (office.ts), under the same sign-in rules. */

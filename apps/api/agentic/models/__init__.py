@@ -2557,14 +2557,15 @@ class CrmAccess(Timestamps, Base):
 class PrismaLink(Timestamps, Base):
     """P67: which Prima staff record a person in the office is (agentic/prisma). The office is
     Prima's sign-in: every call it signs names this record, and Prima applies its own rules to
-    it. Made automatically when the person's verified Microsoft account is the one IT recorded
-    in Prima (how="microsoft"), else by the owner on the Prisma page (how="owner"). One record
-    per person and one person per record."""
+    it. Made automatically the first time they open Prima when the match is sure: the record IT
+    gave their verified Microsoft account (how="microsoft") or the only record with exactly
+    their name (how="name"); or by the owner on the Prisma page (how="owner"). One record per
+    person and one person per record."""
 
     __tablename__ = "prisma_links"
     __table_args__ = (
         UniqueConstraint("workspace_id", "prima_user_id", name="uq_prisma_links_record"),
-        CheckConstraint("how IN ('microsoft', 'owner')", name="ck_prisma_links_how"),
+        CheckConstraint("how IN ('microsoft', 'name', 'owner')", name="ck_prisma_links_how"),
     )
 
     workspace_id: Mapped[str] = mapped_column(

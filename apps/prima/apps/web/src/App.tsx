@@ -139,6 +139,33 @@ export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
 export const useApp = () => useContext(Ctx);
 
 /** depts is informational now: which central departments a screen serves; LINE in Shell decides who sees it. */
+/**
+ * P68 (Agentic Office): the menu in sections, so a long menu reads at a glance. Each screen keeps its own rank inside
+ * its section; a short menu (8 or fewer) stays one plain list.
+ */
+const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
+  { title: 'Today', views: ['home', 'overview', 'company', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
+  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'fleet', 'arms', 'cms'] },
+  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'fwm', 'socso', 'hostels', 'requests', 'memos', 'pdpa'] },
+  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'branches', 'assets', 'insurance', 'ja'] },
+  { title: 'Compliance and governance', views: ['compliance', 'audit', 'grc', 'act', 'governance', 'corporate', 'continuity'] },
+  { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
+];
+
+function navSections<T extends { view: ViewName }>(items: T[]): { title: string | null; items: T[] }[] {
+  if (items.length <= 8) return [{ title: null, items }];
+  const seen = new Set<ViewName>();
+  const out: { title: string | null; items: T[] }[] = [];
+  for (const g of NAV_GROUPS) {
+    const mine = items.filter((n) => g.views.includes(n.view));
+    mine.forEach((n) => seen.add(n.view));
+    if (mine.length) out.push({ title: g.title, items: mine });
+  }
+  const rest = items.filter((n) => !seen.has(n.view));
+  if (rest.length) out.push({ title: 'More', items: rest });
+  return out;
+}
+
 const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][]; depts?: NonNullable<User['department']>[] }[] = [
   { view: 'home', label: 'Home', icon: 'company', roles: ['director', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'overview', label: 'Group', icon: 'group', roles: ['director', 'pwvsb_officer'] },
@@ -891,11 +918,16 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </div>
           </div>
           <nav className="nav" aria-label="Main">
-            {nav.map((n) => (
-              <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
-                <Icon name={n.icon} />
-                {n.label}
-              </button>
+            {navSections(nav).map((sec) => (
+              <div className="nav-section" key={sec.title ?? 'all'}>
+                {sec.title && <div className="nav-heading">{sec.title}</div>}
+                {sec.items.map((n) => (
+                  <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
+                    <Icon name={n.icon} />
+                    {n.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
           <div className="rail-foot">
@@ -953,10 +985,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             )}
             <span className="grow" />
             <span className="muted small hide-sm">{dept === 'it' ? 'Merdeka Network' : ROLE_LABEL[role]}</span>
-            <span className="mono num" title="Malaysia time">
+            <span className="mono num muted small" title="Malaysia time">
               {hhmm(clock)} MYT
             </span>
-            <button className="btn btn-sm" onClick={onSignOut}>
+            <button className="btn btn-sm hide-sm" onClick={onSignOut}>
               {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
             </button>
           </header>
@@ -981,18 +1013,24 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           <>
             <div className="scrim" onClick={() => setMoreOpen(false)} />
             <div className="sheet" role="dialog" aria-label="More">
-              {moreNav.map((n) => (
-                <button
-                  key={n.view}
-                  className="sheet-item"
-                  onClick={() => {
-                    setMoreOpen(false);
-                    go({ view: n.view });
-                  }}
-                >
-                  <Icon name={n.icon} />
-                  {n.label}
-                </button>
+              {navSections(moreNav).map((sec) => (
+                <div className="sheet-section" key={sec.title ?? 'all'}>
+                  {sec.title && <div className="nav-heading">{sec.title}</div>}
+                  {sec.items.map((n) => (
+                    <button
+                      key={n.view}
+                      className="sheet-item"
+                      aria-current={route.view === n.view ? 'page' : undefined}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        go({ view: n.view });
+                      }}
+                    >
+                      <Icon name={n.icon} />
+                      {n.label}
+                    </button>
+                  ))}
+                </div>
               ))}
               <button
                 className="sheet-item"

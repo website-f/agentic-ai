@@ -22,7 +22,7 @@ import type {
 import { RECORD_KINDS, RULES, accessClosed, arishaFormView, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type ArishaReviewDraft } from '@prima/core';
 import { ArishaBusy, IdentityToken, arishaConfig, askArisha } from './arisha';
 import { arishaPilotAllowed } from './arisha-pilot';
-import { AuthGuard, DoorFeedGuard, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken } from './auth';
+import { AuthGuard, DoorFeedGuard, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly } from './auth';
 import { officeSecret } from './office';
 import { Db, schemaState } from './db';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
@@ -254,7 +254,7 @@ export class OfficeController {
         title: u.title,
         role: u.role,
         entraOid: u.entraOid ? u.entraOid.toLowerCase() : null,
-        canSignIn: !accessClosed(u, today) && (!RULES.pilot.value.on || inPilot(u)),
+        canSignIn: !accessClosed(u, today) && (!pilotSignInOnly() || inPilot(u)),
       };
     });
   }

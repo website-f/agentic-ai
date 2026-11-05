@@ -1,10 +1,10 @@
 """Calls to Prima Secure, signed for one person (P66, P67).
 
 The office is Prima's sign-in. Each person in the office is linked to one Prima staff record
-(models.PrismaLink): automatically the first time they open Prima, when the Microsoft account
-they signed in to the office with (Membership.ms_oid, verified by Microsoft) is the one IT
-recorded on a Prima record; otherwise by the owner on the Prisma page (agentic/prisma/people).
-Nobody runs a script.
+(models.PrismaLink), automatically the first time they open Prima when the match is sure: the
+record IT gave the Microsoft account they signed in with (Membership.ms_oid, verified by
+Microsoft), else the only record with exactly their name. The owner sees and can change every
+link on the Prisma page (agentic/prisma/people). Nobody runs a script or signs in twice.
 
 The office holds no Prima password or token. Each call names the linked record and is signed
 with settings.prima_secret, which Prima checks (apps/prima/apps/api/src/office.ts) before
@@ -22,13 +22,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..i18n import Msg
-from ..models import Membership, PrismaLink
+from ..models import PrismaLink
 from ..services import audit
 
 transport: httpx.AsyncBaseTransport | None = None
@@ -137,32 +136,30 @@ async def staff() -> list[StaffRecord]:
 
 
 async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaLink:
-    """This person's Prima record. Made here, once, when their verified Microsoft account is
-    the one IT recorded in Prima and that record is not someone else's in this office."""
+    """This person's Prima record. Made here, the first time they open Prima, when the match is
+    sure (people.suggestions): the record IT gave their verified Microsoft account, else the
+    only record with exactly their name while nobody else in the office has it. The owner sees
+    and can change every link on the Prisma page."""
+    from . import people  # late: people builds on this module
+
     link = await db.get(PrismaLink, (workspace_id, user_id))
     if link is not None:
         return link
-    m = await db.get(Membership, (workspace_id, user_id))
-    oid = (m.ms_oid or "").lower() if m is not None else ""
-    if not oid:
+    records = await staff()
+    persons = await people.people(db, workspace_id)
+    rid = people.suggestions(persons, records).get(user_id)
+    record = next((r for r in records if r.id == rid), None)
+    me = next((p for p in persons if p.user_id == user_id), None)
+    if record is None or me is None:
         raise _not_linked()
-    record = next((r for r in await staff() if r.entra_oid == oid), None)
-    if record is None:
-        raise _not_linked()
-    taken = await db.scalar(
-        select(PrismaLink).where(
-            PrismaLink.workspace_id == workspace_id, PrismaLink.prima_user_id == record.id
-        )
-    )
-    if taken is not None:
-        raise _not_linked()
+    how = "microsoft" if me.ms_oid and record.entra_oid == me.ms_oid else "name"
     link = PrismaLink(
         workspace_id=workspace_id,
         user_id=user_id,
         prima_user_id=record.id,
         prima_name=record.name[:200],
-        how="microsoft",
-        linked_by="microsoft",
+        how=how,
+        linked_by=f"auto:{how}",
     )
     db.add(link)
     try:
@@ -179,7 +176,8 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaL
         "system:prisma",
         "prisma.link",
         target=user_id,
-        note=f"Linked to Prima record {record.id} by their Microsoft account",
+        note=f"Linked to Prima record {record.id} by their "
+        + ("Microsoft account" if how == "microsoft" else "name"),
     )
     await db.commit()
     return link

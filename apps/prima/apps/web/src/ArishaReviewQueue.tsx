@@ -65,7 +65,7 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
     } catch { if (current === generation.current) setError('Submission was not confirmed. Refresh the queue before retrying.'); }
     finally { inFlight.current = false; if (current === generation.current) setBusy(false); }
   };
-  return <section aria-label="Draft reviews" style={{ padding: '8px 16px', borderBottom: '1px solid var(--line)' }}>
+  return <section aria-label="Draft reviews" className="draft-queue" data-open={open}>
     <button className="btn btn-sm" aria-expanded={open} onClick={() => { if (open) close(); else { setOpen(true); void refresh(); } }}>Draft reviews {open ? '−' : '+'}</button>
     {open && <div style={{ maxHeight: '60vh', overflow: 'auto', paddingTop: 8 }}>
       <p className="small">Drafts are proposals, not approvals. An authorized person using their existing save rights must check the details and explicitly save. AI access is not granted by this panel.</p>

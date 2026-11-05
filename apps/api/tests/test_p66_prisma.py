@@ -154,26 +154,30 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     owner_id, ws = await _ids("owner@example.com")
     aina_id, _ = await _ids("aina@example.com")
 
-    # Nobody linked yet: Prima says so, and nothing is sent as anyone.
-    s = (await client.get("/api/prisma/status")).json()
-    assert s["enabled"] and not s["linked"] and "owner links people" in s["problem"]
-    assert all(r.url.raw_path == b"/api/office/staff" for r in prima_on) or not prima_on
-
-    # The owner's page: everyone, Prima's records, and the sure picks.
+    # The owner's page before anyone opened Prima: everyone, Prima's records, the sure picks.
     d = (await client.get("/api/prisma/people")).json()
     rows = {p["user_id"]: p for p in d["people"]}
     assert rows[owner_id]["suggestion"] == "u-owner" and rows[aina_id]["suggestion"] is None
     assert {r["id"] for r in d["staff"]} == {s["id"] for s in STAFF}
 
-    # One click links the sure picks; Prima now opens for the owner, as their record.
-    r = await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
-    assert r.json() == {"linked": 1}
+    # The owner just opens Prisma: the only record with their exact name is theirs, so they are
+    # in at once, with no click and no second sign-in.
     s = (await client.get("/api/prisma/status")).json()
     assert s["linked"] and s["me"]["name"] == "Owner One"
+    async with SessionLocal() as db:
+        assert (await db.get(PrismaLink, (ws, owner_id))).how == "name"
     r = await client.get("/api/prisma/api/leave?status=waiting")
     assert r.json()["as"] == "u-owner" and r.json()["url"] == "/api/leave?status=waiting"
     assert prima_on[-1].headers["x-office-via"] == "person"
     assert prima_on[-1].headers["x-forwarded-for"]
+
+    # No sure match for Aina by name ("Aina" here, "Aina Binti Ali" in Prima): she is told the
+    # owner links her, and nothing is sent as anyone.
+    async with SessionLocal() as db:
+        with pytest.raises(PrimaError):
+            await prima.link_for(db, ws, aina_id)
+    r = await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
+    assert r.json() == {"linked": 0}
 
     # Aina signs in with Microsoft and IT recorded that account in Prima: linked by itself.
     await _microsoft("aina@example.com")
