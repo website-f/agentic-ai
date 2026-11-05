@@ -50,9 +50,12 @@ const RULES_BY_VIEW: Record<string, string[]> = {
 
 type RuleRow = { id: string; label: string; source: string };
 
-function firstSentence(text: string): string {
-  const s = text.split(/(?<=\.)\s/)[0] ?? text;
-  return s.length > 110 ? `${s.slice(0, 107)}…` : s;
+/** A scannable title: the first sentence, without the "Fauzan, 27 Oct 2026:" it was decided with (kept in the body). */
+function titleOf(text: string): string {
+  const plain = text.replace(/^[^:]{0,60}\d{1,2} [A-Z][a-z]{2} \d{4}[^:]{0,40}:\s*/, '');
+  const s = plain.split(/(?<=\.)\s/)[0] ?? plain;
+  const t = s.charAt(0).toUpperCase() + s.slice(1);
+  return t.length > 110 ? `${t.slice(0, 107)}…` : t;
 }
 
 export function rulesFor(view: string): NonNullable<PrimaPage['rules']> {
@@ -61,7 +64,7 @@ export function rulesFor(view: string): NonNullable<PrimaPage['rules']> {
   return (Object.values(RULES) as unknown as RuleRow[])
     .filter((r) => prefixes.some((p) => r.id.startsWith(p)))
     .slice(0, 12)
-    .map((r) => ({ id: r.id, title: firstSentence(r.source), body: r.source, source: r.label }));
+    .map((r) => ({ id: r.id, title: titleOf(r.source), body: r.source, source: r.label }));
 }
 
 /** Tell the office's feedback button which screen is open. */

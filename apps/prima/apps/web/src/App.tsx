@@ -749,10 +749,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     publishPage({
       view: route.view,
       title: item?.label ?? route.view,
-      role: { label: me.user.department === 'it' ? 'Merdeka Network' : ROLE_LABEL[me.user.role] },
+      role: { label: me.user.title || ROLE_LABEL[me.user.role] },
       rules: rulesFor(route.view),
     });
-  }, [route.view, me.user.id, me.user.role, me.user.department, nav]);
+  }, [route.view, me.user.id, me.user.role, me.user.title, nav]);
   const [moreOpen, setMoreOpen] = useState(false);
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;
