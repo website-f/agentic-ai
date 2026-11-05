@@ -465,3 +465,8 @@ app.include_router(crm_hub_router.router)
 from .routers import erasure as erasure_router  # noqa: E402
 
 app.include_router(erasure_router.router)
+
+# P66: Prima Secure through the office: its screens (/prisma/) and the AI, signed per person.
+from .routers import prisma as prisma_router  # noqa: E402
+
+app.include_router(prisma_router.router)

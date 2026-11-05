@@ -352,7 +352,7 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
   const [users, setUsers] = useState<User[] | null>(null);
   const [error, setError] = useState<string | null>(notice ?? null);
   // Office staff sign in with their Microsoft 365 account; the person picker is only for the test link and development.
-  const [ways, setWays] = useState<{ microsoft: boolean; devLogin: boolean } | null>(api.signInOptions ? null : { microsoft: false, devLogin: true });
+  const [ways, setWays] = useState<{ microsoft: boolean; devLogin: boolean; office?: boolean } | null>(api.signInOptions ? null : { microsoft: false, devLogin: true });
   useEffect(() => {
     if (!api.signInOptions) return;
     api.signInOptions().then(setWays, (e) => setError(e.message));
@@ -372,6 +372,19 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
           </div>
         </div>
         <LangPicker />
+        {ways?.office && (
+          // P66: inside the Agentic Office, Prima opens with the office's sign-in (no second one).
+          <div className="list" style={{ gap: 8 }}>
+            <h1>Sign in</h1>
+            <p className="muted">Prima opens with your Agentic Office sign-in. Sign in to the office, then open Prisma again.</p>
+            <a className="btn btn-primary" href="/login?next=%2Fprisma" target="_top">
+              Sign in to the office
+            </a>
+            <a className="btn btn-ghost" href="/" target="_top">
+              Back to the office
+            </a>
+          </div>
+        )}
         {ways?.microsoft && (
           <div className="list" style={{ gap: 8 }}>
             <h1>Sign in</h1>
@@ -416,7 +429,7 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
             ))}
           </div>
         )}
-        {ways && !ways.microsoft && !ways.devLogin && <div className="notice">Sign-in is not set up on this server yet. Contact IT.</div>}
+        {ways && !ways.microsoft && !ways.devLogin && !ways.office && <div className="notice">Sign-in is not set up on this server yet. Contact IT.</div>}
       </div>
     </div>
   );

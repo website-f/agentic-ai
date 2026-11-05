@@ -17,8 +17,10 @@ COPY apps/pc-agent/agent.cjs apps/web/dist/downloads/pc-agent/agent.cjs
 RUN cd apps/web/dist/downloads/pc-agent && sha256sum agent.cjs > agent.cjs.sha256
 
 
-# P65: Prima Secure's web app (apps/prima, npm workspaces), served at /prisma/ with its API at
-# /prisma-api/, plus its no-sign-in preview at /prisma/demo/ (its own code on sample data).
+# P65: Prima Secure's web app (apps/prima, npm workspaces), served at /prisma/, plus its
+# no-sign-in preview at /prisma/demo/ (its own code on sample data). P66: built for the office
+# (VITE_OFFICE): it signs in with the office session and calls /api/prisma/..., which the office
+# signs on to Prima for the person.
 FROM node:22-alpine AS prima
 WORKDIR /prima
 COPY apps/prima/package.json apps/prima/package-lock.json apps/prima/tsconfig.base.json ./
@@ -29,7 +31,7 @@ RUN --mount=type=cache,id=npm,target=/root/.npm \
     npm ci -w @prima/core -w @prima/web --no-audit --no-fund
 COPY apps/prima/packages/core packages/core
 COPY apps/prima/apps/web apps/web
-RUN PRIMA_BASE=/prisma/ VITE_ALLOW_SAME_ORIGIN_API=true VITE_API_URL=/prisma-api npm run build -w @prima/web \
+RUN PRIMA_BASE=/prisma/ VITE_ALLOW_SAME_ORIGIN_API=true VITE_API_URL=/api/prisma VITE_OFFICE=true npm run build -w @prima/web \
  && npm run build:demo -w @prima/web
 
 

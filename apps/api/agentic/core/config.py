@@ -143,6 +143,13 @@ class Settings(BaseSettings):
     # /app/prima-pack in the image, else the repo's apps/prima. Off = never imported.
     prima_pack: bool = True
     prima_pack_dir: str = ""
+    # P66: Prima Secure's API (inside the stack) and the secret the office signs its calls
+    # with (Prima's OFFICE_SIGNING_SECRET). Either empty = Prima is not linked: no /prisma
+    # sign-in through the office and no Prima tools for the AI. prima_workspace: only that
+    # workspace may use it (empty = any workspace whose people Prima has linked).
+    prima_url: str = ""
+    prima_secret: str = ""
+    prima_workspace: str = ""
     minutes_max_mb: int = Field(default=1024, ge=1, le=10_240)
     minutes_max_hours: float = Field(default=4.0, gt=0, le=12)
 

@@ -89,7 +89,7 @@ describe('API over HTTP with Microsoft sign-in', () => {
   it('tells the website to use Microsoft sign-in with the API scope, and keeps the test sign-in off', async () => {
     const r = await call('/api/auth/config');
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { microsoft: { tenantId: TENANT, clientId: SPA, scope: `api://${API}/access_as_user` }, devLogin: false });
+    assert.deepEqual(r.body, { microsoft: { tenantId: TENANT, clientId: SPA, scope: `api://${API}/access_as_user` }, devLogin: false, office: false });
     assert.equal((await call('/api/auth/users')).status, 403);
     assert.equal((await call('/api/auth/dev-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"userId":"u-fauzan"}' })).status, 403);
   });

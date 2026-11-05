@@ -23,6 +23,7 @@ import { RECORD_KINDS, RULES, arishaFormView, dataModeOf, arishaKind, arishaTool
 import { ArishaBusy, IdentityToken, arishaConfig, askArisha } from './arisha';
 import { arishaPilotAllowed } from './arisha-pilot';
 import { AuthGuard, DoorFeedGuard, FeedGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken } from './auth';
+import { officeSecret } from './office';
 import { Db, schemaState } from './db';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
 
@@ -206,6 +207,8 @@ export class AuthController {
     return {
       microsoft: e ? { tenantId: e.cfg.tenantId, clientId: e.cfg.spaClientId, scope: `${e.cfg.apiAppIdUri}/${e.cfg.scope}` } : null,
       devLogin: devLoginOn(),
+      // P66: the Agentic Office may sign people in (office.ts). A yes/no only; the secret never leaves the server.
+      office: !!officeSecret(),
     };
   }
 

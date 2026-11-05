@@ -83,6 +83,10 @@ class Membership(Timestamps, Base):
     # P36: this person's AI tokens per day (teams/allowance.py). None = the workspace default
     # for their role; 0 = no limit.
     ai_daily_tokens: Mapped[int | None] = mapped_column(Integer)
+    # P66: the Microsoft account (tenant + object ID) this person last signed in with, verified
+    # by Microsoft. Prima links its staff by this ID (agentic/prisma).
+    ms_tenant_id: Mapped[str | None] = mapped_column(String(80))
+    ms_oid: Mapped[str | None] = mapped_column(String(80))
 
     user: Mapped[User] = relationship(lazy="joined")
 

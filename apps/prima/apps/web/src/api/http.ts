@@ -23,6 +23,12 @@ import {
 import { MicrosoftSignIn, type SignInConfig } from './microsoft';
 
 const TOKEN_KEY = 'prima-token';
+
+/** The office's CSRF token (its agentic_csrf cookie), sent back as a header on every call. */
+function officeCsrf(): string {
+  const m = /(?:^|;\s*)agentic_csrf=([^;]+)/.exec(document.cookie);
+  return m ? decodeURIComponent(m[1]) : '';
+}
 /** Sent on window when the server says the sign-in is no longer valid (HTTP 401). */
 export const SESSION_ENDED = 'prima:session-ended';
 
@@ -32,7 +38,11 @@ export class HttpApi implements Api {
   private token: string | null = null;
   private setup: Promise<{ config: SignInConfig; ms: MicrosoftSignIn | null }> | null = null;
 
-  constructor(private base = '') {
+  /**
+   * P66: inside the Agentic Office (/prisma/), Prima opens with the office's own sign-in. The office signs each call
+   * for the person signed in (apps/api/agentic/prisma), so the browser holds no Prima token at all.
+   */
+  constructor(private base = '', readonly office = false) {
     try {
       this.token = sessionStorage.getItem(TOKEN_KEY);
     } catch {
@@ -43,6 +53,7 @@ export class HttpApi implements Api {
   /** Reads the sign-in settings once and, when Microsoft sign-in is on, finishes any return from the Microsoft page. */
   private ready() {
     this.setup ??= (async () => {
+      if (this.office) return { config: { microsoft: null, devLogin: false } as SignInConfig, ms: null };
       const res = await fetch(`${this.base}/api/auth/config`);
       const config = (res.ok ? await res.json() : { microsoft: null, devLogin: false }) as SignInConfig;
       return { config, ms: config.microsoft ? await MicrosoftSignIn.start(config.microsoft) : null };
@@ -57,7 +68,7 @@ export class HttpApi implements Api {
 
   async signInOptions() {
     const { config } = await this.ready();
-    return { microsoft: !!config.microsoft, devLogin: config.devLogin };
+    return { microsoft: !!config.microsoft, devLogin: config.devLogin, office: this.office };
   }
 
   async signInMicrosoft() {
@@ -67,6 +78,11 @@ export class HttpApi implements Api {
   }
 
   async signOut() {
+    // In the office, signing out of Prima is signing out of the office: back to it.
+    if (this.office) {
+      window.top?.location.assign('/');
+      return;
+    }
     this.token = null;
     try {
       sessionStorage.removeItem(TOKEN_KEY);
@@ -87,9 +103,12 @@ export class HttpApi implements Api {
     } else token = await this.bearer();
     const res = await fetch(`${this.base}/api${path}`, {
       method, signal,
+      credentials: 'same-origin',
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        // The office's session cookie goes with the call; its CSRF token must match (double submit).
+        ...(this.office ? { 'x-csrf-token': officeCsrf() } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });

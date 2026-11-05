@@ -1821,4 +1821,23 @@ MS: dict[str, str] = {
     "A file can have up to {n} labels.": "Satu fail boleh ada sehingga {n} label.",
     # ------------------------------------------------------------ P65 Prima Secure knowledge pack (api/routers/library)
     "The Prima Secure pack is not on this server.": "Pek Prima Secure tiada di pelayan ini.",
+    # ------------------------------------------------------------ P66 Prima through the office (agentic/prisma)
+    "Prima did not open for this account.": "Prima tidak dibuka untuk akaun ini.",
+    "Prima is not set up on this server.": "Prima belum disediakan di pelayan ini.",
+    "Prima only reads (GET) and records (POST).": "Prima hanya membaca (GET) dan merekod (POST).",
+    "That is too large for Prima (3 MB at most).": "Itu terlalu besar untuk Prima (paling banyak 3 MB).",
+    "Prima is not answering right now. Try again in a minute.": (
+        "Prima tidak menjawab sekarang. Cuba lagi dalam seminit."
+    ),
+    "That is not a Prima address.": "Itu bukan alamat Prima.",
+    "That part of Prima is not opened through the office.": (
+        "Bahagian Prima itu tidak dibuka melalui pejabat."
+    ),
+    "Prima knows people by their Microsoft work account. Sign out, then use Sign in with Microsoft once, and open Prima again.": (  # noqa: E501
+        "Prima mengenali orang melalui akaun kerja Microsoft mereka. Log keluar, kemudian guna "
+        "Log masuk dengan Microsoft sekali, dan buka Prima semula."
+    ),
+    "Find a Prima action": "Cari tindakan Prima",
+    "Read from Prima": "Baca daripada Prima",
+    "Record in Prima": "Rekod dalam Prima",
 }

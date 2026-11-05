@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core import crypto
 from ..core.valkey import valkey
 from ..i18n import Msg
-from ..models import MailItem, MailSubscription, MicrosoftAccount
+from ..models import MailItem, MailSubscription, Membership, MicrosoftAccount
 from . import app, http
 from .errors import MicrosoftError, NotConfigured, ReconnectNeeded
 
@@ -221,6 +221,10 @@ async def store(
         await db.execute(delete(MailSubscription).where(MailSubscription.account_id == acct.id))
         acct.delta_link = None
         acct.last_sync_at = None
+    # P66: the same verified account, for Prima (agentic/prisma).
+    member = await db.get(Membership, (workspace_id, user_id))
+    if member is not None and acct.ms_user_id and acct.tenant_id:
+        member.ms_oid, member.ms_tenant_id = acct.ms_user_id, acct.tenant_id
     await db.commit()
     await _cache(acct.id, tok)
     return acct

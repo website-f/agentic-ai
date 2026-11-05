@@ -42,6 +42,8 @@ from ..models import (
     User,
     Workspace,
 )
+from ..prisma.client import TOOL_NAMES as PRISMA_TOOLS
+from ..prisma.client import enabled as prisma_ready
 from ..services import events, prefs
 from ..skills import routines
 from ..skills import store as skills_store
@@ -572,6 +574,8 @@ def offered_tools(
         if n in MAIL_TOOLS and not mail:  # a mailbox it may use (P34)
             continue
         if n in TEAMS_TOOLS and not teams:  # its person's own Teams (P52)
+            continue
+        if n in PRISMA_TOOLS and not prisma_ready(agent.workspace_id):  # P66: Prima is here
             continue
         if n in MONEY_TOOLS and not (finance or explicit_money(agent, n)):  # P35
             continue

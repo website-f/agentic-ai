@@ -86,6 +86,11 @@ async def build_parts(
 
     if await prima_pack.installed(db, agent.workspace_id):
         parts.append(PromptPart("Company procedures", prima_pack.PROMPT_NOTE))
+    # P66: and where Prima itself runs here, that the AI can work in it.
+    from ..prisma import client as prima_client
+
+    if prima_client.enabled(agent.workspace_id):
+        parts.append(PromptPart("Prima Secure", prima_client.PROMPT_NOTE))
 
     # P56: SOPs fill a fixed budget, most general first; the rest are listed by title and
     # read with find_sop when a task needs them, so a company with many long SOPs does not

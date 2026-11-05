@@ -28,6 +28,7 @@ x-prod-env: &prod-env
   AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:?set AGENTIC_SANDBOX_TOKEN in .env}
   AGENTIC_WAHA_API_KEY: ${AGENTIC_WAHA_API_KEY:?set AGENTIC_WAHA_API_KEY in .env}
   AGENTIC_PUBLIC_URL: ${AGENTIC_PUBLIC_URL:?set AGENTIC_PUBLIC_URL in .env (https://your.domain)}
+  AGENTIC_PRIMA_SECRET: ${PRIMA_OFFICE_SECRET:?set PRIMA_OFFICE_SECRET in .env (deploy/scripts/prima-secrets.sh)}
 
 services:
   postgres:
@@ -117,6 +118,7 @@ services:
     environment:
       DATABASE_URL: postgres://prima_api:${PRIMA_API_DB_PASSWORD:?set PRIMA_API_DB_PASSWORD in .env}@prima-db:5432/prima
       PIN_PEPPER: ${PRIMA_PIN_PEPPER:?set PRIMA_PIN_PEPPER in .env}
+      OFFICE_SIGNING_SECRET: ${PRIMA_OFFICE_SECRET:?set PRIMA_OFFICE_SECRET in .env}
       PRIMA_DATA_MODE: ${PRIMA_DATA_MODE:-staging-pilot}
 
 networks:

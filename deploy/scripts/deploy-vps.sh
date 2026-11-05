@@ -31,6 +31,9 @@ for arg in "$@"; do
   esac
 done
 
+# P65: Prima Secure's secrets, generated into .env the first time (never changed after).
+# Before the check below: the compose files require them.
+[ ! -f deploy/scripts/prima-secrets.sh ] || bash deploy/scripts/prima-secrets.sh
 # Fails here, before anything changes, if a required value in .env is missing.
 "${DC[@]}" config --quiet
 
@@ -62,9 +65,14 @@ fi
 if [ "$PULL" = true ]; then
   git pull --ff-only
   [ "$(git rev-parse HEAD)" = "$prev" ] || echo "Now at $(git rev-parse HEAD)"
+  # Bash reads a script as it runs: when the pull changed this file, carry on with the new one
+  # (the backup is taken and the code is pulled, so it starts at the build).
+  if ! git diff --quiet "$prev" HEAD -- deploy/scripts/deploy-vps.sh; then
+    echo "The deploy script itself changed: continuing with the new version."
+    exec "$0" --skip-backup --no-pull
+  fi
 fi
-# P65: Prima Secure's secrets, generated into .env the first time (never changed after).
-bash deploy/scripts/prima-secrets.sh
+[ ! -f deploy/scripts/prima-secrets.sh ] || bash deploy/scripts/prima-secrets.sh
 "${DC[@]}" config --quiet  # the new compose files may need new .env values
 "${DC[@]}" build --pull api web browser egress sandbox backup
 "${DC[@]}" --profile prima build --pull prima-setup  # P65: Prima Secure's API image

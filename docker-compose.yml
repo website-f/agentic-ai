@@ -44,6 +44,10 @@ x-app-env: &app-env
   # sends them through the workspace's chosen company computer (Staff computers > ePerolehan).
   AGENTIC_PC_TUNNEL_LISTEN: ${AGENTIC_PC_TUNNEL_LISTEN:-0.0.0.0:3130}
   AGENTIC_SANDBOX_URL: http://sandbox:8610
+  # P66: Prima Secure (profile prima). The office signs each call to it with this secret
+  # (Prima's OFFICE_SIGNING_SECRET) for the person signed in, and their AI.
+  AGENTIC_PRIMA_URL: ${AGENTIC_PRIMA_URL:-http://prima-api:3000}
+  AGENTIC_PRIMA_SECRET: ${PRIMA_OFFICE_SECRET:-prima-office-dev-secret-0123456789abcdef}
   AGENTIC_SANDBOX_TOKEN: ${AGENTIC_SANDBOX_TOKEN:-dev-sandbox-token}
   # The local backup brain (P14). Empty AGENTIC_LOCAL_LLM_URL turns it off.
   AGENTIC_LOCAL_LLM_URL: ${AGENTIC_LOCAL_LLM_URL:-http://ollama:11434/v1}
@@ -702,6 +706,9 @@ services:
       ENTRA_API_CLIENT_ID: ${PRIMA_ENTRA_API_CLIENT_ID:-}
       ENTRA_API_APP_ID_URI: ${PRIMA_ENTRA_API_APP_ID_URI:-}
       LEADERSHIP_ONBOARDING_ONLY: ${PRIMA_LEADERSHIP_ONBOARDING_ONLY:-false}
+      # P66: the office's signed calls (apps/prima/apps/api/src/office.ts). Same value as the
+      # api's AGENTIC_PRIMA_SECRET.
+      OFFICE_SIGNING_SECRET: ${PRIMA_OFFICE_SECRET:-prima-office-dev-secret-0123456789abcdef}
     depends_on:
       prima-setup: { condition: service_completed_successfully }
     healthcheck:
@@ -712,7 +719,8 @@ services:
       start_period: 20s
     mem_limit: 384m
     cpus: 0.5
-    # prima: its database. edge: our nginx reaches it, and it checks Microsoft sign-in keys.
+    # prima: its database. edge: the office api reaches it (P66, signed calls only), and it
+    # checks Microsoft sign-in keys.
     networks: [prima, edge]
     <<: [*app-hardening, *logging]
 

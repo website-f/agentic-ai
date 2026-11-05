@@ -20,6 +20,7 @@ add PRIMA_DB_SUPER_PASSWORD "$(hex 24)"
 add PRIMA_OWNER_PASSWORD "$(hex 24)"
 add PRIMA_API_DB_PASSWORD "$(hex 24)"   # >= 24 characters (db-setup requires it)
 add PRIMA_PIN_PEPPER "$(hex 32)"        # >= 32 characters (staff/guard PINs)
+add PRIMA_OFFICE_SECRET "$(hex 32)"     # P66: the office signs its calls to Prima with it
 
 staging=apps/prima/infra/staging.env
 val() { grep -E "^$1=" "$staging" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r'; }

@@ -251,7 +251,7 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   listUsers(): Promise<User[]>;
   signIn(userId: string): Promise<Me>;
   /** Server only: which sign-in ways this server offers (Microsoft 365 and/or the development picker). */
-  signInOptions?(): Promise<{ microsoft: boolean; devLogin: boolean }>;
+  signInOptions?(): Promise<{ microsoft: boolean; devLogin: boolean; office?: boolean }>;
   /** Server only: go to the Microsoft 365 sign-in page; the app reopens signed in. */
   signInMicrosoft?(): Promise<void>;
   /** Server only: forget the session (and sign out of Microsoft for this app). */

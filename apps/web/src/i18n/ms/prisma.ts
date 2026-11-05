@@ -30,4 +30,19 @@ export const PRISMA: Record<string, string> = {
     "Dalam Microsoft Entra, buka pendaftaran aplikasi \"Prima Secure App\" > Authentication > Single-page application, dan tambah URI ubah hala ini:",
   "Link each person's Microsoft account to their Prima user (one line per person on the server, docs/P65-PRIMA-SECURE.md).":
     "Pautkan akaun Microsoft setiap orang kepada pengguna Prima mereka (satu baris setiap orang di pelayan, docs/P65-PRIMA-SECURE.md).",
+  // P66: Prima inside the office (one sign-in), and the AI working in it.
+  "Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more.":
+    "Prima Secure, aplikasi operasi kumpulan: kakitangan dan tapak, jadual tugas, kehadiran, kes, HR, tuntutan, IT dan banyak lagi.",
+  "Not set up on this server": "Belum disediakan di pelayan ini",
+  "Your account is not linked yet": "Akaun anda belum dipautkan",
+  "How you get in": "Cara anda masuk",
+  "Sign in to the office with Microsoft (Sign in with Microsoft on the sign-in page), once. Prima knows people by their Microsoft work account.":
+    "Log masuk ke pejabat dengan Microsoft (Log masuk dengan Microsoft di halaman log masuk), sekali. Prima mengenali orang melalui akaun kerja Microsoft mereka.",
+  "IT links your Microsoft account to your Prima staff record. Then this page opens Prima, with no second sign-in.":
+    "IT memautkan akaun Microsoft anda kepada rekod staf Prima anda. Selepas itu halaman ini membuka Prima, tanpa log masuk kali kedua.",
+  "Your AI works in Prima for you, as you: it reads what you may read, and records what you may record only after you approve each one. Prima's own rules still apply, and decisions on pay, discipline and contracts stay with people.":
+    "AI anda bekerja dalam Prima untuk anda, sebagai anda: ia membaca apa yang anda boleh baca, dan merekod apa yang anda boleh rekod hanya selepas anda meluluskan setiap satu. Peraturan Prima sendiri tetap terpakai, dan keputusan tentang gaji, tatatertib dan kontrak kekal pada manusia.",
+  "Set-up for IT": "Persediaan untuk IT",
+  "Link each person's Microsoft account to their Prima user, one line per person on the server:":
+    "Pautkan akaun Microsoft setiap orang kepada pengguna Prima mereka, satu baris setiap orang di pelayan:",
 };

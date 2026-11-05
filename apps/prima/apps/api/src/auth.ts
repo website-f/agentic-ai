@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import { Db } from './db';
 import { EntraTokenError, entraConfig, microsoftKeys, verifyEntraToken, type EntraConfig, type EntraIdentity, type KeySource } from './entra';
 import { leadershipOnboardingPermits } from './arisha-pilot';
+import { isOfficeCall, verifyOffice, type OfficeCall } from './office';
 
 // Office staff sign in with Microsoft Entra ID (entra.ts). The HMAC tokens below are for development and the test
 // build only, and are accepted only while ALLOW_DEV_LOGIN=true. Shared site devices use enrolment plus PIN (plan 6.4).
@@ -42,6 +43,8 @@ export function verifyToken(token: string, now = Date.now()): string | null {
 
 export interface AuthedRequest extends Request {
   userId?: string;
+  /** Set when the Agentic Office made this call (P66): who it named and whether a person or an AI acted. */
+  office?: OfficeCall;
 }
 
 /** Request-local assertion, minted only after Microsoft verification AND Prima identity linking. */
@@ -107,9 +110,25 @@ export class AuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
     // Never trust a header/body property or a reused development request as an OBO assertion.
     verifiedEntraAssertions.delete(req);
+    delete req.office;
+    const setup = entraSetup();
+    // The Agentic Office (office.ts): a signed call naming a Microsoft account. Once the headers are present the call
+    // must verify; it never falls through to another way in.
+    if (isOfficeCall(req.headers as Record<string, unknown>)) {
+      const call = verifyOffice(
+        req.headers as Record<string, unknown>,
+        req.method,
+        req.originalUrl,
+        (req as AuthedRequest & { rawBody?: Buffer }).rawBody,
+        setup?.cfg.tenantId ?? null,
+      );
+      if (!call) throw new UnauthorizedException('Open Prima from the office again.');
+      req.userId = (await userForEntra(this.db, { oid: call.oid, tid: call.tid, name: '', username: '' })).id;
+      req.office = call;
+      return true;
+    }
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-    const setup = entraSetup();
     if (setup && token.split('.').length === 3) {
       let who: EntraIdentity;
       try {

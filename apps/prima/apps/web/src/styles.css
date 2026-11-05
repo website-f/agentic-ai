@@ -1,81 +1,106 @@
 /* Layout: operations console. Fixed rail on desktop, bottom tab bar on phones.
-   Navy ink on cool paper; brass marks what is selected; status colours are separate,
-   and UNKNOWN has its own violet so it is never mistaken for green. */
+   P66: the Agentic Office's look (apps/web/src/styles.css): its green accent on quiet
+   grey-green paper, Geist, the same corners, and the same light/dark choice (theme-init.js
+   reads the office's setting). Status colours stay separate, and UNKNOWN keeps its own violet
+   so it is never mistaken for green. */
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/geist-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist Mono Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/geist-mono-latin-wght-normal.woff2') format('woff2-variations');
+}
 :root {
-  --bg: #eef1f5;
+  --bg: #f6f8f7;
   --surface: #ffffff;
-  --surface-2: #f6f8fb;
-  --ink: #142033;
-  --muted: #5a6679;
-  --line: #d6dce5;
-  --primary: #1b2b48;
+  --surface-2: #eef2f0;
+  --ink: #121a17;
+  --muted: #5a6762;
+  --line: #d9e1dd;
+  --primary: #13895f;
   --on-primary: #ffffff;
-  --accent: #a8741a;
-  --accent-soft: #f6ead3;
-  --ok: #2b7a49;
+  --accent: #13895f;
+  --accent-soft: #dff2ea;
+  --ok: #1e8a4c;
   --ok-soft: #e1f2e7;
-  --warn: #b25e00;
-  --warn-soft: #fbead3;
-  --crit: #b42318;
-  --crit-soft: #fbe2df;
+  --warn: #b7791f;
+  --warn-soft: #fbefd9;
+  --crit: #c2412d;
+  --crit-soft: #fbe4df;
   --unknown: #5f50a0;
   --unknown-soft: #ebe8f7;
-  --focus: #2f6fd6;
-  --shadow: 0 1px 2px rgba(20, 32, 51, 0.06), 0 2px 8px rgba(20, 32, 51, 0.05);
+  --focus: #13895f;
+  --shadow: 0 1px 2px hsl(152 30% 18% / 0.06), 0 8px 24px -12px hsl(152 30% 18% / 0.18);
 
-  --font-display: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
-  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-display: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
 
-  --r: 6px;
+  --r: 8px;
   --rail: 232px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0d131d;
-    --surface: #151d2a;
-    --surface-2: #1a2333;
-    --ink: #e5e9f0;
-    --muted: #96a2b5;
-    --line: #2a3548;
-    --primary: #9dbbe8;
-    --on-primary: #0d131d;
-    --accent: #d9a441;
-    --accent-soft: #3a2f1a;
-    --ok: #5cbf85;
-    --ok-soft: #173826;
-    --warn: #eb9d45;
-    --warn-soft: #3d2a12;
-    --crit: #f1756a;
-    --crit-soft: #44201d;
-    --unknown: #a99ce0;
-    --unknown-soft: #2a2545;
-    --focus: #7fb0ff;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    color-scheme: dark;
+  --bg: #0d1210;
+  --surface: #141b18;
+  --surface-2: #1b2420;
+  --ink: #e6ece9;
+  --muted: #93a39c;
+  --line: #26322d;
+  --primary: #35c48c;
+  --on-primary: #06130d;
+  --accent: #35c48c;
+  --accent-soft: #123426;
+  --ok: #4cc27f;
+  --ok-soft: #173826;
+  --warn: #e0a84a;
+  --warn-soft: #3d2c12;
+  --crit: #ef7a66;
+  --crit-soft: #44211c;
+  --unknown: #a99ce0;
+  --unknown-soft: #2a2545;
+  --focus: #35c48c;
+  --shadow: 0 1px 2px hsl(150 40% 2% / 0.3), 0 8px 24px -12px hsl(150 40% 2% / 0.5);
+  color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --bg: #0d131d;
-  --surface: #151d2a;
-  --surface-2: #1a2333;
-  --ink: #e5e9f0;
-  --muted: #96a2b5;
-  --line: #2a3548;
-  --primary: #9dbbe8;
-  --on-primary: #0d131d;
-  --accent: #d9a441;
-  --accent-soft: #3a2f1a;
-  --ok: #5cbf85;
+  --bg: #0d1210;
+  --surface: #141b18;
+  --surface-2: #1b2420;
+  --ink: #e6ece9;
+  --muted: #93a39c;
+  --line: #26322d;
+  --primary: #35c48c;
+  --on-primary: #06130d;
+  --accent: #35c48c;
+  --accent-soft: #123426;
+  --ok: #4cc27f;
   --ok-soft: #173826;
-  --warn: #eb9d45;
-  --warn-soft: #3d2a12;
-  --crit: #f1756a;
-  --crit-soft: #44201d;
+  --warn: #e0a84a;
+  --warn-soft: #3d2c12;
+  --crit: #ef7a66;
+  --crit-soft: #44211c;
   --unknown: #a99ce0;
   --unknown-soft: #2a2545;
-  --focus: #7fb0ff;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --focus: #35c48c;
+  --shadow: 0 1px 2px hsl(150 40% 2% / 0.3), 0 8px 24px -12px hsl(150 40% 2% / 0.5);
   color-scheme: dark;
 }
 
@@ -224,8 +249,8 @@ textarea {
 }
 .nav button[aria-current='page'] {
   background: var(--accent-soft);
-  color: var(--ink);
-  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 .nav svg {
   width: 18px;
@@ -393,7 +418,7 @@ textarea {
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: 12px; /* the office's cards */
   box-shadow: var(--shadow);
   min-width: 0;
 }

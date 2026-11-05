@@ -1,5 +1,7 @@
 # P65: Prima Secure in the office (Prisma)
 
+> **Superseded in part by P66** (`docs/P66-PRISMA-ONE-SYSTEM.md`). Prima now opens with the office sign-in, and its API is reached only through the office (`/api/prisma/...`, signed per person). `/prisma-api/` and Prima's own Microsoft sign-in in the browser are gone. Where this page says otherwise, P66 wins.
+
 Prima Secure is PWVSB Security Group's operations app: people and sites, rosters, attendance,
 patrols, cases, licences, HR, claims, IT operations and more. It now lives in this repository
 and deploys with the office as one system.

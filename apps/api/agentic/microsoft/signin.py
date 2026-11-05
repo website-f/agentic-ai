@@ -254,6 +254,13 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
         membership = await db.get(Membership, (ws_id, user.id))  # store() committed
         user = await db.get(User, user.id)
         assert membership is not None and user is not None
+    # P66: the verified account, for Prima (agentic/prisma links its staff by object ID).
+    if oid and tid and (membership.ms_oid, membership.ms_tenant_id) != (oid, tid):
+        membership.ms_oid, membership.ms_tenant_id = oid, tid
+        await db.commit()
+        membership = await db.get(Membership, (ws_id, user.id))
+        user = await db.get(User, user.id)
+        assert membership is not None and user is not None
     amr = claims.get("amr") or []
     return SignedIn(
         user=user,

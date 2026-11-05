@@ -14,7 +14,7 @@ from sqlalchemy import select
 from agentic.core.db import SessionLocal
 from agentic.microsoft import app as ms_app
 from agentic.microsoft import features, http, sync
-from agentic.models import AuditLog, MicrosoftAccount, User
+from agentic.models import AuditLog, Membership, MicrosoftAccount, User
 
 from .conftest import csrf
 from .test_agents import llm, office, temporal  # noqa: F401
@@ -145,6 +145,9 @@ async def test_a_member_signs_in_with_microsoft_and_their_outlook_connects(
             )
             assert acct.status == "connected" and acct.tenant_id == TENANT
             assert acct.ms_user_id == "oid-owner" and acct.email == "owner@example.com"
+            # P66: the verified account, for Prima (agentic/prisma).
+            mem = await db.scalar(select(Membership).where(Membership.user_id == owner_id))
+            assert (mem.ms_oid, mem.ms_tenant_id) == ("oid-owner", TENANT)
             log = (await db.scalars(select(AuditLog).where(AuditLog.action == "auth.login"))).all()
             assert any("Microsoft" in (e.note or "") for e in log)
 
@@ -283,6 +286,9 @@ async def test_staff_sign_in_and_the_admin_switches(client, llm, temporal, sso):
                 is None
             )
             assert (await db.get(User, aina)).must_change_password is False
+            # P66: no mailbox, but Prima still knows who signed in.
+            mem = await db.scalar(select(Membership).where(Membership.user_id == aina))
+            assert (mem.ms_oid, mem.ms_tenant_id) == ("oid-aina", TENANT)
     finally:
         await c.aclose()
 
