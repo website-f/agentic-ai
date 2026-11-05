@@ -637,7 +637,7 @@ services:
     <<: [*app-hardening, *logging]
 
   # ---------------------------------------------------------------- P65: Prima Secure (apps/prima)
-  # PWVSB's operations app beside the office, at /prisma/ (deploy/nginx/web.conf). Its own
+  # PWVSB's operations app beside the office, at /prima/ (deploy/nginx/web.conf). Its own
   # PostgreSQL 16 (what it is built and tested on), never shared with ours: a schema owned by
   # a non-superuser, FORCEd row-level security, an append-only audit chain. prima-setup runs
   # Prima's own db-setup and module installer before every start of prima-api, which refuses
@@ -700,7 +700,7 @@ services:
       PRIMA_DATA_MODE: ${PRIMA_DATA_MODE:-test}
       PIN_PEPPER: ${PRIMA_PIN_PEPPER:-}
       # Microsoft sign-in (all three or none): the company's Entra "Prima Secure" registrations.
-      # The SPA registration needs https://<this site>/prisma/ as a redirect URI.
+      # The SPA registration needs https://<this site>/prima/ as a redirect URI.
       ENTRA_TENANT_ID: ${PRIMA_ENTRA_TENANT_ID:-}
       ENTRA_SPA_CLIENT_ID: ${PRIMA_ENTRA_SPA_CLIENT_ID:-}
       ENTRA_API_CLIENT_ID: ${PRIMA_ENTRA_API_CLIENT_ID:-}

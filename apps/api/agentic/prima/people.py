@@ -1,9 +1,9 @@
-"""P67/P68: who in the office is which Prima staff record (models.PrismaLink).
+"""P67/P68: who in the office is which Prima staff record (models.PrimaLink).
 
 Nobody runs a script or signs in twice. The first time someone opens Prima, the office links
 them when the match is sure (client.link_for): the record IT gave their verified Microsoft
 account, else the only Prima record with exactly their name while nobody else in the office has
-that name. Anyone without a sure match is listed on the owner's Prisma page beside Prima's
+that name. Anyone without a sure match is listed on the owner's Prima page beside Prima's
 records; the owner picks their record there, and can change or clear any link, including the
 automatic ones.
 """
@@ -16,7 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..i18n import Msg
-from ..models import Membership, PrismaLink, User
+from ..models import Membership, PrimaLink, User
 from ..services import audit
 from .client import PrimaError, StaffRecord
 
@@ -28,7 +28,7 @@ class Person:
     email: str
     role: str
     ms_oid: str | None
-    link: PrismaLink | None
+    link: PrimaLink | None
 
 
 def name_key(name: str) -> str:
@@ -49,7 +49,7 @@ async def people(db: AsyncSession, workspace_id: str) -> list[Person]:
     links = {
         lk.user_id: lk
         for lk in (
-            await db.scalars(select(PrismaLink).where(PrismaLink.workspace_id == workspace_id))
+            await db.scalars(select(PrimaLink).where(PrimaLink.workspace_id == workspace_id))
         ).all()
     }
     return [
@@ -107,13 +107,13 @@ async def set_link(
     m = await db.get(Membership, (workspace_id, user_id))
     if m is None:
         raise PrimaError(404, Msg("That person is not in this office."))
-    old = await db.get(PrismaLink, (workspace_id, user_id))
+    old = await db.get(PrimaLink, (workspace_id, user_id))
     if record is not None:
         other = await db.scalar(
-            select(PrismaLink).where(
-                PrismaLink.workspace_id == workspace_id,
-                PrismaLink.prima_user_id == record.id,
-                PrismaLink.user_id != user_id,
+            select(PrimaLink).where(
+                PrimaLink.workspace_id == workspace_id,
+                PrimaLink.prima_user_id == record.id,
+                PrimaLink.user_id != user_id,
             )
         )
         if other is not None:
@@ -122,13 +122,13 @@ async def set_link(
             )
     if old is not None:
         await db.execute(
-            delete(PrismaLink).where(
-                PrismaLink.workspace_id == workspace_id, PrismaLink.user_id == user_id
+            delete(PrimaLink).where(
+                PrimaLink.workspace_id == workspace_id, PrimaLink.user_id == user_id
             )
         )
     if record is not None:
         db.add(
-            PrismaLink(
+            PrimaLink(
                 workspace_id=workspace_id,
                 user_id=user_id,
                 prima_user_id=record.id,
@@ -141,7 +141,7 @@ async def set_link(
         db,
         workspace_id,
         actor,
-        "prisma.link" if record else "prisma.unlink",
+        "prima.link" if record else "prima.unlink",
         target=user_id,
         before={"prima_user_id": old.prima_user_id} if old else None,
         after={"prima_user_id": record.id} if record else None,

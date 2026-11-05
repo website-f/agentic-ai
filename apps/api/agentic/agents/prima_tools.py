@@ -1,16 +1,16 @@
 """P66: the AI works in Prima Secure (attendance, leave, claims, staff pay, tenders, assets,
 cases...) for the person it acts for.
 
-- prisma_find: which Prima action does a job (the catalog built from Prima's own API,
-  agentic/prisma/routes.json), with what it takes;
-- prisma_read: read from Prima (any GET), e.g. today's attendance or the leave waiting;
-- prisma_record: record in Prima (any POST): apply for leave, file a claim, prepare a
+- prima_find: which Prima action does a job (the catalog built from Prima's own API,
+  agentic/prima/routes.json), with what it takes;
+- prima_read: read from Prima (any GET), e.g. today's attendance or the leave waiting;
+- prima_record: record in Prima (any POST): apply for leave, file a claim, prepare a
   draft, decide a request... A person approves every one first (default mode "ask", high
   risk, so autonomy "auto" does not skip it).
 
 Always as the person who asked: the one chatting, or who gave the task. Never as anyone else,
 and never for the office's own work (a mail rule, an agent's own idea) where nobody asked.
-The call is signed for that person (agentic/prisma/client.py) and Prima applies its own
+The call is signed for that person (agentic/prima/client.py) and Prima applies its own
 roles, record rules and row-level security, so the AI can never do more in Prima than the
 person themselves could. Prima's SOPs and workflows are in the Library (P65): read the
 matching one before acting.
@@ -20,8 +20,8 @@ import json
 from typing import Any
 from urllib.parse import urlencode
 
-from ..prisma import client, routes
-from ..prisma.client import PrimaError
+from ..prima import client, routes
+from ..prima.client import PrimaError
 from .tools import Tool, ToolContext, _threat_note
 
 MAX_RESULT = 15_000
@@ -111,9 +111,9 @@ async def _record(ctx: ToolContext, args: dict[str, Any]) -> str:
     return await _ask(ctx, "POST", _path(args.get("path")), "", raw)
 
 
-PRISMA_TOOLS = [
+PRIMA_TOOLS = [
     Tool(
-        "prisma_find",
+        "prima_find",
         "Find a Prima action",
         "Which Prima Secure action does a job (attendance, leave, claims, staff pay, tenders, "
         "assets, cases, purchasing...): the method, the path (':id' parts to fill in), what it "
@@ -131,18 +131,18 @@ PRISMA_TOOLS = [
         _find,
     ),
     Tool(
-        "prisma_read",
+        "prima_read",
         "Read from Prima",
         "Read from Prima Secure as the person you are helping, with their access only. Start "
         "with 'api/me' (who they are in Prima and the companies they see: the company ids for "
         "':id'), then e.g. 'api/home', 'api/companies/<id>/attendance' (query date), "
         "'api/companies/<id>/attendance/alerts', 'api/leave' (query companyId, status), "
         "'api/claims', 'api/staff-pay' and 'api/staff-pay/<run id>', 'api/pay-changes', "
-        "'api/companies/<id>/people', 'api/reports'. Use prisma_find for anything else. For a "
+        "'api/companies/<id>/people', 'api/reports'. Use prima_find for anything else. For a "
         "summary or report, read what it needs, then write it (a document, if asked).",
         _p(
             {
-                "path": {"type": "string", "description": "a GET path from prisma_find"},
+                "path": {"type": "string", "description": "a GET path from prima_find"},
                 "query": {"type": "object", "description": "query values, e.g. {'date': '...'}"},
             },
             ["path"],
@@ -152,7 +152,7 @@ PRISMA_TOOLS = [
         _read,
     ),
     Tool(
-        "prisma_record",
+        "prima_record",
         "Record in Prima",
         "Record something in Prima Secure as the person you are helping (apply for leave, file "
         "a claim, prepare a draft, decide a request...). They approve it first. Prima checks "
@@ -161,7 +161,7 @@ PRISMA_TOOLS = [
         "people. Say what it records and why in `why`.",
         _p(
             {
-                "path": {"type": "string", "description": "a POST path from prisma_find"},
+                "path": {"type": "string", "description": "a POST path from prima_find"},
                 "body": {"type": "object", "description": "the JSON the action takes"},
                 "why": {"type": "string", "description": "what this records, in one sentence"},
             },

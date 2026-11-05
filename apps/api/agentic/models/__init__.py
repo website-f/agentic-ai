@@ -84,7 +84,7 @@ class Membership(Timestamps, Base):
     # for their role; 0 = no limit.
     ai_daily_tokens: Mapped[int | None] = mapped_column(Integer)
     # P66: the Microsoft account (tenant + object ID) this person last signed in with, verified
-    # by Microsoft. Prima links its staff by this ID (agentic/prisma).
+    # by Microsoft. Prima links its staff by this ID (agentic/prima).
     ms_tenant_id: Mapped[str | None] = mapped_column(String(80))
     ms_oid: Mapped[str | None] = mapped_column(String(80))
 
@@ -2554,18 +2554,18 @@ class CrmAccess(Timestamps, Base):
     granted_by: Mapped[str] = mapped_column(String(80))
 
 
-class PrismaLink(Timestamps, Base):
-    """P67: which Prima staff record a person in the office is (agentic/prisma). The office is
+class PrimaLink(Timestamps, Base):
+    """P67: which Prima staff record a person in the office is (agentic/prima). The office is
     Prima's sign-in: every call it signs names this record, and Prima applies its own rules to
     it. Made automatically the first time they open Prima when the match is sure: the record IT
     gave their verified Microsoft account (how="microsoft") or the only record with exactly
-    their name (how="name"); or by the owner on the Prisma page (how="owner"). One record per
+    their name (how="name"); or by the owner on the Prima page (how="owner"). One record per
     person and one person per record."""
 
-    __tablename__ = "prisma_links"
+    __tablename__ = "prima_links"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "prima_user_id", name="uq_prisma_links_record"),
-        CheckConstraint("how IN ('microsoft', 'name', 'owner')", name="ck_prisma_links_how"),
+        UniqueConstraint("workspace_id", "prima_user_id", name="uq_prima_links_record"),
+        CheckConstraint("how IN ('microsoft', 'name', 'owner')", name="ck_prima_links_how"),
     )
 
     workspace_id: Mapped[str] = mapped_column(

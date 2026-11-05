@@ -1821,7 +1821,7 @@ MS: dict[str, str] = {
     "A file can have up to {n} labels.": "Satu fail boleh ada sehingga {n} label.",
     # ------------------------------------------------------------ P65 Prima Secure knowledge pack (api/routers/library)
     "The Prima Secure pack is not on this server.": "Pek Prima Secure tiada di pelayan ini.",
-    # ------------------------------------------------------------ P66 Prima through the office (agentic/prisma)
+    # ------------------------------------------------------------ P66 Prima through the office (agentic/prima)
     "Prima did not open for this account.": "Prima tidak dibuka untuk akaun ini.",
     "Prima is not set up on this server.": "Prima belum disediakan di pelayan ini.",
     "Prima only reads (GET) and records (POST).": "Prima hanya membaca (GET) dan merekod (POST).",
@@ -1841,9 +1841,9 @@ MS: dict[str, str] = {
     "Read from Prima": "Baca daripada Prima",
     "Record in Prima": "Rekod dalam Prima",
     # ------------------------------------------------------------ P67 who is who in Prima
-    "You are not linked to your Prima staff record yet. The office owner links people on the Prisma page.": (  # noqa: E501
+    "You are not linked to your Prima staff record yet. The office owner links people on the Prima page.": (  # noqa: E501
         "Anda belum dipautkan kepada rekod staf Prima anda. Pemilik pejabat memautkan orang di "
-        "halaman Prisma."
+        "halaman Prima."
     ),
     "That person is not in this office.": "Orang itu tiada dalam pejabat ini.",
     "That Prima record is already linked to someone else in the office.": (

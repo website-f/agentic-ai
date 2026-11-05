@@ -1,9 +1,9 @@
 """The catalog of what can be done in Prima (P66): every GET and POST its API serves to a
 signed-in person, with the sentence its code documents it with, what it takes, and how the
 AI may use it. Built from Prima's controllers (apps/prima/apps/api/src) and kept in
-routes.json next to this file; tests/test_p66_prisma.py fails when the two drift apart.
+routes.json next to this file; tests/test_p66_prima.py fails when the two drift apart.
 
-    python -m agentic.prisma.routes ../prima/apps/api/src > agentic/prisma/routes.json
+    python -m agentic.prima.routes ../prima/apps/api/src > agentic/prima/routes.json
 """
 
 import json

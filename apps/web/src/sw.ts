@@ -20,9 +20,9 @@ precacheAndRoute(self.__WB_MANIFEST);
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("/index.html"), {
     // /i/ (installers, the Windows program) and /downloads/ are files from the server, never app pages.
-    // P65: /prisma/ is another app (Prima Secure) with its own shell and service worker.
-    // /prisma (no slash) is this app's own page, which shows it.
-    denylist: [/^\/api\//, /^\/readyz/, /^\/healthz/, /^\/i\//, /^\/downloads\//, /^\/prisma\//],
+    // P65: /prima/ is another app (Prima Secure) with its own shell and service worker.
+    // /prima (no slash) is this app's own page, which shows it.
+    denylist: [/^\/api\//, /^\/readyz/, /^\/healthz/, /^\/i\//, /^\/downloads\//, /^\/prima\//],
   }),
 );
 

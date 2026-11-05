@@ -221,7 +221,7 @@ async def store(
         await db.execute(delete(MailSubscription).where(MailSubscription.account_id == acct.id))
         acct.delta_link = None
         acct.last_sync_at = None
-    # P66: the same verified account, for Prima (agentic/prisma).
+    # P66: the same verified account, for Prima (agentic/prima).
     member = await db.get(Membership, (workspace_id, user_id))
     if member is not None and acct.ms_user_id and acct.tenant_id:
         member.ms_oid, member.ms_tenant_id = acct.ms_user_id, acct.tenant_id

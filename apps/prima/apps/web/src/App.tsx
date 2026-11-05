@@ -426,8 +426,8 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
           // P66: inside the Agentic Office, Prima opens with the office's sign-in (no second one).
           <div className="list" style={{ gap: 8 }}>
             <h1>Sign in</h1>
-            <p className="muted">Prima opens with your Agentic Office sign-in. Sign in to the office, then open Prisma again.</p>
-            <a className="btn btn-primary" href="/login?next=%2Fprisma" target="_top">
+            <p className="muted">Prima opens with your Agentic Office sign-in. Sign in to the office, then open Prima again.</p>
+            <a className="btn btn-primary" href="/login?next=%2Fprima" target="_top">
               Sign in to the office
             </a>
             <a className="btn btn-ghost" href="/" target="_top">

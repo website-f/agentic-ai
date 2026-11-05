@@ -20,7 +20,7 @@ function headers(c: OfficeCall = call, over: Record<string, string> = {}, body =
 }
 
 describe('Agentic Office signed calls', () => {
-  it('signs exactly as the office does (the same test vector as apps/api/tests/test_p66_prisma.py)', () => {
+  it('signs exactly as the office does (the same test vector as apps/api/tests/test_p66_prima.py)', () => {
     assert.equal(
       officeSign(SECRET, officePayload(TS, 'POST', '/api/leave?x=1', call, '{"a":1}')),
       '14c37adaea8d43fab8a6148b0e1dc0d7b9d30d778830b813ac1421e39c621b60',

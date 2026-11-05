@@ -18,7 +18,7 @@ function checkApiUrl(command: string, mode: string): void {
   if (command !== 'build' || mode === 'demo') return;
   const url = process.env.VITE_API_URL ?? '';
   if (!url && process.env.VITE_ALLOW_SAME_ORIGIN_API === 'true') return;
-  // Agentic Office: the API on the same site under its own path (e.g. /prisma-api), no host.
+  // Agentic Office: the API on the same site under its own path (e.g. /api/prima), no host.
   if (/^\/[a-z0-9_-]+(\/[a-z0-9_-]+)*$/i.test(url) && process.env.VITE_ALLOW_SAME_ORIGIN_API === 'true') return;
   if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(url) && !/^http:\/\/localhost(:\d+)?$/.test(url))
     throw new Error('Set VITE_API_URL to the API address (https://..., no trailing slash) for a server build, or build the test version with --mode demo.');
@@ -48,7 +48,7 @@ function receiptReaderFiles(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => (checkApiUrl(command, mode), {
-  // Agentic Office serves Prima under a sub-path (PRIMA_BASE=/prisma/); the default is the site root.
+  // Agentic Office serves Prima under a sub-path (PRIMA_BASE=/prima/); the default is the site root.
   base: mode === 'demo' ? './' : process.env.PRIMA_BASE || '/',
   plugins: [react(), ...(mode === 'demo' ? [viteSingleFile()] : [receiptReaderFiles()])],
   resolve: {

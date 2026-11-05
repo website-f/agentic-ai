@@ -11,9 +11,9 @@
 #      (stops here if the backup fails or is empty);
 #   2. prima-api, prima-setup and prima-db removed, then the primadata volume;
 #   3. prima-db, prima-setup (base + every module of the release manifest) and prima-api
-#      started again. The office's links to Prima staff records (prisma_links) keep working:
+#      started again. The office's links to Prima staff records (prima_links) keep working:
 #      the sample records keep their ids.
-# Restore a backup: docs/P66-PRISMA-ONE-SYSTEM.md, "Reinstalling Prima".
+# Restore a backup: docs/P66-PRIMA-ONE-SYSTEM.md, "Reinstalling Prima".
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [ "${1:-}" = "--yes" ] || { echo "This replaces Prima's database (after a backup). Run with --yes." >&2; exit 64; }

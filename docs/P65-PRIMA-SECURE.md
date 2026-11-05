@@ -1,6 +1,6 @@
-# P65: Prima Secure in the office (Prisma)
+# P65: Prima Secure in the office (Prima)
 
-> **Superseded in part by P66** (`docs/P66-PRISMA-ONE-SYSTEM.md`). Prima now opens with the office sign-in, and its API is reached only through the office (`/api/prisma/...`, signed per person). `/prisma-api/` and Prima's own Microsoft sign-in in the browser are gone. Where this page says otherwise, P66 wins.
+> **Superseded in part by P66** (`docs/P66-PRIMA-ONE-SYSTEM.md`). Prima now opens with the office sign-in, and its API is reached only through the office (`/api/prima/...`, signed per person). `/prima-api/` and Prima's own Microsoft sign-in in the browser are gone. Where this page says otherwise, P66 wins.
 
 Prima Secure is PWVSB Security Group's operations app: people and sites, rosters, attendance,
 patrols, cases, licences, HR, claims, IT operations and more. It now lives in this repository
@@ -13,10 +13,10 @@ and deploys with the office as one system.
   - `apps/prima/.gitattributes` forces LF: its SQL is hash-pinned (`db/release-manifest.json`), and
     a Windows CRLF checkout would make its API refuse to start.
 - **In the browser:**
-  - `/prisma/` is the app.
-  - `/prisma/demo/` is a preview: the same code on sample data, in the browser only, with no sign-in.
-  - `/prisma-api/` is its API (nginx strips the prefix; Prima serves `/api/...`).
-- **In the office menu:** **Prisma** (`/prisma` in the office). It shows whether Prima is running and
+  - `/prima/` is the app.
+  - `/prima/demo/` is a preview: the same code on sample data, in the browser only, with no sign-in.
+  - `/prima-api/` is its API (nginx strips the prefix; Prima serves `/api/...`).
+- **In the office menu:** **Prima** (`/prima` in the office). It shows whether Prima is running and
   whether its sign-in is set up, then opens it. Prima forbids framing, and so does Microsoft
   sign-in, so it opens as its own page.
 
@@ -38,7 +38,7 @@ and deploys with the office as one system.
   checks its schema and release at start and refuses otherwise. Networks: `prima` and `edge`
   (our nginx, and Microsoft's sign-in keys).
 - **Web:** built in the web image (`deploy/web.Dockerfile`, a Node 22 + npm stage) with
-  `PRIMA_BASE=/prisma/` and `VITE_API_URL=/prisma-api`. It has its own nginx headers: Prima's CSP
+  `PRIMA_BASE=/prima/` and `VITE_API_URL=/prima-api`. It has its own nginx headers: Prima's CSP
   (Microsoft sign-in, Google Fonts), and camera + location for the staff clock.
 - **`deploy-vps.sh`:**
   - generates Prima's secrets into `.env` once (`deploy/scripts/prima-secrets.sh`; never changed
@@ -54,14 +54,14 @@ Changes made to Prima for the sub-path, all of which still work at a site root:
 - `microsoft.ts`: the redirect is to the app's own address;
 - the manifest and `index.html` use relative paths.
 
-Our own service worker leaves `/prisma/` and `/prisma-api/` alone.
+Our own service worker leaves `/prima/` and `/prima-api/` alone.
 
 ## Sign-in (to finish, Microsoft admin)
 Prima signs people in with Microsoft itself (MSAL in the browser, tokens checked by its API). Its
 app registrations are the existing "Prima Secure App" (SPA) and "Prima Secure API"; their public
 IDs come from `apps/prima/infra/staging.env` into `.env` (`PRIMA_ENTRA_*`).
 1. In Microsoft Entra, open **Prima Secure App**, then **Authentication**, then
-   **Single-page application**, and add the redirect URI `https://agent.oriondesk.space/prisma/`.
+   **Single-page application**, and add the redirect URI `https://agent.oriondesk.space/prima/`.
 2. Link each person's Microsoft account to their Prima user. Prima has no screen for this; its
    tool runs as the owner, and the change is audited:
    `./deploy/scripts/prima-link-user.sh <prima-user-id> <entra-object-id> "<your name>"`
@@ -88,8 +88,8 @@ Prima's own rules still apply:
 - **Arisha** (Prima's own assistant) needs Azure OpenAI with a managed identity, so it stays off here.
 
 ## Checked
-- **Prima's web:** builds for `/prisma/`. Every asset and the manifest are under `/prisma/`, and
-  its API calls go to `/prisma-api`. The demo build works too.
+- **Prima's web:** builds for `/prima/`. Every asset and the manifest are under `/prima/`, and
+  its API calls go to `/prima-api`. The demo build works too.
 - **On PostgreSQL 16, with the role script and setup above:**
   - db-setup created the clean slate, and all 5 modules installed;
   - a second run was a no-op;

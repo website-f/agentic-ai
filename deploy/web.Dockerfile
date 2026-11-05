@@ -17,9 +17,9 @@ COPY apps/pc-agent/agent.cjs apps/web/dist/downloads/pc-agent/agent.cjs
 RUN cd apps/web/dist/downloads/pc-agent && sha256sum agent.cjs > agent.cjs.sha256
 
 
-# P65: Prima Secure's web app (apps/prima, npm workspaces), served at /prisma/, plus its
-# no-sign-in preview at /prisma/demo/ (its own code on sample data). P66: built for the office
-# (VITE_OFFICE): it signs in with the office session and calls /api/prisma/..., which the office
+# P65: Prima Secure's web app (apps/prima, npm workspaces), served at /prima/, plus its
+# no-sign-in preview at /prima/demo/ (its own code on sample data). P66: built for the office
+# (VITE_OFFICE): it signs in with the office session and calls /api/prima/..., which the office
 # signs on to Prima for the person.
 FROM node:22-alpine AS prima
 WORKDIR /prima
@@ -32,13 +32,13 @@ RUN --mount=type=cache,id=npm,target=/root/.npm \
     npm ci -w @prima/core -w @prima/web --no-audit --no-fund
 COPY apps/prima/packages/core packages/core
 COPY apps/prima/apps/web apps/web
-RUN PRIMA_BASE=/prisma/ VITE_ALLOW_SAME_ORIGIN_API=true VITE_API_URL=/api/prisma VITE_OFFICE=true npm run build -w @prima/web \
+RUN PRIMA_BASE=/prima/ VITE_ALLOW_SAME_ORIGIN_API=true VITE_API_URL=/api/prima VITE_OFFICE=true npm run build -w @prima/web \
  && npm run build:demo -w @prima/web
 
 
 FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 COPY deploy/nginx/web.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
-COPY --from=prima /prima/apps/web/dist /usr/share/nginx/html/prisma
-COPY --from=prima /prima/apps/web/dist-demo /usr/share/nginx/html/prisma/demo
+COPY --from=prima /prima/apps/web/dist /usr/share/nginx/html/prima
+COPY --from=prima /prima/apps/web/dist-demo /usr/share/nginx/html/prima/demo
 EXPOSE 8080

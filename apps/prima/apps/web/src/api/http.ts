@@ -52,8 +52,8 @@ export class HttpApi implements Api {
   private setup: Promise<{ config: SignInConfig; ms: MicrosoftSignIn | null }> | null = null;
 
   /**
-   * P66: inside the Agentic Office (/prisma/), Prima opens with the office's own sign-in. The office signs each call
-   * for the person signed in (apps/api/agentic/prisma), so the browser holds no Prima token at all.
+   * P66: inside the Agentic Office (/prima/), Prima opens with the office's own sign-in. The office signs each call
+   * for the person signed in (apps/api/agentic/prima), so the browser holds no Prima token at all.
    */
   constructor(private base = '', readonly office = false) {
     try {

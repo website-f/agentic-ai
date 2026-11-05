@@ -1,5 +1,5 @@
-/** P65-P67: Prisma, Prima Secure (apps/prima) inside the office. Prima opens with the office's
- * own sign-in: the office signs each call for the person (apps/api/agentic/prisma) and names
+/** P65-P67: Prima, Prima Secure (apps/prima) inside the office. Prima opens with the office's
+ * own sign-in: the office signs each call for the person (apps/api/agentic/prima) and names
  * their Prima staff record. People are linked to their record automatically when they signed in
  * with Microsoft and IT recorded that account in Prima; the owner links everyone else here, with
  * the likely record already picked, in one click. On a computer Prima fills this page beside the
@@ -20,8 +20,8 @@ import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 
-const APP = "/prisma/";
-const PREVIEW = "/prisma/demo/";
+const APP = "/prima/";
+const PREVIEW = "/prima/demo/";
 
 interface PrimaStatus {
   enabled: boolean;
@@ -32,21 +32,21 @@ interface PrimaStatus {
 }
 
 const statusQuery = {
-  queryKey: ["prisma", "status"],
-  queryFn: () => api<PrimaStatus>("/api/prisma/status"),
+  queryKey: ["prima", "status"],
+  queryFn: () => api<PrimaStatus>("/api/prima/status"),
   staleTime: 30_000,
 };
 
-export function PrismaPage() {
+export function PrimaPage() {
   const status = useQuery(statusQuery);
   const search = useSearch({ strict: false }) as { people?: number };
-  if (status.data?.linked && !search.people) return <PrismaFrame />;
-  return <PrismaSetup status={status.data} loading={status.isLoading} />;
+  if (status.data?.linked && !search.people) return <PrimaFrame />;
+  return <PrimaSetup status={status.data} loading={status.isLoading} />;
 }
 
 /** Prima itself, filling the page under the office header (computers); a button on phones.
  * Owners get a slim bar above it to link people. */
-function PrismaFrame() {
+function PrimaFrame() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const owner = me.permissions.includes("org.manage");
@@ -54,7 +54,7 @@ function PrismaFrame() {
     <>
       {owner ? (
         <div className="hidden h-10 items-center justify-end gap-2 border-b border-border bg-surface px-3 md:flex">
-          <Button asChild size="sm" variant="ghost"><Link to="/prisma" search={{ people: 1 }}><UsersThreeIcon size={15} /> {t("People in Prima")}</Link></Button>
+          <Button asChild size="sm" variant="ghost"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={15} /> {t("People in Prima")}</Link></Button>
         </div>
       ) : null}
       <iframe
@@ -67,7 +67,7 @@ function PrismaFrame() {
       />
       <div className="md:hidden">
         <Page>
-          <PageHeader title={t("Prisma")} icon={ShieldCheckIcon}
+          <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
             description={t("Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more.")} />
           <Button asChild size="lg"><a href={APP}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
         </Page>
@@ -76,13 +76,13 @@ function PrismaFrame() {
   );
 }
 
-function PrismaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boolean }) {
+function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boolean }) {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const owner = me.permissions.includes("org.manage");
   return (
     <Page>
-      <PageHeader title={t("Prisma")} icon={ShieldCheckIcon}
+      <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
         description={t("Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more. Staff do the daily work there; your AI follows the same SOPs and workflows from the Library.")} />
 
       <Section title={t("Status")}>
@@ -141,16 +141,16 @@ function PeopleSection() {
   const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const q = useQuery({ queryKey: ["prisma", "people"], queryFn: () => api<PeopleData>("/api/prisma/people") });
+  const q = useQuery({ queryKey: ["prima", "people"], queryFn: () => api<PeopleData>("/api/prima/people") });
   const done = () => {
-    void qc.invalidateQueries({ queryKey: ["prisma"] });
+    void qc.invalidateQueries({ queryKey: ["prima"] });
   };
   const linkAll = useMutation({
-    mutationFn: () => api<{ linked: number }>("/api/prisma/people/link-suggested", "POST", {}),
+    mutationFn: () => api<{ linked: number }>("/api/prima/people/link-suggested", "POST", {}),
     onSuccess: done,
   });
   const linkOne = useMutation({
-    mutationFn: (v: { user_id: string; prima_user_id: string | null }) => api("/api/prisma/people/link", "POST", v),
+    mutationFn: (v: { user_id: string; prima_user_id: string | null }) => api("/api/prima/people/link", "POST", v),
     onSuccess: done,
   });
   const d = q.data;
@@ -196,7 +196,7 @@ function PeopleSection() {
         </div>
       )}
       <div className="mt-3">
-        <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prisma", search: {} })}>{t("Back to Prima")}</Button>
+        <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prima", search: {} })}>{t("Back to Prima")}</Button>
       </div>
     </Section>
   );

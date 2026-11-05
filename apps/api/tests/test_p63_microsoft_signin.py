@@ -145,7 +145,7 @@ async def test_a_member_signs_in_with_microsoft_and_their_outlook_connects(
             )
             assert acct.status == "connected" and acct.tenant_id == TENANT
             assert acct.ms_user_id == "oid-owner" and acct.email == "owner@example.com"
-            # P66: the verified account, for Prima (agentic/prisma).
+            # P66: the verified account, for Prima (agentic/prima).
             mem = await db.scalar(select(Membership).where(Membership.user_id == owner_id))
             assert (mem.ms_oid, mem.ms_tenant_id) == ("oid-owner", TENANT)
             log = (await db.scalars(select(AuditLog).where(AuditLog.action == "auth.login"))).all()

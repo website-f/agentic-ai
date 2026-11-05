@@ -1,9 +1,9 @@
-"""P66/P67: Prima Secure through the office (agentic/prisma).
+"""P66/P67: Prima Secure through the office (agentic/prima).
 
-Prima's screens at /prisma/ call /api/prisma/api/... with the office session (and its CSRF
+Prima's screens at /prima/ call /api/prima/api/... with the office session (and its CSRF
 token, like every other screen); each call goes on to Prima signed for the person signed in.
 Prima's answer, refusals included, comes back as it is, so Prima decides what anyone sees.
-/api/prisma/people: the owner links the office's people to Prima's staff records (P67).
+/api/prima/people: the owner links the office's people to Prima's staff records (P67).
 """
 
 from fastapi import APIRouter, Depends, Request
@@ -13,11 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
-from ...prisma import client, people
-from ...prisma.client import PrimaError
+from ...prima import client, people
+from ...prima.client import PrimaError
 from ..deps import Principal, client_ip, current_principal, require
 
-router = APIRouter(prefix="/api/prisma", tags=["prisma"])
+router = APIRouter(prefix="/api/prima", tags=["prima"])
 
 
 def _refused(e: PrimaError) -> JSONResponse:
@@ -31,7 +31,7 @@ def _refused(e: PrimaError) -> JSONResponse:
 async def status(
     principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
 ) -> dict[str, object]:
-    """For the Prisma page: is Prima here, and who it knows this person as."""
+    """For the Prima page: is Prima here, and who it knows this person as."""
     ws = principal.workspace_id
     if not client.enabled(ws):
         return {"enabled": False, "running": False, "linked": False, "me": None, "problem": ""}

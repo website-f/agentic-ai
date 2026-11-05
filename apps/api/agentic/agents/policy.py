@@ -31,8 +31,8 @@ from ..devices.core import PC_TOOLS, has_device, personal
 from ..engine import compliance
 from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, has_mailbox, has_teams
 from ..models import Agent, Membership
-from ..prisma.client import TOOL_NAMES as PRISMA_TOOLS
-from ..prisma.client import enabled as prisma_ready
+from ..prima.client import TOOL_NAMES as PRIMA_TOOLS
+from ..prima.client import enabled as prima_ready
 from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
@@ -58,8 +58,8 @@ OUTSIDE_CONTENT = frozenset(
         "teams_channels",  # P63: channel posts
         "teams_read_channel",
         # P66: Prima's records (what staff typed).
-        "prisma_read",
-        "prisma_record",
+        "prima_read",
+        "prima_record",
         "email_read",
         "email_search",
         "web_fetch",
@@ -210,7 +210,7 @@ async def _evaluate(
         why = (
             "only its person's own AI uses their Teams, through their own Microsoft 365 connection"
         )
-    if not why and tool_name in PRISMA_TOOLS and not prisma_ready(agent.workspace_id):  # P66
+    if not why and tool_name in PRIMA_TOOLS and not prima_ready(agent.workspace_id):  # P66
         why = "Prima is not set up on this server"
     if not why and tool_name in MONEY_TOOLS and not await has_money(agent, tool_name):  # P35
         why = (

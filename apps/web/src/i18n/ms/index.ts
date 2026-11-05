@@ -32,7 +32,7 @@ import { JOBS } from "./jobs";
 import { NEEDS_MEMORY } from "./needs-memory";
 import { APPROVED_SERVICES } from "./approved-services";
 import { PC_TUNNEL } from "./pc-tunnel";
-import { PRISMA } from "./prisma";
+import { PRIMA } from "./prima";
 import { SIGN_IN } from "./signin";
 import { WEB_CONNECTIONS } from "./web-connections";
 import { SEARCH } from "./search";
@@ -92,7 +92,7 @@ export const MS: Record<string, string> = {
   ...PC_TUNNEL,
   ...WEB_CONNECTIONS,
   ...SIGN_IN,
-  ...PRISMA,
+  ...PRIMA,
   ...FOLDER_BROWSER,
   ...TWO_FACTOR,
   ...ERASE,

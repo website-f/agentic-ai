@@ -6,7 +6,7 @@
 # The Microsoft sign-in identifiers (tenant, app registrations) are public IDs, not secrets:
 # they default to Prima's existing "Prima Secure App" / "Prima Secure API" registrations
 # (apps/prima/infra/staging.env). The SPA registration must list
-# https://<this site>/prisma/ as a redirect URI (Microsoft Entra > App registrations).
+# https://<this site>/prima/ as a redirect URI (Microsoft Entra > App registrations).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ENV_FILE=.env

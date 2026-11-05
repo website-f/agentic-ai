@@ -1,10 +1,10 @@
 """Calls to Prima Secure, signed for one person (P66, P67).
 
 The office is Prima's sign-in. Each person in the office is linked to one Prima staff record
-(models.PrismaLink), automatically the first time they open Prima when the match is sure: the
+(models.PrimaLink), automatically the first time they open Prima when the match is sure: the
 record IT gave the Microsoft account they signed in with (Membership.ms_oid, verified by
 Microsoft), else the only record with exactly their name. The owner sees and can change every
-link on the Prisma page (agentic/prisma/people). Nobody runs a script or signs in twice.
+link on the Prima page (agentic/prima/people). Nobody runs a script or signs in twice.
 
 The office holds no Prima password or token. Each call names the linked record and is signed
 with settings.prima_secret, which Prima checks (apps/prima/apps/api/src/office.ts) before
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..i18n import Msg
-from ..models import PrismaLink
+from ..models import PrimaLink
 from ..services import audit
 
 transport: httpx.AsyncBaseTransport | None = None
@@ -39,13 +39,13 @@ _QUERY = re.compile(r"^[A-Za-z0-9_\-.~%=&+:,]{0,1000}$")
 # Never through the office: the signed system feeds (their own keys), development sign-in,
 # and the office's own staff list (a system call, staff() below).
 _CLOSED = ("api/integrations/", "api/auth/dev-login", "api/auth/users", "api/office/")
-# The AI's Prima tools (agents/prisma_tools.py): offered only when enabled() for the workspace.
-TOOL_NAMES = frozenset({"prisma_find", "prisma_read", "prisma_record"})
+# The AI's Prima tools (agents/prima_tools.py): offered only when enabled() for the workspace.
+TOOL_NAMES = frozenset({"prima_find", "prima_read", "prima_record"})
 PROMPT_NOTE = (
     "Prima Secure (the group's operations app: attendance, leave, claims, staff pay, rosters, "
     "cases, assets, purchasing, tenders...) runs in this office. You can work in it for the "
-    "person who asked you, as them, with their access only: prisma_find gives the action for a "
-    "job, prisma_read reads, prisma_record records (they approve each one first). Follow the "
+    "person who asked you, as them, with their access only: prima_find gives the action for a "
+    "job, prima_read reads, prima_record records (they approve each one first). Follow the "
     "matching Prima procedure from the library. If Prima refuses, say why; never try another "
     "way round its rules. Prepare and record what the person asks; decisions on pay, "
     "deductions, discipline and contracts stay with the people Prima names."
@@ -110,7 +110,7 @@ def _not_linked() -> PrimaError:
         403,
         Msg(
             "You are not linked to your Prima staff record yet. The office owner links people "
-            "on the Prisma page."
+            "on the Prima page."
         ),
     )
 
@@ -135,14 +135,14 @@ async def staff() -> list[StaffRecord]:
     ]
 
 
-async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaLink:
+async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLink:
     """This person's Prima record. Made here, the first time they open Prima, when the match is
     sure (people.suggestions): the record IT gave their verified Microsoft account, else the
     only record with exactly their name while nobody else in the office has it. The owner sees
-    and can change every link on the Prisma page."""
+    and can change every link on the Prima page."""
     from . import people  # late: people builds on this module
 
-    link = await db.get(PrismaLink, (workspace_id, user_id))
+    link = await db.get(PrimaLink, (workspace_id, user_id))
     if link is not None:
         return link
     records = await staff()
@@ -153,7 +153,7 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaL
     if record is None or me is None:
         raise _not_linked()
     how = "microsoft" if me.ms_oid and record.entra_oid == me.ms_oid else "name"
-    link = PrismaLink(
+    link = PrimaLink(
         workspace_id=workspace_id,
         user_id=user_id,
         prima_user_id=record.id,
@@ -166,15 +166,15 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaL
         await db.commit()
     except IntegrityError:  # opened twice at once: the other request linked it
         await db.rollback()
-        link = await db.get(PrismaLink, (workspace_id, user_id))
+        link = await db.get(PrimaLink, (workspace_id, user_id))
         if link is None:
             raise _not_linked() from None
         return link
     await audit.record(
         db,
         workspace_id,
-        "system:prisma",
-        "prisma.link",
+        "system:prima",
+        "prima.link",
         target=user_id,
         note=f"Linked to Prima record {record.id} by their "
         + ("Microsoft account" if how == "microsoft" else "name"),

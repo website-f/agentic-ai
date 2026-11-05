@@ -1,6 +1,6 @@
-"""P66/P67: Prima Secure inside the office. Its screens call /api/prisma/... with the office
+"""P66/P67: Prima Secure inside the office. Its screens call /api/prima/... with the office
 session, and its AI works in it for the person who asked (in chat, or who gave the task), both
-signed for that person's linked Prima staff record (agentic/prisma) and checked by Prima
+signed for that person's linked Prima staff record (agentic/prima) and checked by Prima
 (apps/prima/apps/api/src/office.ts). People link themselves by their Microsoft account, or the
 owner links them in one click; nobody runs a script."""
 
@@ -18,11 +18,11 @@ from agentic.agents.runtime import offered_tools
 from agentic.agents.tools import TOOLS, ToolContext
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
-from agentic.models import Agent, Membership, PrismaLink, Task, User, Workspace
-from agentic.prisma import client as prima
-from agentic.prisma import routes
-from agentic.prisma.client import PrimaError, StaffRecord
-from agentic.prisma.people import Person, name_key, suggestions
+from agentic.models import Agent, Membership, PrimaLink, Task, User, Workspace
+from agentic.prima import client as prima
+from agentic.prima import routes
+from agentic.prima.client import PrimaError, StaffRecord
+from agentic.prima.people import Person, name_key, suggestions
 
 from .conftest import csrf
 from .test_agents import new_agent, new_task, office
@@ -32,10 +32,38 @@ SECRET = "o" * 40
 OID = "0a0a0a0a-0000-4000-8000-000000000001"
 PRIMA_SRC = Path(__file__).resolve().parents[2] / "prima" / "apps" / "api" / "src"
 STAFF = [
-    {"id": "u-owner", "name": "Owner One", "title": "CEO", "role": "director", "entraOid": None, "canSignIn": True},  # noqa: E501
-    {"id": "u-aina", "name": "Aina Binti Ali", "title": "HR", "role": "company_hr", "entraOid": OID, "canSignIn": True},  # noqa: E501
-    {"id": "u-ahmad-1", "name": "Ahmad", "title": "Guard", "role": "guard", "entraOid": None, "canSignIn": False},  # noqa: E501
-    {"id": "u-ahmad-2", "name": "Ahmad", "title": "Driver", "role": "staff", "entraOid": None, "canSignIn": True},  # noqa: E501
+    {
+        "id": "u-owner",
+        "name": "Owner One",
+        "title": "CEO",
+        "role": "director",
+        "entraOid": None,
+        "canSignIn": True,
+    },  # noqa: E501
+    {
+        "id": "u-aina",
+        "name": "Aina Binti Ali",
+        "title": "HR",
+        "role": "company_hr",
+        "entraOid": OID,
+        "canSignIn": True,
+    },  # noqa: E501
+    {
+        "id": "u-ahmad-1",
+        "name": "Ahmad",
+        "title": "Guard",
+        "role": "guard",
+        "entraOid": None,
+        "canSignIn": False,
+    },  # noqa: E501
+    {
+        "id": "u-ahmad-2",
+        "name": "Ahmad",
+        "title": "Driver",
+        "role": "staff",
+        "entraOid": None,
+        "canSignIn": True,
+    },  # noqa: E501
 ]
 
 
@@ -108,7 +136,9 @@ def test_signs_as_prima_checks():
 def test_the_catalog_is_prima_s_api():
     built = routes.build(PRIMA_SRC)
     kept = json.loads((Path(routes.__file__).with_name("routes.json")).read_text(encoding="utf-8"))
-    assert built == kept, "Run: python -m agentic.prisma.routes ../prima/apps/api/src > agentic/prisma/routes.json"  # noqa: E501
+    assert built == kept, (
+        "Run: python -m agentic.prima.routes ../prima/apps/api/src > agentic/prima/routes.json"
+    )  # noqa: E501
     paths = {(r["method"], r["path"]) for r in kept}
     assert ("GET", "api/leave") in paths and ("POST", "api/claims") in paths
     assert ("GET", "api/staff-pay") in paths and ("GET", "api/companies/:id/attendance") in paths
@@ -155,18 +185,18 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     aina_id, _ = await _ids("aina@example.com")
 
     # The owner's page before anyone opened Prima: everyone, Prima's records, the sure picks.
-    d = (await client.get("/api/prisma/people")).json()
+    d = (await client.get("/api/prima/people")).json()
     rows = {p["user_id"]: p for p in d["people"]}
     assert rows[owner_id]["suggestion"] == "u-owner" and rows[aina_id]["suggestion"] is None
     assert {r["id"] for r in d["staff"]} == {s["id"] for s in STAFF}
 
-    # The owner just opens Prisma: the only record with their exact name is theirs, so they are
+    # The owner just opens Prima: the only record with their exact name is theirs, so they are
     # in at once, with no click and no second sign-in.
-    s = (await client.get("/api/prisma/status")).json()
+    s = (await client.get("/api/prima/status")).json()
     assert s["linked"] and s["me"]["name"] == "Owner One"
     async with SessionLocal() as db:
-        assert (await db.get(PrismaLink, (ws, owner_id))).how == "name"
-    r = await client.get("/api/prisma/api/leave?status=waiting")
+        assert (await db.get(PrimaLink, (ws, owner_id))).how == "name"
+    r = await client.get("/api/prima/api/leave?status=waiting")
     assert r.json()["as"] == "u-owner" and r.json()["url"] == "/api/leave?status=waiting"
     assert prima_on[-1].headers["x-office-via"] == "person"
     assert prima_on[-1].headers["x-forwarded-for"]
@@ -176,7 +206,7 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     async with SessionLocal() as db:
         with pytest.raises(PrimaError):
             await prima.link_for(db, ws, aina_id)
-    r = await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
+    r = await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     assert r.json() == {"linked": 0}
 
     # Aina signs in with Microsoft and IT recorded that account in Prima: linked by itself.
@@ -187,17 +217,17 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
 
     # The owner can change or clear any link; one record is never two people.
     bad = await client.post(
-        "/api/prisma/people/link", json={"user_id": owner_id, "prima_user_id": "u-aina"},
+        "/api/prima/people/link", json={"user_id": owner_id, "prima_user_id": "u-aina"},
         headers=csrf(client),
     )  # fmt: skip
     assert bad.status_code == 409
     r = await client.post(
-        "/api/prisma/people/link", json={"user_id": aina_id, "prima_user_id": None},
+        "/api/prima/people/link", json={"user_id": aina_id, "prima_user_id": None},
         headers=csrf(client),
     )  # fmt: skip
     assert r.status_code == 200
     async with SessionLocal() as db:
-        assert await db.get(PrismaLink, (ws, aina_id)) is None
+        assert await db.get(PrimaLink, (ws, aina_id)) is None
 
 
 async def test_only_the_owner_links_people(client, prima_on):
@@ -207,8 +237,8 @@ async def test_only_the_owner_links_people(client, prima_on):
 
     c = await signed_in("staff1@example.com", m["temp_password"])
     try:
-        assert (await c.get("/api/prisma/people")).status_code == 403
-        r = await c.post("/api/prisma/people/link-suggested", json={}, headers=csrf(c))
+        assert (await c.get("/api/prima/people")).status_code == 403
+        r = await c.post("/api/prima/people/link-suggested", json={}, headers=csrf(c))
         assert r.status_code == 403
     finally:
         await c.aclose()
@@ -216,33 +246,37 @@ async def test_only_the_owner_links_people(client, prima_on):
 
 async def test_prima_screens_through_the_office(client, prima_on):
     await office(client)
-    await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
+    await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
 
     # Writes carry the office's CSRF token, like every other screen, and the exact body.
-    r = await client.post("/api/prisma/api/leave", json={"days": 2})
+    r = await client.post("/api/prima/api/leave", json={"days": 2})
     assert r.status_code == 403
-    r = await client.post("/api/prisma/api/leave", content=b'{"days":2}', headers={**csrf(client), "content-type": "application/json"})  # noqa: E501
+    r = await client.post(
+        "/api/prima/api/leave",
+        content=b'{"days":2}',
+        headers={**csrf(client), "content-type": "application/json"},
+    )  # noqa: E501
     assert r.status_code == 200 and r.json()["body"] == '{"days":2}'
 
     # Prima's own refusal comes back as it is; closed parts never reach it.
-    r = await client.get("/api/prisma/api/staff-pay")
+    r = await client.get("/api/prima/api/staff-pay")
     assert r.status_code == 403 and r.json()["message"] == "Only HR runs payroll."
     n = len(prima_on)
-    for closed in ("/api/prisma/api/integrations/ja/v1/staff", "/api/prisma/api/office/staff"):
+    for closed in ("/api/prima/api/integrations/ja/v1/staff", "/api/prima/api/office/staff"):
         r = await client.get(closed)
         assert r.status_code == 403
     assert len(prima_on) == n
 
     client.cookies.clear()
-    assert (await client.get("/api/prisma/api/me")).status_code == 401
+    assert (await client.get("/api/prima/api/me")).status_code == 401
 
 
 async def test_not_set_up_means_no_prima(client, monkeypatch):
     monkeypatch.setattr(settings, "prima_url", "")
     await office(client)
-    s = (await client.get("/api/prisma/status")).json()
+    s = (await client.get("/api/prima/status")).json()
     assert s == {"enabled": False, "running": False, "linked": False, "me": None, "problem": ""}
-    assert (await client.get("/api/prisma/api/me")).status_code == 404
+    assert (await client.get("/api/prima/api/me")).status_code == 404
 
 
 async def _ctx(db, agent_id: str, person: str | None, task: Task | None = None) -> ToolContext:
@@ -254,51 +288,57 @@ async def _ctx(db, agent_id: str, person: str | None, task: Task | None = None) 
 async def test_the_ai_works_in_prima_as_the_person_who_asked(client, prima_on):
     o = await office(client)
     agent = await new_agent(client, o, "Chief of Staff", dept="Finance")
-    await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
+    await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     owner_id, _ = await _ids("owner@example.com")
 
     async with SessionLocal() as db:
         ctx = await _ctx(db, agent["id"], owner_id)
-        found = await TOOLS["prisma_find"].handler(ctx, {"query": "attendance"})
+        found = await TOOLS["prima_find"].handler(ctx, {"query": "attendance"})
         assert "api/companies/:id/attendance" in found
-        out = await TOOLS["prisma_read"].handler(ctx, {"path": "/leave", "query": {"x": "1"}})
+        out = await TOOLS["prima_read"].handler(ctx, {"path": "/leave", "query": {"x": "1"}})
         assert '"url": "/api/leave?x=1"' in out and '"as": "u-owner"' in out
         assert prima_on[-1].headers["x-office-via"] == "agent:Chief of Staff"
-        out = await TOOLS["prisma_record"].handler(
+        out = await TOOLS["prima_record"].handler(
             ctx, {"path": "api/claims", "body": {"amount": 12}, "why": "taxi claim"}
         )
         assert '"body": "{\\"amount\\":12}"' in out
-        refused = await TOOLS["prisma_read"].handler(ctx, {"path": "api/staff-pay"})
+        refused = await TOOLS["prima_read"].handler(ctx, {"path": "api/staff-pay"})
         assert refused.startswith("Error: Prima refused (403)") and "Only HR" in refused
 
         # Nobody asked (the office's own work): never as anyone.
         n = len(prima_on)
-        nobody = await TOOLS["prisma_read"].handler(await _ctx(db, agent["id"], None), {"path": "api/me"})  # noqa: E501
+        nobody = await TOOLS["prima_read"].handler(
+            await _ctx(db, agent["id"], None), {"path": "api/me"}
+        )  # noqa: E501
         assert nobody.startswith("Error:") and len(prima_on) == n
 
         # Recording waits for a person, even on autonomy "auto"; reading does not.
         a = await db.get(Agent, agent["id"])
-        assert (await policy.evaluate(a, "prisma_read", {"path": "api/me"})).effect == "allow"
-        assert (await policy.evaluate(a, "prisma_record", {"path": "api/claims", "body": {}, "why": "x"})).effect == "ask"  # noqa: E501
+        assert (await policy.evaluate(a, "prima_read", {"path": "api/me"})).effect == "allow"
+        assert (
+            await policy.evaluate(a, "prima_record", {"path": "api/claims", "body": {}, "why": "x"})
+        ).effect == "ask"  # noqa: E501
         a.autonomy = "auto"
-        assert (await policy.evaluate(a, "prisma_record", {"path": "api/claims", "body": {}, "why": "x"})).effect == "ask"  # noqa: E501
+        assert (
+            await policy.evaluate(a, "prima_record", {"path": "api/claims", "body": {}, "why": "x"})
+        ).effect == "ask"  # noqa: E501
         names = {t["function"]["name"] for t in offered_tools(a)}
-        assert {"prisma_find", "prisma_read", "prisma_record"} <= names
+        assert {"prima_find", "prima_read", "prima_record"} <= names
 
 
 async def test_a_task_given_in_the_office_reads_prima_as_whoever_gave_it(client, prima_on):
-    """"Summarise this week's attendance and the leave waiting": the agent's task reads
+    """ "Summarise this week's attendance and the leave waiting": the agent's task reads
     Prima with the rights of the person who gave it."""
     o = await office(client)
     agent = await new_agent(client, o, "Ops Analyst", dept="Finance")
-    await client.post("/api/prisma/people/link-suggested", json={}, headers=csrf(client))
+    await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     t = await new_task(client, agent, "Attendance and leave summary", "This week, for co-1.")
     async with SessionLocal() as db:
         task = await db.get(Task, t["id"])
         ctx = await _ctx(db, agent["id"], None, task)
-        me = await TOOLS["prisma_read"].handler(ctx, {"path": "api/me"})
+        me = await TOOLS["prima_read"].handler(ctx, {"path": "api/me"})
         assert '"name": "Owner One"' in me and '"co-1"' in me
-        att = await TOOLS["prisma_read"].handler(
+        att = await TOOLS["prima_read"].handler(
             ctx, {"path": "api/companies/co-1/attendance", "query": {"date": "2026-11-06"}}
         )
         assert '"as": "u-owner"' in att and "/api/companies/co-1/attendance?date=2026-11-06" in att
@@ -312,5 +352,5 @@ async def test_no_prima_tools_without_prima(client, monkeypatch):
     async with SessionLocal() as db:
         a = await db.get(Agent, agent["id"])
         names = {t["function"]["name"] for t in offered_tools(a)}
-        assert not names & {"prisma_find", "prisma_read", "prisma_record"}
-        assert (await policy.evaluate(a, "prisma_read", {"path": "api/me"})).effect == "deny"
+        assert not names & {"prima_find", "prima_read", "prima_record"}
+        assert (await policy.evaluate(a, "prima_read", {"path": "api/me"})).effect == "deny"

@@ -1,6 +1,6 @@
-/** P65 Prisma: the launch page and menu entry for Prima Secure (apps/prima). */
-export const PRISMA: Record<string, string> = {
-  "Prisma": "Prisma",
+/** P65 Prima: the launch page and menu entry for Prima Secure (apps/prima). */
+export const PRIMA: Record<string, string> = {
+  "Prima": "Prima",
   "Prima Secure": "Prima Secure",
   "Prima Secure: the group's operations app, where staff do the daily work while their AI follows its SOPs.":
     "Prima Secure: aplikasi operasi kumpulan, tempat staf melakukan kerja harian sementara AI mereka mengikut SOPnya.",

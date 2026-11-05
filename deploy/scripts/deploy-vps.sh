@@ -96,7 +96,7 @@ recreate_internal llm ollama ollama-pull api worker
 
 # 4. Start.
 "${DC[@]}" up -d --remove-orphans
-# P65: Prima Secure (/prisma/), on its own: its setup job installs its schema first. If it
+# P65: Prima Secure (/prima/), on its own: its setup job installs its schema first. If it
 # cannot start, the office above keeps running and this says so.
 if ! "${DC[@]}" --profile prima up -d prima-db prima-setup prima-api; then
   echo >&2

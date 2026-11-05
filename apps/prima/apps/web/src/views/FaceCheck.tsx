@@ -15,7 +15,7 @@ async function engine(): Promise<FaceApi> {
   if (__DEMO__) throw new Error('The test version has no face engine.');
   loading ??= (async () => {
     const faceapi = await import('@vladmandic/face-api');
-    // Under the site's base path (the Agentic Office serves Prima at /prisma/); the build copies the files (vite.config.ts).
+    // Under the site's base path (the Agentic Office serves Prima at /prima/); the build copies the files (vite.config.ts).
     const url = `${import.meta.env.BASE_URL}face-models`;
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(url),

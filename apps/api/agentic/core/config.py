@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     prima_pack: bool = True
     prima_pack_dir: str = ""
     # P66: Prima Secure's API (inside the stack) and the secret the office signs its calls
-    # with (Prima's OFFICE_SIGNING_SECRET). Either empty = Prima is not linked: no /prisma
+    # with (Prima's OFFICE_SIGNING_SECRET). Either empty = Prima is not linked: no /prima
     # sign-in through the office and no Prima tools for the AI. prima_workspace: only that
     # workspace may use it (empty = any workspace whose people Prima has linked).
     prima_url: str = ""

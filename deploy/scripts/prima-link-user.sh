@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # P65: link (or unlink) a person's Microsoft account to their Prima Secure user, so they can
-# sign in at /prisma/. Prima has no screen for this; its own tool does it as the schema owner,
+# sign in at /prima/. Prima has no screen for this; its own tool does it as the schema owner,
 # audited in Prima's audit chain.
 #
 #   link:   ./deploy/scripts/prima-link-user.sh <prima-user-id> <entra-object-id> "<who is linking>"

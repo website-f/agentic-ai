@@ -22,7 +22,7 @@ export class MicrosoftSignIn {
       auth: {
         clientId: cfg.clientId,
         authority: `https://login.microsoftonline.com/${cfg.tenantId}`,
-        // The app's own address: the site root, or its path beside another app (/prisma/).
+        // The app's own address: the site root, or its path beside another app (/prima/).
         redirectUri: `${window.location.origin}${import.meta.env.BASE_URL}`,
         postLogoutRedirectUri: `${window.location.origin}${import.meta.env.BASE_URL}`,
       },

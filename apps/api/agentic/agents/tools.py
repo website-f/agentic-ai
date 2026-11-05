@@ -1487,9 +1487,9 @@ from .teams_tools import TEAMS_TOOLS  # noqa: E402
 TOOLS.update({t.name: t for t in TEAMS_TOOLS})
 
 # P66: Prima Secure (attendance, leave, claims, pay...), as the person who asked.
-from .prisma_tools import PRISMA_TOOLS  # noqa: E402
+from .prima_tools import PRIMA_TOOLS  # noqa: E402
 
-TOOLS.update({t.name: t for t in PRISMA_TOOLS})
+TOOLS.update({t.name: t for t in PRIMA_TOOLS})
 
 # P35: customers, suppliers and deals (every agent, its own company's), and money (finance
 # agents only: crm/access.MONEY_TOOLS). Approving, paying and voiding are never tools.

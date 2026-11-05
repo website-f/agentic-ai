@@ -19,7 +19,7 @@ document.querySelectorAll<HTMLLinkElement>('link[rel=stylesheet][media=print]').
 // where service workers are not available.
 if (!__DEMO__ && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Under its own path when served beside another app (Agentic Office: /prisma/).
+    // Under its own path when served beside another app (Agentic Office: /prima/).
     const base = import.meta.env.BASE_URL;
     navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => undefined);
   });

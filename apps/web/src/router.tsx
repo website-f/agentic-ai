@@ -91,7 +91,7 @@ const page = {
   staffComputers: lazyRouteComponent(() => import("@/pages/computers/staff"), "StaffComputersPage"),
   approvedServices: lazyRouteComponent(() => import("@/pages/approved-services"), "ApprovedServicesPage"),
   webConnections: lazyRouteComponent(() => import("@/pages/web-connections"), "WebConnectionsPage"),
-  prisma: lazyRouteComponent(() => import("@/pages/prisma"), "PrismaPage"),
+  prima: lazyRouteComponent(() => import("@/pages/prima"), "PrimaPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
   contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
@@ -710,11 +710,11 @@ const approvedServicesRoute = createRoute({
 });
 
 // P60: how the agents' browsers reach websites (this server, a company computer, proxies).
-// P65: Prima Secure's launch page (the app itself is at /prisma/, outside this one).
-const prismaRoute = createRoute({
+// P65: Prima Secure's launch page (the app itself is at /prima/, outside this one).
+const primaRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/prisma",
-  component: page.prisma,
+  path: "/prima",
+  component: page.prima,
   // P67: ?people=1 opens the owner's "People in Prima" instead of Prima itself.
   validateSearch: (s: Record<string, unknown>): { people?: number } => ({ people: s.people ? 1 : undefined }),
 });
@@ -900,7 +900,7 @@ const routeTree = rootRoute.addChildren([
     staffComputersRoute,
     approvedServicesRoute,
     webConnectionsRoute,
-    prismaRoute,
+    primaRoute,
     remoteRoute,
     mailRoute,
     contactsRoute,

@@ -1,7 +1,7 @@
 // Offline shell for the installable app. API calls always go to the network; offline
 // clock-ins are queued by the app itself (planned, ADR 0003), never served from cache.
 // The app may live at the site root or under a path beside another app (Agentic Office:
-// /prisma/), so every path here is relative to this worker's scope.
+// /prima/), so every path here is relative to this worker's scope.
 const CACHE = 'prima-shell-v3';
 const BASE = new URL(self.registration.scope).pathname;
 const SHELL = [BASE, `${BASE}index.html`, `${BASE}manifest.webmanifest`, `${BASE}icon.svg`];
