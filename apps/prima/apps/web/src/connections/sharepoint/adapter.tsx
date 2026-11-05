@@ -19,11 +19,11 @@ export function sharePointAdapter(client: ConnectionsClient): Adapter {
     const approved = configuration?.sites.find(s => s.key === selection.resourceKey)?.hasApprovedLibraries === true;
     if (!evidence) return null;
     if (!approved) return <p className="notice" data-tone="info">No approved libraries are configured for this site. A site access check does not approve libraries. Ask IT to review the exact library IDs; no library metadata is requested.</p>;
-    return <div style={{ marginTop: 12 }}>
+    return <div className="ix-block-gap">
       <p className="small muted">The check covers this site only. Each library request is separately authorized by the server. Only explicitly approved libraries are listed.</p>
       <button className="btn" disabled={!!state.busy || !state.verification} onClick={() => void session.listLibraries()}>List approved libraries</button>
       {state.busy && <><span role="status"> Requesting metadata… </span><button className="btn btn-sm" onClick={cancel}>Cancel request</button></>}
-      {state.libraries.length > 0 && <div style={{ marginTop: 12 }}>
+      {state.libraries.length > 0 && <div className="ix-block-gap">
         <label htmlFor="connection-library">Approved library</label>
         <select id="connection-library" className="select" style={{ display: 'block', width: '100%', maxWidth: 560 }} value={state.libraryId} onChange={e => session.selectLibrary(e.target.value)}>
           <option value="">Choose a library — no metadata requested by selecting</option>
@@ -33,8 +33,8 @@ export function sharePointAdapter(client: ConnectionsClient): Adapter {
         <button className="btn" disabled={!!state.busy || !state.libraryId} onClick={() => void session.listMetadata()}>List metadata</button>
       </div>}
       {state.metadataCheckedAt && <p className="small muted">Metadata observed: <time dateTime={state.metadataCheckedAt}>{state.metadataCheckedAt}</time>. Not continuous monitoring.</p>}
-      {state.items.length > 0 && <ul style={{ paddingLeft: 20 }} aria-label="SharePoint root metadata">
-        {state.items.map(i => <li key={i.id} style={{ overflowWrap: 'anywhere' }}><strong>{i.name}</strong>{i.kind === 'file' && sharePointBrowserUrl(i.webUrl) && <> · <a href={sharePointBrowserUrl(i.webUrl)} target="_blank" rel="noopener noreferrer">Open in SharePoint (new tab)</a></>}<div className="small muted">{i.kind === 'folder' ? 'Folder (not opened)' : 'File (contents not read)'} · {i.size === null ? 'Size unknown' : `${i.size} bytes`} · Last modified: {i.lastModifiedAt ?? 'unknown'}</div></li>)}
+      {state.items.length > 0 && <ul className="ix-list" aria-label="SharePoint root metadata">
+        {state.items.map(i => <li key={i.id} className="ix-wrap"><strong>{i.name}</strong>{i.kind === 'file' && sharePointBrowserUrl(i.webUrl) && <> · <a href={sharePointBrowserUrl(i.webUrl)} target="_blank" rel="noopener noreferrer">Open in SharePoint (new tab)</a></>}<div className="small muted">{i.kind === 'folder' ? 'Folder (not opened)' : 'File (contents not read)'} · {i.size === null ? 'Size unknown' : `${i.size} bytes`} · Last modified: {i.lastModifiedAt ?? 'unknown'}</div></li>)}
       </ul>}
       {state.libraryHasMore && <p className="small">Approved library listing is bounded; no automatic pagination.</p>}
       {state.itemHasMore && <p className="small">Only the first 25 root entries are shown. No pagination or folder traversal.</p>}

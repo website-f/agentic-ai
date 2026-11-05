@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
+import { CalendarBlankIcon, ClockIcon, FootprintsIcon, ShieldCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
 import { jaOwns } from '@prima/core';
 import { api, type MyDuty as Duty } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, hhmm, useLoad, type Tone } from '../ui';
+import { Card, PageHead, Stat, Stats } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, hhmm, useLoad, type Tone } from '../ui';
 import { FLAG_LABEL } from './shared';
 import { BenefitsTab, HoursTab, LeaveTab, TrainingTab, WarningsTab, WorkTab } from './People';
 import { SocsoTab } from './Socso';
 import { MyItemsPanel } from './MyItems';
+import '../styles/selfservice.css';
 
 const PERSON_ROLE: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
@@ -28,6 +31,18 @@ const ROUND: Record<Duty['patrols'][number]['rounds'][number]['status'], { label
   now: { label: 'In progress', tone: 'info' },
 };
 
+/** A date as a small calendar block: weekday over day of month. */
+function DateBlock({ date, now }: { date: string; now?: boolean }) {
+  const d = new Date(`${date}T00:00:00+08:00`);
+  const wd = d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'Asia/Kuala_Lumpur' });
+  return (
+    <span className="ss-date" data-now={now ? '' : undefined} aria-hidden="true">
+      <small>{wd}</small>
+      <b>{Number(date.slice(8, 10))}</b>
+    </span>
+  );
+}
+
 /**
  * A guard's own sign-in (Fauzan, 25 Oct 2026): view only. Their details, reminders, roster, clock-in and clock-out
  * record, and patrol rounds done or missed. Nothing about any other guard or the company.
@@ -43,13 +58,13 @@ export function MyDuty() {
   }, []);
   if (error)
     return (
-      <div className="page">
+      <div className="page ss">
         <ErrorNotice error={error} />
       </div>
     );
   if (!data)
     return (
-      <div className="page">
+      <div className="page ss">
         <Loading what="your duty" />
       </div>
     );
@@ -57,51 +72,70 @@ export function MyDuty() {
   const view: Tab = staff ? 'me' : tab;
   const late = d.clockRecord.filter((c) => c.status === 'late').length;
   const absent = d.clockRecord.filter((c) => c.status === 'no_show').length;
+  const shift = d.onNow ? d.roster.find((r) => r.id === d.onNow?.id) : d.next ? d.roster.find((r) => r.id === d.next?.id) : undefined;
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>{d.person.name}</h1>
-          <p>
+    <div className="page ss">
+      <PageHead
+        title={d.person.name}
+        sub={
+          <>
             {d.person.staffNo} · {d.person.jobTitle ?? PERSON_ROLE[d.person.role] ?? 'Guard'} · {d.person.companyName}
-          </p>
+          </>
+        }
+      />
+
+      {!staff && shift && (
+        <div className="ss-hero" data-on={d.onNow ? '' : undefined}>
+          <span className="ss-hero-icon" aria-hidden="true">
+            <ShieldCheckIcon size={26} />
+          </span>
+          <div className="ss-hero-main">
+            <span className="ss-hero-kicker">{d.onNow ? 'On duty now' : 'Next shift'}</span>
+            <span className="ss-hero-title">
+              {dateLabel(shift.date)} · {hhmm(shift.start)} to {hhmm(shift.end)}
+            </span>
+            <span className="ss-hero-sub">
+              {shift.siteName} · {shift.postName}
+              {shift.address ? ` · ${shift.address}` : ''}
+            </span>
+          </div>
+          <div className="ss-hero-side">{d.onNow ? <Chip tone="info">Now</Chip> : <Chip tone="warn">Next</Chip>}</div>
         </div>
-      </div>
+      )}
+
+      {d.reminders.length > 0 && (
+        <Card title="Reminders" flush>
+          <ul className="ss-rows">
+            {d.reminders.map((r, i) => (
+              <li key={i} className="ss-row" data-tone={r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined}>
+                <span className="ss-row-main">{r.text}</span>
+                <Chip tone={r.tone}>{r.tone === 'crit' ? 'Now' : r.tone === 'warn' ? 'Soon' : 'Note'}</Chip>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <MyItemsPanel />
 
-      {d.reminders.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Reminders</h2>
-          </div>
-          <div className="list">
-            {d.reminders.map((r, i) => (
-              <div key={i} className="list-item" style={{ justifyContent: 'flex-start', gap: 10 }}>
-                <Chip tone={r.tone}>{r.tone === 'crit' ? 'Now' : r.tone === 'warn' ? 'Soon' : 'Note'}</Chip>
-                <span>{r.text}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {!staff && (
-        <div className="kpis">
-          <Kpi label="Shifts in next 14 days" value={d.roster.length} />
-          <Kpi label="Late in last 30 days" value={late} tone={late ? 'warn' : 'ok'} />
-          <Kpi label="Not attended, 30 days" value={absent} tone={absent ? 'crit' : 'ok'} />
-          <Kpi
+        <Stats>
+          <Stat label="Shifts in next 14 days" value={d.roster.length} icon={<CalendarBlankIcon size={16} />} tone="info" onClick={() => setTab('roster')} />
+          <Stat label="Late in last 30 days" value={late} tone={late ? 'warn' : 'ok'} icon={<ClockIcon size={16} />} onClick={() => setTab('clock')} />
+          <Stat label="Not attended, 30 days" value={absent} tone={absent ? 'crit' : 'ok'} icon={<UserMinusIcon size={16} />} onClick={() => setTab('clock')} />
+          <Stat
             label="Patrol rounds missed, 7 days"
             value={d.patrolSummary.missed}
             tone={d.patrolSummary.missed ? 'warn' : 'ok'}
             note={`${d.patrolSummary.done} done`}
+            icon={<FootprintsIcon size={16} />}
+            onClick={() => setTab('patrol')}
           />
-        </div>
+        </Stats>
       )}
 
       {!staff && (
-        <div className="tabbar" role="tablist" aria-label="My duty sections" style={{ flexWrap: 'wrap' }}>
+        <div className="tabbar ss-tabs" role="tablist" aria-label="My duty sections">
           {(
             [
               ['roster', 'Roster'],
@@ -118,90 +152,97 @@ export function MyDuty() {
       )}
 
       {view === 'roster' && (
-        <section className="panel">
-          <div className="list">
-            {d.roster.length === 0 && <div className="empty">No published shift in the next 14 days.</div>}
+        <Card title="My roster" sub="Published shifts, next 14 days" flush>
+          <ul className="ss-rows">
+            {d.roster.length === 0 && <li className="empty">No published shift in the next 14 days.</li>}
             {d.roster.map((r) => (
-              <div key={r.id} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>
+              <li key={r.id} className="ss-row ss-dated">
+                <DateBlock date={r.date} now={r.id === d.onNow?.id} />
+                <span className="ss-row-main">
+                  <span className="ss-row-title ss-times">
                     {dateLabel(r.date)} · {hhmm(r.start)} to {hhmm(r.end)}
-                  </div>
-                  <div className="muted small">
+                  </span>
+                  <span className="ss-meta">
                     {r.siteName} · {r.postName}
-                  </div>
-                  {r.address && <div className="muted small">{r.address}</div>}
-                </div>
-                {r.id === d.onNow?.id ? <Chip tone="info">Now</Chip> : r.id === d.next?.id ? <Chip tone="warn">Next</Chip> : null}
-              </div>
+                  </span>
+                  {r.address && <span className="ss-meta">{r.address}</span>}
+                </span>
+                <span>{r.id === d.onNow?.id ? <Chip tone="info">Now</Chip> : r.id === d.next?.id ? <Chip tone="warn">Next</Chip> : null}</span>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
 
       {view === 'clock' && (
-        <section className="panel">
-          <div className="list">
-            {d.clockRecord.length === 0 && <div className="empty">No shift in the last 30 days.</div>}
+        <Card title="Clock in and out" sub="Last 30 days" flush>
+          <ul className="ss-rows">
+            {d.clockRecord.length === 0 && <li className="empty">No shift in the last 30 days.</li>}
             {d.clockRecord.map((c) => (
-              <div key={c.shiftId} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>
+              <li key={c.shiftId} className="ss-row ss-dated" data-tone={CLOCK[c.status].tone === 'crit' ? 'crit' : CLOCK[c.status].tone === 'warn' ? 'warn' : undefined}>
+                <DateBlock date={c.date} />
+                <span className="ss-row-main">
+                  <span className="ss-row-title">
                     {dateLabel(c.date)} · {c.siteName}
-                  </div>
-                  <div className="muted small mono">
+                  </span>
+                  <span className="ss-meta mono">
                     Shift {hhmm(c.start)}–{hhmm(c.end)} · in {c.clockIn ? hhmm(c.clockIn) : '--:--'} · out {c.clockOut ? hhmm(c.clockOut) : '--:--'}
-                  </div>
+                  </span>
                   {c.flags.filter((f) => f !== 'LATE').length > 0 && (
-                    <div className="muted small">
+                    <span className="ss-meta">
                       {c.flags
                         .filter((f) => f !== 'LATE')
                         .map((f) => FLAG_LABEL[f] ?? f)
                         .join(', ')}
-                    </div>
+                    </span>
                   )}
-                </div>
+                </span>
                 <Chip tone={CLOCK[c.status].tone}>{CLOCK[c.status].label}</Chip>
-              </div>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
 
       {view === 'patrol' && (
         <>
           {d.patrols.length === 0 && <div className="empty">No patrol shift in the last 7 days.</div>}
           {d.patrols.map((p) => (
-            <section key={p.shiftId} className="panel">
-              <div className="panel-head">
-                <div>
-                  <h3>
-                    {dateLabel(p.date)} · {p.siteName}
-                  </h3>
-                  <div className="muted small">A round every {p.intervalMin} minutes: tap every checkpoint</div>
-                </div>
+            <Card
+              key={p.shiftId}
+              title={
+                <>
+                  {dateLabel(p.date)} · {p.siteName}
+                </>
+              }
+              sub={`A round every ${p.intervalMin} minutes: tap every checkpoint`}
+              actions={
                 <Chip tone={p.missed ? 'warn' : 'ok'}>
                   {p.done} done{p.missed ? `, ${p.missed} missed` : ''}
                 </Chip>
-              </div>
-              <div className="list">
+              }
+              flush
+            >
+              <ul className="ss-rows">
                 {p.rounds.map((r) => (
-                  <div key={r.from} className="list-item">
-                    <span className="mono small">
-                      {hhmm(r.from)}–{hhmm(r.to)} · {r.tapped} of {r.total} checkpoints
+                  <li key={r.from} className="ss-row" data-tone={ROUND[r.status].tone === 'crit' ? 'crit' : undefined}>
+                    <span className="ss-row-main">
+                      <span className="mono small">
+                        {hhmm(r.from)}–{hhmm(r.to)} · {r.tapped} of {r.total} checkpoints
+                      </span>
                     </span>
                     <Chip tone={ROUND[r.status].tone}>{ROUND[r.status].label}</Chip>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            </section>
+              </ul>
+            </Card>
           ))}
         </>
       )}
 
       {view === 'me' && (
         <>
-          <div className="tabbar" role="tablist" aria-label="My details sections" style={{ flexWrap: 'wrap' }}>
+          <div className="tabbar ss-tabs" role="tablist" aria-label="My details sections">
             {(
               [
                 ['work', 'Papers'],
@@ -218,7 +259,7 @@ export function MyDuty() {
               </button>
             ))}
           </div>
-          <section className="panel" style={{ padding: 12 }}>
+          <Card>
             {meTab === 'work' && <WorkTab data={d.profile} />}
             {meTab === 'training' && <TrainingTab d={d.profile} />}
             {meTab === 'hours' && <HoursTab d={d.profile} self />}
@@ -226,11 +267,11 @@ export function MyDuty() {
             {meTab === 'socso' && <SocsoTab d={d.profile} personId={d.person.id} />}
             {meTab === 'warnings' && <WarningsTab d={d.profile} self />}
             {meTab === 'benefits' && <BenefitsTab d={d.profile} self />}
-          </section>
+          </Card>
         </>
       )}
 
-      <p className="muted small">
+      <p className="ss-note">
         {staff
           ? 'Your own record. Ask for leave under Leave; your clock in and out is under Clock.'
           : 'View only. To ask for leave or give a reason for an absence, use the site device or inform your Operations Manager (OM).'}

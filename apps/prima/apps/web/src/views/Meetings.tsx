@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { CalendarBlankIcon, ChecksIcon, ClipboardTextIcon, ClockCountdownIcon, NotePencilIcon, PlusIcon } from '@phosphor-icons/react';
 import { myt } from '@prima/core';
 import { api, type Meetings } from '../api';
 import { useApp } from '../App';
 import { saveFile } from '../save';
-import { Chip, notify, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import { Chip, notify, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Person, Stat, Stats } from '../kit';
+import '../styles/leadership.css';
 
 type Row = Meetings['rows'][number];
 type Deadline = Meetings['deadlines'][number];
@@ -66,6 +69,21 @@ async function download(items: Deadline[], name: string) {
   if (problem) notify(problem);
 }
 
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** A calendar leaf for a YYYY-MM-DD date: weekday, day and month. */
+function DateLeaf({ date }: { date: string }) {
+  const dt = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  return (
+    <span className="ld-leaf" aria-hidden="true">
+      <span className="ld-leaf-wd">{WDAY[dt.getUTCDay()]}</span>
+      <span className="ld-leaf-d">{dt.getUTCDate()}</span>
+      <span className="ld-leaf-m">{MON[dt.getUTCMonth()]}</span>
+    </span>
+  );
+}
+
 /** Meetings across the group, their minutes and summaries, and every deadline for the calendar (Fauzan, 25 Oct 2026). */
 export function MeetingsView() {
   const { data, error } = useLoad(() => api.meetings(), []);
@@ -86,27 +104,67 @@ export function MeetingsView() {
     );
   const row = data.rows.find((r) => r.meeting.id === open);
   const toCheck = data.rows.filter((r) => r.canCheck).length;
-  const noMinutes = data.rows.filter((r) => r.meeting.status !== 'cancelled' && !r.meeting.minutes && r.meeting.end < new Date().toISOString()).length;
+  const now = new Date().toISOString();
+  const noMinutes = data.rows.filter((r) => r.meeting.status !== 'cancelled' && !r.meeting.minutes && r.meeting.end < now).length;
+  // Upcoming first, soonest at the top; then what was held, latest first.
+  const upcoming = data.rows.filter((r) => r.meeting.end >= now).sort((a, b) => a.meeting.start.localeCompare(b.meeting.start));
+  const past = data.rows.filter((r) => r.meeting.end < now).sort((a, b) => b.meeting.start.localeCompare(a.meeting.start));
+  // The calendar grouped by day.
+  const days: [string, Deadline[]][] = [];
+  for (const d of data.deadlines) {
+    const last = days[days.length - 1];
+    if (last && last[0] === d.date) last[1].push(d);
+    else days.push([d.date, [d]]);
+  }
+  const meetingRow = (r: Row) => (
+    <li key={r.meeting.id}>
+      <button type="button" className="ld-agenda-row" onClick={() => setOpen(r.meeting.id)}>
+        <DateLeaf date={r.meeting.start} />
+        <span className="ld-row-main">
+          <span className="ld-row-title">{r.meeting.title}</span>
+          <span className="ld-row-meta">
+            {dateLabel(r.meeting.start.slice(0, 10))} {hhmm(r.meeting.start)} · {r.companyName} · {MEETING_KIND[r.meeting.kind]}
+          </span>
+        </span>
+        <span className="ld-row-aside">
+          <MeetingChip r={r} />
+        </span>
+      </button>
+    </li>
+  );
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Meetings and deadlines</h1>
-          <p>Every meeting with its minutes and summary, and the dates that matter: meetings, action items, tender closing dates and reports due.</p>
-        </div>
-        {data.canSchedule && (
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            New meeting
-          </button>
+    <div className="page ld">
+      <PageHead
+        title="Meetings and deadlines"
+        sub="Every meeting with its minutes and summary, and the dates that matter: meetings, action items, tender closing dates and reports due."
+        actions={
+          data.canSchedule && (
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" /> New meeting
+            </button>
+          )
+        }
+      />
+      <Stats>
+        <Stat label="Dates in next 60 days" value={data.deadlines.length} icon={<CalendarBlankIcon />} tone="info" onClick={() => setTab('calendar')} />
+        <Stat
+          label="Action items overdue"
+          value={data.overdueActions.length}
+          tone={data.overdueActions.length ? 'crit' : 'ok'}
+          icon={<ClockCountdownIcon />}
+        />
+        <Stat label="Held, no minutes yet" value={noMinutes} tone={noMinutes ? 'warn' : 'ok'} icon={<NotePencilIcon />} onClick={() => setTab('meetings')} />
+        <Stat
+          label="Within 24 hours, pre-brief not done"
+          value={data.prepNotReady}
+          tone={data.prepNotReady ? 'crit' : 'ok'}
+          icon={<ClipboardTextIcon />}
+          onClick={() => setTab('meetings')}
+        />
+        {data.doa && (
+          <Stat label="Summaries to check" value={toCheck} tone={toCheck ? 'warn' : 'ok'} icon={<ChecksIcon />} onClick={() => setTab('meetings')} />
         )}
-      </div>
-      <div className="kpis">
-        <Kpi label="Dates in next 60 days" value={data.deadlines.length} />
-        <Kpi label="Action items overdue" value={data.overdueActions.length} tone={data.overdueActions.length ? 'crit' : 'ok'} />
-        <Kpi label="Held, no minutes yet" value={noMinutes} tone={noMinutes ? 'warn' : 'ok'} />
-        <Kpi label="Within 24 hours, pre-brief not done" value={data.prepNotReady} tone={data.prepNotReady ? 'crit' : 'ok'} />
-        {data.doa && <Kpi label="Summaries to check" value={toCheck} tone={toCheck ? 'warn' : 'ok'} />}
-      </div>
+      </Stats>
       <div className="tabbar" role="tablist" aria-label="Meetings sections">
         <button role="tab" aria-selected={tab === 'calendar'} onClick={() => setTab('calendar')}>
           Calendar
@@ -116,65 +174,70 @@ export function MeetingsView() {
         </button>
       </div>
       {tab === 'calendar' && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Next 60 days</h3>
+        <Card
+          title="Next 60 days"
+          actions={
             <button className="btn btn-sm" disabled={!data.deadlines.length} onClick={() => download(data.deadlines, 'prima-deadlines.ics')}>
               Add all to Outlook
             </button>
-          </div>
-          <div className="list">
-            {data.deadlines.length === 0 && <div className="empty">Nothing in the next 60 days.</div>}
-            {data.deadlines.map((d, i) => (
-              <div key={i} className="list-item" style={{ alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{d.title}</div>
-                  <div className="muted small">
-                    {dateLabel(d.date)}
-                    {d.start ? ` · ${hhmm(d.start)}–${hhmm(d.end)}` : ''} · {d.detail}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: 4,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Chip tone={KIND[d.kind].tone}>{KIND[d.kind].label}</Chip>
-                  <button className="btn btn-sm" aria-label={`Add ${d.title} to Outlook`} onClick={() => download([d], 'prima-date.ics')}>
-                    Outlook
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="muted small" style={{ padding: '8px 12px' }}>
-            Opens as a calendar file in Outlook, with a reminder the day before. Syncing straight into the Outlook calendar needs the Microsoft 365 connection,
-            which comes with the live system.
-          </p>
-        </section>
+          }
+          footer={
+            <p className="muted small ld-foot-text">
+              Opens as a calendar file in Outlook, with a reminder the day before. Syncing straight into the Outlook calendar needs the Microsoft 365
+              connection, which comes with the live system.
+            </p>
+          }
+          flush
+        >
+          {data.deadlines.length === 0 ? (
+            <Empty title="Nothing in the next 60 days." />
+          ) : (
+            <ul className="ld-days">
+              {days.map(([date, items]) => (
+                <li key={date} className="ld-day">
+                  <DateLeaf date={date} />
+                  <ul className="ld-day-items">
+                    {items.map((d, i) => (
+                      <li key={i} className="ld-day-item" data-kind={d.kind}>
+                        <span className="ld-row-main">
+                          <span className="ld-row-title">{d.title}</span>
+                          <span className="ld-row-meta">
+                            {dateLabel(d.date)}
+                            {d.start ? ` · ${hhmm(d.start)}–${hhmm(d.end)}` : ''} · {d.detail}
+                          </span>
+                        </span>
+                        <span className="ld-row-aside">
+                          <Chip tone={KIND[d.kind].tone}>{KIND[d.kind].label}</Chip>
+                          <button className="btn btn-sm btn-ghost" aria-label={`Add ${d.title} to Outlook`} onClick={() => download([d], 'prima-date.ics')}>
+                            Outlook
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       )}
-      {tab === 'meetings' && (
-        <section className="panel">
-          <div className="list">
-            {data.rows.length === 0 && <div className="empty">No meetings yet.</div>}
-            {data.rows.map((r) => (
-              <button key={r.meeting.id} className="list-item list-button" onClick={() => setOpen(r.meeting.id)}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{r.meeting.title}</div>
-                  <div className="muted small">
-                    {dateLabel(r.meeting.start.slice(0, 10))} {hhmm(r.meeting.start)} · {r.companyName} · {MEETING_KIND[r.meeting.kind]}
-                  </div>
-                </div>
-                <MeetingChip r={r} />
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      {tab === 'meetings' &&
+        (data.rows.length === 0 ? (
+          <Card>
+            <Empty title="No meetings yet." />
+          </Card>
+        ) : (
+          <>
+            <Card title="Upcoming" actions={<Chip tone="info">{upcoming.length}</Chip>} flush>
+              {upcoming.length === 0 ? <Empty title="No meetings coming up." /> : <ul className="ld-rows">{upcoming.map(meetingRow)}</ul>}
+            </Card>
+            {past.length > 0 && (
+              <Card title="Past meetings" sub="Minutes, summaries and action items" actions={<Chip tone="neutral">{past.length}</Chip>} flush>
+                <ul className="ld-rows">{past.map(meetingRow)}</ul>
+              </Card>
+            )}
+          </>
+        ))}
       {row && <MeetingDrawer r={row} reader={data.reader} onClose={() => setOpen(null)} />}
       {creating && <NewMeeting doa={data.doa} onClose={() => setCreating(false)} />}
     </div>
@@ -201,124 +264,175 @@ function MeetingDrawer({ r, reader, onClose }: { r: Row; reader: Meetings['reade
   const past = m.start <= new Date().toISOString();
   return (
     <Drawer title={m.title} sub={`${r.companyName} · ${dateTimeLabel(m.start)} · ${m.location}`} onClose={onClose}>
-      <section>
-        <div className="muted small">Organised by {m.organiser}</div>
-        {m.attendees.length > 0 && <div className="small">Attending: {m.attendees.join(', ')}</div>}
-      </section>
-      {r.carried.length > 0 && (
-        <section>
-          <h3>Open actions from the last meeting</h3>
-          <ul className="small" style={{ margin: 0, paddingLeft: 20 }}>
-            {r.carried.map((a, i) => (
-              <li key={i}>
-                {a.text} · {a.owner}
-                {a.due ? ` · due ${a.due}` : ''}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <section>
-        <h3>Agenda</h3>
-        {r.agendaItems.length === 0 ? (
-          <div className="empty">No agenda given.</div>
-        ) : (
-          <ol className="small" style={{ margin: 0, paddingLeft: 20 }}>
-            {r.agendaItems.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
-          </ol>
-        )}
-      </section>
-      {m.status === 'scheduled' && <PrepChecklist r={r} />}
-      {m.summary && (
-        <section>
-          <h3>Summary {m.summary.checkedBy ? <Chip tone="ok">Checked by {m.summary.checkedBy}</Chip> : <Chip tone="warn">Not checked yet</Chip>}</h3>
-          <p>{m.summary.text}</p>
-          <div className="muted small">{m.summary.reader}</div>
-          <h3>Action items</h3>
-          <div className="list">
-            {m.summary.actions.length === 0 && <div className="empty">No action items found.</div>}
-            {m.summary.actions.map((a, i) => (
-              <div key={i} className="list-item">
-                <div>
-                  <div
-                    style={{
-                      textDecoration: a.done ? 'line-through' : undefined,
-                    }}
-                  >
-                    {a.text}
-                  </div>
-                  <div className="muted small">
-                    {a.owner}
-                    {a.due ? ` · by ${dateLabel(a.due)}` : ''}
-                  </div>
-                </div>
-                {r.canRun ? (
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy}
-                    onClick={() => act.run(() => api.setMeetingAction(m.id, i, !a.done), a.done ? 'Reopened.' : 'Marked done.')}
-                  >
-                    {a.done ? 'Reopen' : 'Done'}
-                  </button>
-                ) : (
-                  <Chip tone={a.done ? 'ok' : 'warn'}>{a.done ? 'Done' : 'Open'}</Chip>
-                )}
-              </div>
-            ))}
+      <div className="ld-detail">
+        <section className="ld-detail-sec">
+          <div className="ld-detail-top">
+            <MeetingChip r={r} />
+            <Chip tone="neutral">{MEETING_KIND[m.kind]}</Chip>
           </div>
-          {r.canCheck && (
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ marginTop: 8 }}
-              disabled={act.busy}
-              onClick={() => act.run(() => api.checkMeetingSummary(m.id, {}), 'Summary checked.')}
-            >
-              Summary is right
-            </button>
+          <Facts
+            items={[
+              ['When', `${dateTimeLabel(m.start)}–${hhmm(m.end)}`],
+              ['Where', m.location || '–'],
+              ['Organised by', m.organiser],
+              ['Company', r.companyName],
+            ]}
+          />
+          {m.attendees.length > 0 && (
+            <div className="ld-attendees">
+              <span className="label">Attending</span>
+              <ul className="ld-people">
+                {m.attendees.map((a, i) => (
+                  <li key={i}>
+                    <Person name={a} size={26} />
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
-      )}
-      {m.minutes && (
-        <section>
-          <h3>Minutes</h3>
-          <div className="muted small">
-            {m.minutes.by}, {dateTimeLabel(m.minutes.at)}
-          </div>
-          <pre className="small" style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
-            {m.minutes.text}
-          </pre>
+
+        {r.carried.length > 0 && (
+          <section className="ld-detail-sec">
+            <h3>Open actions from the last meeting</h3>
+            <ul className="ld-actionlist">
+              {r.carried.map((a, i) => (
+                <li key={i} className="ld-action-item">
+                  <span className="ld-row-main">
+                    <span className="ld-row-text">{a.text}</span>
+                    <span className="ld-action-who">
+                      <Person name={a.owner} size={22} />
+                      {a.due && <span className="muted small">due {a.due}</span>}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="ld-detail-sec">
+          <h3>Agenda</h3>
+          {r.agendaItems.length === 0 ? (
+            <p className="muted small">No agenda given.</p>
+          ) : (
+            <ol className="ld-agenda">
+              {r.agendaItems.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ol>
+          )}
         </section>
-      )}
-      {!m.minutes && r.canRun && past && (
-        <section>
-          <h3>Add the minutes</h3>
-          <textarea
-            className="input"
-            rows={8}
-            aria-label="Minutes"
-            placeholder={'Paste the minutes. Start action items with "Action:" and end with (Owner, by YYYY-MM-DD).'}
-            value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
-          />
-          <div className="muted small">
-            {reader.usesAi
-              ? `The AI agent (${reader.name}) drafts the summary and action items.`
-              : 'Test version: a simple reader picks the first points and the "Action:" lines; the AI agent is not connected yet.'}
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            style={{ marginTop: 8 }}
-            disabled={act.busy || minutes.trim().length < 20}
-            onClick={() => act.run(() => api.addMinutes(m.id, minutes), 'Minutes saved and summarised.')}
-          >
-            Save minutes
-          </button>
-        </section>
-      )}
-      {!m.minutes && !past && <p className="muted">Minutes are added after the meeting.</p>}
-      <ErrorNotice error={act.error} />
+
+        {m.status === 'scheduled' && <PrepChecklist r={r} />}
+
+        {m.summary && (
+          <section className="ld-detail-sec">
+            <div className="ld-detail-h">
+              <h3>Summary</h3>
+              {m.summary.checkedBy ? <Chip tone="ok">Checked by {m.summary.checkedBy}</Chip> : <Chip tone="warn">Not checked yet</Chip>}
+            </div>
+            <p className="ld-prose">{m.summary.text}</p>
+            <p className="muted small">{m.summary.reader}</p>
+            {r.canCheck && (
+              <div>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={act.busy}
+                  onClick={() => act.run(() => api.checkMeetingSummary(m.id, {}), 'Summary checked.')}
+                >
+                  Summary is right
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {m.summary && (
+          <section className="ld-detail-sec">
+            <div className="ld-detail-h">
+              <h3>Action items</h3>
+              <Chip tone={m.summary.actions.some((a) => !a.done) ? 'warn' : 'ok'}>
+                {m.summary.actions.filter((a) => a.done).length} of {m.summary.actions.length} done
+              </Chip>
+            </div>
+            {m.summary.actions.length === 0 ? (
+              <p className="muted small">No action items found.</p>
+            ) : (
+              <ul className="ld-actionlist">
+                {m.summary.actions.map((a, i) => (
+                  <li key={i} className="ld-action-item" data-done={a.done}>
+                    <span className="ld-row-main">
+                      <span className="ld-row-text ld-action-text">{a.text}</span>
+                      <span className="ld-action-who">
+                        <Person name={a.owner} size={22} />
+                        {a.due && <span className="muted small">by {dateLabel(a.due)}</span>}
+                      </span>
+                    </span>
+                    <span className="ld-row-aside">
+                      {r.canRun ? (
+                        <button
+                          className="btn btn-sm"
+                          disabled={act.busy}
+                          onClick={() => act.run(() => api.setMeetingAction(m.id, i, !a.done), a.done ? 'Reopened.' : 'Marked done.')}
+                        >
+                          {a.done ? 'Reopen' : 'Done'}
+                        </button>
+                      ) : (
+                        <Chip tone={a.done ? 'ok' : 'warn'}>{a.done ? 'Done' : 'Open'}</Chip>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {m.minutes && (
+          <section className="ld-detail-sec">
+            <div className="ld-detail-h">
+              <h3>Minutes</h3>
+              <span className="muted small">
+                {m.minutes.by}, {dateTimeLabel(m.minutes.at)}
+              </span>
+            </div>
+            <pre className="ld-minutes">{m.minutes.text}</pre>
+          </section>
+        )}
+
+        {!m.minutes && r.canRun && past && (
+          <section className="ld-detail-sec">
+            <label className="field">
+              <span className="label">Add the minutes</span>
+              <textarea
+                className="textarea"
+                rows={8}
+                aria-label="Minutes"
+                placeholder={'Paste the minutes. Start action items with "Action:" and end with (Owner, by YYYY-MM-DD).'}
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+              />
+            </label>
+            <p className="muted small">
+              {reader.usesAi
+                ? `The AI agent (${reader.name}) drafts the summary and action items.`
+                : 'Test version: a simple reader picks the first points and the "Action:" lines; the AI agent is not connected yet.'}
+            </p>
+            <div>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || minutes.trim().length < 20}
+                onClick={() => act.run(() => api.addMinutes(m.id, minutes), 'Minutes saved and summarised.')}
+              >
+                Save minutes
+              </button>
+            </div>
+          </section>
+        )}
+        {!m.minutes && !past && <p className="muted small">Minutes are added after the meeting.</p>}
+        <ErrorNotice error={act.error} />
+      </div>
     </Drawer>
   );
 }
@@ -329,58 +443,57 @@ function PrepChecklist({ r }: { r: Row }) {
   const m = r.meeting;
   const done = r.prep.filter((x) => x.done).length;
   return (
-    <section>
-      <h3>
-        Pre-briefing checklist{' '}
+    <section className="ld-detail-sec">
+      <div className="ld-detail-h">
+        <h3>Pre-briefing checklist</h3>
         <Chip tone={r.prepState === 'ready' ? 'ok' : r.prepState === 'late' ? 'crit' : 'warn'}>
           {done} of {r.prep.length} done
         </Chip>
-      </h3>
+      </div>
+      {r.prep.length > 0 && (
+        <span className="ld-bar" aria-hidden="true">
+          <span style={{ width: `${Math.round((done / r.prep.length) * 100)}%` }} />
+        </span>
+      )}
       {r.prepState === 'late' && (
         <div className="notice" data-tone="warn">
           The meeting is within 24 hours and the pre-brief is not finished.
         </div>
       )}
-      <div className="list">
+      <ul className="ld-checklist">
         {r.prep.map((x, i) => (
-          <label
-            key={i}
-            className="list-item"
-            style={{
-              gap: 8,
-              justifyContent: 'flex-start',
-              alignItems: 'flex-start',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={x.done}
-              disabled={!r.canRun || act.busy}
-              onChange={(e) =>
-                act.run(
-                  () =>
-                    api.setMeetingPrep(m.id, {
-                      index: i,
-                      done: e.target.checked,
-                    }),
-                  e.target.checked ? 'Ticked.' : 'Unticked.',
-                )
-              }
-            />
-            <div style={{ minWidth: 0 }}>
-              <div>{x.label}</div>
-              {x.done && x.by && (
-                <div className="muted small">
-                  {x.by}
-                  {x.at ? `, ${dateTimeLabel(x.at)}` : ''}
-                </div>
-              )}
-            </div>
-          </label>
+          <li key={i}>
+            <label className="ld-check" data-done={x.done}>
+              <input
+                type="checkbox"
+                checked={x.done}
+                disabled={!r.canRun || act.busy}
+                onChange={(e) =>
+                  act.run(
+                    () =>
+                      api.setMeetingPrep(m.id, {
+                        index: i,
+                        done: e.target.checked,
+                      }),
+                    e.target.checked ? 'Ticked.' : 'Unticked.',
+                  )
+                }
+              />
+              <span className="ld-check-text">
+                <span>{x.label}</span>
+                {x.done && x.by && (
+                  <span className="muted small">
+                    {x.by}
+                    {x.at ? `, ${dateTimeLabel(x.at)}` : ''}
+                  </span>
+                )}
+              </span>
+            </label>
+          </li>
         ))}
-      </div>
+      </ul>
       {r.canRun && (
-        <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <div className="ld-inline-add">
           <input className="input" aria-label="Add a checklist item" placeholder="Add your own item" value={add} onChange={(e) => setAdd(e.target.value)} />
           <button
             className="btn btn-sm"
@@ -419,7 +532,7 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
   const act = useAction();
   return (
     <Drawer title="New meeting" onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="ld-editor">
         {doa && (
           <label className="field">
             <span className="label">For</span>
@@ -452,23 +565,21 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
             ))}
           </select>
         </label>
-        <div className="grid-2">
+        <div className="ld-form ld-form-3">
           <label className="field">
             <span className="label">Date</span>
             <input className="input" type="date" aria-label="Date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
-          <div className="row" style={{ gap: 6 }}>
-            <label className="field">
-              <span className="label">From</span>
-              <input className="input" type="time" aria-label="Start time" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </label>
-            <label className="field">
-              <span className="label">To</span>
-              <input className="input" type="time" aria-label="End time" value={to} onChange={(e) => setTo(e.target.value)} />
-            </label>
-          </div>
+          <label className="field">
+            <span className="label">From</span>
+            <input className="input" type="time" aria-label="Start time" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="label">To</span>
+            <input className="input" type="time" aria-label="End time" value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
         </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="ld-form">
           <label className="field">
             <span className="label">Repeats</span>
             <select className="select" aria-label="Repeats" value={repeat} onChange={(e) => setRepeat(e.target.value as keyof typeof REPEAT)}>
@@ -512,7 +623,7 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
         <label className="field">
           <span className="label">Agenda, one item per line</span>
           <textarea
-            className="input"
+            className="textarea"
             rows={4}
             aria-label="Agenda"
             placeholder={'1. Actions from the last meeting\n2. …'}
@@ -522,7 +633,10 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
         </label>
         <p className="muted small">A pre-briefing checklist for this kind of meeting is added when you save. Tick it off before the meeting.</p>
         <ErrorNotice error={act.error} />
-        <div>
+        <div className="ld-sticky ld-actions">
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
           <button
             className="btn btn-primary"
             disabled={act.busy || !title.trim() || !agenda.trim()}

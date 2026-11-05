@@ -37,7 +37,7 @@ export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
           </div>
         </div>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div className="row fin-mb">
         <select className="select" aria-label="Month" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })}>
           {ic.periods.map((p) => (
             <option key={p}>{p}</option>
@@ -94,8 +94,8 @@ export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
           const key = `${p.period}|${p.withId}|${p.kind}`;
           const [tone, label] = STATUS[p.status];
           return (
-            <div key={key} className="list-item" style={{ display: 'block' }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div key={key} className="list-item fin-block">
+              <div className="row fin-between">
                 <div>
                   <strong>
                     {p.period} · {p.with} · {KIND[p.kind]}
@@ -115,7 +115,7 @@ export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
                 <Chip tone={tone}>{label}</Chip>
               </div>
               {p.status === 'differs' && (
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                <div className="row fin-mt">
                   {explain?.key === key ? (
                     <>
                       <input
@@ -183,7 +183,7 @@ export function CashForecast({ v, co }: { v: FinControls; co: Co }) {
         </div>
       )}
       {adding && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div className="row fin-mb">
           <select className="select" aria-label="In or out" value={f.direction} onChange={(e) => setF({ ...f, direction: e.target.value })}>
             <option value="in">Money in</option>
             <option value="out">Money out</option>
@@ -215,20 +215,20 @@ export function CashForecast({ v, co }: { v: FinControls; co: Co }) {
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <div style={{ overflowX: 'auto' }}>
+      <div className="fin-scroll">
         <table className="table small">
           <thead>
             <tr>
               <th>Week of</th>
-              <th style={{ textAlign: 'right' }}>Opening</th>
-              <th style={{ textAlign: 'right' }}>In</th>
-              <th style={{ textAlign: 'right' }}>Out</th>
-              <th style={{ textAlign: 'right' }}>Closing</th>
+              <th className="fin-num">Opening</th>
+              <th className="fin-num">In</th>
+              <th className="fin-num">Out</th>
+              <th className="fin-num">Closing</th>
             </tr>
           </thead>
           <tbody>
             {c.weeks.map((w) => (
-              <tr key={w.week} onClick={() => setOpen(open === w.week ? null : w.week)} style={{ cursor: 'pointer' }}>
+              <tr className="fin-click" key={w.week} onClick={() => setOpen(open === w.week ? null : w.week)}>
                 <td>
                   {dateLabel(w.from)}
                   {open === w.week && (
@@ -242,10 +242,10 @@ export function CashForecast({ v, co }: { v: FinControls; co: Co }) {
                     </div>
                   )}
                 </td>
-                <td style={{ textAlign: 'right' }}>{rm(w.opening)}</td>
-                <td style={{ textAlign: 'right' }}>{rm(w.moneyIn)}</td>
-                <td style={{ textAlign: 'right' }}>{rm(w.moneyOut)}</td>
-                <td style={{ textAlign: 'right', color: w.closing < 0 ? 'var(--crit, #b3261e)' : undefined }}>{rm(w.closing)}</td>
+                <td className="fin-num">{rm(w.opening)}</td>
+                <td className="fin-num">{rm(w.moneyIn)}</td>
+                <td className="fin-num">{rm(w.moneyOut)}</td>
+                <td className="fin-num" data-neg={w.closing < 0 ? 'yes' : undefined}>{rm(w.closing)}</td>
               </tr>
             ))}
           </tbody>
@@ -253,7 +253,7 @@ export function CashForecast({ v, co }: { v: FinControls; co: Co }) {
       </div>
       <div className="muted small">Press a week to see what is in it.</div>
       {c.lines.length > 0 && (
-        <div className="muted small" style={{ marginTop: 6 }}>
+        <div className="muted small fin-mt">
           Lines added by Finance:{' '}
           {c.lines.map((l) => (
             <span key={l.id}>
@@ -270,7 +270,7 @@ export function CashForecast({ v, co }: { v: FinControls; co: Co }) {
           ))}
         </div>
       )}
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+      <div className="row fin-mt">
         <span className="muted small">
           {c.review ? `Last reviewed by ${c.review.by} on ${dateLabel(c.review.at.slice(0, 10))}: ${c.review.comment}` : 'Not reviewed yet.'}
           {c.reviewDue ? ' Review due this week.' : ''}

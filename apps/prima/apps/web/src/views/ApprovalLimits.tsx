@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { Chip, ErrorNotice, Loading, useAction, useLoad } from '../ui';
+import '../styles/gov.css';
 
 // Approval value limits (Fauzan, 3 Nov 2026: "will set later in the app. create setting button in the app for ceo to
 // decide"). Empty means no limit: the COO approves every staff claim, and the COO and the CEO approve every purchase.
@@ -33,65 +34,70 @@ export function ApprovalLimitsPanel() {
       reload();
     });
   return (
-    <section className="panel" aria-labelledby="limits-title">
-      <div className="panel-head">
-        <h2 id="limits-title">Approval limits</h2>
-        <Chip tone={data.claimsMax == null && data.purchasesMax == null ? 'info' : 'ok'}>{data.set ? `Set by ${data.set.by}` : 'Not set'}</Chip>
-      </div>
-      <p className="muted small">
-        Small amounts you choose skip a leader's step. Empty means no limit: the COO approves every staff claim, and the COO and the CEO approve
-        every purchase. HR's check, the company head's verification and Procurement's three quotes always stay.
-      </p>
-      <div className="list">
-        <div className="list-item">
-          <div>
-            <div style={{ fontWeight: 600 }}>Staff claims final without the COO, up to</div>
-            <div className="muted small">After HR checks and the company head verifies</div>
-          </div>
-          <strong>{rm(data.claimsMax)}</strong>
+    <section className="k-card" aria-labelledby="limits-title">
+      <div className="k-card-head">
+        <div className="k-card-title">
+          <h2 id="limits-title">Approval limits</h2>
         </div>
-        <div className="list-item">
-          <div>
-            <div style={{ fontWeight: 600 }}>Purchases approved by the COO alone, up to</div>
-            <div className="muted small">Above this, the CEO approves too</div>
-          </div>
-          <strong>{rm(data.purchasesMax)}</strong>
+        <div className="k-card-actions">
+          <Chip tone={data.claimsMax == null && data.purchasesMax == null ? 'info' : 'ok'}>{data.set ? `Set by ${data.set.by}` : 'Not set'}</Chip>
+          {data.canSet && !open && (
+            <button className="btn btn-sm" onClick={start}>
+              Change limits
+            </button>
+          )}
         </div>
       </div>
-      {data.set && (
-        <div className="muted small" style={{ marginTop: 6 }}>
-          Last change: {data.set.by}, {data.set.at.slice(0, 16).replace('T', ' ')}: {data.set.comment}
-        </div>
-      )}
-      {data.canSet && !open && (
-        <div style={{ marginTop: 8 }}>
-          <button className="btn btn-sm" onClick={start}>
-            Change limits
-          </button>
-        </div>
-      )}
-      {data.canSet && open && (
-        <div className="form" style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-          <label className="small">
-            Staff claims without the COO, up to RM (empty = no limit)
-            <input className="input" inputMode="decimal" aria-label="Staff claims limit" value={claims} onChange={(e) => setClaims(e.target.value)} />
-          </label>
-          <label className="small">
-            Purchases without the CEO, up to RM (empty = no limit)
-            <input className="input" inputMode="decimal" aria-label="Purchases limit" value={purchases} onChange={(e) => setPurchases(e.target.value)} />
-          </label>
-          <input className="input" aria-label="Why" placeholder="Why (needed)" value={comment} onChange={(e) => setComment(e.target.value)} />
-          <ErrorNotice error={act.error} />
-          <div className="row">
-            <button className="btn btn-primary btn-sm" disabled={act.busy || comment.trim().length < 3} onClick={save}>
-              Save
-            </button>
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => setOpen(false)}>
-              Cancel
-            </button>
+      <div className="k-card-body gv-stack-sm">
+        <p className="gv-intro">
+          Small amounts you choose skip a leader's step. Empty means no limit: the COO approves every staff claim, and the COO and the CEO approve
+          every purchase. HR's check, the company head's verification and Procurement's three quotes always stay.
+        </p>
+        <div className="gv-limits">
+          <div className="gv-limit">
+            <span className="gv-limit-label">Staff claims final without the COO, up to</span>
+            <span className="gv-limit-value">{rm(data.claimsMax)}</span>
+            <span className="muted small">After HR checks and the company head verifies</span>
+          </div>
+          <div className="gv-limit">
+            <span className="gv-limit-label">Purchases approved by the COO alone, up to</span>
+            <span className="gv-limit-value">{rm(data.purchasesMax)}</span>
+            <span className="muted small">Above this, the CEO approves too</span>
           </div>
         </div>
-      )}
+        {data.set && (
+          <p className="muted small">
+            Last change: {data.set.by}, {data.set.at.slice(0, 16).replace('T', ' ')}: {data.set.comment}
+          </p>
+        )}
+        {data.canSet && open && (
+          <div className="gv-box">
+            <div className="gv-form">
+              <label className="field">
+                <span className="label">Staff claims without the COO, up to RM (empty = no limit)</span>
+                <input className="input" inputMode="decimal" aria-label="Staff claims limit" value={claims} onChange={(e) => setClaims(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="label">Purchases without the CEO, up to RM (empty = no limit)</span>
+                <input className="input" inputMode="decimal" aria-label="Purchases limit" value={purchases} onChange={(e) => setPurchases(e.target.value)} />
+              </label>
+              <label className="field gv-span">
+                <span className="label">Why</span>
+                <input className="input" aria-label="Why" placeholder="Why (needed)" value={comment} onChange={(e) => setComment(e.target.value)} />
+              </label>
+            </div>
+            <ErrorNotice error={act.error} />
+            <div className="gv-form-foot">
+              <button className="btn btn-primary btn-sm" disabled={act.busy || comment.trim().length < 3} onClick={save}>
+                Save
+              </button>
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

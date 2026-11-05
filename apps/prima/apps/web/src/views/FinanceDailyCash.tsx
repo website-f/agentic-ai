@@ -65,17 +65,16 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
   const set = (i: number, patch: Partial<Person>) => onChange(people.map((p, k) => (k === i ? { ...p, ...patch } : p)));
   const total = people.reduce((n, p) => n + p.dailyRate * p.days.filter((d) => all.includes(d)).length, 0);
   return (
-    <div className="stack" style={{ gap: 6 }}>
+    <div className="stack fin-gap">
       {people.map((p, i) => (
-        <div key={i} className="list-item" style={{ display: 'block' }}>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div key={i} className="list-item fin-block">
+          <div className="row">
             <input className="input" aria-label={`Person ${i + 1} name`} placeholder="Name" value={p.name} onChange={(e) => set(i, { name: e.target.value })} />
             <input
-              className="input"
+              className="input fin-w-sm"
               aria-label={`Person ${i + 1} last 4 of IC or passport`}
               placeholder="Last 4 of IC / passport"
               maxLength={4}
-              style={{ width: 120 }}
               value={p.idLast4}
               onChange={(e) => set(i, { idLast4: e.target.value })}
             />
@@ -87,12 +86,11 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
               onChange={(e) => set(i, { work: e.target.value })}
             />
             <input
-              className="input"
+              className="input fin-w-sm"
               type="number"
               step="0.01"
               aria-label={`Person ${i + 1} daily rate RM`}
               placeholder="Daily rate RM"
-              style={{ width: 120 }}
               value={p.dailyRate || ''}
               onChange={(e) => set(i, { dailyRate: Number(e.target.value) || 0 })}
             />
@@ -100,7 +98,7 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
               Remove
             </button>
           </div>
-          <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }} role="group" aria-label={`Days for person ${i + 1}`}>
+          <div className="row fin-mt" role="group" aria-label={`Days for person ${i + 1}`}>
             <span className="muted small">Days ({p.days.filter((d) => all.includes(d)).length}):</span>
             {all.map((d) => {
               const on = p.days.includes(d);
@@ -127,15 +125,14 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
         </div>
       ))}
       <textarea
-        className="input"
+        className="input fin-full"
         rows={2}
-        style={{ width: '100%' }}
         aria-label="Add people"
         placeholder={'Add people, one per line: name; last 4 of IC or passport; work or site; daily rate\nAli bin Abu; 1234; Orchard harvest; 120'}
         value={paste}
         onChange={(e) => setPaste(e.target.value)}
       />
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="row fin-center">
         <button
           className="btn btn-sm"
           disabled={!paste.trim() || !all.length}
@@ -191,8 +188,8 @@ export function DailyCash({ v, co }: { v: FinControls; co: Co }) {
       </div>
       <FinGuide id="fin.dailycash.list" />
       {adding && (
-        <div className="stack" style={{ gap: 6, marginBottom: 8 }}>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="stack fin-gap fin-mb">
+          <div className="row">
             <select className="select" aria-label="Week or month" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })}>
               <option value="week">Week</option>
               <option value="month">Month</option>
@@ -215,7 +212,7 @@ export function DailyCash({ v, co }: { v: FinControls; co: Co }) {
             onChange={(e) => setF({ ...f, purpose: e.target.value })}
           />
           <PeopleEditor from={f.from} to={f.to} people={people} onChange={setPeople} />
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row">
             <button
               className="btn btn-primary btn-sm"
               disabled={act.busy || !f.from || !f.to || !f.purpose.trim() || !people.length}
@@ -268,8 +265,8 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
         .map((x) => ({ key: `${s.statement!.id}|${x.id}`, label: `${x.date} ${x.description} ${rm(-x.amount)}`, amount: -x.amount })),
     );
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <div>
           <strong>
             {dateLabel(l.from)} to {dateLabel(l.to)}
@@ -288,7 +285,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
               : ''}
           </div>
         </div>
-        <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        <div className="row">
           <Chip tone={tone}>{label}</Chip>
           {l.state.lateSettle && <Chip tone="crit">Not settled by {dateLabel(l.state.settleBy)}</Chip>}
           {l.withdrawals.some((w) => !w.statement) && <Chip tone="warn">Withdrawal not yet on the statement</Chip>}
@@ -321,7 +318,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
           })}
         </ul>
       </details>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="row">
         {l.status === 'draft' && btn('edit', l.returnedForChange ? 'Edit (returned by the FD)' : 'Edit')}
         {l.status === 'draft' && btn('submit', 'Send to the FD')}
         {l.status === 'to_approve' && btn('approve', 'Approve (FD)')}
@@ -334,9 +331,9 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
         {['draft', 'to_approve', 'approved'].includes(l.status) && l.withdrawals.length === 0 && btn('cancel', 'Cancel list')}
       </div>
       {mode === 'edit' && (
-        <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+        <div className="stack fin-gap fin-mt">
           <PeopleEditor from={l.from} to={l.to} people={people} onChange={setPeople} />
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row">
             <button
               className="btn btn-primary btn-sm"
               disabled={act.busy || !people.length}
@@ -351,7 +348,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
         </div>
       )}
       {mode && mode !== 'edit' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row fin-mt">
           {(mode === 'withdraw' || mode === 'handover') && (
             <input
               className="input"
@@ -497,7 +494,7 @@ function MineLine({ l }: { l: Mine }) {
   const person = l.people.find((p) => p.id === pay.personId);
   const unpaidDays = person ? person.days.filter((d) => !l.payouts.some((x) => x.personId === person.id && x.day === d)) : [];
   return (
-    <div className="list-item" style={{ display: 'block' }}>
+    <div className="list-item fin-block">
       <div>
         <strong>
           {dateLabel(l.from)} to {dateLabel(l.to)}
@@ -507,7 +504,7 @@ function MineLine({ l }: { l: Mine }) {
       {l.handovers
         .filter((h) => l.toConfirm.includes(h.id))
         .map((h) => (
-          <div key={h.id} className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <div key={h.id} className="row fin-mt">
             <span>
               Finance handed you {rm(h.amount)} on {dateLabel(h.on)}. Count it:
             </span>
@@ -538,7 +535,7 @@ function MineLine({ l }: { l: Mine }) {
           </div>
         ))}
       {l.status === 'with_collector' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row fin-mt">
           <select className="select" aria-label="Person" value={pay.personId} onChange={(e) => setPay({ ...pay, personId: e.target.value, day: '' })}>
             {l.people.map((p) => (
               <option key={p.id} value={p.id}>
@@ -583,7 +580,7 @@ function MineLine({ l }: { l: Mine }) {
         <p className="muted small">You have given back your cash on this list; Finance settles it once the other holder gives back theirs.</p>
       )}
       {l.status === 'with_collector' && !l.gaveBack && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row fin-mt">
           <span className="muted small">
             {l.giveBackDue ? 'The list has ended: give back the unpaid cash.' : 'Give back unpaid cash (at the end, or earlier):'}
           </span>

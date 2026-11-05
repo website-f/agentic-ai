@@ -1,0 +1,794 @@
+/* Work, far branches and staff self-service (Duty / My details, Clock, Staff clock, Requests, Memos). P75 redesign.
+   Colours come only from the theme variables in styles.css. */
+
+/* ---------- Layout ---------- */
+.ss-cols {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .ss-cols {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  }
+  .ss-cols[data-even] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ss-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+.ss-stack:empty {
+  display: none;
+}
+/* Panels drawn by shared components (Remote, HR, finance) keep their own look; only the spacing is set here. */
+.ss-stack > .panel,
+.ss-stack > section.panel {
+  margin: 0;
+}
+.ss-pad {
+  padding: 16px 18px;
+}
+.ss-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+}
+.ss-tools .k-search {
+  flex: 1 1 220px;
+}
+.ss-tools .seg {
+  flex-wrap: wrap;
+}
+.ss-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 80ch;
+}
+.ss-lead {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 80ch;
+}
+.ss-foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.ss-tabs {
+  flex-wrap: wrap;
+}
+.ss-count {
+  margin-left: 6px;
+  min-width: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+button[aria-selected='true'] .ss-count,
+button[aria-pressed='true'] .ss-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Rows ---------- */
+.ss-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ss-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+.ss-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: start;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  box-shadow: inset 3px 0 0 transparent;
+}
+button.ss-row {
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+button.ss-row:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+button.ss-row:disabled {
+  cursor: default;
+  opacity: 1;
+}
+button.ss-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.ss-row[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.ss-row[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.ss-row[data-tone='info'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.ss-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ss-row-title {
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ss-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+.ss-row .k-person-sub {
+  white-space: normal;
+}
+.ss-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.ss-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ss-meta svg {
+  flex: none;
+}
+.ss-strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ss-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ss-chev {
+  color: var(--muted);
+  align-self: center;
+}
+
+/* ---------- A task ---------- */
+.ss-task {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.ss-task[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.ss-task[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.ss-task-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ss-task-title {
+  font-weight: 600;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ss-task-top .chip {
+  flex: none;
+}
+.ss-done {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.ss-done-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.ss-high {
+  color: var(--warn);
+  font-weight: 600;
+}
+.ss-task .notice {
+  margin: 0;
+}
+
+/* ---------- Forms ---------- */
+.ss-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.ss-form-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.ss-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+.ss-grid-3 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ss-inline {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.ss-inline > .input,
+.ss-inline > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ss-inline > .btn {
+  flex: none;
+}
+.ss-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.ss-form .seg {
+  justify-self: start;
+  flex-wrap: wrap;
+}
+.ss-form-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.ss-form-foot .ss-note {
+  flex: 1 1 260px;
+}
+.ss-sub-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-2) 50%, var(--surface));
+}
+
+/* ---------- Drawer sections ---------- */
+.ss-sec {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.ss-sec + .ss-sec {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ss-sec-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.ss-boxed {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.ss-boxed .table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+/* ---------- Team people rows ---------- */
+.ss-person {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.ss-person .ss-row-main {
+  gap: 10px;
+}
+.ss-talk {
+  font-size: 0.82rem;
+  color: var(--warn);
+  font-weight: 550;
+}
+
+/* ---------- Checklists ---------- */
+.ss-checks {
+  display: grid;
+  gap: 8px;
+}
+.ss-check-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.ss-ticks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.84rem;
+}
+.ss-ticks li[data-ok='false'] {
+  color: var(--crit);
+}
+
+/* ---------- Hero status (My clock, My duty) ---------- */
+.ss-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px 20px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ss-hero[data-on] {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+}
+.ss-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.ss-hero[data-on] .ss-hero-icon {
+  background: var(--accent);
+  color: var(--on-primary);
+}
+.ss-hero-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ss-hero-kicker {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ss-hero-title {
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.6rem);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.ss-hero-sub {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.ss-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.ss-hero-more {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.ss-hero .notice {
+  margin: 0;
+}
+
+/* ---------- Roster and clock records ---------- */
+.ss-date {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  line-height: 1.05;
+  flex: none;
+}
+.ss-date b {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.ss-date small {
+  font-size: 0.66rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.ss-date[data-now] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ss-date[data-now] small {
+  color: var(--accent);
+}
+.ss-dated {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+.ss-times {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Staff clock board ---------- */
+.ss-board-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.5fr) auto;
+  align-items: center;
+}
+.ss-board-row .k-person {
+  max-width: 100%;
+}
+.ss-board-times {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.84rem;
+}
+.ss-times-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-variant-numeric: tabular-nums;
+}
+.ss-times-line > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ss-times-line svg {
+  color: var(--muted);
+}
+.ss-board-row[data-status='not_in'] .k-person-name {
+  color: var(--muted);
+  font-weight: 550;
+}
+.ss-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.ss-dot[data-tone='ok'] {
+  background: var(--ok);
+}
+.ss-dot[data-tone='warn'] {
+  background: var(--warn);
+}
+.ss-dot[data-tone='crit'] {
+  background: var(--crit);
+}
+.ss-dot[data-tone='info'] {
+  background: var(--accent);
+}
+.ss-dot[data-tone='unknown'] {
+  background: var(--unknown);
+}
+
+/* Clock record drawer */
+.ss-io {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.ss-io-col {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  font-size: 0.84rem;
+  min-width: 0;
+}
+.ss-photo {
+  width: 100%;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  display: block;
+}
+.ss-photo-sm {
+  max-width: 240px;
+}
+.ss-pings .list-item {
+  font-size: 0.84rem;
+  padding: 8px 4px;
+}
+.ss-gaps {
+  display: grid;
+  gap: 8px;
+}
+.ss-gaps .notice {
+  margin: 0;
+}
+
+/* Face approvals */
+.ss-face {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 16px 18px;
+}
+.ss-face img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+}
+.ss-face-noimg {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+/* ---------- Requests ---------- */
+.ss-amount {
+  font-size: 1.02rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ss-req-detail {
+  display: grid;
+  gap: 14px;
+  padding: 4px 18px 18px;
+}
+.ss-lines {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.ss-lines .table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+.ss-lines td.num,
+.ss-lines th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ss-line {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr);
+  gap: 8px;
+}
+.ss-decide {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ss-req .ss-row {
+  align-items: center;
+}
+
+/* ---------- Memos ---------- */
+.ss-memo[data-unread] .ss-row-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: middle;
+}
+.ss-memo-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+.ss-memo-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  max-width: 75ch;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ss-regions {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.ss-regions legend {
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.ss-region {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 0.86rem;
+}
+.ss-region-name {
+  font-weight: 600;
+  min-width: 9rem;
+}
+.ss-region label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+  .ss-row,
+  .ss-board-row {
+    padding: 14px 16px;
+  }
+  .ss-board-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .ss-board-row .ss-board-times {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .ss-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .ss-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 18px;
+  }
+  .ss-hero-side {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .ss-tools {
+    padding: 12px 16px;
+  }
+  .ss-tools .seg {
+    width: 100%;
+  }
+  .ss-line {
+    grid-template-columns: minmax(0, 1fr) 110px;
+  }
+  .ss-line > :last-child {
+    grid-column: 1 / -1;
+  }
+  .ss-face {
+    grid-template-columns: 1fr;
+  }
+  .ss-io {
+    grid-template-columns: 1fr;
+  }
+  .ss-row-side {
+    align-items: flex-end;
+  }
+  .ss-task,
+  .ss-pad {
+    padding: 14px 16px;
+  }
+}
+@media (max-width: 480px) {
+  .ss-inline {
+    flex-direction: column;
+  }
+  .ss-inline > .btn {
+    align-self: flex-start;
+  }
+}
+
+.ss-why {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+.ss-check-end {
+  align-self: end;
+  min-height: 40px;
+}
+.ss-rows-top {
+  border-top: 1px solid var(--line);
+}
+.ss-prefill-co {
+  width: auto;
+  max-width: 260px;
+  min-width: 0;
+}
+.ss-memo .ss-row {
+  align-items: center;
+}
+@media (min-width: 861px) {
+  .ss .k-stats {
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  }
+}
+/* Shared panels shown on these pages that start with a bare heading get the card padding. */
+.ss .panel > :is(h2, h3):first-child {
+  padding: 14px 18px 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+@media (max-width: 860px) {
+  .ss-board-row .ss-row-side {
+    max-width: 132px;
+  }
+  .ss-board-row .ss-row-side .chip {
+    white-space: normal;
+    text-align: left;
+    line-height: 1.3;
+    padding-block: 3px;
+  }
+}
+@media (max-width: 860px) {
+  .ss-req .ss-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ss-req .ss-row .ss-actions {
+    justify-content: flex-start;
+  }
+  .ss-req-detail {
+    padding: 4px 16px 16px;
+  }
+}

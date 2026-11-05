@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { ItImportKind, ItImportPreview } from '@prima/core';
 import { api } from '../api';
 import { Chip, ErrorNotice, useAction } from '../ui';
+import { Card, Steps } from '../kit';
 
 /**
  * The CEO's batch import of open IT work (Fauzan, 31 Oct 2026, task T9): give the rows, review the preview, approve the
@@ -102,154 +103,176 @@ export function ItImport() {
     reset();
   };
 
+  const stage = result ? 3 : preview ? 2 : text.trim() ? 1 : 0;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Import open IT work</h3>
-      </div>
-      <p className="muted small">
-        Paste rows copied from Excel with their heading row, or choose a CSV file. Check the preview, then approve the batch once. Only new items are
-        added; rows with errors or repeats are left out. If anything changes after the preview, approving stops and asks you to preview again. Use dummy rows until real data is approved.
-      </p>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-        <select
-          className="select"
-          disabled={locked}
-          aria-label="What to import"
-          value={kind}
-          onChange={(e) => edit(() => setKind(e.target.value as ItImportKind))}
-        >
-          <option value="tickets">Open help requests</option>
-          <option value="jobs">Open IT jobs</option>
-        </select>
-        <input
-          className="input"
-          disabled={locked}
-          aria-label="Where the rows come from"
-          placeholder="Where from: file name, email subject and date, or SharePoint link"
-          value={source}
-          onChange={(e) => edit(() => setSource(e.target.value))}
-        />
-        <input className="input" type="file" disabled={locked} accept=".csv,text/csv,text/plain" aria-label="CSV file" onChange={(e) => readFile(e.target.files?.[0])} />
-      </div>
-      <p className="muted small">Columns: {HEADINGS[kind]}.</p>
-      <textarea
-        className="textarea"
-        disabled={locked}
-        aria-label="Rows"
-        rows={8}
-        placeholder="Paste the rows here, heading row first"
-        value={text}
-        onChange={(e) => edit(() => setText(e.target.value))}
-      />
-      <div className="row" style={{ gap: 6, marginTop: 6 }}>
-        <button className="btn btn-sm" disabled={loading || locked || !text.trim() || source.trim().length < 3} onClick={doPreview}>
-          Preview
-        </button>
-      </div>
-      <ErrorNotice error={look.error} />
-      {preview && !result && (
-        <>
-          <p className="small" style={{ marginTop: 8 }}>
-            Columns read:{' '}
-            {Object.entries(preview.mapping)
-              .map(([f, h]) => `${h} → ${f}`)
-              .join(', ') || 'none'}
-            .
-          </p>
-          {preview.problems.map((p) => (
-            <p key={p} className="notice" data-tone="crit">
-              {p} Fix it in the sheet and preview again.
-            </p>
-          ))}
-          {preview.missingColumns.length > 0 && (
-            <p className="notice" data-tone="crit">
-              Missing columns: {preview.missingColumns.join(', ')}. Add them to the heading row and preview again.
-            </p>
-          )}
-          <div className="list">
-            {preview.rows.map((r) => {
-              const v = r.ticket ?? r.job;
-              const left = r.errors.length > 0 || !!r.duplicateOf;
-              return (
-                <div key={r.row} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                    <span className="muted small">Row {r.row}</span>
-                    {r.errors.length > 0 ? (
-                      <Chip tone="crit">Left out: error</Chip>
-                    ) : r.duplicateOf ? (
-                      <Chip tone="warn">Left out: repeats {r.duplicateOf}</Chip>
-                    ) : blocked ? (
-                      <Chip tone="crit">Not added until the table is fixed</Chip>
-                    ) : skip.includes(r.row) ? (
-                      <Chip tone="unknown">Left out by you</Chip>
-                    ) : (
-                      <Chip tone="ok">Will be added</Chip>
-                    )}
-                    <strong>{v?.title ?? '(not readable)'}</strong>
-                  </div>
-                  {r.ticket && (
-                    <span className="small">
-                      {r.ticket.priority} · {r.ticket.category} · for {r.ticket.raisedFor} by {r.ticket.channel.replace('_', ' ')} · raised {r.ticket.at.slice(0, 10)}
-                      {r.ticket.itPerson ? ` · with ${r.ticket.itPerson}` : ''}
-                    </span>
-                  )}
-                  {r.job && (
-                    <span className="small">
-                      {r.job.priority} · {r.job.kind} · {r.job.doer} · due {r.job.dueOn}
-                      {r.job.technical ? ' · IT Lead checks' : ''}
-                    </span>
-                  )}
-                  {v?.detail && (
-                    <span className="small" style={{ whiteSpace: 'pre-wrap' }}>
-                      Detail: {v.detail}
-                    </span>
-                  )}
-                  {r.errors.map((e) => (
-                    <span key={e} className="small" style={{ color: 'var(--crit, #b42318)' }}>
-                      {e}
-                    </span>
-                  ))}
-                  {r.warnings.map((w) => (
-                    <span key={w} className="muted small">
-                      {w}
-                    </span>
-                  ))}
-                  <span className="muted small">Source: {r.sourceRef}</span>
-                  {!left && (
-                    <label className="small">
-                      <input
-                        type="checkbox"
-                        checked={skip.includes(r.row)}
-                        disabled={locked}
-                        onChange={(e) => {
-                          if (pending.current.approve) return;
-                          const on = e.target.checked;
-                          setSkip((s) => (on ? [...s, r.row] : s.filter((x) => x !== r.row)));
-                        }}
-                      />{' '}
-                      Leave this row out
-                    </label>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-sm btn-primary" disabled={act.busy || loading || going === 0 || blocked} onClick={approve}>
+    <Card
+      title="Import open IT work"
+      sub="New items only. Nothing already in Prima changes."
+      footer={
+        preview && !result ? (
+          <>
+            <span className="muted small ix-foot-note">{preview.rows.length - going} left out</span>
+            <button className="btn btn-primary" disabled={act.busy || loading || going === 0 || blocked} onClick={approve}>
               Approve and add {going}
             </button>
-            <span className="muted small">{preview.rows.length - going} left out</span>
-          </div>
-          <ErrorNotice error={act.error} />
-        </>
-      )}
-      {result && (
-        <div className="notice" data-tone="ok" style={{ marginTop: 8 }}>
-          {result.already ? 'This batch was already imported: ' : 'Added: '}
-          {result.created.join(', ')}.{result.skipped.length ? ` Left out: ${result.skipped.map((s) => `row ${s.row} (${s.why})`).join('; ')}` : ''}
+          </>
+        ) : undefined
+      }
+    >
+      <div className="ix-stack">
+        <Steps
+          steps={[
+            { label: 'Give the rows', state: stage > 0 ? 'done' : 'now', note: 'Paste or choose a CSV' },
+            { label: 'Check the preview', state: stage > 1 ? 'done' : stage === 1 ? 'now' : 'todo' },
+            { label: 'Approve the batch once', state: stage > 2 ? 'done' : stage === 2 ? 'now' : 'todo' },
+          ]}
+        />
+        <p className="ix-meta">
+          Paste rows copied from Excel with their heading row, or choose a CSV file. Check the preview, then approve the batch once. Only new items are
+          added; rows with errors or repeats are left out. If anything changes after the preview, approving stops and asks you to preview again. Use dummy rows until real data is approved.
+        </p>
+        <div className="ix-fields">
+          <label className="field">
+            <span className="label">What to import</span>
+            <select
+              className="select"
+              disabled={locked}
+              aria-label="What to import"
+              value={kind}
+              onChange={(e) => edit(() => setKind(e.target.value as ItImportKind))}
+            >
+              <option value="tickets">Open help requests</option>
+              <option value="jobs">Open IT jobs</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Where the rows come from</span>
+            <input
+              className="input"
+              disabled={locked}
+              aria-label="Where the rows come from"
+              placeholder="Where from: file name, email subject and date, or SharePoint link"
+              value={source}
+              onChange={(e) => edit(() => setSource(e.target.value))}
+            />
+          </label>
+          <label className="field">
+            <span className="label">CSV file</span>
+            <input className="input" type="file" disabled={locked} accept=".csv,text/csv,text/plain" aria-label="CSV file" onChange={(e) => readFile(e.target.files?.[0])} />
+          </label>
         </div>
-      )}
-    </section>
+        <label className="field">
+          <span className="label">Rows</span>
+          <textarea
+            className="textarea"
+            disabled={locked}
+            aria-label="Rows"
+            rows={8}
+            placeholder="Paste the rows here, heading row first"
+            value={text}
+            onChange={(e) => edit(() => setText(e.target.value))}
+          />
+          <span className="muted small">Columns: {HEADINGS[kind]}.</span>
+        </label>
+        <div className="ix-actions">
+          <button className="btn" disabled={loading || locked || !text.trim() || source.trim().length < 3} onClick={doPreview}>
+            Preview
+          </button>
+        </div>
+        <ErrorNotice error={look.error} />
+        {preview && !result && (
+          <>
+            <p className="ix-meta">
+              Columns read:{' '}
+              {Object.entries(preview.mapping)
+                .map(([f, h]) => `${h} → ${f}`)
+                .join(', ') || 'none'}
+              .
+            </p>
+            {preview.problems.map((p) => (
+              <p key={p} className="notice" data-tone="crit">
+                {p} Fix it in the sheet and preview again.
+              </p>
+            ))}
+            {preview.missingColumns.length > 0 && (
+              <p className="notice" data-tone="crit">
+                Missing columns: {preview.missingColumns.join(', ')}. Add them to the heading row and preview again.
+              </p>
+            )}
+            <ul className="ix-rows ix-rows-boxed">
+              {preview.rows.map((r) => {
+                const v = r.ticket ?? r.job;
+                const left = r.errors.length > 0 || !!r.duplicateOf;
+                return (
+                  <li key={r.row} className="ix-import-row">
+                    <div className="ix-import-head">
+                      <span className="ix-meta">Row {r.row}</span>
+                      <strong>{v?.title ?? '(not readable)'}</strong>
+                      {r.errors.length > 0 ? (
+                        <Chip tone="crit">Left out: error</Chip>
+                      ) : r.duplicateOf ? (
+                        <Chip tone="warn">Left out: repeats {r.duplicateOf}</Chip>
+                      ) : blocked ? (
+                        <Chip tone="crit">Not added until the table is fixed</Chip>
+                      ) : skip.includes(r.row) ? (
+                        <Chip tone="unknown">Left out by you</Chip>
+                      ) : (
+                        <Chip tone="ok">Will be added</Chip>
+                      )}
+                    </div>
+                    {r.ticket && (
+                      <span className="small">
+                        {r.ticket.priority} · {r.ticket.category} · for {r.ticket.raisedFor} by {r.ticket.channel.replace('_', ' ')} · raised {r.ticket.at.slice(0, 10)}
+                        {r.ticket.itPerson ? ` · with ${r.ticket.itPerson}` : ''}
+                      </span>
+                    )}
+                    {r.job && (
+                      <span className="small">
+                        {r.job.priority} · {r.job.kind} · {r.job.doer} · due {r.job.dueOn}
+                        {r.job.technical ? ' · IT Lead checks' : ''}
+                      </span>
+                    )}
+                    {v?.detail && <span className="small ix-pre">Detail: {v.detail}</span>}
+                    {r.errors.map((e) => (
+                      <span key={e} className="small ix-crit">
+                        {e}
+                      </span>
+                    ))}
+                    {r.warnings.map((w) => (
+                      <span key={w} className="muted small">
+                        {w}
+                      </span>
+                    ))}
+                    <span className="muted small">Source: {r.sourceRef}</span>
+                    {!left && (
+                      <label className="ix-check small">
+                        <input
+                          type="checkbox"
+                          checked={skip.includes(r.row)}
+                          disabled={locked}
+                          onChange={(e) => {
+                            if (pending.current.approve) return;
+                            const on = e.target.checked;
+                            setSkip((s) => (on ? [...s, r.row] : s.filter((x) => x !== r.row)));
+                          }}
+                        />{' '}
+                        Leave this row out
+                      </label>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <ErrorNotice error={act.error} />
+          </>
+        )}
+        {result && (
+          <div className="notice" data-tone="ok">
+            {result.already ? 'This batch was already imported: ' : 'Added: '}
+            {result.created.join(', ')}.{result.skipped.length ? ` Left out: ${result.skipped.map((s) => `row ${s.row} (${s.why})`).join('; ')}` : ''}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

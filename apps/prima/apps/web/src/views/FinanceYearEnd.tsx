@@ -76,13 +76,13 @@ function WithholdingTax({ v, co }: { v: FinControls; co: Co }) {
           {adding ? 'Close' : 'Add'}
         </button>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         When the company pays a non-resident for services, royalty, interest or a contract, tax is withheld and paid to LHDN within one month. Prima works out
         the tax and the due day; late payment adds 10%.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Payment in Prima (fills the payee, amount and day)">
             <select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
               <option value="">Not in Prima: type it</option>
@@ -168,8 +168,8 @@ function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean 
         ? ['crit', 'Late']
         : ['info', `Due ${dateLabel(w.dueOn)}`];
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {w.payee} ({w.country}) · {rm(w.gross)} · tax {rm(w.tax)} at {w.rate}%{w.treaty ? ' (treaty)' : ''}
           <span className="muted">
@@ -178,7 +178,7 @@ function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean 
             {w.remitted ? ` · to LHDN ${dateLabel(w.remitted.on)}, receipt ${w.remitted.receipt}` : ''}
           </span>
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={chip[0]}>{chip[1]}</Chip>
           {!w.checked && (
             <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -188,7 +188,7 @@ function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean 
         </span>
       </div>
       {open && !w.remitted && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 8 }}>
+        <div className="row fin-pt fin-end">
           <Field label="Paid to LHDN on">
             <input className="input" type="date" value={f.on ?? ''} onChange={set('on')} />
           </Field>
@@ -209,7 +209,7 @@ function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean 
         </div>
       )}
       {open && w.remitted && !w.checked && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           <Field label="What you checked (receipt, rate, form CP37)">
             <input className="input" value={f.comment ?? ''} onChange={set('comment')} />
           </Field>
@@ -239,13 +239,13 @@ function Schedules({ v }: { v: FinControls }) {
           {adding ? 'Close' : 'Add'}
         </button>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         A cost paid for many months (insurance, licence, rent ahead) or a cost not yet billed. Prima spreads it month by month; post each month&apos;s journal
         in SQL Account and type its number here. A month not posted keeps the close open.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set('kind')}>
               <option value="prepayment">Prepayment (paid ahead)</option>
@@ -301,8 +301,8 @@ function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: 
   const next = due[0];
   const posted = s.lines.filter((l) => l.posted).length;
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {s.kind === 'prepayment' ? 'Prepayment' : 'Accrual'} · {s.what} · {rm(s.total)} over {s.months} months
           <span className="muted">
@@ -310,7 +310,7 @@ function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: 
             · {s.account} · {posted} of {s.months} posted
           </span>
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={due.length ? 'warn' : 'ok'}>{due.length ? `${due.length} to post` : 'Up to date'}</Chip>
           <button className="btn btn-sm" onClick={() => setOpen(!open)}>
             {open ? 'Close' : 'Open'}
@@ -318,9 +318,9 @@ function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: 
         </span>
       </div>
       {open && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           {next && (
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="row fin-end">
               <span className="small">
                 {next.period}: {rm(next.amount)}
               </span>
@@ -336,7 +336,7 @@ function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: 
               </button>
             </div>
           )}
-          <ul className="small" style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          <ul className="small fin-ul">
             {s.lines.map((l) => (
               <li key={l.period}>
                 {l.posted ? '✓ ' : ''}
@@ -345,7 +345,7 @@ function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: 
               </li>
             ))}
           </ul>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 8 }}>
+          <div className="row fin-mt fin-end">
             <Field label="Stop it (team leader, FD, CEO): reason">
               <input className="input" value={f.why ?? ''} onChange={set('why')} />
             </Field>
@@ -375,7 +375,7 @@ function FixedAssets({ v }: { v: FinControls }) {
     <section className="panel">
       <div className="panel-head">
         <h3>Fixed assets and capital allowances</h3>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <button className="btn btn-sm" onClick={() => setAgree(!agree)}>
             {agree ? 'Close' : 'Agree with SQL Account'}
           </button>
@@ -384,7 +384,7 @@ function FixedAssets({ v }: { v: FinControls }) {
           </button>
         </span>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         {live.length} asset(s), cost {rm(live.reduce((n, a) => n + a.cost, 0))}. Capital allowances for {ca.year}: {rm(ca.total)} (for the tax computation;
         rates from Schedule 3, to be confirmed by the Finance Director).
         {ca.smallValueOverCap > 0 &&
@@ -394,7 +394,7 @@ function FixedAssets({ v }: { v: FinControls }) {
       <TaxSize v={v} go={go} busy={act.busy} />
       <ErrorNotice error={act.error} />
       {agree && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: 12 }}>
+        <div className="row fin-pad fin-end">
           <Field label="Year end">
             <input className="input" value={g.f.year ?? ''} onChange={g.set('year')} />
           </Field>
@@ -416,7 +416,7 @@ function FixedAssets({ v }: { v: FinControls }) {
         </div>
       )}
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           {(
             [
               ['name', 'Asset'],
@@ -477,8 +477,8 @@ function AssetLine({ a, r, go, busy }: { a: Ye['assets'][number]; r: Ye['allowan
   const [open, setOpen] = useState(false);
   const { f, set } = useForm();
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {a.sqlCode} · {a.name} · {rm(a.cost)}
           <span className="muted">
@@ -494,7 +494,7 @@ function AssetLine({ a, r, go, busy }: { a: Ye['assets'][number]; r: Ye['allowan
         )}
       </div>
       {open && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 8 }}>
+        <div className="row fin-pt fin-end">
           <Field label="Disposed on">
             <input className="input" type="date" value={f.on ?? ''} onChange={set('on')} />
           </Field>
@@ -535,13 +535,13 @@ function AuditorRequests({ v }: { v: FinControls }) {
           {adding ? 'Close' : 'Add'}
         </button>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Paste the auditor&apos;s list, one item per line, and choose who prepares it. Each item shows on that person&apos;s home until it is sent. {open.length}{' '}
         open, {ye.audit.length - open.length} sent.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Year audited">
             <input className="input" value={f.year ?? ''} onChange={set('year')} />
           </Field>
@@ -577,8 +577,8 @@ function AuditorRequests({ v }: { v: FinControls }) {
       )}
       <div className="list">
         {ye.audit.map((r) => (
-          <div key={r.id} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+          <div key={r.id} className="list-item fin-block">
+            <div className="row fin-between">
               <span>
                 {r.year} · {r.item}
                 <span className="muted">
@@ -590,7 +590,7 @@ function AuditorRequests({ v }: { v: FinControls }) {
               <Chip tone={r.sent ? 'ok' : r.late ? 'crit' : 'info'}>{r.sent ? 'Sent' : r.late ? 'Late' : 'Open'}</Chip>
             </div>
             {!r.sent && (
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 6 }}>
+              <div className="row fin-pt fin-end">
                 <input
                   className="input"
                   placeholder="What was sent (file name or SharePoint link)"
@@ -616,7 +616,7 @@ function TaxSize({ v, go, busy }: { v: FinControls; go: Go; busy: boolean }) {
   const [open, setOpen] = useState(false);
   const { f, set } = useForm({ bigRelated: 'no' });
   return (
-    <div style={{ padding: '0 12px 8px' }}>
+    <div className="fin-padb">
       <span className="small">
         Tax size:{' '}
         {p
@@ -627,7 +627,7 @@ function TaxSize({ v, go, busy }: { v: FinControls; go: Go; busy: boolean }) {
         {open ? 'Close' : p ? 'Change' : 'Record (FD or CEO)'}
       </button>
       {open && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 8 }}>
+        <div className="row fin-pt fin-end">
           <Field label="Paid-up capital (RM)">
             <input className="input" inputMode="decimal" value={f.paidUp ?? ''} onChange={set('paidUp')} />
           </Field>

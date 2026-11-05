@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { BuildingsIcon, CoinsIcon, FileTextIcon, ScalesIcon, ShieldWarningIcon, UmbrellaIcon } from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
 import { api, type Insurance } from '../api';
 import { useApp } from '../App';
-import { Chip, Drawer, ErrorNotice, ExpiryChip, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { Chip, Drawer, ErrorNotice, ExpiryChip, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import '../styles/biz.css';
 
 type Tab = 'alerts' | 'policies' | 'premiums' | 'claims' | 'guarantees' | 'companies';
 
@@ -43,6 +46,8 @@ const PREMIUM: Record<Insurance['policies'][number]['premium'], { label: string;
   paid: { label: 'Paid', tone: 'ok' },
 };
 
+const stripe = (t: Tone) => (t === 'crit' || t === 'warn' ? t : undefined);
+
 /**
  * Chief of Staff insurance section (Fauzan, 25 Oct 2026): premiums, every insurance matter and
  * guarantees, for every company. The section chases; each company's board and Finance pay, sign and settle.
@@ -66,46 +71,64 @@ export function InsuranceView() {
   const t = data.tiles;
   const group = me.user.role === 'director' || me.user.role === 'pwvsb_officer';
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Insurance</h1>
-          <p>
-            Premiums, policies, claims and guarantees{group ? ' for every company' : ''}. The Chief of Staff's insurance section follows up; paying a premium,
-            signing a guarantee or accepting a settlement stays with the company's board and Finance. A company with no records loaded shows Unknown, never as
-            covered.
-          </p>
-        </div>
-      </div>
-      <div className="kpis">
-        <Kpi
+    <div className="page bz-in-page">
+      <PageHead
+        title="Insurance"
+        sub={`Premiums, policies, claims and guarantees${group ? ' for every company' : ''}. The Chief of Staff's insurance section follows up; paying a premium, signing a guarantee or accepting a settlement stays with the company's board and Finance. A company with no records loaded shows Unknown, never as covered.`}
+      />
+      <Stats>
+        <Stat
           label="Cover gaps"
           value={t.coverGaps + t.lapsed}
           tone={t.coverGaps + t.lapsed ? 'crit' : 'ok'}
           note={`${t.lapsed} lapsed, ${t.coverGaps} missing`}
+          icon={<ShieldWarningIcon size={16} />}
+          onClick={() => setTab('companies')}
         />
-        <Kpi label="Renewals due" value={t.expiring} tone={t.expiring ? 'warn' : 'ok'} note={`Within ${data.rules.renewDays} days, not renewed`} />
-        <Kpi
+        <Stat
+          label="Renewals due"
+          value={t.expiring}
+          tone={t.expiring ? 'warn' : 'ok'}
+          note={`Within ${data.rules.renewDays} days, not renewed`}
+          icon={<UmbrellaIcon size={16} />}
+          onClick={() => setTab('policies')}
+        />
+        <Stat
           label="Premiums to pay"
           value={rm(t.premiumUnpaid)}
           tone={t.premiumsOverdue ? 'crit' : t.premiumsDue ? 'warn' : 'ok'}
           note={`${t.premiumsOverdue} overdue, ${t.premiumsDue} due in ${data.rules.premiumDays} days`}
+          icon={<CoinsIcon size={16} />}
+          onClick={() => setTab('premiums')}
         />
-        <Kpi label="Annual premiums" value={rm(t.premiumYear)} note="Companies with records" />
-        <Kpi
+        <Stat label="Annual premiums" value={rm(t.premiumYear)} note="Companies with records" icon={<CoinsIcon size={16} />} />
+        <Stat
           label="Claims open"
           value={t.claimsOpen}
           tone={t.claimsNotNotified ? 'crit' : t.claimsOpen ? 'info' : 'ok'}
           note={`${t.claimsNotNotified} insurer not told yet`}
+          icon={<FileTextIcon size={16} />}
+          onClick={() => setTab('claims')}
         />
-        <Kpi
+        <Stat
           label="Guarantees out"
           value={rm(t.guaranteesLive)}
           tone={t.guaranteesAction ? 'warn' : 'ok'}
           note={`${t.guaranteesAction} to extend or release`}
+          icon={<ScalesIcon size={16} />}
+          onClick={() => setTab('guarantees')}
         />
-        {group && <Kpi label="Companies unknown" value={t.unknown} tone={t.unknown ? 'unknown' : 'ok'} note="No insurance records loaded" />}
-      </div>
+        {group && (
+          <Stat
+            label="Companies unknown"
+            value={t.unknown}
+            tone={t.unknown ? 'unknown' : 'ok'}
+            note="No insurance records loaded"
+            icon={<BuildingsIcon size={16} />}
+            onClick={() => setTab('companies')}
+          />
+        )}
+      </Stats>
       <div className="tabbar" role="tablist" aria-label="Insurance sections">
         {TABS.map((x) => (
           <button key={x.id} role="tab" aria-selected={tab === x.id} onClick={() => setTab(x.id)}>
@@ -126,62 +149,72 @@ export function InsuranceView() {
 
 function Alerts({ data }: { data: Insurance }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>To chase</h2>
-        <span className="muted small">Most urgent first</span>
-      </div>
-      <div className="list">
-        {data.alerts.length === 0 && <div className="empty">Nothing to chase.</div>}
-        {data.alerts.map((a, i) => (
-          <div key={i} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>{a.title}</div>
-              <div className="muted small">{a.detail}</div>
-              <div className="small">{a.companyName}</div>
-            </div>
-            <Chip tone={a.tone}>{a.kind}</Chip>
-          </div>
-        ))}
-      </div>
-    </section>
+    <Card title="To chase" sub="Most urgent first" flush>
+      {data.alerts.length === 0 ? (
+        <Empty title="Nothing to chase." />
+      ) : (
+        <ul className="bz-rows">
+          {data.alerts.map((a, i) => (
+            <li key={i} className="bz-row" data-tone={stripe(a.tone)}>
+              <span className="bz-row-main">
+                <span className="bz-row-title">{a.title}</span>
+                <span className="bz-row-meta">{a.detail}</span>
+                <span className="bz-in-co">{a.companyName}</span>
+              </span>
+              <span className="bz-row-side">
+                <Chip tone={a.tone}>{a.kind}</Chip>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
 function Policies({ data }: { data: Insurance }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Policies</h2>
-        <span className="muted small">Renewal starts {data.rules.renewDays} days before expiry</span>
-        <AddFor kind="insurancePolicy" label="Add policy" />
-      </div>
-      <div className="list">
-        {data.policies.length === 0 && <div className="empty">No policies recorded.</div>}
-        {data.policies.map((r) => (
-          <div key={r.policy.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>{r.label}</div>
-              <div className="muted small">
-                {r.policy.insurer} · {r.policy.policyNo}
-                {r.policy.broker ? ` · via ${r.policy.broker}` : ''}
-              </div>
-              <div className="muted small">
-                Cover {rm(r.policy.sumInsured)} · premium {rm(r.policy.premium)} a year · {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)}
-                {r.cover.status === 'DUE'
-                  ? ` · renewal ${r.policy.renewal === 'renewed' ? 'done' : r.policy.renewal === 'quotes' ? 'quotes in hand' : 'not started'}`
-                  : ''}
-              </div>
-              <div className="small">{r.companyName}</div>
-            </div>
-            <div className="row" style={{ gap: 6 }}>
-              <ExpiryChip status={r.cover.status} daysLeft={r.cover.daysLeft} />
-              <RecordButton kind="insurancePolicy" id={r.policy.id} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <Card title="Policies" sub={`Renewal starts ${data.rules.renewDays} days before expiry`} actions={<AddFor kind="insurancePolicy" label="Add policy" />} flush>
+      {data.policies.length === 0 ? (
+        <Empty title="No policies recorded." />
+      ) : (
+        <ul className="bz-rows">
+          {data.policies.map((r) => (
+            <li key={r.policy.id} className="bz-row bz-in-row">
+              <span className="bz-row-main">
+                <span className="bz-row-title">{r.label}</span>
+                <span className="bz-row-meta">
+                  {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span>
+                  {r.policy.broker ? ` · via ${r.policy.broker}` : ''}
+                </span>
+                <span className="bz-row-meta">{r.companyName}</span>
+              </span>
+              <span className="bz-in-fig">
+                <span className="bz-sub">Cover</span>
+                <span className="bz-amt">{rm(r.policy.sumInsured)}</span>
+                <span className="bz-sub">
+                  {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)}
+                </span>
+              </span>
+              <span className="bz-in-fig">
+                <span className="bz-sub">Premium</span>
+                <span className="bz-amt">{rm(r.policy.premium)}</span>
+                <span className="bz-sub">a year</span>
+              </span>
+              <span className="bz-row-side">
+                <ExpiryChip status={r.cover.status} daysLeft={r.cover.daysLeft} />
+                {r.cover.status === 'DUE' && (
+                  <span className="bz-sub">
+                    renewal {r.policy.renewal === 'renewed' ? 'done' : r.policy.renewal === 'quotes' ? 'quotes in hand' : 'not started'}
+                  </span>
+                )}
+                <RecordButton kind="insurancePolicy" id={r.policy.id} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -189,40 +222,43 @@ function Premiums({ data }: { data: Insurance }) {
   const rows = [...data.policies].sort((a, b) => a.policy.premiumDueOn.localeCompare(b.policy.premiumDueOn));
   const order = { overdue: 0, due: 1, later: 2, paid: 3 } as const;
   rows.sort((a, b) => order[a.premium] - order[b.premium]);
+  const groups = (Object.keys(order) as (keyof typeof order)[]).map((k) => ({ k, rows: rows.filter((r) => r.premium === k) })).filter((g) => g.rows.length);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Premiums</h2>
-        <span className="muted small">Cash before cover: an unpaid premium can leave the company without cover</span>
-      </div>
-      <div className="list">
-        {rows.map((r) => {
-          const p = PREMIUM[r.premium];
-          return (
-            <div key={r.policy.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {rm(r.policy.premium)} · {r.label}
-                </div>
-                <div className="muted small">
-                  {r.policy.premiumPaidOn
-                    ? `Paid ${dateLabel(r.policy.premiumPaidOn)}`
-                    : r.premiumDaysLeft < 0
-                      ? `Was due ${dateLabel(r.policy.premiumDueOn)}, ${-r.premiumDaysLeft} days ago`
-                      : `Due ${dateLabel(r.policy.premiumDueOn)}, in ${r.premiumDaysLeft} days`}{' '}
-                  · {r.policy.insurer}
-                </div>
-                <div className="small">{r.companyName}</div>
-              </div>
-              <div className="row" style={{ gap: 6 }}>
-                <Chip tone={p.tone}>{p.label}</Chip>
-                <RecordButton kind="insurancePolicy" id={r.policy.id} label="Record payment" />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+    <Card title="Premiums" sub="Cash before cover: an unpaid premium can leave the company without cover" flush>
+      {rows.length === 0 && <Empty title="No policies recorded." />}
+      {groups.map((g) => (
+        <div key={g.k} className="bz-in-group">
+          <div className="bz-in-group-head">
+            <Chip tone={PREMIUM[g.k].tone}>{PREMIUM[g.k].label}</Chip>
+            <span className="bz-sub">
+              {g.rows.length} · <span className="bz-amt">{rm(g.rows.reduce((n, r) => n + r.policy.premium, 0))}</span>
+            </span>
+          </div>
+          <ul className="bz-rows">
+            {g.rows.map((r) => (
+              <li key={r.policy.id} className="bz-row" data-tone={g.k === 'overdue' ? 'crit' : g.k === 'due' ? 'warn' : undefined}>
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{r.label}</span>
+                  <span className="bz-row-meta">
+                    {r.policy.premiumPaidOn
+                      ? `Paid ${dateLabel(r.policy.premiumPaidOn)}`
+                      : r.premiumDaysLeft < 0
+                        ? `Was due ${dateLabel(r.policy.premiumDueOn)}, ${-r.premiumDaysLeft} days ago`
+                        : `Due ${dateLabel(r.policy.premiumDueOn)}, in ${r.premiumDaysLeft} days`}{' '}
+                    · {r.policy.insurer}
+                  </span>
+                  <span className="bz-row-meta">{r.companyName}</span>
+                </span>
+                <span className="bz-row-side">
+                  <span className="bz-amt">{rm(r.policy.premium)}</span>
+                  <RecordButton kind="insurancePolicy" id={r.policy.id} label="Record payment" />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Card>
   );
 }
 
@@ -230,50 +266,71 @@ function Claims({ data }: { data: Insurance }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = data.claims.find((r) => r.claim.id === openId) ?? null;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Claims</h2>
-        <span className="muted small">
-          Tell the insurer within {data.rules.noticeDays} days of the incident; chase after {data.rules.claimAge} days
-        </span>
-        <AddFor kind="insuranceClaim" label="Add claim" />
-      </div>
-      <div className="list">
-        {data.claims.length === 0 && <div className="empty">No claims.</div>}
-        {data.claims.map((r) => {
-          const s = CLAIM_STATUS[r.claim.status];
-          return (
-            <div key={r.claim.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>{r.claim.what}</div>
-                <div className="muted small">
-                  {r.claim.ref} · {r.policyLabel} · {rm(r.claim.amountClaimed)} claimed
-                  {r.claim.settledAmount !== null ? `, ${rm(r.claim.settledAmount)} paid ${dateLabel(r.claim.settledOn)}` : ''}
-                </div>
-                <div className="muted small">
-                  Incident {dateLabel(r.claim.incidentOn)}
-                  {r.claim.notifiedOn ? ` · insurer told ${dateLabel(r.claim.notifiedOn)}` : ` · ${r.sinceIncident} days and the insurer is not told`}
-                </div>
-                <div className="small">{r.companyName}</div>
-              </div>
-              <div className="row" style={{ gap: 6 }}>
-                <Chip tone={s.tone}>{s.label}</Chip>
-                {!r.covered && <Chip tone="warn">Outside cover dates</Chip>}
-                <button className="btn btn-sm" onClick={() => setOpenId(r.claim.id)}>
-                  Steps
-                </button>
-                {r.claim.status === 'to_notify' && <RecordButton kind="insuranceClaim" id={r.claim.id} />}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <Card
+      title="Claims"
+      sub={`Tell the insurer within ${data.rules.noticeDays} days of the incident; chase after ${data.rules.claimAge} days`}
+      actions={<AddFor kind="insuranceClaim" label="Add claim" />}
+      flush
+    >
+      {data.claims.length === 0 ? (
+        <Empty title="No claims." />
+      ) : (
+        <ul className="bz-rows">
+          {data.claims.map((r) => {
+            const s = CLAIM_STATUS[r.claim.status];
+            return (
+              <li key={r.claim.id} className="bz-row bz-in-claim" data-tone={stripe(s.tone)}>
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{r.claim.what}</span>
+                  <span className="bz-row-meta">
+                    <span className="mono">{r.claim.ref}</span> · {r.policyLabel}
+                  </span>
+                  <span className="bz-row-meta">
+                    Incident {dateLabel(r.claim.incidentOn)}
+                    {r.claim.notifiedOn ? ` · insurer told ${dateLabel(r.claim.notifiedOn)}` : ` · ${r.sinceIncident} days and the insurer is not told`}
+                  </span>
+                  <span className="bz-row-meta">{r.companyName}</span>
+                  <span className="bz-chips">
+                    <Chip tone={s.tone}>{s.label}</Chip>
+                    {!r.covered && <Chip tone="warn">Outside cover dates</Chip>}
+                  </span>
+                </span>
+                <span className="bz-in-fig">
+                  <span className="bz-amt">{rm(r.claim.amountClaimed)}</span>
+                  <span className="bz-sub">claimed</span>
+                  {r.claim.settledAmount !== null && (
+                    <span className="bz-sub">
+                      {rm(r.claim.settledAmount)} paid {dateLabel(r.claim.settledOn)}
+                    </span>
+                  )}
+                </span>
+                <span className="bz-row-side bz-in-claim-acts">
+                  <button className="btn btn-sm" onClick={() => setOpenId(r.claim.id)}>
+                    Steps
+                  </button>
+                  {r.claim.status === 'to_notify' && <RecordButton kind="insuranceClaim" id={r.claim.id} />}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {open && <ClaimDrawer row={open} onClose={() => setOpenId(null)} />}
-    </section>
+    </Card>
   );
 }
 
 type ClaimRow = Insurance['claims'][number];
+
+const CLAIM_STEPS = ['Insurer told', 'Documents', 'Adjuster assessing', 'Offer', 'Settled'];
+const CLAIM_AT: Record<ClaimRow['claim']['status'], number> = { to_notify: 0, notified: 1, documents: 1, assessing: 2, offered: 3, settled: 5, rejected: -1 };
+
+/** Where a claim is: the steps it has passed and the one it waits on. */
+function claimSteps(c: ClaimRow['claim']): { label: string; state: StepState }[] {
+  if (c.status === 'rejected') return [{ label: CLAIM_STEPS[0], state: c.notifiedOn ? 'done' : 'todo' }, { label: 'Rejected', state: 'stopped' }];
+  const at = CLAIM_AT[c.status];
+  return CLAIM_STEPS.map((label, i) => ({ label, state: i < at ? 'done' : i === at ? 'now' : 'todo' }));
+}
 
 /** Masterplan 61: each claim step is recorded by a person with its reference. Prima never contacts the insurer. */
 function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }) {
@@ -281,107 +338,177 @@ function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }
   const c = r.claim;
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  const input = (k: string, label: string, type = 'text') => <input className="input" type={type} aria-label={label} placeholder={label} value={f[k] ?? ''} onChange={set(k)} />;
-  const step = (action: string, body: Record<string, unknown>, done: string) =>
-    act.run(() => api.insuranceClaimAct(c.id, action, body), done).then((x) => x !== undefined && setF({}));
+  const input = (k: string, label: string, type = 'text') => (
+    <label className="field">
+      <span className="label">{label}</span>
+      <input className="input" type={type} aria-label={label} placeholder={type === 'date' ? undefined : label} value={f[k] ?? ''} onChange={set(k)} />
+    </label>
+  );
+  const step = (action: string, body: Record<string, unknown>, done: string) => act.run(() => api.insuranceClaimAct(c.id, action, body), done).then((x) => x !== undefined && setF({}));
   const keep = r.can.keep;
+  const s = CLAIM_STATUS[c.status];
+  const facts: [string, string][] = [['Claimed', rm(c.amountClaimed)]];
+  if (c.insurerRef) facts.push(['Insurer reference', `${c.insurerRef} (${c.notifyHow})`]);
+  if (c.offer) facts.push(['Offer', `${rm(c.offer.amount)} · ${c.offer.ref}`]);
+  if (c.accepted) facts.push(['Accepted by', `${c.accepted.by}: ${c.accepted.note}`]);
+  if (c.received) facts.push(['Money received', `${dateLabel(c.received.on)} · ${c.received.bankRef} · ${c.received.by}`]);
+  if (c.rejection) facts.push(['Rejected', `${c.rejection.reason} (${c.rejection.ref})`]);
+  if (c.appeal) facts.push(['Appeal', c.appeal.reason]);
   return (
     <Drawer title={c.ref} sub={`${r.companyName} · ${r.policyLabel}`} onClose={onClose}>
-      <section className="panel">
-        <p className="small muted">Staff record each step with its reference. Prima does not contact the insurer, accept offers by itself or receive money.</p>
-        {!r.covered && <div className="notice" data-tone="warn">The incident date is outside the policy period. Check cover with the insurer or broker.</div>}
-        <div className="list">
-          <div className="list-item"><span>Claimed</span><span>{rm(c.amountClaimed)}</span></div>
-          {c.insurerRef && <div className="list-item"><span>Insurer reference</span><span>{c.insurerRef} ({c.notifyHow})</span></div>}
-          {c.offer && <div className="list-item"><span>Offer</span><span>{rm(c.offer.amount)} · {c.offer.ref}</span></div>}
-          {c.accepted && <div className="list-item"><span>Accepted by</span><span>{c.accepted.by}: {c.accepted.note}</span></div>}
-          {c.received && <div className="list-item"><span>Money received</span><span>{dateLabel(c.received.on)} · {c.received.bankRef} · {c.received.by}</span></div>}
-          {c.rejection && <div className="list-item"><span>Rejected</span><span>{c.rejection.reason} ({c.rejection.ref})</span></div>}
-          {c.appeal && <div className="list-item"><span>Appeal</span><span>{c.appeal.reason}</span></div>}
+      <div className="bz-chips">
+        <Chip tone={s.tone}>{s.label}</Chip>
+      </div>
+      <Steps steps={claimSteps(c)} />
+      <p className="bz-note">Staff record each step with its reference. Prima does not contact the insurer, accept offers by itself or receive money.</p>
+      {!r.covered && (
+        <div className="notice" data-tone="warn">
+          The incident date is outside the policy period. Check cover with the insurer or broker.
         </div>
-        {(c.status === 'notified' || c.status === 'documents') && (
-          <>
-            <h3>Documents</h3>
-            <div className="list">
+      )}
+      <div className="bz-facts">
+        <Facts items={facts} />
+      </div>
+      {(c.status === 'notified' || c.status === 'documents') && (
+        <section className="bz-sec">
+          <h3>Documents</h3>
+          {(c.docs ?? []).length > 0 && (
+            <ul className="bz-in-docs">
               {(c.docs ?? []).map((d) => (
-                <div className="list-item" key={d.name}><span>{d.name}</span><span className="small">{d.ref}</span></div>
+                <li key={d.name}>
+                  <span>{d.name}</span>
+                  <span className="bz-sub">{d.ref}</span>
+                </li>
               ))}
-            </div>
-            {r.missingDocs.length > 0 && <div className="notice">Usually still needed: {r.missingDocs.join(', ')}. The insurer&apos;s own list wins.</div>}
-          </>
-        )}
-        {keep && c.status === 'to_notify' && (
-          <div className="list" style={{ gap: 6 }}>
-            {input('on', 'Date the insurer was told', 'date')}
-            {input('insurerRef', 'Insurer claim reference')}
-            {input('how', 'How (email, letter, portal, broker)')}
-            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('notify', { on: f.on, insurerRef: f.insurerRef, how: f.how }, 'Recorded: insurer told.')}>Record insurer told</button>
+            </ul>
+          )}
+          {r.missingDocs.length > 0 && <div className="notice" data-tone="info">Usually still needed: {r.missingDocs.join(', ')}. The insurer&apos;s own list wins.</div>}
+        </section>
+      )}
+      {keep && c.status === 'to_notify' && (
+        <div className="bz-act">
+          {input('on', 'Date the insurer was told', 'date')}
+          {input('insurerRef', 'Insurer claim reference')}
+          {input('how', 'How (email, letter, portal, broker)')}
+          <div className="bz-actions">
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('notify', { on: f.on, insurerRef: f.insurerRef, how: f.how }, 'Recorded: insurer told.')}>
+              Record insurer told
+            </button>
           </div>
-        )}
-        {keep && (c.status === 'notified' || c.status === 'documents') && (
-          <div className="list" style={{ gap: 6 }}>
+        </div>
+      )}
+      {keep && (c.status === 'notified' || c.status === 'documents') && (
+        <div className="bz-act">
+          <label className="field">
+            <span className="label">Document</span>
             <select className="select" aria-label="Document" value={f.name ?? ''} onChange={set('name')}>
               <option value="">Choose or type a document</option>
               {r.typicalDocs.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>
+                  {d}
+                </option>
               ))}
             </select>
-            {input('name', 'Document name')}
-            {input('ref', 'Document reference or file number')}
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('add_doc', { name: f.name, ref: f.ref }, 'Document added.')}>Add document</button>
-            {c.status === 'documents' && (
-              <>
-                {input('on', 'Date documents went to the insurer', 'date')}
-                <button className="btn btn-primary btn-sm" disabled={act.busy || r.missingDocs.length > 0} onClick={() => step('submit', { on: f.on }, 'Sent for assessment.')}>Sent for assessment</button>
-              </>
-            )}
+          </label>
+          {input('name', 'Document name')}
+          {input('ref', 'Document reference or file number')}
+          <div className="bz-actions">
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('add_doc', { name: f.name, ref: f.ref }, 'Document added.')}>
+              Add document
+            </button>
           </div>
-        )}
-        {keep && c.status === 'assessing' && (
-          <div className="list" style={{ gap: 6 }}>
-            {input('amount', 'Amount offered (RM)')}
-            {input('ref', 'Offer or discharge letter reference')}
-            {input('on', 'Offer date', 'date')}
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('offer', { amount: Number(f.amount), ref: f.ref, on: f.on }, 'Offer recorded. The company manager accepts it.')}>Record offer</button>
-          </div>
-        )}
-        {r.can.accept && c.status === 'offered' && !c.accepted && (
-          <div className="list" style={{ gap: 6 }}>
-            {input('note', 'Comment (why the company accepts)')}
-            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('accept', { note: f.note }, 'Offer accepted. Finance records the money when it arrives.')}>Accept offer for the company</button>
-          </div>
-        )}
-        {r.can.receive && c.status === 'offered' && c.accepted && (
-          <div className="list" style={{ gap: 6 }}>
-            {input('bankRef', 'Bank statement reference')}
-            {input('on', 'Date money reached the bank', 'date')}
-            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('received', { bankRef: f.bankRef, on: f.on }, 'Money received recorded. Claim settled.')}>Record money received</button>
-          </div>
-        )}
-        {keep && ['notified', 'documents', 'assessing', 'offered'].includes(c.status) && !c.accepted && (
-          <details>
-            <summary className="small">Insurer rejected the claim</summary>
-            <div className="list" style={{ gap: 6 }}>
-              {input('reason', "Insurer's reason")}
-              {input('ref', 'Letter reference')}
-              {input('on', 'Date', 'date')}
-              <button className="btn btn-sm" disabled={act.busy} onClick={() => step('reject', { reason: f.reason, ref: f.ref, on: f.on }, 'Rejection recorded.')}>Record rejection</button>
-            </div>
-          </details>
-        )}
-        {r.can.accept && c.status === 'rejected' && !c.appeal && (
-          <div className="list" style={{ gap: 6 }}>
-            {input('reason', 'Grounds for appeal')}
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('appeal', { reason: f.reason }, 'Appeal recorded.')}>Appeal (once)</button>
-          </div>
-        )}
-        <ErrorNotice error={act.error} />
-        <h3>History</h3>
-        <div className="list">
-          {(c.steps ?? []).map((s, i) => (
-            <div className="list-item small" key={i}><span>{dateTimeLabel(s.at)} · {s.by}</span><span>{s.what}{s.note ? `: ${s.note}` : ''}</span></div>
-          ))}
+          {c.status === 'documents' && (
+            <>
+              {input('on', 'Date documents went to the insurer', 'date')}
+              <div className="bz-actions">
+                <button className="btn btn-primary btn-sm" disabled={act.busy || r.missingDocs.length > 0} onClick={() => step('submit', { on: f.on }, 'Sent for assessment.')}>
+                  Sent for assessment
+                </button>
+              </div>
+            </>
+          )}
         </div>
+      )}
+      {keep && c.status === 'assessing' && (
+        <div className="bz-act">
+          {input('amount', 'Amount offered (RM)')}
+          {input('ref', 'Offer or discharge letter reference')}
+          {input('on', 'Offer date', 'date')}
+          <div className="bz-actions">
+            <button
+              className="btn btn-sm"
+              disabled={act.busy}
+              onClick={() => step('offer', { amount: Number(f.amount), ref: f.ref, on: f.on }, 'Offer recorded. The company manager accepts it.')}
+            >
+              Record offer
+            </button>
+          </div>
+        </div>
+      )}
+      {r.can.accept && c.status === 'offered' && !c.accepted && (
+        <div className="bz-act">
+          {input('note', 'Comment (why the company accepts)')}
+          <div className="bz-actions">
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('accept', { note: f.note }, 'Offer accepted. Finance records the money when it arrives.')}>
+              Accept offer for the company
+            </button>
+          </div>
+        </div>
+      )}
+      {r.can.receive && c.status === 'offered' && c.accepted && (
+        <div className="bz-act">
+          {input('bankRef', 'Bank statement reference')}
+          {input('on', 'Date money reached the bank', 'date')}
+          <div className="bz-actions">
+            <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => step('received', { bankRef: f.bankRef, on: f.on }, 'Money received recorded. Claim settled.')}>
+              Record money received
+            </button>
+          </div>
+        </div>
+      )}
+      {keep && ['notified', 'documents', 'assessing', 'offered'].includes(c.status) && !c.accepted && (
+        <details className="bz-in-details">
+          <summary>Insurer rejected the claim</summary>
+          <div className="bz-act">
+            {input('reason', "Insurer's reason")}
+            {input('ref', 'Letter reference')}
+            {input('on', 'Date', 'date')}
+            <div className="bz-actions">
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => step('reject', { reason: f.reason, ref: f.ref, on: f.on }, 'Rejection recorded.')}>
+                Record rejection
+              </button>
+            </div>
+          </div>
+        </details>
+      )}
+      {r.can.accept && c.status === 'rejected' && !c.appeal && (
+        <div className="bz-act">
+          {input('reason', 'Grounds for appeal')}
+          <div className="bz-actions">
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => step('appeal', { reason: f.reason }, 'Appeal recorded.')}>
+              Appeal (once)
+            </button>
+          </div>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+      <section className="bz-sec">
+        <h3>History</h3>
+        {(c.steps ?? []).length === 0 && <p className="bz-note">No steps recorded yet.</p>}
+        <ul className="bz-ct-tl">
+          {(c.steps ?? []).map((s, i) => (
+            <li key={i}>
+              <span className="bz-ct-tl-top">
+                <strong>{s.what}</strong>
+                <time className="bz-sub">{dateTimeLabel(s.at)}</time>
+              </span>
+              <span className="bz-row-meta">
+                {s.by}
+                {s.note ? `: ${s.note}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
     </Drawer>
   );
@@ -389,41 +516,50 @@ function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }
 
 function Guarantees({ data }: { data: Insurance }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Guarantees and bonds</h2>
-        <span className="muted small">Must stay valid until the contract ends; ask for release after</span>
-        <AddFor kind="insuranceGuarantee" label="Add guarantee" />
-      </div>
-      <div className="list">
-        {data.guarantees.length === 0 && <div className="empty">No guarantees.</div>}
-        {data.guarantees.map((r) => {
-          const s = GUARANTEE_STATE[r.state];
-          const g = r.guarantee;
-          return (
-            <div key={g.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {r.label} {rm(g.amount)}
-                </div>
-                <div className="muted small">
-                  To {g.beneficiary} · {g.contractRef}
-                </div>
-                <div className="muted small">
-                  By {g.issuer} · fee {rm(g.fee)} · valid to {dateLabel(g.expiresOn)} · contract to {dateLabel(g.contractEndsOn)}
-                  {g.releasedOn ? ` · released ${dateLabel(g.releasedOn)}` : ''}
-                </div>
-                <div className="small">{r.companyName}</div>
-              </div>
-              <div className="row" style={{ gap: 6 }}>
-                <Chip tone={s.tone}>{s.label}</Chip>
-                <RecordButton kind="insuranceGuarantee" id={g.id} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+    <Card
+      title="Guarantees and bonds"
+      sub="Must stay valid until the contract ends; ask for release after"
+      actions={<AddFor kind="insuranceGuarantee" label="Add guarantee" />}
+      flush
+    >
+      {data.guarantees.length === 0 ? (
+        <Empty title="No guarantees." />
+      ) : (
+        <ul className="bz-rows">
+          {data.guarantees.map((r) => {
+            const s = GUARANTEE_STATE[r.state];
+            const g = r.guarantee;
+            return (
+              <li key={g.id} className="bz-row bz-in-row" data-tone={stripe(s.tone)}>
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{r.label}</span>
+                  <span className="bz-row-meta">
+                    To {g.beneficiary} · {g.contractRef}
+                  </span>
+                  <span className="bz-row-meta">
+                    By {g.issuer} · fee {rm(g.fee)}
+                    {g.releasedOn ? ` · released ${dateLabel(g.releasedOn)}` : ''}
+                  </span>
+                  <span className="bz-row-meta">{r.companyName}</span>
+                </span>
+                <span className="bz-in-fig">
+                  <span className="bz-sub">Amount</span>
+                  <span className="bz-amt">{rm(g.amount)}</span>
+                </span>
+                <span className="bz-in-fig">
+                  <span>Valid to {dateLabel(g.expiresOn)}</span>
+                  <span className="bz-sub">Contract to {dateLabel(g.contractEndsOn)}</span>
+                </span>
+                <span className="bz-row-side">
+                  <Chip tone={s.tone}>{s.label}</Chip>
+                  <RecordButton kind="insuranceGuarantee" id={g.id} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -435,61 +571,70 @@ function AddFor({ kind, label }: { kind: 'insurancePolicy' | 'insuranceClaim' | 
 
 function Companies({ data }: { data: Insurance }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>By company</h2>
-        <span className="muted small">Also shows insurance watched on other screens: group insurance licence, foreign worker and armed-service cover</span>
-      </div>
-      <div className="list">
-        {data.rows.map((r) =>
-          r.hasDetail ? (
-            <div key={r.company.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', alignItems: 'flex-start' }}>
-                <div style={{ fontWeight: 600 }}>{r.company.name}</div>
-                <Chip tone={r.missing.length || r.lapsed ? 'crit' : r.expiring ? 'warn' : 'ok'}>
-                  {r.missing.length || r.lapsed
-                    ? `${r.missing.length + r.lapsed} cover gap${r.missing.length + r.lapsed === 1 ? '' : 's'}`
-                    : r.expiring
-                      ? 'Renewals due'
-                      : 'Covered'}
-                </Chip>
-              </div>
-              <div className="muted small">
-                {r.policies} policies · {rm(r.premiumYear)} a year in premiums · {r.claimsOpen} claims open · {rm(r.guaranteesLive)} in guarantees
-              </div>
-              {r.missing.map((m) => (
-                <div key={m.kind} className="small" style={{ color: 'var(--crit)' }}>
-                  No {m.label.toLowerCase()}: {m.why}
-                </div>
-              ))}
-              <div className="muted small">
-                Group insurance licence:{' '}
-                {r.groupLicence
-                  ? r.groupLicence.status === 'OK'
-                    ? 'valid'
-                    : r.groupLicence.status === 'DUE'
-                      ? `due in ${r.groupLicence.daysLeft} days`
-                      : r.groupLicence.status === 'OVERDUE'
-                        ? 'expired'
-                        : 'unknown'
-                  : 'unknown'}{' '}
-                · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown ·{' '}
-                {data.armedCoverOnArmsBoard
-                  ? 'Armed-service and cash-in-transit cover: checked on the Arms Control board'
-                  : `Armed-service cover: ${r.armsInsurance} client agreements, ${r.armsInsuranceDue} due or unknown`}
-              </div>
-            </div>
-          ) : (
-            <div key={r.company.id} className="list-item">
-              <div>
-                <div>{r.company.name}</div>
-                <div className="muted small">Unknown: insurance records not loaded yet</div>
-              </div>
-              <Chip tone="unknown">Unknown</Chip>
-            </div>
-          ),
-        )}
-      </div>
-    </section>
+    <Card title="By company" sub="Also shows insurance watched on other screens: group insurance licence, foreign worker and armed-service cover" flush>
+      <ul className="bz-rows">
+        {data.rows.map((r) => {
+          if (!r.hasDetail)
+            return (
+              <li key={r.company.id} className="bz-row">
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{r.company.name}</span>
+                  <span className="bz-row-meta">Unknown: insurance records not loaded yet</span>
+                </span>
+                <span className="bz-row-side">
+                  <Chip tone="unknown">Unknown</Chip>
+                </span>
+              </li>
+            );
+          const gaps = r.missing.length + r.lapsed;
+          const tone: Tone = gaps ? 'crit' : r.expiring ? 'warn' : 'ok';
+          return (
+            <li key={r.company.id} className="bz-row" data-tone={stripe(tone)}>
+              <span className="bz-row-main">
+                <span className="bz-row-title">{r.company.name}</span>
+                <span className="bz-in-figs">
+                  <span>
+                    <strong>{r.policies}</strong> policies
+                  </span>
+                  <span>
+                    <strong>{rm(r.premiumYear)}</strong> a year in premiums
+                  </span>
+                  <span>
+                    <strong>{r.claimsOpen}</strong> claims open
+                  </span>
+                  <span>
+                    <strong>{rm(r.guaranteesLive)}</strong> in guarantees
+                  </span>
+                </span>
+                {r.missing.map((m) => (
+                  <span key={m.kind} className="bz-in-missing">
+                    No {m.label.toLowerCase()}: {m.why}
+                  </span>
+                ))}
+                <span className="bz-row-meta">
+                  Group insurance licence:{' '}
+                  {r.groupLicence
+                    ? r.groupLicence.status === 'OK'
+                      ? 'valid'
+                      : r.groupLicence.status === 'DUE'
+                        ? `due in ${r.groupLicence.daysLeft} days`
+                        : r.groupLicence.status === 'OVERDUE'
+                          ? 'expired'
+                          : 'unknown'
+                    : 'unknown'}{' '}
+                  · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown ·{' '}
+                  {data.armedCoverOnArmsBoard
+                    ? 'Armed-service and cash-in-transit cover: checked on the Arms Control board'
+                    : `Armed-service cover: ${r.armsInsurance} client agreements, ${r.armsInsuranceDue} due or unknown`}
+                </span>
+              </span>
+              <span className="bz-row-side">
+                <Chip tone={tone}>{gaps ? `${gaps} cover gap${gaps === 1 ? '' : 's'}` : r.expiring ? 'Renewals due' : 'Covered'}</Chip>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

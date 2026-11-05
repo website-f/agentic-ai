@@ -6,7 +6,10 @@ import { api, type Commercial, type QuotationAction } from '../api';
 import { useApp } from '../App';
 import { ProtocolPanel, TenderSteps, stepsMissing } from './TenderProtocol';
 import { PriorityChip, TenderBidFiles, TenderChecklist, TenderChecks, TenderDecisionPanel, TenderPapers, TenderQueries, TenderRecordPanel } from './TenderFlow';
-import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Stat, Stats } from '../kit';
+import { CalendarBlankIcon, FileTextIcon, HourglassIcon, PlusIcon, ProhibitIcon } from '@phosphor-icons/react';
+import '../styles/biz.css';
 
 const TENDER_STATUS: Record<TenderStatus, { label: string; tone: Tone }> = {
   open: { label: 'Open', tone: 'info' },
@@ -58,134 +61,132 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
   const tender = data.tenders.find((t) => t.tender.id === openTender);
   const quote = data.quotations.find((q) => q.id === openQuote);
 
+  const blocked = live.filter((t) => t.findings.some((f) => f.level === 'block')).length;
+  const awaitingQuotes = data.quotations.filter((q) => q.status === 'awaiting_approval').length;
+  const byClose = (a: TenderRow, b: TenderRow) => a.tender.closesOn.localeCompare(b.tender.closesOn);
+  const stages: { key: string; label: string; rows: TenderRow[] }[] = [
+    { key: 'open', label: 'Open', rows: data.tenders.filter((t) => t.tender.status === 'open').sort(byClose) },
+    { key: 'preparing', label: 'Preparing', rows: data.tenders.filter((t) => t.tender.status === 'preparing').sort(byClose) },
+    { key: 'submitted', label: 'Submitted', rows: data.tenders.filter((t) => t.tender.status === 'submitted').sort(byClose) },
+    {
+      key: 'decided',
+      label: 'Decided',
+      rows: data.tenders.filter((t) => t.tender.status === 'won' || t.tender.status === 'lost' || t.tender.status === 'no_bid').sort((a, b) => byClose(b, a)),
+    },
+  ];
+
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Tenders and quotations</h1>
-          <p>
-            Every bid and quotation is in {company?.name ?? 'this company'}'s own name, so its own papers decide whether it can bid. Government tenders are
-            tracked by the Director Office Administrator, private ones by the COO / Private Sector team or a branch. The admin team prepares; the Company
-            Manager approves.
-          </p>
-        </div>
-        {data.can.prepare && (
-          <button className="btn btn-primary" onClick={() => setNewQuote({ tenderId: null, client: '' })}>
-            New quotation
-          </button>
+    <div className="page bz-tn-page">
+      <PageHead
+        title="Tenders and quotations"
+        sub={
+          <>
+            Every bid and quotation is in {company?.name ?? 'this company'}'s own name, so its own papers decide whether it can bid. Government tenders are tracked by
+            the Director Office Administrator, private ones by the COO / Private Sector team or a branch. The admin team prepares; the Company Manager approves.
+          </>
+        }
+        actions={
+          data.can.prepare && (
+            <button className="btn btn-primary" onClick={() => setNewQuote({ tenderId: null, client: '' })}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              New quotation
+            </button>
+          )
+        }
+      />
+
+      <Stats>
+        <Stat label="Tenders to work on" value={live.length} note="Open or being prepared" icon={<FileTextIcon size={16} />} tone="info" />
+        <Stat
+          label="Closing in 14 days"
+          value={live.filter((t) => t.daysLeft <= 14).length}
+          note={live.some((t) => t.daysLeft <= 7) ? 'At least one closes within a week' : 'Nothing closes within a week'}
+          tone={live.some((t) => t.daysLeft <= 7) ? 'warn' : undefined}
+          icon={<CalendarBlankIcon size={16} />}
+        />
+        <Stat label="Cannot bid yet" value={blocked} note="Papers block the bid" tone={blocked ? 'crit' : 'ok'} icon={<ProhibitIcon size={16} />} />
+        <Stat
+          label="Quotes waiting approval"
+          value={awaitingQuotes}
+          note="With the Company Manager"
+          tone={awaitingQuotes ? 'warn' : undefined}
+          icon={<HourglassIcon size={16} />}
+        />
+      </Stats>
+
+      <Card title="Tender pipeline" sub="Closing date first. Open a tender to work on its papers, steps and bid files." actions={<span className="bz-count">{data.tenders.length}</span>}>
+        {data.tenders.length === 0 ? (
+          <Empty title="No tenders recorded for this company yet." />
+        ) : (
+          <div className="bz-board" aria-label="Tenders by stage">
+            {stages.map((st) => (
+              <section key={st.key} className="bz-col" aria-label={st.label}>
+                <div className="bz-col-head">
+                  <span>{st.label}</span>
+                  <span className="bz-count">{st.rows.length}</span>
+                </div>
+                {st.rows.length === 0 && <div className="bz-col-empty">None</div>}
+                {st.rows.map((t) => (
+                  <TenderTile key={t.tender.id} t={t} onOpen={() => setOpenTender(t.tender.id)} />
+                ))}
+              </section>
+            ))}
+          </div>
         )}
+      </Card>
+
+      <div className="bz-two">
+        <Card title="Can this company bid today?" sub="Government tenders also need MOF" flush>
+          <ul className="bz-rows">
+            {data.biddingPapers.map((p) => (
+              <li key={p.type} className="bz-row">
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{p.label}</span>
+                  <span className="bz-row-meta">{p.expiresOn ? `Expires ${dateLabel(p.expiresOn)}` : 'No record'}</span>
+                </span>
+                <span className="bz-row-side">
+                  <ExpiryChip status={p.status} daysLeft={p.daysLeft} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card title="Quotations" sub="Prices are typed in by the admin team until costing rules are approved" flush>
+          {data.quotations.length === 0 ? (
+            <Empty title="No quotations yet." />
+          ) : (
+            <ul className="bz-rows">
+              {data.quotations.map((q) => (
+                <li key={q.id}>
+                  <button className="bz-row" data-tone={q.status === 'returned' ? 'crit' : q.status === 'awaiting_approval' ? 'warn' : undefined} onClick={() => setOpenQuote(q.id)}>
+                    <span className="bz-row-main">
+                      <span className="bz-row-title">
+                        {q.client} <span className="muted small mono">{q.ref}</span>
+                      </span>
+                      <span className="bz-row-meta">
+                        {q.siteName ? `${q.siteName} · ` : ''}
+                        {q.guards} guards × {q.hoursPerDay}h · valid to {dateLabel(q.validUntil)}
+                      </span>
+                    </span>
+                    <span className="bz-row-side">
+                      <span className="bz-amt">{rm(q.monthlyTotal)}</span>
+                      <span className="bz-sub">a month</span>
+                      <Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
 
       {(me.user.role === 'company_manager' || me.user.role === 'admin_exec') && <JointTenders />}
 
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Can this company bid today?</h3>
-          <span className="muted small">Government tenders also need MOF</span>
-        </div>
-        <div className="list">
-          {data.biddingPapers.map((p) => (
-            <div key={p.type} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>{p.label}</div>
-                <div className="muted small">{p.expiresOn ? `Expires ${dateLabel(p.expiresOn)}` : 'No record'}</div>
-              </div>
-              <ExpiryChip status={p.status} daysLeft={p.daysLeft} />
-            </div>
-          ))}
-        </div>
-      </section>
-
       <LeadsPanel companyId={companyId} />
 
-      <div className="kpis">
-        <Kpi label="Tenders to work on" value={live.length} />
-        <Kpi label="Closing in 14 days" value={live.filter((t) => t.daysLeft <= 14).length} tone={live.some((t) => t.daysLeft <= 7) ? 'warn' : undefined} />
-        <Kpi
-          label="Cannot bid yet"
-          value={live.filter((t) => t.findings.some((f) => f.level === 'block')).length}
-          tone={live.some((t) => t.findings.some((f) => f.level === 'block')) ? 'crit' : 'ok'}
-          note="Papers block the bid"
-        />
-        <Kpi label="Quotes waiting approval" value={data.quotations.filter((q) => q.status === 'awaiting_approval').length} tone="warn" />
-      </div>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Tenders</h3>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tender</th>
-                <th className="hide-sm">Type</th>
-                <th>Closes</th>
-                <th className="hide-sm">Guards</th>
-                <th>Can bid?</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.tenders.map((t) => (
-                <tr key={t.tender.id} className="clickable" onClick={() => setOpenTender(t.tender.id)}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{t.tender.title}</div>
-                    <div className="muted small">
-                      {t.tender.buyer} · <span className="mono">{t.tender.ref}</span>
-                    </div>
-                    <div className="row" style={{ marginTop: 4, gap: 6, flexWrap: 'wrap' }}>
-                      <Chip tone={TENDER_STATUS[t.tender.status].tone}>{TENDER_STATUS[t.tender.status].label}</Chip>
-                      {(t.tender.status === 'open' || t.tender.status === 'preparing') && <span className="muted small">{t.stage}</span>}
-                      <PriorityChip p={t.priority} />
-                    </div>
-                  </td>
-                  <td className="hide-sm">
-                    <div>{t.tender.channel === 'GOVERNMENT' ? 'Government' : 'Private'}</div>
-                    <div className="muted small">{t.tender.owner}</div>
-                  </td>
-                  <td className="num">
-                    <div>{dateLabel(t.tender.closesOn)}</div>
-                    {(t.tender.status === 'open' || t.tender.status === 'preparing') && (
-                      <div className="muted small">{t.daysLeft >= 0 ? `${t.daysLeft} days left` : 'Closed'}</div>
-                    )}
-                  </td>
-                  <td className="num hide-sm">{t.tender.guards}</td>
-                  <td>
-                    <EligibilityChip row={t} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {data.tenders.length === 0 && <div className="empty">No tenders recorded for this company yet.</div>}
-        </div>
-      </section>
-
       <ProtocolPanel p={data.protocol} />
-
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Quotations</h3>
-          <span className="muted small">Prices are typed in by the admin team until costing rules are approved</span>
-        </div>
-        <div className="list">
-          {data.quotations.map((q) => (
-            <button key={q.id} className="list-item list-button" onClick={() => setOpenQuote(q.id)}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {q.client} <span className="muted small mono">{q.ref}</span>
-                </div>
-                <div className="muted small">
-                  {q.siteName ? `${q.siteName} · ` : ''}
-                  {q.guards} guards × {q.hoursPerDay}h · {rm(q.monthlyTotal)} a month · valid to {dateLabel(q.validUntil)}
-                </div>
-              </div>
-              <Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>
-            </button>
-          ))}
-          {data.quotations.length === 0 && <div className="empty">No quotations yet.</div>}
-        </div>
-      </section>
 
       {tender && (
         <TenderDrawer
@@ -214,11 +215,47 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
   );
 }
 
+/** One tender on the pipeline: the closing date is what matters most while it is live. */
+function TenderTile({ t, onOpen }: { t: TenderRow; onOpen: () => void }) {
+  const tn = t.tender;
+  const isLive = tn.status === 'open' || tn.status === 'preparing';
+  const tone = !isLive ? undefined : t.findings.some((f) => f.level === 'block') || t.daysLeft <= 7 ? 'crit' : t.daysLeft <= 14 ? 'warn' : undefined;
+  return (
+    <button type="button" className="bz-tile" data-tone={tone} onClick={onOpen}>
+      <span className="bz-row-main">
+        <span className="bz-row-title">{tn.title}</span>
+        <span className="bz-row-meta">
+          {tn.buyer} · <span className="mono">{tn.ref}</span>
+        </span>
+      </span>
+      <span className="bz-tn-close" data-tone={tone}>
+        <span className="bz-tn-close-date">
+          <span className="bz-sub">Closes</span>
+          <strong>{dateLabel(tn.closesOn)}</strong>
+        </span>
+        {isLive && <span className="bz-tn-days">{t.daysLeft >= 0 ? `${t.daysLeft} days left` : 'Closed'}</span>}
+      </span>
+      {isLive && <span className="bz-row-meta">{t.stage}</span>}
+      <span className="bz-chips">
+        {!isLive && <Chip tone={TENDER_STATUS[tn.status].tone}>{TENDER_STATUS[tn.status].label}</Chip>}
+        {isLive && <EligibilityChip row={t} />}
+        <PriorityChip p={t.priority} />
+      </span>
+      <span className="bz-tile-foot">
+        <span>
+          {tn.channel === 'GOVERNMENT' ? 'Government' : 'Private'} · {tn.owner}
+        </span>
+        <span>{tn.guards} guards</span>
+      </span>
+    </button>
+  );
+}
+
 function EligibilityChip({ row }: { row: TenderRow }) {
   if (row.tender.status !== 'open' && row.tender.status !== 'preparing') return <span className="muted small">–</span>;
   if (row.findings.some((f) => f.level === 'block')) return <Chip tone="crit">Blocked</Chip>;
   if (row.findings.length) return <Chip tone="warn">Check papers</Chip>;
-  return <Chip tone="ok">Yes</Chip>;
+  return <Chip tone="ok">Can bid</Chip>;
 }
 
 function TenderDrawer({
@@ -248,35 +285,24 @@ function TenderDrawer({
   };
   return (
     <Drawer title={t.title} sub={`${t.buyer} · ${t.ref}`} onClose={onClose}>
-      <div className="grid-2">
-        <div>
-          <div className="label">Type</div>
-          <div>{t.channel === 'GOVERNMENT' ? 'Government' : 'Private'}</div>
-        </div>
-        <div>
-          <div className="label">Source</div>
-          <div>{t.source}</div>
-        </div>
-        <div>
-          <div className="label">Leads the pursuit</div>
-          <div>{t.owner}</div>
-        </div>
-        <div>
-          <div className="label">Closes</div>
-          <div>{dateLabel(t.closesOn)}</div>
-        </div>
-        <div>
-          <div className="label">Size</div>
-          <div>
-            {t.guards} guards, {t.sites} site{t.sites === 1 ? '' : 's'}
-          </div>
-        </div>
-        <div>
-          <div className="label">Estimated value</div>
-          <div>{t.estMonthly ? `${rm(t.estMonthly)} a month` : 'Not known'}</div>
-        </div>
+      <div className="bz-chips">
+        <Chip tone={TENDER_STATUS[t.status].tone}>{TENDER_STATUS[t.status].label}</Chip>
+        {(t.status === 'open' || t.status === 'preparing') && <EligibilityChip row={row} />}
+        <PriorityChip p={row.priority} />
       </div>
-      <section>
+      <div className="bz-facts">
+        <Facts
+          items={[
+            ['Closes', <strong key="c">{dateLabel(t.closesOn)}{(t.status === 'open' || t.status === 'preparing') && row.daysLeft >= 0 ? ` · ${row.daysLeft} days left` : ''}</strong>],
+            ['Estimated value', t.estMonthly ? `${rm(t.estMonthly)} a month` : 'Not known'],
+            ['Size', `${t.guards} guards, ${t.sites} site${t.sites === 1 ? '' : 's'}`],
+            ['Type', t.channel === 'GOVERNMENT' ? 'Government' : 'Private'],
+            ['Source', t.source],
+            ['Leads the pursuit', t.owner],
+          ]}
+        />
+      </div>
+      <section className="bz-sec">
         <h3>Can this company bid?</h3>
         {t.status !== 'open' && t.status !== 'preparing' ? (
           <p className="muted">This tender is {TENDER_STATUS[t.status].label.toLowerCase()}.</p>
@@ -296,25 +322,28 @@ function TenderDrawer({
       <TenderChecklist row={row} canPrepare={can.prepare} doa={doa} reader={reader} />
       <TenderBidFiles row={row} canPrepare={can.prepare} doa={doa} />
       <TenderChecks row={row} canPrepare={can.prepare} missing={[...stepsMissing(row, 'submitted'), ...row.bidFileGaps]} />
-      <section>
+      <section className="bz-sec">
         <h3>Quotations for this tender</h3>
         {quotations.length === 0 ? (
           <p className="muted">None yet.</p>
         ) : (
-          <div className="list">
+          <ul className="bz-rows bz-tn-boxed">
             {quotations.map((q) => (
-              <div key={q.id} className="list-item">
-                <span>
-                  {q.ref} · {rm(q.monthlyTotal)} a month
+              <li key={q.id} className="bz-row">
+                <span className="bz-row-main">
+                  <span className="bz-row-title mono">{q.ref}</span>
+                  <span className="bz-row-meta">{rm(q.monthlyTotal)} a month</span>
                 </span>
-                <Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>
-              </div>
+                <span className="bz-row-side">
+                  <Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ flexWrap: 'wrap' }}>
+      <div className="bz-actions bz-tn-foot">
         {can.prepare && (t.status === 'open' || t.status === 'preparing') && (
           <button className="btn" onClick={onQuote}>
             Prepare quotation
@@ -381,43 +410,23 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
   };
   return (
     <Drawer title={`${q.ref} · ${q.client}`} sub={<Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>} onClose={onClose}>
-      <div className="grid-2">
-        <div>
-          <div className="label">Site</div>
-          <div>{q.siteName || '–'}</div>
-        </div>
-        <div>
-          <div className="label">Tender</div>
-          <div>{tenderTitle ?? 'Direct quotation'}</div>
-        </div>
-        <div>
-          <div className="label">Guards</div>
-          <div>
-            {q.guards} × {q.hoursPerDay}-hour shifts
-          </div>
-        </div>
-        <div>
-          <div className="label">Rate per guard</div>
-          <div>{rm(q.ratePerGuard)} a month</div>
-        </div>
-        <div>
-          <div className="label">Total</div>
-          <div style={{ fontWeight: 600 }}>{rm(q.monthlyTotal)} a month</div>
-        </div>
-        <div>
-          <div className="label">Valid until</div>
-          <div>{dateLabel(q.validUntil)}</div>
-        </div>
-        <div>
-          <div className="label">Prepared by</div>
-          <div>
-            {q.preparedBy}, {dateTimeLabel(q.preparedAt)}
-          </div>
-        </div>
-        <div>
-          <div className="label">Approved by</div>
-          <div>{q.approvedBy ? `${q.approvedBy}, ${dateTimeLabel(q.approvedAt!)}` : '–'}</div>
-        </div>
+      <div className="bz-tn-total">
+        <span className="bz-sub">Total</span>
+        <strong className="bz-amt">{rm(q.monthlyTotal)}</strong>
+        <span className="bz-sub">a month</span>
+      </div>
+      <div className="bz-facts">
+        <Facts
+          items={[
+            ['Site', q.siteName || '–'],
+            ['Tender', tenderTitle ?? 'Direct quotation'],
+            ['Guards', `${q.guards} × ${q.hoursPerDay}-hour shifts`],
+            ['Rate per guard', `${rm(q.ratePerGuard)} a month`],
+            ['Valid until', dateLabel(q.validUntil)],
+            ['Prepared by', `${q.preparedBy}, ${dateTimeLabel(q.preparedAt)}`],
+            ['Approved by', q.approvedBy ? `${q.approvedBy}, ${dateTimeLabel(q.approvedAt!)}` : '–'],
+          ]}
+        />
       </div>
       {q.note && (
         <div className="notice" data-tone={q.status === 'returned' ? 'warn' : 'info'}>
@@ -444,33 +453,34 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
         </button>
       )}
       {fix && (
-        <div className="form">
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <label>
-              Guards
-              <input type="number" min={1} max={1000} value={fix.guards} onChange={(e) => setFix({ ...fix, guards: e.target.value })} />
+        <div className="bz-act">
+          <h3 className="bz-tn-act-title">Correct guards, rate or date</h3>
+          <div className="bz-form">
+            <label className="field">
+              <span className="label">Guards</span>
+              <input className="input" type="number" min={1} max={1000} value={fix.guards} onChange={(e) => setFix({ ...fix, guards: e.target.value })} />
             </label>
-            <label>
-              Hours a day
-              <select value={fix.hoursPerDay} onChange={(e) => setFix({ ...fix, hoursPerDay: Number(e.target.value) === 8 ? 8 : 12 })}>
+            <label className="field">
+              <span className="label">Hours a day</span>
+              <select className="select" value={fix.hoursPerDay} onChange={(e) => setFix({ ...fix, hoursPerDay: Number(e.target.value) === 8 ? 8 : 12 })}>
                 <option value={8}>8</option>
                 <option value={12}>12</option>
               </select>
             </label>
-            <label>
-              Rate per guard (RM a month)
-              <input type="number" min={1} step="0.01" value={fix.ratePerGuard} onChange={(e) => setFix({ ...fix, ratePerGuard: e.target.value })} />
+            <label className="field">
+              <span className="label">Rate per guard (RM a month)</span>
+              <input className="input" type="number" min={1} step="0.01" value={fix.ratePerGuard} onChange={(e) => setFix({ ...fix, ratePerGuard: e.target.value })} />
             </label>
-            <label>
-              Valid until
-              <input type="date" value={fix.validUntil} onChange={(e) => setFix({ ...fix, validUntil: e.target.value })} />
+            <label className="field">
+              <span className="label">Valid until</span>
+              <input className="input" type="date" value={fix.validUntil} onChange={(e) => setFix({ ...fix, validUntil: e.target.value })} />
+            </label>
+            <label className="field bz-span">
+              <span className="label">Reason for the correction (needed)</span>
+              <input className="input" value={fix.reason} maxLength={500} onChange={(e) => setFix({ ...fix, reason: e.target.value })} />
             </label>
           </div>
-          <label>
-            Reason for the correction (needed)
-            <input value={fix.reason} maxLength={500} onChange={(e) => setFix({ ...fix, reason: e.target.value })} />
-          </label>
-          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+          <div className="bz-actions">
             <button className="btn btn-sm btn-primary" disabled={act.busy || !fix.reason.trim()} onClick={saveFix}>
               Save correction
             </button>
@@ -481,7 +491,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ flexWrap: 'wrap' }}>
+      <div className="bz-actions bz-tn-foot">
         {can.prepare && (q.status === 'draft' || q.status === 'returned') && (
           <button className="btn btn-primary" disabled={act.busy} onClick={() => run('submit')}>
             Send to manager for approval
@@ -558,32 +568,32 @@ function NewQuoteDrawer({
   };
   return (
     <Drawer title="New quotation" sub="Saved as a draft. The Company Manager approves it before it goes to the client." onClose={onClose}>
-      <div className="field">
-        <label className="label" htmlFor="nq-client">
-          Client
-        </label>
-        <input id="nq-client" className="input" value={client} onChange={(e) => setClient(e.target.value)} />
-      </div>
-      <div className="field">
-        <label className="label" htmlFor="nq-site">
-          Site
-        </label>
-        <input id="nq-site" className="input" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
-      </div>
-      <div className="field">
-        <label className="label" htmlFor="nq-tender">
-          For tender
-        </label>
-        <select id="nq-tender" className="select" value={tenderId} onChange={(e) => setTenderId(e.target.value)}>
-          <option value="">Direct quotation (no tender)</option>
-          {tenders.map((t) => (
-            <option key={t.tender.id} value={t.tender.id}>
-              {t.tender.ref} · {t.tender.title}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="grid-2">
+      <div className="bz-form">
+        <div className="field bz-span">
+          <label className="label" htmlFor="nq-client">
+            Client
+          </label>
+          <input id="nq-client" className="input" value={client} onChange={(e) => setClient(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="nq-site">
+            Site
+          </label>
+          <input id="nq-site" className="input" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="nq-tender">
+            For tender
+          </label>
+          <select id="nq-tender" className="select" value={tenderId} onChange={(e) => setTenderId(e.target.value)}>
+            <option value="">Direct quotation (no tender)</option>
+            {tenders.map((t) => (
+              <option key={t.tender.id} value={t.tender.id}>
+                {t.tender.ref} · {t.tender.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="field">
           <label className="label" htmlFor="nq-guards">
             Guards
@@ -592,11 +602,11 @@ function NewQuoteDrawer({
         </div>
         <div className="field">
           <span className="label">Shift length</span>
-          <div className="seg">
-            <button aria-pressed={hours === 12} onClick={() => setHours(12)}>
+          <div className="seg" role="group" aria-label="Shift length">
+            <button type="button" aria-pressed={hours === 12} onClick={() => setHours(12)}>
               12 hours
             </button>
-            <button aria-pressed={hours === 8} onClick={() => setHours(8)}>
+            <button type="button" aria-pressed={hours === 8} onClick={() => setHours(8)}>
               8 hours
             </button>
           </div>
@@ -618,9 +628,11 @@ function NewQuoteDrawer({
         Total {rm(total)} a month. Check the rate against wages, overtime and statutory contributions before sending it for approval.
       </div>
       <ErrorNotice error={act.error} />
-      <button className="btn btn-primary" disabled={act.busy || !client.trim() || !rate} onClick={save}>
-        Save draft
-      </button>
+      <div className="bz-form-foot">
+        <button className="btn btn-primary" disabled={act.busy || !client.trim() || !rate} onClick={save}>
+          Save draft
+        </button>
+      </div>
     </Drawer>
   );
 }

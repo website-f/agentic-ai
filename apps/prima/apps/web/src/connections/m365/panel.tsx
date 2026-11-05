@@ -54,47 +54,48 @@ function Row({ s, session, busy, message, guidance, linkInput, link, selected }:
   const g = guidance?.[s.service];
   const needsResource = s.service !== 'outlook';
   const resourceName = s.resourceKey ? s.resources.find(r => r.key === s.resourceKey)?.name : undefined;
-  return <section className="panel" style={{ padding: 16, minWidth: 0 }} aria-labelledby={`${id}-title`}>
-    <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-      <h3 id={`${id}-title`} style={{ margin: 0 }}>{TITLE[s.service]}</h3>
+  return <section className="panel ix-conn" aria-labelledby={`${id}-title`}>
+    <div className="ix-conn-head">
+      <h3 id={`${id}-title`}>{TITLE[s.service]}</h3>
       <span className="chip" data-tone={st.tone} role="status" aria-label={`${TITLE[s.service]} status: ${st.label}`}>{st.label}</span>
     </div>
+    <div className="ix-conn-body">
     <p>{REASON[s.reason] ?? 'Status unknown.'}</p>
-    {s.state === 'connected' && <p className="small">Checked {resourceName ? `for ${resourceName} ` : ''}at <time dateTime={s.checkedAt}>{when(s.checkedAt)}</time>. Shown until <time dateTime={s.validUntil}>{when(s.validUntil)}</time>. This is a point-in-time check, not continuous monitoring.</p>}
-    {s.state !== 'connected' && s.checkedAt && <p className="small muted">Last answer from Microsoft: <time dateTime={s.checkedAt}>{when(s.checkedAt)}</time>.</p>}
-    {s.retryAfterSeconds && <p className="small">Try again in about {Math.ceil(s.retryAfterSeconds / 60)} minute(s).</p>}
-    {needsResource && s.resources.length > 0 && <div>
-      <label htmlFor={`${id}-resource`}>{s.service === 'teams' ? 'Approved team' : 'Approved site'}</label>
-      <select id={`${id}-resource`} className="select" style={{ display: 'block', width: '100%', maxWidth: 480 }} value={selected ?? ''} disabled={!!busy} onChange={e => session.select(s.service as 'teams' | 'sharepoint', e.target.value)}>
+    {s.state === 'connected' && <p className="ix-meta">Checked {resourceName ? `for ${resourceName} ` : ''}at <time dateTime={s.checkedAt}>{when(s.checkedAt)}</time>. Shown until <time dateTime={s.validUntil}>{when(s.validUntil)}</time>. This is a point-in-time check, not continuous monitoring.</p>}
+    {s.state !== 'connected' && s.checkedAt && <p className="ix-meta">Last answer from Microsoft: <time dateTime={s.checkedAt}>{when(s.checkedAt)}</time>.</p>}
+    {s.retryAfterSeconds && <p className="ix-meta">Try again in about {Math.ceil(s.retryAfterSeconds / 60)} minute(s).</p>}
+    {needsResource && s.resources.length > 0 && <div className="field">
+      <label className="label" htmlFor={`${id}-resource`}>{s.service === 'teams' ? 'Approved team' : 'Approved site'}</label>
+      <select id={`${id}-resource`} className="select" value={selected ?? ''} disabled={!!busy} onChange={e => session.select(s.service as 'teams' | 'sharepoint', e.target.value)}>
         <option value="">Choose</option>
         {s.resources.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
       </select>
     </div>}
-    <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+    <div className="ix-actions">
       {s.actions.includes('check') && <button className="btn btn-primary" disabled={!!busy || (needsResource && !selected)} onClick={() => void session.check(s.service)}>{s.state === 'connected' ? 'Check again' : 'Check'}</button>}
       {s.actions.includes('reconnect') && <button className="btn btn-primary" disabled={!!busy} onClick={() => void session.reconnect(s.service)}>Reconnect</button>}
       {s.actions.includes('disconnect') && <button className="btn" disabled={busy === 'disconnect'} onClick={() => void session.disconnect(s.service)}>Disconnect</button>}
     </div>
-    {busy && <p role="status" className="small">{busy === 'check' ? 'Asking Microsoft…' : busy === 'link' ? 'Checking the link with Microsoft…' : busy === 'reconnect' ? 'Opening Microsoft sign-in…' : 'Disconnecting…'}</p>}
+    {busy && <p role="status" className="ix-meta">{busy === 'check' ? 'Asking Microsoft…' : busy === 'link' ? 'Checking the link with Microsoft…' : busy === 'reconnect' ? 'Opening Microsoft sign-in…' : 'Disconnecting…'}</p>}
     {message && <p role="status" className="notice" data-tone="info">{message}</p>}
-    {(s.service === 'teams' || s.service === 'sharepoint') && s.resources.length > 0 && s.state !== 'not_configured' && <div style={{ marginTop: 12 }}>
-      <label htmlFor={`${id}-link`}>{s.service === 'teams' ? 'Check a Teams channel link' : 'Check a SharePoint site or library link'}</label>
-      <input id={`${id}-link`} className="input" style={{ width: '100%', minWidth: 0 }} autoComplete="off" inputMode="url" value={linkInput ?? ''} disabled={!!busy}
+    {(s.service === 'teams' || s.service === 'sharepoint') && s.resources.length > 0 && s.state !== 'not_configured' && <div className="ix-link-check">
+      <label className="label" htmlFor={`${id}-link`}>{s.service === 'teams' ? 'Check a Teams channel link' : 'Check a SharePoint site or library link'}</label>
+      <div className="ix-inline-form"><input id={`${id}-link`} className="input" autoComplete="off" inputMode="url" value={linkInput ?? ''} disabled={!!busy}
         placeholder={s.service === 'teams' ? 'https://teams.microsoft.com/l/channel/…' : 'https://<tenant>.sharepoint.com/sites/…'}
         onChange={e => session.editLink(s.service as 'teams' | 'sharepoint', e.target.value)} />
-      <button className="btn" style={{ marginTop: 8 }} disabled={!!busy || !linkInput?.trim()} onClick={() => void session.checkLink(s.service as 'teams' | 'sharepoint')}>Check link</button>
-      {link && <div className="notice" data-tone={link.outcome === 'Verified' ? 'ok' : 'warn'} role="status" style={{ marginTop: 8 }}>
+      <button className="btn" disabled={!!busy || !linkInput?.trim()} onClick={() => void session.checkLink(s.service as 'teams' | 'sharepoint')}>Check link</button></div>
+      {link && <div className="notice" data-tone={link.outcome === 'Verified' ? 'ok' : 'warn'} role="status">
         <p>{LINK[link.outcome]}</p>
         {link.outcome === 'Verified' && <p className="small">Confirmed: {link.verifiedScope === 'channel' ? 'this channel only (not the whole team)' : link.verifiedScope === 'library' ? 'this approved library' : 'the site'}. A link check does not change the connection status above.</p>}
         {link.outcome === 'Failed' && link.reason && <p className="small">{REASON[link.reason] ?? ''}{link.retryAfterSeconds ? ` Try again in about ${Math.ceil(link.retryAfterSeconds / 60)} minute(s).` : ''}</p>}
         {link.membershipType && <p className="small">Channel type: {link.membershipType}.</p>}
         {link.openUrl && <a href={link.openUrl} target="_blank" rel="noopener noreferrer">Open in Teams (new tab)</a>}
-        {link.canonicalUrl && link.outcome !== 'Verified' && <p className="small" style={{ overflowWrap: 'anywhere' }}>Link checked: <code>{link.canonicalUrl}</code></p>}
+        {link.canonicalUrl && link.outcome !== 'Verified' && <p className="small ix-wrap">Link checked: <code>{link.canonicalUrl}</code></p>}
       </div>}
     </div>}
-    {g && <details style={{ marginTop: 12 }}>
+    {g && <details className="ix-details">
       <summary>Kenapa sambungan ini? / Why this connection?</summary>
-      <dl className="small">
+      <dl className="small ix-guide">
         <dt>Kenapa / Why</dt><dd>{g.why.bm}<br /><span className="muted">{g.why.en}</span></dd>
         <dt>Data digunakan / Data used</dt><dd>{g.data.bm}<br /><span className="muted">{g.data.en}</span></dd>
         <dt>Pautan / Where to get the link</dt><dd>{g.whereToGetLink.bm}<br /><span className="muted">{g.whereToGetLink.en}</span></dd>
@@ -102,6 +103,7 @@ function Row({ s, session, busy, message, guidance, linkInput, link, selected }:
         <dt>Kebenaran Microsoft / Microsoft permission</dt><dd>{g.scopes.join(', ')} (delegated, read-only)</dd>
       </dl>
     </details>}
+    </div>
   </section>;
 }
 
@@ -110,18 +112,18 @@ export function M365ConnectionsPanel({ userId, client, reauthenticate }: { userI
   const session = useMemo(() => new M365Session(userId, client, reauthenticate), [userId, client, reauthenticate]);
   const s = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
   useEffect(() => { session.start(); return session.dispose; }, [session]);
-  return <section aria-labelledby="m365-title" style={{ marginBottom: 16 }}>
-    <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+  return <section className="ix-section" aria-labelledby="m365-title">
+    <div className="ix-section-head ix-section-head-row">
       <h2 id="m365-title">Your Microsoft 365 connections</h2>
       <button className="btn btn-sm" disabled={s.phase === 'loading'} onClick={() => void session.load()}>Refresh status</button>
     </div>
-    <p className="muted">Each connection uses your own Microsoft account and only reads. Connected means Microsoft answered a check for you; signing in to Prima alone does not count. Prima never shows or keeps your Microsoft tokens. Disconnect makes Prima forget its check; it does not remove Microsoft permission. Outlook only checks that your mailbox can be reached. Staff keep sending email in Outlook.</p>
-    {s.phase === 'loading' && !s.status && <p role="status">Reading Prima status…</p>}
+    <p className="ix-meta ix-lead">Each connection uses your own Microsoft account and only reads. Connected means Microsoft answered a check for you; signing in to Prima alone does not count. Prima never shows or keeps your Microsoft tokens. Disconnect makes Prima forget its check; it does not remove Microsoft permission. Outlook only checks that your mailbox can be reached. Staff keep sending email in Outlook.</p>
+    {s.phase === 'loading' && !s.status && <p role="status" className="empty">Reading Prima status…</p>}
     {s.failure && <p role="alert" className="notice" data-tone="crit">Status unavailable. Nothing is shown as connected. Refresh, or ask the IT desk.</p>}
-    {s.status && s.status.userId === userId && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
+    {s.status && s.status.userId === userId && <div className="ix-conn-grid ix-conn-grid-3">
       {s.status.services.map(x => <Row key={x.service} s={x} session={session} busy={s.busy[x.service]} message={s.message[x.service]} guidance={s.guidance}
         selected={x.service === 'outlook' ? undefined : s.selected[x.service]} linkInput={x.service === 'outlook' ? undefined : s.linkInput[x.service]} link={x.service === 'outlook' ? undefined : s.links[x.service]} />)}
     </div>}
-    {s.status && <p className="small muted" style={{ marginTop: 8 }}>Teams Approvals evidence is not built. A chat message saying "approved" is not evidence, and Prima approvals stay in Prima. The Power Automate Approvals connector is being evaluated.</p>}
+    {s.status && <p className="ix-meta">Teams Approvals evidence is not built. A chat message saying "approved" is not evidence, and Prima approvals stay in Prima. The Power Automate Approvals connector is being evaluated.</p>}
   </section>;
 }

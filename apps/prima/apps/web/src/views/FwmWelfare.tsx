@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { FW_CHECK_LABEL, FW_CONCERN_LABEL, type FwCheckKind, type FwConcern, type ProofInput } from '@prima/core';
 import { api, type FwmWelfare } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { ChatsCircleIcon, ClockCountdownIcon, FlagIcon, HandCoinsIcon, IdentificationCardIcon, QuestionIcon } from '@phosphor-icons/react';
+import { Avatar, Empty, Search, Stat, Stats, Toolbar } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import '../styles/hrx.css';
 
 /**
  * Responsible recruitment and worker welfare (masterplan §240, Fauzan 3 Nov 2026). FWM asks each new foreign worker
@@ -35,7 +38,7 @@ export function FwmWelfarePanel() {
   const [page, setPage] = useState(0);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="welfare checks" />;
-  // The whole list, searchable and paged (Arisha main review, 3 Nov 2026: no worker may fall off the end).
+  // The whole list, searchable and paged (main review, 3 Nov 2026: no worker may fall off the end).
   const needle = q.trim().toLowerCase();
   const matched = data.workers.filter(
     (w) =>
@@ -46,19 +49,61 @@ export function FwmWelfarePanel() {
   const at = Math.min(page, pages - 1);
   const shown = matched.slice(at * PAGE, at * PAGE + PAGE);
   return (
-    <>
-      <div className="kpis">
-        <Kpi label="Fee not asked yet" value={data.counts.feeNotChecked} tone={data.counts.feeNotChecked ? 'unknown' : 'ok'} note="Unknown, not green" />
-        {data.counts.feesFound !== null && <Kpi label="Fees found" value={data.counts.feesFound} tone={data.counts.feesFound ? 'crit' : 'ok'} note="Workers who paid to get the job" />}
-        <Kpi label="Passport with company" value={data.counts.passportWithCompany} tone={data.counts.passportNoConsent ? 'crit' : data.counts.passportWithCompany ? 'warn' : 'ok'} note={`${data.counts.passportNoConsent} without signed consent`} />
-        <Kpi label="Passport check due" value={data.counts.passportDue} tone={data.counts.passportDue ? 'warn' : 'ok'} note={`Every ${data.rules.passport.value} days`} />
-        <Kpi label="Welfare talk due" value={data.counts.welfareDue} tone={data.counts.welfareDue ? 'warn' : 'ok'} note={`Every ${data.rules.welfare.value} days`} />
-        <Kpi label="Open follow-ups" value={data.counts.open} tone={data.counts.open ? 'crit' : 'ok'} />
+    <div className="hx-stack">
+      <div className="fw-stats">
+      <Stats>
+        <Stat
+          label="Fee not asked yet"
+          value={data.counts.feeNotChecked}
+          tone={data.counts.feeNotChecked ? 'unknown' : 'ok'}
+          note="Unknown, not green"
+          icon={<QuestionIcon size={16} />}
+        />
+        {data.counts.feesFound !== null && (
+          <Stat
+            label="Fees found"
+            value={data.counts.feesFound}
+            tone={data.counts.feesFound ? 'crit' : 'ok'}
+            note="Workers who paid to get the job"
+            icon={<HandCoinsIcon size={16} />}
+          />
+        )}
+        <Stat
+          label="Passport with company"
+          value={data.counts.passportWithCompany}
+          tone={data.counts.passportNoConsent ? 'crit' : data.counts.passportWithCompany ? 'warn' : 'ok'}
+          note={`${data.counts.passportNoConsent} without signed consent`}
+          icon={<IdentificationCardIcon size={16} />}
+        />
+        <Stat
+          label="Passport check due"
+          value={data.counts.passportDue}
+          tone={data.counts.passportDue ? 'warn' : 'ok'}
+          note={`Every ${data.rules.passport.value} days`}
+          icon={<ClockCountdownIcon size={16} />}
+        />
+        <Stat
+          label="Welfare talk due"
+          value={data.counts.welfareDue}
+          tone={data.counts.welfareDue ? 'warn' : 'ok'}
+          note={`Every ${data.rules.welfare.value} days`}
+          icon={<ChatsCircleIcon size={16} />}
+        />
+        <Stat label="Open follow-ups" value={data.counts.open} tone={data.counts.open ? 'crit' : 'ok'} icon={<FlagIcon size={16} />} />
+      </Stats>
       </div>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Recruitment and welfare</h2>
-          <div className="tabbar" role="tablist" aria-label="Welfare sections">
+      {!data.confidential && (
+        <p className="notice" data-tone="info">
+          You see when each check was done and any passport follow-up your company must act on. Fees and what workers raise stay with FWM and the group
+          leaders, so nobody can tell who spoke up.
+        </p>
+      )}
+      <section className="k-card">
+        <div className="k-card-head">
+          <div className="k-card-title">
+            <h2>Recruitment and welfare</h2>
+          </div>
+          <div className="tabbar hx-tabs" role="tablist" aria-label="Welfare sections">
             <button role="tab" aria-selected={tab === 'workers'} onClick={() => setTab('workers')}>
               Workers
             </button>
@@ -78,49 +123,49 @@ export function FwmWelfarePanel() {
             )}
           </div>
         </div>
-        {!data.confidential && (
-          <p className="muted small" style={{ padding: '0 12px' }}>
-            You see when each check was done and any passport follow-up your company must act on. Fees and what workers raise stay with FWM and the group leaders, so nobody can tell who spoke up.
-          </p>
-        )}
         {tab === 'workers' && (
-          <div className="list">
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap', padding: '0 12px' }}>
-              <input
-                className="input"
-                aria-label="Search workers"
-                placeholder="Search name, staff no or company"
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(0);
-                }}
-              />
-              <select
-                className="select"
-                aria-label="Show"
-                value={only}
-                onChange={(e) => {
-                  setOnly(e.target.value as 'all' | 'open' | 'due');
-                  setPage(0);
-                }}
-              >
-                <option value="all">All workers</option>
-                <option value="open">With a follow-up open</option>
-                <option value="due">With a check due</option>
-              </select>
+          <>
+            <div className="fw-filter">
+              <Toolbar>
+                <Search
+                  value={q}
+                  onChange={(v) => {
+                    setQ(v);
+                    setPage(0);
+                  }}
+                  placeholder="Search name, staff no or company"
+                  label="Search workers"
+                />
+                <select
+                  className="select hx-filter"
+                  aria-label="Show"
+                  value={only}
+                  onChange={(e) => {
+                    setOnly(e.target.value as 'all' | 'open' | 'due');
+                    setPage(0);
+                  }}
+                >
+                  <option value="all">All workers</option>
+                  <option value="open">With a follow-up open</option>
+                  <option value="due">With a check due</option>
+                </select>
+              </Toolbar>
             </div>
-            {matched.length === 0 && <div className="empty">{data.workers.length ? 'No worker matches.' : 'No foreign worker on record.'}</div>}
-            {shown.map((w) => (
-              <WorkerRow key={w.person.id} w={w} canRecord={data.canRecord} confidential={data.confidential} />
-            ))}
+            {matched.length === 0 && <Empty title={data.workers.length ? 'No worker matches.' : 'No foreign worker on record.'} />}
+            {shown.length > 0 && (
+              <ul className="hx-rows">
+                {shown.map((w) => (
+                  <WorkerRow key={w.person.id} w={w} canRecord={data.canRecord} confidential={data.confidential} />
+                ))}
+              </ul>
+            )}
             {matched.length > 0 && (
-              <div className="row" style={{ gap: 6, justifyContent: 'space-between', padding: '0 12px' }}>
+              <div className="k-card-foot fw-pager">
                 <span className="muted small" aria-live="polite">
                   {at * PAGE + 1}–{at * PAGE + shown.length} of {matched.length}
                   {matched.length !== data.workers.length ? ` (${data.workers.length} in all)` : ''}
                 </span>
-                <span className="row" style={{ gap: 6 }}>
+                <span className="hx-row-actions">
                   <button className="btn btn-sm" disabled={at === 0} onClick={() => setPage(at - 1)}>
                     Previous
                   </button>
@@ -130,106 +175,127 @@ export function FwmWelfarePanel() {
                 </span>
               </div>
             )}
-          </div>
+          </>
         )}
-        {tab === 'open' && (
-          <div className="list">
-            {data.open.length === 0 && <div className="empty">Nothing open.</div>}
-            {data.open.map((o) => (
-              <OpenRow key={o.check.id} o={o} confidential={data.confidential} />
-            ))}
-          </div>
-        )}
-        {tab === 'closed' && (
-          <div className="list">
-            {data.closed.length === 0 && <div className="empty">Nothing closed yet.</div>}
-            {data.closed.map((x) => (
-              <ClosedRow key={x.check.id} x={x} />
-            ))}
-          </div>
-        )}
-        {tab === 'agencies' && (
-          <div className="list">
-            {data.agencies.length === 0 && <div className="empty">No arrival fee check yet.</div>}
-            {data.agencies.map((a) => (
-              <div key={a.agency} className="list-item" style={{ justifyContent: 'space-between', gap: 6 }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{a.agency}</div>
-                  <div className="muted small">
-                    {a.checked} workers asked · {a.feesFound} paid a fee · RM{a.paid.toLocaleString()} paid, RM{a.repaid.toLocaleString()} paid back
+        {tab === 'open' &&
+          (data.open.length === 0 ? (
+            <Empty title="Nothing open." />
+          ) : (
+            <ul className="hx-rows">
+              {data.open.map((o) => (
+                <OpenRow key={o.check.id} o={o} confidential={data.confidential} />
+              ))}
+            </ul>
+          ))}
+        {tab === 'closed' &&
+          (data.closed.length === 0 ? (
+            <Empty title="Nothing closed yet." />
+          ) : (
+            <ul className="hx-rows">
+              {data.closed.map((x) => (
+                <ClosedRow key={x.check.id} x={x} />
+              ))}
+            </ul>
+          ))}
+        {tab === 'agencies' &&
+          (data.agencies.length === 0 ? (
+            <Empty title="No arrival fee check yet." />
+          ) : (
+            <ul className="hx-rows">
+              {data.agencies.map((a) => (
+                <li key={a.agency} className="hx-row" data-tone={a.open ? 'crit' : a.feesFound ? 'warn' : undefined}>
+                  <div className="hx-row-main">
+                    <span className="hx-row-title">{a.agency}</span>
+                    <span className="hx-row-meta">
+                      {a.checked} workers asked · {a.feesFound} paid a fee · RM{a.paid.toLocaleString()} paid, RM{a.repaid.toLocaleString()} paid back
+                    </span>
                   </div>
-                </div>
-                <Chip tone={a.open ? 'crit' : a.feesFound ? 'warn' : 'ok'}>{a.open ? `${a.open} open` : a.feesFound ? 'Fees found' : 'No fees'}</Chip>
-              </div>
-            ))}
-          </div>
-        )}
-        <p className="muted small" style={{ padding: '8px 12px' }}>
-          {data.rules.zeroFee.source} {data.rules.passport.source}
-        </p>
+                  <div className="hx-row-side">
+                    <Chip tone={a.open ? 'crit' : a.feesFound ? 'warn' : 'ok'}>{a.open ? `${a.open} open` : a.feesFound ? 'Fees found' : 'No fees'}</Chip>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ))}
       </section>
-    </>
+      <p className="hx-source">
+        {data.rules.zeroFee.source} {data.rules.passport.source}
+      </p>
+    </div>
   );
 }
 
 function WorkerRow({ w, canRecord, confidential }: { w: Worker; canRecord: boolean; confidential: boolean }) {
   const [mode, setMode] = useState<FwCheckKind | null>(null);
   const [history, setHistory] = useState(false);
+  const feeText = w.feeDue ? 'not asked yet' : !w.fee ? 'asked' : w.fee.paidAnything ? 'paid a fee' : 'paid nothing';
+  const passportText = w.passportHolder
+    ? `${w.passportHolder === 'company' ? (w.passportConsented ? 'with the company, consent signed' : 'with the company, no consent') : 'with the worker'}, checked ${since(w.passportDaysSince)}`
+    : 'never checked';
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>{w.person.name}</div>
-          <div className="muted small">
-            {w.person.staffNo} · {w.person.companyName} · hired {dateLabel(w.person.hiredOn)}
-          </div>
-          <div className="small">
-            Fee: {w.feeDue ? 'not asked yet' : !w.fee ? 'asked' : w.fee.paidAnything ? 'paid a fee' : 'paid nothing'}
-            {' · '}Passport:{' '}
-            {w.passportHolder
-              ? `${w.passportHolder === 'company' ? (w.passportConsented ? 'with the company, consent signed' : 'with the company, no consent') : 'with the worker'}, checked ${since(w.passportDaysSince)}`
-              : 'never checked'}
-            {' · '}Welfare talk: {since(w.welfareDaysSince)}
-          </div>
-        </div>
-        <div className="row" style={{ gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {w.open > 0 && <Chip tone="crit">{w.open} open</Chip>}
-          {w.feeDue && <Chip tone="unknown">Fee not asked</Chip>}
-          {w.passportDue && <Chip tone="warn">Passport check due</Chip>}
-          {w.welfareDue && <Chip tone="warn">Talk due</Chip>}
-        </div>
+    <li className="hx-row fw-row" data-tone={w.open > 0 ? 'crit' : w.passportDue || w.welfareDue ? 'warn' : w.feeDue ? 'unknown' : undefined}>
+      <Avatar name={w.person.name} size={36} />
+      <div className="hx-row-main">
+        <span className="hx-row-title">{w.person.name}</span>
+        <span className="hx-row-meta">
+          {w.person.staffNo} · {w.person.companyName} · hired {dateLabel(w.person.hiredOn)}
+        </span>
       </div>
-      {confidential && w.history.length > 0 && (
-        <div>
-          <button className="btn btn-sm" aria-expanded={history} onClick={() => setHistory(!history)}>
-            {history ? 'Hide history' : `History (${w.history.length})`}
-          </button>
-        </div>
-      )}
-      {history && (
-        <div className="list" style={{ gap: 4 }}>
-          {w.history.map((c) => (
-            <HistoryItem key={c.id} c={c} />
-          ))}
-        </div>
-      )}
-      {canRecord && !mode && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {w.feeDue && (
-            <button className="btn btn-sm" onClick={() => setMode('ARRIVAL_FEE')}>
-              Arrival fee check
-            </button>
-          )}
-          <button className="btn btn-sm" onClick={() => setMode('PASSPORT')}>
-            Passport check
-          </button>
-          <button className="btn btn-sm" onClick={() => setMode('WELFARE')}>
-            Welfare talk
-          </button>
-        </div>
-      )}
-      {mode && <CheckForm personId={w.person.id} kind={mode} onDone={() => setMode(null)} />}
-    </div>
+      <div className="hx-row-side">
+        {w.open > 0 && <Chip tone="crit">{w.open} open</Chip>}
+        {w.feeDue && <Chip tone="unknown">Fee not asked</Chip>}
+        {w.passportDue && <Chip tone="warn">Passport check due</Chip>}
+        {w.welfareDue && <Chip tone="warn">Talk due</Chip>}
+      </div>
+      <div className="hx-row-body">
+        <dl className="fw-checks">
+          <div data-due={w.feeDue || undefined}>
+            <dt>Fee</dt>
+            <dd>{feeText}</dd>
+          </div>
+          <div data-due={w.passportDue || undefined}>
+            <dt>Passport</dt>
+            <dd>{passportText}</dd>
+          </div>
+          <div data-due={w.welfareDue || undefined}>
+            <dt>Welfare talk</dt>
+            <dd>{since(w.welfareDaysSince)}</dd>
+          </div>
+        </dl>
+        {((confidential && w.history.length > 0) || (canRecord && !mode)) && (
+          <div className="hx-row-actions">
+            {canRecord && !mode && (
+              <>
+                {w.feeDue && (
+                  <button className="btn btn-sm" onClick={() => setMode('ARRIVAL_FEE')}>
+                    Arrival fee check
+                  </button>
+                )}
+                <button className="btn btn-sm" onClick={() => setMode('PASSPORT')}>
+                  Passport check
+                </button>
+                <button className="btn btn-sm" onClick={() => setMode('WELFARE')}>
+                  Welfare talk
+                </button>
+              </>
+            )}
+            {confidential && w.history.length > 0 && (
+              <button className="btn btn-ghost btn-sm" aria-expanded={history} onClick={() => setHistory(!history)}>
+                {history ? 'Hide history' : `History (${w.history.length})`}
+              </button>
+            )}
+          </div>
+        )}
+        {history && (
+          <ul className="fw-history">
+            {w.history.map((c) => (
+              <HistoryItem key={c.id} c={c} />
+            ))}
+          </ul>
+        )}
+        {mode && <CheckForm personId={w.person.id} kind={mode} onDone={() => setMode(null)} />}
+      </div>
+    </li>
   );
 }
 
@@ -251,44 +317,71 @@ function CheckForm({ personId, kind, onDone }: { personId: string; kind: FwCheck
         ? !concerns.length || note.trim().length >= 5
         : true;
   return (
-    <div className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div className="muted small">
+    <div className="hx-form">
+      <h3 className="hx-form-title">{FW_CHECK_LABEL[kind]}</h3>
+      <p className="notice" data-tone="info">
         {kind === 'ARRIVAL_FEE'
           ? 'Ask in private, in Nepali, with nobody from the agency or the site present: did you pay anyone to get this job?'
           : kind === 'PASSPORT'
-            ? 'The worker keeps their passport. Company safekeeping only with the worker\'s signed consent, attached here.'
+            ? "The worker keeps their passport. Company safekeeping only with the worker's signed consent, attached here."
             : 'A private talk: pay, hours, hostel, how they are treated. Write down what they raise in their words.'}
+      </p>
+      <div className="hx-form-grid">
+        <label className="field">
+          <span className="label">Date of the check</span>
+          <input className="input" type="date" aria-label="Date of the check" value={checkedOn} onChange={(e) => setCheckedOn(e.target.value)} />
+        </label>
+        {kind === 'ARRIVAL_FEE' && (
+          <>
+            <label className="field">
+              <span className="label">Agency</span>
+              <input className="input" aria-label="Agency" placeholder="Recruiting agency" value={agency} onChange={(e) => setAgency(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">Paid anything</span>
+              <select className="select" aria-label="Paid anything" value={paid} onChange={(e) => setPaid(e.target.value as 'no' | 'yes' | '')}>
+                <option value="">Did the worker pay anyone?</option>
+                <option value="no">No, nothing</option>
+                <option value="yes">Yes, they paid</option>
+              </select>
+            </label>
+            {paid === 'yes' && (
+              <>
+                <label className="field">
+                  <span className="label">Amount paid (RM)</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    aria-label="Amount paid (RM)"
+                    placeholder="Amount (RM)"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span className="label">Paid to</span>
+                  <input className="input" aria-label="Paid to" placeholder="Paid to, such as the agent in Nepal" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} />
+                </label>
+              </>
+            )}
+          </>
+        )}
+        {kind === 'PASSPORT' && (
+          <label className="field">
+            <span className="label">Held by</span>
+            <select className="select" aria-label="Held by" value={heldBy} onChange={(e) => setHeldBy(e.target.value as 'worker' | 'company')}>
+              <option value="worker">The worker has it</option>
+              <option value="company">The company keeps it</option>
+            </select>
+          </label>
+        )}
       </div>
-      <label className="field">
-        <span className="label">Date of the check</span>
-        <input className="input" type="date" aria-label="Date of the check" value={checkedOn} onChange={(e) => setCheckedOn(e.target.value)} />
-      </label>
-      {kind === 'ARRIVAL_FEE' && (
-        <>
-          <input className="input" aria-label="Agency" placeholder="Recruiting agency" value={agency} onChange={(e) => setAgency(e.target.value)} />
-          <select className="select" aria-label="Paid anything" value={paid} onChange={(e) => setPaid(e.target.value as 'no' | 'yes' | '')}>
-            <option value="">Did the worker pay anyone?</option>
-            <option value="no">No, nothing</option>
-            <option value="yes">Yes, they paid</option>
-          </select>
-          {paid === 'yes' && (
-            <div className="grid-2">
-              <input className="input" type="number" min="1" aria-label="Amount paid (RM)" placeholder="Amount (RM)" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <input className="input" aria-label="Paid to" placeholder="Paid to, such as the agent in Nepal" value={paidTo} onChange={(e) => setPaidTo(e.target.value)} />
-            </div>
-          )}
-        </>
-      )}
-      {kind === 'PASSPORT' && (
-        <select className="select" aria-label="Held by" value={heldBy} onChange={(e) => setHeldBy(e.target.value as 'worker' | 'company')}>
-          <option value="worker">The worker has it</option>
-          <option value="company">The company keeps it</option>
-        </select>
-      )}
       {kind === 'WELFARE' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <fieldset className="fw-concerns">
+          <legend className="label">What the worker raised</legend>
           {CONCERNS.map((c) => (
-            <label key={c} className="row small" style={{ gap: 4 }}>
+            <label key={c}>
               <input
                 type="checkbox"
                 checked={concerns.includes(c)}
@@ -297,12 +390,21 @@ function CheckForm({ personId, kind, onDone }: { personId: string; kind: FwCheck
               {FW_CONCERN_LABEL[c]}
             </label>
           ))}
-        </div>
+        </fieldset>
       )}
-      <input className="input" aria-label="Check note" placeholder={kind === 'WELFARE' && concerns.length ? 'What the worker raised (needed)' : 'Note'} value={note} onChange={(e) => setNote(e.target.value)} />
+      <label className="field">
+        <span className="label">Note</span>
+        <input
+          className="input"
+          aria-label="Check note"
+          placeholder={kind === 'WELFARE' && concerns.length ? 'What the worker raised (needed)' : 'Note'}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </label>
       {(kind === 'PASSPORT' ? heldBy === 'company' : true) && <ProofPicker site={null} refText="FWM" items={proof} onChange={setProof} documentsOnly />}
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ gap: 6 }}>
+      <div className="hx-form-actions">
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !ready}
@@ -356,72 +458,101 @@ function OpenRow({ o, confidential }: { o: Open; confidential: boolean }) {
           ? (c.concerns ?? []).map((x) => FW_CONCERN_LABEL[x]).join(', ')
           : 'A concern was raised';
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {o.label} · {o.person?.name ?? ''}
-          </div>
-          <div className="muted small">
-            {o.person?.staffNo} · {o.person?.companyName} · {dateLabel(c.checkedOn)} by {c.by}
-          </div>
-          <div className="small">{what}</div>
-          {confidential && c.note && <div className="muted small">{c.note}</div>}
-        </div>
+    <li className="hx-row fw-row" data-tone={o.daysOpen > 30 ? 'crit' : 'warn'}>
+      <Avatar name={o.person?.name ?? o.label} size={36} />
+      <div className="hx-row-main">
+        <span className="hx-row-title">
+          {o.label} · {o.person?.name ?? ''}
+        </span>
+        <span className="hx-row-meta">
+          {o.person?.staffNo} · {o.person?.companyName} · {dateLabel(c.checkedOn)} by {c.by}
+        </span>
+      </div>
+      <div className="hx-row-side">
         <Chip tone={o.daysOpen > 30 ? 'crit' : 'warn'}>{o.daysOpen} days open</Chip>
       </div>
-      {confidential && docs.data && docs.data.length > 0 && <DocList docs={docs.data} />}
-      {o.canClose && !closing && (
-        <div>
-          <button className="btn btn-sm" onClick={() => setClosing(true)}>
-            Close the follow-up
-          </button>
-        </div>
-      )}
-      {closing && (
-        <>
-          {c.kind === 'ARRIVAL_FEE' && (
-            <input
-              className="input"
-              type="number"
-              min="0"
-              aria-label="Paid back (RM)"
-              placeholder={`Paid back to the worker (RM, up to ${c.amount ?? 0})`}
-              value={repaid}
-              onChange={(e) => setRepaid(e.target.value)}
-            />
-          )}
-          {c.kind === 'PASSPORT' && (
-            <select className="select" aria-label="How custody ended" value={custody} onChange={(e) => setCustody(e.target.value as '' | 'worker' | 'company')}>
-              <option value="">How did it end?</option>
-              <option value="worker">Passport given back to the worker (attach their signed receipt)</option>
-              <option value="company">Worker signed consent for safekeeping (attach the consent)</option>
-            </select>
-          )}
-          <input className="input" aria-label="How it was dealt with" placeholder="How it was dealt with" value={note} onChange={(e) => setNote(e.target.value)} />
-          <ProofPicker site={null} refText="FWM" items={proof} onChange={setProof} documentsOnly required={c.kind === 'PASSPORT' || (c.kind === 'ARRIVAL_FEE' && Number(repaid) > 0)} />
-          <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={act.busy || note.trim().length < 5 || (c.kind === 'PASSPORT' && !custody)}
-              onClick={async () => {
-                const ok = await act.run(
-                  () => api.closeFwCheck(c.id, { note, repaid: c.kind === 'ARRIVAL_FEE' ? Number(repaid || 0) : null, custody: c.kind === 'PASSPORT' ? custody || null : null }, proof),
-                  'Follow-up closed.',
-                );
-                if (ok) setClosing(false);
-              }}
-            >
-              Close
-            </button>
-            <button className="btn btn-sm" onClick={() => setClosing(false)}>
-              Cancel
+      <div className="hx-row-body">
+        <p className="hx-row-text">
+          <strong>{what}</strong>
+        </p>
+        {confidential && c.note && <p className="hx-row-text muted">{c.note}</p>}
+        {confidential && docs.data && docs.data.length > 0 && <DocList docs={docs.data} />}
+        {o.canClose && !closing && (
+          <div className="hx-row-actions">
+            <button className="btn btn-primary btn-sm" onClick={() => setClosing(true)}>
+              Close the follow-up
             </button>
           </div>
-        </>
-      )}
-    </div>
+        )}
+        {closing && (
+          <div className="hx-form">
+            <h3 className="hx-form-title">Close the follow-up</h3>
+            <div className="hx-form-grid">
+              {c.kind === 'ARRIVAL_FEE' && (
+                <label className="field">
+                  <span className="label">Paid back (RM)</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    aria-label="Paid back (RM)"
+                    placeholder={`Paid back to the worker (RM, up to ${c.amount ?? 0})`}
+                    value={repaid}
+                    onChange={(e) => setRepaid(e.target.value)}
+                  />
+                </label>
+              )}
+              {c.kind === 'PASSPORT' && (
+                <label className="field hx-form-wide">
+                  <span className="label">How custody ended</span>
+                  <select className="select" aria-label="How custody ended" value={custody} onChange={(e) => setCustody(e.target.value as '' | 'worker' | 'company')}>
+                    <option value="">How did it end?</option>
+                    <option value="worker">Passport given back to the worker (attach their signed receipt)</option>
+                    <option value="company">Worker signed consent for safekeeping (attach the consent)</option>
+                  </select>
+                </label>
+              )}
+              <label className="field hx-form-wide">
+                <span className="label">How it was dealt with</span>
+                <input className="input" aria-label="How it was dealt with" placeholder="How it was dealt with" value={note} onChange={(e) => setNote(e.target.value)} />
+              </label>
+            </div>
+            <ProofPicker
+              site={null}
+              refText="FWM"
+              items={proof}
+              onChange={setProof}
+              documentsOnly
+              required={c.kind === 'PASSPORT' || (c.kind === 'ARRIVAL_FEE' && Number(repaid) > 0)}
+            />
+            <ErrorNotice error={act.error} />
+            <div className="hx-form-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || note.trim().length < 5 || (c.kind === 'PASSPORT' && !custody)}
+                onClick={async () => {
+                  const ok = await act.run(
+                    () =>
+                      api.closeFwCheck(
+                        c.id,
+                        { note, repaid: c.kind === 'ARRIVAL_FEE' ? Number(repaid || 0) : null, custody: c.kind === 'PASSPORT' ? custody || null : null },
+                        proof,
+                      ),
+                    'Follow-up closed.',
+                  );
+                  if (ok) setClosing(false);
+                }}
+              >
+                Close
+              </button>
+              <button className="btn btn-sm" onClick={() => setClosing(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -449,38 +580,48 @@ function HistoryItem({ c }: { c: Check }) {
   const [open, setOpen] = useState(false);
   const docs = useLoad(() => (open ? api.fwmDocs(c.id) : Promise.resolve([])), [c.id, open]);
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
-        <div className="small">
-          <strong>{c.label}</strong> · {dateLabel(c.checkedOn)} by {c.by}
-        </div>
-        <Chip tone={c.status === 'open' ? 'crit' : c.status === 'closed' ? 'ok' : 'neutral'}>{c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Clear'}</Chip>
+    <li className="fw-hist">
+      <div className="fw-hist-head">
+        <span>
+          <strong>{c.label}</strong>
+          <span className="muted"> · {dateLabel(c.checkedOn)} by {c.by}</span>
+        </span>
+        <Chip tone={c.status === 'open' ? 'crit' : c.status === 'closed' ? 'ok' : 'neutral'}>
+          {c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Clear'}
+        </Chip>
       </div>
       <div className="small">{checkDetail(c)}</div>
       {c.note && <div className="muted small">{c.note}</div>}
       {c.status === 'closed' && <div className="muted small">{closing(c)}</div>}
       {c.docIds.length + (c.closeDocIds?.length ?? 0) > 0 && (
         <div>
-          <button className="btn btn-sm" onClick={() => setOpen(!open)}>
+          <button className="btn btn-ghost btn-sm" aria-expanded={open} onClick={() => setOpen(!open)}>
             {open ? 'Hide papers' : 'Papers'}
           </button>
         </div>
       )}
       {open && docs.data && <DocList docs={docs.data} />}
-    </div>
+    </li>
   );
 }
 
 function ClosedRow({ x }: { x: Closed }) {
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-      <div style={{ fontWeight: 600 }}>
-        {x.label} · {x.person?.name ?? ''}
+    <li className="hx-row fw-row">
+      <Avatar name={x.person?.name ?? x.label} size={36} />
+      <div className="hx-row-main">
+        <span className="hx-row-title">
+          {x.label} · {x.person?.name ?? ''}
+        </span>
+        <span className="hx-row-meta">
+          {x.person?.staffNo} · {x.person?.companyName}
+        </span>
       </div>
-      <div className="muted small">
-        {x.person?.staffNo} · {x.person?.companyName}
+      <div className="hx-row-body">
+        <ul className="fw-history">
+          <HistoryItem c={{ ...x.check, label: x.label }} />
+        </ul>
       </div>
-      <HistoryItem c={{ ...x.check, label: x.label }} />
-    </div>
+    </li>
   );
 }

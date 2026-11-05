@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { CaretDownIcon, FileTextIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type Reports } from '../api';
-import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { ProofPicker } from './Proof';
+import '../styles/leadership.css';
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   on_time: { label: 'Sent on time', tone: 'ok' },
@@ -50,39 +53,41 @@ export function ReportsView() {
     );
   const due = data.mine.flatMap((m) => m.periods).filter((p) => p.status === 'missing').length;
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Reports to the Director Office</h1>
-          <p>Weekly and monthly reports each company and central department sends. The Director Office Administrator sets the list and follows who has sent.</p>
-        </div>
-        {data.canEdit && data.editList && (
-          <button className="btn btn-primary" onClick={() => setEditing(true)}>
-            Change the report list
-          </button>
-        )}
-      </div>
+    <div className="page ld">
+      <PageHead
+        title="Reports to the Director Office"
+        sub="Weekly and monthly reports each company and central department sends. The Director Office Administrator sets the list and follows who has sent."
+        actions={
+          data.canEdit &&
+          data.editList && (
+            <button className="btn btn-primary" onClick={() => setEditing(true)}>
+              Change the report list
+            </button>
+          )
+        }
+      />
       {editing && data.editList && <ReportListEditor list={data.editList} departments={data.departments} onDone={() => setEditing(false)} />}
       {data.mine.length > 0 && (
         <>
-          <div className="kpis">
-            <Kpi label="Reports you send" value={data.mine.length} />
-            <Kpi label="Overdue" value={due} tone={due ? 'crit' : 'ok'} />
-          </div>
-          <section className="panel">
-            <div className="panel-head">
-              <h3>To send</h3>
-            </div>
-            <div className="list">
+          <Stats>
+            <Stat label="Reports you send" value={data.mine.length} icon={<FileTextIcon />} tone="info" />
+            <Stat label="Overdue" value={due} tone={due ? 'crit' : 'ok'} icon={<WarningIcon />} />
+          </Stats>
+          <Card title="To send" sub="Choose a period to send its report" flush>
+            <ul className="ld-rows">
               {data.mine.map((m) => (
                 <MineRow key={`${m.def.id}:${m.companyId}`} m={m} />
               ))}
-            </div>
-          </section>
+            </ul>
+          </Card>
         </>
       )}
       {data.board && <Board board={data.board} />}
-      {data.mine.length === 0 && !data.board && <div className="empty">No report is due from you.</div>}
+      {data.mine.length === 0 && !data.board && (
+        <Card>
+          <Empty title="No report is due from you." />
+        </Card>
+      )}
       <p className="muted small">The starting list is a proposal; the Director Office Administrator changes it with Change the report list.</p>
     </div>
   );
@@ -97,52 +102,61 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
   const p = m.periods.find((x) => x.period === sending);
   const sections = m.def.sections ?? [];
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div>
-        <div style={{ fontWeight: 600 }}>{m.def.name}</div>
-        <div className="muted small">
+    <li className="ld-report">
+      <div className="ld-report-head">
+        <span className="ld-row-title">{m.def.name}</span>
+        <span className="ld-row-meta">
           {m.companyName ? `${m.companyName} · ` : ''}
           {when(m.def)} · {m.def.detail}
-        </div>
+        </span>
       </div>
-      <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+      <div className="ld-periods" role="group" aria-label={`Periods of ${m.def.name}`}>
         {m.periods.map((x) => (
           <button
             key={x.period}
-            className="btn btn-sm"
+            type="button"
+            className="ld-period"
+            data-status={x.status}
             aria-pressed={sending === x.period}
             disabled={!!x.sent}
             title={x.sent ? `Sent by ${x.sent.by}, ${dateTimeLabel(x.sent.at)}` : `Due ${dateLabel(x.due)}`}
             onClick={() => setSending(sending === x.period ? null : x.period)}
           >
-            {x.period} <Chip tone={STATUS[x.status].tone}>{STATUS[x.status].label}</Chip>
+            <span className="ld-period-name">{x.period}</span>
+            <Chip tone={STATUS[x.status].tone}>{STATUS[x.status].label}</Chip>
           </button>
         ))}
       </div>
       {p && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="small">
+        <div className="ld-subpanel">
+          <h3>
             Send {m.def.name} for {p.label} (due {dateLabel(p.due)})
-          </div>
+          </h3>
           <ProofPicker site={null} refText="Report" items={proof} onChange={setProof} documentsOnly required />
           {sections.length > 0 && (
-            <fieldset style={{ display: 'grid', gap: 4, border: 0, padding: 0, margin: 0 }}>
-              <legend className="small">Standard form (set by ACT): tick each section your report covers</legend>
+            <fieldset className="ld-checks">
+              <legend className="label">Standard form (set by ACT): tick each section your report covers</legend>
               {sections.map((x) => (
-                <label key={x} className="small" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                <label key={x} className="ld-check">
                   <input
                     type="checkbox"
                     checked={covered.includes(x)}
                     onChange={(e) => setCovered(e.target.checked ? [...covered, x] : covered.filter((y) => y !== x))}
                   />
-                  {x}
+                  <span>{x}</span>
                 </label>
               ))}
             </fieldset>
           )}
-          <input className="input" aria-label="Report note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <label className="field">
+            <span className="label">Note (optional)</span>
+            <input className="input" aria-label="Report note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
           <ErrorNotice error={act.error} />
-          <div>
+          <div className="ld-actions">
+            <button className="btn btn-sm" onClick={() => setSending(null)}>
+              Cancel
+            </button>
             <button
               className="btn btn-primary btn-sm"
               disabled={act.busy || !proof.length}
@@ -171,70 +185,128 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
           </div>
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
+type BoardShow = 'all' | 'missing' | 'late' | 'company' | 'department';
+const BOARD_SHOW: [BoardShow, string][] = [
+  ['all', 'All'],
+  ['missing', 'Not sent'],
+  ['late', 'Late'],
+  ['company', 'From companies'],
+  ['department', 'From departments'],
+];
+
 function Board({ board }: { board: NonNullable<Reports['board']> }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<BoardShow>('all');
+  const needle = q.trim().toLowerCase();
+  const rows = board.filter(
+    (b) =>
+      (!needle || `${b.def.name} ${b.rows[0]?.name ?? ''}`.toLowerCase().includes(needle)) &&
+      (show === 'all' ||
+        (show === 'missing' && b.totals.missing > 0) ||
+        (show === 'late' && b.totals.late > 0) ||
+        (show === 'company' && b.def.from === 'company') ||
+        (show === 'department' && b.def.from !== 'company')),
+  );
+  const missing = board.reduce((s, b) => s + b.totals.missing, 0);
+  const late = board.reduce((s, b) => s + b.totals.late, 0);
+  const onTime = board.reduce((s, b) => s + b.totals.onTime, 0);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Who has sent</h3>
+    <section className="ld-section" aria-labelledby="ld-board">
+      <div className="ld-section-head">
+        <h2 id="ld-board">Who has sent</h2>
         <span className="muted small">Latest period due for each report</span>
       </div>
-      <div className="list">
-        {board.map((b) => (
-          <div key={b.def.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            <button
-              className="list-button"
-              style={{
-                textAlign: 'left',
-                background: 'none',
-                border: 0,
-                padding: 0,
-              }}
-              onClick={() => setOpen(open === b.def.id ? null : b.def.id)}
-            >
-              <div style={{ fontWeight: 600 }}>{b.def.name}</div>
-              <div className="muted small">
-                {b.period.label}, due {dateLabel(b.period.due)} · from {b.def.from === 'company' ? 'every company' : b.rows[0]?.name}
-              </div>
-              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                {b.totals.onTime > 0 && <Chip tone="ok">{b.totals.onTime} on time</Chip>}
-                {b.totals.late > 0 && <Chip tone="warn">{b.totals.late} late</Chip>}
-                {b.totals.missing > 0 && <Chip tone="crit">{b.totals.missing} not sent</Chip>}
-                {b.totals.notDue > 0 && <Chip tone="neutral">{b.totals.notDue} not due</Chip>}
-                {b.totals.unknown > 0 && <Chip tone="unknown">{b.totals.unknown} unknown</Chip>}
-              </div>
-            </button>
-            {open === b.def.id && (
-              <div className="list">
-                {b.rows
-                  .filter((r) => r.status !== 'unknown')
-                  .map((r) => (
-                    <div key={r.key} className="list-item">
-                      <div>
-                        <div>{r.name}</div>
-                        {r.sent && (
-                          <div className="muted small">
-                            {r.sent.by}, {dateTimeLabel(r.sent.at)}
-                            {r.sent.note ? ` · ${r.sent.note}` : ''}
-                          </div>
-                        )}
-                      </div>
-                      <Chip tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Chip>
+      <Stats>
+        <Stat label="Reports on the list" value={board.length} icon={<FileTextIcon />} tone="info" onClick={() => setShow('all')} />
+        <Stat label="Sent on time" value={onTime} tone="ok" />
+        <Stat label="Sent late" value={late} tone={late ? 'warn' : 'ok'} onClick={() => setShow('late')} />
+        <Stat label="Not sent" value={missing} tone={missing ? 'crit' : 'ok'} onClick={() => setShow('missing')} />
+      </Stats>
+      <Toolbar
+        end={
+          <div className="seg ld-seg" role="group" aria-label="Show reports">
+            {BOARD_SHOW.map(([k, label]) => (
+              <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <Search value={q} onChange={setQ} placeholder="Search reports" />
+      </Toolbar>
+      <div className="k-card">
+        {rows.length === 0 && <Empty title="No report matches." />}
+        <ul className="ld-rows">
+          {rows.map((b) => {
+            const isOpen = open === b.def.id;
+            return (
+              <li key={b.def.id} className="ld-cat" data-open={isOpen}>
+                <button type="button" className="ld-cat-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : b.def.id)}>
+                  <span className="ld-row-main">
+                    <span className="ld-row-title">{b.def.name}</span>
+                    <span className="ld-row-meta">
+                      {b.period.label}, due {dateLabel(b.period.due)} · from {b.def.from === 'company' ? 'every company' : b.rows[0]?.name}
+                    </span>
+                  </span>
+                  <span className="ld-chips ld-cat-chips">
+                    {b.totals.onTime > 0 && <Chip tone="ok">{b.totals.onTime} on time</Chip>}
+                    {b.totals.late > 0 && <Chip tone="warn">{b.totals.late} late</Chip>}
+                    {b.totals.missing > 0 && <Chip tone="crit">{b.totals.missing} not sent</Chip>}
+                    {b.totals.notDue > 0 && <Chip tone="neutral">{b.totals.notDue} not due</Chip>}
+                    {b.totals.unknown > 0 && <Chip tone="unknown">{b.totals.unknown} unknown</Chip>}
+                  </span>
+                  <CaretDownIcon className="ld-cat-caret" size={16} aria-hidden="true" />
+                </button>
+                {isOpen && (
+                  <div className="ld-cat-body">
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>From</th>
+                            <th>Sent</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {b.rows
+                            .filter((r) => r.status !== 'unknown')
+                            .map((r) => (
+                              <tr key={r.key}>
+                                <td>{r.name}</td>
+                                <td className="muted">
+                                  {r.sent ? (
+                                    <>
+                                      {r.sent.by}, {dateTimeLabel(r.sent.at)}
+                                      {r.sent.note ? ` · ${r.sent.note}` : ''}
+                                    </>
+                                  ) : (
+                                    '–'
+                                  )}
+                                </td>
+                                <td>
+                                  <Chip tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Chip>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                {b.totals.unknown > 0 && (
-                  <div className="muted small" style={{ padding: 8 }}>
-                    {b.totals.unknown} companies are not on the app yet, so their reports are Unknown.
+                    {b.totals.unknown > 0 && (
+                      <p className="muted small ld-pad">{b.totals.unknown} companies are not on the app yet, so their reports are Unknown.</p>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        ))}
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </section>
   );
@@ -250,93 +322,108 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
   const set = (i: number, patch: Partial<Def>) => setDefs(defs.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   return (
     <Drawer title="Report list" sub="Who sends what, how often and when it is due. A report taken off the list keeps its history." onClose={onDone}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="ld-editor">
         {defs.map((d, i) => (
-          <div
-            key={d.id || `new-${i}`}
-            className="panel"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              padding: 10,
-            }}
-          >
-            <input className="input" aria-label="Report name" placeholder="Report name" value={d.name} onChange={(e) => set(i, { name: e.target.value })} />
-            <input
-              className="input"
-              aria-label="What it covers"
-              placeholder="What it covers"
-              value={d.detail}
-              onChange={(e) => set(i, { detail: e.target.value })}
-            />
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <select className="select" aria-label="Sent by" value={d.from} onChange={(e) => set(i, { from: e.target.value as Def['from'] })}>
-                <option value="company">Every company</option>
-                <option value="department">A central department</option>
-              </select>
+          <fieldset key={d.id || `new-${i}`} className="ld-def">
+            <legend className="ld-def-legend">{d.name || 'New report'}</legend>
+            <label className="field">
+              <span className="label">Report name</span>
+              <input className="input" aria-label="Report name" placeholder="Report name" value={d.name} onChange={(e) => set(i, { name: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">What it covers</span>
+              <input
+                className="input"
+                aria-label="What it covers"
+                placeholder="What it covers"
+                value={d.detail}
+                onChange={(e) => set(i, { detail: e.target.value })}
+              />
+            </label>
+            <div className="ld-form">
+              <label className="field">
+                <span className="label">Sent by</span>
+                <select className="select" aria-label="Sent by" value={d.from} onChange={(e) => set(i, { from: e.target.value as Def['from'] })}>
+                  <option value="company">Every company</option>
+                  <option value="department">A central department</option>
+                </select>
+              </label>
               {d.from === 'department' && (
+                <label className="field">
+                  <span className="label">Department</span>
+                  <select
+                    className="select"
+                    aria-label="Department"
+                    value={d.department ?? ''}
+                    onChange={(e) =>
+                      set(i, {
+                        department: (e.target.value || undefined) as Def['department'],
+                      })
+                    }
+                  >
+                    <option value="">Choose the department</option>
+                    {departments.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="field">
+                <span className="label">How often</span>
                 <select
                   className="select"
-                  aria-label="Department"
-                  value={d.department ?? ''}
+                  aria-label="How often"
+                  value={d.frequency}
                   onChange={(e) =>
                     set(i, {
-                      department: (e.target.value || undefined) as Def['department'],
+                      frequency: e.target.value as Def['frequency'],
+                      dueDay: 1,
                     })
                   }
                 >
-                  <option value="">Choose the department</option>
-                  {departments.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.label}
-                    </option>
-                  ))}
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Every 2 weeks</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="once">One time</option>
                 </select>
-              )}
-              <select
-                className="select"
-                aria-label="How often"
-                value={d.frequency}
-                onChange={(e) =>
-                  set(i, {
-                    frequency: e.target.value as Def['frequency'],
-                    dueDay: 1,
-                  })
-                }
-              >
-                <option value="weekly">Weekly</option>
-                <option value="fortnightly">Every 2 weeks</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="yearly">Yearly</option>
-                <option value="once">One time</option>
-              </select>
+              </label>
               {d.frequency === 'yearly' || d.frequency === 'once' ? (
-                <input className="input" type="date" aria-label="Due date" value={d.dueOn ?? ''} onChange={(e) => set(i, { dueOn: e.target.value })} />
+                <label className="field">
+                  <span className="label">Due date</span>
+                  <input className="input" type="date" aria-label="Due date" value={d.dueOn ?? ''} onChange={(e) => set(i, { dueOn: e.target.value })} />
+                </label>
               ) : (
-                <select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
-                  {d.frequency === 'weekly' || d.frequency === 'fortnightly'
-                    ? DAY.slice(1).map((x, k) => (
-                        <option key={x} value={k + 1}>
-                          Due {x}
-                        </option>
-                      ))
-                    : Array.from({ length: 28 }, (_, k) => (
-                        <option key={k} value={k + 1}>
-                          Due day {k + 1} of the {d.frequency === 'quarterly' ? 'month after the quarter' : 'next month'}
-                        </option>
-                      ))}
-                </select>
+                <label className="field">
+                  <span className="label">Due</span>
+                  <select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
+                    {d.frequency === 'weekly' || d.frequency === 'fortnightly'
+                      ? DAY.slice(1).map((x, k) => (
+                          <option key={x} value={k + 1}>
+                            Due {x}
+                          </option>
+                        ))
+                      : Array.from({ length: 28 }, (_, k) => (
+                          <option key={k} value={k + 1}>
+                            Due day {k + 1} of the {d.frequency === 'quarterly' ? 'month after the quarter' : 'next month'}
+                          </option>
+                        ))}
+                  </select>
+                </label>
               )}
-              <button className="btn btn-sm" onClick={() => setDefs(defs.filter((_, j) => j !== i))}>
+            </div>
+            <div className="ld-actions">
+              <button className="btn btn-sm btn-ghost" onClick={() => setDefs(defs.filter((_, j) => j !== i))}>
                 Take off the list
               </button>
             </div>
-          </div>
+          </fieldset>
         ))}
         <button
-          className="btn btn-sm"
+          className="btn btn-sm ld-add"
           disabled={defs.length >= 40}
           onClick={() =>
             setDefs([
@@ -355,18 +442,25 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
         >
           Add a report
         </button>
-        <input className="input" aria-label="What changed" placeholder="What changed and why" value={note} onChange={(e) => setNote(e.target.value)} />
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={act.busy || note.trim().length < 3}
-          onClick={async () => {
-            const ok = await act.run(() => api.setReportDefs(defs, note), 'Report list saved.');
-            if (ok) onDone();
-          }}
-        >
-          Save the list
-        </button>
-        <ErrorNotice error={act.error} />
+        <div className="ld-sticky">
+          <label className="field">
+            <span className="label">What changed and why</span>
+            <input className="input" aria-label="What changed" placeholder="What changed and why" value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <ErrorNotice error={act.error} />
+          <div className="ld-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || note.trim().length < 3}
+              onClick={async () => {
+                const ok = await act.run(() => api.setReportDefs(defs, note), 'Report list saved.');
+                if (ok) onDone();
+              }}
+            >
+              Save the list
+            </button>
+          </div>
+        </div>
       </div>
     </Drawer>
   );

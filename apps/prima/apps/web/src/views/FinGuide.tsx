@@ -1,6 +1,7 @@
 import { finGuidesFor, type FinText } from '@prima/core';
 import { useApp } from '../App';
 import { useLang } from '../i18n';
+import '../styles/finance.css';
 
 /**
  * The guide card for a Finance task (Arisha main's review, 2 Nov 2026, section A): what to enter, which documents,
@@ -22,12 +23,12 @@ export function FinGuide({ id }: { id: string }) {
       </>
     );
   return (
-    <details className="panel small" style={{ padding: '8px 12px' }} data-guide={g.id}>
-      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+    <details className="fin-guide small" data-guide={g.id}>
+      <summary className="fin-guide-sum">
         {lang === 'en' ? 'How to do this' : 'Cara membuatnya'}
         {lang === 'mix' && <span className="muted"> / How to do this</span>}: <T t={g.title} />
       </summary>
-      <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+      <div className="fin-guide-body">
         <div>
           <T t={g.purpose} />
         </div>
@@ -37,7 +38,7 @@ export function FinGuide({ id }: { id: string }) {
         {g.fields.length > 0 && (
           <div>
             <strong>{lang === 'en' ? 'What to enter' : 'Apa yang diisi'}:</strong>
-            <ul style={{ margin: '2px 0 0 18px' }}>
+            <ul className="fin-ul">
               {g.fields.map((f) => (
                 <li key={f.key}>
                   <T t={f.label} />
@@ -67,7 +68,7 @@ export function FinGuide({ id }: { id: string }) {
           .map(([h, list]) => (
             <div key={h as string}>
               <strong>{h as string}:</strong>
-              <ul style={{ margin: '2px 0 0 18px' }}>
+              <ul className="fin-ul">
                 {(list as FinText[]).map((t, i) => (
                   <li key={i}>
                     <T t={t} />

@@ -1,9 +1,21 @@
 import { api, type ArmsControl } from '../api';
 import { useApp } from '../App';
 import { useState } from 'react';
+import {
+  BriefcaseIcon,
+  CalendarCheckIcon,
+  ClockCountdownIcon,
+  HeadsetIcon,
+  PackageIcon,
+  ShieldWarningIcon,
+  VaultIcon,
+  WrenchIcon,
+} from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
 import { OpsGuide } from './OpsGuide';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Stat, Stats } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import '../styles/ops.css';
 
 export type ArmsTab =
   | 'alerts'
@@ -66,37 +78,72 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
   const t = data.tiles;
   return (
     <>
-      <div className="kpis">
-        <Kpi
+      <Stats>
+        <Stat
           label="Not cleared for armed duty"
           value={t.notReady}
           tone={t.notReady ? 'crit' : 'ok'}
           note={`${t.armedShiftsToday} armed duties, next 24 hours`}
+          icon={<ShieldWarningIcon size={16} />}
+          onClick={() => onTab('ready')}
         />
-        <Kpi label="Firearms out now" value={t.out} tone={t.overdue ? 'crit' : 'ok'} note={t.overdue ? `${t.overdue} overdue` : 'All on time'} />
-        <Kpi
+        <Stat
+          label="Firearms out now"
+          value={t.out}
+          tone={t.overdue ? 'crit' : 'ok'}
+          note={t.overdue ? `${t.overdue} overdue` : 'All on time'}
+          icon={<ClockCountdownIcon size={16} />}
+          onClick={() => onTab('log')}
+        />
+        <Stat
           label="Armed jobs running"
           value={t.jobsActive}
           tone={t.jobsProblem ? 'warn' : 'ok'}
           note={t.jobsProblem ? `${t.jobsProblem} delayed or incident` : 'Bodyguard, CIT, CDM, vault'}
+          icon={<BriefcaseIcon size={16} />}
+          onClick={() => onTab('jobs')}
         />
-        <Kpi
+        <Stat
           label="Renewals due"
           value={t.renewalsDue}
           tone={t.renewalsOverdue ? 'crit' : t.renewalsDue ? 'warn' : 'ok'}
           note={t.renewalsOverdue ? `${t.renewalsOverdue} expired` : 'Licences, permits, vaults'}
+          icon={<CalendarCheckIcon size={16} />}
+          onClick={() => onTab('renewals')}
         />
-        <Kpi
+        <Stat
           label="Servicing due"
           value={t.serviceDue}
           tone={t.serviceOverdue ? 'crit' : t.serviceDue ? 'warn' : 'ok'}
           note={t.serviceOverdue ? `${t.serviceOverdue} overdue` : 'Armourer service'}
+          icon={<WrenchIcon size={16} />}
+          onClick={() => onTab('renewals')}
         />
-        <Kpi label="Vault exceptions" value={t.vaultExceptions} tone={t.vaultExceptions ? 'crit' : 'ok'} note="CCTV, recorder, alarm, door" />
-        <Kpi label="Ammunition exceptions" value={t.ammoExceptions} tone={t.ammoExceptions ? 'crit' : 'ok'} note="Counts and rounds returned" />
-        <Kpi label="CMS gaps now" value={t.cmsGapsNow} tone={t.cmsGapsNow ? 'crit' : 'ok'} note={`${t.cmsWeekGaps} shifts uncovered this week`} />
-      </div>
-      <div className="tabbar" role="tablist" aria-label="Arms control sections">
+        <Stat
+          label="Vault exceptions"
+          value={t.vaultExceptions}
+          tone={t.vaultExceptions ? 'crit' : 'ok'}
+          note="CCTV, recorder, alarm, door"
+          icon={<VaultIcon size={16} />}
+          onClick={() => onTab('vaults')}
+        />
+        <Stat
+          label="Ammunition exceptions"
+          value={t.ammoExceptions}
+          tone={t.ammoExceptions ? 'crit' : 'ok'}
+          note="Counts and rounds returned"
+          icon={<PackageIcon size={16} />}
+          onClick={() => onTab('ammo')}
+        />
+        <Stat
+          label="CMS gaps now"
+          value={t.cmsGapsNow}
+          tone={t.cmsGapsNow ? 'crit' : 'ok'}
+          note={`${t.cmsWeekGaps} shifts uncovered this week`}
+          icon={<HeadsetIcon size={16} />}
+        />
+      </Stats>
+      <div className="tabbar op-tabs" role="tablist" aria-label="Arms control sections">
         {ARMS_TABS.filter((x) => x.id !== 'legal' || data.canSeeLegalFlags).map((x) => (
           <button key={x.id} role="tab" aria-selected={tab === x.id} onClick={() => onTab(x.id)}>
             {x.label}
@@ -133,25 +180,24 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
 function Alerts({ data }: { data: ArmsControl }) {
   const { setCompanyId } = useApp();
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>CMS arms alerts</h2>
-        <span className="muted small">What the CMS arms desk is watching now</span>
-      </div>
-      <div className="list">
-        {data.alerts.length === 0 && <div className="empty">No arms alerts.</div>}
+    <Card title="CMS arms alerts" sub="What the CMS arms desk is watching now. Open one to switch to that company." flush>
+      {data.alerts.length === 0 && <Empty title="No arms alerts." />}
+      <ul className="op-list">
         {data.alerts.map((a, i) => (
-          <button key={i} className="list-item" onClick={() => setCompanyId(a.companyId)}>
-            <div>
-              <div style={{ fontWeight: 600 }}>{a.title}</div>
-              <div className="muted small">{a.detail}</div>
-              <div className="small">{a.companyName}</div>
-            </div>
-            <Chip tone={a.tone}>{a.kind}</Chip>
-          </button>
+          <li key={i}>
+            <button className="op-item cm-q" data-tone={a.tone} onClick={() => setCompanyId(a.companyId)}>
+              <span className="cm-q-bar" aria-hidden="true" />
+              <span className="op-main">
+                <span className="op-title">{a.title}</span>
+                <span className="op-meta">{a.detail}</span>
+                <span className="op-co">{a.companyName}</span>
+              </span>
+              <Chip tone={a.tone}>{a.kind}</Chip>
+            </button>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -172,56 +218,70 @@ const WATCH_STATE: Record<ArmsControl['vaults'][number]['watchState'], { label: 
 function Vaults({ data }: { data: ArmsControl }) {
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Vaults, as CMS control sees them</h2>
-          <span className="muted small">Day and night watch check in at least every {data.vaultCheckMin} minutes</span>
-          <RecordButton kind="vault" label="Add vault" />
-        </div>
-        <div className="list">
+      <Card
+        title="Vaults, as CMS control sees them"
+        sub={`Day and night watch check in at least every ${data.vaultCheckMin} minutes`}
+        actions={<RecordButton kind="vault" label="Add vault" />}
+      >
+        <div className="ar-vaults">
           {data.vaults.map((v) => {
             const police = v.vault.kind === 'POLICE_STATION';
             const w = police ? { label: 'Kept by police', tone: 'neutral' as Tone } : WATCH_STATE[v.watchState];
             const c = v.current;
             return (
-              <div key={v.vault.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{v.vault.name}</div>
-                    <div className="muted small">{STORAGE_LABEL[v.vault.kind ?? 'COMPANY_ARMOURY']}</div>
-                    {v.vault.authorisedUsers && <div className="muted small">Authorised: {v.vault.authorisedUsers.join(', ')}</div>}
-                    <div className="small">{v.companyName}</div>
-                    <div style={{ marginTop: 4 }}>
-                      <RecordButton kind="vault" id={v.vault.id} label="Edit vault" />
-                    </div>
+              <article key={v.vault.id} className="ar-vault">
+                <div className="ar-vault-head">
+                  <div className="op-main">
+                    <h3>{v.vault.name}</h3>
+                    <span className="op-co">{v.companyName}</span>
                   </div>
                   <Chip tone={w.tone}>{w.label}</Chip>
                 </div>
-                <div className="muted small">
+                <span className="op-meta">{STORAGE_LABEL[v.vault.kind ?? 'COMPANY_ARMOURY']}</span>
+                <div className="ar-vault-figs">
+                  <div>
+                    <span>In vault</span>
+                    <strong>{v.inVault}</strong>
+                  </div>
+                  <div>
+                    <span>Out now</span>
+                    <strong>{v.out}</strong>
+                  </div>
+                  <div>
+                    <span>Today out / back</span>
+                    <strong>
+                      {v.outToday} / {v.inToday}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Last count</span>
+                    <strong className={v.vault.lastCountOk === false ? 'op-crit' : undefined}>
+                      {v.vault.lastCountAt ? hhmm(v.vault.lastCountAt) : 'never'}
+                      {v.vault.lastCountOk === false ? ' (difference)' : ''}
+                    </strong>
+                  </div>
+                </div>
+                {v.vault.authorisedUsers && <span className="op-meta">Authorised: {v.vault.authorisedUsers.join(', ')}</span>}
+                <span className="op-meta">
                   A licence: {v.vault.aLicenceHolder ?? 'not recorded'}
                   {v.vault.aLicenceRole ? ` (${v.vault.aLicenceRole.replace(/^A licence holder, /, '')})` : ''} · Amra: {v.vault.custodian}
                   {v.vault.custodianRole ? ` (${v.vault.custodianRole.replace(/^Amra, /, '')})` : ''}
-                </div>
-                <div className="muted small">
-                  {v.inVault} in vault · {v.out} out now · today {v.outToday} out, {v.inToday} back · last count{' '}
-                  {v.vault.lastCountAt ? hhmm(v.vault.lastCountAt) : 'never'}
-                  {v.vault.lastCountOk === false ? ' (difference)' : ''}
-                </div>
+                </span>
                 {v.vault.kind !== 'POLICE_STATION' && (
-                  <div className="muted small">
+                  <span className="op-meta">
                     Register book and online register:{' '}
                     {v.vault.registerCheckedAt
                       ? `checked ${dateLabel(v.vault.registerCheckedAt.slice(0, 10))} ${hhmm(v.vault.registerCheckedAt)}`
                       : 'never checked'}
-                  </div>
+                  </span>
                 )}
-                <div className="muted small">
+                <span className="op-meta">
                   {c
                     ? `${c.shift === 'day' ? 'Day' : 'Night'} watch ${hhmm(c.start)}–${hhmm(c.end)}: ${c.watcher ?? 'nobody'}${c.clockIn ? `, in ${hhmm(c.clockIn)}` : ''}${c.lastCheckAt ? `, last check ${hhmm(c.lastCheckAt)}` : ''}`
                     : 'No watch now'}
                   {v.next ? ` · next ${v.next.shift} watch ${hhmm(v.next.start)}: ${v.next.watcher ?? 'nobody rostered'}` : ''}
-                </div>
-                <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                </span>
+                <div className="op-chips">
                   {!police && (
                     <>
                       <Chip tone={v.vault.alarmOnline === true ? 'ok' : v.vault.alarmOnline === false ? 'crit' : 'warn'}>
@@ -250,63 +310,58 @@ function Vaults({ data }: { data: ArmsControl }) {
                         : `Approval ${v.approval.daysLeft} days`}
                   </Chip>
                 </div>
-              </div>
+                <div className="ar-vault-foot">
+                  <RecordButton kind="vault" id={v.vault.id} label="Edit vault" />
+                </div>
+              </article>
             );
           })}
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Vault door events, last 24 hours</h2>
-          <span className="muted small">Each opening should match an issue, return or count within {data.doorMatchMin} minutes</span>
-        </div>
-        <div className="list">
-          {data.doors.length === 0 && <div className="empty">No door events from the vault access systems.</div>}
+      </Card>
+      <Card title="Vault door events, last 24 hours" sub={`Each opening should match an issue, return or count within ${data.doorMatchMin} minutes`} flush>
+        {data.doors.length === 0 && <Empty title="No door events from the vault access systems." />}
+        <ul className="op-list">
           {data.doors.map((d) => (
-            <div key={d.event.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
+            <li key={d.event.id} className="op-item ar-log" data-tone={d.matched ? undefined : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>
+              <span className="op-time">{hhmm(d.event.at)}</span>
+              <span className="op-main">
+                <span className="op-title">
                   {d.vaultName}: {d.event.kind === 'DOOR_FORCED' ? 'door forced' : d.event.kind === 'ACCESS_DENIED' ? 'access refused' : 'door opened'}
-                </div>
-                <div className="muted small">{d.event.by ?? 'Person not identified'}</div>
-                <div className="small">{d.companyName}</div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <span className="mono small">{hhmm(d.event.at)}</span>
-                <Chip tone={d.matched ? 'ok' : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>
-                  {d.matched ? 'Matches a movement' : 'No matching record'}
-                </Chip>
-              </div>
-            </div>
+                </span>
+                <span className="op-meta">{d.event.by ?? 'Person not identified'}</span>
+                <span className="op-co">{d.companyName}</span>
+              </span>
+              <Chip tone={d.matched ? 'ok' : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>
+                {d.matched ? 'Matches a movement' : 'No matching record'}
+              </Chip>
+            </li>
           ))}
-        </div>
-      </section>
+        </ul>
+      </Card>
     </>
   );
 }
 
+/** The custody log: every firearm out and back, newest first, with who holds it and who witnessed. */
 function Log({ data }: { data: ArmsControl }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Firearms in and out, last 24 hours</h2>
-        <span className="muted small">All companies, newest first</span>
-      </div>
-      <div className="list">
-        {data.log.length === 0 && <div className="empty">No movements in the last 24 hours.</div>}
-        {data.log.map((l, i) => (
-          <div key={i} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                <span className="mono">{l.tag}</span> {l.dir === 'out' ? 'out to' : 'back from'} {l.person}
-              </div>
-              <div className="muted small">
-                {l.place} · witness {l.witness || 'none'}
-              </div>
-              <div className="small">{l.companyName}</div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <span className="mono small">{hhmm(l.at)}</span>
+    <Card title="Firearms in and out, last 24 hours" sub="All companies, newest first" flush>
+      {data.log.length === 0 && <Empty title="No movements in the last 24 hours." />}
+      <ul className="op-list">
+        {data.log.map((l, i) => {
+          const late = l.dir === 'out' && l.state !== 'out' && l.state !== 'returned';
+          return (
+            <li key={i} className="op-item ar-log" data-tone={late ? 'crit' : undefined}>
+              <span className="op-time">{hhmm(l.at)}</span>
+              <span className="op-main">
+                <span className="op-title">
+                  <span className="mono">{l.tag}</span> {l.dir === 'out' ? 'out to' : 'back from'} {l.person}
+                </span>
+                <span className="op-meta">
+                  {l.place} · witness {l.witness || 'none'}
+                </span>
+                <span className="op-co">{l.companyName}</span>
+              </span>
               {l.dir === 'out' ? (
                 <Chip tone={l.state === 'out' || l.state === 'returned' ? 'info' : 'crit'}>
                   {l.state === 'returned' ? 'Out, back' : l.state === 'out' ? 'Out' : 'Overdue'}
@@ -314,117 +369,113 @@ function Log({ data }: { data: ArmsControl }) {
               ) : (
                 <Chip tone="ok">In</Chip>
               )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
 function Jobs({ data }: { data: ArmsControl }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Armed jobs, today and next 24 hours</h2>
-        <span className="muted small">Close protection, cash-in-transit, cash deposit machines, cash vaulting</span>
-      </div>
-      <div className="list">
-        {data.jobs.length === 0 && <div className="empty">No armed jobs.</div>}
+    <Card title="Armed jobs, today and next 24 hours" sub="Close protection, cash-in-transit, cash deposit machines, cash vaulting" flush>
+      {data.jobs.length === 0 && <Empty title="No armed jobs." />}
+      <ul className="op-list">
         {data.jobs.map(({ job, companyName, crew, firearms, police }) => (
-          <div key={job.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                {JOB_LABEL[job.kind]} · {job.client}
+          <li key={job.id} className="op-item" data-tone={JOB_STATUS[job.status].tone}>
+            <div className="op-line">
+              <div className="op-main">
+                <span className="op-title">
+                  {JOB_LABEL[job.kind]} · {job.client}
+                </span>
+                <span className="op-meta">
+                  {job.ref} · {hhmm(job.start)}–{hhmm(job.end)} · {job.detail}
+                </span>
+                <span className="op-meta">
+                  Crew {crew.join(', ') || 'not named'} · firearms {firearms.join(', ') || 'none out'}
+                  {job.vehicle ? ` · ${job.vehicle}` : ''}
+                </span>
+                <span className="op-co">
+                  {companyName} · {job.lastUpdate} ({hhmm(job.lastUpdateAt)})
+                </span>
               </div>
-              <div className="muted small">
-                {job.ref} · {hhmm(job.start)}–{hhmm(job.end)} · {job.detail}
-              </div>
-              <div className="muted small">
-                Crew {crew.join(', ') || 'not named'} · firearms {firearms.join(', ') || 'none out'}
-                {job.vehicle ? ` · ${job.vehicle}` : ''}
-              </div>
-              <div className="small">
-                {companyName} · {job.lastUpdate} ({hhmm(job.lastUpdateAt)})
+              <div className="op-side">
+                <Chip tone={JOB_STATUS[job.status].tone}>{JOB_STATUS[job.status].label}</Chip>
+                {/* The police reference is a task to record here; whether it is legally in order is for the directors' view. */}
+                <Chip tone={police.notice ? 'ok' : 'neutral'}>{police.notice ? `Police notice ${police.notice.ref}` : 'Police notice: to record'}</Chip>
+                {police.needsApproval && (
+                  <Chip tone={police.approval ? 'ok' : 'neutral'}>
+                    {police.approval ? `Approval to ${police.away.join(', ')} ${police.approval.ref}` : `Approval to ${police.away.join(', ')}: to record`}
+                  </Chip>
+                )}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <Chip tone={JOB_STATUS[job.status].tone}>{JOB_STATUS[job.status].label}</Chip>
-              {/* The police reference is a task to record here; whether it is legally in order is for the directors' view. */}
-              <Chip tone={police.notice ? 'ok' : 'neutral'}>{police.notice ? `Police notice ${police.notice.ref}` : 'Police notice: to record'}</Chip>
-              {police.needsApproval && (
-                <Chip tone={police.approval ? 'ok' : 'neutral'}>
-                  {police.approval ? `Approval to ${police.away.join(', ')} ${police.approval.ref}` : `Approval to ${police.away.join(', ')}: to record`}
-                </Chip>
-              )}
-            </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
 function Renewals({ data }: { data: ArmsControl }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Renewals and servicing</h2>
-        <span className="muted small">Firearm licences run to 30 June. Unknown is never counted as fine.</span>
-      </div>
-      <div className="list">
-        {data.renewals.length === 0 && <div className="empty">Nothing due.</div>}
+    <Card title="Renewals and servicing" sub="Firearm licences run to 30 June. Unknown is never counted as fine." flush>
+      {data.renewals.length === 0 && <Empty title="Nothing due." />}
+      <ul className="op-list">
         {data.renewals.map((r, i) => (
-          <div key={i} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>{r.what}</div>
-              <div className="muted small">{r.item}</div>
-              <div className="small">{r.companyName}</div>
+          <li key={i} className="op-item" data-tone={r.tone}>
+            <div className="op-line">
+              <div className="op-main">
+                <span className="op-title">{r.what}</span>
+                <span className="op-meta">{r.item}</span>
+                <span className="op-co">{r.companyName}</span>
+              </div>
+              <Chip tone={r.tone}>
+                {r.due === null ? 'No record' : (r.daysLeft ?? 0) < 0 ? `${-(r.daysLeft ?? 0)} days late` : `${r.daysLeft} days · ${dateLabel(r.due)}`}
+              </Chip>
             </div>
-            <Chip tone={r.tone}>
-              {r.due === null ? 'No record' : (r.daysLeft ?? 0) < 0 ? `${-(r.daysLeft ?? 0)} days late` : `${r.daysLeft} days · ${dateLabel(r.due)}`}
-            </Chip>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
 function TenderList({ rows, empty }: { rows: ArmsControl['tenders']; empty: string }) {
   return (
-    <div className="list">
-      {rows.length === 0 && <div className="empty">{empty}</div>}
-      {rows.map((t) => {
-        const blocked = t.findings.filter((f) => f.level === 'block');
-        const supply = t.tender.kind === 'ARMS_SUPPLY';
-        return (
-          <div key={t.tender.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>{t.tender.title}</div>
-              <div className="muted small">
-                {t.tender.ref} · {t.tender.buyer}
-                {supply ? '' : ` · ${t.tender.guards} guards`} · closes {dateLabel(t.tender.closesOn)}
+    <>
+      {rows.length === 0 && <Empty title={empty} />}
+      <ul className="op-list">
+        {rows.map((t) => {
+          const blocked = t.findings.filter((f) => f.level === 'block');
+          const supply = t.tender.kind === 'ARMS_SUPPLY';
+          return (
+            <li key={t.tender.id} className="op-item" data-tone={blocked.length ? 'crit' : undefined}>
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">{t.tender.title}</span>
+                  <span className="op-meta">
+                    {t.tender.ref} · {t.tender.buyer}
+                    {supply ? '' : ` · ${t.tender.guards} guards`} · closes {dateLabel(t.tender.closesOn)}
+                  </span>
+                  {!supply && (
+                    <span className="op-meta">
+                      Company holds {t.firearmsHeld} firearms and {t.permitHolders} guards with a valid firearm permit
+                    </span>
+                  )}
+                  {blocked.length > 0 && <span className="small op-crit">{blocked.map((f) => f.message).join(' ')}</span>}
+                  <span className="op-co">{t.companyName}</span>
+                </div>
+                <Chip tone={blocked.length ? 'crit' : t.tender.status === 'submitted' ? 'ok' : t.daysLeft <= 7 ? 'warn' : 'neutral'}>
+                  {t.tender.status === 'submitted' ? 'Submitted' : `${t.daysLeft} days left`}
+                </Chip>
               </div>
-              {!supply && (
-                <div className="muted small">
-                  Company holds {t.firearmsHeld} firearms and {t.permitHolders} guards with a valid firearm permit
-                </div>
-              )}
-              {blocked.length > 0 && (
-                <div className="small" style={{ color: 'var(--crit)' }}>
-                  {blocked.map((f) => f.message).join(' ')}
-                </div>
-              )}
-              <div className="small">{t.companyName}</div>
-            </div>
-            <Chip tone={blocked.length ? 'crit' : t.tender.status === 'submitted' ? 'ok' : t.daysLeft <= 7 ? 'warn' : 'neutral'}>
-              {t.tender.status === 'submitted' ? 'Submitted' : `${t.daysLeft} days left`}
-            </Chip>
-          </div>
-        );
-      })}
-    </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 
@@ -432,22 +483,14 @@ function Tenders({ data }: { data: ArmsControl }) {
   const supply = data.tenders.filter((t) => t.tender.kind === 'ARMS_SUPPLY');
   const guarding = data.tenders.filter((t) => t.tender.kind !== 'ARMS_SUPPLY');
   return (
-    <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Tenders to supply arms-related items</h2>
-          <span className="muted small">Bid under an arms dealer licence, priced from the supplier catalogue</span>
-        </div>
+    <div className="op-grid-2">
+      <Card title="Tenders to supply arms-related items" sub="Bid under an arms dealer licence, priced from the supplier catalogue" flush>
         <TenderList rows={supply} empty="No supply tenders open." />
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Guarding tenders that need arms</h2>
-          <span className="muted small">Only armed work is shown. The company bids in its own name.</span>
-        </div>
+      </Card>
+      <Card title="Guarding tenders that need arms" sub="Only armed work is shown. The company bids in its own name." flush>
         <TenderList rows={guarding} empty="No armed guarding tenders open." />
-      </section>
-    </>
+      </Card>
+    </div>
   );
 }
 
@@ -455,15 +498,19 @@ function Suppliers({ data }: { data: ArmsControl }) {
   const d = data.dealer;
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Arms dealer licence</h2>
-          <Chip tone={d.rows.some((r) => r.licence.status === 'approved') ? 'ok' : 'warn'}>
-            {d.rows.filter((r) => r.licence.status === 'approved').length} of {d.target} companies licensed
-          </Chip>
-        </div>
-        <div className="panel-body">
-          <p className="small" style={{ marginTop: 0 }}>
+      <Card
+        title="Arms dealer licence"
+        actions={
+          <>
+            <Chip tone={d.rows.some((r) => r.licence.status === 'approved') ? 'ok' : 'warn'}>
+              {d.rows.filter((r) => r.licence.status === 'approved').length} of {d.target} companies licensed
+            </Chip>
+            <RecordButton kind="dealerLicence" label="Add dealer licence" />
+          </>
+        }
+      >
+        <div className="op-form">
+          <p className="op-note">
             {d.target} licensed security companies will hold a licence to buy and sell arms, and keep trade stock in their own vault to save on vaulting. Trade
             stock is registered apart from operational firearms and is never issued to a guard.
           </p>
@@ -472,67 +519,70 @@ function Suppliers({ data }: { data: ArmsControl }) {
               The {d.target} companies are not chosen yet. Trade stock held: {d.tradeStockHeld}.
             </div>
           ) : (
-            <div className="list">
+            <div className="op-box">
               {d.rows.map((r) => (
-                <div key={r.licence.id} className="list-item">
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{r.companyName}</div>
-                    <div className="muted small">
-                      {r.licence.reference ?? 'Not applied yet'} · {r.vault ? `vault ${r.vault}` : 'no vault on record yet'} · trade stock {r.tradeStock}
+                <div key={r.licence.id} className="op-item">
+                  <div className="op-line">
+                    <div className="op-main">
+                      <span className="op-title">{r.companyName}</span>
+                      <span className="op-meta">
+                        {r.licence.reference ?? 'Not applied yet'} · {r.vault ? `vault ${r.vault}` : 'no vault on record yet'} · trade stock {r.tradeStock}
+                      </span>
                     </div>
-                  </div>
-                  <div className="row" style={{ gap: 6 }}>
-                    <Chip tone={r.licence.status === 'approved' ? 'ok' : r.licence.status === 'refused' || r.licence.status === 'expired' ? 'crit' : 'warn'}>
-                      {r.licence.status}
-                    </Chip>
-                    <RecordButton kind="dealerLicence" id={r.licence.id} />
+                    <div className="op-chips">
+                      <Chip tone={r.licence.status === 'approved' ? 'ok' : r.licence.status === 'refused' || r.licence.status === 'expired' ? 'crit' : 'warn'}>
+                        {r.licence.status}
+                      </Chip>
+                      <RecordButton kind="dealerLicence" id={r.licence.id} />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
-          <p className="muted small">
-            To confirm with counsel and PDRM first: whether an armoury approved for a company's own firearms may also hold dealer stock (rule {d.rule.id},{' '}
+          <p className="op-note">
+            To confirm with counsel and PDRM first: whether an armoury approved for a company&apos;s own firearms may also hold dealer stock (rule {d.rule.id},{' '}
             {d.rule.label}).
           </p>
-          <RecordButton kind="dealerLicence" label="Add dealer licence" />
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Suppliers and their items</h2>
-          <span className="muted small">Specs and prices for every item from suppliers we have engaged</span>
-          <div className="row" style={{ gap: 6 }}>
+      </Card>
+      <Card
+        title="Suppliers and their items"
+        sub="Specs and prices for every item from suppliers we have engaged"
+        actions={
+          <>
             <RecordButton kind="armsSupplier" label="Add supplier" />
             <RecordButton kind="supplierItem" label="Add item and price" />
-          </div>
-        </div>
-        <div className="list">
+          </>
+        }
+        flush
+      >
+        <ul className="op-list">
           {data.suppliers.map(({ supplier, licence, items }) => (
-            <div key={supplier.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{supplier.name}</div>
-                  <div className="muted small">
+            <li key={supplier.id} className="op-item">
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">{supplier.name}</span>
+                  <span className="op-meta">
                     {supplier.supplies.join(', ')} · {supplier.contact}
                     {supplier.lastOrderOn ? ` · last order ${dateLabel(supplier.lastOrderOn)}` : ''}
-                  </div>
-                  <div style={{ marginTop: 4 }}>
-                    <RecordButton kind="armsSupplier" id={supplier.id} label="Edit supplier" />
-                  </div>
+                  </span>
                 </div>
-                <Chip tone={licence.status === 'OK' ? 'ok' : licence.status === 'OVERDUE' ? 'crit' : licence.status === 'UNKNOWN' ? 'neutral' : 'warn'}>
-                  {licence.status === 'UNKNOWN'
-                    ? 'Licence not on file'
-                    : licence.status === 'OK'
-                      ? 'Licence valid'
-                      : licence.status === 'OVERDUE'
-                        ? 'Licence expired'
-                        : `Licence ${licence.daysLeft} days`}
-                </Chip>
+                <div className="op-chips">
+                  <Chip tone={licence.status === 'OK' ? 'ok' : licence.status === 'OVERDUE' ? 'crit' : licence.status === 'UNKNOWN' ? 'neutral' : 'warn'}>
+                    {licence.status === 'UNKNOWN'
+                      ? 'Licence not on file'
+                      : licence.status === 'OK'
+                        ? 'Licence valid'
+                        : licence.status === 'OVERDUE'
+                          ? 'Licence expired'
+                          : `Licence ${licence.daysLeft} days`}
+                  </Chip>
+                  <RecordButton kind="armsSupplier" id={supplier.id} label="Edit supplier" />
+                </div>
               </div>
               {items.length > 0 && (
-                <div className="table-wrap" style={{ marginTop: 8 }}>
+                <div className="table-wrap op-box">
                   <table>
                     <thead>
                       <tr>
@@ -540,19 +590,23 @@ function Suppliers({ data }: { data: ArmsControl }) {
                         <th className="num">Price (RM)</th>
                         <th className="hide-sm">Lead time</th>
                         <th>Price valid</th>
-                        <th />
+                        <th aria-label="Edit" />
                       </tr>
                     </thead>
                     <tbody>
                       {items.map(({ item, priceStatus }) => (
                         <tr key={item.id}>
                           <td>
-                            <div style={{ fontWeight: 600 }}>{item.name}</div>
-                            <div className="muted small">{item.spec}</div>
+                            <div className="op-company">
+                              {item.name}
+                              <span>{item.spec}</span>
+                            </div>
                           </td>
                           <td className="num">
-                            {item.unitPrice.toLocaleString('en-MY')}
-                            <div className="muted small">{item.unit}</div>
+                            <div className="op-company">
+                              {item.unitPrice.toLocaleString('en-MY')}
+                              <span>{item.unit}</span>
+                            </div>
                           </td>
                           <td className="hide-sm small">{item.leadTimeDays ? `${item.leadTimeDays} days` : '-'}</td>
                           <td>
@@ -579,10 +633,10 @@ function Suppliers({ data }: { data: ArmsControl }) {
                   </table>
                 </div>
               )}
-            </div>
+            </li>
           ))}
-        </div>
-      </section>
+        </ul>
+      </Card>
     </>
   );
 }
@@ -599,30 +653,30 @@ function Readiness({ data }: { data: ArmsControl }) {
     (a, b) => (a.verdict === 'no_go' ? 0 : a.verdict === 'unknown' ? 1 : 2) - (b.verdict === 'no_go' ? 0 : b.verdict === 'unknown' ? 1 : 2),
   );
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Armed-duty readiness, now and next 24 hours</h2>
-        <span className="muted small">Company licence, guard permit, range practice, client agreement, insurance, vault approval</span>
-      </div>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">No armed shifts or armed jobs in the next 24 hours.</div>}
+    <Card
+      title="Armed-duty readiness, now and next 24 hours"
+      sub="Company licence, guard permit, range practice, client agreement, insurance, vault approval"
+      flush
+    >
+      {rows.length === 0 && <Empty title="No armed shifts or armed jobs in the next 24 hours." />}
+      <ul className="op-list">
         {rows.map((r) => (
-          <div key={r.duty.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
+          <li key={r.duty.id} className="op-item" data-tone={r.verdict === 'no_go' ? 'crit' : undefined}>
+            <div className="op-line">
+              <div className="op-main">
+                <span className="op-title">
                   {r.person} · {r.siteName}
-                </div>
-                <div className="muted small">
+                </span>
+                <span className="op-meta">
                   {hhmm(r.duty.start)}–{hhmm(r.duty.end)}
                   {r.issued ? ` · firearm ${r.issued} issued` : ''}
-                </div>
-                <div className="small">{r.companyName}</div>
+                </span>
+                <span className="op-co">{r.companyName}</span>
               </div>
               <Chip tone={VERDICT[r.verdict].tone}>{VERDICT[r.verdict].label}</Chip>
             </div>
             {r.verdict !== 'go' && (
-              <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+              <div className="op-chips">
                 {r.checks
                   .filter((c) => c.state !== 'ok')
                   .map((c) => (
@@ -632,10 +686,10 @@ function Readiness({ data }: { data: ArmsControl }) {
                   ))}
               </div>
             )}
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -643,13 +697,9 @@ function Readiness({ data }: { data: ArmsControl }) {
 function Ammo({ data }: { data: ArmsControl }) {
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Ammunition by vault</h2>
-          <span className="muted small">Ledger against the last count. A difference opens a case; nobody edits the ledger to match.</span>
-        </div>
+      <Card title="Ammunition by vault" sub="Ledger against the last count. A difference opens a case; nobody edits the ledger to match." flush>
         <div className="table-wrap">
-          <table>
+          <table className="op-sticky-first">
             <thead>
               <tr>
                 <th>Vault</th>
@@ -664,8 +714,10 @@ function Ammo({ data }: { data: ArmsControl }) {
               {data.ammo.map((a) => (
                 <tr key={a.stock.id}>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{a.vaultName}</div>
-                    <div className="muted small">{a.stock.countedAt ? `Counted ${hhmm(a.stock.countedAt)}` : 'Never counted'}</div>
+                    <div className="op-company">
+                      {a.vaultName}
+                      <span>{a.stock.countedAt ? `Counted ${hhmm(a.stock.countedAt)}` : 'Never counted'}</span>
+                    </div>
                   </td>
                   <td>{a.stock.calibre}</td>
                   <td className="num">{a.stock.ledger}</td>
@@ -689,30 +741,28 @@ function Ammo({ data }: { data: ArmsControl }) {
             </tbody>
           </table>
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Rounds not returned</h2>
-          <span className="muted small">Returns with fewer rounds than issued and no case opened</span>
-        </div>
-        <div className="list">
-          {data.roundsShort.length === 0 && <div className="empty">Every return matched the rounds issued.</div>}
+      </Card>
+      <Card title="Rounds not returned" sub="Returns with fewer rounds than issued and no case opened" flush>
+        {data.roundsShort.length === 0 && <Empty title="Every return matched the rounds issued." />}
+        <ul className="op-list">
           {data.roundsShort.map((r) => (
-            <div key={r.movement.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  <span className="mono">{r.tag}</span> · {r.person}
+            <li key={r.movement.id} className="op-item" data-tone="crit">
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">
+                    <span className="mono">{r.tag}</span> · {r.person}
+                  </span>
+                  <span className="op-meta">
+                    Issued {r.movement.rounds}, returned {r.movement.roundsReturned} at {hhmm(r.movement.returnedAt!)}
+                  </span>
+                  <span className="op-co">{r.companyName}</span>
                 </div>
-                <div className="muted small">
-                  Issued {r.movement.rounds}, returned {r.movement.roundsReturned} at {hhmm(r.movement.returnedAt!)}
-                </div>
-                <div className="small">{r.companyName}</div>
+                <Chip tone="crit">{r.movement.rounds - (r.movement.roundsReturned ?? 0)} short</Chip>
               </div>
-              <Chip tone="crit">{r.movement.rounds - (r.movement.roundsReturned ?? 0)} short</Chip>
-            </div>
+            </li>
           ))}
-        </div>
-      </section>
+        </ul>
+      </Card>
     </>
   );
 }
@@ -734,56 +784,58 @@ function Requests({ data }: { data: ArmsControl }) {
   const [note, setNote] = useState<Record<string, string>>({});
   const { run, busy, error } = useAction();
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Arms requests</h2>
-        <span className="muted small">Ten steps from draft to closed. Arms Control reviews; the company with the A licence authorises.</span>
-      </div>
-      <ErrorNotice error={error} />
-      <div className="list">
-        {data.requests.length === 0 && <div className="empty">No open requests.</div>}
+    <Card title="Arms requests" sub="Ten steps from draft to closed. Arms Control reviews; the company with the A licence authorises." flush>
+      {error && (
+        <div className="op-pad">
+          <ErrorNotice error={error} />
+        </div>
+      )}
+      {data.requests.length === 0 && <Empty title="No open requests." />}
+      <ul className="op-list">
         {data.requests.map((r) => {
           const step = data.requestSteps[r.step - 1];
           const mine = data.canReview && r.request.state === 'arms_review';
           return (
-            <div key={r.request.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{r.request.title}</div>
-                  <div className="muted small">
+            <li key={r.request.id} className="op-item" data-tone={mine ? 'warn' : undefined}>
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">{r.request.title}</span>
+                  <span className="op-meta">
                     {r.request.ref} · {REQUEST_KIND[r.request.kind]} · raised by {r.request.raisedBy}
                     {r.request.needsLegal ? ' · needs legal check' : ''}
-                  </div>
-                  <div className="muted small">{r.request.note}</div>
-                  {r.police.moving && (
-                    <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                      {r.request.fromState && (
-                        <span className="small">
-                          {r.request.fromState} to {r.request.toState}
-                        </span>
-                      )}
-                      <Chip tone={r.police.notice ? 'ok' : 'neutral'}>{r.police.notice ? `Police notice ${r.police.notice.ref}` : 'Police notice: to record'}</Chip>
-                      {r.police.interstate && (
-                        <Chip tone={r.police.approval ? 'ok' : 'neutral'}>{r.police.approval ? `Police approval ${r.police.approval.ref}` : 'Police approval: to record'}</Chip>
-                      )}
-                    </div>
-                  )}
-                  <div className="small">{r.companyName}</div>
+                  </span>
+                  <span className="op-meta">{r.request.note}</span>
+                  <span className="op-co">{r.companyName}</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div className="op-side">
                   <Chip tone={mine ? 'warn' : 'info'}>
                     Step {r.step} of {data.requestSteps.length}
                   </Chip>
                   {r.daysLeft !== null && <Chip tone={r.daysLeft <= 2 ? 'crit' : 'warn'}>Due {dateLabel(r.request.dueBy!)}</Chip>}
                 </div>
               </div>
-              <div className="small">
-                Now: <strong>{step.label}</strong> · with {step.owner}
-              </div>
-              <div style={{ display: 'flex', gap: 2 }} aria-hidden>
-                {data.requestSteps.map((s, i) => (
-                  <span key={s.id} title={s.label} style={{ flex: 1, height: 4, borderRadius: 2, background: i < r.step ? 'var(--accent)' : 'var(--line)' }} />
-                ))}
+              {r.police.moving && (
+                <div className="op-chips">
+                  {r.request.fromState && (
+                    <span className="small">
+                      {r.request.fromState} to {r.request.toState}
+                    </span>
+                  )}
+                  <Chip tone={r.police.notice ? 'ok' : 'neutral'}>{r.police.notice ? `Police notice ${r.police.notice.ref}` : 'Police notice: to record'}</Chip>
+                  {r.police.interstate && (
+                    <Chip tone={r.police.approval ? 'ok' : 'neutral'}>{r.police.approval ? `Police approval ${r.police.approval.ref}` : 'Police approval: to record'}</Chip>
+                  )}
+                </div>
+              )}
+              <div className="op-main">
+                <span className="small">
+                  Now: <strong>{step.label}</strong> · with {step.owner}
+                </span>
+                <div className="op-ladder" aria-hidden>
+                  {data.requestSteps.map((s, i) => (
+                    <span key={s.id} title={s.label} data-on={i < r.step} />
+                  ))}
+                </div>
               </div>
               {r.request.state === 'draft' && <Resubmit id={r.request.id} label={r.request.ref} quantity={r.request.quantity ?? null} estCost={r.request.estCost ?? null} busy={busy} run={run} />}
               {r.request.state !== 'closed' && r.request.state !== 'draft' && (
@@ -797,11 +849,11 @@ function Requests({ data }: { data: ArmsControl }) {
                   run={run}
                 />
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -845,14 +897,13 @@ export function StepActions(props: { id: string; label: string; state: Step; not
   if (!actions.length) return null;
   const today = new Date().toISOString().slice(0, 10);
   return (
-    <div className="row" style={{ flexWrap: 'wrap' }}>
+    <div className="op-act">
       <input
         className="input"
         aria-label={`Reason or reference for ${label}`}
         placeholder={actions.some((a) => a.police) ? 'Reason, or the PDRM / KDN reference' : 'Reason (needed for a decision)'}
         value={note}
         onChange={(e) => onNote(e.target.value)}
-        style={{ flex: 1, minWidth: 160 }}
       />
       {actions.map((a) => (
         <button
@@ -884,14 +935,16 @@ export function Resubmit(props: { id: string; label: string; quantity: number | 
     ...(cost !== (props.estCost == null ? '' : String(props.estCost)) ? { estCost: cost === '' ? null : Number(cost) } : {}),
   };
   return (
-    <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-      <span className="small">Sent back for correction.</span>
-      <input className="input" type="number" min={1} aria-label={`Quantity for ${label}`} placeholder="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 100 }} />
-      <input className="input" type="number" min={0} aria-label={`Cost for ${label}`} placeholder="Cost RM" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 110 }} />
-      <input className="input" aria-label={`What was corrected on ${label}`} placeholder="What you corrected" value={why} onChange={(e) => setWhy(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-      <button className="btn btn-sm btn-primary" disabled={busy || why.trim().length < 3} onClick={() => run(() => api.armsRequestStep(id, 'resubmit', why, { changes }), `${label} sent again to Arms Control`)}>
-        Correct and resubmit
-      </button>
+    <div className="op-main">
+      <span className="small op-warn">Sent back for correction.</span>
+      <div className="op-act">
+        <input className="input op-narrow" type="number" min={1} aria-label={`Quantity for ${label}`} placeholder="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} />
+        <input className="input op-narrow" type="number" min={0} aria-label={`Cost for ${label}`} placeholder="Cost RM" value={cost} onChange={(e) => setCost(e.target.value)} />
+        <input className="input" aria-label={`What was corrected on ${label}`} placeholder="What you corrected" value={why} onChange={(e) => setWhy(e.target.value)} />
+        <button className="btn btn-sm btn-primary" disabled={busy || why.trim().length < 3} onClick={() => run(() => api.armsRequestStep(id, 'resubmit', why, { changes }), `${label} sent again to Arms Control`)}>
+          Correct and resubmit
+        </button>
+      </div>
     </div>
   );
 }
@@ -905,30 +958,28 @@ function LegalFlags() {
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="legal points" />;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Legal points for the directors</h2>
-        <span className="muted small">{data.totals.open} open. Seen only by the group directors; staff screens show the task without legal notices.</span>
-      </div>
-      <div className="list">
-        {data.rows.length === 0 && <div className="empty">No open legal points from Special Ops.</div>}
+    <Card title="Legal points for the directors" sub={`${data.totals.open} open. Seen only by the group directors; staff screens show the task without legal notices.`} flush>
+      {data.rows.length === 0 && <Empty title="No open legal points from Special Ops." />}
+      <ul className="op-list">
         {data.rows.map((f) => (
-          <div key={f.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 600 }}>{f.title}</div>
+          <li key={f.id} className="op-item" data-tone="warn">
+            <div className="op-line">
+              <span className="op-title">{f.title}</span>
               <Chip tone="warn">Open, not verified</Chip>
             </div>
-            <div className="muted small">
-              {f.companyName} · since {dateLabel(f.since)} · responsible: {f.responsible}
-              {f.responsibleAssumed ? ' (assumed, to confirm)' : ''}
+            <div className="op-main">
+              <span className="op-meta">
+                {f.companyName} · since {dateLabel(f.since)} · responsible: {f.responsible}
+                {f.responsibleAssumed ? ' (assumed, to confirm)' : ''}
+              </span>
+              <span className="small">Source: {f.source}</span>
+              <span className="small">Records: {f.records.map((r) => r.label).join('; ')}</span>
+              <span className="small">{f.detail}</span>
             </div>
-            <div className="small">Source: {f.source}</div>
-            <div className="small">Records: {f.records.map((r) => r.label).join('; ')}</div>
-            <div className="small">{f.detail}</div>
             {f.history.length > 0 && (
-              <details className="small">
+              <details className="ar-history">
                 <summary>History ({f.history.length})</summary>
-                <ul style={{ margin: '4px 0 0 18px' }}>
+                <ul>
                   {f.history.map((h, i) => (
                     <li key={i}>
                       {h.at.slice(0, 16).replace('T', ' ')} · {h.actor}: {h.summary}
@@ -937,10 +988,10 @@ function LegalFlags() {
                 </ul>
               </details>
             )}
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -952,35 +1003,33 @@ function Trading() {
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="arms trading" />;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Arms trading and import</h2>
-        <Chip tone={data.on ? 'warn' : 'neutral'}>{data.on ? 'On' : 'Off'}</Chip>
+    <Card title="Arms trading and import" actions={<Chip tone={data.on ? 'warn' : 'neutral'}>{data.on ? 'On' : 'Off'}</Chip>}>
+      <div className="op-form">
+        <p className="op-note">
+          Buying and selling trade stock and importing (Port Klang or KLIA, after the CPO, with KDN papers) are built but stay off until the CEO switches them on. While off, every trading
+          request is refused and the refusal is logged.
+        </p>
+        {data.by && (
+          <span className="small">
+            Last switched by {data.by}
+            {data.at ? ` on ${dateLabel(data.at.slice(0, 10))}` : ''}: {data.reason}
+          </span>
+        )}
+        <ErrorNotice error={act.error} />
+        {data.canSwitch && (
+          <div className="op-act">
+            <input className="input" aria-label="Reason" placeholder="Reason, for example the dealer licence reference" value={reason} onChange={(e) => setReason(e.target.value)} />
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || reason.trim().length < 5}
+              onClick={() => act.run(() => api.setArmsTrading(!data.on, reason).then(() => { setReason(''); reload(); }), data.on ? 'Arms trading switched off' : 'Arms trading switched on')}
+            >
+              {data.on ? 'Switch off' : 'Switch on'}
+            </button>
+          </div>
+        )}
       </div>
-      <p className="muted small">
-        Buying and selling trade stock and importing (Port Klang or KLIA, after the CPO, with KDN papers) are built but stay off until the CEO switches them on. While off, every trading
-        request is refused and the refusal is logged.
-      </p>
-      {data.by && (
-        <div className="small">
-          Last switched by {data.by}
-          {data.at ? ` on ${dateLabel(data.at.slice(0, 10))}` : ''}: {data.reason}
-        </div>
-      )}
-      <ErrorNotice error={act.error} />
-      {data.canSwitch && (
-        <div className="row" style={{ flexWrap: 'wrap', marginTop: 8 }}>
-          <input className="input" aria-label="Reason" placeholder="Reason, for example the dealer licence reference" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={act.busy || reason.trim().length < 5}
-            onClick={() => act.run(() => api.setArmsTrading(!data.on, reason).then(() => { setReason(''); reload(); }), data.on ? 'Arms trading switched off' : 'Arms trading switched on')}
-          >
-            {data.on ? 'Switch off' : 'Switch on'}
-          </button>
-        </div>
-      )}
-    </section>
+    </Card>
   );
 }
 
@@ -1001,63 +1050,65 @@ const AGREEMENT_STATE: Record<ArmsControl['agreements'][number]['state'], { labe
 /** Client arms agreements and armed-service insurance for every armed site and armed job (V14 s.212, s.224). */
 function Agreements({ data }: { data: ArmsControl }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Client arms agreements</h2>
-        <span className="muted small">
-          Set-up: notify the police once, install the site vault if used, get police approval, then go live. Plus a signed agreement and current insurance.
-        </span>
-        <RecordButton kind="armsAgreement" label="Add arms agreement" />
-      </div>
-      <div className="list">
+    <Card
+      title="Client arms agreements"
+      sub="Set-up: notify the police once, install the site vault if used, get police approval, then go live. Plus a signed agreement and current insurance."
+      actions={<RecordButton kind="armsAgreement" label="Add arms agreement" />}
+      flush
+    >
+      <ul className="op-list">
         {data.sitesWithoutAgreement.map((x) => (
-          <div key={x.site.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>{x.site.name}</div>
-              <div className="muted small">{x.site.client} · armed site with no arms agreement on file</div>
-              <div className="small">{x.companyName}</div>
+          <li key={x.site.id} className="op-item" data-tone="crit">
+            <div className="op-line">
+              <div className="op-main">
+                <span className="op-title">{x.site.name}</span>
+                <span className="op-meta">{x.site.client} · armed site with no arms agreement on file</span>
+                <span className="op-co">{x.companyName}</span>
+              </div>
+              <div className="op-chips">
+                <Chip tone="crit">No agreement</Chip>
+                <RecordButton kind="armsAgreement" companyId={x.site.companyId} label="Add" />
+              </div>
             </div>
-            <div className="row" style={{ gap: 6 }}>
-              <Chip tone="crit">No agreement</Chip>
-              <RecordButton kind="armsAgreement" companyId={x.site.companyId} label="Add" />
-            </div>
-          </div>
+          </li>
         ))}
         {data.agreements.map((a) => (
-          <div key={a.agreement.id} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                {a.siteName ?? a.agreement.siteName ?? `${a.agreement.client} · ${a.agreement.jobKind ? JOB_LABEL[a.agreement.jobKind] : 'Armed job'}`}
+          <li key={a.agreement.id} className="op-item">
+            <div className="op-line">
+              <div className="op-main">
+                <span className="op-title">
+                  {a.siteName ?? a.agreement.siteName ?? `${a.agreement.client} · ${a.agreement.jobKind ? JOB_LABEL[a.agreement.jobKind] : 'Armed job'}`}
+                </span>
+                <span className="op-meta">
+                  {a.agreement.client} · {a.agreement.armedPosts} armed {a.agreement.siteId ? 'posts' : 'crew'}
+                  {a.agreement.endsOn ? ` · to ${dateLabel(a.agreement.endsOn)}` : ''}
+                </span>
+                <span className="op-meta">
+                  Insurance {a.agreement.insurer ?? 'not recorded'}
+                  {a.agreement.policyRef ? ` · ${a.agreement.policyRef}` : ''}
+                  {a.agreement.insuranceExpiresOn ? ` · to ${dateLabel(a.agreement.insuranceExpiresOn)}` : ''}
+                </span>
+                <span className="op-co">{a.companyName}</span>
               </div>
-              <div className="muted small">
-                {a.agreement.client} · {a.agreement.armedPosts} armed {a.agreement.siteId ? 'posts' : 'crew'}
-                {a.agreement.endsOn ? ` · to ${dateLabel(a.agreement.endsOn)}` : ''}
+              <div className="op-side">
+                <Chip tone={AGREEMENT_STATE[a.state].tone}>{AGREEMENT_STATE[a.state].label}</Chip>
+                <Chip tone={SETUP_STEP[a.setupStep].tone}>{SETUP_STEP[a.setupStep].label}</Chip>
+                {a.insurance.status !== 'OK' && (
+                  <Chip tone={a.insurance.status === 'OVERDUE' ? 'crit' : a.insurance.status === 'UNKNOWN' ? 'neutral' : 'warn'}>
+                    {a.insurance.status === 'UNKNOWN'
+                      ? 'Insurance unknown'
+                      : a.insurance.status === 'OVERDUE'
+                        ? 'Insurance expired'
+                        : `Insurance ${a.insurance.daysLeft} days`}
+                  </Chip>
+                )}
+                <RecordButton kind="armsAgreement" id={a.agreement.id} />
               </div>
-              <div className="muted small">
-                Insurance {a.agreement.insurer ?? 'not recorded'}
-                {a.agreement.policyRef ? ` · ${a.agreement.policyRef}` : ''}
-                {a.agreement.insuranceExpiresOn ? ` · to ${dateLabel(a.agreement.insuranceExpiresOn)}` : ''}
-              </div>
-              <div className="small">{a.companyName}</div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <Chip tone={AGREEMENT_STATE[a.state].tone}>{AGREEMENT_STATE[a.state].label}</Chip>
-              <Chip tone={SETUP_STEP[a.setupStep].tone}>{SETUP_STEP[a.setupStep].label}</Chip>
-              <RecordButton kind="armsAgreement" id={a.agreement.id} />
-              {a.insurance.status !== 'OK' && (
-                <Chip tone={a.insurance.status === 'OVERDUE' ? 'crit' : a.insurance.status === 'UNKNOWN' ? 'neutral' : 'warn'}>
-                  {a.insurance.status === 'UNKNOWN'
-                    ? 'Insurance unknown'
-                    : a.insurance.status === 'OVERDUE'
-                      ? 'Insurance expired'
-                      : `Insurance ${a.insurance.daysLeft} days`}
-                </Chip>
-              )}
-            </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -1066,61 +1117,55 @@ function Police({ data }: { data: ArmsControl }) {
   const p = data.police;
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Police reports for missing firearms</h2>
-          <span className="muted small">Report within {p.reportDays} days of finding out, at the nearest police station</span>
-        </div>
-        <div className="list">
-          {p.reports.length === 0 && <div className="empty">No firearm is missing.</div>}
-          {p.reports.map((r) => (
-            <div key={r.firearm.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  <span className="mono">{r.firearm.tag}</span> · {r.firearm.kind}
+      <div className="op-grid-2">
+        <Card title="Police reports for missing firearms" sub={`Report within ${p.reportDays} days of finding out, at the nearest police station`} flush>
+          {p.reports.length === 0 && <Empty title="No firearm is missing." />}
+          <ul className="op-list">
+            {p.reports.map((r) => (
+              <li key={r.firearm.id} className="op-item" data-tone={r.report ? undefined : 'crit'}>
+                <div className="op-line">
+                  <div className="op-main">
+                    <span className="op-title">
+                      <span className="mono">{r.firearm.tag}</span> · {r.firearm.kind}
+                    </span>
+                    <span className="op-meta">
+                      Missing since {dateLabel(r.missingSince.slice(0, 10))} {hhmm(r.missingSince)}
+                      {r.report ? ` · reported ${r.report.ref} on ${dateLabel(r.report.on)}` : ` · report by ${dateLabel(r.dueBy)}`}
+                    </span>
+                    <span className="op-co">{r.companyName}</span>
+                  </div>
+                  <Chip tone={r.report ? 'ok' : r.daysLeft <= 4 ? 'crit' : 'warn'}>
+                    {r.report ? 'Reported' : r.daysLeft < 0 ? `${-r.daysLeft} days late` : `${r.daysLeft} days left`}
+                  </Chip>
                 </div>
-                <div className="muted small">
-                  Missing since {dateLabel(r.missingSince.slice(0, 10))} {hhmm(r.missingSince)}
-                  {r.report ? ` · reported ${r.report.ref} on ${dateLabel(r.report.on)}` : ` · report by ${dateLabel(r.dueBy)}`}
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Firearms to deposit with the police" sub="Licence expired or revoked: deposit without delay" flush>
+          {p.deposits.length === 0 && <Empty title="Every firearm has a current licence." />}
+          <ul className="op-list">
+            {p.deposits.map((d) => (
+              <li key={d.firearm.id} className="op-item" data-tone={d.deposited ? undefined : 'crit'}>
+                <div className="op-line">
+                  <div className="op-main">
+                    <span className="op-title">
+                      <span className="mono">{d.firearm.tag}</span> · licence {d.firearm.licenceRef}
+                    </span>
+                    <span className="op-meta">
+                      Expired {dateLabel(d.expiredOn)}
+                      {d.deposited ? ` · deposited at ${d.deposited.station} on ${dateLabel(d.deposited.on)}` : ' · still in the company vault'}
+                    </span>
+                    <span className="op-co">{d.companyName}</span>
+                  </div>
+                  <Chip tone={d.deposited ? 'ok' : 'crit'}>{d.deposited ? 'Deposited' : 'Not deposited'}</Chip>
                 </div>
-                <div className="small">{r.companyName}</div>
-              </div>
-              <Chip tone={r.report ? 'ok' : r.daysLeft <= 4 ? 'crit' : 'warn'}>
-                {r.report ? 'Reported' : r.daysLeft < 0 ? `${-r.daysLeft} days late` : `${r.daysLeft} days left`}
-              </Chip>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Firearms to deposit with the police</h2>
-          <span className="muted small">Licence expired or revoked: deposit without delay</span>
-        </div>
-        <div className="list">
-          {p.deposits.length === 0 && <div className="empty">Every firearm has a current licence.</div>}
-          {p.deposits.map((d) => (
-            <div key={d.firearm.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  <span className="mono">{d.firearm.tag}</span> · licence {d.firearm.licenceRef}
-                </div>
-                <div className="muted small">
-                  Expired {dateLabel(d.expiredOn)}
-                  {d.deposited ? ` · deposited at ${d.deposited.station} on ${dateLabel(d.deposited.on)}` : ' · still in the company vault'}
-                </div>
-                <div className="small">{d.companyName}</div>
-              </div>
-              <Chip tone={d.deposited ? 'ok' : 'crit'}>{d.deposited ? 'Deposited' : 'Not deposited'}</Chip>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Firearms out at once</h2>
-          <span className="muted small">No limit on firearms per permit. Shown so Arms Control sees how many are out.</span>
-        </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+      <Card title="Firearms out at once" sub="No limit on firearms per permit. Shown so Arms Control sees how many are out." flush>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1141,14 +1186,10 @@ function Police({ data }: { data: ArmsControl }) {
             </tbody>
           </table>
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Annual firearms return to KDN, {p.year}</h2>
-          <span className="muted small">Number and type every year. Prepared here; the company checks and files it.</span>
-        </div>
+      </Card>
+      <Card title={`Annual firearms return to KDN, ${p.year}`} sub="Number and type every year. Prepared here; the company checks and files it." flush>
         <div className="table-wrap">
-          <table>
+          <table className="op-sticky-first">
             <thead>
               <tr>
                 <th>Company</th>
@@ -1169,7 +1210,7 @@ function Police({ data }: { data: ArmsControl }) {
                   <td className="num">{r.revolver}</td>
                   <td className="num">{r.pistol}</td>
                   <td className="num hide-sm">{r.trade}</td>
-                  <td className="num hide-sm" style={r.lostOrUnverified ? { color: 'var(--crit)', fontWeight: 600 } : undefined}>
+                  <td className="num hide-sm op-num" data-tone={r.lostOrUnverified ? 'crit' : undefined}>
                     {r.lostOrUnverified}
                   </td>
                   <td className="num hide-sm">{r.permitHolders}</td>
@@ -1179,7 +1220,7 @@ function Police({ data }: { data: ArmsControl }) {
             </tbody>
           </table>
         </div>
-      </section>
+      </Card>
     </>
   );
 }

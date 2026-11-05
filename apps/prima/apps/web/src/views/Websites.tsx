@@ -4,7 +4,9 @@ import { api, type WebBoardOk } from '../api';
 import { saveFile } from '../save';
 import { useApp } from '../App';
 import { loadWebsiteVisit, websiteNoticeIsMonth, type WebsiteVisit } from './website-schedule-state';
-import { Chip, Drawer, ErrorNotice, Kpi, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { ArrowsClockwiseIcon, BuildingsIcon, CalendarCheckIcon, CheckSquareIcon, GlobeIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 
 /**
  * Group websites (Fauzan, 27 Oct 2026). One register of every company's domains and websites, run by IT: who owns
@@ -74,14 +76,12 @@ export function WebsitesView() {
   const [tab, setTab] = useState<Tab>('overview');
   const [open, setOpen] = useState<Open>(null);
   const [filter, setFilter] = useState<{ label: string; ids: string[] } | null>(null);
-  if (error) return <><ErrorNotice error={error} /><button className="btn" onClick={reload}>Retry Websites</button></>;
+  if (error) return <div className="ws-retry"><ErrorNotice error={error} /><button className="btn" onClick={reload}>Retry Websites</button></div>;
   if (!data) return <Loading what="websites" />;
   if (!data.allowed)
     return (
-      <div className="page">
-        <div className="page-head">
-          <h1>Websites</h1>
-        </div>
+      <div className="page ws-page">
+        <PageHead title="Websites" />
         <div className="empty">No company websites are assigned to you. IT, group management and each company's Head of Company, content owner and approver work here.</div>
       </div>
     );
@@ -106,21 +106,22 @@ export function WebsitesView() {
     setTab('companies');
   };
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Websites</h1>
-        <p className="muted">
-          {r.itHead || r.group
+    <div className="page ws-page">
+      <PageHead
+        title="Websites"
+        sub={
+          r.itHead || r.group
             ? `Domains, websites, quarterly content reviews, monthly checks and issues for every company in the group. ${data.quarter.key} runs ${dateLabel(data.quarter.start)} to ${dateLabel(data.quarter.end)}.`
             : r.head || r.company
               ? 'Your companies’ websites: answer the quarterly review, approve changes and follow open issues.'
-              : 'The websites and domains assigned to you.'}
-        </p>
+              : 'The websites and domains assigned to you.'
+        }
+      >
         <p className="notice" data-tone="info">
           {dataNotice(me.dataMode)} Publications and renewals are recorded by hand. Optional connector readings are labelled with their source and time; notices show inside Prima only.
         </p>
-      </div>
-      <div className="tabbar" role="tablist" aria-label="Website sections" style={{ flexWrap: 'wrap' }}>
+      </PageHead>
+      <div className="tabbar ws-tabs" role="tablist" aria-label="Website sections">
         {tabs.map(([t, l]) => (
           <button
             key={t}
@@ -163,9 +164,9 @@ export function WebsitesView() {
 
 function Line({ k, children }: { k: string; children: ReactNode }) {
   return (
-    <div className="list-item">
-      <span className="muted">{k}</span>
-      <span style={{ textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>{children}</span>
+    <div className="ws-line">
+      <span className="ws-line-k">{k}</span>
+      <span className="ws-line-v">{children}</span>
     </div>
   );
 }
@@ -173,6 +174,13 @@ function Line({ k, children }: { k: string; children: ReactNode }) {
 function Pill({ map, k }: { map: Record<string, [Tone, string]>; k: string }) {
   const [tone, label] = map[k] ?? ['unknown', k];
   return <Chip tone={tone}>{label}</Chip>;
+}
+
+/** Days to a domain's expiry at a glance: expired or within 30 days red, within 60 amber. Nothing when no date is recorded. */
+function ExpiryChip({ days }: { days: number | null | undefined }) {
+  if (days == null) return null;
+  if (days < 0) return <Chip tone="crit">{days === -1 ? '1 day ago' : `${-days} days ago`}</Chip>;
+  return <Chip tone={days <= 30 ? 'crit' : days <= 60 ? 'warn' : 'ok'}>{days === 1 ? '1 day left' : `${days} days left`}</Chip>;
 }
 
 function Manual() {
@@ -214,26 +222,25 @@ function Text({ label, value, onChange, area = false, placeholder }: { label: st
   );
 }
 
-function Panel({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+/** A titled card; lists inside it run edge to edge. */
+function Panel({ title, note, actions, children }: { title: string; note?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>{title}</h3>
-        {note && <span className="muted small">{note}</span>}
-      </div>
-      {children}
-    </section>
+    <div className="ws-card">
+      <Card title={title} sub={note} actions={actions}>
+        {children}
+      </Card>
+    </div>
   );
 }
 
 function RowButton({ onClick, title, sub, right }: { onClick: () => void; title: ReactNode; sub?: ReactNode; right?: ReactNode }) {
   return (
-    <button className="list-item" style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={onClick}>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontWeight: 600 }}>{title}</div>
-        {sub && <div className="muted small">{sub}</div>}
-      </div>
-      {right && <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>{right}</div>}
+    <button className="ws-row" onClick={onClick}>
+      <span className="ws-row-main">
+        <span className="ws-row-title">{title}</span>
+        {sub && <span className="ws-row-sub">{sub}</span>}
+      </span>
+      {right && <span className="ws-row-right">{right}</span>}
     </button>
   );
 }
@@ -253,7 +260,7 @@ function OnBehalf() {
   return (
     <Panel title="Recording for the company" note="Pilot: the companies and ACT are not on Prima yet">
       <p className="muted small">Write who in the company (or ACT) gave this answer, check or approval, and how they gave it. Both are kept on the record.</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         <Text
           label="Given by (name and role)"
           value={name}
@@ -283,9 +290,9 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
   const r = data.role;
   const act = useAction();
   const tile = (label: string, ids: string[], tone: Tone) => (
-    <button className="list-item" style={{ width: '100%', textAlign: 'left' }} onClick={() => drill(label, ids)} key={label}>
-      <span>{label}</span>
-      <Chip tone={ids.length ? tone : 'ok'}>{ids.length}</Chip>
+    <button className="ws-tile" data-tone={ids.length ? tone : 'ok'} onClick={() => drill(label, ids)} key={label}>
+      <span className="ws-tile-n">{ids.length}</span>
+      <span className="ws-tile-l">{label}</span>
     </button>
   );
   const goTodo = (t: { go: { tab: string; id: string } }) => {
@@ -295,45 +302,49 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
   };
   return (
     <>
-      <div className="kpis">
-        <Kpi label="Companies" value={k.companies} note="From the company list" />
-        <Kpi label="Live websites" value={k.liveSites} tone="ok" note={k.offlineOrCritical ? `${k.offlineOrCritical} offline or critical` : undefined} />
-        <Kpi
+      <Stats>
+        <Stat label="Companies" value={k.companies} note="From the company list" icon={<BuildingsIcon size={16} />} onClick={() => setTab('companies')} />
+        <Stat label="Live websites" value={k.liveSites} tone="ok" note={k.offlineOrCritical ? `${k.offlineOrCritical} offline or critical` : undefined} icon={<GlobeIcon size={16} />} onClick={() => setTab('sites')} />
+        <Stat
           label={`${data.quarter.key} reviews done`}
           value={k.reviewsDone}
           note={`${k.reviewsOpen} in progress · ${k.reviewsOverdue} overdue`}
           tone={k.reviewsOverdue ? 'crit' : 'ok'}
+          icon={<CalendarCheckIcon size={16} />}
+          onClick={() => setTab('reviews')}
         />
-        <Kpi label="Domains expiring" value={k.expiring30} note={`within 30 days · ${k.expiring60} within 60 · ${k.expired} expired`} tone={k.expired ? 'crit' : k.expiring30 ? 'warn' : 'ok'} />
-        <Kpi label="Critical issues" value={k.critical} tone={k.critical ? 'crit' : 'ok'} />
-        <Kpi label="Waiting for approval" value={k.awaitingApproval} tone={k.awaitingApproval ? 'warn' : 'ok'} />
-        {(r.it || r.group) && <Kpi label="Monthly checks" value={k.checksDue} note={`due · ${k.checksOverdue} overdue`} tone={k.checksOverdue ? 'crit' : 'ok'} />}
-      </div>
+        <Stat label="Domains expiring" value={k.expiring30} note={`within 30 days · ${k.expiring60} within 60 · ${k.expired} expired`} tone={k.expired ? 'crit' : k.expiring30 ? 'warn' : 'ok'} icon={<ArrowsClockwiseIcon size={16} />} onClick={() => setTab('domains')} />
+        <Stat label="Critical issues" value={k.critical} tone={k.critical ? 'crit' : 'ok'} icon={<WarningIcon size={16} />} onClick={() => setTab('issues')} />
+        <Stat label="Waiting for approval" value={k.awaitingApproval} tone={k.awaitingApproval ? 'warn' : 'ok'} icon={<SealCheckIcon size={16} />} onClick={() => setTab('reviews')} />
+        {(r.it || r.group) && <Stat label="Monthly checks" value={k.checksDue} note={`due · ${k.checksOverdue} overdue`} tone={k.checksOverdue ? 'crit' : 'ok'} icon={<CheckSquareIcon size={16} />} onClick={() => setTab('checks')} />}
+      </Stats>
       <ErrorNotice error={act.error} />
-      <Panel title={r.itHead || r.group || r.cos ? 'Needs action' : 'Your to-do'} note={`${data.todo.length} item${data.todo.length === 1 ? '' : 's'}`}>
-        <div className="list">
-          {data.todo.slice(0, 25).map((t, i) => (
-            <RowButton key={i} onClick={() => goTodo(t)} title={t.text} right={<Chip tone={t.tone}>{t.tone === 'crit' ? 'Urgent' : t.tone === 'warn' ? 'Due' : 'To do'}</Chip>} />
-          ))}
-          {data.todo.length > 25 && <div className="muted small">and {data.todo.length - 25} more</div>}
-          {!data.todo.length && <div className="empty">Nothing waiting on you.</div>}
-        </div>
-      </Panel>
-      {c && (
-        <Panel title="Company coverage" note={`${c.total} companies in the company list`}>
+      <div className={c ? 'ws-grid' : 'ws-stack'}>
+        <Panel title={r.itHead || r.group || r.cos ? 'Needs action' : 'Your to-do'} note={`${data.todo.length} item${data.todo.length === 1 ? '' : 's'}`}>
           <div className="list">
-            {tile('With a live website', c.live, 'ok')}
-            {tile('Domain but no live website', c.domainNoSite, 'warn')}
-            {tile('No domain', c.noDomain, 'warn')}
-            {tile('No website', c.noSite, 'warn')}
-            {tile('Neither domain nor website', c.neither, 'warn')}
-            {tile('Missing owner or administrator', c.missingOwners, 'crit')}
-            {tile('Quarterly review overdue', c.overdue, 'crit')}
-            {tile('Website not required (with reason)', c.notRequired, 'neutral')}
-            {tile('Incomplete or unknown records', c.incomplete, 'warn')}
+            {data.todo.slice(0, 25).map((t, i) => (
+              <RowButton key={i} onClick={() => goTodo(t)} title={t.text} right={<Chip tone={t.tone}>{t.tone === 'crit' ? 'Urgent' : t.tone === 'warn' ? 'Due' : 'To do'}</Chip>} />
+            ))}
+            {data.todo.length > 25 && <div className="muted small ws-more">and {data.todo.length - 25} more</div>}
+            {!data.todo.length && <div className="empty">Nothing waiting on you.</div>}
           </div>
         </Panel>
-      )}
+        {c && (
+          <Panel title="Company coverage" note={`${c.total} companies in the company list`}>
+            <div className="ws-tiles">
+              {tile('With a live website', c.live, 'ok')}
+              {tile('Domain but no live website', c.domainNoSite, 'warn')}
+              {tile('No domain', c.noDomain, 'warn')}
+              {tile('No website', c.noSite, 'warn')}
+              {tile('Neither domain nor website', c.neither, 'warn')}
+              {tile('Missing owner or administrator', c.missingOwners, 'crit')}
+              {tile('Quarterly review overdue', c.overdue, 'crit')}
+              {tile('Website not required (with reason)', c.notRequired, 'neutral')}
+              {tile('Incomplete or unknown records', c.incomplete, 'warn')}
+            </div>
+          </Panel>
+        )}
+      </div>
       {r.cos && (
         <Panel title="Administration exceptions" note="Monitor and chase; approvals stay with the company and IT">
           <div className="list">
@@ -373,7 +384,7 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
                 </tbody>
               </table>
             </div>
-            <div className="list" style={{ marginTop: 8 }}>
+            <div className="list ws-gap-top">
               <Line k="Company answers pending">{k.awaitingCompany}</Line>
               <Line k="Waiting to be published">{k.awaitingPublish}</Line>
               <Line k="Failed tests">{k.failedTests}</Line>
@@ -382,7 +393,7 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
             </div>
           </Panel>
           <Panel title="Start the cycle" note="Run again safely: nothing is opened twice">
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="ws-actions">
               <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => call(act, 'openReviews', { quarter: data.quarter.key }, `${data.quarter.key} reviews opened.`)}>
                 Open {data.quarter.key} reviews
               </button>
@@ -391,7 +402,7 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
               </button>
             </div>
             {data.schedule.canForce && (
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <div className="ws-actions ws-gap-top">
                 <button
                   className="btn btn-sm"
                   disabled={act.busy}
@@ -452,7 +463,9 @@ function Companies({ data, go, filter, clearFilter }: { data: B; go: (k: NonNull
           </button>
         </div>
       )}
-      <input className="input" aria-label="Search" placeholder="Company, Head of Company or IT administrator" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />
+      <div className="ws-toolbar">
+        <input className="input ws-search" type="search" aria-label="Search" placeholder="Company, Head of Company or IT administrator" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
       <div className="list">
         {rows.map((c) => (
           <RowButton
@@ -540,7 +553,12 @@ function CompanyDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k:
               onClick={() => go('domain', d.domain.id)}
               title={d.domain.name}
               sub={d.domain.expiresOn ? `Expires ${dateLabel(d.domain.expiresOn)}` : 'Expiry not recorded'}
-              right={<Pill map={DOMAIN_STATUS} k={d.status} />}
+              right={
+                <>
+                  <ExpiryChip days={d.days} />
+                  <Pill map={DOMAIN_STATUS} k={d.status} />
+                </>
+              }
             />
           ))}
           {!domains.length && <div className="empty">No domain recorded.</div>}
@@ -548,7 +566,7 @@ function CompanyDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k:
       </Panel>
       {(data.role.itHead || data.role.group) && (
         <Panel title="Set up" note="IT Head or group management">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="ws-form">
             <label className="field">
               <span>Website needed?</span>
               <select className="select" value={required} onChange={(e) => setRequired(e.target.value)}>
@@ -591,9 +609,19 @@ function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: s
   const rows = data.sites.filter((s) => status === 'ALL' || s.site.status === status);
   return (
     <>
-      <Panel title="Website register" note={`${rows.length} shown`}>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          <select className="select" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+      <Panel
+        title="Website register"
+        note={`${rows.length} shown`}
+        actions={
+          data.role.itHead && (
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              Add website
+            </button>
+          )
+        }
+      >
+        <div className="ws-toolbar">
+          <select className="select ws-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="ALL">Every status</option>
             {['live', 'development', 'offline', 'retired'].map((s) => (
               <option key={s} value={s}>
@@ -601,11 +629,6 @@ function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: s
               </option>
             ))}
           </select>
-          {data.role.itHead && (
-            <button className="btn btn-sm" onClick={() => setAdding(true)}>
-              Add website
-            </button>
-          )}
         </div>
         <div className="list">
           {rows.map((s) => (
@@ -771,7 +794,7 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
   const tri = (v: string) => (v === '' ? null : v === 'true');
   const companyDomains = data.domains.filter((d) => d.domain.companyIds.includes(f.companyId));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="ws-form">
       <ErrorNotice error={act.error} />
       <Text label="Website name" value={f.name} onChange={set('name')} />
       {!site && (
@@ -801,7 +824,7 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
       <fieldset className="field">
         <span>Linked domains</span>
         {companyDomains.map((d) => (
-          <label key={d.domain.id} className="row" style={{ gap: 6 }}>
+          <label key={d.domain.id} className="ws-check">
             <input
               type="checkbox"
               checked={domainIds.includes(d.domain.id)}
@@ -867,7 +890,7 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
           <PersonPick data={data} value={f.approverId} onChange={set('approverId')} label="Content approver (blank: company default)" />
         </>
       )}
-      <div className="row" style={{ gap: 6 }}>
+      <div className="ws-actions">
         <button
           className="btn btn-sm btn-primary"
           disabled={act.busy}
@@ -918,12 +941,17 @@ function Domains({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
   const [adding, setAdding] = useState(false);
   return (
     <>
-      <Panel title="Domain register" note={`${data.domains.length} · soonest expiry first`}>
-        {data.role.itHead && (
-          <button className="btn btn-sm" onClick={() => setAdding(true)} style={{ marginBottom: 8 }}>
-            Add domain
-          </button>
-        )}
+      <Panel
+        title="Domain register"
+        note={`${data.domains.length} · soonest expiry first`}
+        actions={
+          data.role.itHead && (
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              Add domain
+            </button>
+          )
+        }
+      >
         <div className="list">
           {data.domains.map((d) => (
             <RowButton
@@ -941,6 +969,7 @@ function Domains({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
               }
               right={
                 <>
+                  <ExpiryChip days={d.days} />
                   <Pill map={DOMAIN_STATUS} k={d.status} />
                   {d.escalate && <Chip tone="crit">Renewal not confirmed</Chip>}
                 </>
@@ -1020,7 +1049,7 @@ function DomainDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: 
               )}
               {x.receiptRef && <Line k="Receipt">{x.receiptRef}</Line>}
             </div>
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="ws-actions">
               {d.canEdit && (
                 <button className="btn btn-sm" onClick={() => setEditing(true)}>
                   Edit
@@ -1046,7 +1075,7 @@ function DomainDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: 
           )}
           {d.canConfirmRenewal && (
             <Panel title="Confirm renewal" note="Marked renewed only with the new expiry date and evidence">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="ws-form">
                 <label className="field">
                   <span>New expiry date</span>
                   <input className="input" type="date" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} />
@@ -1065,7 +1094,7 @@ function DomainDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: 
           )}
           {(isRenewalOwner || data.role.itHead) && d.canConfirmRenewal && (
             <Panel title="Renewal payment">
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <div className="ws-actions">
                 <input className="input" placeholder="Payment reference" value={payRef} onChange={(e) => setPayRef(e.target.value)} />
                 <button className="btn btn-sm" disabled={act.busy} onClick={() => call(act, 'recordPayment', { domainId: id, status: 'paid', ref: payRef }, 'Payment recorded.')}>
                   Paid
@@ -1127,7 +1156,7 @@ function DomainForm({ data, domain, onDone }: { data: B; domain?: B['domains'][n
   const [companyIds, setCompanyIds] = useState<string[]>(domain?.companyIds ?? []);
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="ws-form">
       <ErrorNotice error={act.error} />
       <Text label="Domain name (like company.com.my)" value={f.name} onChange={set('name')} />
       <label className="field">
@@ -1209,7 +1238,7 @@ function DomainForm({ data, domain, onDone }: { data: B; domain?: B['domains'][n
       <Text label="Who may open it" value={f.vaultAccess} onChange={set('vaultAccess')} />
       <Text label="Receipt or document link" value={f.receiptRef} onChange={set('receiptRef')} />
       <Text label="Notes" value={f.note} onChange={set('note')} area />
-      <div className="row" style={{ gap: 6 }}>
+      <div className="ws-actions">
         <button
           className="btn btn-sm btn-primary"
           disabled={act.busy}
@@ -1248,7 +1277,8 @@ function Reviews({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
   const rows = data.reviews.filter((r) => state === 'ALL' || r.label === state || (state === 'mine' && Object.values(r.can).some(Boolean)));
   return (
     <Panel title="Quarterly reviews" note={`${data.quarter.key} and anything still open`}>
-      <select className="select" aria-label="Filter" value={state} onChange={(e) => setState(e.target.value)} style={{ marginBottom: 8 }}>
+      <div className="ws-toolbar">
+      <select className="select ws-filter" aria-label="Filter" value={state} onChange={(e) => setState(e.target.value)}>
         <option value="ALL">All</option>
         <option value="mine">Waiting on me</option>
         {Object.entries(Q_STATUS)
@@ -1259,6 +1289,7 @@ function Reviews({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
             </option>
           ))}
       </select>
+      </div>
       <div className="list">
         {rows.map((r) => (
           <RowButton
@@ -1304,12 +1335,14 @@ function ReviewDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: 
     <Drawer title={`${row.siteName} · ${r.quarter}`} sub={`${row.companyName} · ${row.stageLabel}`} onClose={onClose}>
       <ErrorNotice error={act.error} />
       {data.role.proxy && ['request', 'verify', 'compliance', 'approval'].includes(r.stage) && <OnBehalf />}
-      <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-        {STAGES.filter((s) => s !== 'compliance' || r.changes.some((c) => c.compliance)).map((s) => (
-          <Chip key={s} tone={STAGES.indexOf(s) < at ? 'ok' : s === r.stage ? (row.overdue ? 'crit' : 'warn') : 'neutral'}>
-            {STAGE_SHORT[s]}
-          </Chip>
-        ))}
+      <div className="ws-steps">
+        <Steps
+          steps={STAGES.filter((s) => s !== 'compliance' || r.changes.some((c) => c.compliance)).map((s) => ({
+            label: STAGE_SHORT[s],
+            state: (STAGES.indexOf(s) < at ? 'done' : s === r.stage ? (row.overdue ? 'stopped' : 'now') : 'todo') as StepState,
+            note: s === r.stage && row.overdue ? 'Overdue' : undefined,
+          }))}
+        />
       </div>
       <Panel title="Dates and people">
         <div className="list">
@@ -1332,8 +1365,8 @@ function ReviewDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: 
             {r.response.note ? `: ${r.response.note}` : ''}
           </p>
           {r.changes.map((c, i) => (
-            <div key={i} className="list-item" style={{ display: 'block' }}>
-              <div style={{ fontWeight: 600 }}>{c.page}</div>
+            <div key={i} className="list-item ws-block">
+              <div className="ws-strong">{c.page}</div>
               <div className="muted small">Now: {c.existing || '–'}</div>
               <div>Change to: {c.proposed}</div>
               <div className="muted small">
@@ -1437,9 +1470,9 @@ function TestList({ data, row, go }: { data: B; row: B['reviews'][number]; go: (
     <Panel title="Tests after publication" note={<Manual />}>
       <div className="list">
         {row.review.tests.map((t) => (
-          <div key={t.key} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <div key={t.key} className="list-item ws-wrap">
             <span>{data.lists.tests.find(([k]) => k === t.key)?.[1]}</span>
-            <span className="row" style={{ gap: 4 }}>
+            <span className="ws-chips">
               {t.result ? <Pill map={RESULT} k={t.result} /> : <Chip tone="neutral">Not entered</Chip>}
               {t.issueId && (
                 <button className="btn btn-sm" onClick={() => go('issue', t.issueId!)}>
@@ -1448,7 +1481,7 @@ function TestList({ data, row, go }: { data: B; row: B['reviews'][number]; go: (
               )}
             </span>
             {(t.note || t.correction) && (
-              <div className="muted small" style={{ width: '100%' }}>
+              <div className="muted small ws-full">
                 {t.note}
                 {t.correction ? ` · corrected: ${t.correction}` : ''}
               </div>
@@ -1480,7 +1513,7 @@ function RespondForm({ data, row, act }: { data: B; row: B['reviews'][number]; a
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         <label className="field">
           <span>Result</span>
           <select className="select" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
@@ -1493,7 +1526,7 @@ function RespondForm({ data, row, act }: { data: B; row: B['reviews'][number]; a
           <fieldset className="field">
             <span>What I checked</span>
             {data.lists.topics.map(([k, l]) => (
-              <label key={k} className="row" style={{ gap: 6 }}>
+              <label key={k} className="ws-check">
                 <input type="checkbox" checked={topics.includes(k)} onChange={(e) => setTopics((t) => (e.target.checked ? [...t, k] : t.filter((x) => x !== k)))} />
                 {l}
               </label>
@@ -1505,14 +1538,14 @@ function RespondForm({ data, row, act }: { data: B; row: B['reviews'][number]; a
         )}
         {outcome === 'changes' &&
           changes.map((c, i) => (
-            <div key={i} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div key={i} className="panel ws-form">
               <Text label="Page or section" value={c.page} onChange={(v) => setChange(i, 'page', v)} />
               <Text label="What it says now" value={c.existing} onChange={(v) => setChange(i, 'existing', v)} area />
               <Text label="What it should say" value={c.proposed} onChange={(v) => setChange(i, 'proposed', v)} area />
               <Text label="Reason" value={c.reason} onChange={(v) => setChange(i, 'reason', v)} />
               <Text label="Supporting document or image (where)" value={c.docRef} onChange={(v) => setChange(i, 'docRef', v)} />
               <Text label="Business owner who checked it" value={c.verifiedBy} onChange={(v) => setChange(i, 'verifiedBy', v)} />
-              <label className="row" style={{ gap: 6 }}>
+              <label className="ws-check">
                 <input type="checkbox" checked={c.compliance} onChange={(e) => setChange(i, 'compliance', e.target.checked)} />
                 Licence, certification or other claim: needs a compliance check
               </label>
@@ -1524,7 +1557,7 @@ function RespondForm({ data, row, act }: { data: B; row: B['reviews'][number]; a
           </button>
         )}
         {outcome === 'no_changes' && (
-          <label className="row" style={{ gap: 6 }}>
+          <label className="ws-check">
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />I confirm I reviewed the website content and it is correct.
           </label>
         )}
@@ -1546,11 +1579,11 @@ function ComplianceForm({ queue, act }: { queue: B['complianceQueue'][number]; a
   return (
     <Panel title="Compliance check" note="ACT verifies licence and certification claims">
       {queue.changes.map((c) => (
-        <div key={c.index} className="list-item" style={{ display: 'block' }}>
-          <div style={{ fontWeight: 600 }}>{c.page}</div>
+        <div key={c.index} className="list-item ws-block">
+          <div className="ws-strong">{c.page}</div>
           <div>{c.proposed}</div>
           <Text label="Comment (always needed: what you checked, or why not confirmed)" value={note} onChange={setNote} />
-          <div className="row" style={{ gap: 6 }}>
+          <div className="ws-actions">
             <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => call(act, 'complianceDecide', { reviewId: queue.reviewId, index: c.index, ok: true, note }, 'Claim confirmed.')}>
               Claim confirmed
             </button>
@@ -1572,14 +1605,14 @@ function PrepareForm({ id, act }: { id: string; act: Act }) {
   const [mobileOk, setMob] = useState(false);
   return (
     <Panel title="Prepare the change" note="Stage 4: in a draft or branch, keep the previous version">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         <Text label="Preview link" value={previewUrl} onChange={setPreview} />
         <Text label="Previous version kept (deployment, commit or backup)" value={previousVersion} onChange={setPrev} />
-        <label className="row" style={{ gap: 6 }}>
+        <label className="ws-check">
           <input type="checkbox" checked={desktopOk} onChange={(e) => setDesk(e.target.checked)} />
           Checked on desktop
         </label>
-        <label className="row" style={{ gap: 6 }}>
+        <label className="ws-check">
           <input type="checkbox" checked={mobileOk} onChange={(e) => setMob(e.target.checked)} />
           Checked on mobile
         </label>
@@ -1597,7 +1630,7 @@ function ApproveForm({ id, act, noChange }: { id: string; act: Act; noChange: bo
   return (
     <Panel title="Approve" note={noChange ? 'Stage 5: approve the no-change confirmation' : 'Stage 5: check the preview first'}>
       <Text label="Comment (always needed: what you checked, or what must change)" value={note} onChange={setNote} area />
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="ws-actions">
         <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => call(act, 'approve', { reviewId: id, decision: 'approve', note }, 'Approved.')}>
           Approve
         </button>
@@ -1620,7 +1653,7 @@ function PublishForm({ id, act, url }: { id: string; act: Act; url: string }) {
   const [issue, setIssue] = useState('');
   return (
     <Panel title="Record publication" note="Stage 6: publish with the usual method, then record it here (manual)">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         <Text label="Deployment or version reference" value={versionRef} onChange={setVersion} />
         <Text label="Live address" value={liveUrl} onChange={setLive} />
         <Text label="Any issue during publication" value={issue} onChange={setIssue} />
@@ -1638,13 +1671,13 @@ function TestForm({ row, lists, act }: { row: B['reviews'][number]; lists: B['li
   const set = (k: string, f: string, val: string) => setV((x) => ({ ...x, [k]: { ...x[k], [f]: val } }));
   return (
     <Panel title="Record tests" note="Stage 7: a failure opens an issue">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="ws-form">
         {row.review.tests.map((t) => (
-          <div key={t.key} style={{ borderBottom: '1px solid var(--line, #ddd)', paddingBottom: 6 }}>
-            <div style={{ fontWeight: 600 }}>{lists.tests.find(([k]) => k === t.key)?.[1]}</div>
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div key={t.key} className="ws-test">
+            <div className="ws-strong">{lists.tests.find(([k]) => k === t.key)?.[1]}</div>
+            <div className="ws-actions">
               {(['pass', 'fail', 'na'] as const).map((res) => (
-                <label key={res} className="row" style={{ gap: 4 }}>
+                <label key={res} className="ws-check">
                   <input type="radio" name={`t-${t.key}`} checked={v[t.key].result === res} onChange={() => set(t.key, 'result', res)} />
                   {RESULT[res][1]}
                 </label>
@@ -1691,7 +1724,7 @@ function Checks({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
       {data.role.itHead && (
         <Panel title="Assign in a batch" note={`${data.month}: one result kept per website`}>
           <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="ws-actions">
             <select className="select" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
               <option value="">Each website’s own IT administrator</option>
               {data.itTeam.map((p) => (
@@ -1745,11 +1778,11 @@ function CheckDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
     <Drawer title={`${row.siteName} · ${c.month}`} sub={`${row.companyName} · ${row.url}`} onClose={onClose}>
       <ErrorNotice error={act.error} />
       <Panel title="Checklist" note={<Pill map={CHECK_STATUS} k={row.status} />}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="ws-form">
           {c.items.map((it) => (
             <div key={it.key}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                <span style={{ fontWeight: 600 }}>{(c.kind === 'social' ? data.lists.social : c.kind === 'mail' ? data.lists.mail : data.lists.monthly).find(([k]) => k === it.key)?.[1]}</span>
+              <div className="ws-spread">
+                <span className="ws-strong">{(c.kind === 'social' ? data.lists.social : c.kind === 'mail' ? data.lists.mail : data.lists.monthly).find(([k]) => k === it.key)?.[1]}</span>
                 {it.issueId && (
                   <button className="btn btn-sm" onClick={() => go('issue', it.issueId!)}>
                     Issue
@@ -1758,9 +1791,9 @@ function CheckDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
               </div>
               {row.canRecord && !c.doneAt ? (
                 <>
-                  <div className="row" style={{ gap: 6 }}>
+                  <div className="ws-actions">
                     {(['pass', 'fail', 'na'] as const).map((res) => (
-                      <label key={res} className="row" style={{ gap: 4 }}>
+                      <label key={res} className="ws-check">
                         <input type="radio" name={`c-${it.key}`} checked={v[it.key]?.result === res} onChange={() => setV((x) => ({ ...x, [it.key]: { ...x[it.key], result: res } }))} />
                         {RESULT[res][1]}
                       </label>
@@ -1780,7 +1813,7 @@ function CheckDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
       </Panel>
       {row.canRecord && !c.doneAt && (
         <Panel title="Save">
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="ws-actions">
             <button className="btn btn-sm" disabled={act.busy} onClick={() => call(act, 'recordCheck', { checkId: id, results }, 'Saved.')}>
               Save
             </button>
@@ -1788,7 +1821,7 @@ function CheckDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
               Complete check
             </button>
           </div>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          <div className="ws-actions ws-gap-top">
             <input className="input" placeholder="Reason it does not apply this month" value={na} onChange={(e) => setNa(e.target.value)} />
             <button className="btn btn-sm" disabled={act.busy} onClick={() => call(act, 'recordCheck', { checkId: id, na }, 'Marked not applicable.')}>
               Not applicable
@@ -1808,12 +1841,17 @@ function Issues({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
   const rows = data.issues.filter((i) => showClosed || i.issue.status === 'open' || i.issue.status === 'in_progress');
   return (
     <>
-      <Panel title="Issues and urgent changes" note="Handled at once, not at the quarterly review">
-        <div className="row" style={{ gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+      <Panel
+        title="Issues and urgent changes"
+        note="Handled at once, not at the quarterly review"
+        actions={
           <button className="btn btn-sm btn-primary" onClick={() => setRaising(true)}>
             Report an issue
           </button>
-          <label className="row" style={{ gap: 4 }}>
+        }
+      >
+        <div className="ws-toolbar">
+          <label className="ws-check">
             <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
             Show resolved and closed
           </label>
@@ -1857,7 +1895,7 @@ function IssueForm({ data, onDone }: { data: B; onDone: () => void }) {
   const [ownerId, setOwner] = useState('');
   const sites = data.sites.filter((s) => s.site.companyId === companyId);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="ws-form">
       <ErrorNotice error={act.error} />
       <label className="field">
         <span>Company</span>
@@ -2024,7 +2062,7 @@ function IssueDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
           <Text label="Note or what was done" value={note} onChange={setNote} area />
           <Text label="Evidence it works (needed to resolve)" value={evidence} onChange={setEvidence} />
           <p className="small muted">Resolution note and evidence are preserved without truncation. Note: 3–680 characters; evidence: 3–300 characters. This records work, not independent confirmation.</p>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="ws-actions">
             {i.status === 'open' && (
               <button className="btn btn-sm" disabled={act.busy} onClick={() => step('start', {}, 'Started.')}>
                 Start
@@ -2094,7 +2132,7 @@ function DnsForm({ data, domainId, m365, onDone }: { data: B; domainId: string; 
   const [to, setTo] = useState('');
   const [ownerId, setOwner] = useState('');
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="ws-form">
       <DnsWarning />
       {m365 && <div className="notice" data-tone="crit">This domain carries Microsoft 365 email.</div>}
       <ErrorNotice error={act.error} />
@@ -2140,7 +2178,7 @@ function DnsDrawer({ data, id, onClose }: { data: B; id: string; onClose: () => 
           {data.lists.dnsPre.map(([k, label]) => {
             const p = c.pre.find((x) => x.key === k)!;
             return (
-              <div key={k} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+              <div key={k} className="list-item ws-wrap">
                 <span>{label}</span>
                 {p.doneAt ? (
                   <span className="muted small">
@@ -2148,7 +2186,7 @@ function DnsDrawer({ data, id, onClose }: { data: B; id: string; onClose: () => 
                     {p.note ? `: ${p.note}` : ''}
                   </span>
                 ) : row.canWork && c.status === 'draft' ? (
-                  <span className="row" style={{ gap: 4 }}>
+                  <span className="ws-chips">
                     <input className="input" placeholder="Where it is recorded" value={notes[k] ?? ''} onChange={(e) => setNotes((n) => ({ ...n, [k]: e.target.value }))} />
                     <button className="btn btn-sm" disabled={act.busy} onClick={() => step('pre', { key: k, note: notes[k] ?? '' }, 'Done.')}>
                       Done
@@ -2176,12 +2214,12 @@ function DnsDrawer({ data, id, onClose }: { data: B; id: string; onClose: () => 
             {data.lists.dnsPost.map(([k, label]) => {
               const p = c.post.find((x) => x.key === k)!;
               return (
-                <div key={k} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+                <div key={k} className="list-item ws-wrap">
                   <span>{label}</span>
                   {p.result ? (
                     <Pill map={RESULT} k={p.result} />
                   ) : row.canWork && c.status === 'approved' ? (
-                    <span className="row" style={{ gap: 4 }}>
+                    <span className="ws-chips">
                       {(['pass', 'fail', 'na'] as const).map((res) => (
                         <button key={res} className="btn btn-sm" disabled={act.busy} onClick={() => step('post', { key: k, result: res }, 'Saved.')}>
                           {RESULT[res][1]}
@@ -2196,10 +2234,10 @@ function DnsDrawer({ data, id, onClose }: { data: B; id: string; onClose: () => 
             })}
           </div>
           {c.status === 'approved' && row.canWork && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+            <div className="ws-form ws-gap-top">
               <Text label="Final DNS set-up" value={finalConfig} onChange={setFinal} area />
               <Text label="Incident and resolution (needed if a test failed)" value={incident} onChange={setIncident} />
-              <div className="row" style={{ gap: 6 }}>
+              <div className="ws-actions">
                 <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => step('finish', { finalConfig, incident }, 'Change closed.')}>
                   Close the change
                 </button>
@@ -2317,7 +2355,7 @@ function Reports({ data }: { data: B }) {
   const itNames = [...new Set(data.itTeam.map((t) => t.name))];
   return (
     <Panel title="Reports" note="Opens in Excel; print to save as PDF">
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div className="ws-toolbar">
         <select className="select" aria-label="Report" value={which} onChange={(e) => setWhich(e.target.value)}>
           {reports.map((x) => (
             <option key={x.key} value={x.key}>
@@ -2403,7 +2441,7 @@ function Settings({ data }: { data: B }) {
   return (
     <Panel title="Settings" note={s.updatedBy ? `Last changed by ${s.updatedBy}` : 'Proposed defaults, for approval'}>
       <ErrorNotice error={act.error} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         <Text label="Domain reminders (days before expiry)" value={f.reminders} onChange={set('reminders')} />
         <Text label="Escalate an unconfirmed renewal this many days before expiry" value={f.escalate} onChange={set('escalate')} />
         <Text label="Review opens (days after the quarter starts)" value={f.requestDay} onChange={set('requestDay')} />
@@ -2414,11 +2452,11 @@ function Settings({ data }: { data: B }) {
         <Text label="Remind the checker (days before the monthly check is due)" value={f.checkReminder} onChange={set('checkReminder')} />
         <Text label="Tell management this many days after a deadline is missed" value={f.overdueEscalate} onChange={set('overdueEscalate')} />
         <PersonPick data={data} value={esc} onChange={setEsc} label="Management escalation recipient" />
-        <label className="row" style={{ gap: 6 }}>
+        <label className="ws-check">
           <input type="checkbox" checked={f.auto} onChange={(e) => setF((x) => ({ ...x, auto: e.target.checked }))} />
           Open reviews and checks and send reminders automatically
         </label>
-        <label className="row" style={{ gap: 6 }}>
+        <label className="ws-check">
           <input type="checkbox" checked={f.blockSelf} onChange={(e) => setF((x) => ({ ...x, blockSelf: e.target.checked }))} />
           Nobody approves content they submitted
         </label>
@@ -2464,10 +2502,11 @@ function Connectors({ data }: { data: B }) {
   return (
     <Panel title="Connections" note="Supported readers are off until authorized configuration is complete. Microsoft 365 delivery is unavailable in this pilot; manual work remains available.">
       <ErrorNotice error={act.error} />
-      <div className="list">
+      <div className="ws-conns">
         {data.integrations.map((i) => (
-          <div key={i.key} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0' }}>
-            <Line k={i.name}>
+          <div key={i.key} className="ws-conn" data-on={i.on ? 'true' : 'false'}>
+            <div className="ws-conn-head">
+              <span className="ws-strong">{i.name}</span>
               {!i.on ? (
                 <Chip tone="unknown">Off</Chip>
               ) : !i.state ? (
@@ -2476,12 +2515,12 @@ function Connectors({ data }: { data: B }) {
                 <Chip tone="ok">Read {i.state.lastSync ? dateTimeLabel(i.state.lastSync) : ''}</Chip>
               ) : (
                 <Chip tone="crit">Failed: {i.state.error}</Chip>
-              )}{' '}
-              <span className="muted small">{i.key === 'm365' ? 'Unavailable in this pilot: Microsoft 365 delivery is disabled. A legacy enabled flag may only be switched off.' : i.on ? i.reads : i.manual}</span>
-            </Line>
+              )}
+            </div>
+            <span className="muted small">{i.key === 'm365' ? 'Unavailable in this pilot: Microsoft 365 delivery is disabled. A legacy enabled flag may only be switched off.' : i.on ? i.reads : i.manual}</span>
             {i.state && i.state.unmatched.length > 0 && <span className="muted small">Not in the register: {i.state.unmatched.slice(0, 8).join(', ')}{i.state.unmatched.length > 8 ? ' …' : ''}</span>}
             {data.canConnect && (
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <div className="ws-inline-form">
                 <Text label="Comment (needed)" value={notes[i.key] ?? ''} onChange={(x) => setNotes((n) => ({ ...n, [i.key]: x }))} />
                 <button className="btn btn-sm" disabled={act.busy || (i.key === 'm365' && !i.on)} onClick={() => { if (act.busy || (i.key === 'm365' && !i.on)) return; return call(act, 'setConnector', { key: i.key, on: !i.on, note: notes[i.key] ?? '' }, `${i.name} switched ${i.on ? 'off' : 'on'}.`); }}>
                   {i.on ? 'Switch off' : i.key === 'm365' ? 'Unavailable in this pilot' : 'Switch on'}
@@ -2493,7 +2532,7 @@ function Connectors({ data }: { data: B }) {
       </div>
       {data.canSync && anyOn && (
         <button
-          className="btn btn-sm btn-primary"
+          className="btn btn-sm btn-primary ws-gap-top"
           disabled={act.busy}
           onClick={() =>
             act.run(
@@ -2518,7 +2557,7 @@ function SpInbox({ data }: { data: B }) {
       <ErrorNotice error={act.error} />
       <div className="list">
         {data.spInbox.map((x) => (
-          <div key={x.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0' }}>
+          <div key={x.id} className="ws-item">
             <strong>
               {x.kind === 'proposal' ? 'Proposal' : x.kind === 'instruction' ? 'Instruction' : 'Change'}: {x.title}
             </strong>
@@ -2538,7 +2577,7 @@ function SpInbox({ data }: { data: B }) {
               </select>
             </label>
             <Text label="Comment (needed)" value={notes[x.id] ?? ''} onChange={(v) => setNotes((n) => ({ ...n, [x.id]: v }))} />
-            <div className="row" style={{ gap: 6 }}>
+            <div className="ws-actions">
               <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => call(act, 'spDecide', { id: x.id, accept: true, note: notes[x.id] ?? '', companyId: company[x.id] || undefined }, 'Accepted: website issue opened.')}>
                 Accept
               </button>
@@ -2579,12 +2618,17 @@ function Social({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
   const [adding, setAdding] = useState(false);
   return (
     <>
-      <Panel title="Social media and online listings" note="Who holds each account and who can get in matters most; posts are checked every month">
-        {(data.role.it || data.role.admin) && (
-          <button className="btn btn-sm" onClick={() => setAdding(true)} style={{ marginBottom: 8 }}>
-            Add account
-          </button>
-        )}
+      <Panel
+        title="Social media and online listings"
+        note="Who holds each account and who can get in matters most; posts are checked every month"
+        actions={
+          (data.role.it || data.role.admin) && (
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              Add account
+            </button>
+          )
+        }
+      >
         <div className="list">
           {data.social.map((a) => (
             <RowButton
@@ -2625,7 +2669,7 @@ function SocialForm({ data, account, onDone }: { data: B; account?: B['social'][
   return (
     <Panel title={account ? 'Edit account' : 'Add account'} note="Never a password: only where the sign-in is kept">
       <ErrorNotice error={act.error} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="ws-form">
         {!account && (
           <label className="small">
             Company{' '}
@@ -2678,13 +2722,13 @@ function SocialForm({ data, account, onDone }: { data: B; account?: B['social'][
         <Text label="Password manager entry (name only)" value={f.vaultEntry} onChange={set('vaultEntry')} />
         <strong className="small">Admins</strong>
         {admins.map((a, k) => (
-          <div key={k} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div key={k} className="ws-actions">
             <input className="input" placeholder="Name and role" value={a.name} onChange={(e) => setAdmins((x) => x.map((y, j) => (j === k ? { ...y, name: e.target.value } : y)))} />
-            <label className="row small" style={{ gap: 4 }}>
+            <label className="ws-check small">
               <input type="checkbox" checked={a.companyEmail} onChange={(e) => setAdmins((x) => x.map((y, j) => (j === k ? { ...y, companyEmail: e.target.checked } : y)))} />
               Company email
             </label>
-            <label className="row small" style={{ gap: 4 }}>
+            <label className="ws-check small">
               <input type="checkbox" checked={a.twoFactor === true} onChange={(e) => setAdmins((x) => x.map((y, j) => (j === k ? { ...y, twoFactor: e.target.checked } : y)))} />
               Two-step sign-in on
             </label>
@@ -2697,7 +2741,7 @@ function SocialForm({ data, account, onDone }: { data: B; account?: B['social'][
           Add admin
         </button>
         <Text label="Notes" value={f.note} onChange={set('note')} area />
-        <div className="row" style={{ gap: 6 }}>
+        <div className="ws-actions">
           <button
             className="btn btn-sm btn-primary"
             disabled={act.busy || ((f.status==='dormant'||f.status==='closed')&&(f.statusReason.trim().length<3||f.statusReason.trim().length>500))}
@@ -2828,7 +2872,7 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
         <ErrorNotice error={act.error} />
         <div className="list">
           {data.mail.map((m) => (
-            <div key={m.domainId} style={{ padding: '6px 0' }}>
+            <div key={m.domainId} className="ws-item">
               <Line k={m.name}>
                 {m.health ? (
                   <span className="small">
@@ -2847,19 +2891,19 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
                 </button>
               )}
               {editDomain === m.domainId && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                <div className="ws-form ws-gap-top">
                   {sel('spf', ['pass', 'missing', 'too_many_lookups', 'unknown'])}
                   {sel('dkim', ['on', 'off', 'unknown'])}
                   {sel('dmarc', ['reject', 'quarantine', 'none', 'missing', 'unknown'])}
                   {sel('mx', ['m365', 'other', 'missing', 'unknown'])}
-                  <label className="row small" style={{ gap: 4 }}>
+                  <label className="ws-check small">
                     DMARC reports collected
                     <select className="select" aria-label="DMARC reports collected" value={f.dmarcReports ?? 'unknown'} onChange={(e) => set('dmarcReports')(e.target.value)}>
                       <option value="unknown">Not checked</option><option value="yes">Yes</option><option value="no">No</option>
                     </select>
                   </label>
                   <Text label="Comment (needed: where you checked it)" value={f.note ?? ''} onChange={set('note')} />
-                  <div className="row" style={{ gap: 6 }}>
+                  <div className="ws-actions">
                     <button
                       className="btn btn-sm btn-primary"
                       disabled={act.busy}
@@ -2884,7 +2928,7 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
       <Panel title="Mailbox review per company" note="Every 90 days in the Microsoft 365 admin centre: leavers, forwarding outside, full mailboxes">
         <div className="list">
           {data.mailboxes.map((m) => (
-            <div key={m.companyId} style={{ padding: '6px 0' }}>
+            <div key={m.companyId} className="ws-item">
               <Line k={m.companyName}>
                 {m.mailboxes ? (
                   <span className="small">
@@ -2902,14 +2946,14 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
                 </button>
               )}
               {editCo === m.companyId && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                <div className="ws-form ws-gap-top">
                   <Text label="Licensed mailboxes" value={mailboxForm.licensed ?? ''} onChange={setMailbox('licensed')} />
                   <Text label="Shared mailboxes" value={mailboxForm.shared ?? ''} onChange={setMailbox('shared')} />
                   <Text label="Leaver mailboxes still open" value={mailboxForm.leaversPending ?? ''} onChange={setMailbox('leaversPending')} />
                   <Text label="Mailboxes close to full" value={mailboxForm.nearFull ?? ''} onChange={setMailbox('nearFull')} />
                   <Text label="Forwarding outside the company" value={mailboxForm.forwardingOutside ?? ''} onChange={setMailbox('forwardingOutside')} />
                   <Text label="Comment (needed: what you checked)" value={mailboxForm.note ?? ''} onChange={setMailbox('note')} />
-                  <div className="row" style={{ gap: 6 }}>
+                  <div className="ws-actions">
                     <button
                       className="btn btn-sm btn-primary"
                       disabled={act.busy}

@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { ArrowsClockwiseIcon, IdentificationCardIcon, MoneyIcon, SirenIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { api, type JaBoard } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, Sev, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
+import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { Chip, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
+import '../styles/biz.css';
 
 /**
  * JA Group app data (Fauzan, 26 Oct 2026). Guards and officers stay on the JA Group app, which runs their payroll,
@@ -29,50 +32,79 @@ const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits
 export function JaView() {
   const { data, error } = useLoad(() => api.jaBoard(), []);
   const [tab, setTab] = useState<Tab | null>(null);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="JA Group app data" />;
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="JA Group app data" />
+      </div>
+    );
   const tabs: Tab[] = [...(data.syncs.length || data.datasets.length > 1 ? (['feed'] as Tab[]) : []), ...data.datasets.filter((d): d is Exclude<typeof d, 'paySummary'> => d !== 'paySummary')];
   const current = tab && tabs.includes(tab) ? tab : tabs[0];
   const stale = data.feeds.flatMap((f) => f.companies.filter((c) => c.state !== 'ok'));
   const openBig = data.incidents.filter((i) => i.status === 'open' && (i.severity === 'P1' || i.severity === 'P2')).length;
+  const go = (t: Tab) => (tabs.length > 1 && tabs.includes(t) ? () => setTab(t) : undefined);
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>JA Group app</h1>
-        <p className="muted">
-          Guards and officers use the JA Group app. Their payroll, foreign worker papers and incidents come here from its feed, read-only. A company with no
-          data for over {data.rule.staleHours} hours shows as unknown.
-        </p>
+    <div className="page bz-ja-page">
+      <PageHead
+        title="JA Group app"
+        sub={`Guards and officers use the JA Group app. Their payroll, foreign worker papers and incidents come here from its feed, read-only. A company with no data for over ${data.rule.staleHours} hours shows as unknown.`}
+      >
         <p className="notice" data-tone="info">
-          Preview with test data: the JA feed is not live yet, so Prima's own foreign worker, incident, pay and hostel screens stay on until it is.
+          Preview with test data: the JA feed is not live yet, so Prima&apos;s own foreign worker, incident, pay and hostel screens stay on until it is.
         </p>
-      </div>
-      <div className="kpis">
-        <Kpi label="Feeds late or missing" value={stale.length} tone={stale.length ? 'unknown' : 'ok'} note="Company and dataset" />
+      </PageHead>
+      <Stats>
+        <Stat
+          label="Feeds late or missing"
+          value={stale.length}
+          tone={stale.length ? 'unknown' : 'ok'}
+          note="Company and dataset"
+          icon={<ArrowsClockwiseIcon size={16} />}
+          onClick={go('feed')}
+        />
         {data.datasets.includes('payroll') && (
-          <Kpi
+          <Stat
             label="Payroll not paid by the 7th"
             value={data.payroll.filter((p) => p.late).length + data.payrollMissing.length}
             tone={data.payroll.some((p) => p.late) || data.payrollMissing.length ? 'crit' : 'ok'}
             note="Last month"
+            icon={<MoneyIcon size={16} />}
+            onClick={go('payroll')}
           />
         )}
         {data.datasets.includes('worker') && (
-          <Kpi
+          <Stat
             label="Papers due"
             value={data.papers.length}
             tone={data.papers.length ? 'warn' : 'ok'}
             note={`Within ${data.rule.papersWarnDays} days, no renewal`}
+            icon={<IdentificationCardIcon size={16} />}
+            onClick={go('worker')}
           />
         )}
-        {data.datasets.includes('incident') && <Kpi label="Open P1 or P2" value={openBig} tone={openBig ? 'crit' : 'ok'} />}
+        {data.datasets.includes('incident') && (
+          <Stat label="Open P1 or P2" value={openBig} tone={openBig ? 'crit' : 'ok'} note="Serious incidents still open" icon={<SirenIcon size={16} />} onClick={go('incident')} />
+        )}
         {data.datasets.includes('guard') && (
-          <Kpi label="Active guards" value={data.guards.reduce((n, g) => n + g.active, 0)} tone={data.guards.some((g) => g.stale) ? 'unknown' : 'ok'} note="From JA" />
+          <Stat
+            label="Active guards"
+            value={data.guards.reduce((n, g) => n + g.active, 0)}
+            tone={data.guards.some((g) => g.stale) ? 'unknown' : 'ok'}
+            note="From JA"
+            icon={<UsersThreeIcon size={16} />}
+            onClick={go('guard')}
+          />
         )}
         {data.datasets.includes('guard') && data.belowMinimumWage.length > 0 && (
-          <Kpi label="Below minimum wage" value={data.belowMinimumWage.length} tone="crit" note="Basic pay in JA" />
+          <Stat label="Below minimum wage" value={data.belowMinimumWage.length} tone="crit" note="Basic pay in JA" icon={<WarningIcon size={16} />} onClick={go('guard')} />
         )}
-      </div>
+      </Stats>
       {tabs.length > 1 && (
         <div className="tabbar" role="tablist" aria-label="JA data">
           {tabs.map((t) => (
@@ -91,54 +123,58 @@ export function JaView() {
   );
 }
 
+/** One health card per dataset (current, or which companies are late), then each delivery the JA app made. */
 function FeedPanel({ data }: { data: JaBoard }) {
   return (
     <>
-      {data.feeds.map((f) => {
-        const bad = f.companies.filter((c) => c.state !== 'ok');
-        return (
-          <section key={f.dataset} className="panel">
-            <div className="panel-head">
-              <h3>{DATASET[f.dataset]}</h3>
-              <Chip tone={bad.length ? 'unknown' : 'ok'}>{bad.length ? `${bad.length} unknown` : 'All companies current'}</Chip>
-            </div>
-            <div className="list">
-              {bad.slice(0, 12).map((c) => (
-                <div key={c.companyId} className="list-item">
-                  <div>{c.companyName}</div>
-                  <span className="muted small">{c.lastAt ? `last ${dateTimeLabel(c.lastAt)}` : 'nothing received'}</span>
-                </div>
-              ))}
-              {bad.length > 12 && <div className="muted small">and {bad.length - 12} more</div>}
-            </div>
-          </section>
-        );
-      })}
+      <div className="bz-ja-feeds">
+        {data.feeds.map((f) => {
+          const bad = f.companies.filter((c) => c.state !== 'ok');
+          return (
+            <section key={f.dataset} className="k-card bz-ja-feed" data-state={bad.length ? 'unknown' : 'ok'}>
+              <div className="bz-ja-feed-head">
+                <span className="bz-ja-dot" aria-hidden="true" />
+                <h2>{DATASET[f.dataset]}</h2>
+                <Chip tone={bad.length ? 'unknown' : 'ok'}>{bad.length ? `${bad.length} unknown` : 'All companies current'}</Chip>
+              </div>
+              {bad.length > 0 && (
+                <ul className="bz-ja-late">
+                  {bad.slice(0, 12).map((c) => (
+                    <li key={c.companyId}>
+                      <span>{c.companyName}</span>
+                      <span className="bz-sub">{c.lastAt ? `last ${dateTimeLabel(c.lastAt)}` : 'nothing received'}</span>
+                    </li>
+                  ))}
+                  {bad.length > 12 && <li className="bz-sub">and {bad.length - 12} more</li>}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </div>
       {data.syncs.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Deliveries</h3>
-          </div>
-          <div className="list">
+        <Card title="Deliveries" sub="Each batch the JA app sent, and what Prima kept" flush>
+          <ul className="bz-rows">
             {data.syncs.map((s) => (
-              <div key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span>
-                    {DATASET[s.dataset]} · {dateTimeLabel(s.at)}
-                  </span>
+              <li key={s.id} className="bz-row" data-tone={s.rejected.length ? 'warn' : undefined}>
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{DATASET[s.dataset]}</span>
+                  <span className="bz-row-meta">{dateTimeLabel(s.at)}</span>
+                  {s.rejected.slice(0, 3).map((r) => (
+                    <span key={r.externalId} className="bz-row-meta">
+                      Refused {r.externalId}: {r.reason}
+                    </span>
+                  ))}
+                </span>
+                <span className="bz-row-side">
                   <Chip tone={s.rejected.length ? 'warn' : 'ok'}>
                     {s.accepted} of {s.received} kept
                   </Chip>
-                </div>
-                {s.rejected.slice(0, 3).map((r) => (
-                  <div key={r.externalId} className="muted small">
-                    Refused {r.externalId}: {r.reason}
-                  </div>
-                ))}
-              </div>
+                </span>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
     </>
   );
@@ -156,30 +192,36 @@ function PayrollPanel({ data }: { data: JaBoard }) {
       {periods.map((period) => {
         const rows = data.payroll.filter((p) => p.period === period);
         return (
-          <section key={period} className="panel">
-            <div className="panel-head">
-              <h3>{period}</h3>
-              <span className="muted small">
-                {rows.reduce((n, r) => n + r.headcount, 0).toLocaleString()} paid · gross {rm(rows.reduce((n, r) => n + r.gross, 0))}
-              </span>
-            </div>
-            <Contributions rows={rows} />
-            <div className="list">
+          <Card
+            key={period}
+            title={period}
+            sub={`${rows.reduce((n, r) => n + r.headcount, 0).toLocaleString()} paid · gross ${rm(rows.reduce((n, r) => n + r.gross, 0))}`}
+            flush
+          >
+            <ul className="bz-rows">
               {rows.map((p) => (
-                <div key={p.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{p.companyName}</div>
-                    <div className="muted small">
-                      {p.headcount} people · gross {rm(p.gross)} · net {rm(p.net)} · employer EPF {rm(p.employerEpf)}
+                <li key={p.id} className="bz-row" data-tone={p.late ? 'crit' : undefined}>
+                  <span className="bz-row-main">
+                    <span className="bz-row-title">{p.companyName}</span>
+                    <span className="bz-row-meta">
+                      {p.headcount} people · net {rm(p.net)} · employer EPF {rm(p.employerEpf)}
                       {p.approvedBy ? ` · approved by ${p.approvedBy}` : ''}
                       {p.paidOn ? ` · paid ${dateLabel(p.paidOn)}` : ''}
-                    </div>
-                  </div>
-                  <Chip tone={p.late ? 'crit' : PAY[p.status][0]}>{p.late ? `Not paid by the ${data.rule.payrollByDay}th` : PAY[p.status][1]}</Chip>
-                </div>
+                    </span>
+                  </span>
+                  <span className="bz-row-side">
+                    <span className="bz-amt">{rm(p.gross)}</span>
+                    <span className="bz-sub">gross</span>
+                    <Chip tone={p.late ? 'crit' : PAY[p.status][0]}>{p.late ? `Not paid by the ${data.rule.payrollByDay}th` : PAY[p.status][1]}</Chip>
+                  </span>
+                </li>
               ))}
+            </ul>
+            <div className="bz-ja-contrib">
+              <h3>SOCSO, LINDUNG and EIS</h3>
+              <Contributions rows={rows} />
             </div>
-          </section>
+          </Card>
         );
       })}
     </>
@@ -188,67 +230,73 @@ function PayrollPanel({ data }: { data: JaBoard }) {
 
 function PapersPanel({ data }: { data: JaBoard }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Papers due within {data.rule.papersWarnDays} days, no renewal submitted</h3>
-        <span className="muted small">{data.workers} workers on the feed</span>
-      </div>
-      <div className="list">
-        {data.papers.length === 0 && <div className="empty">Nothing due.</div>}
-        {data.papers.slice(0, 80).map((p) => (
-          <div key={`${p.recordId}-${p.paper}`} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
-                {p.name} · {p.staffNo}
-              </div>
-              <div className="muted small">
-                {p.companyName} · {PAPER[p.paper]} {p.expiresOn ? `expires ${dateLabel(p.expiresOn)}` : 'no expiry date on record'}
-                {p.status !== 'active' ? ` · ${p.status.replace('_', ' ')}` : ''}
-              </div>
-            </div>
-            {p.stale ? (
-              <Chip tone="unknown">Unknown, feed late</Chip>
-            ) : (
-              <Chip tone={p.daysLeft == null || p.daysLeft <= 7 ? 'crit' : 'warn'}>
-                {p.daysLeft == null ? 'No date' : p.daysLeft < 0 ? `${-p.daysLeft} days expired` : `${p.daysLeft} days left`}
-              </Chip>
-            )}
-          </div>
-        ))}
-        {data.papers.length > 80 && <div className="muted small">and {data.papers.length - 80} more</div>}
-      </div>
-    </section>
+    <Card
+      title={`Papers due within ${data.rule.papersWarnDays} days, no renewal submitted`}
+      sub={`${data.workers} workers on the feed`}
+      actions={<span className="bz-count">{data.papers.length}</span>}
+      flush
+    >
+      {data.papers.length === 0 ? (
+        <Empty title="Nothing due." />
+      ) : (
+        <ul className="bz-rows">
+          {data.papers.slice(0, 80).map((p) => (
+            <li key={`${p.recordId}-${p.paper}`} className="bz-row" data-tone={!p.stale && (p.daysLeft == null || p.daysLeft <= 7) ? 'crit' : undefined}>
+              <span className="bz-row-main">
+                <span className="bz-row-title">
+                  {p.name} <span className="muted small mono">{p.staffNo}</span>
+                </span>
+                <span className="bz-row-meta">
+                  {p.companyName} · {PAPER[p.paper]} {p.expiresOn ? `expires ${dateLabel(p.expiresOn)}` : 'no expiry date on record'}
+                  {p.status !== 'active' ? ` · ${p.status.replace('_', ' ')}` : ''}
+                </span>
+              </span>
+              <span className="bz-row-side">
+                {p.stale ? (
+                  <Chip tone="unknown">Unknown, feed late</Chip>
+                ) : (
+                  <Chip tone={p.daysLeft == null || p.daysLeft <= 7 ? 'crit' : 'warn'}>
+                    {p.daysLeft == null ? 'No date' : p.daysLeft < 0 ? `${-p.daysLeft} days expired` : `${p.daysLeft} days left`}
+                  </Chip>
+                )}
+              </span>
+            </li>
+          ))}
+          {data.papers.length > 80 && <li className="bz-ja-more">and {data.papers.length - 80} more</li>}
+        </ul>
+      )}
+    </Card>
   );
 }
 
 function IncidentsPanel({ data }: { data: JaBoard }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Incidents from the JA app</h3>
-        <span className="muted small">Reported, escalated and closed in the JA app</span>
-      </div>
-      <div className="list">
-        {data.incidents.length === 0 && <div className="empty">No incidents received.</div>}
-        {data.incidents.map((i) => (
-          <div key={i.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
-                {i.category} · {i.companyName}
-                {i.siteCode ? ` · ${i.siteCode}` : ''}
-              </div>
-              <div className="muted small">
-                {dateTimeLabel(i.occurredAt)} · {i.summary}
-              </div>
-            </div>
-            <div className="row" style={{ gap: 6 }}>
-              <Sev s={i.severity} />
-              <Chip tone={i.status === 'open' ? 'warn' : 'ok'}>{i.status === 'open' ? 'Open' : 'Closed'}</Chip>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <Card title="Incidents from the JA app" sub="Reported, escalated and closed in the JA app" actions={<span className="bz-count">{data.incidents.length}</span>} flush>
+      {data.incidents.length === 0 ? (
+        <Empty title="No incidents received." />
+      ) : (
+        <ul className="bz-rows">
+          {data.incidents.map((i) => (
+            <li key={i.id} className="bz-row bz-ja-inc" data-tone={i.status === 'open' && (i.severity === 'P1' || i.severity === 'P2') ? 'crit' : undefined}>
+              <span className="bz-ja-sev">
+                <Sev s={i.severity} />
+              </span>
+              <span className="bz-row-main">
+                <span className="bz-row-title">
+                  {i.category} · {i.companyName}
+                  {i.siteCode ? ` · ${i.siteCode}` : ''}
+                </span>
+                <span className="bz-row-meta">{i.summary}</span>
+                <span className="bz-row-meta">{dateTimeLabel(i.occurredAt)}</span>
+              </span>
+              <span className="bz-row-side">
+                <Chip tone={i.status === 'open' ? 'warn' : 'ok'}>{i.status === 'open' ? 'Open' : 'Closed'}</Chip>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -261,7 +309,7 @@ function Contributions({ rows }: { rows: JaBoard['payroll'] }) {
   const total = (k: 'employerSocso' | 'employeeSocso' | 'employeeLindung' | 'employerEis' | 'employeeEis') =>
     rows.some((r) => r[k] == null) ? <span className="muted">Incomplete</span> : rm(rows.reduce((n, r) => n + (r[k] ?? 0), 0));
   return (
-    <div className="table-wrap" style={{ marginBottom: 8 }}>
+    <div className="table-wrap">
       <table>
         <thead>
           <tr>
@@ -284,7 +332,7 @@ function Contributions({ rows }: { rows: JaBoard['payroll'] }) {
               <td className="num">{cell(p.employeeEis)}</td>
             </tr>
           ))}
-          <tr style={{ fontWeight: 700 }}>
+          <tr className="bz-ja-total">
             <td>Total</td>
             <td className="num">{total('employerSocso')}</td>
             <td className="num">{total('employeeSocso')}</td>
@@ -305,42 +353,58 @@ function Contributions({ rows }: { rows: JaBoard['payroll'] }) {
 function GuardsPanel({ data }: { data: JaBoard }) {
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Guards by company</h3>
-        </div>
-        <div className="list">
-          {data.guards.length === 0 && <div className="empty">No guard records received yet.</div>}
-          {data.guards.map((g) => (
-            <div key={g.companyId} className="list-item">
-              <div>{g.companyName}</div>
-              <span className="small">
-                {g.active} active · {g.suspended} suspended · {g.left} left · {g.foreign} foreign {g.stale && <Chip tone="unknown">feed late</Chip>}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
       {data.belowMinimumWage.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Basic pay below the minimum wage</h3>
-            <Chip tone="crit">{data.belowMinimumWage.length}</Chip>
-          </div>
-          <div className="list">
+        <Card title="Basic pay below the minimum wage" actions={<Chip tone="crit">{data.belowMinimumWage.length}</Chip>} flush>
+          <ul className="bz-rows">
             {data.belowMinimumWage.map((g) => (
-              <div key={`${g.companyId}-${g.staffNo}`} className="list-item">
-                <div>
-                  {g.name} <span className="muted small">{g.staffNo} · {g.companyName}</span>
-                </div>
-                <span className="small">
-                  {rm(g.basicPay)} against {rm(g.minimum)}
+              <li key={`${g.companyId}-${g.staffNo}`} className="bz-row" data-tone="crit">
+                <span className="bz-row-main">
+                  <span className="bz-row-title">{g.name}</span>
+                  <span className="bz-row-meta">
+                    {g.staffNo} · {g.companyName}
+                  </span>
                 </span>
-              </div>
+                <span className="bz-row-side">
+                  <span className="bz-amt">{rm(g.basicPay)}</span>
+                  <span className="bz-sub">against {rm(g.minimum)}</span>
+                </span>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
+      <Card title="Guards by company" flush>
+        {data.guards.length === 0 ? (
+          <Empty title="No guard records received yet." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th className="num">Active</th>
+                  <th className="num">Suspended</th>
+                  <th className="num">Left</th>
+                  <th className="num">Foreign</th>
+                  <th>Feed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.guards.map((g) => (
+                  <tr key={g.companyId}>
+                    <td>{g.companyName}</td>
+                    <td className="num">{g.active}</td>
+                    <td className="num">{g.suspended}</td>
+                    <td className="num">{g.left}</td>
+                    <td className="num">{g.foreign}</td>
+                    <td>{g.stale ? <Chip tone="unknown">feed late</Chip> : <Chip tone="ok">Current</Chip>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   );
 }

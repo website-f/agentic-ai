@@ -80,36 +80,34 @@ export function ChecksTab({ desk, target }: { desk: FinDesk; target?: { section?
   return (
     <>
       <MyDailyCash />
-      <Field label="Company">
-        <select
-          className="select"
-          value={companyId}
-          onChange={(e) => {
-            setChosen(e.target.value);
-            setSection(null);
-          }}
-        >
-          {companies.map((c) => (
-            <option key={c.companyId} value={c.companyId}>
-              {c.companyName} (Team {c.team}){total(c.companyId) ? ` · ${total(c.companyId)} to do` : ''}
-            </option>
+      <div className="fin-checks-bar">
+        <label className="field fin-checks-co">
+          <span>Company</span>
+          <select
+            className="select"
+            value={companyId}
+            onChange={(e) => {
+              setChosen(e.target.value);
+              setSection(null);
+            }}
+          >
+            {companies.map((c) => (
+              <option key={c.companyId} value={c.companyId}>
+                {c.companyName} (Team {c.team}){total(c.companyId) ? ` · ${total(c.companyId)} to do` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="tabbar fin-tabs" role="tablist" aria-label="Checks section">
+          {SECTIONS.map(([k, label, what]) => (
+            <button key={k} role="tab" aria-selected={sec === k} title={what} onClick={() => setSection(k)}>
+              {label}
+              {(mine[k] ?? 0) > 0 && <span className="fin-count">{mine[k]}</span>}
+            </button>
           ))}
-        </select>
-      </Field>
-      <div className="tabbar" role="tablist" aria-label="Checks section" style={{ marginTop: 8 }}>
-        {SECTIONS.map(([k, label, what]) => (
-          <button key={k} role="tab" aria-selected={sec === k} title={what} onClick={() => setSection(k)}>
-            {label}
-            {(mine[k] ?? 0) > 0 && (
-              <>
-                {' '}
-                <Chip tone="warn">{mine[k]}</Chip>
-              </>
-            )}
-          </button>
-        ))}
+        </div>
       </div>
-      <p className="muted small" style={{ margin: '4px 0 8px' }}>
+      <p className="muted small fin-section-note">
         {SECTIONS.find((x) => x[0] === sec)![2]}. Test data: SQL Account and the banks are not connected; figures are typed or loaded from files.
       </p>
       {error && <ErrorNotice error={error} />}
@@ -194,13 +192,13 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         A new payee or a change of bank account is verified by someone other than the person who entered it, by calling back on a number from your own records
         (never the number on the request). Payments to a payee that is not verified cannot be approved or released.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Fill from the supplier's e-Invoice (paste the MyInvois document, optional)">
             <textarea className="input" rows={3} value={f.einv ?? ''} onChange={set('einv')} />
           </Field>
@@ -219,7 +217,7 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
               Fill name and registration number
             </button>
           )}
-          {f.einvError && <p className="small" style={{ color: 'var(--crit, #b00)' }}>{f.einvError}</p>}
+          {f.einvError && <p className="small fin-crit">{f.einvError}</p>}
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set('kind')}>
               {['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'].map((k) => (
@@ -262,9 +260,9 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
       <div className="list">
         {v.payees.length === 0 && <div className="empty">No payees yet.</div>}
         {v.payees.map((p) => (
-          <button key={p.id} className="list-item" style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={() => setOpen(open === p.id ? null : p.id)}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>{p.name}</div>
+          <button key={p.id} className="list-item" onClick={() => setOpen(open === p.id ? null : p.id)}>
+            <div className="fin-min0">
+              <div className="fin-strong">{p.name}</div>
               <div className="muted small">
                 {p.kind} · {p.regNo} · {p.bank} ending {p.accountLast4} · {p.accountName}
                 {p.held ? ` · ${p.held} payment(s) on hold` : ''}
@@ -286,14 +284,14 @@ function PayeeActions({ v, p }: { v: FinControls; p: FinControls['payees'][numbe
   const [mode, setMode] = useState<'verify' | 'change' | 'block' | null>(p.status === 'pending' ? 'verify' : null);
   const run = (action: string, msg: string) => go('payees', action, { ...f, payeeId: p.id }, msg).then((r) => r && setMode(null));
   return (
-    <div style={{ padding: 12, borderTop: '1px solid var(--line, #ddd)' }}>
+    <div className="fin-pad fin-sep">
       <div className="muted small">
         Entered by {p.entered.by}, {dateTimeLabel(p.entered.at)}
         {p.verified ? ` · verified by ${p.verified.by} (${p.verified.method}, ${p.verified.contact}), ${dateTimeLabel(p.verified.at)}` : ''}
       </div>
       {p.history.length > 0 && <div className="muted small">Earlier: {p.history.map((h) => `${h.bank} ending ${h.accountLast4} until ${dateLabel(h.until.slice(0, 10))}`).join('; ')}</div>}
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+      <div className="row fin-my">
         {p.status === 'pending' && (
           <button className="btn btn-sm" onClick={() => setMode('verify')}>
             Verify
@@ -386,7 +384,7 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
       <div className="panel-head">
         <h3>Bank reconciliation with SQL Account, {v.period}</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Load the bank statement above, then paste SQL Account&apos;s ledger for the same bank account (GL Ledger or Cash Book export: date, document no, description,
         debit, credit). Prima matches every line by reference, then by amount and date, then batches, carries last month&apos;s outstanding items forward, and
         proves the balance. Whoever paid from the account does not reconcile it; someone else reviews.
@@ -400,10 +398,10 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
         const matchedL = new Set(rec?.pairs.flatMap((p) => p.lineIds) ?? []);
         const matchedG = new Set(rec?.pairs.flatMap((p) => p.ledgerIds) ?? []);
         return (
-          <div key={s.bank.id} style={{ borderTop: '1px solid var(--line, #ddd)' }}>
-            <div className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
+          <div key={s.bank.id} className="fin-sep">
+            <div className="list-item">
+              <div className="fin-min0">
+                <div className="fin-strong">
                   {s.bank.bank} {s.bank.accountMasked}
                 </div>
                 {r && (
@@ -414,7 +412,7 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
                   </div>
                 )}
               </div>
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row">
                 <Chip tone={tone}>{label}</Chip>
                 {co.canAct && s.statement && (
                   <button className="btn btn-sm" onClick={() => setOpen(open === s.bank.id ? null : s.bank.id)}>
@@ -424,7 +422,7 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
               </div>
             </div>
             {open === s.bank.id && (
-              <div style={{ padding: 12 }}>
+              <div className="fin-pad">
                 <Field label="SQL Account opening balance for the month (RM)">
                   <input className="input" inputMode="decimal" value={f.opening ?? ''} onChange={set('opening')} />
                 </Field>
@@ -455,7 +453,7 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
               </div>
             )}
             {rec && r && (
-              <div style={{ padding: '0 12px 12px' }}>
+              <div className="fin-padb">
                 {r.outstanding.length > 0 && (
                   <p className="small">
                     <b>Payments in SQL Account not yet at the bank:</b>{' '}
@@ -476,8 +474,8 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
                   <div className="list">
                     <div className="muted small">Bank lines with no SQL Account entry (post them in SQL Account, or match by hand):</div>
                     {r.bankOnly.map((l) => (
-                      <div key={l.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                        <label style={{ minWidth: 0 }}>
+                      <div key={l.id} className="list-item">
+                        <label className="fin-min0">
                           {co.canAct && !rec.reviewed && <input type="checkbox" checked={pick.lines.includes(l.id)} onChange={() => toggle('lines', l.id)} />} {dateLabel(l.date)} ·{' '}
                           {l.description} · {l.ref} · <b>{rm(l.amount)}</b>
                           {l.explained && <span className="muted small"> · {l.explained.note}</span>}
@@ -524,7 +522,7 @@ function BankRecs({ v, co }: { v: FinControls; co: Co }) {
                   </details>
                 )}
                 {co.canAct && !rec.reviewed && Math.abs(r.difference) < 0.005 && !r.unexplained.length && (
-                  <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                  <div className="row fin-mt">
                     <input className="input" placeholder="Review comment" value={f[`rv-${rec.id}`] ?? ''} onChange={set(`rv-${rec.id}`)} />
                     <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => go('bankrec', 'review', { recId: rec.id, rev: rec.rev ?? 1, comment: f[`rv-${rec.id}`] }, 'Reconciliation reviewed.')}>
                       Review
@@ -552,7 +550,7 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
       <div className="panel-head">
         <h3>Bank statements, {v.period}</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Load each bank's statement (CSV from the bank portal: date, description, reference, amount, with money out negative). Prima matches money out to released
         payments by amount and bank reference. Every other payment out must be explained before the close.
       </p>
@@ -563,15 +561,15 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
         </p>
       )}
       {v.afterPayment.length > 0 && (
-        <details style={{ padding: '0 12px 8px' }} open={v.afterPayment.some((x) => x.status === 'fail' || x.status === 'review')}>
+        <details className="fin-padb" open={v.afterPayment.some((x) => x.status === 'fail' || x.status === 'review')}>
           <summary className="small">
             Check after payment (automatic): {v.afterPayment.filter((x) => x.status === 'pass').length} passed, {v.afterPayment.filter((x) => x.status === 'fail').length} failed,{' '}
             {v.afterPayment.filter((x) => x.status === 'review').length} to compare, {v.afterPayment.filter((x) => x.status === 'waiting').length} waiting for the statement
           </summary>
           <div className="list">
             {v.afterPayment.map((x) => (
-              <div key={x.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                <span style={{ minWidth: 0, flex: '1 1 240px' }}>
+              <div key={x.id} className="list-item">
+                <span className="fin-min0 fin-flex">
                   {x.payee} {rm(x.amount)} · released {x.releasedOn ? dateLabel(x.releasedOn) : '-'}
                   {(x.status === 'fail' || x.status === 'review') && (
                     <span className="muted small">
@@ -587,10 +585,10 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
         </details>
       )}
       {v.statements.map((s) => (
-        <div key={s.bank.id} style={{ borderTop: '1px solid var(--line, #ddd)' }}>
-          <div className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
+        <div key={s.bank.id} className="fin-sep">
+          <div className="list-item">
+            <div className="fin-min0">
+              <div className="fin-strong">
                 {s.bank.bank} {s.bank.accountMasked}
               </div>
               <div className="muted small">
@@ -599,7 +597,7 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                   : 'Not loaded'}
               </div>
             </div>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row">
               {s.statement && <Chip tone={s.unmatchedOut ? 'warn' : 'ok'}>{s.unmatchedOut ? `${s.unmatchedOut} to match` : 'All matched'}</Chip>}
               {co.canAct && (
                 <button
@@ -615,7 +613,7 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
             </div>
           </div>
           {loading === s.bank.id && (
-            <div style={{ padding: 12 }}>
+            <div className="fin-pad">
               <Field label="Statement file from the bank portal (CSV)">
                 <input
                   className="input"
@@ -673,8 +671,8 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                 const st = line[l.id] ?? {};
                 const setL = (k: 'paymentId' | 'comment', val: string) => setLine((x) => ({ ...x, [l.id]: { ...x[l.id], [k]: val } }));
                 return (
-                  <div key={l.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                    <div style={{ minWidth: 0 }}>
+                  <div key={l.id} className="list-item">
+                    <div className="fin-min0">
                       <div>
                         {dateLabel(l.date)} · {l.description} · {l.ref} · <b>{rm(l.amount)}</b>
                       </div>
@@ -689,10 +687,10 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                         {l.match?.kind === 'fd' && `Fixed deposit placed or uplifted, found by Prima (${l.match.fdId})`}
                         {!l.match && (l.amount < 0 ? 'Money out with no approved payment' : 'Money in')}
                       </div>
-                      {l.nameSeen === false && <div className="small" style={{ color: 'var(--crit, #b00)' }}>The payee's name is not on this bank line. Check who was paid.</div>}
+                      {l.nameSeen === false && <div className="small fin-crit">The payee's name is not on this bank line. Check who was paid.</div>}
                     </div>
                     {co.canAct && !l.match && l.suggest.length > 0 && (
-                      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                      <div className="row">
                         {l.suggest.map((x) => (
                           <button
                             key={x.paymentId}
@@ -708,7 +706,7 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                       </div>
                     )}
                     {co.canAct && !l.match && l.amount < 0 && (
-                      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                      <div className="row">
                         <select className="select" value={st.paymentId ?? ''} onChange={(e) => setL('paymentId', e.target.value)}>
                           <option value="">Match to a payment…</option>
                           {released.map((p) => (
@@ -743,7 +741,7 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                       </div>
                     )}
                     {co.canAct && l.match && (
-                      <div className="row" style={{ gap: 6 }}>
+                      <div className="row">
                         <input className="input" placeholder="Why unmatch (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
                         <button
                           className="btn btn-sm"
@@ -806,14 +804,14 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         An invoice is never deleted. A wrong payer or site is fixed with a credit note and a new invoice to the right payer (an e-Invoice only within 72 hours
         can be cancelled in MyInvois instead). A customer who will not pay is followed up at least every {ar.rule.followUpDays} days, provided for, and after{' '}
         {ar.rule.writeOffMinDays} days of recovery steps (or insolvency) written off with evidence and the Finance Director's or the CEO's approval. Every invoice
         unpaid {ar.rule.caseFromDays} days or more needs a case.
       </p>
       <ErrorNotice error={act.error} />
-      <div className="list-item muted small" style={{ flexWrap: 'wrap', gap: 6 }}>
+      <div className="list-item muted small">
         <span>
           {ar.auditedTo
             ? `Audited accounts signed to ${dateLabel(ar.auditedTo.date)} (${ar.auditedTo.set.comment}). Nothing on or before that date is changed: corrections go in the current month and the auditor is told.`
@@ -821,9 +819,9 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
         </span>
       </div>
       {ar.over90.cases > 0 && (
-        <div className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600 }}>
+        <div className="list-item">
+          <div className="fin-min0">
+            <div className="fin-strong">
               Over 90 days: {ar.over90.cases} invoice(s), {rm(ar.over90.unpaid)} unpaid{ar.over90.noFollowUp ? `, ${ar.over90.noFollowUp} with no follow-up this month` : ''}
             </div>
             <div className="muted small">
@@ -840,7 +838,7 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
         </p>
       )}
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="SQL Account invoice number">
             <input className="input" value={f.invoiceNo ?? ''} onChange={set('invoiceNo')} />
           </Field>
@@ -892,9 +890,9 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
       <div className="list">
         {ar.cases.length === 0 && <div className="empty">No invoice problems recorded.</div>}
         {ar.cases.map((c) => (
-          <button key={c.id} className="list-item" style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={() => setOpenId(openId === c.id ? null : c.id)}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
+          <button key={c.id} className="list-item" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
+            <div className="fin-min0">
+              <div className="fin-strong">
                 {c.invoiceNo} · {c.customer} · {rm(c.outstanding)} unpaid
               </div>
               <div className="muted small">
@@ -909,7 +907,7 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
       </div>
       {sel && <CaseDetail v={v} co={co} c={sel} />}
       {co.canAct && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary>Record the latest audited year (Finance Director or CEO)</summary>
           <Field label="Financial year end of the signed audited accounts">
             <input className="input" type="date" value={f.auditDate ?? ''} onChange={set('auditDate')} />
@@ -930,7 +928,7 @@ function FdReview({ v }: { v: FinControls }) {
   const { act, go } = useControl(v.companyId);
   const [comment, setComment] = useState('');
   return (
-    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+    <div className="row">
       <ErrorNotice error={act.error} />
       <input className="input" placeholder="Finance Director's review comment" value={comment} onChange={(e) => setComment(e.target.value)} />
       <button className="btn btn-sm btn-primary" disabled={act.busy || !comment.trim()} onClick={() => go('ar', 'fdReview', { comment }, 'Monthly review recorded.')}>
@@ -966,7 +964,7 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
           ? [['sstRelief', 'SST bad debt relief']]
           : [];
   return (
-    <div style={{ padding: 12, borderTop: '1px solid var(--line, #ddd)' }}>
+    <div className="fin-pad fin-sep">
       <div className="small">{c.detail}</div>
       {(c.receipts ?? []).map((r) => (
         <div key={r.id} className="small">
@@ -1008,7 +1006,7 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
       )}
       <div className="list">
         {[...c.log].reverse().map((l, i) => (
-          <div key={i} className="list-item small" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <div key={i} className="list-item small">
             <span>
               {l.kind.replace('_', ' ')}: {l.text}
             </span>
@@ -1021,7 +1019,7 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
       {co.canAct && modes.length > 0 && (
         <>
           <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+          <div className="row fin-my">
             {modes.map(([k, l]) => (
               <button key={k} className={`btn btn-sm${mode === k ? ' btn-primary' : ''}`} onClick={() => setMode(k)}>
                 {l}
@@ -1182,7 +1180,7 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
             </>
           )}
           {mode === 'decide' && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="row">
               <input className="input" placeholder="Comment (needed; 10+ characters to return)" value={f.comment ?? ''} onChange={set('comment')} />
               <button className="btn btn-sm btn-primary" disabled={act.busy || !(f.comment ?? '').trim()} onClick={() => run('approve', { comment: f.comment }, 'Approved.')}>
                 Approve
@@ -1193,7 +1191,7 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
             </div>
           )}
           {mode === 'close' && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="row">
               <input className="input" placeholder="Why it is settled (10+ characters)" value={f.comment ?? ''} onChange={set('comment')} />
               <button className="btn btn-sm" disabled={act.busy || (f.comment ?? '').trim().length < 10} onClick={() => run('close', { comment: f.comment }, 'Case closed.')}>
                 Close case
@@ -1248,31 +1246,51 @@ function Ageing({ v, co }: { v: FinControls; co: Co }) {
         <h3>Customer and supplier ageing, {v.period}</h3>
         <Chip tone={r?.reviewed ? 'ok' : r ? 'warn' : v.ageing.late ? 'crit' : 'warn'}>{r?.reviewed ? 'Reviewed' : r ? 'To review' : v.ageing.late ? 'Late' : `Due ${dateLabel(v.ageing.dueOn)}`}</Chip>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Every month, from the SQL Account Customer and Supplier Aging reports. The totals must agree with debtors and creditors in the ledger, or the difference
         becomes a close exception.
       </p>
       <ErrorNotice error={act.error} />
       {r && (
-        <div className="list">
-          {(['ar', 'ap'] as const).map((side) => (
-            <div key={side} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
-                  {side === 'ar' ? 'Customers owe' : 'We owe suppliers'} {rm(side === 'ar' ? v.ageing.arTotal : v.ageing.apTotal)} (ledger {rm(side === 'ar' ? r.glAr : r.glAp)})
-                </div>
-                <div className="muted small">{BUCKETS.map(([k, l]) => `${l} ${rm(r[side][k])}`).join(' · ')}</div>
-              </div>
-            </div>
-          ))}
-          <div className="list-item muted small">
+        <>
+          <div className="fin-scroll fin-sep fin-mt">
+            <table className="fin-table">
+              <thead>
+                <tr>
+                  <th />
+                  {BUCKETS.map(([k, l]) => (
+                    <th key={k} className="fin-num">
+                      {l}
+                    </th>
+                  ))}
+                  <th className="fin-num">Total</th>
+                  <th className="fin-num">Ledger</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(['ar', 'ap'] as const).map((side) => (
+                  <tr key={side}>
+                    <td className="fin-strong">{side === 'ar' ? 'Customers owe' : 'We owe suppliers'}</td>
+                    {BUCKETS.map(([k]) => (
+                      <td key={k} className="fin-num">
+                        {rm(r[side][k])}
+                      </td>
+                    ))}
+                    <td className="fin-num fin-strong">{rm(side === 'ar' ? v.ageing.arTotal : v.ageing.apTotal)}</td>
+                    <td className="fin-num">{rm(side === 'ar' ? r.glAr : r.glAp)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted small fin-intro fin-mb">
             {r.source} · prepared by {r.prepared.by}
             {r.reviewed ? ` · reviewed by ${r.reviewed.by}: "${r.reviewed.comment}"` : ''}
-          </div>
-        </div>
+          </p>
+        </>
       )}
       {co.canAct && r && !r.reviewed && (
-        <div className="row" style={{ gap: 6, padding: 12 }}>
+        <div className="row fin-pad">
           <input className="input" placeholder="Review comment (needed)" value={comment} onChange={(e) => setComment(e.target.value)} />
           <button className="btn btn-sm btn-primary" disabled={act.busy || !comment.trim()} onClick={() => go('ageing', 'review', { period: v.period, comment }, 'Ageing reviewed.')}>
             Mark reviewed
@@ -1280,14 +1298,14 @@ function Ageing({ v, co }: { v: FinControls; co: Co }) {
         </div>
       )}
       {co.canAct && !r?.reviewed && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary>{r ? 'Record again' : 'Record the ageing'}</summary>
           {(['ar', 'ap'] as const).map((side) => (
             <div key={side}>
-              <div style={{ fontWeight: 600, margin: '8px 0 4px' }}>{side === 'ar' ? 'Customers (receivables)' : 'Suppliers (payables)'}</div>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <div className="fin-strong fin-subhead">{side === 'ar' ? 'Customers (receivables)' : 'Suppliers (payables)'}</div>
+              <div className="row">
                 {BUCKETS.map(([k, l]) => (
-                  <input key={k} className="input" style={{ maxWidth: 130 }} inputMode="decimal" placeholder={l} value={f[`${side}.${k}`] ?? ''} onChange={set(`${side}.${k}`)} />
+                  <input key={k} className="input fin-maxw" inputMode="decimal" placeholder={l} value={f[`${side}.${k}`] ?? ''} onChange={set(`${side}.${k}`)} />
                 ))}
               </div>
             </div>
@@ -1362,7 +1380,7 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
         <h3>e-Invoice (LHDN MyInvois), {v.period}</h3>
         <Chip tone={tone}>{label}</Chip>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Each company is tested on its own turnover: from RM3 million it must issue e-Invoices. SQL Account sends the e-Invoices to MyInvois. Each month, count from SQL Account's MyInvois Transaction listing (after Batch Check E-Invoice Status):
         every sales document must be Valid, sales to buyers who did not ask for an e-Invoice go into one consolidated e-Invoice by the 7th
         ({dateLabel(e.consolidateBy)}), a single sale above RM10,000 gets its own e-Invoice, and after 72 hours a mistake is corrected with a credit note,
@@ -1377,9 +1395,9 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
       )}
       {r && (
         <div className="list">
-          <div className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
+          <div className="list-item">
+            <div className="fin-min0">
+              <div className="fin-strong">
                 {r.valid} of {r.issued} valid · {r.invalid} invalid · {r.submitting} stuck · {r.notSubmitted} not submitted
               </div>
               <div className="muted small">
@@ -1397,7 +1415,7 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
         </div>
       )}
       {co.canAct && r && !r.reviewed && (
-        <div className="row" style={{ gap: 6, padding: 12 }}>
+        <div className="row fin-pad">
           <input className="input" placeholder="Review comment (needed)" value={comment} onChange={(ev) => setComment(ev.target.value)} />
           <button className="btn btn-sm btn-primary" disabled={act.busy || !comment.trim()} onClick={() => go('einvoice', 'review', { period: v.period, rev: r.rev ?? 1, comment }, 'e-Invoice check reviewed.')}>
             Mark reviewed
@@ -1405,9 +1423,9 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
         </div>
       )}
       {co.canAct && r?.reviewed && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary className="small">Reopen (team leader, Finance Director or CEO)</summary>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row">
             <input className="input" placeholder="Why it is reopened (needed)" value={comment} onChange={(ev) => setComment(ev.target.value)} />
             <button className="btn btn-sm" disabled={act.busy || !comment.trim()} onClick={() => go('einvoice', 'reopen', { period: v.period, comment }, 'e-Invoice check reopened.')}>
               Reopen
@@ -1416,7 +1434,7 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
         </details>
       )}
       {co.canAct && e.setup?.required && !r?.reviewed && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary>{r ? 'Count again' : 'Record the month’s e-Invoice check'}</summary>
           {EI_COUNTS.map(([k, l]) => (
             <Field key={k} label={l}>
@@ -1472,7 +1490,7 @@ function EInvoice({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
         </p>
       )}
       {co.canAct && lead && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary>e-Invoice set-up (Finance Director or CEO)</summary>
           <Field label="Must this company issue e-Invoices?">
             <select className="select" value={f.required ?? (e.setup?.required === false ? 'no' : 'yes')} onChange={set('required')}>
@@ -1548,7 +1566,7 @@ function Sst({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
       <div className="panel-head">
         <h3>Service tax (SST) to Customs</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Security services are taxable at 8%. A registered company files SST-02 in MySST every two months and pays Customs by the last day of the month after
         the period. Late payment adds 10%, then 15% and 15% more (up to 40%). The payment to Customs goes through a normal Prima payment and must equal the
         declared tax exactly.
@@ -1563,10 +1581,10 @@ function Sst({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
       )}
       <div className="list">
         {(s?.returns ?? []).map((r) => (
-          <div key={r.from} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
+          <div key={r.from} className="list-item fin-stack">
+            <div className="row fin-between">
+              <div className="fin-min0">
+                <div className="fin-strong">
                   {r.from} to {r.to} · due {dateLabel(r.dueOn)}
                 </div>
                 <div className="muted small">
@@ -1577,7 +1595,7 @@ function Sst({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
                   {r.payment ? ` · payment ${rm(r.payment.amount)} ${r.payment.status}` : ''}
                 </div>
                 {r.record && r.problems.length > 0 && <div className="small">{r.problems.join(' · ')}</div>}
-                {r.penalty > 0 && <div className="small" style={{ color: 'var(--crit, #b00)' }}>Late payment penalty so far: {rm(r.penalty)}</div>}
+                {r.penalty > 0 && <div className="small fin-crit">Late payment penalty so far: {rm(r.penalty)}</div>}
               </div>
               <Chip tone={r.tone}>{r.tone === 'ok' ? 'Filed and paid' : r.tone === 'crit' ? 'Late' : 'Open'}</Chip>
             </div>
@@ -1589,7 +1607,7 @@ function Sst({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
       </div>
       {s && <SstClaims v={v} co={co} claims={s.claims} />}
       {co.canAct && lead && (
-        <details style={{ padding: 12 }}>
+        <details className="fin-pad">
           <summary>SST registration (Finance Director or CEO)</summary>
           <Field label="Registered with Customs?">
             <select className="select" value={f.registered ?? (s?.registered ? 'yes' : 'no')} onChange={set('registered')}>
@@ -1641,15 +1659,15 @@ function SstClaims({ v, co, claims }: { v: FinControls; co: Co; claims: Claim[] 
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const docs = (k: string) => (f[k] ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
   return (
-    <div style={{ padding: '0 12px 12px' }}>
-      <div style={{ fontWeight: 600, margin: '8px 0 4px' }}>Claims to Customs</div>
+    <div className="fin-padb">
+      <div className="fin-strong fin-subhead">Claims to Customs</div>
       <ErrorNotice error={act.error} />
       {claims.length === 0 && <div className="muted small">None. Tax is paid when the customer pays, so bad debt relief should rarely be needed.</div>}
       {claims.map((c) => (
-        <div key={c.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-          <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
+        <div key={c.id} className="list-item fin-stack">
+          <div className="row fin-between">
+            <div className="fin-min0">
+              <div className="fin-strong">
                 {c.kind === 'bad_debt_relief' ? 'Bad debt relief' : 'Wrong payment'} · {rm(c.amount)}
               </div>
               <div className="muted small">
@@ -1663,7 +1681,7 @@ function SstClaims({ v, co, claims }: { v: FinControls; co: Co; claims: Claim[] 
             </Chip>
           </div>
           {co.canAct && !c.submitted && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="row">
               <input className="input" placeholder="Customs claim reference" value={f[`ref-${c.id}`] ?? ''} onChange={set(`ref-${c.id}`)} />
               <input className="input" placeholder="Comment: documents checked (needed)" value={f[`cm-${c.id}`] ?? ''} onChange={set(`cm-${c.id}`)} />
               <button className="btn btn-sm" disabled={act.busy} onClick={() => go('sst', 'claimSubmit', { claimId: c.id, ref: f[`ref-${c.id}`], comment: f[`cm-${c.id}`] }, 'Claim submitted.')}>
@@ -1672,7 +1690,7 @@ function SstClaims({ v, co, claims }: { v: FinControls; co: Co; claims: Claim[] 
             </div>
           )}
           {co.canAct && c.submitted && !c.result && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="row">
               <select className="select" value={f[`out-${c.id}`] ?? 'approved'} onChange={set(`out-${c.id}`)}>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
@@ -1691,7 +1709,7 @@ function SstClaims({ v, co, claims }: { v: FinControls; co: Co; claims: Claim[] 
         </div>
       ))}
       {co.canAct && (
-        <details style={{ marginTop: 8 }}>
+        <details className="fin-mt">
           <summary>Claim back a wrong payment to Customs</summary>
           <Field label="Amount (RM)">
             <input className="input" inputMode="decimal" value={f.amount ?? ''} onChange={set('amount')} />
@@ -1760,7 +1778,7 @@ function SstReturnActions({
         </>
       )}
       {rec && !rec.reviewed && (
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row">
           <input className="input" placeholder="Review comment (needed)" value={f.comment ?? ''} onChange={set('comment')} />
           <button className="btn btn-sm btn-primary" disabled={busy || !(f.comment ?? '').trim()} onClick={() => go('sst', 'review', { returnId: rec.id, comment: f.comment }, 'Return reviewed.')}>
             Mark reviewed
@@ -1784,7 +1802,7 @@ function SstReturnActions({
         </>
       )}
       {rec?.reviewed && !rec.paymentId && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row fin-mt">
           <select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
             <option value="">Payment to Customs…</option>
             {tax.map((p) => (
@@ -1846,7 +1864,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
     <section className="panel">
       <div className="panel-head">
         <h3>Budget and forecast, {pv.year}</h3>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row">
           <button className={`btn btn-sm${which === 'this' ? ' btn-primary' : ''}`} onClick={() => setWhich('this')}>
             {v.plan.year}
           </button>
@@ -1855,13 +1873,13 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
           </button>
         </div>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         The budget is set once a year and approved by the Finance Director or the CEO. It is not changed after approval: a revision approved by the Finance Director or the CEO applies from an open month, and other changes go into the forecasts,
         made yearly (the whole year's outlook) and quarterly (after each quarter closes). Differences above the Finance Director's threshold need a reason.
       </p>
       <ErrorNotice error={act.error} />
       {b && (
-        <div className="list-item muted small" style={{ flexWrap: 'wrap', gap: 6 }}>
+        <div className="list-item muted small">
           <Chip tone={b.status === 'approved' ? 'ok' : b.status === 'returned' ? 'crit' : 'warn'}>{b.status}</Chip>
           <span>
             {b.prepared ? `Prepared by ${b.prepared.by}` : ''}
@@ -1879,7 +1897,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
       )}
       {pv.yearlyDue && <p className="notice" data-tone="warn">The yearly forecast for {pv.year} has not been made.</p>}
       {shown.length > 0 && (
-        <div style={{ overflowX: 'auto', padding: '0 12px' }}>
+        <div className="fin-padx fin-scroll">
           <table className="table small">
             <thead>
               <tr>
@@ -1906,11 +1924,11 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
       )}
       {pv.toExplain.length > 0 && (
         <div className="list">
-          <div className="list-item" style={{ fontWeight: 600 }}>
+          <div className="list-item fin-strong">
             Differences to explain
           </div>
           {pv.toExplain.map((x) => (
-            <div key={x.key} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+            <div key={x.key} className="list-item">
               <span>
                 {x.month} {LINE_LABEL[x.line]}: budget {rm(x.budget)}, actual {rm(x.actual)} ({x.diff! > 0 ? '+' : ''}
                 {rm(x.diff)})
@@ -1921,7 +1939,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
                 {x.overdue && <Chip tone="crit">Late</Chip>}
               </span>
               {co.canAct && (
-                <div className="row" style={{ gap: 6 }}>
+                <div className="row">
                   <input className="input" placeholder="Why (10+ characters)" value={why[x.key] ?? ''} onChange={(e) => setWhy((w) => ({ ...w, [x.key]: e.target.value }))} />
                   <button
                     className="btn btn-sm"
@@ -1938,16 +1956,16 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
       )}
       {pv.toAccept.length > 0 && (
         <div className="list">
-          <div className="list-item" style={{ fontWeight: 600 }}>
+          <div className="list-item fin-strong">
             Explanations to accept (Finance Director or CEO)
           </div>
           {pv.toAccept.map((x) => (
-            <div key={x.key} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+            <div key={x.key} className="list-item">
               <span>
                 {x.key}: {x.text} <span className="muted small">· {x.by}</span>
               </span>
               {lead && co.canAct && x.byId !== me && (
-                <div className="row" style={{ gap: 6 }}>
+                <div className="row">
                   <input className="input" placeholder="Comment (needed)" value={why[`a-${x.key}`] ?? ''} onChange={(e) => setWhy((w) => ({ ...w, [`a-${x.key}`]: e.target.value }))} />
                   <button
                     className="btn btn-sm"
@@ -1963,9 +1981,9 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
         </div>
       )}
       {co.canAct && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           {b?.status === 'submitted' && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div className="row fin-mb">
               <input className="input" placeholder="Comment (needed; 10+ characters to return)" value={f.comment ?? ''} onChange={set('comment')} />
               <button className="btn btn-sm btn-primary" disabled={act.busy || !(f.comment ?? '').trim()} onClick={() => go('plan', 'approve', { year: pv.year, comment: f.comment }, 'Budget approved.')}>
                 Approve budget
@@ -1976,7 +1994,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
             </div>
           )}
           {(b?.status === 'draft' || b?.status === 'returned') && b.prepared && (
-            <button className="btn btn-sm btn-primary" disabled={act.busy} style={{ marginBottom: 8 }} onClick={() => go('plan', 'submit', { year: pv.year }, 'Budget submitted for approval.')}>
+            <button className="btn btn-sm btn-primary fin-mb" disabled={act.busy} onClick={() => go('plan', 'submit', { year: pv.year }, 'Budget submitted for approval.')}>
               Submit budget for approval
             </button>
           )}
@@ -2007,7 +2025,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
                 <Field label="What changed since the budget or the last forecast (10+ characters)">
                   <textarea className="textarea" rows={2} value={f.note ?? ''} onChange={set('note')} />
                 </Field>
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <div className="row">
                   {(pv.quarterEnd || pv.forecastsOwed.length > 0) && (
                     <button
                       className="btn btn-sm btn-primary"
@@ -2042,7 +2060,7 @@ function Actuals({ v, year }: { v: FinControls; year: number }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [source, setSource] = useState('');
   return (
-    <details style={{ marginTop: 8 }}>
+    <details className="fin-mt">
       <summary>Record a month's actuals from the SQL Account profit and loss</summary>
       <ErrorNotice error={act.error} />
       <Field label="Month">
@@ -2092,7 +2110,7 @@ function AuditDates({ v }: { v: FinControls }) {
           <span>{dateLabel(a.formCBy)}</span>
         </div>
       </div>
-      <p className="muted small" style={{ padding: '0 12px 12px' }}>
+      <p className="muted small fin-padb">
         The monthly audit file (in each company's drawer) keeps the auditor's usual requests up every month: trial balance, ageing, fixed assets, payroll, SST,
         accruals, contracts, minutes, intercompany and customer confirmations.
       </p>
@@ -2115,15 +2133,15 @@ function MatchRules({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Prima explains a bank line with these words, in this direction and up to this amount, the way a reviewer did before. The reconciliation reviewer still sees each one.
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">
         {v.matchRules.map((r) => (
-          <div key={r.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
+          <div key={r.id} className="list-item">
+            <div className="fin-min0">
+              <div className="fin-strong">
                 &quot;{r.pattern}&quot;, money {r.direction}, up to {rm(r.maxAmount)}
               </div>
               <div className="muted small">
@@ -2131,7 +2149,7 @@ function MatchRules({ v, co }: { v: FinControls; co: Co }) {
               </div>
             </div>
             {co.canAct && (
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row">
                 <input className="input" placeholder="Why remove (10+ characters)" value={why[r.id] ?? ''} onChange={(e) => setWhy((x) => ({ ...x, [r.id]: e.target.value }))} />
                 <button className="btn btn-sm" disabled={act.busy || (why[r.id] ?? '').trim().length < 10} onClick={() => go('statements', 'forget', { ruleId: r.id, comment: why[r.id] }, 'Removed.')}>
                   Remove
@@ -2155,15 +2173,15 @@ function TaxCalendar({ v, co }: { v: FinControls; co: Co }) {
       <div className="panel-head">
         <h3>Tax and statutory calendar</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Built from the financial year end. Prima ticks what it can see (SST filed, payments made from the regular payments list, the consolidated e-Invoice). Record the
         others once filed in the portal. Dates to be confirmed by the tax agent.
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">
         {v.taxCalendar.map((x) => (
-          <div key={x.key} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
+          <div key={x.key} className="list-item">
+            <div className="fin-min0">
               <div>
                 <b>{dateLabel(x.dueOn)}</b> · {x.what} · {x.body}
               </div>
@@ -2171,7 +2189,7 @@ function TaxCalendar({ v, co }: { v: FinControls; co: Co }) {
             </div>
             <Chip tone={TONE[x.status][0]}>{TONE[x.status][1]}</Chip>
             {co.canAct && x.status !== 'done' && (
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row">
                 <input className="input" type="date" value={f[x.key]?.filedOn ?? ''} onChange={(e) => setF((y) => ({ ...y, [x.key]: { ...y[x.key], filedOn: e.target.value } }))} />
                 <input className="input" placeholder="Acknowledgement or receipt no." value={f[x.key]?.ref ?? ''} onChange={(e) => setF((y) => ({ ...y, [x.key]: { ...y[x.key], ref: e.target.value } }))} />
                 <button className="btn btn-sm" disabled={act.busy} onClick={() => go('tax', 'file', { key: x.key, ...f[x.key] }, 'Recorded as filed.')}>
@@ -2196,19 +2214,19 @@ function Reminders({ v, co }: { v: FinControls; co: Co }) {
       <div className="panel-head">
         <h3>Client reminders to send</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Prima drafts a reminder at 30, 60 and 90 days after the invoice date. Read it, send it by email or letter, then mark it sent. Prima sends nothing.
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">
         {v.reminders.map((r) => (
-          <div key={r.caseId} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+          <div key={r.caseId} className="list-item fin-block">
+            <div className="row fin-between">
               <div>
                 <b>{r.customer}</b> · invoice {r.invoiceNo} · {rm(r.outstanding)} · {r.days} days
                 {r.lastReminder ? ` · last reminder ${dateLabel(r.lastReminder)}` : ''}
               </div>
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row">
                 <button className="btn btn-sm btn-ghost" onClick={() => setOpen(open === r.caseId ? null : r.caseId)}>
                   {open === r.caseId ? 'Hide draft' : 'Show draft'}
                 </button>
@@ -2223,7 +2241,7 @@ function Reminders({ v, co }: { v: FinControls; co: Co }) {
               </div>
             </div>
             {open === r.caseId && (
-              <pre className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>
+              <pre className="small fin-mt fin-pre">
                 {r.subject}
                 {'\n\n'}
                 {r.text}

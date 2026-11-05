@@ -3,7 +3,20 @@ import type { FinCloseAction, FinPackItem, FinPackKind, FinPackStatus, FinPaymen
 import { LINE_LABEL } from './FinanceChecks';
 import { api, type FinDesk } from '../api';
 import { FinGuide } from './FinGuide';
+import {
+  ArrowUUpLeftIcon,
+  BankIcon,
+  CheckCircleIcon,
+  HourglassMediumIcon,
+  ListChecksIcon,
+  PaperPlaneTiltIcon,
+  PlusIcon,
+  SealCheckIcon,
+  WarningCircleIcon,
+} from '@phosphor-icons/react';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction, type Tone } from '../ui';
+import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
+import '../styles/finance.css';
 
 /**
  * Finance Phase 2 (31 Oct 2026). Payments, the month-end close and the bank and payment packs. SQL Account keeps the
@@ -79,44 +92,57 @@ export function PaymentsTab({ desk }: { desk: FinDesk }) {
   const others = all.filter((x) => !mine.includes(x)).sort((a, b) => (a.p.status === 'released' ? 1 : 0) - (b.p.status === 'released' ? 1 : 0));
   const sel = all.find((x) => x.p.id === open) ?? null;
   const canAdd = desk.companies.some((c) => c.canAct);
+  const returned = all.filter(({ p }) => p.status === 'returned').length;
+  const toRelease = all.filter(({ p }) => p.status === 'approved').length;
+  const short = desk.companies.reduce((n, c) => n + c.cash.filter((x) => (x.short7 ?? 0) > 0).length, 0);
   return (
     <>
+      <Stats>
+        <Stat label="Waiting for you" value={mine.length} tone={mine.length ? 'warn' : 'ok'} icon={<HourglassMediumIcon size={18} />} />
+        <Stat label="Returned" value={returned} tone={returned ? 'crit' : 'ok'} note="Back with the preparer" icon={<ArrowUUpLeftIcon size={18} />} />
+        <Stat label="To release" value={toRelease} tone={toRelease ? 'info' : 'ok'} note="Approved, not yet paid in the bank portal" icon={<PaperPlaneTiltIcon size={18} />} />
+        <Stat label="Bank accounts short this week" value={short} tone={short ? 'crit' : 'ok'} note="For approved payments" icon={<BankIcon size={18} />} />
+      </Stats>
+      <Card
+        title="Waiting for you"
+        sub={`${mine.length} payment${mine.length === 1 ? '' : 's'}`}
+        actions={
+          canAdd ? (
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={14} aria-hidden="true" />
+              New payment
+            </button>
+          ) : undefined
+        }
+        flush
+      >
+        {mine.length === 0 ? (
+          <Empty title="Nothing waiting for you." />
+        ) : (
+          <div className="fin-pays">
+            {mine.map(({ c, p }) => (
+              <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
+            ))}
+          </div>
+        )}
+      </Card>
+      <CashPanel desk={desk} />
+      <Card title="Other payments" sub="Open, and closed in the last 60 days" flush>
+        {others.length === 0 ? (
+          <Empty title="None." />
+        ) : (
+          <div className="fin-pays">
+            {others.map(({ c, p }) => (
+              <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
+            ))}
+          </div>
+        )}
+      </Card>
       <p className="notice" data-tone="info">
         Prima approves; the bank portal pays. One person never approves and releases the same payment. Approval is by subject (Fauzan, 1 Nov 2026: only the FD,
         the CEO and the COO approve anything): Finance payments by the Finance Director or the CEO; payments for the departments the COO monitors by the COO or
         the CEO. Team leaders and deputies review; Finance releases. The CEO is also reminded of payments of {rm(desk.rule.ceoNoticeFrom)} or more.
       </p>
-      {canAdd && (
-        <div className="row" style={{ marginBottom: 8 }}>
-          <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
-            New payment
-          </button>
-        </div>
-      )}
-      <CashPanel desk={desk} />
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Waiting for you</h3>
-          <span className="muted small">{mine.length}</span>
-        </div>
-        <div className="list">
-          {mine.length === 0 && <div className="empty">Nothing waiting for you.</div>}
-          {mine.map(({ c, p }) => (
-            <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Other payments (open, and closed in the last 60 days)</h3>
-        </div>
-        <div className="list">
-          {others.length === 0 && <div className="empty">None.</div>}
-          {others.map(({ c, p }) => (
-            <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
-          ))}
-        </div>
-      </section>
       {sel && <PaymentDrawer key={`${sel.p.id}-${editing}`} c={sel.c} p={sel.p} startEdit={editing} onClose={() => setOpen(null)} />}
       {adding && <NewPayment desk={desk} onClose={() => setAdding(false)} />}
     </>
@@ -128,62 +154,74 @@ function CashPanel({ desk }: { desk: FinDesk }) {
   const rows = desk.companies.flatMap((c) => c.cash.filter((x) => x.due30 > 0 || (x.short7 ?? 0) > 0).map((x) => ({ c, x })));
   if (rows.length === 0) return null;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Cash needed for approved payments</h3>
-        <span className="muted small">balance = last statement's closing less payments released since</span>
-      </div>
-      <div className="list">
-        {rows.map(({ c, x }) => (
-          <div key={`${c.companyId}-${x.bankId}`} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
-                {c.companyName} · {x.bank}
-              </div>
-              <div className="muted small">
-                {x.balance == null ? 'No statement loaded, balance unknown' : `Balance ${rm(x.balance)} at ${dateLabel(x.balanceAsOf!)}`} · due in 7 days{' '}
-                {rm(x.due7)} · in 30 days {rm(x.due30)}
-              </div>
-            </div>
-            {x.balance == null ? (
-              <Chip tone="warn">Unknown</Chip>
-            ) : x.short7 ? (
-              <Chip tone="crit">Short {rm(x.short7)} this week</Chip>
-            ) : x.short30 ? (
-              <Chip tone="warn">Short {rm(x.short30)} in 30 days</Chip>
-            ) : (
-              <Chip tone="ok">Enough</Chip>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
+    <Card title="Cash needed for approved payments" sub="balance = last statement's closing less payments released since" flush>
+      <table className="fin-table">
+        <thead>
+          <tr>
+            <th>Company and bank</th>
+            <th className="fin-num">Balance</th>
+            <th className="fin-num">Due in 7 days</th>
+            <th className="fin-num">Due in 30 days</th>
+            <th>Cover</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ c, x }) => (
+            <tr key={`${c.companyId}-${x.bankId}`}>
+              <td>
+                <span className="fin-strong">{c.companyName}</span>
+                <span className="muted small fin-block">{x.bank}</span>
+              </td>
+              <td className="fin-num">
+                {x.balance == null ? (
+                  <span className="muted">No statement loaded, balance unknown</span>
+                ) : (
+                  <>
+                    {rm(x.balance)}
+                    <span className="muted small fin-block">at {dateLabel(x.balanceAsOf!)}</span>
+                  </>
+                )}
+              </td>
+              <td className="fin-num">{rm(x.due7)}</td>
+              <td className="fin-num">{rm(x.due30)}</td>
+              <td>
+                {x.balance == null ? (
+                  <Chip tone="warn">Unknown</Chip>
+                ) : x.short7 ? (
+                  <Chip tone="crit">Short {rm(x.short7)} this week</Chip>
+                ) : x.short30 ? (
+                  <Chip tone="warn">Short {rm(x.short30)} in 30 days</Chip>
+                ) : (
+                  <Chip tone="ok">Enough</Chip>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
 function PayLine({ c, p, onOpen }: { c: Co; p: Pay; onOpen: (id: string, edit?: boolean) => void }) {
   return (
-    <div className="row" style={{ gap: 6, alignItems: 'stretch' }}>
-      <button className="list-item" style={{ flex: 1, textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={() => onOpen(p.id)}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
-            {p.payee} · {rm(p.amount)}
-          </div>
-          <div className="muted small">
+    <div className="fin-pay" data-tone={p.status === 'returned' ? 'crit' : undefined}>
+      <button type="button" className="fin-pay-main" onClick={() => onOpen(p.id)}>
+        <span className="fin-pay-text">
+          <span className="fin-pay-payee">{p.payee}</span>
+          <span className="muted small">
             {c.companyName} · Team {c.team} · {p.sqlRef} · due {dateLabel(p.dueOn)} · needs the {NEEDS[p.needs]}
-          </div>
-        </div>
-        {p.budget && p.budget.over > 0 && <Chip tone="warn">Over budget {rm(p.budget.over)}</Chip>}
-        {p.watch.length > 0 && <Chip tone="info">{p.watch[0]}</Chip>}
-        <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : PAY[p.status][1]}</Chip>
+          </span>
+        </span>
+        <span className="fin-pay-amount">{rm(p.amount)}</span>
+        <span className="fin-chips fin-pay-tags">
+          {p.budget && p.budget.over > 0 && <Chip tone="warn">Over budget {rm(p.budget.over)}</Chip>}
+          {p.watch.length > 0 && <Chip tone="info">{p.watch[0]}</Chip>}
+          <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : PAY[p.status][1]}</Chip>
+        </span>
       </button>
       {p.may.includes('resubmit') && (
-        <button
-          className="btn btn-sm btn-primary"
-          style={{ alignSelf: 'center' }}
-          aria-label={`Edit returned payment to ${p.payee}`}
-          onClick={() => onOpen(p.id, true)}
-        >
+        <button className="btn btn-sm btn-primary fin-pay-edit" aria-label={`Edit returned payment to ${p.payee}`} onClick={() => onOpen(p.id, true)}>
           Edit
         </button>
       )}
@@ -223,7 +261,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
     <Drawer title={`${p.payee} · ${rm(p.amount)}`} sub={`${c.companyName} · ${p.id}`} onClose={onClose}>
       {editing && <EditReturned c={c} p={p} onDone={onClose} onCancel={() => setEditing(false)} />}
       <section className="panel">
-        <div className="list">
+        <div className="list fin-dl">
           <div className="list-item">
             <span>Status</span>
             <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : PAY[p.status][1]}</Chip>
@@ -347,8 +385,8 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
         </div>
         {ext ? (
           <div className="list">
-            <div className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
+            <div className="list-item">
+              <div className="fin-min0">
                 <a href={ext.url} target="_blank" rel="noreferrer">
                   {ext.system === 'teams' ? 'Teams' : 'SharePoint'}: {ext.requestRef}
                 </a>
@@ -359,8 +397,8 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
             </div>
             {ext.decisions.length === 0 && <div className="empty">No decisions recorded yet.</div>}
             {ext.decisions.map((d, i) => (
-              <div key={i} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                <div style={{ minWidth: 0 }}>
+              <div key={i} className="list-item">
+                <div className="fin-min0">
                   <div>
                     {d.approver} · {dateLabel(d.decidedOn)}
                   </div>
@@ -383,7 +421,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
         </div>
         <div className="list">
           {p.steps.map((s, i) => (
-            <div key={i} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+            <div key={i} className="list-item">
               <div>
                 <div>
                   {s.step} by {s.by}
@@ -396,7 +434,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
         </div>
       </section>
       {p.may.some((a) => a !== 'link') && (
-        <section className="panel" style={{ padding: 12 }}>
+        <section className="panel fin-pad">
           <FinGuide id={p.may.includes('release') ? 'fin.payment.release' : p.may.includes('approve') ? 'fin.payment.approve' : 'fin.payment.review'} />
           <ErrorNotice error={act.error} />
           {p.may.includes('release') && (
@@ -438,7 +476,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
           <Field label={ACT[p.may.find((a) => a !== 'link') ?? 'review'][1]}>
             <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
           </Field>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="row">
             {p.may
               .filter((a) => a !== 'resubmit' && a !== 'link')
               .map((a) => (
@@ -510,7 +548,7 @@ function EditReturned({ c, p, onDone, onCancel }: { c: Co; p: Pay; onDone: () =>
     if (r) onDone();
   };
   return (
-    <section className="panel" style={{ padding: 12 }}>
+    <section className="panel fin-pad">
       <div className="panel-head">
         <h3>Correct and resubmit</h3>
       </div>
@@ -552,7 +590,7 @@ function EditReturned({ c, p, onDone, onCancel }: { c: Co; p: Pay; onDone: () =>
       <Field label="What you changed">
         <textarea className="textarea" rows={2} value={f.comment} onChange={set('comment')} />
       </Field>
-      <div className="row" style={{ gap: 6 }}>
+      <div className="row">
         <button className="btn btn-sm btn-primary" disabled={act.busy || !(Number(f.amount) > 0)} onClick={() => void save()}>
           Save and resubmit
         </button>
@@ -805,7 +843,7 @@ function LinkApproval({ c, p }: { c: Co; p: Pay }) {
   const setD = (i: number, k: keyof Decision, v: string) => setDs((x) => x.map((d, j) => (j === i ? { ...d, [k]: v } : d)));
   const blank = ds.some((d) => !d.comment.trim() || d.approver.trim().length < 2 || !d.decidedOn);
   return (
-    <div style={{ padding: 12 }}>
+    <div className="fin-pad">
       <ErrorNotice error={act.error} />
       <Field label="Where the approval is">
         <select className="select" value={system} onChange={(e) => setSystem(e.target.value as 'teams' | 'sharepoint')}>
@@ -825,8 +863,8 @@ function LinkApproval({ c, p }: { c: Co; p: Pay }) {
         <input className="input" value={requestRef} onChange={(e) => setRequestRef(e.target.value)} />
       </Field>
       {ds.map((d, i) => (
-        <div key={i} className="panel" style={{ padding: 8, marginBottom: 6 }}>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div key={i} className="fin-subcard">
+          <div className="row">
             <input className="input" placeholder="Approver's name" value={d.approver} onChange={(e) => setD(i, 'approver', e.target.value)} />
             <select className="select" value={d.decision} onChange={(e) => setD(i, 'decision', e.target.value)}>
               <option value="approved">Approved</option>
@@ -845,7 +883,7 @@ function LinkApproval({ c, p }: { c: Co; p: Pay }) {
           />
         </div>
       ))}
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="row">
         <button className="btn btn-sm" onClick={() => setDs((x) => [...x, { approver: '', decision: 'approved', comment: '', decidedOn: '' }])}>
           Add an approver's decision
         </button>
@@ -866,6 +904,13 @@ function LinkApproval({ c, p }: { c: Co; p: Pay }) {
 
 // ---------- Month-end close ----------
 
+/** The close's three hands, drawn from its status: the team prepares, the deputy or leader reviews, the FD or CEO approves. */
+function closeSteps(status: string) {
+  const at = ({ open: 0, prepared: 1, reviewed: 2, approved: 3 } as Record<string, number>)[status] ?? 0;
+  const labels = ['Team prepares', 'Deputy or leader reviews', 'FD or CEO approves'];
+  return labels.map((label, i) => ({ label, state: (at > i ? 'done' : at === i ? 'now' : 'todo') as StepState }));
+}
+
 export function CloseTab({ desk }: { desk: FinDesk }) {
   const [open, setOpen] = useState<string | null>(null);
   const sel = desk.companies.find((c) => c.companyId === open) ?? null;
@@ -873,32 +918,37 @@ export function CloseTab({ desk }: { desk: FinDesk }) {
   const rows = [...desk.companies].sort(
     (a, b) => order[a.close.status] - order[b.close.status] || a.team - b.team || a.companyName.localeCompare(b.companyName),
   );
+  const by = (s: string) => desk.companies.filter((c) => c.close.status === s).length;
   return (
     <>
+      <Stats>
+        <Stat label="Open" value={by('open')} tone={by('open') ? 'warn' : 'ok'} note="Team to prepare" icon={<ListChecksIcon size={18} />} />
+        <Stat label="To review" value={by('prepared')} tone={by('prepared') ? 'warn' : 'ok'} note="Deputy or leader" icon={<HourglassMediumIcon size={18} />} />
+        <Stat label="Waiting for approval" value={by('reviewed')} tone={by('reviewed') ? 'info' : 'ok'} note="Finance Director or the CEO" icon={<SealCheckIcon size={18} />} />
+        <Stat label="Approved financials" value={by('approved')} tone="ok" note={`of ${desk.companies.length}`} icon={<CheckCircleIcon size={18} />} />
+      </Stats>
       <p className="notice" data-tone="info">
         Closing {desk.period}: SQL Account closed, every bank account reconciled with its report attached, FS-01, FS-02 and FS-06 at RM0.00 and every other
         exception explained. The team prepares, the deputy or leader reviews, and the Finance Director or the CEO approves the financials.
       </p>
-      <section className="panel">
-        <div className="list">
+      <Card title={`Close ${desk.period}`} sub="Press a company for its checklist" flush>
+        <div className="fin-closes">
           {rows.map((c) => (
-            <button
-              key={c.companyId}
-              className="list-item"
-              style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }}
-              onClick={() => setOpen(c.companyId)}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{c.companyName}</div>
-                <div className="muted small">
+            <button key={c.companyId} type="button" className="fin-close" onClick={() => setOpen(c.companyId)}>
+              <span className="fin-close-name">
+                <span className="fin-strong">{c.companyName}</span>
+                <span className="muted small">
                   Team {c.team} · {c.close.check.blockers.length} to fix · {c.close.check.exceptions.filter((e) => !e.explained).length} to explain
-                </div>
-              </div>
+                </span>
+              </span>
+              <span className="fin-close-steps">
+                <Steps steps={closeSteps(c.close.status)} />
+              </span>
               <Chip tone={CLOSE[c.close.status][0]}>{CLOSE[c.close.status][1]}</Chip>
             </button>
           ))}
         </div>
-      </section>
+      </Card>
       {sel && <CloseDrawer c={sel} period={desk.period} onClose={() => setOpen(null)} />}
     </>
   );
@@ -915,54 +965,57 @@ function CloseDrawer({ c, period, onClose }: { c: Co; period: string; onClose: (
   const attached = (bankId: string) => c.close.record?.bankRecRefs.find((r) => r.bankId === bankId) ?? null;
   return (
     <Drawer title={`${c.companyName}: close ${period}`} sub={CLOSE[c.close.status][1]} onClose={onClose}>
+      <div className="fin-drawer-steps">
+        <Steps steps={closeSteps(c.close.status)} />
+      </div>
       <ErrorNotice error={act.error} />
-      {ck.done.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Already done (checked by Prima)</h3>
-          </div>
-          <div className="list">
-            {ck.done.map((d) => (
-              <div key={d} className="list-item">
-                <Chip tone="ok">Done</Chip> {d}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>To fix before the close</h3>
-        </div>
-        <div className="list">
-          {ck.blockers.length === 0 && <div className="empty">Nothing blocks the close.</div>}
-          {ck.blockers.map((b) => (
-            <div key={b} className="list-item">
-              {b}
-            </div>
+      <Card title="Checklist" sub={`${ck.done.length} done · ${ck.blockers.length + (ck.bankPackOpen > 0 ? 1 : 0)} to fix`} flush>
+        <ul className="fin-check">
+          {ck.done.map((d) => (
+            <li key={d} data-state="done">
+              <CheckCircleIcon size={18} weight="fill" aria-hidden="true" />
+              <span>
+                {d} <span className="muted small">· done (checked by Prima)</span>
+              </span>
+            </li>
           ))}
-          {ck.bankPackOpen > 0 && <div className="list-item">{ck.bankPackOpen} bank pack item(s) to review before approval.</div>}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Bank reconciliation reports</h3>
-        </div>
-        <div className="list">
+          {ck.blockers.map((b) => (
+            <li key={b} data-state="todo">
+              <WarningCircleIcon size={18} aria-hidden="true" />
+              <span>{b}</span>
+            </li>
+          ))}
+          {ck.bankPackOpen > 0 && (
+            <li data-state="todo">
+              <WarningCircleIcon size={18} aria-hidden="true" />
+              <span>{ck.bankPackOpen} bank pack item(s) to review before approval.</span>
+            </li>
+          )}
+          {ck.blockers.length === 0 && (
+            <li data-state="done">
+              <CheckCircleIcon size={18} weight="fill" aria-hidden="true" />
+              <span>Nothing blocks the close.</span>
+            </li>
+          )}
+        </ul>
+      </Card>
+      <Card title="Bank reconciliation reports" flush>
+        <div className="fin-rows">
           {c.banks.map((b) => {
             const a = attached(b.id);
             return (
-              <div key={b.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div>
+              <div key={b.id} className="fin-kv fin-kv-wrap">
+                <span className="fin-kv-label">
+                  <span>
                     {b.bank} {b.accountMasked}
-                  </div>
-                  <div className="muted small">{a ? `${a.ref} · ${a.by}` : 'Not attached'}</div>
-                </div>
-                {may.includes('evidence') && (
-                  <div className="row" style={{ gap: 6 }}>
+                  </span>
+                  <span className="muted small">{a ? `${a.ref} · ${a.by}` : 'Not attached'}</span>
+                </span>
+                {may.includes('evidence') ? (
+                  <span className="fin-inline-form">
                     <input
                       className="input"
+                      aria-label={`Reconciliation report for ${b.bank} ${b.accountMasked}`}
                       placeholder="Report file name or SharePoint link"
                       value={refs[b.id] ?? ''}
                       onChange={(e) => setRefs((x) => ({ ...x, [b.id]: e.target.value }))}
@@ -974,72 +1027,70 @@ function CloseDrawer({ c, period, onClose }: { c: Co; period: string; onClose: (
                     >
                       Attach
                     </button>
-                  </div>
+                  </span>
+                ) : (
+                  <Chip tone={a ? 'ok' : 'warn'}>{a ? 'Attached' : 'Not attached'}</Chip>
                 )}
               </div>
             );
           })}
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Exceptions to explain</h3>
-        </div>
-        <div className="list">
-          {ck.exceptions.length === 0 && <div className="empty">No exceptions.</div>}
-          {ck.exceptions.map((e) => (
-            <div key={e.key} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div>{e.text}</div>
-                <div className="muted small">{e.explained ?? 'Not explained yet'}</div>
-              </div>
-              {may.includes('explain') && (
-                <div className="row" style={{ gap: 6 }}>
-                  <input
-                    className="input"
-                    placeholder="Why it is acceptable (at least 10 characters)"
-                    value={why[e.key] ?? ''}
-                    onChange={(ev) => setWhy((x) => ({ ...x, [e.key]: ev.target.value }))}
-                  />
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy || (why[e.key] ?? '').trim().length < 10}
-                    onClick={() => run('explain', { key: e.key, text: why[e.key] }, 'Explained.')}
-                  >
-                    Save
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-      {c.close.record && c.close.record.steps.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Who did what</h3>
-          </div>
-          <div className="list">
-            {c.close.record.steps.map((s, i) => (
-              <div key={i} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-                <div>
-                  <div>
-                    {s.step} by {s.by}
-                  </div>
-                  {s.comment && <div className="muted small">{s.comment}</div>}
-                </div>
-                <span className="muted small">{dateTimeLabel(s.at)}</span>
+      </Card>
+      <Card title="Exceptions to explain" flush>
+        {ck.exceptions.length === 0 ? (
+          <Empty title="No exceptions." />
+        ) : (
+          <div className="fin-rows">
+            {ck.exceptions.map((e) => (
+              <div key={e.key} className="fin-kv fin-kv-wrap">
+                <span className="fin-kv-label">
+                  <span>{e.text}</span>
+                  <span className="muted small">{e.explained ?? 'Not explained yet'}</span>
+                </span>
+                {may.includes('explain') && (
+                  <span className="fin-inline-form">
+                    <input
+                      className="input"
+                      aria-label="Why it is acceptable"
+                      placeholder="Why it is acceptable (at least 10 characters)"
+                      value={why[e.key] ?? ''}
+                      onChange={(ev) => setWhy((x) => ({ ...x, [e.key]: ev.target.value }))}
+                    />
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || (why[e.key] ?? '').trim().length < 10}
+                      onClick={() => run('explain', { key: e.key, text: why[e.key] }, 'Explained.')}
+                    >
+                      Save
+                    </button>
+                  </span>
+                )}
               </div>
             ))}
           </div>
-        </section>
+        )}
+      </Card>
+      {c.close.record && c.close.record.steps.length > 0 && (
+        <Card title="Who did what" flush>
+          <ol className="fin-trail">
+            {c.close.record.steps.map((s, i) => (
+              <li key={i}>
+                <span>
+                  <span className="fin-strong">{s.step}</span> by {s.by}
+                  {s.comment && <span className="muted small fin-block">{s.comment}</span>}
+                </span>
+                <span className="muted small fin-nowrap">{dateTimeLabel(s.at)}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
       )}
       {may.some((a) => ['prepare', 'review', 'approve', 'return', 'reopen'].includes(a)) && (
-        <section className="panel" style={{ padding: 12 }}>
+        <section className="fin-actions">
           <Field label={may.includes('approve') || may.includes('review') ? 'Comment (needed; a short one is fine)' : 'Comment or reason'}>
             <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
           </Field>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="row">
             {may.includes('prepare') && (
               <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => run('prepare', { comment }, 'Sent for review.')}>
                 Send for review
@@ -1114,68 +1165,65 @@ export function FinPackPanel({
 }) {
   const act = useAction();
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const sent = items.filter((i) => i.status === 'sent').length;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>{title}</h3>
-      </div>
+    <Card title={title} sub={items.length ? `${sent} of ${items.length} sent` : undefined} flush>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {items.length === 0 && <div className="empty">Nothing in this pack yet.</div>}
-        {items.map((i) => {
-          const next = NEXT[i.status];
-          const needsNote = next && next[0] !== 'prepared';
-          const own = !!next && needsNote && !!meId && i.preparedById === meId;
-          return (
-            <div key={i.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div>{i.label}</div>
-                <div className="muted small">
-                  Due {dateLabel(i.dueOn)}
-                  {i.by ? ` · ${i.by}, ${dateTimeLabel(i.at!)}` : ''}
-                  {i.comment ? ` · "${i.comment}"` : ''}
-                </div>
-                {i.autoChanged && (
-                  <div className="small" style={{ color: 'var(--warn, #a60)' }}>
-                    Changed since it was reviewed: review it again.
-                  </div>
-                )}
-                {i.auto && i.auto.length > 0 && (
-                  <ul className="muted small" style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-                    {i.auto.map((x, k) => (
-                      <li key={k}>{x}</li>
-                    ))}
-                  </ul>
-                )}
+      {items.length === 0 ? (
+        <Empty title="Nothing in this pack yet." />
+      ) : (
+        <div className="fin-rows">
+          {items.map((i) => {
+            const next = NEXT[i.status];
+            const needsNote = next && next[0] !== 'prepared';
+            const own = !!next && needsNote && !!meId && i.preparedById === meId;
+            return (
+              <div key={i.id} className="fin-kv fin-kv-wrap fin-paper">
+                <span className="fin-kv-label">
+                  <span>{i.label}</span>
+                  <span className="muted small">
+                    Due {dateLabel(i.dueOn)}
+                    {i.by ? ` · ${i.by}, ${dateTimeLabel(i.at!)}` : ''}
+                    {i.comment ? ` · "${i.comment}"` : ''}
+                  </span>
+                  {i.autoChanged && <span className="small fin-warn">Changed since it was reviewed: review it again.</span>}
+                  {i.auto && i.auto.length > 0 && (
+                    <ul className="muted small fin-ul">
+                      {i.auto.map((x, k) => (
+                        <li key={k}>{x}</li>
+                      ))}
+                    </ul>
+                  )}
+                </span>
+                <span className="fin-inline-form">
+                  <Chip tone={PACK[i.status][0]}>{PACK[i.status][1]}</Chip>
+                  {canSet && next && may.includes(next[0]) && !own && (
+                    <>
+                      {needsNote && (
+                        <input
+                          className="input fin-maxw"
+                          aria-label={`Comment for ${i.label}`}
+                          placeholder="Comment (needed)"
+                          value={notes[i.id] ?? ''}
+                          onChange={(e) => setNotes((x) => ({ ...x, [i.id]: e.target.value }))}
+                        />
+                      )}
+                      <button
+                        className="btn btn-sm"
+                        disabled={act.busy || (needsNote && !(notes[i.id] ?? '').trim())}
+                        onClick={() => act.run(() => api.setFinPack(companyId, pack, i.id, next[0], notes[i.id]), `${next[1].replace('Mark ', '')}.`)}
+                      >
+                        {next[1]}
+                      </button>
+                    </>
+                  )}
+                  {own && <span className="muted small">You prepared it; someone else reviews</span>}
+                </span>
               </div>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <Chip tone={PACK[i.status][0]}>{PACK[i.status][1]}</Chip>
-                {canSet && next && may.includes(next[0]) && !own && (
-                  <>
-                    {needsNote && (
-                      <input
-                        className="input"
-                        placeholder="Comment (needed)"
-                        value={notes[i.id] ?? ''}
-                        onChange={(e) => setNotes((x) => ({ ...x, [i.id]: e.target.value }))}
-                        style={{ maxWidth: 200 }}
-                      />
-                    )}
-                    <button
-                      className="btn btn-sm"
-                      disabled={act.busy || (needsNote && !(notes[i.id] ?? '').trim())}
-                      onClick={() => act.run(() => api.setFinPack(companyId, pack, i.id, next[0], notes[i.id]), `${next[1].replace('Mark ', '')}.`)}
-                    >
-                      {next[1]}
-                    </button>
-                  </>
-                )}
-                {own && <span className="muted small">You prepared it; someone else reviews</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }

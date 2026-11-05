@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { BuildingsIcon, PlusIcon, SmileyIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type ClientBoard, type ClientShareReport } from '../api';
-import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import '../styles/biz.css';
 
 /**
  * Client board (Fauzan, 26 Oct 2026). Operations Managers, the Operations Director and officers act on clients:
@@ -14,6 +17,7 @@ type Account = ClientBoard['accounts'][number];
 
 const TONE_LABEL: Record<Account['tone'], string> = { crit: 'Needs attention', warn: 'Follow up', unknown: 'Unknown', ok: 'In order' };
 const STAGE_LABEL: Record<Account['stage'], string> = { onboarding: 'Onboarding', active: 'Active', offboarding: 'Offboarding', ended: 'Ended' };
+const STAGE_TONE: Record<Account['stage'], Tone> = { onboarding: 'info', active: 'ok', offboarding: 'warn', ended: 'neutral' };
 const VIA: Record<'meeting' | 'visit' | 'call' | 'email' | 'form', string> = {
   meeting: 'Meeting',
   visit: 'Visit',
@@ -26,18 +30,42 @@ const MEETING: Record<ClientBoard['opsMeetings'][number]['state'], [Tone, string
   scheduled: ['warn', 'Scheduled'],
   none: ['crit', 'Not scheduled'],
 };
+const FILTERS = [
+  ['attention', 'Needs attention'],
+  ['onboarding', 'Onboarding'],
+  ['offboarding', 'Offboarding'],
+  ['all', 'All'],
+] as const;
+type Filter = (typeof FILTERS)[number][0];
+
+const money = (n: number) => `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const latestRating = (a: Account) => [...a.ratings].sort((x, y) => x.at.localeCompare(y.at)).at(-1);
 
 export function ClientsView() {
   const { data, error } = useLoad(() => api.clientBoard(), []);
-  const [filter, setFilter] = useState<'attention' | 'onboarding' | 'offboarding' | 'all'>('attention');
+  const [filter, setFilter] = useState<Filter>('attention');
   const [company, setCompany] = useState('');
+  const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="clients" />;
+  const [openId, setOpenId] = useState<string | null>(null);
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="clients" />
+      </div>
+    );
   const act = data.role === 'act';
+  const needle = q.trim().toLowerCase();
   const rows = data.accounts.filter(
     (a) =>
       (!company || a.companyId === company) &&
+      (!needle || a.name.toLowerCase().includes(needle) || a.companyName.toLowerCase().includes(needle)) &&
       (filter === 'all' ||
         (filter === 'attention' && (a.tone === 'crit' || a.tone === 'warn')) ||
         (filter === 'onboarding' && a.stage === 'onboarding') ||
@@ -45,131 +73,144 @@ export function ClientsView() {
   );
   const crit = data.accounts.filter((a) => a.tone === 'crit').length;
   const unknown = data.accounts.filter((a) => a.tone === 'unknown').length;
+  const onboarding = data.accounts.filter((a) => a.stage === 'onboarding').length;
+  const offboarding = data.accounts.filter((a) => a.stage === 'offboarding').length;
+  const open = data.accounts.find((a) => a.id === openId) ?? null;
+  const showMeetings = data.opsMeetings.length > 0;
+  const showCompanies = data.byCompany.length > 1;
+  const companyName = company ? data.byCompany.find((c) => c.companyId === company)?.companyName : null;
   return (
     <div className="page">
       {adding && <NewClientForm options={data.canAdd} onDone={() => setAdding(false)} />}
-      <div className="page-head">
-        <div>
-          <h1>Clients</h1>
-          <p className="muted">
-            Operations Managers, the Operations Director and officers look after each client. The COO monitors every company; each company manager monitors
-            their own. Unknown is never shown as fine.
-          </p>
-        </div>
-        {data.canAdd.length > 0 && (
-          <button className="btn btn-primary" onClick={() => setAdding(true)}>
-            New client
-          </button>
-        )}
-      </div>
-      <div className="kpis">
-        <Kpi label="Clients" value={data.accounts.length} />
-        <Kpi label="Need attention" value={crit} tone={crit ? 'crit' : 'ok'} />
-        <Kpi label="Unknown" value={unknown} tone={unknown ? 'unknown' : 'ok'} note="Never visited, rated or billed on record" />
-        <Kpi
-          label="Onboarding / offboarding"
-          value={`${data.accounts.filter((a) => a.stage === 'onboarding').length} / ${data.accounts.filter((a) => a.stage === 'offboarding').length}`}
+      <PageHead
+        title="Clients"
+        sub="Operations Managers, the Operations Director and officers look after each client. The COO monitors every company; each company manager monitors their own. Unknown is never shown as fine."
+        actions={
+          data.canAdd.length > 0 && (
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              New client
+            </button>
+          )
+        }
+      />
+      <Stats>
+        <Stat label="Clients" value={data.accounts.length} icon={<UsersThreeIcon size={16} />} tone="info" onClick={() => setFilter('all')} />
+        <Stat
+          label="Need attention"
+          value={crit}
+          tone={crit ? 'crit' : 'ok'}
+          icon={<WarningIcon size={16} />}
+          note={filter === 'attention' ? 'Showing clients to follow up' : undefined}
+          onClick={() => setFilter('attention')}
         />
-      </div>
-      {data.opsMeetings.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h3>Monthly operations meetings</h3>
-              <div className="muted small">The COO meets each company's operations every month. Schedule and file the minutes in Meetings.</div>
-            </div>
-          </div>
-          <div className="list">
-            {data.opsMeetings.map((m) => (
-              <div key={m.companyId} className="list-item">
-                <div>{m.companyName}</div>
-                <Chip tone={MEETING[m.state][0]}>{MEETING[m.state][1]}</Chip>
-              </div>
-            ))}
-          </div>
-        </section>
+        <Stat label="Unknown" value={unknown} tone={unknown ? 'unknown' : 'ok'} icon={<SmileyIcon size={16} />} note="Never visited, rated or billed on record" />
+        <Stat label="Onboarding / offboarding" value={`${onboarding} / ${offboarding}`} icon={<BuildingsIcon size={16} />} />
+      </Stats>
+
+      {(showMeetings || showCompanies) && (
+        <div className={showMeetings && showCompanies ? 'bz-two' : 'bz-stack'}>
+          {showMeetings && (
+            <Card title="Monthly operations meetings" sub="The COO meets each company's operations every month. Schedule and file the minutes in Meetings." flush>
+              <ul className="bz-rows">
+                {data.opsMeetings.map((m) => (
+                  <li key={m.companyId} className="bz-row">
+                    <span className="bz-row-title">{m.companyName}</span>
+                    <Chip tone={MEETING[m.state][0]}>{MEETING[m.state][1]}</Chip>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {showCompanies && (
+            <Card title="By company" sub="Pick a company to narrow the list" flush>
+              <ul className="bz-rows">
+                {data.byCompany.map((c) => (
+                  <li key={c.companyId}>
+                    <button
+                      className="bz-row bz-cl-co"
+                      data-on={company === c.companyId || undefined}
+                      onClick={() => setCompany(company === c.companyId ? '' : c.companyId)}
+                      aria-pressed={company === c.companyId}
+                    >
+                      <span className="bz-row-main">
+                        <span className="bz-row-title">{c.companyName}</span>
+                        <span className="bz-row-meta">
+                          {c.clients} clients · satisfaction {c.avgScore ?? 'unknown'} of 5 · {c.onboarding} onboarding · {c.offboarding} offboarding
+                        </span>
+                      </span>
+                      {c.crit ? <Chip tone="crit">{c.crit} need attention</Chip> : <Chip tone="ok">No urgent issue</Chip>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
       )}
-      {data.byCompany.length > 1 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>By company</h3>
-          </div>
-          <div className="list">
-            {data.byCompany.map((c) => (
-              <button
-                key={c.companyId}
-                className="list-item"
-                style={{ background: 'none', border: 0, width: '100%', textAlign: 'left', color: 'inherit', cursor: 'pointer' }}
-                onClick={() => setCompany(company === c.companyId ? '' : c.companyId)}
-                aria-pressed={company === c.companyId}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{c.companyName}</div>
-                  <div className="muted small">
-                    {c.clients} clients · satisfaction {c.avgScore ?? 'unknown'} of 5 · {c.onboarding} onboarding · {c.offboarding} offboarding
-                  </div>
-                </div>
-                {c.crit ? <Chip tone="crit">{c.crit} need attention</Chip> : <Chip tone="ok">No urgent issue</Chip>}
+
+      <Toolbar
+        end={
+          <div className="tabbar" role="tablist" aria-label="Client filter">
+            {FILTERS.map(([k, label]) => (
+              <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)}>
+                {label}
               </button>
             ))}
           </div>
-        </section>
-      )}
-      <div className="tabbar" role="tablist" aria-label="Client filter">
-        {(
-          [
-            ['attention', 'Needs attention'],
-            ['onboarding', 'Onboarding'],
-            ['offboarding', 'Offboarding'],
-            ['all', 'All'],
-          ] as const
-        ).map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)}>
-            {label}
+        }
+      >
+        <Search value={q} onChange={setQ} placeholder="Search client or company" label="Search clients" />
+        {companyName && (
+          <button className="btn btn-sm" onClick={() => setCompany('')}>
+            {companyName} · show every company
           </button>
-        ))}
-      </div>
-      <section className="panel">
-        <div className="list">
-          {rows.length === 0 && <div className="empty">Nothing here.</div>}
-          {rows.slice(0, 60).map((a) => (
-            <ClientLine key={a.id} a={a} act={act && a.canAct} canBill={a.canBill} />
-          ))}
-          {rows.length > 60 && <div className="muted small">Showing 60 of {rows.length}. Pick a company above to narrow the list.</div>}
-        </div>
-      </section>
+        )}
+      </Toolbar>
+
+      <Card title={FILTERS.find(([k]) => k === filter)?.[1]} sub={`${rows.length} client${rows.length === 1 ? '' : 's'}`} flush>
+        {rows.length === 0 ? (
+          <Empty title="Nothing here.">{needle ? 'No client matches the search.' : undefined}</Empty>
+        ) : (
+          <ul className="bz-rows">
+            {rows.slice(0, 60).map((a) => (
+              <li key={a.id}>
+                <ClientLine a={a} act={act && a.canAct} onOpen={() => setOpenId(a.id)} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {rows.length > 60 && <p className="bz-note bz-cl-more">Showing 60 of {rows.length}. Pick a company above to narrow the list.</p>}
+      </Card>
+      {open && <ClientDetail a={open} act={act && open.canAct} canBill={open.canBill} onClose={() => setOpenId(null)} />}
     </div>
   );
 }
 
-function ClientLine({ a, act, canBill }: { a: Account; act: boolean; canBill: boolean }) {
-  const [open, setOpen] = useState(false);
-  const tone: Tone = a.tone;
-  const rating = [...a.ratings].sort((x, y) => x.at.localeCompare(y.at)).at(-1);
+function ClientLine({ a, act, onOpen }: { a: Account; act: boolean; onOpen: () => void }) {
+  const rating = latestRating(a);
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>{a.name}</div>
-          <div className="muted small">
-            {a.companyName} · {STAGE_LABEL[a.stage]} · satisfaction {rating ? `${rating.score} of 5` : 'unknown'}
-            {a.contractEndsOn ? ` · contract to ${dateLabel(a.contractEndsOn)}` : ''}
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
-          <Chip tone={tone}>{TONE_LABEL[a.tone]}</Chip>
-          <button className="btn btn-ghost btn-sm" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? 'Hide' : act ? 'Act' : 'Details'}
-          </button>
-        </div>
-      </div>
-      {a.issues.length > 0 && <div className="small">{a.issues.map((i) => i.what).join(' · ')}</div>}
-      {open && <ClientDetail a={a} act={act} canBill={canBill} />}
-    </div>
+    <button className="bz-row bz-cl-row" data-tone={a.tone === 'crit' || a.tone === 'warn' ? a.tone : undefined} onClick={onOpen}>
+      <span className="bz-row-main">
+        <span className="bz-row-title">{a.name}</span>
+        <span className="bz-row-meta">
+          {a.companyName} · satisfaction {rating ? `${rating.score} of 5` : 'unknown'}
+          {a.contractEndsOn ? ` · contract to ${dateLabel(a.contractEndsOn)}` : ''}
+        </span>
+        {a.issues.length > 0 && <span className="bz-cl-issues">{a.issues.map((i) => i.what).join(' · ')}</span>}
+      </span>
+      <span className="bz-row-side">
+        <span className="bz-chips">
+          <Chip tone={STAGE_TONE[a.stage]}>{STAGE_LABEL[a.stage]}</Chip>
+          <Chip tone={a.tone}>{TONE_LABEL[a.tone]}</Chip>
+        </span>
+        <span className="bz-sub">{act ? 'Act' : 'Details'}</span>
+      </span>
+    </button>
   );
 }
 
-function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: boolean }) {
+function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; canBill: boolean; onClose: () => void }) {
   const [note, setNote] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
   const [score, setScore] = useState(0);
@@ -195,158 +236,244 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
   };
   const phases: ['onboarding' | 'offboarding', Account['onboarding']][] = [['onboarding', a.onboarding]];
   if (a.offboarding) phases.push(['offboarding', a.offboarding]);
+  const rating = ratings[0];
+  const invoices = a.invoices ?? [];
+  const yesNo = (v: boolean) => <Chip tone={v ? 'ok' : 'neutral'}>{v ? 'Yes' : 'No'}</Chip>;
   return (
-    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <Drawer title={a.name} sub={`${a.companyName} · ${STAGE_LABEL[a.stage]}`} onClose={onClose}>
+      <div className="bz-chips">
+        <Chip tone={a.tone}>{TONE_LABEL[a.tone]}</Chip>
+        <Chip tone={STAGE_TONE[a.stage]}>{STAGE_LABEL[a.stage]}</Chip>
+      </div>
+      <div className="bz-facts">
+        <Facts
+          items={[
+            ['Company', a.companyName],
+            ['Satisfaction', rating ? `${rating.score} of 5` : 'Unknown'],
+            ['Contract ends', a.contractEndsOn ? dateLabel(a.contractEndsOn) : 'Not recorded'],
+            ['Overdue', a.billing ? `${money(a.billing.overdueAmount)} (${a.billing.overdueDays} days)` : 'Unknown'],
+          ]}
+        />
+      </div>
+      {a.issues.length > 0 && (
+        <div className="notice" data-tone={a.tone === 'crit' ? 'crit' : 'warn'}>
+          {a.issues.map((i) => i.what).join(' · ')}
+        </div>
+      )}
+
       {phases.map(([phase, steps]) => (
-        <div key={phase}>
-          <div style={{ fontWeight: 600 }}>{phase === 'onboarding' ? 'Onboarding' : `Offboarding${a.offboardReason ? `: ${a.offboardReason}` : ''}`}</div>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
+        <section key={phase} className="bz-sec">
+          <div className="bz-sec-head">
+            <h3>{phase === 'onboarding' ? 'Onboarding' : `Offboarding${a.offboardReason ? `: ${a.offboardReason}` : ''}`}</h3>
+            <span className="bz-count">
+              {steps.filter((s) => s.doneAt).length} of {steps.length}
+            </span>
+          </div>
+          <ul className="bz-cl-checks">
             {steps.map((s) => (
-              <li key={s.key}>
-                {s.label}:{' '}
-                {s.doneAt ? (
-                  `${s.by}, ${dateTimeLabel(s.doneAt)}`
-                ) : act ? (
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    disabled={action.busy}
-                    onClick={() => action.run(() => api.clientStep(a.id, phase, s.key, note, proof), 'Done.').then(clear)}
-                  >
-                    Mark done
-                  </button>
-                ) : (
-                  <span className="muted">not done</span>
+              <li key={s.key} data-done={s.doneAt ? 'yes' : undefined}>
+                <span className="bz-cl-tick" aria-hidden="true">
+                  {s.doneAt ? '✓' : ''}
+                </span>
+                <span className="bz-row-main">
+                  <span>{s.label}</span>
+                  {s.doneAt && (
+                    <span className="bz-row-meta">
+                      {s.by}, {dateTimeLabel(s.doneAt)}
+                    </span>
+                  )}
+                </span>
+                {!s.doneAt &&
+                  (act ? (
+                    <button
+                      className="btn btn-sm"
+                      disabled={action.busy}
+                      onClick={() => action.run(() => api.clientStep(a.id, phase, s.key, note, proof), 'Done.').then(clear)}
+                    >
+                      Mark done
+                    </button>
+                  ) : (
+                    <span className="bz-sub">not done</span>
+                  ))}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      <section className="bz-sec">
+        <h3>Relationship</h3>
+        {a.contacts.length === 0 ? (
+          <p className="bz-note">No visit or meeting logged.</p>
+        ) : (
+          <ul className="bz-cl-log">
+            {a.contacts.slice(-3).map((c, i) => (
+              <li key={i}>
+                <span className="bz-cl-log-top">
+                  <strong className="bz-cl-kind">{c.kind}</strong>
+                  <span className="bz-sub">
+                    {c.by}, {dateTimeLabel(c.at)}
+                  </span>
+                </span>
+                <span>{c.note}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="bz-note">Reports sent: {a.reports.length ? a.reports.map((r) => r.period).join(', ') : 'none on record'}</p>
+      </section>
+
+      <section className="bz-sec">
+        <h3>Satisfaction and complaints</h3>
+        {ratings.length === 0 && <p className="bz-note">Never rated.</p>}
+        {ratings.length > 0 && (
+          <ul className="bz-cl-log">
+            {ratings.slice(0, 3).map((r) => (
+              <li key={r.at}>
+                <span className="bz-cl-log-top">
+                  <strong>{r.score} of 5</strong>
+                  <span className="bz-sub">
+                    {r.by}, {dateLabel(r.at.slice(0, 10))}
+                  </span>
+                </span>
+                <span className="bz-row-meta">
+                  {r.from ? `from ${r.from}${r.via ? ` (${VIA[r.via]})` : ''}` : 'who at the client not recorded'}
+                  {r.comment ? ` · ${r.comment}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {complaints.length === 0 && <p className="bz-note">No complaints on record.</p>}
+        {complaints.length > 0 && (
+          <ul className="bz-cl-log">
+            {complaints.slice(0, 5).map((c) => (
+              <li key={c.id}>
+                <span className="bz-cl-log-top">
+                  <Chip tone={c.resolvedAt ? 'ok' : 'warn'}>{c.resolvedAt ? 'Closed' : 'Open'}</Chip>
+                  <span className="bz-sub">
+                    {dateLabel(c.at.slice(0, 10))} · {c.from} ({VIA[c.via]})
+                  </span>
+                </span>
+                <span>{c.what}</span>
+                {c.resolvedAt && (
+                  <span className="bz-row-meta">
+                    done: {c.resolution} ({c.resolvedBy}, {dateLabel(c.resolvedAt.slice(0, 10))})
+                  </span>
+                )}
+                {act && !c.resolvedAt && (
+                  <span>
+                    <button
+                      className="btn btn-sm"
+                      disabled={action.busy || note.trim().length < 3}
+                      title="Write what was done in the note"
+                      onClick={() => action.run(() => api.resolveClientComplaint(a.id, c.id, note, proof), 'Complaint closed.').then(clear)}
+                    >
+                      Close (what was done in the note)
+                    </button>
+                  </span>
                 )}
               </li>
             ))}
           </ul>
-        </div>
-      ))}
-      <div>
-        <div style={{ fontWeight: 600 }}>Relationship</div>
-        {a.contacts.length === 0 && <div className="muted">No visit or meeting logged.</div>}
-        {a.contacts.slice(-3).map((c, i) => (
-          <div key={i}>
-            {c.kind} · {c.by}, {dateTimeLabel(c.at)} · {c.note}
-          </div>
-        ))}
-        <div>Reports sent: {a.reports.length ? a.reports.map((r) => r.period).join(', ') : 'none on record'}</div>
-        <div>
-          Billing:{' '}
-          {a.billing
-            ? `invoiced to ${a.billing.invoicedTo ?? '-'}, RM${a.billing.overdueAmount.toFixed(2)} overdue (${a.billing.overdueDays} days), as of ${dateLabel(a.billing.asOf)}`
-            : 'unknown (SQL Account not connected)'}
-        </div>
-        <div>
-          Invoices (by hand and by email{a.invoicePortal ? `, and in ${a.invoicePortal}` : ''}):{' '}
-          {(a.invoices ?? []).length
-            ? (a.invoices ?? [])
-                .map(
-                  (v) =>
-                    `${v.period} RM${v.amount.toFixed(2)} ${[v.hand ? 'hand ✓' : 'hand ✗', v.email ? 'email ✓' : 'email ✗', ...(a.invoicePortal ? [v.portal ? 'system ✓' : 'system ✗'] : [])].join(' ')}`,
-                )
-                .join(' · ')
-            : 'none on record'}
-        </div>
-      </div>
-      <div>
-        <div style={{ fontWeight: 600 }}>Satisfaction and complaints</div>
-        {ratings.length === 0 && <div className="muted">Never rated.</div>}
-        {ratings.slice(0, 3).map((r) => (
-          <div key={r.at}>
-            {r.score} of 5 · {r.from ? `from ${r.from}${r.via ? ` (${VIA[r.via]})` : ''}` : 'who at the client not recorded'} · {r.by}, {dateLabel(r.at.slice(0, 10))}
-            {r.comment ? ` · ${r.comment}` : ''}
-          </div>
-        ))}
-        {complaints.length === 0 && <div className="muted">No complaints on record.</div>}
-        {complaints.slice(0, 5).map((c) => (
-          <div key={c.id} className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Chip tone={c.resolvedAt ? 'ok' : 'warn'}>{c.resolvedAt ? 'Closed' : 'Open'}</Chip>
-            <span>
-              {dateLabel(c.at.slice(0, 10))} · {c.from} ({VIA[c.via]}): {c.what}
-              {c.resolvedAt ? ` · done: ${c.resolution} (${c.resolvedBy}, ${dateLabel(c.resolvedAt.slice(0, 10))})` : ''}
-            </span>
-            {act && !c.resolvedAt && (
-              <button
-                className="btn btn-ghost btn-sm"
-                disabled={action.busy || note.trim().length < 3}
-                title="Write what was done in the note"
-                onClick={() => action.run(() => api.resolveClientComplaint(a.id, c.id, note, proof), 'Complaint closed.').then(clear)}
-              >
-                Close (what was done in the note)
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+        )}
+      </section>
+
       {act && (
-        <>
-          <ProofPicker site={null} refText={a.name.slice(0, 20)} items={proof} onChange={setProof} documentsOnly />
-          <input className="input" aria-label="Note" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            <select className="select" aria-label="Contact" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-              <option value="visit">Visit</option>
-              <option value="meeting">Meeting</option>
-              <option value="call">Call</option>
-            </select>
-            <button
-              className="btn btn-sm"
-              disabled={action.busy || note.trim().length < 3}
-              onClick={() => action.run(() => api.clientContact(a.id, kind, note), 'Logged.').then(clear)}
-            >
-              Log contact
-            </button>
-            <input className="input" type="month" aria-label="Report month" value={period} onChange={(e) => setPeriod(e.target.value)} />
-            <button
-              className="btn btn-sm"
-              disabled={action.busy || !proof.length}
-              onClick={() => action.run(() => api.clientReport(a.id, period, proof), 'Report recorded.').then(clear)}
-            >
-              Report sent
-            </button>
-          </div>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              className="input"
-              aria-label="Who at the client"
-              placeholder="Who at the client (name, position)"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-            <select className="select" aria-label="How they said it" value={via} onChange={(e) => setVia(e.target.value as keyof typeof VIA)}>
-              {(Object.keys(VIA) as (keyof typeof VIA)[]).map((k) => (
-                <option key={k} value={k}>
-                  {VIA[k]}
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn btn-sm"
-              disabled={action.busy || from.trim().length < 2 || note.trim().length < 3}
-              title="Write the complaint in the note"
-              onClick={() => action.run(() => api.clientComplaint(a.id, { from, via, what: note, proof }), 'Complaint logged.').then(clear)}
-            >
-              Log complaint (in the note)
-            </button>
-          </div>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span>Satisfaction</span>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} className={`btn btn-sm${score === n ? ' btn-primary' : ''}`} aria-pressed={score === n} onClick={() => setScore(n)}>
-                {n}
+        <section className="bz-sec">
+          <h3>Record an update</h3>
+          <div className="bz-act">
+            <p className="bz-note">The note and proof go with the action you take here or above: a step marked done, a complaint closed, a contact, a report, a rating or offboarding.</p>
+            <label className="field">
+              <span className="label">Note</span>
+              <input className="input" aria-label="Note" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+            <ProofPicker site={null} refText={a.name.slice(0, 20)} items={proof} onChange={setProof} documentsOnly />
+            <div className="bz-cl-pair">
+              <label className="field">
+                <span className="label">Contact</span>
+                <select className="select" aria-label="Contact" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+                  <option value="visit">Visit</option>
+                  <option value="meeting">Meeting</option>
+                  <option value="call">Call</option>
+                </select>
+              </label>
+              <button
+                className="btn"
+                disabled={action.busy || note.trim().length < 3}
+                onClick={() => action.run(() => api.clientContact(a.id, kind, note), 'Logged.').then(clear)}
+              >
+                Log contact
               </button>
-            ))}
-            <button
-              className="btn btn-sm"
-              disabled={action.busy || !score || from.trim().length < 2}
-              title="Fill in who at the client gave it and how"
-              onClick={() => action.run(() => api.clientRating(a.id, score, note, { from, via, proof }), 'Rating saved.').then(clear)}
-            >
-              Save rating
-            </button>
+            </div>
+            <div className="bz-cl-pair">
+              <label className="field">
+                <span className="label">Report month</span>
+                <input className="input" type="month" aria-label="Report month" value={period} onChange={(e) => setPeriod(e.target.value)} />
+              </label>
+              <button
+                className="btn"
+                disabled={action.busy || !proof.length}
+                onClick={() => action.run(() => api.clientReport(a.id, period, proof), 'Report recorded.').then(clear)}
+              >
+                Report sent
+              </button>
+            </div>
+          </div>
+          <div className="bz-act">
+            <div className="bz-form">
+              <label className="field">
+                <span className="label">Who at the client</span>
+                <input
+                  className="input"
+                  aria-label="Who at the client"
+                  placeholder="Who at the client (name, position)"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span className="label">How they said it</span>
+                <select className="select" aria-label="How they said it" value={via} onChange={(e) => setVia(e.target.value as keyof typeof VIA)}>
+                  {(Object.keys(VIA) as (keyof typeof VIA)[]).map((k) => (
+                    <option key={k} value={k}>
+                      {VIA[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="bz-actions">
+              <span className="label">Satisfaction</span>
+              <div className="seg" role="group" aria-label="Satisfaction">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} aria-pressed={score === n} onClick={() => setScore(n)}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bz-actions">
+              <button
+                className="btn"
+                disabled={action.busy || !score || from.trim().length < 2}
+                title="Fill in who at the client gave it and how"
+                onClick={() => action.run(() => api.clientRating(a.id, score, note, { from, via, proof }), 'Rating saved.').then(clear)}
+              >
+                Save rating
+              </button>
+              <button
+                className="btn"
+                disabled={action.busy || from.trim().length < 2 || note.trim().length < 3}
+                title="Write the complaint in the note"
+                onClick={() => action.run(() => api.clientComplaint(a.id, { from, via, what: note, proof }), 'Complaint logged.').then(clear)}
+              >
+                Log complaint (in the note)
+              </button>
+            </div>
           </div>
           {a.stage !== 'offboarding' && a.stage !== 'ended' && (
-            <div>
+            <div className="bz-actions">
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={action.busy || note.trim().length < 3}
@@ -357,49 +484,99 @@ function ClientDetail({ a, act, canBill }: { a: Account; act: boolean; canBill: 
               </button>
             </div>
           )}
-        </>
+        </section>
       )}
-      {canBill && <InvoiceForm a={a} />}
-      {canBill && a.stage !== 'ended' && <ShareLinks a={a} />}
-      {canBill && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span>Billing</span>
-          <input
-            className="input"
-            type="month"
-            aria-label="Invoiced to"
-            value={bill.invoicedTo}
-            onChange={(e) => setBill({ ...bill, invoicedTo: e.target.value })}
-          />
-          <input
-            className="input"
-            type="number"
-            min={0}
-            aria-label="Overdue RM"
-            placeholder="Overdue RM"
-            value={bill.overdueAmount || ''}
-            onChange={(e) => setBill({ ...bill, overdueAmount: Number(e.target.value) || 0 })}
-          />
-          <input
-            className="input"
-            type="number"
-            min={0}
-            aria-label="Overdue days"
-            placeholder="Days overdue"
-            value={bill.overdueDays || ''}
-            onChange={(e) => setBill({ ...bill, overdueDays: Number(e.target.value) || 0 })}
-          />
-          <button
-            className="btn btn-sm"
-            disabled={action.busy}
-            onClick={() => action.run(() => api.clientBilling(a.id, { ...bill, invoicedTo: bill.invoicedTo || null }), 'Billing updated.')}
-          >
-            Update billing
-          </button>
+
+      <section className="bz-sec">
+        <h3>Money</h3>
+        <div className="bz-facts bz-cl-billing">
+          <span className="label">Billing</span>
+          <span>
+            {a.billing
+              ? `invoiced to ${a.billing.invoicedTo ?? '-'}, RM${a.billing.overdueAmount.toFixed(2)} overdue (${a.billing.overdueDays} days), as of ${dateLabel(a.billing.asOf)}`
+              : 'unknown (SQL Account not connected)'}
+          </span>
         </div>
-      )}
+        <div className="bz-sec-head">
+          <span className="label">Invoices (by hand and by email{a.invoicePortal ? `, and in ${a.invoicePortal}` : ''})</span>
+        </div>
+        {invoices.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th className="num">Amount</th>
+                  <th>By hand</th>
+                  <th>By email</th>
+                  {a.invoicePortal && <th>In system</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((v) => (
+                  <tr key={v.period}>
+                    <td>{v.period}</td>
+                    <td className="num">RM{v.amount.toFixed(2)}</td>
+                    <td>{yesNo(!!v.hand)}</td>
+                    <td>{yesNo(!!v.email)}</td>
+                    {a.invoicePortal && <td>{yesNo(!!v.portal)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="bz-note">None on record.</p>
+        )}
+        {canBill && <InvoiceForm a={a} />}
+        {canBill && (
+          <div className="bz-act">
+            <span className="label">Billing</span>
+            <div className="bz-cl-bill">
+              <label className="field">
+                <span className="label">Invoiced to</span>
+                <input className="input" type="month" aria-label="Invoiced to" value={bill.invoicedTo} onChange={(e) => setBill({ ...bill, invoicedTo: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="label">Overdue RM</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  aria-label="Overdue RM"
+                  placeholder="Overdue RM"
+                  value={bill.overdueAmount || ''}
+                  onChange={(e) => setBill({ ...bill, overdueAmount: Number(e.target.value) || 0 })}
+                />
+              </label>
+              <label className="field">
+                <span className="label">Days overdue</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  aria-label="Overdue days"
+                  placeholder="Days overdue"
+                  value={bill.overdueDays || ''}
+                  onChange={(e) => setBill({ ...bill, overdueDays: Number(e.target.value) || 0 })}
+                />
+              </label>
+            </div>
+            <div className="bz-actions">
+              <button
+                className="btn btn-sm"
+                disabled={action.busy}
+                onClick={() => action.run(() => api.clientBilling(a.id, { ...bill, invoicedTo: bill.invoicedTo || null }), 'Billing updated.')}
+              >
+                Update billing
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+      {canBill && a.stage !== 'ended' && <ShareLinks a={a} />}
       <ErrorNotice error={action.error} />
-    </div>
+    </Drawer>
   );
 }
 
@@ -415,29 +592,38 @@ function InvoiceForm({ a }: { a: Account }) {
   const act = useAction();
   const existing = (a.invoices ?? []).find((v) => v.period === period);
   return (
-    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontWeight: 600 }}>Record an invoice sent</div>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input className="input" type="month" aria-label="Invoice month" value={period} onChange={(e) => setPeriod(e.target.value)} />
-        <select className="select" aria-label="Sent" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
-          <option value="hand">By hand (client's received copy)</option>
-          <option value="email">By email</option>
-          {a.invoicePortal && <option value="portal">In {a.invoicePortal}</option>}
-        </select>
+    <div className="bz-act">
+      <span className="label">Record an invoice sent</span>
+      <div className="bz-cl-bill">
+        <label className="field">
+          <span className="label">Invoice month</span>
+          <input className="input" type="month" aria-label="Invoice month" value={period} onChange={(e) => setPeriod(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Sent</span>
+          <select className="select" aria-label="Sent" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
+            <option value="hand">By hand (client's received copy)</option>
+            <option value="email">By email</option>
+            {a.invoicePortal && <option value="portal">In {a.invoicePortal}</option>}
+          </select>
+        </label>
         {!existing && (
-          <input
-            className="input"
-            type="number"
-            min={0}
-            aria-label="Invoice RM"
-            placeholder="Invoice RM"
-            value={amount || ''}
-            onChange={(e) => setAmount(Number(e.target.value) || 0)}
-          />
+          <label className="field">
+            <span className="label">Invoice RM</span>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              aria-label="Invoice RM"
+              placeholder="Invoice RM"
+              value={amount || ''}
+              onChange={(e) => setAmount(Number(e.target.value) || 0)}
+            />
+          </label>
         )}
       </div>
       <ProofPicker site={null} refText="Invoice" items={proof} onChange={setProof} documentsOnly required />
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="bz-actions">
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !proof.length || (!existing && !amount)}
@@ -445,13 +631,18 @@ function InvoiceForm({ a }: { a: Account }) {
         >
           Record
         </button>
-        <input
-          className="input"
-          aria-label="Client system"
-          placeholder="Client's invoicing system, if any"
-          value={portal}
-          onChange={(e) => setPortal(e.target.value)}
-        />
+      </div>
+      <div className="bz-cl-pair">
+        <label className="field">
+          <span className="label">Client's invoicing system</span>
+          <input
+            className="input"
+            aria-label="Client system"
+            placeholder="Client's invoicing system, if any"
+            value={portal}
+            onChange={(e) => setPortal(e.target.value)}
+          />
+        </label>
         <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => act.run(() => api.setInvoicePortal(a.id, portal || null), 'Saved.')}>
           Save system
         </button>
@@ -484,61 +675,86 @@ function ShareLinks({ a }: { a: Account }) {
   const full = (u: string) => (u.startsWith('/') ? `${window.location.origin}${u}` : u);
   if (!open)
     return (
-      <div>
-        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
+      <div className="bz-actions">
+        <button className="btn" onClick={() => setOpen(true)}>
           Client report links
         </button>
       </div>
     );
   const d = view.data;
   return (
-    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontWeight: 600 }}>Client report links</div>
-      <div className="muted">Read-only page for this client: its own sites, patrol scans, supervisor visits, incidents, emergency alerts, complaints and invoices sent. No staff names, no case details, no amounts owed. Invoices show as sent, never as paid. Invoices and monthly reports appear only for months wholly inside the period.</div>
+    <section className="bz-sec">
+      <h3>Client report links</h3>
+      <p className="bz-note">
+        Read-only page for this client: its own sites, patrol scans, supervisor visits, incidents, emergency alerts, complaints and invoices sent. No staff names, no case
+        details, no amounts owed. Invoices show as sent, never as paid. Invoices and monthly reports appear only for months wholly inside the period.
+      </p>
       {view.error && <ErrorNotice error={{ message: view.error, findings: [] }} />}
       {!d && !view.error && <Loading what="links" />}
-      {d && !d.linksOn && <div className="muted">Report links are switched off on this server until the link key and public address are set.</div>}
+      {d && !d.linksOn && <div className="notice">Report links are switched off on this server until the link key and public address are set.</div>}
       {d?.canCreate && d.linksOn && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input className="input" aria-label="Link for" placeholder="Who receives it (name or role)" value={form.recipient} onChange={(e) => setForm({ ...form, recipient: e.target.value })} />
-          <input className="input" type="date" aria-label="Report from" value={form.from} max={today} onChange={(e) => setForm({ ...form, from: e.target.value })} />
-          <input className="input" type="date" aria-label="Report to" value={form.to} max={today} onChange={(e) => setForm({ ...form, to: e.target.value })} />
-          <select className="select" aria-label="Link open for" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}>
-            {[1, 3, 7, 14, 30].map((n) => (
-              <option key={n} value={n}>
-                Open {n} day{n > 1 ? 's' : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            className="btn btn-primary btn-sm"
-            disabled={act.busy || form.recipient.trim().length < 3}
-            onClick={() => act.run(() => api.createClientShareLink(a.id, form), 'Link made.').then((r) => r && setMade({ url: r.url }))}
-          >
-            Make link
-          </button>
+        <div className="bz-act">
+          <div className="bz-form">
+            <label className="field bz-span">
+              <span className="label">Link for</span>
+              <input
+                className="input"
+                aria-label="Link for"
+                placeholder="Who receives it (name or role)"
+                value={form.recipient}
+                onChange={(e) => setForm({ ...form, recipient: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span className="label">Report from</span>
+              <input className="input" type="date" aria-label="Report from" value={form.from} max={today} onChange={(e) => setForm({ ...form, from: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Report to</span>
+              <input className="input" type="date" aria-label="Report to" value={form.to} max={today} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Link open for</span>
+              <select className="select" aria-label="Link open for" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}>
+                {[1, 3, 7, 14, 30].map((n) => (
+                  <option key={n} value={n}>
+                    Open {n} day{n > 1 ? 's' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="bz-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || form.recipient.trim().length < 3}
+              onClick={() => act.run(() => api.createClientShareLink(a.id, form), 'Link made.').then((r) => r && setMade({ url: r.url }))}
+            >
+              Make link
+            </button>
+          </div>
         </div>
       )}
       {made && (
-        <div className="card" style={{ padding: 8 }}>
+        <div className="notice" data-tone="ok">
           {made.url ? (
-            <>
-              <div>Send this link to the client by your usual email. It is shown once here; make a new one if it is lost.</div>
-              <code style={{ wordBreak: 'break-all' }}>{full(made.url)}</code>
-              <div>
-                <button className="btn btn-ghost btn-sm" onClick={() => void navigator.clipboard?.writeText(full(made.url!))}>
+            <div className="bz-stack">
+              <span>Send this link to the client by your usual email. It is shown once here; make a new one if it is lost.</span>
+              <code className="bz-cl-url">{full(made.url)}</code>
+              <span>
+                <button className="btn btn-sm" onClick={() => void navigator.clipboard?.writeText(full(made.url!))}>
                   Copy link
                 </button>
-              </div>
-            </>
+              </span>
+            </div>
           ) : (
-            <div>Link made. This test build has no server, so the link cannot be opened from outside: use Preview to see the client page.</div>
+            <span>Link made. This test build has no server, so the link cannot be opened from outside: use Preview to see the client page.</span>
           )}
         </div>
       )}
       {d && d.links.length > 0 && (
         <div className="table-wrap">
-          <table className="small">
+          <table>
             <thead>
               <tr>
                 <th>For</th>
@@ -558,15 +774,23 @@ function ShareLinks({ a }: { a: Account }) {
                   </td>
                   <td>{dateLabel(l.expiresOn)}</td>
                   <td>{l.views ? `${l.views}x, last ${dateTimeLabel(l.lastViewAt!)}` : 'Not yet'}</td>
-                  <td>
-                    {l.revokedAt ? <Chip tone="neutral">Revoked</Chip> : l.live ? <Chip tone="ok">Open</Chip> : <Chip tone="neutral">Expired</Chip>}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => act.run(() => api.previewClientShareLink(a.id, l.id)).then((r) => r && setPreview(r))}>
+                  <td>{l.revokedAt ? <Chip tone="neutral">Revoked</Chip> : l.live ? <Chip tone="ok">Open</Chip> : <Chip tone="neutral">Expired</Chip>}</td>
+                  <td className="bz-cl-nowrap">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={act.busy}
+                      onClick={() => act.run(() => api.previewClientShareLink(a.id, l.id)).then((r) => r && setPreview(r))}
+                    >
                       Preview
                     </button>
                     {l.live && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setRevoking(l.id); setReason(''); }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setRevoking(l.id);
+                          setReason('');
+                        }}
+                      >
                         Revoke
                       </button>
                     )}
@@ -578,23 +802,28 @@ function ShareLinks({ a }: { a: Account }) {
         </div>
       )}
       {revoking && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <input className="input" aria-label="Why revoke" placeholder="Why (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <button
-            className="btn btn-sm"
-            disabled={act.busy || reason.trim().length < 5}
-            onClick={() => act.run(() => api.revokeClientShareLink(a.id, revoking, reason), 'Link revoked.').then((r) => r !== undefined && setRevoking(null))}
-          >
-            Revoke link
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setRevoking(null)}>
-            Cancel
-          </button>
+        <div className="bz-act">
+          <label className="field">
+            <span className="label">Why revoke</span>
+            <input className="input" aria-label="Why revoke" placeholder="Why (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <div className="bz-actions">
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || reason.trim().length < 5}
+              onClick={() => act.run(() => api.revokeClientShareLink(a.id, revoking, reason), 'Link revoked.').then((r) => r !== undefined && setRevoking(null))}
+            >
+              Revoke link
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setRevoking(null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       <ErrorNotice error={act.error} />
       {preview && <SharePreview r={preview} onClose={() => setPreview(null)} />}
-    </div>
+    </section>
   );
 }
 
@@ -602,32 +831,34 @@ function ShareLinks({ a }: { a: Account }) {
 function SharePreview({ r, onClose }: { r: ClientShareReport; onClose: () => void }) {
   return (
     <Drawer title={`Client page: ${r.clientName}`} sub={`Period ${dateLabel(r.from)} to ${dateLabel(r.to)}. Open until ${dateLabel(r.expiresOn)}. Preview only.`} onClose={onClose}>
-      <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontWeight: 600 }}>Sites</div>
+      <section className="bz-sec">
+        <h3>Sites</h3>
         <div className="table-wrap">
-          <table className="small">
+          <table>
             <thead>
               <tr>
                 <th>Site</th>
-                <th>Patrol checkpoints scanned</th>
-                <th>Supervisor visits</th>
+                <th className="num">Patrol checkpoints scanned</th>
+                <th className="num">Supervisor visits</th>
               </tr>
             </thead>
             <tbody>
               {r.sites.map((s) => (
                 <tr key={s.name}>
                   <td>{s.name}</td>
-                  <td>{s.patrolScans}</td>
-                  <td>{s.visits}</td>
+                  <td className="num">{s.patrolScans}</td>
+                  <td className="num">{s.visits}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div style={{ fontWeight: 600 }}>Incidents at the client's sites</div>
+      </section>
+      <section className="bz-sec">
+        <h3>Incidents at the client's sites</h3>
         {r.incidents.length ? (
           <div className="table-wrap">
-            <table className="small">
+            <table>
               <thead>
                 <tr>
                   <th>Ref</th>
@@ -641,7 +872,7 @@ function SharePreview({ r, onClose }: { r: ClientShareReport; onClose: () => voi
               <tbody>
                 {r.incidents.map((c) => (
                   <tr key={c.ref}>
-                    <td>{c.ref}</td>
+                    <td className="mono">{c.ref}</td>
                     <td>{dateLabel(c.on)}</td>
                     <td>{c.site}</td>
                     <td>{c.kind}</td>
@@ -653,24 +884,32 @@ function SharePreview({ r, onClose }: { r: ClientShareReport; onClose: () => voi
             </table>
           </div>
         ) : (
-          <div className="muted">None in this period.</div>
+          <p className="bz-note">None in this period.</p>
         )}
-        <div style={{ fontWeight: 600 }}>Invoices sent</div>
+      </section>
+      <section className="bz-sec">
+        <h3>Invoices sent</h3>
         {r.invoices.length ? (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
+          <ul className="bz-cl-log">
             {r.invoices.map((x) => (
               <li key={x.period}>
-                {x.period}: RM {x.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}, {x.sentOn ? `sent ${dateLabel(x.sentOn)}` : 'not yet sent'}
+                <span className="bz-cl-log-top">
+                  <strong>{x.period}</strong>
+                  <span className="bz-amt">RM {x.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </span>
+                <span className="bz-row-meta">{x.sentOn ? `sent ${dateLabel(x.sentOn)}` : 'not yet sent'}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="muted">None recorded for this period.</div>
+          <p className="bz-note">None recorded for this period.</p>
         )}
-        <div className="muted">The client page lists invoices sent. It is not a statement of account and does not show payments.</div>
-        <div style={{ fontWeight: 600 }}>Monthly reports</div>
-        <div>{r.reports.length ? r.reports.join(', ') : 'None recorded for this period.'}</div>
-      </div>
+        <p className="bz-note">The client page lists invoices sent. It is not a statement of account and does not show payments.</p>
+      </section>
+      <section className="bz-sec">
+        <h3>Monthly reports</h3>
+        <p>{r.reports.length ? r.reports.join(', ') : 'None recorded for this period.'}</p>
+      </section>
     </Drawer>
   );
 }
@@ -685,30 +924,36 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
   const [ends, setEnds] = useState('');
   return (
     <Drawer title="New client" sub="Onboarding starts with every step open: contract, survey, award, deployment, billing and PDPA." onClose={onDone}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="bz-form">
         {options.length > 1 && (
-          <select
-            className="select"
-            aria-label="Company"
-            value={companyId}
-            onChange={(e) => {
-              setCompanyId(e.target.value);
-              setSiteIds([]);
-            }}
-          >
-            {options.map((o) => (
-              <option key={o.companyId} value={o.companyId}>
-                {o.companyName}
-              </option>
-            ))}
-          </select>
+          <label className="field bz-span">
+            <span className="label">Company</span>
+            <select
+              className="select"
+              aria-label="Company"
+              value={companyId}
+              onChange={(e) => {
+                setCompanyId(e.target.value);
+                setSiteIds([]);
+              }}
+            >
+              {options.map((o) => (
+                <option key={o.companyId} value={o.companyId}>
+                  {o.companyName}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
-        <input className="input" aria-label="Client name" placeholder="Client name" value={name} onChange={(e) => setName(e.target.value)} />
-        <div className="muted small">Sites for this client (add a new site first under Sites if it is not listed)</div>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6, maxHeight: 160, overflow: 'auto' }}>
-          {co?.sites.length === 0 && <span className="muted small">No sites yet.</span>}
+        <label className="field bz-span">
+          <span className="label">Client name</span>
+          <input className="input" aria-label="Client name" placeholder="Client name" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <fieldset className="bz-span bz-cl-sites">
+          <legend className="label">Sites for this client (add a new site first under Sites if it is not listed)</legend>
+          {co?.sites.length === 0 && <span className="bz-note">No sites yet.</span>}
           {co?.sites.map((x) => (
-            <label key={x.id} className="row small" style={{ gap: 4 }}>
+            <label key={x.id} className="bz-cl-site">
               <input
                 type="checkbox"
                 checked={siteIds.includes(x.id)}
@@ -717,13 +962,16 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
               {x.name}
             </label>
           ))}
-        </div>
-        <label className="small muted" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          Contract ends (if known)
+        </fieldset>
+        <label className="field">
+          <span className="label">Contract ends (if known)</span>
           <input className="input" type="date" aria-label="Contract ends on" value={ends} onChange={(e) => setEnds(e.target.value)} />
         </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="bz-form-foot">
         <button
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary"
           disabled={act.busy || name.trim().length < 3}
           onClick={async () => {
             const ok = await act.run(
@@ -735,7 +983,9 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
         >
           Save client
         </button>
-        <ErrorNotice error={act.error} />
+        <button className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
       </div>
     </Drawer>
   );

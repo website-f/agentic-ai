@@ -1,18 +1,25 @@
 import { OpsGuide } from "./OpsGuide";
 import { useEffect, useState } from "react";
+import {
+  BuildingsIcon,
+  CoinsIcon,
+  WarningIcon,
+  WrenchIcon,
+} from "@phosphor-icons/react";
 import { api, type AmBoard } from "../api";
 import { FixedAssetsPanel } from "./FixedAssets";
 import { RecordButton } from "./RecordForm";
+import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from "../kit";
 import {
   Chip,
   ErrorNotice,
-  Kpi,
   Loading,
   dateLabel,
   useAction,
   useLoad,
   type Tone,
 } from "../ui";
+import "../styles/biz.css";
 
 /**
  * Asset Management (Fauzan, 26 Oct 2026): 450 rental units, every non-electronic asset, 2 resorts, 6 orchards and the
@@ -71,6 +78,8 @@ const KIND: Record<AmBoard["properties"][number]["kind"], string> = {
   TRAINING: "Training facility",
 };
 const rm = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
+/** Row edge colour for a tone: only problems get one. */
+const edge = (t: Tone) => (t === "crit" || t === "warn" ? t : undefined);
 
 export function AssetsView() {
   const { data, error } = useLoad(() => api.amBoard(), []);
@@ -79,48 +88,52 @@ export function AssetsView() {
   if (!data) return <Loading what="Asset Management" />;
   const k = data.kpis;
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Asset Management</h1>
-        <p className="muted">
-          The group's rental units, office furniture and fittings, resorts,
-          orchards and training facility. Seen only by the Asset Management
-          team, group leadership and the finance staff who oversee it. Test
-          version on made-up data: the Asset Management system will send the
-          real figures.
-        </p>
-      </div>
-      <div className="kpis">
-        <Kpi
+    <div className="page bz-am-page">
+      <PageHead
+        title="Asset Management"
+        sub="The group's rental units, office furniture and fittings, resorts, orchards and training facility. Seen only by the Asset Management team, group leadership and the finance staff who oversee it. Test version on made-up data: the Asset Management system will send the real figures."
+      />
+      <Stats>
+        <Stat
           label="Units let"
           value={`${k.let} / ${k.units}`}
           note={`${k.occupancyPct}% occupied · ${k.vacant} vacant`}
           tone={k.occupancyPct >= 85 ? "ok" : "warn"}
+          icon={<BuildingsIcon size={16} />}
+          onClick={() => setTab("units")}
         />
-        <Kpi
+        <Stat
           label="Rent collected this month"
           value={rm(k.collectedThisMonth)}
           note={`of ${rm(k.billedThisMonth)} billed`}
           tone={k.collectedThisMonth >= k.billedThisMonth * 0.9 ? "ok" : "warn"}
+          icon={<CoinsIcon size={16} />}
+          onClick={() => setTab("monthly")}
         />
-        <Kpi
+        <Stat
           label="Arrears"
           value={rm(k.arrears)}
           note={`${k.arrears90} tenants 90 days or more`}
           tone={k.arrears90 ? "crit" : k.arrears ? "warn" : "ok"}
+          icon={<WarningIcon size={16} />}
+          onClick={() => setTab("rent")}
         />
-        <Kpi
+        <Stat
           label="Work orders open"
           value={k.openOrders}
           note={`${k.overdueOrders} overdue`}
           tone={k.overdueOrders ? "crit" : "ok"}
+          icon={<WrenchIcon size={16} />}
+          onClick={() => setTab("maintenance")}
         />
-      </div>
+      </Stats>
+      {data.can.approveLetters && data.lateUpdates.length > 0 && (
+        <LateUpdates data={data} />
+      )}
       <div
-        className="tabbar"
+        className="tabbar bz-am-tabs"
         role="tablist"
         aria-label="Asset Management sections"
-        style={{ flexWrap: "wrap" }}
       >
         {TABS.map(([t, label]) => (
           <button
@@ -133,16 +146,13 @@ export function AssetsView() {
           </button>
         ))}
       </div>
-      {data.can.approveLetters && data.lateUpdates.length > 0 && (
-        <LateUpdates data={data} />
-      )}
       {tab === "overview" && <Overview data={data} />}
       {tab === "units" && <Units data={data} />}
       {tab === "monthly" && <MonthlyRent data={data} />}
       {tab === "rent" && (
         <>
-          <WhatsAppReminders />
           <Rent data={data} />
+          <WhatsAppReminders />
         </>
       )}
       {tab === "maintenance" && <Maintenance data={data} />}
@@ -165,130 +175,113 @@ function Bar({
   max: number;
   tone: "ok" | "muted";
 }) {
+  const pct = max ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div
-      style={{
-        height: 8,
-        background: "var(--line, #e5e7eb)",
-        borderRadius: 4,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${max ? Math.min(100, (value / max) * 100) : 0}%`,
-          height: "100%",
-          background:
-            tone === "ok" ? "var(--ok, #15803d)" : "var(--muted, #94a3b8)",
-        }}
-      />
-    </div>
+    <span className="bz-meter bz-am-bar" data-tone={tone}>
+      <span style={{ width: `${pct}%` }} />
+    </span>
   );
 }
 
 function Overview({ data }: { data: AmBoard }) {
   const max = Math.max(...data.monthly.map((m) => m.billed), 1);
+  const watches: { label: string; n: number; tone: Tone }[] = [
+    {
+      label: "Tenants 90 days or more in arrears",
+      n: data.kpis.arrears90,
+      tone: "crit",
+    },
+    {
+      label: `Agreements ending within ${data.rule.tenancyWarnDays} days`,
+      n: data.expiring.length,
+      tone: "warn",
+    },
+    {
+      label: `Insurance, assessment or quit rent due within ${data.rule.dueWarnDays} days or overdue`,
+      n: data.dues.length,
+      tone: "warn",
+    },
+    {
+      label: `Units vacant over ${data.rule.vacantWarnDays} days`,
+      n: data.vacantLong.length,
+      tone: "warn",
+    },
+    {
+      label: "Licences due within 60 days (resorts, orchards, training)",
+      n: data.properties.reduce((n, p) => n + p.licencesDue.length, 0),
+      tone: "warn",
+    },
+    {
+      label: "Assets not checked in the last 12 months",
+      n: data.assets.notChecked,
+      tone: "warn",
+    },
+    {
+      label: "Disposals waiting for approval",
+      n: data.assets.disposalPending.length,
+      tone: "warn",
+    },
+  ];
+  // Exceptions first: anything that needs attention comes before what is clear.
+  const ordered = [
+    ...watches.filter((w) => w.n),
+    ...watches.filter((w) => !w.n),
+  ];
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Units by type</h3>
-        </div>
-        <div className="list">
-          {data.byType.map((t) => (
-            <div
-              key={t.type}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}
-            >
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <span>{TYPE[t.type]}</span>
-                <span className="muted small">
-                  {t.let} of {t.units} let · {t.vacant} vacant ·{" "}
-                  {t.occupancyPct}%
-                </span>
-              </div>
-              <Bar value={t.let} max={t.units} tone="ok" />
-            </div>
+      <Card title="Watch list" sub="What needs attention first">
+        <ul className="bz-am-watch">
+          {ordered.map((w) => (
+            <Watch key={w.label} label={w.label} n={w.n} tone={w.tone} />
           ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Rent billed and collected</h3>
-          <span className="muted small">Last 6 months</span>
-        </div>
-        <div className="list">
-          {data.monthly.map((m) => (
-            <div
-              key={m.period}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}
-            >
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <span>{m.period}</span>
-                <span className="muted small">
-                  {rm(m.collected)} of {rm(m.billed)} (
-                  {m.billed ? Math.round((m.collected / m.billed) * 100) : 0}%)
-                </span>
-              </div>
-              <Bar value={m.collected} max={max} tone="ok" />
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Watch list</h3>
-        </div>
-        <div className="list">
-          <Watch
-            label={`Agreements ending within ${data.rule.tenancyWarnDays} days`}
-            n={data.expiring.length}
-            tone="warn"
-          />
-          <Watch
-            label={`Insurance, assessment or quit rent due within ${data.rule.dueWarnDays} days or overdue`}
-            n={data.dues.length}
-            tone="warn"
-          />
-          <Watch
-            label={`Units vacant over ${data.rule.vacantWarnDays} days`}
-            n={data.vacantLong.length}
-            tone="warn"
-          />
-          <Watch
-            label="Tenants 90 days or more in arrears"
-            n={data.kpis.arrears90}
-            tone="crit"
-          />
-          <Watch
-            label="Licences due within 60 days (resorts, orchards, training)"
-            n={data.properties.reduce((n, p) => n + p.licencesDue.length, 0)}
-            tone="warn"
-          />
-          <Watch
-            label="Assets not checked in the last 12 months"
-            n={data.assets.notChecked}
-            tone="warn"
-          />
-          <Watch
-            label="Disposals waiting for approval"
-            n={data.assets.disposalPending.length}
-            tone="warn"
-          />
-        </div>
-      </section>
+        </ul>
+      </Card>
+      <div className="bz-two">
+        <Card title="Units by type">
+          <ul className="bz-am-bars">
+            {data.byType.map((t) => (
+              <li key={t.type}>
+                <div className="bz-am-bar-head">
+                  <span className="bz-am-bar-label">{TYPE[t.type]}</span>
+                  <span className="bz-sub">
+                    {t.let} of {t.units} let · {t.vacant} vacant ·{" "}
+                    <strong className="bz-am-pct">{t.occupancyPct}%</strong>
+                  </span>
+                </div>
+                <Bar value={t.let} max={t.units} tone="ok" />
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Rent billed and collected" sub="Last 6 months">
+          <ul className="bz-am-bars">
+            {data.monthly.map((m) => (
+              <li key={m.period}>
+                <div className="bz-am-bar-head">
+                  <span className="bz-am-bar-label">{m.period}</span>
+                  <span className="bz-sub">
+                    {rm(m.collected)} of {rm(m.billed)} (
+                    {m.billed ? Math.round((m.collected / m.billed) * 100) : 0}
+                    %)
+                  </span>
+                </div>
+                <Bar value={m.collected} max={max} tone="ok" />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
     </>
   );
 }
 
 function Watch({ label, n, tone }: { label: string; n: number; tone: Tone }) {
   return (
-    <div className="list-item">
-      <span>{label}</span>
-      <Chip tone={n ? tone : "ok"}>{n}</Chip>
-    </div>
+    <li className="bz-am-watch-item" data-tone={n ? tone : "ok"}>
+      <span className="bz-am-watch-n">{n}</span>
+      <span className="bz-am-watch-label">{label}</span>
+      <Chip tone={n ? tone : "ok"}>{n ? "Needs attention" : "Clear"}</Chip>
+    </li>
   );
 }
 
@@ -306,13 +299,16 @@ function Units({ data }: { data: AmBoard }) {
           .includes(q.toLowerCase())),
   );
   return (
-    <section className="panel">
-      <div
-        className="row"
-        style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}
-      >
+    <>
+      <Toolbar end={<RecordButton kind="amUnit" label="Add unit" primary />}>
+        <Search
+          value={q}
+          onChange={setQ}
+          placeholder="Unit, tenant or town"
+          label="Search"
+        />
         <select
-          className="select"
+          className="select bz-filter"
           aria-label="Type"
           value={type}
           onChange={(e) => setType(e.target.value)}
@@ -325,7 +321,7 @@ function Units({ data }: { data: AmBoard }) {
           ))}
         </select>
         <select
-          className="select"
+          className="select bz-filter"
           aria-label="Status"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -337,57 +333,54 @@ function Units({ data }: { data: AmBoard }) {
             </option>
           ))}
         </select>
-        <input
-          className="input"
-          aria-label="Search"
-          placeholder="Unit, tenant or town"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <RecordButton kind="amUnit" label="Add unit" primary />
-      </div>
-      <div className="muted small" style={{ marginBottom: 6 }}>
-        {rows.length} units
-      </div>
-      <div className="list">
-        {rows.slice(0, 100).map((u) => (
-          <div
-            key={u.id}
-            className="list-item"
-            style={{ flexWrap: "wrap", gap: 6 }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>
-                {u.code} · {u.name}
+      </Toolbar>
+      <Card title="Units" actions={<span className="bz-count">{rows.length} units</span>} flush>
+        {rows.length === 0 && <Empty title="No unit matches." />}
+        <ul className="bz-rows">
+          {rows.slice(0, 100).map((u) => (
+            <li key={u.id}>
+              <div className="bz-row bz-am-row" data-tone={edge(STATUS[u.status][0])}>
+                <div className="bz-row-main">
+                  <span className="bz-row-title">
+                    <span className="mono">{u.code}</span> · {u.name}
+                  </span>
+                  <span className="bz-row-meta">
+                    {u.tenant
+                      ? `${u.tenant}${u.internal ? " (group)" : ""} · until ${dateLabel(u.endOn)}`
+                      : u.vacantDays != null
+                        ? `vacant ${u.vacantDays} days`
+                        : "—"}
+                  </span>
+                </div>
+                <div className="bz-am-money">
+                  <span className="bz-amt">{rm(u.rent)}</span>
+                  <span className="bz-sub">a month</span>
+                  {u.owed ? (
+                    <span className="bz-am-owes">owes {rm(u.owed)}</span>
+                  ) : null}
+                </div>
+                <div className="bz-am-side">
+                  <Chip tone={STATUS[u.status][0]}>{STATUS[u.status][1]}</Chip>
+                  <div className="bz-actions">
+                    <RecordButton kind="amUnit" id={u.id} label="Edit unit" />
+                    <RecordButton
+                      kind="amTenancy"
+                      id={u.id}
+                      label={u.tenant ? "Tenant and agreement" : "Let this unit"}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="muted small">
-                {u.tenant
-                  ? `${u.tenant}${u.internal ? " (group)" : ""} · until ${dateLabel(u.endOn)}`
-                  : u.vacantDays != null
-                    ? `vacant ${u.vacantDays} days`
-                    : "—"}{" "}
-                · {rm(u.rent)} a month
-                {u.owed ? ` · owes ${rm(u.owed)}` : ""}
-              </div>
-            </div>
-            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              <Chip tone={STATUS[u.status][0]}>{STATUS[u.status][1]}</Chip>
-              <RecordButton kind="amUnit" id={u.id} label="Edit unit" />
-              <RecordButton
-                kind="amTenancy"
-                id={u.id}
-                label={u.tenant ? "Tenant and agreement" : "Let this unit"}
-              />
-            </div>
-          </div>
-        ))}
+            </li>
+          ))}
+        </ul>
         {rows.length > 100 && (
-          <div className="muted small">
+          <p className="bz-note bz-am-more">
             Showing the first 100. Narrow the search to see others.
-          </div>
+          </p>
         )}
-      </div>
-    </section>
+      </Card>
+    </>
   );
 }
 
@@ -418,41 +411,46 @@ function LateUpdates({ data }: { data: AmBoard }) {
   const [all, setAll] = useState(false);
   const rows = all ? data.lateUpdates : data.lateUpdates.slice(0, 5);
   return (
-    <section className="panel" aria-label="Late rent updates">
-      <div className="panel-head">
-        <h3>Rent updates late: {data.lateUpdates.length}</h3>
-        <span className="muted small">
-          Unpaid units the rental team has not updated in 10 days. Shown to you
-          as Asset Director.
-        </span>
+    <section className="k-card bz-am-alert" aria-label="Late rent updates">
+      <div className="k-card-head">
+        <div className="k-card-title">
+          <h2>Rent updates late: {data.lateUpdates.length}</h2>
+          <p>
+            Unpaid units the rental team has not updated in 10 days. Shown to
+            you as Asset Director.
+          </p>
+        </div>
+        {data.lateUpdates.length > 5 && (
+          <div className="k-card-actions">
+            <button className="btn btn-sm" onClick={() => setAll(!all)}>
+              {all ? "Show fewer" : `Show all ${data.lateUpdates.length}`}
+            </button>
+          </div>
+        )}
       </div>
-      <div className="list">
+      <ul className="bz-rows">
         {rows.map((u) => (
-          <div
-            key={u.id}
-            className="list-item"
-            style={{ flexWrap: "wrap", gap: 6 }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>{u.tenant}</div>
-              <div className="muted small">
-                {u.code} · owes {rm2(u.due)} · last update{" "}
-                {u.update!.lastOn ? dateLabel(u.update!.lastOn) : "none"}
+          <li key={u.id}>
+            <div className="bz-row" data-tone="crit">
+              <div className="bz-row-main">
+                <span className="bz-row-title">{u.tenant}</span>
+                <span className="bz-row-meta">
+                  <span className="mono">{u.code}</span> · last update{" "}
+                  {u.update!.lastOn ? dateLabel(u.update!.lastOn) : "none"}
+                </span>
+              </div>
+              <div className="bz-row-side">
+                <span className="bz-amt">owes {rm2(u.due)}</span>
+                <Chip tone="crit">
+                  {u.update!.daysLate
+                    ? `${u.update!.daysLate} days late`
+                    : "Due today"}
+                </Chip>
               </div>
             </div>
-            <Chip tone="crit">
-              {u.update!.daysLate
-                ? `${u.update!.daysLate} days late`
-                : "Due today"}
-            </Chip>
-          </div>
+          </li>
         ))}
-      </div>
-      {data.lateUpdates.length > 5 && (
-        <button className="btn btn-sm" onClick={() => setAll(!all)}>
-          {all ? "Show fewer" : `Show all ${data.lateUpdates.length}`}
-        </button>
-      )}
+      </ul>
     </section>
   );
 }
@@ -517,48 +515,41 @@ function MonthlyRent({ data }: { data: AmBoard }) {
   const paid = rows.reduce((n, r) => n + Math.min(r.m.paid, r.m.amount), 0);
   return (
     <>
-      <div className="kpis">
-        <Kpi label="Paid" value={count("paid")} tone="ok" />
-        <Kpi
-          label="Part paid"
-          value={count("part")}
-          tone={count("part") ? "warn" : "ok"}
-        />
-        <Kpi
-          label="Not paid"
-          value={count("unpaid")}
-          tone={count("unpaid") ? "crit" : "ok"}
-        />
-        <Kpi
-          label="Update due (every 10 days)"
-          value={data.kpis.updatesDue}
-          tone={data.kpis.updatesDue ? "crit" : "ok"}
-          note="Unpaid units not updated in 10 days, all months"
-        />
-        <Kpi
+      <Stats>
+        <Stat
           label="Collected"
           value={rm(paid)}
           note={`of ${rm(billed)} billed`}
           tone={paid >= billed ? "ok" : "warn"}
         />
-      </div>
-      <section className="panel">
-        <div
-          className="row"
-          style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}
-        >
-          <select
-            className="select"
-            aria-label="Month"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-          >
-            {periods.map((p) => (
-              <option key={p} value={p}>
-                {monthLabel(p)}
-              </option>
-            ))}
-          </select>
+        <Stat
+          label="Not paid"
+          value={count("unpaid")}
+          tone={count("unpaid") ? "crit" : "ok"}
+          onClick={() => setShow(show === "unpaid" ? "all" : "unpaid")}
+        />
+        <Stat
+          label="Part paid"
+          value={count("part")}
+          tone={count("part") ? "warn" : "ok"}
+          onClick={() => setShow(show === "part" ? "all" : "part")}
+        />
+        <Stat
+          label="Paid"
+          value={count("paid")}
+          tone="ok"
+          onClick={() => setShow(show === "paid" ? "all" : "paid")}
+        />
+        <Stat
+          label="Update due (every 10 days)"
+          value={data.kpis.updatesDue}
+          tone={data.kpis.updatesDue ? "crit" : "ok"}
+          note="Unpaid units not updated in 10 days, all months"
+          onClick={() => setShow(show === "due" ? "all" : "due")}
+        />
+      </Stats>
+      <Toolbar
+        end={
           <div className="seg" role="group" aria-label="Show">
             {(
               [
@@ -578,87 +569,117 @@ function MonthlyRent({ data }: { data: AmBoard }) {
               </button>
             ))}
           </div>
-          <input
-            className="input"
-            aria-label="Find a tenant or unit"
-            placeholder="Tenant or unit code"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        <p className="muted small" style={{ marginTop: 0 }}>
-          A unit shows as paid only when its payment is recorded. A payment pays
-          the oldest unpaid month first. Until a unit is paid, the rental team
-          updates it at least every 10 days: call, WhatsApp, email or visit,
-          then record what happened.
-        </p>
-        <div className="list">
-          {shown.length === 0 && <div className="empty">No unit matches.</div>}
+        }
+      >
+        <Search
+          value={q}
+          onChange={setQ}
+          placeholder="Tenant or unit code"
+          label="Find a tenant or unit"
+        />
+        <select
+          className="select bz-filter"
+          aria-label="Month"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+        >
+          {periods.map((p) => (
+            <option key={p} value={p}>
+              {monthLabel(p)}
+            </option>
+          ))}
+        </select>
+      </Toolbar>
+      <Card
+        title={period ? monthLabel(period) : "Monthly rent"}
+        sub="A unit shows as paid only when its payment is recorded. A payment pays the oldest unpaid month first. Until a unit is paid, the rental team updates it at least every 10 days: call, WhatsApp, email or visit, then record what happened."
+        actions={<span className="bz-count">{shown.length} units</span>}
+        flush
+      >
+        {shown.length === 0 && <Empty title="No unit matches." />}
+        <ul className="bz-rows">
           {shown.slice(0, 150).map(({ u, m, state }) => (
-            <div
-              key={u.id}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-            >
-              <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  flexWrap: "nowrap",
-                  alignItems: "flex-start",
-                  gap: 6,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{u.tenant}</div>
-                  <div className="muted small">
-                    {u.code} · {u.name} · {rm2(m.amount)}
-                    {state === "part"
-                      ? ` · paid ${rm2(m.paid)}, ${rm2(m.amount - m.paid)} left`
-                      : ""}
+            <li key={u.id}>
+              <div className="bz-row bz-am-row" data-tone={edge(PAY_STATE[state][0])}>
+                <div className="bz-row-main">
+                  <span className="bz-row-title">{u.tenant}</span>
+                  <span className="bz-row-meta">
+                    <span className="mono">{u.code}</span> · {u.name}
                     {state === "paid" && m.paidOn
                       ? ` · paid ${dateLabel(m.paidOn)}`
                       : ""}
                     {u.owed > 0 && state === "paid"
                       ? ` · still owes ${rm2(u.owed)} from earlier`
                       : ""}
+                  </span>
+                </div>
+                <div className="bz-am-money">
+                  <span className="bz-amt">{rm2(m.amount)}</span>
+                  {state === "part" && (
+                    <span className="bz-sub">
+                      paid {rm2(m.paid)}, {rm2(m.amount - m.paid)} left
+                    </span>
+                  )}
+                </div>
+                <div className="bz-am-side">
+                  <div className="bz-chips bz-am-chips">
+                    <Chip tone={PAY_STATE[state][0]}>{PAY_STATE[state][1]}</Chip>
+                    <UpdateChip u={u} />
                   </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-end",
-                    gap: 4,
-                  }}
-                >
-                  <Chip tone={PAY_STATE[state][0]}>{PAY_STATE[state][1]}</Chip>
-                  <UpdateChip u={u} />
-                </div>
-              </div>
-              {u.due > 0 &&
-                (open === u.id ? (
-                  <FollowUpPanel u={u} canRecord={data.can.record} />
-                ) : (
-                  <div>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => setOpen(u.id)}
-                    >
+                  {u.due > 0 && open !== u.id && (
+                    <button className="btn btn-sm" onClick={() => setOpen(u.id)}>
                       Contact or record payment
                     </button>
+                  )}
+                </div>
+                {u.due > 0 && open === u.id && (
+                  <div className="bz-am-expand">
+                    <FollowUpPanel u={u} canRecord={data.can.record} />
                   </div>
-                ))}
-            </div>
+                )}
+              </div>
+            </li>
           ))}
-          {shown.length > 150 && (
-            <div className="muted small">
-              Showing 150 of {shown.length}. Search or filter to narrow.
-            </div>
-          )}
-        </div>
-      </section>
+        </ul>
+        {shown.length > 150 && (
+          <p className="bz-note bz-am-more">
+            Showing 150 of {shown.length}. Search or filter to narrow.
+          </p>
+        )}
+      </Card>
     </>
+  );
+}
+
+/** Arrears by age, from the arrears list itself: how much is owed in each bucket. */
+function Aging({ rows }: { rows: UnitRow[] }) {
+  const buckets = [...new Set(rows.map((a) => a.arrearsBucket))].sort(
+    (a, b) => a - b,
+  );
+  const total = rows.reduce((n, a) => n + a.owed, 0);
+  if (!rows.length) return null;
+  return (
+    <div className="bz-am-aging" aria-label="Arrears by age">
+      {buckets.map((b) => {
+        const inB = rows.filter((a) => a.arrearsBucket === b);
+        const owed = inB.reduce((n, a) => n + a.owed, 0);
+        const tone: Tone = b >= 90 ? "crit" : b >= 30 ? "warn" : "neutral";
+        return (
+          <div key={b} className="bz-am-age" data-tone={tone}>
+            <span className="bz-am-age-label">
+              {b ? `${b}+ days` : "Under 30 days"}
+            </span>
+            <span className="bz-am-age-value">{rm(owed)}</span>
+            <span className="bz-sub">
+              {inB.length} tenant{inB.length === 1 ? "" : "s"}
+            </span>
+            <span className="bz-meter" data-tone={tone === "neutral" ? undefined : tone}>
+              <span style={{ width: `${total ? (owed / total) * 100 : 0}%` }} />
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -679,8 +700,8 @@ function Rent({ data }: { data: AmBoard }) {
   const chosen = data.units.find((u) => u.id === unitId) ?? null;
   return (
     <>
-      <div className="kpis">
-        <Kpi
+      <Stats>
+        <Stat
           label="Cash not yet banked"
           value={data.kpis.cashToBank}
           tone={
@@ -691,228 +712,220 @@ function Rent({ data }: { data: AmBoard }) {
                 : "ok"
           }
         />
-        <Kpi
+        <Stat
           label="Promises to pay broken"
           value={data.kpis.brokenPromises}
           tone={data.kpis.brokenPromises ? "crit" : "ok"}
         />
-        <Kpi
+        <Stat
           label="Letters waiting for the Asset Director"
           value={data.lettersToApprove.length}
           tone={data.lettersToApprove.length ? "warn" : "ok"}
         />
-      </div>
-      {data.can.record && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Record a payment</h3>
-          </div>
-          <p className="muted small">
-            Any rent received: cash, transfer, cheque or online. It pays the
-            oldest unpaid month first. Cash needs the official receipt number
-            and Finance confirms it is banked within {data.rule.cashBankDays}{" "}
-            days.
-          </p>
-          <div style={{ display: "grid", gap: 6 }}>
-            <input
-              className="input"
-              aria-label="Find a tenant or unit"
-              placeholder="Find a tenant or unit code"
-              value={find}
-              onChange={(e) => {
-                setFind(e.target.value);
-                setUnitId("");
-              }}
-            />
-            {!chosen && matches.length > 0 && (
-              <div className="list">
-                {matches.map((u) => (
-                  <button
-                    key={u.id}
-                    className="list-item list-button"
-                    onClick={() => setUnitId(u.id)}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600 }}>{u.tenant}</div>
-                      <div className="muted small">
-                        {u.code} · {u.name} · {rm2(u.rent)} a month
-                      </div>
-                    </div>
-                    <Chip tone={u.due ? "warn" : "ok"}>
-                      {u.due ? `Due ${rm2(u.due)}` : "Nothing due"}
-                    </Chip>
-                  </button>
-                ))}
-              </div>
-            )}
-            {chosen && (
-              <>
-                <div className="small">
-                  <strong>{chosen.tenant}</strong> · {chosen.code} · due{" "}
-                  {rm2(chosen.due)}
-                </div>
-                <PaymentForm
-                  u={chosen}
-                  onDone={() => (setUnitId(""), setFind(""))}
-                />
-              </>
-            )}
-          </div>
-        </section>
-      )}
-      {(data.cashToBank.length > 0 || data.can.bank) && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Payments to confirm in the bank</h3>
-          </div>
-          <div className="list">
-            {!data.cashToBank.length && (
-              <div className="empty">
-                Every payment is confirmed in the bank.
-              </div>
-            )}
-            {data.cashToBank.map((c) => (
-              <CashLine key={c.id} c={c} canBank={data.can.bank} />
-            ))}
-          </div>
-        </section>
-      )}
+      </Stats>
       {data.reversalsToApprove.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Reversals waiting for the Asset Director</h3>
-          </div>
-          <div className="list">
+        <Card
+          title="Reversals waiting for the Asset Director"
+          actions={<span className="bz-count">{data.reversalsToApprove.length}</span>}
+          flush
+        >
+          <ul className="bz-rows">
             {data.reversalsToApprove.map((p) => (
-              <ReversalLine
-                key={p.id}
-                p={p}
-                canDecide={data.can.approveReversals}
-              />
+              <li key={p.id}>
+                <ReversalLine p={p} canDecide={data.can.approveReversals} />
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
       {data.lettersToApprove.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Letters waiting for the Asset Director</h3>
-          </div>
-          <div className="list">
+        <Card
+          title="Letters waiting for the Asset Director"
+          actions={<span className="bz-count">{data.lettersToApprove.length}</span>}
+          flush
+        >
+          <ul className="bz-rows">
             {data.lettersToApprove.map((l) => (
-              <LetterLine
-                key={l.id}
-                l={l}
-                canDecide={data.can.approveLetters}
-              />
+              <li key={l.id}>
+                <LetterLine l={l} canDecide={data.can.approveLetters} />
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Arrears</h3>
-          <span className="muted small">
-            Open a tenant to record a payment or a follow-up. Letters and any
-            legal step need the Asset Director; nothing goes to lawyers
-            automatically.
-          </span>
-        </div>
-        <div className="list">
-          {data.arrears.length === 0 && (
-            <div className="empty">No arrears.</div>
-          )}
+      <Card
+        title="Arrears"
+        sub="Open a tenant to record a payment or a follow-up. Letters and any legal step need the Asset Director; nothing goes to lawyers automatically."
+        actions={<span className="bz-amt">{rm(data.kpis.arrears)}</span>}
+        flush
+      >
+        {data.arrears.length > 0 && (
+          <div className="bz-am-aging-wrap">
+            <Aging rows={data.arrears} />
+          </div>
+        )}
+        {data.arrears.length === 0 && <Empty title="No arrears." />}
+        <ul className="bz-rows">
           {data.arrears.map((a) => (
-            <ArrearsLine key={a.id} a={a} canRecord={data.can.record} />
+            <li key={a.id}>
+              <ArrearsLine a={a} canRecord={data.can.record} />
+            </li>
           ))}
-        </div>
-      </section>
+        </ul>
+      </Card>
+      <div className="bz-two">
+        {data.can.record && (
+          <Card
+            title="Record a payment"
+            sub={`Any rent received: cash, transfer, cheque or online. It pays the oldest unpaid month first. Cash needs the official receipt number and Finance confirms it is banked within ${data.rule.cashBankDays} days.`}
+          >
+            <div className="bz-stack">
+              <Search
+                value={find}
+                onChange={(v) => {
+                  setFind(v);
+                  setUnitId("");
+                }}
+                placeholder="Find a tenant or unit code"
+                label="Find a tenant or unit"
+              />
+              {!chosen && matches.length > 0 && (
+                <ul className="bz-rows bz-am-picker">
+                  {matches.map((u) => (
+                    <li key={u.id}>
+                      <button className="bz-row" onClick={() => setUnitId(u.id)}>
+                        <span className="bz-row-main">
+                          <span className="bz-row-title">{u.tenant}</span>
+                          <span className="bz-row-meta">
+                            {u.code} · {u.name} · {rm2(u.rent)} a month
+                          </span>
+                        </span>
+                        <span className="bz-row-side">
+                          <Chip tone={u.due ? "warn" : "ok"}>
+                            {u.due ? `Due ${rm2(u.due)}` : "Nothing due"}
+                          </Chip>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {chosen && (
+                <div className="bz-act">
+                  <div className="bz-am-chosen">
+                    <strong>{chosen.tenant}</strong>
+                    <span className="bz-sub">
+                      {chosen.code} · due {rm2(chosen.due)}
+                    </span>
+                  </div>
+                  <PaymentForm
+                    u={chosen}
+                    onDone={() => (setUnitId(""), setFind(""))}
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+        {(data.cashToBank.length > 0 || data.can.bank) && (
+          <Card
+            title="Payments to confirm in the bank"
+            actions={<span className="bz-count">{data.cashToBank.length}</span>}
+            flush
+          >
+            {!data.cashToBank.length && (
+              <Empty title="Every payment is confirmed in the bank." />
+            )}
+            <ul className="bz-rows">
+              {data.cashToBank.map((c) => (
+                <li key={c.id}>
+                  <CashLine c={c} canBank={data.can.bank} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
       {data.recentPayments.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Payments recorded</h3>
-          </div>
-          <div className="list">
+        <Card title="Payments recorded" flush>
+          <ul className="bz-rows">
             {data.recentPayments.map((p) => (
-              <PaymentLine key={p.id} p={p} canReverse={data.can.record} />
+              <li key={p.id}>
+                <PaymentLine p={p} canReverse={data.can.record} />
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Group office and state branches</h3>
-          <span className="muted small">
-            They rent from Asset Management and pay like any tenant, from their
-            own company's account.
-          </span>
-        </div>
-        <div className="list">
+      <Card
+        title="Group office and state branches"
+        sub="They rent from Asset Management and pay like any tenant, from their own company's account."
+        flush
+      >
+        <ul className="bz-rows">
           {data.internal.map((u) => (
-            <div
-              key={u.id}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{u.tenant}</div>
-                <div className="muted small">
-                  {u.code} · {u.name} · {rm(u.rent)} a month
+            <li key={u.id}>
+              <div className="bz-row" data-tone={u.owed ? "warn" : undefined}>
+                <div className="bz-row-main">
+                  <span className="bz-row-title">{u.tenant}</span>
+                  <span className="bz-row-meta">
+                    {u.code} · {u.name} · {rm(u.rent)} a month
+                  </span>
+                </div>
+                <div className="bz-row-side">
+                  <Chip tone={u.owed ? "warn" : "ok"}>
+                    {u.owed ? `Owes ${rm(u.owed)}` : "Paid up"}
+                  </Chip>
                 </div>
               </div>
-              <Chip tone={u.owed ? "warn" : "ok"}>
-                {u.owed ? `Owes ${rm(u.owed)}` : "Paid up"}
-              </Chip>
-            </div>
+            </li>
           ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Agreements ending soon</h3>
-        </div>
-        <div className="list">
-          {data.expiring.slice(0, 40).map((e) => (
-            <div
-              key={e.unitId}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{e.tenant}</div>
-                <div className="muted small">
-                  {e.code} · ends {dateLabel(e.endOn)}
+        </ul>
+      </Card>
+      <div className="bz-two">
+        <Card title="Agreements ending soon" flush>
+          {data.expiring.length === 0 && <Empty title="None ending soon." />}
+          <ul className="bz-rows">
+            {data.expiring.slice(0, 40).map((e) => (
+              <li key={e.unitId}>
+                <div className="bz-row">
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">{e.tenant}</span>
+                    <span className="bz-row-meta">
+                      {e.code} · ends {dateLabel(e.endOn)}
+                    </span>
+                  </div>
+                  <div className="bz-row-side">
+                    <Chip tone={e.days <= 30 ? "crit" : "warn"}>{e.days} days</Chip>
+                  </div>
                 </div>
-              </div>
-              <Chip tone={e.days <= 30 ? "crit" : "warn"}>{e.days} days</Chip>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Insurance, assessment and quit rent</h3>
-        </div>
-        <div className="list">
-          {data.dues.slice(0, 40).map((d) => (
-            <div
-              key={`${d.unitId}-${d.what}`}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{d.what}</div>
-                <div className="muted small">
-                  {d.code} · {d.name} · {dateLabel(d.on)}
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Insurance, assessment and quit rent" flush>
+          {data.dues.length === 0 && <Empty title="Nothing due." />}
+          <ul className="bz-rows">
+            {data.dues.slice(0, 40).map((d) => (
+              <li key={`${d.unitId}-${d.what}`}>
+                <div className="bz-row">
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">{d.what}</span>
+                    <span className="bz-row-meta">
+                      {d.code} · {d.name} · {dateLabel(d.on)}
+                    </span>
+                  </div>
+                  <div className="bz-row-side">
+                    <Chip tone={d.days < 0 ? "crit" : "warn"}>
+                      {d.days < 0 ? `${-d.days} days overdue` : `${d.days} days`}
+                    </Chip>
+                  </div>
                 </div>
-              </div>
-              <Chip tone={d.days < 0 ? "crit" : "warn"}>
-                {d.days < 0 ? `${-d.days} days overdue` : `${d.days} days`}
-              </Chip>
-            </div>
-          ))}
-        </div>
-      </section>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
     </>
   );
 }
@@ -927,39 +940,38 @@ function Maintenance({ data }: { data: AmBoard }) {
           ? ["warn", "In progress"]
           : ["neutral", "Open"];
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Work orders</h3>
-        <span className="muted small">
-          Each closes with photos before and after, the cost and the contractor.
-        </span>
-        <RecordButton kind="amWorkOrder" label="Add work order" />
-      </div>
-      <div className="list">
+    <Card
+      title="Work orders"
+      sub="Each closes with photos before and after, the cost and the contractor."
+      actions={<RecordButton kind="amWorkOrder" label="Add work order" />}
+      flush
+    >
+      {data.workOrders.length === 0 && <Empty title="No work orders." />}
+      <ul className="bz-rows">
         {data.workOrders.map((w) => (
-          <div
-            key={w.id}
-            className="list-item"
-            style={{ flexWrap: "wrap", gap: 6 }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>{w.title}</div>
-              <div className="muted small">
-                {w.place} ·{" "}
-                {w.source === "tenant" ? "tenant complaint" : w.source} · due{" "}
-                {dateLabel(w.dueOn)}
-                {w.contractor ? ` · ${w.contractor}` : ""}
-                {w.cost != null ? ` · ${rm(w.cost)}` : ""}
+          <li key={w.id}>
+            <div className="bz-row bz-am-row" data-tone={edge(tone(w)[0])}>
+              <div className="bz-row-main">
+                <span className="bz-row-title">{w.title}</span>
+                <span className="bz-row-meta">
+                  {w.place} ·{" "}
+                  {w.source === "tenant" ? "tenant complaint" : w.source}
+                  {w.contractor ? ` · ${w.contractor}` : ""}
+                </span>
+              </div>
+              <div className="bz-am-money">
+                <span className="bz-am-due">due {dateLabel(w.dueOn)}</span>
+                {w.cost != null && <span className="bz-sub">{rm(w.cost)}</span>}
+              </div>
+              <div className="bz-am-side">
+                <Chip tone={tone(w)[0]}>{tone(w)[1]}</Chip>
+                <RecordButton kind="amWorkOrder" id={w.id} />
               </div>
             </div>
-            <div className="row" style={{ gap: 6 }}>
-              <Chip tone={tone(w)[0]}>{tone(w)[1]}</Chip>
-              <RecordButton kind="amWorkOrder" id={w.id} />
-            </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -974,162 +986,177 @@ function Assets({ data }: { data: AmBoard }) {
   );
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Register</h3>
-          <span className="muted small">
-            {data.assets.count} in use · {rm(data.assets.cost)} at cost ·{" "}
-            {data.assets.poor} in poor condition
-          </span>
-          <RecordButton kind="amAsset" label="Add asset" />
-        </div>
-        <div className="list">
-          {data.assets.byCategory.map((c) => (
-            <div key={c.category} className="list-item">
-              <span>{CATEGORY[c.category]}</span>
-              <span className="muted small">
-                {c.count} · {rm(c.cost)}
-              </span>
-            </div>
-          ))}
-        </div>
-        <p className="muted small">
-          Computers and other electronic items are not on this register until
-          the group decides who owns them. Buying and disposal are decided by
-          Asset Management, with approval as in the group approval structure.
-        </p>
-      </section>
-      {data.assets.disposalPending.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3>Disposals waiting for approval</h3>
-          </div>
-          <div className="list">
-            {data.assets.disposalPending.map((a) => (
-              <div key={a.id} className="list-item">
-                <span>
-                  {a.tag} · {a.description} · {a.location}
-                </span>
-                <Chip tone="warn">Waiting</Chip>
+      <Card
+        title="Register"
+        sub={`${data.assets.count} in use · ${rm(data.assets.cost)} at cost · ${data.assets.poor} in poor condition`}
+        actions={<RecordButton kind="amAsset" label="Add asset" />}
+      >
+        <div className="bz-stack">
+          <div className="bz-am-cats">
+            {data.assets.byCategory.map((c) => (
+              <div key={c.category} className="bz-am-cat">
+                <span className="bz-sub">{CATEGORY[c.category]}</span>
+                <span className="bz-am-cat-n">{c.count}</span>
+                <span className="bz-sub">{rm(c.cost)}</span>
               </div>
             ))}
           </div>
-        </section>
-      )}
-      <section className="panel">
-        <input
-          className="input"
-          aria-label="Search assets"
-          placeholder="Tag, item or place"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <div className="list" style={{ marginTop: 8 }}>
-          {rows.slice(0, 60).map((a) => (
-            <div
-              key={a.id}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
-                  {a.tag} · {a.description}
-                </div>
-                <div className="muted small">
-                  {a.location} · {rm(a.cost)} · bought {dateLabel(a.boughtOn)} ·
-                  checked{" "}
-                  {a.lastCheckedOn ? dateLabel(a.lastCheckedOn) : "never"}
-                </div>
-              </div>
-              <div className="row" style={{ gap: 6 }}>
-                <Chip
-                  tone={
-                    a.status === "disposed"
-                      ? "neutral"
-                      : a.condition === "poor"
-                        ? "warn"
-                        : "ok"
-                  }
-                >
-                  {a.status === "disposed"
-                    ? "Disposed"
-                    : a.status === "disposal_pending"
-                      ? "Disposal pending"
-                      : a.condition}
-                </Chip>
-                {a.status !== "disposed" && (
-                  <RecordButton kind="amAsset" id={a.id} />
-                )}
-              </div>
-            </div>
-          ))}
-          {rows.length > 60 && (
-            <div className="muted small">
-              Showing 60 of {rows.length}. Search to narrow.
-            </div>
-          )}
+          <p className="bz-note">
+            Computers and other electronic items are not on this register until
+            the group decides who owns them. Buying and disposal are decided by
+            Asset Management, with approval as in the group approval structure.
+          </p>
         </div>
-      </section>
+      </Card>
+      {data.assets.disposalPending.length > 0 && (
+        <Card title="Disposals waiting for approval" flush>
+          <ul className="bz-rows">
+            {data.assets.disposalPending.map((a) => (
+              <li key={a.id}>
+                <div className="bz-row" data-tone="warn">
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">
+                      <span className="mono">{a.tag}</span> · {a.description}
+                    </span>
+                    <span className="bz-row-meta">{a.location}</span>
+                  </div>
+                  <div className="bz-row-side">
+                    <Chip tone="warn">Waiting</Chip>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <Card
+        title="Assets"
+        actions={
+          <Search
+            value={q}
+            onChange={setQ}
+            placeholder="Tag, item or place"
+            label="Search assets"
+          />
+        }
+        flush
+      >
+        {rows.length === 0 && <Empty title="No asset matches." />}
+        <ul className="bz-rows">
+          {rows.slice(0, 60).map((a) => {
+            const t: Tone =
+              a.status === "disposed"
+                ? "neutral"
+                : a.condition === "poor"
+                  ? "warn"
+                  : "ok";
+            return (
+              <li key={a.id}>
+                <div className="bz-row bz-am-row" data-tone={edge(t)}>
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">
+                      <span className="mono">{a.tag}</span> · {a.description}
+                    </span>
+                    <span className="bz-row-meta">
+                      {a.location} · bought {dateLabel(a.boughtOn)} · checked{" "}
+                      {a.lastCheckedOn ? dateLabel(a.lastCheckedOn) : "never"}
+                    </span>
+                  </div>
+                  <div className="bz-am-money">
+                    <span className="bz-amt">{rm(a.cost)}</span>
+                  </div>
+                  <div className="bz-am-side">
+                    <Chip tone={t}>
+                      {a.status === "disposed"
+                        ? "Disposed"
+                        : a.status === "disposal_pending"
+                          ? "Disposal pending"
+                          : a.condition}
+                    </Chip>
+                    {a.status !== "disposed" && (
+                      <RecordButton kind="amAsset" id={a.id} />
+                    )}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {rows.length > 60 && (
+          <p className="bz-note bz-am-more">
+            Showing 60 of {rows.length}. Search to narrow.
+          </p>
+        )}
+      </Card>
     </>
   );
 }
 
 function Properties({ data }: { data: AmBoard }) {
   return (
-    <>
-      {data.properties.map((p) => (
-        <section key={p.id} className="panel">
-          <div className="panel-head">
-            <div style={{ minWidth: 0 }}>
-              <h3>{p.name}</h3>
-              <div className="muted small">
-                {KIND[p.kind]} · {p.town}, {p.state} · {p.detail}
-              </div>
-            </div>
-          </div>
-          <div className="list">
-            <div className="list-item">
-              <span>Last 6 months</span>
-              <span className="muted small">
-                income {rm(p.income6)} · cost {rm(p.cost6)} ·{" "}
-                {p.income6 >= p.cost6 ? "surplus" : "deficit"}{" "}
-                {rm(Math.abs(p.income6 - p.cost6))}
-              </span>
-            </div>
-            {p.last && (
-              <div className="list-item">
-                <span>{p.last.period}</span>
-                <span className="muted small">
-                  {p.last.occupancyPct != null
-                    ? `${p.last.occupancyPct}% occupied · `
-                    : ""}
-                  {p.last.harvestKg != null
-                    ? `${p.last.harvestKg.toLocaleString()} kg harvested · `
-                    : ""}
-                  {p.last.bookings != null
-                    ? `${p.last.bookings} bookings · `
-                    : ""}
-                  income {rm(p.last.income)}
-                </span>
-              </div>
-            )}
-            {p.licences.map((l) => {
-              const due = p.licencesDue.find((d) => d.name === l.name);
-              return (
-                <div key={l.name} className="list-item">
-                  <span>{l.name}</span>
-                  <Chip tone={due ? (due.days <= 30 ? "crit" : "warn") : "ok"}>
-                    {due
-                      ? `${due.days} days left`
-                      : `to ${dateLabel(l.expiresOn)}`}
-                  </Chip>
+    <div className="bz-am-props">
+      {data.properties.map((p) => {
+        const surplus = p.income6 >= p.cost6;
+        return (
+          <Card
+            key={p.id}
+            title={p.name}
+            sub={`${KIND[p.kind]} · ${p.town}, ${p.state} · ${p.detail}`}
+          >
+            <div className="bz-stack">
+              <div className="bz-am-figs" aria-label="Last 6 months">
+                <div>
+                  <span className="bz-sub">Income, last 6 months</span>
+                  <span className="bz-amt">{rm(p.income6)}</span>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </>
+                <div>
+                  <span className="bz-sub">Cost</span>
+                  <span className="bz-amt">{rm(p.cost6)}</span>
+                </div>
+                <div data-tone={surplus ? "ok" : "crit"}>
+                  <span className="bz-sub">{surplus ? "Surplus" : "Deficit"}</span>
+                  <span className="bz-amt">{rm(Math.abs(p.income6 - p.cost6))}</span>
+                </div>
+              </div>
+              {p.last && (
+                <div className="bz-am-last">
+                  <span className="bz-am-last-period">{p.last.period}</span>
+                  <span className="bz-sub">
+                    {p.last.occupancyPct != null
+                      ? `${p.last.occupancyPct}% occupied · `
+                      : ""}
+                    {p.last.harvestKg != null
+                      ? `${p.last.harvestKg.toLocaleString()} kg harvested · `
+                      : ""}
+                    {p.last.bookings != null
+                      ? `${p.last.bookings} bookings · `
+                      : ""}
+                    income {rm(p.last.income)}
+                  </span>
+                </div>
+              )}
+              {p.licences.length > 0 && (
+                <ul className="bz-am-licences" aria-label="Licences">
+                  {p.licences.map((l) => {
+                    const due = p.licencesDue.find((d) => d.name === l.name);
+                    return (
+                      <li key={l.name}>
+                        <span>{l.name}</span>
+                        <Chip tone={due ? (due.days <= 30 ? "crit" : "warn") : "ok"}>
+                          {due
+                            ? `${due.days} days left`
+                            : `to ${dateLabel(l.expiresOn)}`}
+                        </Chip>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1142,48 +1169,56 @@ function PaymentForm({ u, onDone }: { u: UnitRow; onDone?: () => void }) {
     ref: "",
   });
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <input
-          className="input"
-          aria-label="Amount received"
-          placeholder="Amount (RM)"
-          inputMode="decimal"
-          value={f.amount}
-          onChange={(e) => setF({ ...f, amount: e.target.value })}
-        />
-        <select
-          className="input"
-          aria-label="How it was paid"
-          value={f.method}
-          onChange={(e) =>
-            setF({ ...f, method: e.target.value as keyof typeof METHOD })
-          }
-        >
-          {Object.entries(METHOD).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-        <input
-          className="input"
-          type="date"
-          aria-label="Date received"
-          value={f.on}
-          onChange={(e) => setF({ ...f, on: e.target.value })}
-        />
-      </div>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        {f.method !== "CASH" && (
+    <div className="bz-stack">
+      <div className="bz-am-fields">
+        <label className="field">
+          <span className="label">Amount received</span>
           <input
             className="input"
-            aria-label="Bank reference or cheque number"
-            placeholder="Bank ref or cheque no."
-            value={f.ref}
-            onChange={(e) => setF({ ...f, ref: e.target.value })}
+            placeholder="Amount (RM)"
+            inputMode="decimal"
+            value={f.amount}
+            onChange={(e) => setF({ ...f, amount: e.target.value })}
           />
+        </label>
+        <label className="field">
+          <span className="label">How it was paid</span>
+          <select
+            className="select"
+            value={f.method}
+            onChange={(e) =>
+              setF({ ...f, method: e.target.value as keyof typeof METHOD })
+            }
+          >
+            {Object.entries(METHOD).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Date received</span>
+          <input
+            className="input"
+            type="date"
+            value={f.on}
+            onChange={(e) => setF({ ...f, on: e.target.value })}
+          />
+        </label>
+        {f.method !== "CASH" && (
+          <label className="field">
+            <span className="label">Bank reference or cheque number</span>
+            <input
+              className="input"
+              placeholder="Bank ref or cheque no."
+              value={f.ref}
+              onChange={(e) => setF({ ...f, ref: e.target.value })}
+            />
+          </label>
         )}
+      </div>
+      <div className="bz-actions">
         <button
           className="btn btn-sm btn-primary"
           disabled={act.busy || !f.amount}
@@ -1203,11 +1238,11 @@ function PaymentForm({ u, onDone }: { u: UnitRow; onDone?: () => void }) {
         >
           Record payment
         </button>
+        <span className="bz-note">
+          The app numbers the official receipt; give it to the tenant. Finance
+          confirms every payment against the bank.
+        </span>
       </div>
-      <span className="muted small">
-        The app numbers the official receipt; give it to the tenant. Finance
-        confirms every payment against the bank.
-      </span>
       <ErrorNotice error={act.error} />
     </div>
   );
@@ -1226,40 +1261,46 @@ function FollowUpForm({
     setF((x) => ({ ...x, action }));
   }, [action]);
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <select
-          className="input"
-          aria-label="What was done"
-          value={f.action}
-          onChange={(e) =>
-            setF({ ...f, action: e.target.value as keyof typeof FOLLOW })
-          }
-        >
-          {Object.entries(FOLLOW).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
+    <div className="bz-stack">
+      <div className="bz-am-fields">
+        <label className="field">
+          <span className="label">What was done</span>
+          <select
+            className="select"
+            value={f.action}
+            onChange={(e) =>
+              setF({ ...f, action: e.target.value as keyof typeof FOLLOW })
+            }
+          >
+            {Object.entries(FOLLOW).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
         {f.action === "PROMISE" && (
+          <label className="field">
+            <span className="label">Promised to pay on</span>
+            <input
+              className="input"
+              type="date"
+              value={f.promiseOn}
+              onChange={(e) => setF({ ...f, promiseOn: e.target.value })}
+            />
+          </label>
+        )}
+        <label className="field bz-am-wide">
+          <span className="label">What happened</span>
           <input
             className="input"
-            type="date"
-            aria-label="Promised to pay on"
-            value={f.promiseOn}
-            onChange={(e) => setF({ ...f, promiseOn: e.target.value })}
+            placeholder="What happened"
+            value={f.note}
+            onChange={(e) => setF({ ...f, note: e.target.value })}
           />
-        )}
+        </label>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <input
-          className="input"
-          aria-label="What happened"
-          placeholder="What happened"
-          value={f.note}
-          onChange={(e) => setF({ ...f, note: e.target.value })}
-        />
+      <div className="bz-actions">
         <button
           className="btn btn-sm"
           disabled={
@@ -1318,12 +1359,12 @@ function ContactBar({
   ].join("\n\n");
   if (!u.tenantPhone && !u.tenantEmail)
     return (
-      <div className="muted small">
+      <p className="bz-note">
         No phone or email on file. Add them under Units, Tenant and agreement.
-      </div>
+      </p>
     );
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="bz-actions">
       {u.tenantPhone && (
         <>
           <a
@@ -1376,103 +1417,105 @@ function FollowUpPanel({ u, canRecord }: { u: UnitRow; canRecord: boolean }) {
   const [action, setAction] = useState<keyof typeof FOLLOW>("CALL");
   if (!canRecord)
     return (
-      <div className="muted small">
+      <p className="bz-note">
         The rental team contacts tenants and records payments.
-      </div>
+      </p>
     );
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div className="muted small">
-        Last update {u.update?.lastOn ? dateLabel(u.update.lastOn) : "none yet"}
-        . Update at least every 10 days until paid.
+    <div className="bz-act bz-am-follow">
+      <div className="bz-sec">
+        <div className="bz-sec-head">
+          <h3>Contact the tenant</h3>
+          <span className="bz-sub">
+            Last update{" "}
+            {u.update?.lastOn ? dateLabel(u.update.lastOn) : "none yet"}. Update
+            at least every 10 days until paid.
+          </span>
+        </div>
+        <ContactBar u={u} onContact={setAction} />
       </div>
-      <ContactBar u={u} onContact={setAction} />
-      <div className="label">What happened</div>
-      <FollowUpForm u={u} action={action} />
-      <div className="label">Payment received</div>
-      <PaymentForm u={u} />
+      <div className="bz-sec bz-am-split">
+        <h3>What happened</h3>
+        <FollowUpForm u={u} action={action} />
+      </div>
+      <div className="bz-sec bz-am-split">
+        <h3>Payment received</h3>
+        <PaymentForm u={u} />
+      </div>
     </div>
   );
 }
 
 function ArrearsLine({ a, canRecord }: { a: UnitRow; canRecord: boolean }) {
   const [open, setOpen] = useState(false);
+  const tone: Tone =
+    a.promise?.broken || a.arrearsBucket >= 90
+      ? "crit"
+      : a.arrearsBucket >= 30
+        ? "warn"
+        : "neutral";
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
+    <div className="bz-am-item" data-open={open || undefined}>
       <button
-        className="row"
-        style={{
-          justifyContent: "space-between",
-          gap: 6,
-          flexWrap: "wrap",
-          background: "none",
-          border: 0,
-          padding: 0,
-          textAlign: "left",
-          color: "inherit",
-          cursor: "pointer",
-        }}
+        className="bz-row bz-am-row"
+        data-tone={edge(tone)}
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
+        <span className="bz-row-main">
+          <span className="bz-row-title">
             {a.tenant}
             {a.internal ? " (group)" : ""}
-          </div>
-          <div className="muted small">
+          </span>
+          <span className="bz-row-meta">
             {a.code} · {a.name} · unpaid since {a.owedSince}
             {a.followUps.length
               ? ` · last: ${FOLLOW[a.followUps.at(-1)!.action].split(" (")[0].toLowerCase()} ${dateLabel(a.followUps.at(-1)!.on)}`
               : " · no follow-up yet"}
-          </div>
+          </span>
           {a.promise && (
-            <div className="small">
+            <span className="bz-am-promise" data-broken={a.promise.broken || undefined}>
               Promised to pay by {dateLabel(a.promise.on)}
               {a.promise.broken ? ": not kept" : ""}
-            </div>
+            </span>
           )}
-        </div>
-        <div className="row" style={{ gap: 6 }}>
-          <span className="mono">{rm(a.owed)}</span>
-          <UpdateChip u={a} />
-          <Chip
-            tone={
-              a.promise?.broken || a.arrearsBucket >= 90
-                ? "crit"
-                : a.arrearsBucket >= 30
-                  ? "warn"
-                  : "neutral"
-            }
-          >
-            {a.arrearsBucket ? `${a.arrearsBucket}+ days` : "Under 30 days"}
-          </Chip>
-        </div>
+        </span>
+        <span className="bz-am-money">
+          <span className="bz-amt">{rm(a.owed)}</span>
+        </span>
+        <span className="bz-am-side">
+          <span className="bz-chips bz-am-chips">
+            <UpdateChip u={a} />
+            <Chip tone={tone}>
+              {a.arrearsBucket ? `${a.arrearsBucket}+ days` : "Under 30 days"}
+            </Chip>
+          </span>
+        </span>
       </button>
       {open && (
-        <>
+        <div className="bz-am-expand bz-stack">
           {a.followUps.length > 0 && (
-            <div className="small" style={{ display: "grid", gap: 2 }}>
+            <ol className="bz-am-history" aria-label="Follow-ups">
               {a.followUps.map((f) => (
-                <div key={f.id}>
-                  {dateLabel(f.on)} · {FOLLOW[f.action].split(" (")[0]} ·{" "}
-                  {f.note} ({f.by})
-                  {f.action === "LETTER" || f.action === "NOTICE"
-                    ? f.approval
-                      ? f.approval.approve
-                        ? `, approved by ${f.approval.by}`
-                        : `, stopped by ${f.approval.by}: ${f.approval.note}`
-                      : ", waiting for the Asset Director"
-                    : ""}
-                </div>
+                <li key={f.id}>
+                  <span className="bz-am-history-when">{dateLabel(f.on)}</span>
+                  <span>
+                    <strong>{FOLLOW[f.action].split(" (")[0]}</strong> ·{" "}
+                    {f.note} ({f.by})
+                    {f.action === "LETTER" || f.action === "NOTICE"
+                      ? f.approval
+                        ? f.approval.approve
+                          ? `, approved by ${f.approval.by}`
+                          : `, stopped by ${f.approval.by}: ${f.approval.note}`
+                        : ", waiting for the Asset Director"
+                      : ""}
+                  </span>
+                </li>
               ))}
-            </div>
+            </ol>
           )}
           <FollowUpPanel u={a} canRecord={canRecord} />
-        </>
+        </div>
       )}
     </div>
   );
@@ -1489,64 +1532,66 @@ function CashLine({
   const [slip, setSlip] = useState("");
   const [on, setOn] = useState(todayMy());
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
-      <div
-        className="row"
-        style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
-            {c.tenant}: {rm2(c.amount)}
-          </div>
-          <div className="muted small">
+    <div className="bz-am-item">
+      <div className="bz-row" data-tone={c.late ? "crit" : "warn"}>
+        <div className="bz-row-main">
+          <span className="bz-row-title">{c.tenant}</span>
+          <span className="bz-row-meta">
             {c.code} · receipt {c.receiptNo} · {METHOD[c.method].toLowerCase()}{" "}
             · received {dateLabel(c.on)} by {c.by}
-          </div>
+          </span>
         </div>
-        <Chip tone={c.late ? "crit" : "warn"}>
-          {c.late
-            ? "Late"
-            : c.method === "CASH"
-              ? "To bank in"
-              : "To match in the bank"}
-        </Chip>
+        <div className="bz-row-side">
+          <span className="bz-amt">{rm2(c.amount)}</span>
+          <Chip tone={c.late ? "crit" : "warn"}>
+            {c.late
+              ? "Late"
+              : c.method === "CASH"
+                ? "To bank in"
+                : "To match in the bank"}
+          </Chip>
+        </div>
       </div>
       {canBank && (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <input
-            className="input"
-            type="date"
-            aria-label="Banked on"
-            value={on}
-            onChange={(e) => setOn(e.target.value)}
-          />
-          <input
-            className="input"
-            aria-label="Bank-in slip number"
-            placeholder={
-              c.method === "CASH" ? "Bank-in slip no." : "Bank statement ref"
-            }
-            value={slip}
-            onChange={(e) => setSlip(e.target.value)}
-          />
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={act.busy || !slip.trim()}
-            onClick={() =>
-              act.run(
-                () => api.amBankCash(c.unitId, c.id, { on, slipRef: slip }),
-                "Confirmed in the bank.",
-              )
-            }
-          >
-            {c.method === "CASH" ? "Banked" : "Seen in the bank"}
-          </button>
+        <div className="bz-am-expand">
+          <div className="bz-am-inline">
+            <label className="field">
+              <span className="label">Banked on</span>
+              <input
+                className="input"
+                type="date"
+                value={on}
+                onChange={(e) => setOn(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="label">Bank-in slip number</span>
+              <input
+                className="input"
+                placeholder={
+                  c.method === "CASH" ? "Bank-in slip no." : "Bank statement ref"
+                }
+                value={slip}
+                onChange={(e) => setSlip(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || !slip.trim()}
+              onClick={() =>
+                act.run(
+                  () => api.amBankCash(c.unitId, c.id, { on, slipRef: slip }),
+                  "Confirmed in the bank.",
+                )
+              }
+            >
+              {c.method === "CASH" ? "Banked" : "Seen in the bank"}
+            </button>
+          </div>
+          <ErrorNotice error={act.error} />
         </div>
       )}
-      <ErrorNotice error={act.error} />
+      {!canBank && act.error && <ErrorNotice error={act.error} />}
     </div>
   );
 }
@@ -1561,59 +1606,64 @@ function LetterLine({
   const act = useAction();
   const [note, setNote] = useState("");
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>
-          {l.tenant}: {FOLLOW[l.action].split(" (")[0]}
+    <div className="bz-am-item">
+      <div className="bz-row" data-tone="warn">
+        <div className="bz-row-main">
+          <span className="bz-row-title">
+            {l.tenant}: {FOLLOW[l.action].split(" (")[0]}
+          </span>
+          <span className="bz-row-meta">
+            {l.code} · asked {dateLabel(l.on)} by {l.by} · {l.note}
+          </span>
         </div>
-        <div className="muted small">
-          {l.code} · owes {rm(l.owed)} · asked {dateLabel(l.on)} by {l.by} ·{" "}
-          {l.note}
+        <div className="bz-row-side">
+          <span className="bz-amt">owes {rm(l.owed)}</span>
         </div>
       </div>
-      {canDecide ? (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <input
-            className="input"
-            aria-label="Note"
-            placeholder="Note (required to stop)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={act.busy}
-            onClick={() =>
-              act.run(
-                () => api.amDecideLetter(l.unitId, l.id, true, note),
-                "Approved; it can be sent.",
-              )
-            }
-          >
-            Approve
-          </button>
-          <button
-            className="btn btn-sm"
-            disabled={act.busy || !note.trim()}
-            onClick={() =>
-              act.run(
-                () => api.amDecideLetter(l.unitId, l.id, false, note),
-                "Stopped.",
-              )
-            }
-          >
-            Stop
-          </button>
-        </div>
-      ) : (
-        <div className="muted small">
-          The Asset Director approves it before it is sent.
-        </div>
-      )}
-      <ErrorNotice error={act.error} />
+      <div className="bz-am-expand">
+        {canDecide ? (
+          <div className="bz-am-inline">
+            <label className="field bz-am-wide">
+              <span className="label">Note</span>
+              <input
+                className="input"
+                placeholder="Note (required to stop)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy}
+              onClick={() =>
+                act.run(
+                  () => api.amDecideLetter(l.unitId, l.id, true, note),
+                  "Approved; it can be sent.",
+                )
+              }
+            >
+              Approve
+            </button>
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || !note.trim()}
+              onClick={() =>
+                act.run(
+                  () => api.amDecideLetter(l.unitId, l.id, false, note),
+                  "Stopped.",
+                )
+              }
+            >
+              Stop
+            </button>
+          </div>
+        ) : (
+          <p className="bz-note">
+            The Asset Director approves it before it is sent.
+          </p>
+        )}
+        <ErrorNotice error={act.error} />
+      </div>
     </div>
   );
 }
@@ -1628,59 +1678,64 @@ function ReversalLine({
   const act = useAction();
   const [note, setNote] = useState("");
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
-      <div style={{ fontWeight: 600 }}>
-        {p.tenant}: {rm2(p.amount)} {METHOD[p.method].toLowerCase()}, receipt{" "}
-        {p.receiptNo}
-      </div>
-      <div className="muted small">
-        {p.code} · recorded {dateLabel(p.on)} by {p.by} · reversal asked by{" "}
-        {p.reversal!.by}: {p.reversal!.reason}
-      </div>
-      {canDecide ? (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <input
-            className="input"
-            aria-label="Note"
-            placeholder="Note (required to refuse)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={act.busy}
-            onClick={() =>
-              act.run(
-                () => api.amDecideReversal(p.unitId, p.id, true, note),
-                "Reversed. Record the right payment again.",
-              )
-            }
-          >
-            Approve reversal
-          </button>
-          <button
-            className="btn btn-sm"
-            disabled={act.busy || !note.trim()}
-            onClick={() =>
-              act.run(
-                () => api.amDecideReversal(p.unitId, p.id, false, note),
-                "Refused. The payment stands.",
-              )
-            }
-          >
-            Refuse
-          </button>
+    <div className="bz-am-item">
+      <div className="bz-row" data-tone="warn">
+        <div className="bz-row-main">
+          <span className="bz-row-title">
+            {p.tenant}: {rm2(p.amount)} {METHOD[p.method].toLowerCase()},
+            receipt {p.receiptNo}
+          </span>
+          <span className="bz-row-meta">
+            {p.code} · recorded {dateLabel(p.on)} by {p.by} · reversal asked by{" "}
+            {p.reversal!.by}: {p.reversal!.reason}
+          </span>
         </div>
-      ) : (
-        <div className="muted small">
-          The Asset Director approves it. The person who recorded the payment
-          never reverses it alone.
-        </div>
-      )}
-      <ErrorNotice error={act.error} />
+      </div>
+      <div className="bz-am-expand">
+        {canDecide ? (
+          <div className="bz-am-inline">
+            <label className="field bz-am-wide">
+              <span className="label">Note</span>
+              <input
+                className="input"
+                placeholder="Note (required to refuse)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy}
+              onClick={() =>
+                act.run(
+                  () => api.amDecideReversal(p.unitId, p.id, true, note),
+                  "Reversed. Record the right payment again.",
+                )
+              }
+            >
+              Approve reversal
+            </button>
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || !note.trim()}
+              onClick={() =>
+                act.run(
+                  () => api.amDecideReversal(p.unitId, p.id, false, note),
+                  "Refused. The payment stands.",
+                )
+              }
+            >
+              Refuse
+            </button>
+          </div>
+        ) : (
+          <p className="bz-note">
+            The Asset Director approves it. The person who recorded the payment
+            never reverses it alone.
+          </p>
+        )}
+        <ErrorNotice error={act.error} />
+      </div>
     </div>
   );
 }
@@ -1696,73 +1751,81 @@ function PaymentLine({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
-      <div
-        className="row"
-        style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 600,
-              textDecoration: p.reversed ? "line-through" : undefined,
-            }}
-          >
-            {p.tenant}: {rm2(p.amount)} {METHOD[p.method].toLowerCase()}
-          </div>
-          <div className="muted small">
+    <div className="bz-am-item">
+      <div className="bz-row bz-am-row" data-reversed={p.reversed ? "" : undefined}>
+        <div className="bz-row-main">
+          <span className="bz-row-title bz-am-pay-title">
+            {p.tenant}: {METHOD[p.method].toLowerCase()}
+          </span>
+          <span className="bz-row-meta">
             {p.code} · receipt {p.receiptNo}
             {p.ref ? ` · ${p.ref}` : ""} · {dateLabel(p.on)} by {p.by} · for{" "}
             {p.applied.map((x) => x.period).join(", ")}
             {p.banked
               ? ` · banked ${dateLabel(p.banked.on)}, slip ${p.banked.slipRef}`
               : ""}
-          </div>
+          </span>
           {p.reversal && !p.reversed && (
-            <div className="small">
+            <span className="bz-am-flag">
               Reversal asked by {p.reversal.by}: {p.reversal.reason}. Waiting
               for the Asset Director.
-            </div>
+            </span>
           )}
           {p.reversed && (
-            <div className="small">
+            <span className="bz-am-flag">
               Reversed by {p.reversed.by}: {p.reversed.reason}
-            </div>
+            </span>
           )}
         </div>
-        {canReverse && !p.reversed && !p.reversal && !p.banked && (
-          <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-            Ask to reverse
-          </button>
-        )}
+        <div className="bz-am-money">
+          <span className="bz-amt bz-am-pay-amt">{rm2(p.amount)}</span>
+        </div>
+        <div className="bz-am-side">
+          {p.banked && <Chip tone="ok">Banked</Chip>}
+          {p.reversed && <Chip tone="neutral">Reversed</Chip>}
+          {canReverse && !p.reversed && !p.reversal && !p.banked && (
+            <button
+              className="btn btn-sm"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+            >
+              Ask to reverse
+            </button>
+          )}
+        </div>
       </div>
       {open && (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <input
-            className="input"
-            aria-label="Why reverse"
-            placeholder="Why (wrong tenant, wrong amount, cheque bounced)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <button
-            className="btn btn-sm"
-            disabled={act.busy || !reason.trim()}
-            onClick={() =>
-              act.run(
-                () => api.amReversePayment(p.unitId, p.id, reason),
-                "Sent to the Asset Director to approve.",
-              )
-            }
-          >
-            Ask the Asset Director
-          </button>
+        <div className="bz-am-expand">
+          <div className="bz-am-inline">
+            <label className="field bz-am-wide">
+              <span className="label">Why reverse</span>
+              <input
+                className="input"
+                placeholder="Why (wrong tenant, wrong amount, cheque bounced)"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || !reason.trim()}
+              onClick={() =>
+                act.run(
+                  () => api.amReversePayment(p.unitId, p.id, reason),
+                  "Sent to the Asset Director to approve.",
+                )
+              }
+            >
+              Ask the Asset Director
+            </button>
+          </div>
         </div>
       )}
-      <ErrorNotice error={act.error} />
+      {act.error && (
+        <div className="bz-am-expand">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1776,34 +1839,56 @@ function RentCheck() {
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="the rent check" />;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Asset Management system against Prima</h2>
-        <span className="muted small">
-          {data.fromSystem} of {data.units} units sent by the system · {data.notFromSystem} not sent yet
-        </span>
-      </div>
-      <div className="list">
-        {data.differences.length === 0 && (
-          <div className="empty">
-            {data.fromSystem ? "No differences." : "The Asset Management system is not connected yet, so there is nothing to compare."}
-          </div>
-        )}
-        {data.differences.map((d, i) => (
-          <div key={i} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                {d.code} · {d.name}
-              </div>
-              <div className="muted small">
-                Prima: {d.prima} · System: {d.system}
-              </div>
-            </div>
-            <Chip tone="warn">{d.issue}</Chip>
-          </div>
-        ))}
-      </div>
-    </section>
+    <Card
+      title="Asset Management system against Prima"
+      sub={`${data.fromSystem} of ${data.units} units sent by the system · ${data.notFromSystem} not sent yet`}
+      actions={
+        data.differences.length > 0 ? (
+          <Chip tone="warn">{data.differences.length} differences</Chip>
+        ) : undefined
+      }
+      flush
+    >
+      {data.differences.length === 0 && (
+        <Empty
+          title={
+            data.fromSystem
+              ? "No differences."
+              : "The Asset Management system is not connected yet, so there is nothing to compare."
+          }
+        />
+      )}
+      {data.differences.length > 0 && (
+        <div className="table-wrap bz-am-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Unit</th>
+                <th>Prima</th>
+                <th>System</th>
+                <th>Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.differences.map((d, i) => (
+                <tr key={i}>
+                  <td>
+                    <span className="bz-row-title">
+                      <span className="mono">{d.code}</span> · {d.name}
+                    </span>
+                  </td>
+                  <td>{d.prima}</td>
+                  <td>{d.system}</td>
+                  <td>
+                    <Chip tone="warn">{d.issue}</Chip>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1820,77 +1905,112 @@ function Purchases({ data }: { data: AmBoard }) {
   const [why, setWhy] = useState<Record<string, string>>({});
   const { run, busy, error } = useAction();
   const ready = form.description.trim() && form.location.trim() && form.ownerEntity.trim() && form.reason.trim().length >= 3 && form.qty > 0 && form.estCost > 0;
+  const waiting = data.purchases.filter((a) => a.status === "buy_requested").length;
   return (
-    <>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Ask to buy</h2>
-          <span className="muted small">The Asset Management team asks. Once bought, the request becomes the asset in the register.</span>
-        </div>
-        <ErrorNotice error={error} />
-        <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-          <input className="input" aria-label="What to buy" placeholder="What to buy" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ flex: 2, minWidth: 180 }} />
-          <select className="input" aria-label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as typeof form.category })}>
-            <option value="FURNITURE">Furniture</option>
-            <option value="FITTING">Fitting</option>
-            <option value="RENOVATION">Renovation</option>
-            <option value="OTHER">Other</option>
-          </select>
-          <input className="input" type="number" min={1} aria-label="Quantity" placeholder="Qty" value={form.qty} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} style={{ width: 70 }} />
-          <input className="input" type="number" min={0} aria-label="Estimated cost (RM)" placeholder="Estimated RM" value={form.estCost || ""} onChange={(e) => setForm({ ...form, estCost: Number(e.target.value) })} style={{ width: 120 }} />
-          <input className="input" aria-label="Location" placeholder="Where it goes" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
-          <input className="input" aria-label="Owning entity" placeholder="Owning entity" value={form.ownerEntity} onChange={(e) => setForm({ ...form, ownerEntity: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
-          <input className="input" aria-label="Reason" placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} style={{ flex: 2, minWidth: 180 }} />
-          <button className="btn btn-sm btn-primary" disabled={busy || !ready} onClick={() => run(() => api.amBuyRequest(form).then(() => setForm(empty)), "Purchase request sent")}>
-            Ask
-          </button>
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Purchase requests</h2>
-        </div>
-        <div className="list">
-          {data.purchases.length === 0 && <div className="empty">No purchase requests.</div>}
+    <div className="bz-am-buy">
+      <Card
+        title="Purchase requests"
+        actions={waiting ? <Chip tone="warn">{waiting} waiting for a decision</Chip> : undefined}
+        flush
+      >
+        {data.purchases.length === 0 && <Empty title="No purchase requests." />}
+        <ul className="bz-rows">
           {data.purchases.map((a) => {
             const p = a.purchase!;
             const st = BUY_STATE[a.status] ?? { label: a.status, tone: "neutral" as Tone };
             return (
-              <div key={a.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>
-                      {p.qty} × {a.description} · {rm(p.estCost)}
+              <li key={a.id}>
+                <div className="bz-am-item">
+                  <div className="bz-row" data-tone={edge(st.tone)}>
+                    <div className="bz-row-main">
+                      <span className="bz-row-title">
+                        {p.qty} × {a.description}
+                      </span>
+                      <span className="bz-row-meta">
+                        {a.location} · asked by {p.askedBy} on {dateLabel(p.askedAt.slice(0, 10))}: {p.reason}
+                      </span>
+                      {p.decidedBy && (
+                        <span className="bz-am-flag">
+                          {p.decidedBy}: {p.decisionReason}
+                        </span>
+                      )}
                     </div>
-                    <div className="muted small">
-                      {a.location} · asked by {p.askedBy} on {dateLabel(p.askedAt.slice(0, 10))}: {p.reason}
+                    <div className="bz-row-side">
+                      <span className="bz-amt">{rm(p.estCost)}</span>
+                      <Chip tone={st.tone}>{st.label}</Chip>
                     </div>
-                    {p.decidedBy && (
-                      <div className="small">
-                        {p.decidedBy}: {p.decisionReason}
+                  </div>
+                  {a.status === "buy_approved" && (
+                    <div className="bz-am-expand">
+                      <ReceiveBought id={a.id} approved={p.estCost} busy={busy} run={run} />
+                    </div>
+                  )}
+                  {a.status === "buy_requested" && (
+                    <div className="bz-am-expand">
+                      <div className="bz-am-inline">
+                        <label className="field bz-am-wide">
+                          <span className="label">Reason for the decision</span>
+                          <input className="input" aria-label={`Reason for ${a.description}`} placeholder="Reason" value={why[a.id] ?? ""} onChange={(e) => setWhy({ ...why, [a.id]: e.target.value })} />
+                        </label>
+                        <button className="btn btn-sm btn-primary" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, true, why[a.id] ?? "", p.estCost), "Purchase approved")}>
+                          Approve
+                        </button>
+                        <button className="btn btn-sm" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, false, why[a.id] ?? "", p.estCost), "Purchase refused")}>
+                          Refuse
+                        </button>
                       </div>
-                    )}
-                  </div>
-                  <Chip tone={st.tone}>{st.label}</Chip>
+                    </div>
+                  )}
                 </div>
-                {a.status === "buy_approved" && <ReceiveBought id={a.id} approved={p.estCost} busy={busy} run={run} />}
-                {a.status === "buy_requested" && (
-                  <div className="row" style={{ flexWrap: "wrap" }}>
-                    <input className="input" aria-label={`Reason for ${a.description}`} placeholder="Reason" value={why[a.id] ?? ""} onChange={(e) => setWhy({ ...why, [a.id]: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
-                    <button className="btn btn-sm btn-primary" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, true, why[a.id] ?? "", p.estCost), "Purchase approved")}>
-                      Approve
-                    </button>
-                    <button className="btn btn-sm" disabled={busy || (why[a.id] ?? "").trim().length < 3} onClick={() => run(() => api.amBuyDecide(a.id, false, why[a.id] ?? "", p.estCost), "Purchase refused")}>
-                      Refuse
-                    </button>
-                  </div>
-                )}
-              </div>
+              </li>
             );
           })}
+        </ul>
+      </Card>
+      <Card title="Ask to buy" sub="The Asset Management team asks. Once bought, the request becomes the asset in the register.">
+        <div className="bz-form">
+          <ErrorNotice error={error} />
+          <label className="field bz-span">
+            <span className="label">What to buy</span>
+            <input className="input" placeholder="What to buy" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="label">Category</span>
+            <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as typeof form.category })}>
+              <option value="FURNITURE">Furniture</option>
+              <option value="FITTING">Fitting</option>
+              <option value="RENOVATION">Renovation</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Quantity</span>
+            <input className="input" type="number" min={1} placeholder="Qty" value={form.qty} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })} />
+          </label>
+          <label className="field">
+            <span className="label">Estimated cost (RM)</span>
+            <input className="input" type="number" min={0} placeholder="Estimated RM" value={form.estCost || ""} onChange={(e) => setForm({ ...form, estCost: Number(e.target.value) })} />
+          </label>
+          <label className="field">
+            <span className="label">Location</span>
+            <input className="input" placeholder="Where it goes" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+          </label>
+          <label className="field bz-span">
+            <span className="label">Owning entity</span>
+            <input className="input" placeholder="Owning entity" value={form.ownerEntity} onChange={(e) => setForm({ ...form, ownerEntity: e.target.value })} />
+          </label>
+          <label className="field bz-span">
+            <span className="label">Reason</span>
+            <input className="input" placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+          </label>
+          <div className="bz-span bz-actions">
+            <button className="btn btn-primary" disabled={busy || !ready} onClick={() => run(() => api.amBuyRequest(form).then(() => setForm(empty)), "Purchase request sent")}>
+              Ask
+            </button>
+          </div>
         </div>
-      </section>
-    </>
+      </Card>
+    </div>
   );
 }
 
@@ -1919,145 +2039,158 @@ function WhatsAppReminders() {
   const c = data.connector;
   const t = data.timings;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>WhatsApp rent reminders</h2>
-        <Chip tone={c.sending ? "ok" : "unknown"}>{c.sending ? "Connected, sending" : c.configured ? "Set up, switched off" : "Not connected"}</Chip>
-      </div>
-      <p className="muted small">
-        Sent {t.beforeDays} days before rent is due (day {t.dueDay} of the month; reminder days proposed), on the due day, then {t.firstLateDays} days late and every {t.lateEveryDays} days
-        until {t.stopAfterLateDays} days, between {t.sendFromHour} am and {t.sendToHour - 12} pm. Only to tenants who agreed; a tenant who replies STOP is never
-        messaged again. Replies show on the unit. Automatic messages do not replace the team's own update every 10 days.
-        {!c.sending && " Until WhatsApp Business is connected, reminders are planned here but not sent."}
-      </p>
-      <ErrorNotice error={actError} />
-      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span className="small">
-          {data.agreed} of {data.tenants} tenants agreed{data.failed ? ` · ${data.failed} failed` : ""}
-        </span>
-        <button
-          className="btn btn-sm"
-          disabled={busy}
-          onClick={() =>
-            run(() => api.amWhatsAppRun(), (r) => (r.sending ? `${r.sent} sent, ${r.queued} queued` : `${r.queued} planned (WhatsApp not connected)`))
-          }
-        >
-          Check reminders now
-        </button>
-      </div>
-      {data.owingWithoutConsent.length > 0 && (
+    <Card
+      title="WhatsApp rent reminders"
+      actions={
         <>
-          <h3 className="small" style={{ marginTop: 12 }}>
-            Owing rent, not yet agreed to WhatsApp
-          </h3>
-          <div className="list">
-            {data.owingWithoutConsent.slice(0, 30).map((u) => (
-              <div key={u.unitId} className="list-item" style={{ flexWrap: "wrap", gap: 6 }}>
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={{ fontWeight: 600 }}>
-                    {u.code} · {u.tenant}
-                  </div>
-                  {!u.hasMobile && <div className="muted small">No Malaysian mobile on file</div>}
-                </div>
-                {u.hasMobile && (
-                  <>
-                    <input
-                      className="input"
-                      aria-label={`How ${u.tenant} agreed`}
-                      placeholder="How they agreed, e.g. signed form"
-                      value={how[u.unitId] ?? ""}
-                      onChange={(e) => setHow({ ...how, [u.unitId]: e.target.value })}
-                      style={{ flex: 1, minWidth: 160 }}
-                    />
-                    <button
-                      className="btn btn-sm btn-primary"
-                      disabled={busy || (how[u.unitId] ?? "").trim().length < 5}
-                      onClick={() => run(() => api.amWhatsAppConsent(u.unitId, true, how[u.unitId] ?? ""), `${u.code}: WhatsApp reminders on`)}
-                    >
-                      Agreed
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <Chip tone={c.sending ? "ok" : "unknown"}>{c.sending ? "Connected, sending" : c.configured ? "Set up, switched off" : "Not connected"}</Chip>
+          <button
+            className="btn btn-sm"
+            disabled={busy}
+            onClick={() =>
+              run(() => api.amWhatsAppRun(), (r) => (r.sending ? `${r.sent} sent, ${r.queued} queued` : `${r.queued} planned (WhatsApp not connected)`))
+            }
+          >
+            Check reminders now
+          </button>
         </>
-      )}
-      {data.agreedUnits.length > 0 && (
-        <>
-          <h3 className="small" style={{ marginTop: 12 }}>
-            Agreed
-          </h3>
-          <div className="list">
-            {data.agreedUnits.slice(0, 50).map((u) => (
-              <div key={u.unitId} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {u.code} · {u.tenant}
+      }
+    >
+      <div className="bz-stack bz-am-wa">
+        <p className="bz-note">
+          Sent {t.beforeDays} days before rent is due (day {t.dueDay} of the month; reminder days proposed), on the due day, then {t.firstLateDays} days late and every {t.lateEveryDays} days
+          until {t.stopAfterLateDays} days, between {t.sendFromHour} am and {t.sendToHour - 12} pm. Only to tenants who agreed; a tenant who replies STOP is never
+          messaged again. Replies show on the unit. Automatic messages do not replace the team's own update every 10 days.
+          {!c.sending && " Until WhatsApp Business is connected, reminders are planned here but not sent."}
+        </p>
+        <div className="bz-chips">
+          <Chip tone="info">
+            {data.agreed} of {data.tenants} tenants agreed
+          </Chip>
+          {data.failed ? <Chip tone="crit">{data.failed} failed</Chip> : null}
+        </div>
+        <ErrorNotice error={actError} />
+        {data.owingWithoutConsent.length > 0 && (
+          <div className="bz-sec">
+            <h3>Owing rent, not yet agreed to WhatsApp</h3>
+            <ul className="bz-rows bz-am-box">
+              {data.owingWithoutConsent.slice(0, 30).map((u) => (
+                <li key={u.unitId}>
+                  <div className="bz-am-wa-row">
+                    <div className="bz-row-main">
+                      <span className="bz-row-title">
+                        {u.code} · {u.tenant}
+                      </span>
+                      {!u.hasMobile && <span className="bz-row-meta">No Malaysian mobile on file</span>}
+                    </div>
+                    {u.hasMobile && (
+                      <div className="bz-am-inline">
+                        <input
+                          className="input bz-am-grow"
+                          aria-label={`How ${u.tenant} agreed`}
+                          placeholder="How they agreed, e.g. signed form"
+                          value={how[u.unitId] ?? ""}
+                          onChange={(e) => setHow({ ...how, [u.unitId]: e.target.value })}
+                        />
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={busy || (how[u.unitId] ?? "").trim().length < 5}
+                          onClick={() => run(() => api.amWhatsAppConsent(u.unitId, true, how[u.unitId] ?? ""), `${u.code}: WhatsApp reminders on`)}
+                        >
+                          Agreed
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="muted small">
-                    {u.how} · recorded by {u.by}
-                  </div>
-                </div>
-                <button className="btn btn-sm" disabled={busy} onClick={() => run(() => api.amWhatsAppConsent(u.unitId, false, "Tenant asked to stop"), `${u.code}: WhatsApp reminders stopped`)}>
-                  Stop
-                </button>
-              </div>
-            ))}
+                </li>
+              ))}
+            </ul>
           </div>
-        </>
-      )}
-      {data.recent.length > 0 && (
-        <>
-          <h3 className="small" style={{ marginTop: 12 }}>
-            Recent reminders
-          </h3>
-          <div className="list">
-            {data.recent.slice(0, 20).map((r) => (
-              <div key={r.id} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {r.code} · {r.tenant}
-                  </div>
-                  <div className="muted small">
-                    {r.period}, {WA_STAGE[r.stage]} · {rm(r.amount)}
-                    {r.lastError ? ` · ${r.lastError}` : ""}
-                  </div>
-                </div>
-                <Chip tone={(WA_STATUS[r.status] ?? WA_STATUS.queued).tone}>{(WA_STATUS[r.status] ?? WA_STATUS.queued).label}</Chip>
-                {r.status === "uncertain" && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
-                    <input
-                      className="input"
-                      aria-label={`What you checked for ${r.code}`}
-                      placeholder="What you checked (WhatsApp Business inbox, tenant)"
-                      value={checked[r.id] ?? ""}
-                      onChange={(e) => setChecked({ ...checked, [r.id]: e.target.value })}
-                    />
-                    {(
-                      [
-                        ["went", "It went"],
-                        ["resend", "Send again"],
-                        ["drop", "Leave it"],
-                      ] as const
-                    ).map(([o, label]) => (
-                      <button
-                        key={o}
-                        className="btn btn-sm"
-                        disabled={busy || (checked[r.id] ?? "").trim().length < 5}
-                        onClick={() => run(() => api.amWhatsAppSettle(r.unitId, r.id, o, checked[r.id] ?? ""), `${r.code}: ${label.toLowerCase()}`)}
-                      >
-                        {label}
+        )}
+        {data.agreedUnits.length > 0 && (
+          <div className="bz-sec">
+            <h3>Agreed</h3>
+            <ul className="bz-rows bz-am-box">
+              {data.agreedUnits.slice(0, 50).map((u) => (
+                <li key={u.unitId}>
+                  <div className="bz-row">
+                    <div className="bz-row-main">
+                      <span className="bz-row-title">
+                        {u.code} · {u.tenant}
+                      </span>
+                      <span className="bz-row-meta">
+                        {u.how} · recorded by {u.by}
+                      </span>
+                    </div>
+                    <div className="bz-row-side">
+                      <button className="btn btn-sm" disabled={busy} onClick={() => run(() => api.amWhatsAppConsent(u.unitId, false, "Tenant asked to stop"), `${u.code}: WhatsApp reminders stopped`)}>
+                        Stop
                       </button>
-                    ))}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                </li>
+              ))}
+            </ul>
           </div>
-        </>
-      )}
-    </section>
+        )}
+        {data.recent.length > 0 && (
+          <div className="bz-sec">
+            <h3>Recent reminders</h3>
+            <ul className="bz-rows bz-am-box">
+              {data.recent.slice(0, 20).map((r) => (
+                <li key={r.id}>
+                  <div className="bz-am-item">
+                    <div className="bz-row" data-tone={edge((WA_STATUS[r.status] ?? WA_STATUS.queued).tone)}>
+                      <div className="bz-row-main">
+                        <span className="bz-row-title">
+                          {r.code} · {r.tenant}
+                        </span>
+                        <span className="bz-row-meta">
+                          {r.period}, {WA_STAGE[r.stage]} · {rm(r.amount)}
+                          {r.lastError ? ` · ${r.lastError}` : ""}
+                        </span>
+                      </div>
+                      <div className="bz-row-side">
+                        <Chip tone={(WA_STATUS[r.status] ?? WA_STATUS.queued).tone}>{(WA_STATUS[r.status] ?? WA_STATUS.queued).label}</Chip>
+                      </div>
+                    </div>
+                    {r.status === "uncertain" && (
+                      <div className="bz-am-expand">
+                        <div className="bz-am-inline">
+                          <input
+                            className="input bz-am-grow"
+                            aria-label={`What you checked for ${r.code}`}
+                            placeholder="What you checked (WhatsApp Business inbox, tenant)"
+                            value={checked[r.id] ?? ""}
+                            onChange={(e) => setChecked({ ...checked, [r.id]: e.target.value })}
+                          />
+                          {(
+                            [
+                              ["went", "It went"],
+                              ["resend", "Send again"],
+                              ["drop", "Leave it"],
+                            ] as const
+                          ).map(([o, label]) => (
+                            <button
+                              key={o}
+                              className="btn btn-sm"
+                              disabled={busy || (checked[r.id] ?? "").trim().length < 5}
+                              onClick={() => run(() => api.amWhatsAppSettle(r.unitId, r.id, o, checked[r.id] ?? ""), `${r.code}: ${label.toLowerCase()}`)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -2074,23 +2207,39 @@ function ReceiveBought({ id, approved, busy, run }: { id: string; approved: numb
   const n = Number(cost);
   const over = cost !== "" && n > approved;
   return (
-    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-      <input className="input" aria-label="Asset tag" placeholder="Asset tag" value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 130 }} />
-      <input className="input" type="number" min={0} aria-label="Actual cost (RM)" placeholder={`Actual RM (up to ${rm(approved)})`} value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 170 }} />
-      <input className="input" type="date" aria-label="Bought on" value={on} max={today} onChange={(e) => setOn(e.target.value)} />
-      {!over && (
-        <button className="btn btn-sm btn-primary" disabled={busy || tag.trim().length < 3 || !(n > 0)} onClick={() => run(() => api.amBuyReceived(id, { tag, cost: n, boughtOn: on }), "Received: added to the register")}>
-          Received
-        </button>
-      )}
+    <div className="bz-stack">
+      <div className="bz-am-inline">
+        <label className="field">
+          <span className="label">Asset tag</span>
+          <input className="input" placeholder="Asset tag" value={tag} onChange={(e) => setTag(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Actual cost (RM)</span>
+          <input className="input" type="number" min={0} placeholder={`Actual RM (up to ${rm(approved)})`} value={cost} onChange={(e) => setCost(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Bought on</span>
+          <input className="input" type="date" value={on} max={today} onChange={(e) => setOn(e.target.value)} />
+        </label>
+        {!over && (
+          <button className="btn btn-sm btn-primary" disabled={busy || tag.trim().length < 3 || !(n > 0)} onClick={() => run(() => api.amBuyReceived(id, { tag, cost: n, boughtOn: on }), "Received: added to the register")}>
+            Received
+          </button>
+        )}
+      </div>
       {over && (
-        <>
-          <span className="small">Above the approved {rm(approved)}: it must be approved again.</span>
-          <input className="input" aria-label="Why the price changed" placeholder="Why the price changed" value={why} onChange={(e) => setWhy(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        <div className="bz-am-inline">
+          <div className="notice bz-span" data-tone="warn">
+            Above the approved {rm(approved)}: it must be approved again.
+          </div>
+          <label className="field bz-am-wide">
+            <span className="label">Why the price changed</span>
+            <input className="input" placeholder="Why the price changed" value={why} onChange={(e) => setWhy(e.target.value)} />
+          </label>
           <button className="btn btn-sm" disabled={busy || why.trim().length < 5} onClick={() => run(() => api.amBuyReprice(id, n, why), "Sent back for approval at the new amount")}>
             Ask again at {rm(n)}
           </button>
-        </>
+        </div>
       )}
     </div>
   );

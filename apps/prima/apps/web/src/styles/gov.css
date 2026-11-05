@@ -1,0 +1,749 @@
+/* Governance and audit: Audit trail, Speak up and assurance, ACT, Mandates, Company secretary, Continuity, approval limits.
+   Colours come only from the theme variables in styles.css. */
+
+/* ---------- Shared: registers and case lists inside a flush card ---------- */
+.gv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gv-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.gv-item {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  min-width: 0;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.gv-item[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.gv-item[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.gv-item[data-mine='true'] {
+  background: color-mix(in srgb, var(--warn-soft) 40%, var(--surface));
+}
+.gv-item-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: start;
+}
+.gv-item-head.gv-with-date {
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+}
+.gv-item-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.gv-item-title {
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.gv-item-title .gv-co {
+  color: var(--muted);
+  font-weight: 500;
+}
+.gv-item-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.gv-item-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+  max-width: 340px;
+}
+.gv-lines {
+  display: grid;
+  gap: 4px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gv-lines .gv-k {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  margin-right: 6px;
+}
+.gv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.gv-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.gv-intro {
+  font-size: 0.86rem;
+  color: var(--muted);
+  max-width: 82ch;
+  line-height: 1.55;
+}
+.gv-card-intro {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.gv-card-intro > * + * {
+  margin-top: 6px;
+}
+.gv-empty-pad {
+  padding: 8px 0;
+}
+.gv-stack {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.gv-stack-sm {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* A date tile on the left of a row: the day large, the month under it. */
+.gv-date {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: 6px 0 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.gv-date b {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.gv-date span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gv-date[data-tone='crit'] {
+  border-color: color-mix(in srgb, var(--crit) 45%, var(--line));
+  background: var(--crit-soft);
+}
+.gv-date[data-tone='crit'] b {
+  color: var(--crit);
+}
+.gv-date[data-tone='warn'] {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: var(--warn-soft);
+}
+
+/* A month or day heading between groups of rows. */
+.gv-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.gv-list > li.gv-group-li + li {
+  border-top: 0;
+}
+
+/* ---------- Action boxes and forms ---------- */
+.gv-box {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.gv-box :is(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, textarea, .input, .select, .textarea) {
+  background-color: var(--surface);
+}
+.gv-box-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.gv-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px 16px;
+  align-items: end;
+  min-width: 0;
+}
+.gv-form > * {
+  min-width: 0;
+}
+.gv-form .field > :is(input, select, textarea, .input, .select, .textarea) {
+  width: 100%;
+}
+.gv-span {
+  grid-column: 1 / -1;
+}
+.gv-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.gv-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 8px 16px;
+}
+.gv-form-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.gv-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.gv-inline > :is(input, select, .input) {
+  width: 100%;
+}
+
+/* Guides and collapsible parts. */
+.gv-details {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
+.gv-details > summary {
+  padding: 10px 14px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.gv-details[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.gv-details-body {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.gv-details-body ul,
+.gv-details-body ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+/* Numbered steps of a plan, a playbook or an improvement. */
+.gv-ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  counter-reset: gv;
+}
+.gv-ol > li {
+  counter-increment: gv;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.gv-ol > li::before {
+  content: counter(gv);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.gv-ol > li[data-done='true']::before {
+  content: '✓';
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+}
+.gv-ol .gv-ol-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Label and value pairs in a row. */
+.gv-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+.gv-kv dt {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.gv-kv dd {
+  margin: 0;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Audit trail: a searchable timeline ---------- */
+.gv-filter {
+  width: auto;
+  flex: 0 1 200px;
+  min-width: 0;
+}
+.gv-ev {
+  display: grid;
+  grid-template-columns: 64px minmax(160px, 220px) minmax(0, 1fr) minmax(0, 190px) 118px;
+  grid-template-areas: 'time who what rec seal';
+  gap: 4px 16px;
+  align-items: start;
+  width: 100%;
+  padding: 12px 18px;
+  border: 0;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.gv-ev:hover {
+  background: var(--surface-2);
+}
+.gv-ev:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.gv-ev-time {
+  grid-area: time;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.gv-ev-who {
+  grid-area: who;
+  min-width: 0;
+}
+.gv-ev-what {
+  grid-area: what;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.gv-ev-sum {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.gv-ev-act {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.gv-ev-rec {
+  grid-area: rec;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-top: 4px;
+}
+.gv-ev-seal {
+  grid-area: seal;
+  white-space: nowrap;
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-align: right;
+  padding-top: 6px;
+}
+.gv-ev-head {
+  display: grid;
+  grid-template-columns: 64px minmax(160px, 220px) minmax(0, 1fr) minmax(0, 190px) 118px;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gv-ev-head span:last-child {
+  text-align: right;
+}
+.gv-hash {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.gv-seal-box {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.gv-more {
+  display: flex;
+  justify-content: center;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Continuity: systems and their copies ---------- */
+.gv-copies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.gv-copy {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
+.gv-copy[data-tone='ok'] {
+  border-top-color: var(--ok);
+}
+.gv-copy[data-tone='warn'] {
+  border-top-color: var(--warn);
+}
+.gv-copy[data-tone='crit'] {
+  border-top-color: var(--crit);
+}
+.gv-copy-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: start;
+  flex-wrap: wrap;
+}
+.gv-copy-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.gv-copy-where {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.gv-problems {
+  margin: 0;
+  padding: 8px 10px 8px 26px;
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.gv-sys-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- Mandates: coverage matrix ---------- */
+.gv-matrix th:first-child,
+.gv-matrix td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+  min-width: 180px;
+}
+.gv-matrix td {
+  vertical-align: top;
+}
+.gv-matrix .chip {
+  white-space: nowrap;
+}
+.gv-validity {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+.gv-bar {
+  height: 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.gv-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.gv-bar[data-tone='warn'] > span {
+  background: var(--warn);
+}
+.gv-bar[data-tone='crit'] > span {
+  background: var(--crit);
+}
+
+/* ---------- Approval limits (CEO, on Home) ---------- */
+.gv-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+.gv-limit {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.gv-limit-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.gv-limit-value {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- ACT ---------- */
+.gv-team {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+.gv-team-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.gv-team-card h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.gv-team-card p {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.gv-sig-count {
+  font-size: 1.2rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 48px;
+}
+.gv-sig-count[data-tone='crit'] {
+  color: var(--crit);
+}
+.gv-sig-count[data-tone='warn'] {
+  color: var(--warn);
+}
+.gv-sig-count[data-tone='ok'] {
+  color: var(--ok);
+}
+.gv-ev-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+.gv-match {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px dashed var(--line);
+  font-size: 0.86rem;
+}
+.gv-seg-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.gv-tabbar {
+  flex-wrap: nowrap;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+  .gv-ev-head {
+    display: none;
+  }
+  .gv-ev {
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas:
+      'time who'
+      'time what'
+      'time rec';
+    gap: 6px 12px;
+    padding: 14px 16px;
+  }
+  .gv-ev-time {
+    padding-top: 8px;
+  }
+  .gv-ev-seal {
+    display: none;
+  }
+  .gv-ev-rec {
+    padding-top: 0;
+  }
+}
+@media (max-width: 640px) {
+  .gv-item {
+    padding: 14px 16px;
+  }
+  .gv-item-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gv-item-head.gv-with-date {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  .gv-item-head.gv-with-date > .gv-item-state {
+    grid-column: 2;
+  }
+  .gv-item-state {
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .gv-inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gv-ol > li {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+  .gv-ol > li > :nth-child(2) {
+    grid-column: 2;
+  }
+  .gv-group {
+    padding: 10px 16px;
+  }
+  .gv-filter {
+    flex: 1 1 140px;
+  }
+}
+
+/* ---------- Speak up: the report form beside the checker ---------- */
+.gv-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.gv-mt {
+  margin-top: 12px;
+}
+.gv-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.gv-fieldset > legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.gv-quote {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--line);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--surface-2);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gv-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--line);
+  display: grid;
+  gap: 10px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.gv-notes > li {
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.gv-notes-when {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+@media (max-width: 960px) {
+  .gv-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.gv-form > .btn {
+  justify-self: start;
+}
+.gv-ev-file .mono,
+.gv-item-title .mono {
+  font-size: 0.9em;
+}

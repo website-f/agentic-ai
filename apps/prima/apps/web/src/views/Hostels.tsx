@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { ClockCountdownIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type HostelBillInput, type HostelBoard } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { RecordButton } from './RecordForm';
+import '../styles/hrx.css';
 
 /**
  * Hostel bills and utility excess (Fauzan, 26 Oct 2026). Each bill belongs to the company that owns or rents the
@@ -28,29 +31,46 @@ function billTone(b: BillRow): Tone {
 export function HostelsView() {
   const { data, error } = useLoad(() => api.hostelBoard(), []);
   const [tab, setTab] = useState<'bills' | 'utility' | null>(null);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="hostels" />;
+  const [q, setQ] = useState('');
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="hostels" />
+      </div>
+    );
   const view = tab ?? (data.role === 'hr' ? 'utility' : 'bills');
   const bills = data.hostels.flatMap((h) => h.bills);
   const mine = bills.filter((b) => Object.values(b.can).some(Boolean));
   const overdue = bills.filter((b) => b.bill.status !== 'paid' && b.daysToDue < 0);
   const undecided = data.charges.filter((c) => !c.charge.decision);
+  const needle = q.trim().toLowerCase();
+  const hostels = data.hostels.filter((h) => !needle || [h.hostel.name, h.companyName].some((v) => v.toLowerCase().includes(needle)));
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>Hostels</h1>
-        <p className="muted">
-          Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM
-          approves, then the COO. The company pays from its own bank; when Finance records the payment (account, day, reference) it shows here as paid at once,
-          with no slip needed. Otherwise the company uploads the slip. Once Finance loads the bank statement, the bill shows where the money was seen leaving.
-        </p>
-      </div>
-      <div className="kpis">
-        <Kpi label="Waiting for you" value={mine.length} tone={mine.length ? 'warn' : 'ok'} />
-        <Kpi label="Overdue" value={overdue.length} tone={overdue.length ? 'crit' : 'ok'} note="Climbs to CoS, COO, CEO" />
-        {data.charges.length > 0 && <Kpi label="Utility excess to decide" value={undecided.length} tone={undecided.length ? 'warn' : 'ok'} note="HR decides" />}
-      </div>
-      <div className="tabbar" role="tablist" aria-label="Hostel sections">
+      <PageHead
+        title="Hostels"
+        sub="Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM approves, then the COO."
+      />
+      <Stats>
+        <Stat label="Waiting for you" value={mine.length} tone={mine.length ? 'warn' : 'ok'} icon={<TrayIcon size={16} />} />
+        <Stat label="Overdue" value={overdue.length} tone={overdue.length ? 'crit' : 'ok'} note="Climbs to CoS, COO, CEO" icon={<ClockCountdownIcon size={16} />} />
+        {data.charges.length > 0 && (
+          <Stat
+            label="Utility excess to decide"
+            value={undecided.length}
+            tone={undecided.length ? 'warn' : 'ok'}
+            note="HR decides"
+            icon={<LightningIcon size={16} />}
+          />
+        )}
+      </Stats>
+      <div className="tabbar hx-tabs" role="tablist" aria-label="Hostel sections">
         <button role="tab" aria-selected={view === 'bills'} onClick={() => setTab('bills')}>
           Bills
           {mine.length > 0 && <span className="tab-count">{mine.length}</span>}
@@ -63,15 +83,28 @@ export function HostelsView() {
         )}
       </div>
       {view === 'bills' && (
-        <>
-          <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
-            <RecordButton kind="hostel" label="Add hostel" />
-          </div>
-          {data.hostels.length === 0 && <div className="empty">No hostel on record.</div>}
-          {data.hostels.map((h) => (
+        <div className="hx-stack">
+          <Toolbar end={<RecordButton kind="hostel" label="Add hostel" />}>
+            {data.hostels.length > 1 && <Search value={q} onChange={setQ} placeholder="Search hostel or company" label="Search hostels" />}
+          </Toolbar>
+          {data.hostels.length === 0 && (
+            <Card>
+              <Empty title="No hostel on record." />
+            </Card>
+          )}
+          {data.hostels.length > 0 && hostels.length === 0 && (
+            <Card>
+              <Empty title="No hostel matches the search." />
+            </Card>
+          )}
+          {hostels.map((h) => (
             <HostelPanel key={h.hostel.id} h={h} canAdd={data.canAddBill} />
           ))}
-        </>
+          <p className="hx-source">
+            The company pays from its own bank; when Finance records the payment (account, day, reference) it shows here as paid at once, with no slip needed.
+            Otherwise the company uploads the slip. Once Finance loads the bank statement, the bill shows where the money was seen leaving.
+          </p>
+        </div>
       )}
       {view === 'utility' && <UtilityPanel rows={data.charges} rule={data.rules.utility.source} />}
     </div>
@@ -80,40 +113,58 @@ export function HostelsView() {
 
 function HostelPanel({ h, canAdd }: { h: HostelRow; canAdd: boolean }) {
   const [adding, setAdding] = useState(false);
+  const full = h.hostel.beds > 0 ? Math.min(100, Math.round((h.residents / h.hostel.beds) * 100)) : 0;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>{h.hostel.name}</h3>
-          <div className="muted small">
-            {h.companyName} · {h.hostel.tenure === 'RENTED' ? 'rented' : 'owned'} · {h.residents} of {h.hostel.beds} beds · {h.hostel.sector} sector
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
+    <Card
+      title={h.hostel.name}
+      sub={`${h.companyName} · ${h.hostel.tenure === 'RENTED' ? 'rented' : 'owned'} · ${h.hostel.sector} sector`}
+      actions={
+        <>
           <RecordButton kind="hostel" id={h.hostel.id} label="Edit hostel" />
           {canAdd && !adding && (
-            <button className="btn btn-sm" onClick={() => setAdding(true)}>
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
               Add a bill
             </button>
           )}
+        </>
+      }
+      flush
+    >
+      <div className="hs-top">
+        <div className="hs-beds">
+          <span className="hs-beds-text">
+            <b>{h.residents}</b> of {h.hostel.beds} beds
+          </span>
+          <span className="hs-meter" aria-hidden="true">
+            <span style={{ width: `${full}%` }} />
+          </span>
+        </div>
+        {/* Payment history by month: an unpaid or unproven month is red. */}
+        <div className="hs-months" aria-label="Payment history by month">
+          {h.history.map((m) => (
+            <Chip key={m.month} tone={m.red ? 'crit' : m.bills === 0 ? 'neutral' : m.paid === m.bills ? 'ok' : 'warn'}>
+              {m.month}: {m.bills ? `${m.paid}/${m.bills} paid` : 'no bill'}
+            </Chip>
+          ))}
         </div>
       </div>
-      {/* Payment history by month: an unpaid or unproven month is red. */}
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }} aria-label="Payment history by month">
-        {h.history.map((m) => (
-          <Chip key={m.month} tone={m.red ? 'crit' : m.bills === 0 ? 'neutral' : m.paid === m.bills ? 'ok' : 'warn'}>
-            {m.month}: {m.bills ? `${m.paid}/${m.bills} paid` : 'no bill'}
-          </Chip>
-        ))}
-      </div>
-      {adding && <AddBill hostelId={h.hostel.id} onDone={() => setAdding(false)} />}
-      <div className="list">
-        {h.bills.length === 0 && <div className="empty">No bills yet.</div>}
-        {h.bills.map((b) => (
-          <BillItem key={b.bill.id} b={b} />
-        ))}
-      </div>
-    </section>
+      {adding && (
+        <div className="hs-add">
+          <AddBill hostelId={h.hostel.id} onDone={() => setAdding(false)} />
+        </div>
+      )}
+      {h.bills.length === 0 ? (
+        <div className="empty">No bills yet.</div>
+      ) : (
+        <ul className="hx-rows hs-bills">
+          {h.bills.map((b) => (
+            <li key={b.bill.id}>
+              <BillItem b={b} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -131,113 +182,122 @@ function BillItem({ b }: { b: BillRow }) {
     ['COO', bill.cooApproval],
     ['Payment slip', bill.financePaid && !bill.slip ? { by: `not needed, Finance recorded the payment`, at: bill.financePaid.at, note: '' } : bill.slip],
   ] as const;
+  const firstOpen = steps.findIndex(([, s]) => !s);
+  const tone = billTone(b);
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {KIND_LABEL[bill.kind]} {bill.period} · {rm(bill.amount)}
-          </div>
-          <div className="muted small">
-            Due {dateLabel(bill.dueOn)}
-            {bill.status !== 'paid' && (b.daysToDue < 0 ? ` · ${-b.daysToDue} days overdue` : ` · in ${b.daysToDue} days`)}
-            {b.escalatedTo ? ` · reached the ${b.escalatedTo}` : ''}
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
-          <Chip tone={billTone(b)}>{b.waitingOn}</Chip>
-          <button className="btn btn-ghost btn-sm" onClick={() => setOpen(!open)}>
-            {open ? 'Hide' : can ? 'Act' : 'Steps'}
-          </button>
-        </div>
+    <div className="hx-row" data-tone={tone === 'crit' || tone === 'warn' ? tone : undefined}>
+      <div className="hx-row-main">
+        <span className="hx-row-title">
+          {KIND_LABEL[bill.kind]} {bill.period} · {rm(bill.amount)}
+        </span>
+        <span className="hx-row-meta">
+          Due {dateLabel(bill.dueOn)}
+          {bill.status !== 'paid' && (b.daysToDue < 0 ? ` · ${-b.daysToDue} days overdue` : ` · in ${b.daysToDue} days`)}
+          {b.escalatedTo ? ` · reached the ${b.escalatedTo}` : ''}
+        </span>
       </div>
-      {(bill.financePaid || bill.bankSeen) && (
-        <div className="small">
-          {bill.financePaid && (
-            <>
-              Paid by Finance: {rm(bill.financePaid.amount)} from {bill.financePaid.bank} on {dateLabel(bill.financePaid.on)}, ref {bill.financePaid.ref}{' '}
-              (recorded by {bill.financePaid.by}).{' '}
-            </>
-          )}
-          {bill.bankSeen && (
-            <span>
-              Seen leaving {bill.bankSeen.bank} on the bank statement, {dateLabel(bill.bankSeen.date)}.
-            </span>
-          )}
-        </div>
-      )}
-      {bill.returned && bill.status === 'returned' && (
-        <div className="small">
-          Sent back by {bill.returned.by}: {bill.returned.note}
-        </div>
-      )}
-      {open && (
-        <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {steps.map(([label, s]) => (
-              <li key={label}>
-                {label}: {s ? `${s.by}, ${dateTimeLabel(s.at)}${s.note ? ` · ${s.note}` : ''}` : <span className="muted">not yet</span>}
-              </li>
-            ))}
-          </ul>
-          {can && (
-            <>
-              {b.can.slip && <ProofPicker site={null} refText="Slip" items={slip} onChange={setSlip} documentsOnly required />}
-              <input
-                className="input"
-                aria-label="Note"
-                placeholder={b.can.check || b.can.approve ? 'Note (required to send back)' : 'Note (optional)'}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
+      <div className="hx-row-side">
+        <Chip tone={tone}>{b.waitingOn}</Chip>
+        <button className={`btn btn-sm${can && !open ? '' : ' btn-ghost'}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? 'Hide' : can ? 'Act' : 'Steps'}
+        </button>
+      </div>
+      <div className="hx-row-body">
+        {(bill.financePaid || bill.bankSeen) && (
+          <p className="hx-row-text">
+            {bill.financePaid && (
+              <>
+                Paid by Finance: {rm(bill.financePaid.amount)} from {bill.financePaid.bank} on {dateLabel(bill.financePaid.on)}, ref {bill.financePaid.ref}{' '}
+                (recorded by {bill.financePaid.by}).{' '}
+              </>
+            )}
+            {bill.bankSeen && (
+              <span>
+                Seen leaving {bill.bankSeen.bank} on the bank statement, {dateLabel(bill.bankSeen.date)}.
+              </span>
+            )}
+          </p>
+        )}
+        {bill.returned && bill.status === 'returned' && (
+          <p className="notice" data-tone="crit">
+            Sent back by {bill.returned.by}: {bill.returned.note}
+          </p>
+        )}
+        {open && (
+          <>
+            <div className="hs-steps">
+              <Steps
+                steps={steps.map(([label, s], i) => ({
+                  label,
+                  state: (s ? 'done' : i === firstOpen ? (bill.status === 'returned' ? 'stopped' : 'now') : 'todo') as StepState,
+                  note: s ? `${s.by}, ${dateTimeLabel(s.at)}${s.note ? ` · ${s.note}` : ''}` : 'not yet',
+                }))}
               />
-              <ErrorNotice error={act.error} />
-              <div className="row" style={{ gap: 6 }}>
-                {b.can.request && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    disabled={act.busy}
-                    onClick={() => act.run(() => api.hostelBillStep(bill.id, 'request', true, note), 'Sent to FWM.')}
-                  >
-                    Ask for payment approval
-                  </button>
-                )}
-                {(b.can.check || b.can.approve) && (
-                  <>
+            </div>
+            {can && (
+              <div className="hx-form">
+                {b.can.slip && <ProofPicker site={null} refText="Slip" items={slip} onChange={setSlip} documentsOnly required />}
+                <label className="field">
+                  <span className="label">Note</span>
+                  <input
+                    className="input"
+                    aria-label="Note"
+                    placeholder={b.can.check || b.can.approve ? 'Note (required to send back)' : 'Note (optional)'}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                </label>
+                <ErrorNotice error={act.error} />
+                <div className="hx-form-actions">
+                  {b.can.request && (
                     <button
                       className="btn btn-primary btn-sm"
                       disabled={act.busy}
-                      onClick={() =>
-                        act.run(
-                          () => api.hostelBillStep(bill.id, b.can.check ? 'check' : 'approve', true, note),
-                          b.can.check ? 'Checked, passed on.' : 'Approved.',
-                        )
-                      }
+                      onClick={() => act.run(() => api.hostelBillStep(bill.id, 'request', true, note), 'Sent to FWM.')}
                     >
-                      {b.can.check ? 'Checked, pass on' : 'Approve'}
+                      Ask for payment approval
                     </button>
+                  )}
+                  {(b.can.check || b.can.approve) && (
+                    <>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={act.busy}
+                        onClick={() =>
+                          act.run(
+                            () => api.hostelBillStep(bill.id, b.can.check ? 'check' : 'approve', true, note),
+                            b.can.check ? 'Checked, passed on.' : 'Approved.',
+                          )
+                        }
+                      >
+                        {b.can.check ? 'Checked, pass on' : 'Approve'}
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        disabled={act.busy || note.trim().length < 3}
+                        onClick={() =>
+                          act.run(() => api.hostelBillStep(bill.id, b.can.check ? 'check' : 'approve', false, note), 'Sent back to the company.')
+                        }
+                      >
+                        Send back
+                      </button>
+                    </>
+                  )}
+                  {b.can.slip && (
                     <button
-                      className="btn btn-sm"
-                      disabled={act.busy || note.trim().length < 3}
-                      onClick={() => act.run(() => api.hostelBillStep(bill.id, b.can.check ? 'check' : 'approve', false, note), 'Sent back to the company.')}
+                      className="btn btn-primary btn-sm"
+                      disabled={act.busy || !slip.length}
+                      onClick={() => act.run(() => api.hostelBillStep(bill.id, 'slip', true, note, slip), 'Slip on file. The bill is closed.')}
                     >
-                      Send back
+                      Upload the payment slip
                     </button>
-                  </>
-                )}
-                {b.can.slip && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    disabled={act.busy || !slip.length}
-                    onClick={() => act.run(() => api.hostelBillStep(bill.id, 'slip', true, note, slip), 'Slip on file. The bill is closed.')}
-                  >
-                    Upload the payment slip
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -247,39 +307,52 @@ function AddBill({ hostelId, onDone }: { hostelId: string; onDone: () => void })
   const [doc, setDoc] = useState<ProofInput[]>([]);
   const act = useAction();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <select
-          className="select"
-          aria-label="Kind"
-          value={input.kind}
-          onChange={(e) => setInput({ ...input, kind: e.target.value as HostelBillInput['kind'] })}
-        >
-          {Object.entries(KIND_LABEL).map(([k, l]) => (
-            <option key={k} value={k}>
-              {l}
-            </option>
-          ))}
-        </select>
-        <input className="input" type="month" aria-label="Month billed" value={input.period} onChange={(e) => setInput({ ...input, period: e.target.value })} />
-        <input
-          className="input"
-          type="number"
-          min={0}
-          step="0.01"
-          aria-label="Amount RM"
-          placeholder="Amount RM"
-          value={input.amount || ''}
-          onChange={(e) => setInput({ ...input, amount: Number(e.target.value) })}
-        />
-        <input className="input" type="date" aria-label="Due date" value={input.dueOn} onChange={(e) => setInput({ ...input, dueOn: e.target.value })} />
+    <div className="hx-form">
+      <h4 className="hx-form-title">New bill</h4>
+      <div className="hx-form-grid">
+        <label className="field">
+          <span className="label">Kind</span>
+          <select
+            className="select"
+            aria-label="Kind"
+            value={input.kind}
+            onChange={(e) => setInput({ ...input, kind: e.target.value as HostelBillInput['kind'] })}
+          >
+            {Object.entries(KIND_LABEL).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Month billed</span>
+          <input className="input" type="month" aria-label="Month billed" value={input.period} onChange={(e) => setInput({ ...input, period: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Amount (RM)</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            step="0.01"
+            aria-label="Amount RM"
+            placeholder="Amount RM"
+            value={input.amount || ''}
+            onChange={(e) => setInput({ ...input, amount: Number(e.target.value) })}
+          />
+        </label>
+        <label className="field">
+          <span className="label">Due date</span>
+          <input className="input" type="date" aria-label="Due date" value={input.dueOn} onChange={(e) => setInput({ ...input, dueOn: e.target.value })} />
+        </label>
       </div>
       <ProofPicker site={null} refText="Bill" items={doc} onChange={setDoc} documentsOnly required />
       {(input.kind === 'ELECTRICITY' || input.kind === 'WATER') && (
         <p className="muted small">The app works out the amount above the allowance and each resident's share by bed-days.</p>
       )}
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ gap: 6 }}>
+      <div className="hx-form-actions">
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !input.period || !input.amount || !input.dueOn || !doc.length}
@@ -298,25 +371,58 @@ function AddBill({ hostelId, onDone }: { hostelId: string; onDone: () => void })
 }
 
 function UtilityPanel({ rows, rule }: { rows: ChargeRow[]; rule: string }) {
+  const [q, setQ] = useState('');
+  const [only, setOnly] = useState<'all' | 'decide'>('all');
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter(
+    (r) => (only === 'all' || !r.charge.decision) && (!needle || [r.charge.personName, r.hostelName, r.charge.period].some((v) => v.toLowerCase().includes(needle))),
+  );
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>Utility excess per worker</h3>
-          <div className="muted small">
-            Above RM30 electricity and RM20 water a head a month, shared by bed-days. The 1st and 2nd time are a notice; from the 3rd HR may choose a deduction,
-            only when the contract has the utility clause. The count never resets.
-          </div>
-        </div>
-      </div>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">No utility excess.</div>}
-        {rows.map((r) => (
-          <ChargeItem key={r.charge.id} r={r} />
-        ))}
-      </div>
-      <p className="muted small">{rule}</p>
-    </section>
+    <div className="hx-stack-tight">
+      {rows.length > 0 && (
+        <Toolbar
+          end={
+            <div className="seg" role="group" aria-label="Which charges">
+              <button aria-pressed={only === 'all'} onClick={() => setOnly('all')}>
+                All
+              </button>
+              <button aria-pressed={only === 'decide'} onClick={() => setOnly('decide')}>
+                HR to decide
+              </button>
+            </div>
+          }
+        >
+          <Search value={q} onChange={setQ} placeholder="Search worker, hostel or month" label="Search utility excess" />
+        </Toolbar>
+      )}
+      <UtilityList rows={rows} shown={shown} rule={rule} />
+    </div>
+  );
+}
+
+function UtilityList({ rows, shown, rule }: { rows: ChargeRow[]; shown: ChargeRow[]; rule: string }) {
+  return (
+    <Card
+      title="Utility excess per worker"
+      sub="Above RM30 electricity and RM20 water a head a month, shared by bed-days. The 1st and 2nd time are a notice; from the 3rd HR may choose a deduction, only when the contract has the utility clause. The count never resets."
+      actions={rows.length > 0 ? <span className="hx-count">{shown.length === rows.length ? `${rows.length} charge${rows.length === 1 ? '' : 's'}` : `${shown.length} of ${rows.length}`}</span> : undefined}
+      footer={<p className="hx-source hs-foot">{rule}</p>}
+      flush
+    >
+      {rows.length === 0 ? (
+        <Empty title="No utility excess." />
+      ) : shown.length === 0 ? (
+        <Empty title="Nothing matches." />
+      ) : (
+        <ul className="hx-rows">
+          {shown.map((r) => (
+            <li key={r.charge.id}>
+              <ChargeItem r={r} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -327,17 +433,17 @@ function ChargeItem({ r }: { r: ChargeRow }) {
   const act = useAction();
   const c = r.charge;
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {c.personName} · {rm(c.share)}
-          </div>
-          <div className="muted small">
-            {c.kind === 'ELECTRICITY' ? 'Electricity' : 'Water'} {c.period} at {r.hostelName}: {rm(c.excess)} above the allowance × {c.bedDays} of{' '}
-            {c.totalBedDays} bed-days · excess number {c.count} · contract clause {r.clause ? 'on file' : 'missing'}
-          </div>
-        </div>
+    <div className="hx-row" data-tone={c.decision ? undefined : 'unknown'}>
+      <div className="hx-row-main">
+        <span className="hx-row-title">
+          {c.personName} · {rm(c.share)}
+        </span>
+        <span className="hx-row-meta">
+          {c.kind === 'ELECTRICITY' ? 'Electricity' : 'Water'} {c.period} at {r.hostelName}: {rm(c.excess)} above the allowance × {c.bedDays} of{' '}
+          {c.totalBedDays} bed-days · excess number {c.count} · contract clause {r.clause ? 'on file' : 'missing'}
+        </span>
+      </div>
+      <div className="hx-row-side">
         <Chip tone={c.decision === 'DEDUCTION' ? 'warn' : c.decision === 'NOTICE' ? 'info' : 'unknown'}>
           {c.decision === 'DEDUCTION'
             ? `Deduction, payroll ${c.payrollMonth}`
@@ -348,81 +454,87 @@ function ChargeItem({ r }: { r: ChargeRow }) {
               : 'HR to decide'}
         </Chip>
       </div>
-      {(r.canDecide || r.canAck) && (
-        <>
-          {r.canDecide && <input className="input" aria-label="HR note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />}
-          <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="hx-row-body">
+        {(r.canDecide || r.canAck) && (
+          <>
             {r.canDecide && (
-              <button
-                className="btn btn-sm"
-                disabled={act.busy}
-                onClick={() => act.run(() => api.decideUtilityCharge(c.id, 'NOTICE', note), 'Notice recorded.')}
-              >
-                Give a notice
-              </button>
+              <input className="input hs-note" aria-label="HR note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
             )}
-            {r.canDecide && (
-              <button
-                className="btn btn-primary btn-sm"
-                disabled={act.busy || !r.deductionAllowed}
-                title={r.deductionAllowed ? '' : c.count <= 2 ? 'Notices only for the 1st and 2nd time' : 'No utility clause in the contract'}
-                onClick={() => act.run(() => api.decideUtilityCharge(c.id, 'DEDUCTION', note), 'Deduction goes to this month’s payroll.')}
-              >
-                Deduct from pay
-              </button>
-            )}
-            {r.canAck && (
-              <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.ackUtilityNotice(c.id), 'Signed notice recorded.')}>
-                Worker signed the notice
-              </button>
-            )}
-          </div>
-          {r.canDecide && !r.deductionAllowed && (
-            <div className="muted small">
-              {c.count <= 2 ? 'Notice only: this is the 1st or 2nd time.' : 'Notice only: the contract has no utility clause yet. FWM gets a task to add it.'}
+            <ErrorNotice error={act.error} />
+            <div className="hx-row-actions">
+              {r.canDecide && (
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy}
+                  onClick={() => act.run(() => api.decideUtilityCharge(c.id, 'NOTICE', note), 'Notice recorded.')}
+                >
+                  Give a notice
+                </button>
+              )}
+              {r.canDecide && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={act.busy || !r.deductionAllowed}
+                  title={r.deductionAllowed ? '' : c.count <= 2 ? 'Notices only for the 1st and 2nd time' : 'No utility clause in the contract'}
+                  onClick={() => act.run(() => api.decideUtilityCharge(c.id, 'DEDUCTION', note), 'Deduction goes to this month’s payroll.')}
+                >
+                  Deduct from pay
+                </button>
+              )}
+              {r.canAck && (
+                <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.ackUtilityNotice(c.id), 'Signed notice recorded.')}>
+                  Worker signed the notice
+                </button>
+              )}
             </div>
-          )}
-        </>
-      )}
-      {r.canFilePapers && (!r.clause || !r.ack) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {!r.clause && (
-              <button className="btn btn-sm" aria-pressed={filing === 'clause'} onClick={() => setFiling(filing === 'clause' ? null : 'clause')}>
-                File the signed contract clause
-              </button>
+            {r.canDecide && !r.deductionAllowed && (
+              <span className="muted small">
+                {c.count <= 2 ? 'Notice only: this is the 1st or 2nd time.' : 'Notice only: the contract has no utility clause yet. FWM gets a task to add it.'}
+              </span>
             )}
-            {!r.ack && (
-              <button className="btn btn-sm" aria-pressed={filing === 'ack'} onClick={() => setFiling(filing === 'ack' ? null : 'ack')}>
-                File the worker's signed acknowledgement
-              </button>
+          </>
+        )}
+        {r.canFilePapers && (!r.clause || !r.ack) && (
+          <>
+            <div className="hx-row-actions">
+              {!r.clause && (
+                <button className="btn btn-sm" aria-pressed={filing === 'clause'} onClick={() => setFiling(filing === 'clause' ? null : 'clause')}>
+                  File the signed contract clause
+                </button>
+              )}
+              {!r.ack && (
+                <button className="btn btn-sm" aria-pressed={filing === 'ack'} onClick={() => setFiling(filing === 'ack' ? null : 'ack')}>
+                  File the worker's signed acknowledgement
+                </button>
+              )}
+            </div>
+            {filing && (
+              <div className="hx-form">
+                <ProofPicker site={null} refText={c.personName.slice(0, 20)} items={proof} onChange={setProof} documentsOnly required />
+                <ErrorNotice error={act.error} />
+                <div className="hx-form-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={act.busy || !proof.length}
+                    onClick={async () => {
+                      const ok = await act.run(
+                        () => api.fileUtilityPaper(c.personId, filing, proof),
+                        filing === 'clause' ? 'Contract clause filed.' : 'Signed acknowledgement filed.',
+                      );
+                      if (ok) {
+                        setFiling(null);
+                        setProof([]);
+                      }
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             )}
-          </div>
-          {filing && (
-            <>
-              <ProofPicker site={null} refText={c.personName.slice(0, 20)} items={proof} onChange={setProof} documentsOnly required />
-              <button
-                className="btn btn-primary btn-sm"
-                disabled={act.busy || !proof.length}
-                onClick={async () => {
-                  const ok = await act.run(
-                    () => api.fileUtilityPaper(c.personId, filing, proof),
-                    filing === 'clause' ? 'Contract clause filed.' : 'Signed acknowledgement filed.',
-                  );
-                  if (ok) {
-                    setFiling(null);
-                    setProof([]);
-                  }
-                }}
-              >
-                Save
-              </button>
-              <ErrorNotice error={act.error} />
-            </>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

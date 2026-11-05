@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type FinControls, type FinDesk } from "../api";
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from "../ui";
+import "../styles/finance.css";
 
 /**
  * Bank mandates, staff advances, petty cash and company cards (Fauzan, 2 Nov 2026: yes to suggestions 6, 7, 8 and 14).
@@ -57,10 +58,9 @@ function Ask({
 }) {
   const [t, setT] = useState("");
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="row">
       <input
-        className="input"
-        style={{ flex: 1, minWidth: 180 }}
+        className="input fin-flex"
         placeholder={label}
         value={t}
         onChange={(e) => setT(e.target.value)}
@@ -127,7 +127,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
       <div className="panel-head">
         <h3>Bank mandates: who signs and approves</h3>
       </div>
-      <p className="muted small" style={{ padding: "0 12px" }}>
+      <p className="muted small fin-intro">
         Record each account's mandate as the bank holds it (board resolution and
         mandate form). A second person checks it. Once checked, whoever records
         a release must be on it, and the second approver is named when the bank
@@ -138,21 +138,15 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
         {v.cash.mandates.map((m) => (
           <div
             key={m.bank.id}
-            className="list-item"
-            style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+            className="list-item fin-stack"
           >
             <div
-              className="row"
-              style={{
-                justifyContent: "space-between",
-                gap: 6,
-                flexWrap: "wrap",
-              }}
+              className="row fin-between"
             >
               <strong>
                 {m.bank.bank} {m.bank.accountMasked}
               </strong>
-              <span className="row" style={{ gap: 4 }}>
+              <span className="row">
                 {m.inForce ? (
                   <Chip tone={m.issues.length ? "crit" : "ok"}>
                     {m.issues.length
@@ -199,7 +193,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
               </div>
             ))}
             {m.pending && co.canAct && (
-              <div style={{ display: "grid", gap: 6 }}>
+              <div className="fin-grid">
                 <div className="small">
                   Waiting:{" "}
                   {m.pending.people
@@ -255,8 +249,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
             )}
             {co.canAct && !m.pending && (
               <button
-                className="btn btn-sm"
-                style={{ alignSelf: "flex-start" }}
+                className="btn btn-sm fin-self-start"
                 onClick={() =>
                   setAdding(adding === m.bank.id ? null : m.bank.id)
                 }
@@ -269,7 +262,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
               </button>
             )}
             {adding === m.bank.id && (
-              <div style={{ display: "grid", gap: 6 }}>
+              <div className="fin-grid">
                 <Field label="What the bank needs">
                   <select
                     className="select"
@@ -298,7 +291,6 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
                   <div
                     key={i}
                     className="row"
-                    style={{ gap: 6, flexWrap: "wrap" }}
                   >
                     <People
                       cash={v.cash}
@@ -325,8 +317,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
                       ))}
                     </select>
                     <input
-                      className="input"
-                      style={{ width: 140 }}
+                      className="input fin-w-md"
                       placeholder="Own limit RM"
                       inputMode="decimal"
                       value={p.limit}
@@ -335,8 +326,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
                   </div>
                 ))}
                 <button
-                  className="btn btn-sm"
-                  style={{ alignSelf: "flex-start" }}
+                  className="btn btn-sm fin-self-start"
                   onClick={() =>
                     setF((x) => ({
                       ...x,
@@ -430,7 +420,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: "0 12px" }}>
+      <p className="muted small fin-intro">
         Paid as a normal payment (review and approval as usual). The staff
         member settles with receipts by the settle-by date (
         {v.cash.rules.advanceSettleDays} days unless set), from My work; someone
@@ -439,7 +429,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12, display: "grid", gap: 6 }}>
+        <div className="fin-grid fin-pad">
           <Field label="Staff member as a payee (verified)">
             <select
               className="select"
@@ -549,21 +539,15 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
         {v.cash.advances.map((x) => (
           <div
             key={x.id}
-            className="list-item"
-            style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+            className="list-item fin-stack"
           >
             <div
-              className="row"
-              style={{
-                justifyContent: "space-between",
-                gap: 6,
-                flexWrap: "wrap",
-              }}
+              className="row fin-between"
             >
               <span>
                 <strong>{x.name}</strong> · {rm(x.amount)} · {x.purpose}
               </span>
-              <span className="row" style={{ gap: 4 }}>
+              <span className="row">
                 {x.overdue && <Chip tone="crit">Overdue</Chip>}
                 <Chip tone={STATUS[x.status][0]}>{STATUS[x.status][1]}</Chip>
               </span>
@@ -629,7 +613,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
 function Recover({ onGo }: { onGo: (input: Record<string, unknown>) => void }) {
   const [f, setF] = useState({ how: "payroll", ref: "", comment: "" });
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="row">
       <select
         className="select"
         value={f.how}
@@ -682,7 +666,7 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: "0 12px" }}>
+      <p className="muted small fin-intro">
         One float per office, kept by one custodian who records each voucher
         with its receipt (up to {rm(v.cash.rules.pettyVoucherMax)}) from My
         work. The top-up is a normal payment for exactly the vouchers spent.
@@ -690,7 +674,7 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12, display: "grid", gap: 6 }}>
+        <div className="fin-grid fin-pad">
           <Field label="Office">
             <input
               className="input"
@@ -771,16 +755,10 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
           return (
             <div
               key={p.id}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+              className="list-item fin-stack"
             >
               <div
-                className="row"
-                style={{
-                  justifyContent: "space-between",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
+                className="row fin-between"
               >
                 <span>
                   <strong>{p.office}</strong> · kept by {p.custodian} · float{" "}
@@ -820,10 +798,9 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
                 />
               )}
               {p.status === "active" && co.canAct && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <div className="row">
                   <input
-                    className="input"
-                    style={{ width: 130 }}
+                    className="input fin-w-sm"
                     inputMode="decimal"
                     placeholder="Cash counted RM"
                     value={cash[p.id] ?? ""}
@@ -832,8 +809,7 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
                     }
                   />
                   <input
-                    className="input"
-                    style={{ flex: 1, minWidth: 160 }}
+                    className="input fin-flex"
                     placeholder="Why it differs (if it does)"
                     value={why[p.id] ?? ""}
                     onChange={(e) =>
@@ -916,7 +892,7 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: "0 12px" }}>
+      <p className="muted small fin-intro">
         Finance loads each month's statement. The holder gives a receipt and
         purpose for every line, or marks it personal, from My work. Personal use
         is paid back. Someone other than the holder reviews the statement before
@@ -924,7 +900,7 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12, display: "grid", gap: 6 }}>
+        <div className="fin-grid fin-pad">
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set("kind")}>
               <option value="credit">Credit card</option>
@@ -984,16 +960,10 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
         {v.cash.cards.map((c) => (
           <div
             key={c.id}
-            className="list-item"
-            style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+            className="list-item fin-stack"
           >
             <div
-              className="row"
-              style={{
-                justifyContent: "space-between",
-                gap: 6,
-                flexWrap: "wrap",
-              }}
+              className="row fin-between"
             >
               <span>
                 <strong>
@@ -1028,20 +998,9 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
               />
             )}
             {c.statements.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  borderTop: "1px solid var(--line, #ddd)",
-                  paddingTop: 6,
-                }}
-              >
+              <div key={s.id} className="fin-sep fin-pt">
                 <div
-                  className="row"
-                  style={{
-                    justifyContent: "space-between",
-                    gap: 6,
-                    flexWrap: "wrap",
-                  }}
+                  className="row fin-between"
                 >
                   <span className="small">
                     {s.period} · {rm(s.total)} · {s.lines.length} line(s)
@@ -1057,12 +1016,7 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
                 {s.lines.map((l) => (
                   <div
                     key={l.id}
-                    className="small row"
-                    style={{
-                      gap: 6,
-                      flexWrap: "wrap",
-                      justifyContent: "space-between",
-                    }}
+                    className="small row fin-between"
                   >
                     <span>
                       {dateLabel(l.date)} · {l.merchant} · {rm(l.amount)} ·{" "}
@@ -1109,15 +1063,14 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
             ))}
             {c.status === "active" && co.canAct && (
               <button
-                className="btn btn-sm"
-                style={{ alignSelf: "flex-start" }}
+                className="btn btn-sm fin-self-start"
                 onClick={() => setLoading(loading === c.id ? null : c.id)}
               >
                 {loading === c.id ? "Close" : "Load a statement"}
               </button>
             )}
             {loading === c.id && (
-              <div style={{ display: "grid", gap: 6 }}>
+              <div className="fin-grid">
                 <Field label="Month (YYYY-MM)">
                   <input
                     className="input"
@@ -1195,7 +1148,7 @@ function RecoverLine({
   const [how, setHow] = useState("payroll");
   const [ref, setRef] = useState("");
   return (
-    <span className="row" style={{ gap: 4 }}>
+    <span className="row">
       <select
         className="select"
         value={how}
@@ -1205,8 +1158,7 @@ function RecoverLine({
         <option value="repaid">Repaid</option>
       </select>
       <input
-        className="input"
-        style={{ width: 130 }}
+        className="input fin-w-sm"
         placeholder="Payroll month or ref"
         value={ref}
         onChange={(e) => setRef(e.target.value)}
@@ -1236,20 +1188,20 @@ export function MyCash() {
     msg: string,
   ) => act.run(() => api.finControlAction(companyId, area, action, input), msg);
   return (
-    <section className="panel">
-      <h3>My advances, cards and petty cash</h3>
+    <section className="panel fin">
+      <div className="panel-head">
+        <h3>My advances, cards and petty cash</h3>
+      </div>
       <ErrorNotice error={act.error} />
       {data.map((row) => (
         <div key={row.companyId} className="list">
           {row.advances.map((x) => (
             <div
               key={x.id}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+              className="list-item fin-stack"
             >
               <div
-                className="row"
-                style={{ justifyContent: "space-between", gap: 6 }}
+                className="row fin-between"
               >
                 <span>
                   Advance {rm(x.amount)} · {x.purpose}
@@ -1285,8 +1237,7 @@ export function MyCash() {
           {row.petty.map((p) => (
             <div
               key={p.id}
-              className="list-item"
-              style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+              className="list-item fin-stack"
             >
               <span>
                 Petty cash {p.office}: {rm(p.expected)} should be in the box
@@ -1310,12 +1261,7 @@ export function MyCash() {
             c.statements.map((s) => (
               <div
                 key={s.id}
-                className="list-item"
-                style={{
-                  flexDirection: "column",
-                  alignItems: "stretch",
-                  gap: 6,
-                }}
+                className="list-item fin-stack"
               >
                 <span>
                   {c.issuer} ****{c.last4} {s.period}:{" "}
@@ -1372,11 +1318,10 @@ function SettleForm({
   });
   const spent = Number(f.spent || 0);
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="fin-grid">
+      <div className="row">
         <input
-          className="input"
-          style={{ width: 130 }}
+          className="input fin-w-sm"
           inputMode="decimal"
           placeholder="Spent RM"
           value={f.spent}
@@ -1395,8 +1340,7 @@ function SettleForm({
           }
         />
         <input
-          className="input"
-          style={{ width: 130 }}
+          className="input fin-w-sm"
           inputMode="decimal"
           placeholder="Paid back RM"
           value={f.returned}
@@ -1425,8 +1369,7 @@ function SettleForm({
         </div>
       )}
       <button
-        className="btn btn-sm btn-primary"
-        style={{ alignSelf: "flex-start" }}
+        className="btn btn-sm btn-primary fin-self-start"
         disabled={!f.spent}
         onClick={() =>
           onGo({
@@ -1455,10 +1398,9 @@ function VoucherForm({
 }) {
   const [f, setF] = useState({ amount: "", purpose: "", receipt: "" });
   return (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+    <div className="row">
       <input
-        className="input"
-        style={{ width: 110 }}
+        className="input fin-w-sm"
         inputMode="decimal"
         placeholder={`RM (max ${max})`}
         value={f.amount}
@@ -1502,8 +1444,8 @@ function CardLineForm({
 }) {
   const [f, setF] = useState({ receipt: "", purpose: "" });
   return (
-    <div className="row small" style={{ gap: 6, flexWrap: "wrap" }}>
-      <span style={{ minWidth: 160 }}>{label}</span>
+    <div className="row small">
+      <span className="fin-flex">{label}</span>
       <input
         className="input"
         placeholder="Receipt"
@@ -1541,8 +1483,10 @@ export function AdvancesOverdue() {
   if (!data || data.length === 0) return null;
   return (
     <section className="panel">
-      <h3>Staff advances not settled</h3>
-      <p className="muted small" style={{ padding: "0 12px" }}>
+      <div className="panel-head">
+        <h3>Staff advances not settled</h3>
+      </div>
+      <p className="muted small fin-intro">
         Past the settle-by date with no receipts. Finance chases them; a
         recovery from salary is recorded by Finance and shows on the payroll
         line.

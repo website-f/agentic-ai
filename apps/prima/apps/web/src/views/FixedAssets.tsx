@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api, type DisposalBody, type FixedAssets } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Card } from '../kit';
+import '../styles/finance.css';
 
 /**
  * Fixed assets in the books (V5 asset lifecycle). Prima works out each month's straight-line depreciation per owner
@@ -36,35 +38,48 @@ export function FixedAssetsPanel() {
     .map(([c, y]) => `${CATEGORY[c as keyof typeof CATEGORY]} ${y} years`)
     .join(', ');
   return (
-    <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Depreciation for SQL Account</h3>
-        </div>
-        <p className="muted small">
-          Straight line with no residual value, from the month after purchase ({lives}). These lives are confirmed; the auditors confirm the method. Prima
-          drafts the journal; Finance posts it in SQL Account and records the journal number here. A month with no number is not posted.
+    <div className="fin fin-stack-page">
+      <Card
+        title="Depreciation for SQL Account"
+        sub={`Straight line with no residual value, from the month after purchase (${lives}).`}
+        flush
+      >
+        <p className="muted small fin-intro">
+          These lives are confirmed; the auditors confirm the method. Prima drafts the journal; Finance posts it in SQL Account and records the journal
+          number here. A month with no number is not posted.
         </p>
-        <div className="kpis">
-          <Kpi label="Cost in use" value={rm(k.cost)} />
-          <Kpi label="Net book value" value={rm(k.nbv)} />
-          <Kpi label={`Charge for ${data.period}`} value={rm(k.monthCharge)} />
-          <Kpi label="Months not posted" value={k.unposted} tone={k.unposted ? 'warn' : 'ok'} />
-        </div>
-        <div className="list">
+        <dl className="fin-figs fin-figs-inset">
+          <div>
+            <dt>Cost in use</dt>
+            <dd>{rm(k.cost)}</dd>
+          </div>
+          <div>
+            <dt>Net book value</dt>
+            <dd>{rm(k.nbv)}</dd>
+          </div>
+          <div>
+            <dt>Charge for {data.period}</dt>
+            <dd>{rm(k.monthCharge)}</dd>
+          </div>
+          <div data-tone={k.unposted ? 'warn' : 'ok'}>
+            <dt>Months not posted</dt>
+            <dd>{k.unposted}</dd>
+          </div>
+        </dl>
+        <div className="list fin-sep">
           {data.entities.map((e) => (
             <EntityLine key={e.ownerEntity} e={e} data={data} />
           ))}
         </div>
         {k.itNoCost > 0 && (
-          <p className="notice" data-tone="warn">
+          <p className="notice fin-inset" data-tone="warn">
             {k.itNoCost} IT items in the IT register have no cost recorded, so their depreciation is unknown here. IT should add the cost from the invoice.
           </p>
         )}
-      </section>
+      </Card>
       <EndOfLife data={data} />
       <Disposals data={data} />
-    </>
+    </div>
   );
 }
 
@@ -110,10 +125,10 @@ function OldLine({ x, canAct }: { x: Old; canAct: boolean }) {
   const a = x.asset;
   const [tone, label] = LIFE[x.state];
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
+        <div className="fin-min0">
+          <div className="fin-strong">
             {a.tag} {a.description}
           </div>
           <div className="muted small">
@@ -127,12 +142,12 @@ function OldLine({ x, canAct }: { x: Old; canAct: boolean }) {
         <Chip tone={tone}>{label}</Chip>
       </div>
       {canAct && (
-        <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(!open)}>
+        <button className="btn btn-sm fin-self-start" onClick={() => setOpen(!open)}>
           Review
         </button>
       )}
       {open && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
             className="input"
             aria-label="Condition or work done"
@@ -175,13 +190,13 @@ function EntityLine({ e, data }: { e: FixedAssets['entities'][number]; data: Fix
   const [show, setShow] = useState(false);
   const acc = data.rule.accounts;
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div style={{ fontWeight: 600 }}>{e.ownerEntity}</div>
+    <div className="list-item fin-stack">
+      <div className="fin-strong">{e.ownerEntity}</div>
       <div className="muted small">
         {e.assets} assets · cost {rm(e.cost)} · depreciated {rm(e.accumulated)} · book value {rm(e.nbv)}
       </div>
       {e.months.map((m) => (
-        <div key={m.period} className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+        <div key={m.period} className="row fin-between">
           <span className="small">
             {m.period}: {rm(m.amount)}
           </span>
@@ -190,12 +205,11 @@ function EntityLine({ e, data }: { e: FixedAssets['entities'][number]; data: Fix
           ) : m.amount === 0 ? (
             <Chip tone="info">Nothing to post</Chip>
           ) : data.can.post ? (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row">
               <input
-                className="input"
+                className="input fin-w-sm"
                 aria-label={`SQL journal for ${m.period}`}
                 placeholder="SQL journal no."
-                style={{ width: 130 }}
                 value={refs[m.period] ?? ''}
                 onChange={(ev) => setRefs({ ...refs, [m.period]: ev.target.value })}
               />
@@ -213,12 +227,12 @@ function EntityLine({ e, data }: { e: FixedAssets['entities'][number]; data: Fix
         </div>
       ))}
       {e.journal.length > 0 && (
-        <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShow(!show)}>
+        <button className="btn btn-sm fin-self-start" onClick={() => setShow(!show)}>
           {show ? 'Hide journal' : `Journal for ${data.period}`}
         </button>
       )}
       {show && (
-        <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+        <ul className="small fin-ul">
           {e.journal.map((l) => (
             <li key={l.category}>
               Debit {acc.expense} Depreciation, {CATEGORY[l.category]}: {rm(l.amount)} · Credit {acc.accumulated} Accumulated depreciation
@@ -274,10 +288,10 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
   const team = data.can.ask;
   const run = (action: Parameters<typeof api.amDisposalStep>[1], body: DisposalBody, msg: string) => act.run(() => api.amDisposalStep(a.id, action, body), msg);
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
+        <div className="fin-min0">
+          <div className="fin-strong">
             {a.tag}: {a.description}
           </div>
           <div className="muted small">
@@ -306,7 +320,7 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
         <Chip tone={STATE[d.state][0]}>{STATE[d.state][1]}</Chip>
       </div>
       {team && (d.state === 'no_request' || d.state === 'rejected') && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input className="input" aria-label="Reason" placeholder="Reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
           <select className="input" aria-label="Method" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
             {Object.entries(METHOD).map(([v, t]) => (
@@ -333,7 +347,7 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
         </div>
       )}
       {d.canDecide && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
             className="input"
             aria-label="Note"
@@ -350,7 +364,7 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
         </div>
       )}
       {team && d.state === 'to_dispose' && (
-        <div style={{ display: 'grid', gap: 6 }}>
+        <div className="fin-grid">
           <label className="small">
             Disposed on
             <input className="input" type="date" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
@@ -387,7 +401,7 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
         </div>
       )}
       {data.can.post && d.state === 'to_post' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
             className="input"
             aria-label="SQL journal"

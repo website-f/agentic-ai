@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { ArrowLeftIcon, ArrowRightIcon, BriefcaseIcon, BuildingsIcon, CheckCircleIcon, QuestionIcon, TrayIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { HomeLink, OfficeGuideRole } from '@prima/core';
 import { OFFICE_GUIDE_VERSION, officeGuideFor } from '@prima/core';
 import { useLang } from '../i18n';
 import { api, type CompanyOffice, type CompanyOffices } from '../api';
 import { useApp } from '../App';
-import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad, type Tone } from '../ui';
+import { Chip, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, PageHead, Person, Stat, Stats } from '../kit';
+import '../styles/leadership.css';
 
 /**
  * Each licensed company's own office (Fauzan, 2 Nov 2026: 1 Company Manager or GM and 2 to 8 executives). The head
@@ -34,112 +37,187 @@ const KDN_LABEL: Record<CompanyOffice['kdnLicence'], [Tone, string]> = {
   unknown: ['neutral', 'KDN licence not recorded'],
 };
 
+/** Work lists open folded to this many lines; the rest one click away. */
+const FOLD = 12;
+
 function AllOffices({ open }: { open: (id: string) => void }) {
   const { me, setCompanyId, go } = useApp();
   // Fauzan, 3 Nov 2026: "cos will set" (the CEO keeps the right as owner); the server checks again.
   const canSetRunBy = (me.user.role === 'pwvsb_officer' && me.user.leadership === 'cos') || (me.user.role === 'director' && me.user.opsTier === 'ceo');
   const { data, error } = useLoad(() => api.companyOffices(), []);
   const [desk, setDesk] = useState<string | null>(null);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="company offices" />;
+  const [all, setAll] = useState(false);
+  const [allOffices, setAllOffices] = useState(false);
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="company offices" />
+      </div>
+    );
+  const work = data.work.filter((w) => !desk || w.desk === desk).slice(0, 80);
+  const shownWork = all ? work : work.slice(0, FOLD);
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Company offices</h1>
-          <p className="muted">
+    <div className="page ld">
+      <PageHead
+        title="Company offices"
+        sub={
+          <>
             {data.rule.source}. All offices in one place: staffing, desk cover and every company's open work. Each company still acts on its own work; totals
             are a management view, not combined company records.
-          </p>
+          </>
+        }
+      />
+      <Stats>
+        <Stat label="Companies" value={data.totals.companies} icon={<BuildingsIcon />} tone="info" />
+        <Stat label="Office ready" value={data.totals.ready} tone="ok" icon={<CheckCircleIcon />} />
+        <Stat label="Short of people" value={data.totals.short} tone={data.totals.short ? 'crit' : 'ok'} icon={<WarningIcon />} />
+        <Stat label="Not entered yet" value={data.totals.notEntered} tone="neutral" note="Shown as Unknown" icon={<QuestionIcon />} />
+        <Stat label="Executives in all" value={data.totals.execs} icon={<UsersThreeIcon />} />
+        <Stat
+          label="Open office work"
+          value={data.totals.open}
+          tone={data.totals.urgent ? 'crit' : 'ok'}
+          note={`${data.totals.urgent} urgent`}
+          icon={<TrayIcon />}
+        />
+      </Stats>
+
+      <section className="ld-section" aria-labelledby="ld-offices">
+        <div className="ld-section-head">
+          <h2 id="ld-offices">Offices</h2>
+          <Chip tone="neutral">{data.rows.length}</Chip>
         </div>
-      </div>
-      <OfficeGuide role="monitor" />
-      <div className="kpis">
-        <Kpi label="Companies" value={data.totals.companies} />
-        <Kpi label="Office ready" value={data.totals.ready} tone="ok" />
-        <Kpi label="Short of people" value={data.totals.short} tone={data.totals.short ? 'crit' : 'ok'} />
-        <Kpi label="Not entered yet" value={data.totals.notEntered} tone="neutral" note="Shown as Unknown" />
-        <Kpi label="Executives in all" value={data.totals.execs} />
-        <Kpi label="Open office work" value={data.totals.open} tone={data.totals.urgent ? 'crit' : 'ok'} note={`${data.totals.urgent} urgent`} />
-      </div>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>All office work, by desk</h2>
-          {desk && (
+        <ul className="ld-grid">
+          {(allOffices ? data.rows : data.rows.slice(0, FOLD)).map((r) => (
+            <li key={r.company.id} className="ld-co" data-tone={r.tone} data-pilot={r.company.isPilot}>
+              <div className="ld-co-head">
+                <div className="ld-co-name">
+                  <button type="button" className="ld-co-link" onClick={() => open(r.company.id)}>
+                    {r.company.name}
+                  </button>
+                  <span className="ld-co-sub">
+                    {r.company.isPilot ? 'Pilot · ' : ''}
+                    {r.execCount} executive{r.execCount === 1 ? '' : 's'}
+                    {r.unassigned !== null && ` · ${r.desksAssigned} of ${r.desksTotal} desks shared out`}
+                  </span>
+                </div>
+                <Chip tone={r.tone}>{r.tone === 'ok' ? 'Ready' : r.tone === 'neutral' ? 'Unknown' : r.tone === 'crit' ? 'Short' : 'Check'}</Chip>
+              </div>
+              <div className="ld-co-people">
+                {r.heads.length ? (
+                  r.heads.map((h) => <Person key={h.name} name={h.name} sub={h.job} size={30} />)
+                ) : (
+                  <span className="muted small">No head entered</span>
+                )}
+              </div>
+              <div className="ld-co-chips">
+                <Chip tone={r.urgent ? 'crit' : r.open ? 'warn' : 'ok'}>
+                  {r.open} open{r.urgent ? ` (${r.urgent} urgent)` : ''}
+                </Chip>
+                <Chip tone={KDN_LABEL[r.kdnLicence][0]}>{KDN_LABEL[r.kdnLicence][1]}</Chip>
+              </div>
+              {(r.runBy || r.runs.length > 0) && (
+                <p className="ld-co-note">
+                  {r.runBy && `Run by the ${r.runBy.name} office`}
+                  {r.runs.length > 0 && `Also runs: ${r.runs.map((x) => x.name).join(', ')}`}
+                </p>
+              )}
+              {r.findings.length > 0 && <p className="ld-co-note" data-tone={r.tone}>{r.findings.map((f) => f.message).join(' ')}</p>}
+              <div className="ld-co-foot">
+                <button type="button" className="btn btn-sm btn-ghost ld-go" onClick={() => open(r.company.id)}>
+                  Open office
+                  <ArrowRightIcon size={14} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {data.rows.length > FOLD && (
+          <button type="button" className="btn ld-more-cards" aria-expanded={allOffices} onClick={() => setAllOffices(!allOffices)}>
+            {allOffices ? 'Show fewer offices' : `Show all ${data.rows.length} offices`}
+          </button>
+        )}
+      </section>
+
+      <Card
+        title="All office work, by desk"
+        actions={
+          desk && (
             <button className="btn btn-sm" onClick={() => setDesk(null)}>
               Show all desks
             </button>
-          )}
-        </div>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          )
+        }
+        flush
+      >
+        <div className="ld-filters" role="group" aria-label="Filter by desk">
           {data.byDesk.map((d) => (
-            <button key={d.desk} className="btn btn-sm" aria-pressed={desk === d.desk} onClick={() => setDesk(desk === d.desk ? null : d.desk)}>
-              {d.label}: {d.open}
-              {d.urgent ? ` (${d.urgent} urgent)` : ''}
+            <button
+              key={d.desk}
+              type="button"
+              className="ld-filter"
+              aria-pressed={desk === d.desk}
+              data-urgent={d.urgent ? true : undefined}
+              onClick={() => setDesk(desk === d.desk ? null : d.desk)}
+            >
+              <span>{d.label}</span>
+              <span className="ld-filter-count">
+                {d.open}
+                {d.urgent ? ` (${d.urgent} urgent)` : ''}
+              </span>
             </button>
           ))}
         </div>
-        <div className="list">
-          {data.work.filter((w) => !desk || w.desk === desk).length === 0 && <div className="empty">Nothing waiting.</div>}
-          {data.work
-            .filter((w) => !desk || w.desk === desk)
-            .slice(0, 80)
-            .map((w, i) => (
-              <button
-                key={i}
-                className="list-item"
-                onClick={() => {
-                  setCompanyId(w.companyId);
-                  go({
-                    view: w.go.view,
-                    siteId: w.go.siteId,
-                    personId: w.go.personId,
-                    caseId: w.go.caseId,
-                    tenderId: w.go.tenderId,
-                  });
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{w.title}</div>
-                  <div className="muted small">
-                    {w.companyName} · {w.deskLabel}
-                    {w.actingName ? ` · ${w.actingName}` : ''} · {w.detail}
-                  </div>
-                </div>
-                <Chip tone={w.tone}>{w.tag}</Chip>
-              </button>
+        {work.length === 0 ? (
+          <Empty title="Nothing waiting." />
+        ) : (
+          <ul className="ld-rows">
+            {shownWork.map((w, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  className="ld-row"
+                  data-tone={w.tone}
+                  onClick={() => {
+                    setCompanyId(w.companyId);
+                    go({
+                      view: w.go.view,
+                      siteId: w.go.siteId,
+                      personId: w.go.personId,
+                      caseId: w.go.caseId,
+                      tenderId: w.go.tenderId,
+                    });
+                  }}
+                >
+                  <span className="ld-row-main">
+                    <span className="ld-row-title">{w.title}</span>
+                    <span className="ld-row-meta">
+                      {w.companyName} · {w.deskLabel}
+                      {w.actingName ? ` · ${w.actingName}` : ''} · {w.detail}
+                    </span>
+                  </span>
+                  <span className="ld-row-aside">
+                    <Chip tone={w.tone}>{w.tag}</Chip>
+                  </span>
+                </button>
+              </li>
             ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="list">
-          {data.rows.map((r) => (
-            <button key={r.company.id} className="list-item" onClick={() => open(r.company.id)}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {r.company.name} {r.company.isPilot && <span className="muted small">(pilot)</span>}
-                </div>
-                <div className="muted small">
-                  {r.heads.length ? r.heads.map((h) => `${h.name}, ${h.job}`).join('; ') : 'No head entered'} · {r.execCount} executive
-                  {r.execCount === 1 ? '' : 's'} · {r.open} open
-                  {r.urgent ? ` (${r.urgent} urgent)` : ''}
-                  {r.unassigned !== null && ` · ${r.desksAssigned} of ${r.desksTotal} desks shared out`}
-                </div>
-                {(r.runBy || r.runs.length > 0) && (
-                  <div className="small">
-                    {r.runBy && `Run by the ${r.runBy.name} office`}
-                    {r.runs.length > 0 && `Also runs: ${r.runs.map((x) => x.name).join(', ')}`}
-                  </div>
-                )}
-                <div className="muted small">{KDN_LABEL[r.kdnLicence][1]}</div>
-                {r.findings.length > 0 && <div className="small">{r.findings.map((f) => f.message).join(' ')}</div>}
-              </div>
-              <Chip tone={r.tone}>{r.tone === 'ok' ? 'Ready' : r.tone === 'neutral' ? 'Unknown' : r.tone === 'crit' ? 'Short' : 'Check'}</Chip>
-            </button>
-          ))}
-        </div>
-      </section>
+          </ul>
+        )}
+        {work.length > FOLD && (
+          <button type="button" className="ld-more" aria-expanded={all} onClick={() => setAll(!all)}>
+            {all ? 'Show fewer' : `Show all ${work.length}`}
+          </button>
+        )}
+      </Card>
       {canSetRunBy && <RunByForm rows={data.rows} />}
+      <OfficeGuide role="monitor" />
     </div>
   );
 }
@@ -169,18 +247,22 @@ function RunByForm({ rows }: { rows: CompanyOffices['rows'] }) {
     }
   };
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Companies run by another office</h2>
-      </div>
-      <p className="muted small">
-        For a company without a licence, or without enough work of its own. The running office's Company Manager or GM heads it and can give its desks to their
-        own executives. One level only. Give the reason, for example the board decision.
-      </p>
-      <div className="form">
-        <label>
-          Company
+    <Card
+      title="Companies run by another office"
+      sub="For a company without a licence, or without enough work of its own. The running office's Company Manager or GM heads it and can give its desks to their own executives. One level only. Give the reason, for example the board decision."
+      footer={
+        target && (
+          <button className="btn btn-primary btn-sm" disabled={act.busy || !reason.trim()} onClick={save}>
+            Save
+          </button>
+        )
+      }
+    >
+      <div className="ld-form">
+        <label className="field">
+          <span className="label">Company</span>
           <select
+            className="select"
             value={companyId}
             onChange={(e) => {
               setCompanyId(e.target.value);
@@ -198,9 +280,9 @@ function RunByForm({ rows }: { rows: CompanyOffices['rows'] }) {
           </select>
         </label>
         {target && (
-          <label>
-            Run by
-            <select value={runBy} onChange={(e) => setRunBy(e.target.value)}>
+          <label className="field">
+            <span className="label">Run by</span>
+            <select className="select" value={runBy} onChange={(e) => setRunBy(e.target.value)}>
               <option value="">Its own office</option>
               {parents.map((r) => (
                 <option key={r.company.id} value={r.company.id}>
@@ -211,25 +293,24 @@ function RunByForm({ rows }: { rows: CompanyOffices['rows'] }) {
           </label>
         )}
         {target && (
-          <label>
-            Reason
-            <input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="For example: board decision of the parent company" />
+          <label className="field ld-span">
+            <span className="label">Reason</span>
+            <input
+              className="input"
+              value={reason}
+              maxLength={300}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="For example: board decision of the parent company"
+            />
           </label>
         )}
         {act.error && (
-          <div className="notice" data-tone="crit">
+          <div className="notice ld-span" data-tone="crit">
             {act.error.message}
           </div>
         )}
-        {target && (
-          <div className="row" style={{ gap: 6, marginTop: 8 }}>
-            <button className="btn btn-sm" disabled={act.busy || !reason.trim()} onClick={save}>
-              Save
-            </button>
-          </div>
-        )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -238,8 +319,19 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
   const { data, error } = useLoad(() => api.companyOffice(companyId), [companyId]);
   const [editing, setEditing] = useState(false);
   const [onlyMine, setOnlyMine] = useState(true);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="the company office" />;
+  const [all, setAll] = useState(false);
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="the company office" />
+      </div>
+    );
   const openLink = (l: HomeLink) => {
     if (l.companyId) setCompanyId(l.companyId);
     go({
@@ -252,170 +344,218 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
   };
   const mine = data.queue.filter((q) => q.mine);
   const shown = data.role === 'exec' && onlyMine ? mine : data.queue;
+  const capped = shown.slice(0, 60);
+  const visible = all ? capped : capped.slice(0, FOLD);
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          {back && (
-            <button className="btn btn-sm" onClick={back} style={{ marginBottom: 8 }}>
-              All offices
-            </button>
-          )}
-          <h1>{data.company.name} office</h1>
-          <p className="muted">
+    <div className="page ld">
+      <PageHead
+        title={`${data.company.name} office`}
+        sub={
+          <>
             {data.rule.source}. {data.role === 'head' ? 'You share' : 'The Company Manager or GM shares'} the work out by desk. Each desk has an owner and a
             backup, so the work moves to the backup when the owner is on leave.
-          </p>
-        </div>
-      </div>
-      <OfficeGuide role={data.role} />
+          </>
+        }
+        actions={
+          back && (
+            <button className="btn btn-sm" onClick={back}>
+              <ArrowLeftIcon size={14} aria-hidden="true" /> All offices
+            </button>
+          )
+        }
+      />
       {data.runBy && (
-        <div className="notice">
+        <div className="notice" data-tone="info">
           Run by the {data.runBy.name} office: its {data.role === 'head' ? 'head (you)' : 'Company Manager or GM'} leads this office, and its executives can
           hold desks here. {KDN_LABEL[data.kdnLicence][1]}.
         </div>
       )}
-      {data.runs.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Companies your office also runs</h2>
-          </div>
-          <div className="list">
-            {data.runs.map((r) => (
-              <button
-                key={r.id}
-                className="list-item"
-                onClick={() => {
-                  setCompanyId(r.id);
-                  if (back) back();
-                  go({ view: 'office' });
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{r.name}</div>
-                  <div className="muted small">Open its office to share out its desks and see its work.</div>
-                </div>
-                <Chip tone={KDN_LABEL[r.kdnLicence][0]}>{KDN_LABEL[r.kdnLicence][1]}</Chip>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
       {!data.ready && (
-        <div className="notice">The company office is not switched on in this database yet. Desks cannot be saved until its module is applied.</div>
+        <div className="notice" data-tone="warn">
+          The company office is not switched on in this database yet. Desks cannot be saved until its module is applied.
+        </div>
       )}
-      {data.findings.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>To fix</h2>
-            <Chip tone={data.tone}>{data.findings.length}</Chip>
-          </div>
-          <div className="list">
-            {data.findings.map((f, i) => (
-              <div key={i} className="list-item">
-                <div>{f.message}</div>
-                <Chip tone={f.tone}>{f.rule}</Chip>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      <div className="kpis">
-        <Kpi
+
+      <Stats>
+        <Stat
           label="Executives"
           value={data.execCount}
           tone={data.execCount < data.rule.minExecs || data.execCount > data.rule.maxExecs ? 'crit' : 'ok'}
           note={`${data.rule.minExecs} to ${data.rule.maxExecs}`}
+          icon={<UsersThreeIcon />}
         />
-        <Kpi
+        <Stat
           label={data.role === 'exec' ? 'On your desks' : 'Office work open'}
           value={data.role === 'exec' ? mine.length : data.queue.length}
           tone={(data.role === 'exec' ? mine : data.queue).some((q) => q.tone === 'crit') ? 'crit' : 'ok'}
+          icon={<TrayIcon />}
         />
-        <Kpi label="Desks shared out" value={data.desks.filter((d) => d.state !== 'unassigned').length} note={`of ${data.desks.length}`} />
-      </div>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Team</h2>
-        </div>
-        <div className="list">
-          {data.team.length === 0 && <div className="empty">No office people entered yet. HR adds them when they join.</div>}
-          {data.team.map((t) => (
-            <div key={t.userId} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {t.name} <span className="muted small">{t.job}</span>
-                  {t.from && <span className="muted small"> · from the {t.from} office</span>}
-                </div>
-                <div className="muted small">
-                  {t.desks.length ? `Owns: ${t.desks.join(', ')}` : t.job === 'Executive' ? 'No desk yet' : 'Approvals, arms and anything not shared out'}
-                  {t.backupFor.length > 0 && ` · Backup for: ${t.backupFor.join(', ')}`}
-                </div>
+        <Stat
+          label="Desks shared out"
+          value={data.desks.filter((d) => d.state !== 'unassigned').length}
+          note={`of ${data.desks.length}`}
+          icon={<BriefcaseIcon />}
+        />
+      </Stats>
+
+      {data.findings.length > 0 && (
+        <Card title="To fix" actions={<Chip tone={data.tone}>{data.findings.length}</Chip>} flush>
+          <ul className="ld-rows">
+            {data.findings.map((f, i) => (
+              <li key={i} className="ld-row" data-tone={f.tone}>
+                <span className="ld-row-main">
+                  <span className="ld-row-text">{f.message}</span>
+                </span>
+                <span className="ld-row-aside">
+                  <Chip tone={f.tone}>{f.rule}</Chip>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="ld-main-side">
+        <Card
+          title={data.role === 'exec' ? 'Work' : 'Office work by desk'}
+          actions={
+            data.role === 'exec' && (
+              <div className="seg" role="group" aria-label="Whose work">
+                <button type="button" aria-pressed={onlyMine} onClick={() => setOnlyMine(true)}>
+                  Only mine
+                </button>
+                <button type="button" aria-pressed={!onlyMine} onClick={() => setOnlyMine(false)}>
+                  The whole office
+                </button>
               </div>
-              <div className="row" style={{ gap: 6 }}>
-                {t.onLeave && <Chip tone="info">On leave today</Chip>}
-                <Chip tone={t.open ? 'warn' : 'ok'}>{t.open} open</Chip>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Desks</h2>
-          {data.canAssign && !editing && (
-            <button className="btn btn-sm" onClick={() => setEditing(true)}>
-              Share out desks
+            )
+          }
+          flush
+        >
+          {shown.length === 0 ? (
+            <Empty title="Nothing waiting." />
+          ) : (
+            <ul className="ld-rows">
+              {visible.map((q, i) => (
+                <li key={i}>
+                  <button type="button" className="ld-row" data-tone={q.tone} onClick={() => openLink(q.go)}>
+                    <span className="ld-row-main">
+                      <span className="ld-row-title">{q.title}</span>
+                      <span className="ld-row-meta">
+                        {q.detail} · {q.deskLabel}
+                        {q.actingName ? ` · ${q.mine ? 'you' : q.actingName}` : ''}
+                      </span>
+                    </span>
+                    <span className="ld-row-aside">
+                      <Chip tone={q.tone}>{q.tag}</Chip>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {capped.length > FOLD && (
+            <button type="button" className="ld-more" aria-expanded={all} onClick={() => setAll(!all)}>
+              {all ? 'Show fewer' : `Show all ${capped.length}`}
             </button>
           )}
+          {shown.length > 60 && <p className="muted small ld-pad">and {shown.length - 60} more</p>}
+        </Card>
+
+        <div className="ld-side">
+          <Card title="Team" sub={`${data.team.length} in the office`} flush>
+            {data.team.length === 0 ? (
+              <Empty title="No office people entered yet. HR adds them when they join." />
+            ) : (
+              <ul className="ld-rows">
+                {data.team.map((t) => (
+                  <li key={t.userId} className="ld-row ld-row-team">
+                    <Person name={t.name} sub={`${t.job}${t.from ? ` · from the ${t.from} office` : ''}`} size={32} />
+                    <span className="ld-row-aside">
+                      {t.onLeave && <Chip tone="info">On leave today</Chip>}
+                      <Chip tone={t.open ? 'warn' : 'ok'}>{t.open} open</Chip>
+                    </span>
+                    <span className="ld-row-meta ld-row-full">
+                      {t.desks.length ? `Owns: ${t.desks.join(', ')}` : t.job === 'Executive' ? 'No desk yet' : 'Approvals, arms and anything not shared out'}
+                      {t.backupFor.length > 0 && ` · Backup for: ${t.backupFor.join(', ')}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          {data.runs.length > 0 && (
+            <Card title="Companies your office also runs" flush>
+              <ul className="ld-rows">
+                {data.runs.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      className="ld-row"
+                      onClick={() => {
+                        setCompanyId(r.id);
+                        if (back) back();
+                        go({ view: 'office' });
+                      }}
+                    >
+                      <span className="ld-row-main">
+                        <span className="ld-row-title">{r.name}</span>
+                        <span className="ld-row-meta">Open its office to share out its desks and see its work.</span>
+                      </span>
+                      <span className="ld-row-aside">
+                        <Chip tone={KDN_LABEL[r.kdnLicence][0]}>{KDN_LABEL[r.kdnLicence][1]}</Chip>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
+      </div>
+
+      <Card
+        title="Desks"
+        sub="Each desk has an owner and a backup"
+        actions={
+          data.canAssign &&
+          !editing && (
+            <button className="btn btn-sm btn-primary" onClick={() => setEditing(true)}>
+              Share out desks
+            </button>
+          )
+        }
+      >
         {editing ? (
           <DeskForm office={data} onDone={() => setEditing(false)} />
         ) : (
-          <div className="list">
+          <ul className="ld-desks">
             {data.desks.map((d) => (
-              <div key={d.desk} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>{d.label}</div>
-                  <div className="muted small">{d.covers}</div>
-                  <div className="small">
-                    Owner: {d.ownerName ?? 'none'} · Backup: {d.backupName ?? 'none'}
-                    {d.actingName && d.state !== 'ok' && ` · Today: ${d.actingName}`}
+              <li key={d.desk} className="ld-desk" data-tone={DESK_STATE[d.state][0]}>
+                <div className="ld-desk-head">
+                  <h3>{d.label}</h3>
+                  <Chip tone={DESK_STATE[d.state][0]}>{DESK_STATE[d.state][1]}</Chip>
+                </div>
+                <p className="ld-desk-covers">{d.covers}</p>
+                <dl className="ld-desk-who">
+                  <div>
+                    <dt>Owner</dt>
+                    <dd>{d.ownerName ? <Person name={d.ownerName} size={26} /> : <span className="muted">none</span>}</dd>
                   </div>
-                  {d.note && <div className="muted small">{d.note}</div>}
-                </div>
-                <Chip tone={DESK_STATE[d.state][0]}>{DESK_STATE[d.state][1]}</Chip>
-              </div>
+                  <div>
+                    <dt>Backup</dt>
+                    <dd>{d.backupName ? <Person name={d.backupName} size={26} /> : <span className="muted">none</span>}</dd>
+                  </div>
+                </dl>
+                {d.actingName && d.state !== 'ok' && <p className="ld-desk-note">Today: {d.actingName}</p>}
+                {d.note && <p className="ld-desk-note muted">{d.note}</p>}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>{data.role === 'exec' ? 'Work' : 'Office work by desk'}</h2>
-          {data.role === 'exec' && (
-            <button className="btn btn-sm" onClick={() => setOnlyMine(!onlyMine)}>
-              {onlyMine ? 'Show the whole office' : 'Show only mine'}
-            </button>
-          )}
-        </div>
-        <div className="list">
-          {shown.length === 0 && <div className="empty">Nothing waiting.</div>}
-          {shown.slice(0, 60).map((q, i) => (
-            <button key={i} className="list-item" onClick={() => openLink(q.go)}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{q.title}</div>
-                <div className="muted small">
-                  {q.detail} · {q.deskLabel}
-                  {q.actingName ? ` · ${q.mine ? 'you' : q.actingName}` : ''}
-                </div>
-              </div>
-              <Chip tone={q.tone}>{q.tag}</Chip>
-            </button>
-          ))}
-          {shown.length > 60 && <div className="muted small">and {shown.length - 60} more</div>}
-        </div>
-      </section>
+      </Card>
+      <OfficeGuide role={data.role} />
     </div>
   );
 }
@@ -453,68 +593,61 @@ function DeskForm({ office, onDone }: { office: CompanyOffice; onDone: () => voi
     if (r !== undefined) onDone();
   };
   return (
-    <div className="form">
+    <div className="ld-deskform">
       {office.suggested && (
-        <p className="muted small">
+        <p className="notice" data-tone="info">
           Filled with a fair first split: desks go round the executives, and each backup is the next person along. Change anything before saving.
         </p>
       )}
-      {office.desks.map((d) => (
-        <div
-          key={d.desk}
-          className="row"
-          style={{
-            gap: 8,
-            alignItems: 'end',
-            flexWrap: 'wrap',
-            marginBottom: 8,
-          }}
-        >
-          <div style={{ minWidth: 200, flex: 1 }}>
-            <div style={{ fontWeight: 600 }}>{d.label}</div>
-            <div className="muted small">{d.covers}</div>
-          </div>
-          <label>
-            Owner
-            <select value={rows[d.desk].owner} onChange={(e) => set(d.desk, 'owner', e.target.value)}>
-              <option value="">Not shared out</option>
-              {people.map((p) => (
-                <option key={p.userId} value={p.userId}>
-                  {p.name} ({p.job})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Backup
-            <select value={rows[d.desk].backup} onChange={(e) => set(d.desk, 'backup', e.target.value)}>
-              <option value="">None</option>
-              {people
-                .filter((p) => p.userId !== rows[d.desk].owner)
-                .map((p) => (
+      <ul className="ld-deskform-rows">
+        {office.desks.map((d) => (
+          <li key={d.desk} className="ld-deskform-row">
+            <div className="ld-deskform-desk">
+              <strong>{d.label}</strong>
+              <span className="muted small">{d.covers}</span>
+            </div>
+            <label className="field">
+              <span className="label">Owner</span>
+              <select className="select" value={rows[d.desk].owner} onChange={(e) => set(d.desk, 'owner', e.target.value)}>
+                <option value="">Not shared out</option>
+                {people.map((p) => (
                   <option key={p.userId} value={p.userId}>
                     {p.name} ({p.job})
                   </option>
                 ))}
-            </select>
-          </label>
-        </div>
-      ))}
-      <label>
-        Note (optional)
-        <input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="For example: new executive joined" />
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">Backup</span>
+              <select className="select" value={rows[d.desk].backup} onChange={(e) => set(d.desk, 'backup', e.target.value)}>
+                <option value="">None</option>
+                {people
+                  .filter((p) => p.userId !== rows[d.desk].owner)
+                  .map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {p.name} ({p.job})
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <label className="field">
+        <span className="label">Note (optional)</span>
+        <input className="input" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="For example: new executive joined" />
       </label>
       {act.error && (
         <div className="notice" data-tone="crit">
           {act.error.message}
         </div>
       )}
-      <div className="row" style={{ gap: 6, marginTop: 8 }}>
-        <button className="btn btn-sm" disabled={act.busy} onClick={save}>
-          Save desks
-        </button>
+      <div className="ld-actions">
         <button className="btn btn-sm" onClick={onDone}>
           Cancel
+        </button>
+        <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={save}>
+          Save desks
         </button>
       </div>
     </div>
@@ -522,7 +655,7 @@ function DeskForm({ office, onDone }: { office: CompanyOffice; onDone: () => voi
 }
 
 /**
- * In-app guide cards (Arisha main review, section A; shared guide-card shape of PR #56): read-only help for each office
+ * In-app guide cards (main review, section A; shared guide-card shape of PR #56): read-only help for each office
  * task, scoped to the viewer's office role. Bahasa Melayu first, with English. It explains; it never saves or approves.
  */
 function OfficeGuide({ role }: { role: OfficeGuideRole | null }) {
@@ -543,25 +676,27 @@ function OfficeGuide({ role }: { role: OfficeGuideRole | null }) {
     );
   const L = (bm: string, english: string) => (en ? english : bm);
   return (
-    <section className="panel" aria-label="Office guide">
-      <div className="panel-head">
-        <h2>{L('Panduan kerja', 'How to do it')}</h2>
+    <section className="k-card" aria-label="Office guide">
+      <div className="k-card-head">
+        <div className="k-card-title">
+          <h2>{L('Panduan kerja', 'How to do it')}</h2>
+          <p>
+            {L(
+              'Panduan sahaja. Ia tidak menyimpan, melulus atau mengubah apa-apa; gunakan skrin yang dinamakan pada setiap kad.',
+              'Help only. It does not save, approve or change anything; you use the screen named on each card.',
+            )}
+          </p>
+        </div>
         <span className="muted small">{OFFICE_GUIDE_VERSION}</span>
       </div>
-      <p className="muted small">
-        {L(
-          'Panduan sahaja. Ia tidak menyimpan, melulus atau mengubah apa-apa; gunakan skrin yang dinamakan pada setiap kad.',
-          'Help only. It does not save, approve or change anything; you use the screen named on each card.',
-        )}
-      </p>
-      <div className="list">
+      <ul className="ld-guide">
         {cards.map((c) => (
-          <div key={c.id} className="list-item" style={{ display: 'block' }}>
-            <button className="link-button" aria-expanded={openId === c.id} onClick={() => setOpenId(openId === c.id ? null : c.id)}>
+          <li key={c.id}>
+            <button type="button" className="ld-guide-toggle" aria-expanded={openId === c.id} onClick={() => setOpenId(openId === c.id ? null : c.id)}>
               <T v={c.title} />
             </button>
             {openId === c.id && (
-              <div className="small" style={{ marginTop: 6 }}>
+              <div className="ld-guide-body">
                 <p>
                   <T v={c.purpose} />
                 </p>
@@ -623,9 +758,9 @@ function OfficeGuide({ role }: { role: OfficeGuideRole | null }) {
                 )}
               </div>
             )}
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

@@ -28,20 +28,20 @@ export function ContractEnds({ v }: { v: FinControls }) {
       <div className="panel-head">
         <h3>Contracts that ended</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Billing stops on the day a contract ends or is terminated. Prima lists what follows; each line ticks itself when it is done elsewhere (invoice recorded,
         money seen on the bank statement, guarantee closed).
       </p>
       <div className="list">
         {ce.ends.map((e) => (
-          <div key={e.contract.id} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 600 }}>
+          <div key={e.contract.id} className="list-item fin-block">
+            <div className="row fin-between">
+              <span className="fin-strong">
                 {e.contract.client} · {e.contract.ref} · {e.contract.terminated ? 'terminated' : 'ended'} {dateLabel(e.contract.endOn)}
               </span>
               <Chip tone={e.late ? 'crit' : e.open ? 'warn' : 'ok'}>{e.open ? `${e.open} to do${e.late ? `, ${e.late} late` : ''}` : 'All done'}</Chip>
             </div>
-            <ul className="small" style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+            <ul className="small fin-ul">
               {e.steps.map((s, i) => (
                 <li key={i}>
                   {s.done ? '✓ ' : ''}
@@ -81,13 +81,13 @@ export function ClientDeposits({ v }: { v: FinControls }) {
           {adding ? 'Close' : 'Add'}
         </button>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Money a client keeps until the contract ends. A second person checks each one. Claim it back when the contract ends; Prima finds the payment on the bank
         statement.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set('kind')}>
               <option value="deposit">Deposit</option>
@@ -151,15 +151,15 @@ function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Reco
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const [tone, label] = STATUS[d.status];
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {d.kind === 'deposit' ? 'Deposit' : 'Retention'} {rm(d.amount)} · {d.client}
           {d.contractRef && ` · ${d.contractRef}`}
           {d.dueBack && d.status !== 'refunded' && d.status !== 'written_off' && <span className="muted"> · due back {dateLabel(d.dueBack)}</span>}
           {d.refund && <span className="muted"> · paid back {dateLabel(d.refund.date)}</span>}
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={tone}>{label}</Chip>
           {['pending', 'held', 'claimed'].includes(d.status) && (
             <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -169,7 +169,7 @@ function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Reco
         </span>
       </div>
       {open && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           {d.status === 'pending' && (
             <>
               <Field label="What you checked it against">
@@ -201,7 +201,7 @@ function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Reco
             </>
           )}
           {(d.status === 'held' || d.status === 'claimed') && (
-            <div style={{ marginTop: 8 }}>
+            <div className="fin-mt">
               <Field label="Write off (Finance Director or CEO): reason">
                 <input className="input" value={f.why ?? ''} onChange={set('why')} />
               </Field>

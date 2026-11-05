@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { api, type ItBoard, type ItPlan } from '../api';
 import { LANG_RULE, Rich, sampleProblem, useSample } from '../Arisha';
 import { useLang } from '../i18n';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useLoad } from '../ui';
+import { Chip, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
+import { Card, Empty, Stat, Stats } from '../kit';
 import { GiveJob, type JobPreset } from './ItWork';
 
 /**
@@ -34,122 +35,151 @@ export function ItPlanView({ board }: { board: ItBoard }) {
   const shown = show === 'open' ? open : data.dues;
   const r = data.readiness;
   const bucketOf = (d: string) => data.buckets.findIndex((b) => d >= b.from && d <= b.to);
+  const overdueOpen = open.filter((d) => d.overdue).length;
   return (
-    <section className="panel">
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-        <div className="seg">
-          {(
-            [
-              ['week', 'Week'],
-              ['month', 'Month'],
-              ['year', 'Year'],
-            ] as const
-          ).map(([k, l]) => (
-            <button
-              key={k}
-              aria-pressed={span === k}
-              onClick={() => {
-                setSpan(k);
-                setFrom(undefined);
-              }}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-        <button className="btn btn-sm" onClick={() => setFrom(data.prev)} aria-label="Earlier">
-          ‹
-        </button>
-        <strong>{data.title}</strong>
-        <button className="btn btn-sm" onClick={() => setFrom(data.next)} aria-label="Later">
-          ›
-        </button>
-        {from && (
-          <button className="btn btn-sm btn-ghost" onClick={() => setFrom(undefined)}>
-            Today
-          </button>
-        )}
-      </div>
-      <p className="muted small">
-        The regular work comes from the registers: servicing every 6 months, yearly asset checks, domain and certificate renewals, access reviews every 90 days and
-        tender closing dates. {data.canPlan ? 'Give each piece to someone as a job with a due date.' : 'The IT Manager gives each piece to someone as a job.'}
-      </p>
-      <div className="kpis">
-        <Kpi label="Regular work due" value={data.dues.length} />
-        <Kpi label="Not given to anyone" value={open.length} tone={open.length ? 'warn' : 'ok'} />
-        <Kpi label="Overdue, not given" value={open.filter((d) => d.overdue).length} tone={open.some((d) => d.overdue) ? 'crit' : 'ok'} />
-        <Kpi label="Jobs due in this period" value={data.jobs.length} />
-      </div>
-      <p className="notice" data-tone={r.notGiven ? 'warn' : 'ok'}>
-        {r.notGiven
-          ? `${r.nextTitle}: ${r.notGiven} of ${r.due} pieces of regular work not given yet.`
-          : `${r.nextTitle}: all ${r.due} pieces of regular work are given.`}
-      </p>
-
-      <h3>Who has what</h3>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Person</th>
-              {data.buckets.map((b) => (
-                <th key={b.from} className="num">
-                  {data.span === 'year' ? b.label.slice(0, 3) : b.label}
-                </th>
+    <>
+      <Card
+        title={data.title}
+        sub={
+          <>
+            The regular work comes from the registers: servicing every 6 months, yearly asset checks, domain and certificate renewals, access reviews every 90 days and
+            tender closing dates. {data.canPlan ? 'Give each piece to someone as a job with a due date.' : 'The IT Manager gives each piece to someone as a job.'}
+          </>
+        }
+        actions={
+          <div className="it-plan-nav">
+            <div className="seg">
+              {(
+                [
+                  ['week', 'Week'],
+                  ['month', 'Month'],
+                  ['year', 'Year'],
+                ] as const
+              ).map(([k, l]) => (
+                <button
+                  key={k}
+                  aria-pressed={span === k}
+                  onClick={() => {
+                    setSpan(k);
+                    setFrom(undefined);
+                  }}
+                >
+                  {l}
+                </button>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.load.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                {p.cells.map((c, i) => (
-                  <td key={i} className="num" title={c.over ? 'Too much planned' : c.empty ? 'Nothing planned' : undefined}>
-                    {c.over ? <Chip tone="crit">{c.jobs}</Chip> : c.empty ? <Chip tone="warn">0</Chip> : c.jobs || '–'}
-                  </td>
+            </div>
+            <button className="btn btn-sm" onClick={() => setFrom(data.prev)} aria-label="Earlier">
+              ‹
+            </button>
+            <button className="btn btn-sm" onClick={() => setFrom(data.next)} aria-label="Later">
+              ›
+            </button>
+            {from && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setFrom(undefined)}>
+                Today
+              </button>
+            )}
+          </div>
+        }
+      >
+        <div className="it-plan-top">
+          <Stats>
+            <Stat label="Regular work due" value={data.dues.length} />
+            <Stat label="Not given to anyone" value={open.length} tone={open.length ? 'warn' : 'ok'} />
+            <Stat label="Overdue, not given" value={overdueOpen} tone={overdueOpen ? 'crit' : 'ok'} />
+            <Stat label="Jobs due in this period" value={data.jobs.length} />
+          </Stats>
+          <p className="notice" data-tone={r.notGiven ? 'warn' : 'ok'}>
+            {r.notGiven
+              ? `${r.nextTitle}: ${r.notGiven} of ${r.due} pieces of regular work not given yet.`
+              : `${r.nextTitle}: all ${r.due} pieces of regular work are given.`}
+          </p>
+        </div>
+      </Card>
+
+      <Card
+        title="Who has what"
+        sub={`Jobs due in each ${data.span === 'week' ? 'day' : data.span === 'month' ? 'week' : 'month'}. There is no fixed limit: plan what the work needs. A week or month ahead with nothing planned is flagged.`}
+        flush
+      >
+        <div className="table-wrap it-plan-table">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Person</th>
+                {data.buckets.map((b) => (
+                  <th key={b.from} className="num">
+                    {data.span === 'year' ? b.label.slice(0, 3) : b.label}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted small">
-        Jobs due in each {data.span === 'week' ? 'day' : data.span === 'month' ? 'week' : 'month'}. There is no fixed limit: plan what the work needs. A week or
-        month ahead with nothing planned is flagged.
-      </p>
+            </thead>
+            <tbody>
+              {data.load.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.name}</td>
+                  {p.cells.map((c, i) => (
+                    <td key={i} className="num" title={c.over ? 'Too much planned' : c.empty ? 'Nothing planned' : undefined}>
+                      {c.over ? <Chip tone="crit">{c.jobs}</Chip> : c.empty ? <Chip tone="warn">0</Chip> : c.jobs || '–'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {data.canPlan && <PlanHelper data={data} />}
 
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-        <h3 style={{ margin: 0 }}>Regular work</h3>
-        <div className="seg">
-          <button aria-pressed={show === 'open'} onClick={() => setShow('open')}>
-            Not given ({open.length})
-          </button>
-          <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
-            All ({data.dues.length})
-          </button>
-        </div>
-      </div>
-      <div className="list">
-        {shown.length === 0 && <div className="empty">Everything in this period is given to someone.</div>}
+      <Card
+        title="Regular work"
+        actions={
+          <div className="seg">
+            <button aria-pressed={show === 'open'} onClick={() => setShow('open')}>
+              Not given ({open.length})
+            </button>
+            <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
+              All ({data.dues.length})
+            </button>
+          </div>
+        }
+        flush
+      >
+        {shown.length === 0 && <Empty title="Everything in this period is given to someone." />}
         {data.buckets.map((b, i) => {
           const items = shown.filter((d) => bucketOf(d.dueOn) === i);
           if (!items.length) return null;
           return (
             <div key={b.from}>
-              <div className="label" style={{ margin: '8px 0 4px' }}>
-                {b.label}
-              </div>
-              {items.map((d) => (
-                <div key={d.key} className="list-item" style={{ alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{d.title}</div>
-                    <div className="muted small">
-                      {WHAT[d.what]} · due {dateLabel(d.dueOn)} · {d.detail}
+              <h3 className="it-group">{b.label}</h3>
+              <ul className="it-rows">
+                {items.map((d) => (
+                  <li key={d.key} className="it-item" data-late={d.overdue && !d.jobId ? 'yes' : undefined}>
+                    <div className="it-item-head">
+                      <div className="it-item-main">
+                        <span className="it-row-title">{d.title}</span>
+                        <span className="it-row-meta">
+                          {WHAT[d.what]} · due {dateLabel(d.dueOn)} · {d.detail}
+                        </span>
+                      </div>
+                      <div className="it-actions">
+                        {d.overdue && <Chip tone="crit">Overdue</Chip>}
+                        {d.jobId ? (
+                          <Chip tone="ok">{d.assignee}</Chip>
+                        ) : d.what === 'tender' ? (
+                          <Chip tone="warn">No owner</Chip>
+                        ) : data.canPlan ? (
+                          <button className={giving?.key === d.key ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onClick={() => setGiving(giving?.key === d.key ? null : d)}>
+                            {giving?.key === d.key ? 'Cancel' : 'Plan it'}
+                          </button>
+                        ) : (
+                          <Chip tone="warn">Not given</Chip>
+                        )}
+                      </div>
                     </div>
                     {giving?.key === d.key && (
-                      <div style={{ marginTop: 6 }}>
+                      <div className="it-plan-give">
                         <GiveJob
                           data={board}
                           preset={{ kind: d.jobKind, title: d.title, detail: d.detail, dueOn: d.dueOn, technical: d.technical, planKey: d.key } as JobPreset}
@@ -157,28 +187,14 @@ export function ItPlanView({ board }: { board: ItBoard }) {
                         />
                       </div>
                     )}
-                  </div>
-                  <div className="row" style={{ gap: 4, flexShrink: 0 }}>
-                    {d.overdue && <Chip tone="crit">Overdue</Chip>}
-                    {d.jobId ? (
-                      <Chip tone="ok">{d.assignee}</Chip>
-                    ) : d.what === 'tender' ? (
-                      <Chip tone="warn">No owner</Chip>
-                    ) : data.canPlan ? (
-                      <button className="btn btn-sm btn-primary" onClick={() => setGiving(giving?.key === d.key ? null : d)}>
-                        {giving?.key === d.key ? 'Cancel' : 'Plan it'}
-                      </button>
-                    ) : (
-                      <Chip tone="warn">Not given</Chip>
-                    )}
-                  </div>
-                </div>
-              ))}
+                  </li>
+                ))}
+              </ul>
             </div>
           );
         })}
-      </div>
-    </section>
+      </Card>
+    </>
   );
 }
 
@@ -223,12 +239,11 @@ ${open.map((d, i) => `${i + 1}. ${d.title} | due ${d.dueOn}${d.overdue ? ' OVERD
     }
   };
   return (
-    <div className="panel" style={{ marginTop: 10, background: 'var(--surface-2)' }}>
-      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <strong>Arisha can suggest a plan</strong>
-        <span className="muted small">She suggests; you decide and give each job.</span>
-        <span style={{ flex: 1 }} />
-        {busy ? (
+    <Card
+      title="Plan suggestions"
+      sub="Suggestions only: you decide and give each job with Plan it."
+      actions={
+        busy ? (
           <button className="btn btn-sm" onClick={() => abort.current?.abort()}>
             Stop
           </button>
@@ -236,15 +251,17 @@ ${open.map((d, i) => `${i + 1}. ${d.title} | due ${d.dueOn}${d.overdue ? ' OVERD
           <button className="btn btn-sm btn-primary" onClick={suggest} disabled={!sample}>
             Suggest a plan
           </button>
-        )}
-      </div>
-      {!sample && <p className="muted small">Arisha is not connected here. In the test link she runs on Claude.</p>}
+        )
+      }
+    >
+      {!sample && <p className="it-none">Plan suggestions are not connected here. In the test link they run on Claude.</p>}
       {text !== null && (
-        <div style={{ marginTop: 8 }} data-no-translate>
+        <div className="it-plan-text" data-no-translate>
           {text ? <Rich text={text} /> : <span className="muted">Thinking…</span>}
         </div>
       )}
+      {text === null && sample && <p className="it-none">Suggests who could take each piece of regular work that is not given yet, and when.</p>}
       {problem && <p className="notice" data-tone="warn">{problem}</p>}
-    </div>
+    </Card>
   );
 }

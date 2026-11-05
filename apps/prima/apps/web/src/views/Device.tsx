@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeftIcon, CalendarBlankIcon, ScanIcon, SignInIcon, SignOutIcon, SirenIcon, WarningIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, hhmm, useAction, useLoad } from '../ui';
@@ -8,6 +9,8 @@ import { EvidenceCamera } from './Camera';
 import { LeaveForm } from './Leave';
 import { ProofPicker } from './Proof';
 import { FLAG_LABEL, SHIFT_STATE } from './shared';
+import { Card, Empty } from '../kit';
+import '../styles/ops.css';
 
 type Mode = 'home' | 'in' | 'out' | 'scan' | 'report' | 'leave';
 type FaceTest = 'match' | 'nomatch' | 'photo';
@@ -79,7 +82,7 @@ function captureFace(test: FaceTest): FaceCapture | null {
 
 function FaceScan({ value, onChange }: { value: FaceTest; onChange: (v: FaceTest) => void }) {
   return (
-    <div className="field">
+    <div className="field dv-face">
       <span className="label">Face</span>
       <div className="face-frame" aria-hidden="true">
         <svg viewBox="0 0 120 140">
@@ -87,13 +90,11 @@ function FaceScan({ value, onChange }: { value: FaceTest; onChange: (v: FaceTest
           <path d="M8 26V8h18M94 8h18v18M112 114v18H94M26 132H8v-18" />
         </svg>
       </div>
-      <span className="muted small" style={{ textAlign: 'center' }}>
-        Look at the camera. The picture is checked against your enrolled face.
-      </span>
+      <span className="muted small">Look at the camera. The picture is checked against your enrolled face.</span>
       {api.mode === 'demo' ? (
         <>
           <span className="label">Test only: what the camera sees</span>
-          <div className="seg" style={{ alignSelf: 'flex-start' }}>
+          <div className="seg" role="group" aria-label="Test only: what the camera sees">
             <button aria-pressed={value === 'match'} onClick={() => onChange('match')}>
               The right guard
             </button>
@@ -148,55 +149,71 @@ export function Device() {
 
   return (
     <div className="page">
-      <div className="device">
-        <div className="device-site">
-          <div className="label">{s.code}</div>
+      <div className="dv">
+        <header className="dv-site">
+          <span className="dv-code">{s.code}</span>
           <h1>{s.name}</h1>
-          <div className="device-clock">{clock}</div>
-        </div>
+          <div className="dv-clock" aria-label={`Time now ${clock}`}>
+            {clock}
+          </div>
+        </header>
         {mode === 'home' && (
           <>
-            <div className="big-actions">
-              <button className="btn btn-primary" onClick={() => setMode('in')}>
+            <div className="dv-actions">
+              <button className="dv-action" data-primary="true" onClick={() => setMode('in')}>
+                <span className="dv-action-icon" aria-hidden="true">
+                  <SignInIcon size={26} />
+                </span>
                 Clock in
               </button>
-              <button className="btn" onClick={() => setMode('out')}>
+              <button className="dv-action" onClick={() => setMode('out')}>
+                <span className="dv-action-icon" aria-hidden="true">
+                  <SignOutIcon size={26} />
+                </span>
                 Clock out
               </button>
-              <button className="btn" onClick={() => setMode('scan')}>
+              <button className="dv-action" onClick={() => setMode('scan')}>
+                <span className="dv-action-icon" aria-hidden="true">
+                  <ScanIcon size={26} />
+                </span>
                 Patrol checkpoint
               </button>
               {/* Incidents are reported in the JA Group app while it owns them (rule SYS-JA-OWNS). */}
               {!jaOwns('incidents') && (
-                <button className="btn" onClick={() => setMode('report')}>
+                <button className="dv-action" onClick={() => setMode('report')}>
+                  <span className="dv-action-icon" aria-hidden="true">
+                    <WarningIcon size={26} />
+                  </span>
                   Report incident
                 </button>
               )}
-              <button className="btn" onClick={() => setMode('leave')}>
+              <button className="dv-action" onClick={() => setMode('leave')}>
+                <span className="dv-action-icon" aria-hidden="true">
+                  <CalendarBlankIcon size={26} />
+                </span>
                 Leave or absence reason
               </button>
             </div>
             <Sos siteId={s.id} companyId={s.companyId} />
-            <section className="panel">
-              <div className="panel-head">
-                <h3>Today at this post</h3>
-                {api.mode === 'demo' && <span className="muted small">Patrol PINs shown in the test version only</span>}
-              </div>
-              <div className="list">
+            <Card title="Today at this post" sub={api.mode === 'demo' ? 'Patrol PINs shown in the test version only' : undefined} flush>
+              {site.data.shifts.length === 0 && <Empty title="No shifts today." />}
+              <ul className="op-list">
                 {site.data.shifts.map((sh) => (
-                  <div key={sh.id} className="list-item">
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{sh.personName ?? 'Unfilled'}</div>
-                      <div className="muted small mono">
-                        {sh.staffNo ?? ''} · {hhmm(sh.start)}–{hhmm(sh.end)}
-                        {api.mode === 'demo' && sh.staffNo ? ` · patrol PIN ${demoPin(sh.staffNo)}` : ''}
+                  <li key={sh.id} className="op-item">
+                    <div className="op-line">
+                      <div className="op-main">
+                        <span className="op-title">{sh.personName ?? 'Unfilled'}</span>
+                        <span className="dv-shift-time">
+                          {sh.staffNo ?? ''} · {hhmm(sh.start)}–{hhmm(sh.end)}
+                          {api.mode === 'demo' && sh.staffNo ? ` · patrol PIN ${demoPin(sh.staffNo)}` : ''}
+                        </span>
                       </div>
+                      <Chip tone={SHIFT_STATE[sh.state].tone}>{SHIFT_STATE[sh.state].label}</Chip>
                     </div>
-                    <Chip tone={SHIFT_STATE[sh.state].tone}>{SHIFT_STATE[sh.state].label}</Chip>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            </section>
+              </ul>
+            </Card>
           </>
         )}
         {mode === 'leave' && <DeviceLeave onDone={() => setMode('home')} />}
@@ -213,15 +230,16 @@ function Sos({ siteId, companyId }: { siteId: string; companyId: string }) {
   const act = useAction();
   if (!confirm) {
     return (
-      <button className="sos" onClick={() => setConfirm(true)}>
+      <button className="dv-sos" onClick={() => setConfirm(true)}>
+        <SirenIcon size={26} weight="bold" aria-hidden="true" />
         SOS
       </button>
     );
   }
   return (
-    <div className="notice" data-tone="crit">
-      <p style={{ marginBottom: 8 }}>Send an SOS? A P1 case opens at once on the supervisor's and the company's screens. Phone your supervisor as well.</p>
-      <div className="row">
+    <div className="notice dv-sos-confirm" data-tone="crit">
+      <p>Send an SOS? A P1 case opens at once on the supervisor's and the company's screens. Phone your supervisor as well.</p>
+      <div className="dv-big-btns">
         <button
           className="btn btn-danger"
           disabled={act.busy}
@@ -360,11 +378,8 @@ function Flow({
   // The report goes with its proof; afterwards the guard may add more photos of the scene (Fauzan, 25 Oct 2026).
   if (reported) {
     return (
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Photos for {reported.ref}</h2>
-        </div>
-        <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Card title={`Photos for ${reported.ref}`}>
+        <div className="dv-form">
           <div className="notice" data-tone="ok">
             Report {reported.ref} sent to your supervisor with its proof. Add more photos of the scene if needed. Each photo is stamped with the time and this
             phone's location.
@@ -383,13 +398,11 @@ function Flow({
               return r;
             }}
           />
-          <div>
-            <button className="btn btn-primary" onClick={onDone}>
-              Done
-            </button>
-          </div>
+          <button className="btn btn-primary dv-submit" onClick={onDone}>
+            Done
+          </button>
         </div>
-      </section>
+      </Card>
     );
   }
 
@@ -402,11 +415,11 @@ function Flow({
 
   if (result) {
     return (
-      <div className="device">
+      <div className="dv-result" role="status">
         <div className="notice" data-tone={result.tone}>
           {result.text}
         </div>
-        <button className="btn btn-primary" onClick={onDone}>
+        <button className="btn btn-primary dv-submit" onClick={onDone}>
           Done
         </button>
       </div>
@@ -414,14 +427,16 @@ function Flow({
   }
 
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>{titleText}</h2>
+    <Card
+      title={titleText}
+      actions={
         <button className="btn btn-ghost" onClick={onDone}>
+          <ArrowLeftIcon size={16} aria-hidden="true" />
           Back
         </button>
-      </div>
-      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      }
+    >
+      <div className="dv-form">
         <div className="field">
           <label className="label" htmlFor="dev-staff">
             Staff number
@@ -462,7 +477,7 @@ function Flow({
             <div className="field">
               <span className="label">Location</span>
               {api.mode === 'demo' ? (
-                <div className="seg">
+                <div className="seg" role="group" aria-label="Location (test)">
                   <button aria-pressed={where === 'site'} onClick={() => setWhere('site')}>
                     At the site (test)
                   </button>
@@ -527,7 +542,7 @@ function Flow({
         )}
         <ErrorNotice error={act.error} />
         <button
-          className="btn btn-primary"
+          className="btn btn-primary dv-submit"
           disabled={act.busy || !staffNo || (mode === 'scan' && pin.length !== 4) || (mode === 'report' && (!title.trim() || !proof.length))}
           onClick={submit}
         >
@@ -539,7 +554,7 @@ function Flow({
           </span>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -548,19 +563,23 @@ function DeviceLeave({ onDone }: { onDone: () => void }) {
   const [staffNo, setStaffNo] = useState('');
   const [faceTest, setFaceTest] = useState<FaceTest>('match');
   return (
-    <section className="panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="panel-head" style={{ padding: 0 }}>
-        <h2>Leave or absence reason</h2>
-        <button className="btn btn-sm" onClick={onDone}>
+    <Card
+      title="Leave or absence reason"
+      actions={
+        <button className="btn btn-ghost" onClick={onDone}>
+          <ArrowLeftIcon size={16} aria-hidden="true" />
           Back
         </button>
+      }
+    >
+      <div className="dv-form">
+        <label className="field">
+          <span className="label">Staff number</span>
+          <input className="input mono" value={staffNo} onChange={(e) => setStaffNo(e.target.value.toUpperCase())} aria-label="Staff number" />
+        </label>
+        <FaceScan value={faceTest} onChange={setFaceTest} />
+        <LeaveForm key={staffNo} staffNo={staffNo || undefined} face={() => captureFace(faceTest)} onDone={onDone} />
       </div>
-      <label className="field">
-        <span className="label">Staff number</span>
-        <input className="input mono" value={staffNo} onChange={(e) => setStaffNo(e.target.value.toUpperCase())} aria-label="Staff number" />
-      </label>
-      <FaceScan value={faceTest} onChange={setFaceTest} />
-      <LeaveForm key={staffNo} staffNo={staffNo || undefined} face={() => captureFace(faceTest)} onDone={onDone} />
-    </section>
+    </Card>
   );
 }

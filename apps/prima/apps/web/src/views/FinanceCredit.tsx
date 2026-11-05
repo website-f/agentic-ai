@@ -33,17 +33,17 @@ export function ClientCredit({ v }: { v: FinControls }) {
       <div className="panel-head">
         <h3>Client credit limits</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         For private clients. Operations is warned before adding a post for a client over its limit or with an invoice unpaid over {cr.overdueDays} days; they
         may still add it with a reason, which shows here.
       </p>
       <ErrorNotice error={act.error} />
       {open.map((o) => (
-        <div key={o.id} className="notice" data-tone="warn" style={{ margin: '0 12px 8px' }}>
+        <div key={o.id} className="notice fin-inset" data-tone="warn">
           <div>
             {dateTimeLabel(o.at)}: {o.by} added post {o.post} for {o.client} ({o.warning}). Reason: {o.reason}
           </div>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+          <div className="row fin-mt">
             <input
               className="input"
               placeholder="What Finance does (chase payment, agreed with the client)"
@@ -70,8 +70,8 @@ function ClientLine({ c, go, busy }: { c: Row; go: Go; busy: boolean }) {
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {c.name}
           <span className="muted">
@@ -81,7 +81,7 @@ function ClientLine({ c, go, busy }: { c: Row; go: Go; busy: boolean }) {
             {c.oldestUnpaidOn ? ` · oldest unpaid ${dateLabel(c.oldestUnpaidOn)}` : ''}
           </span>
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={c.warn ? 'crit' : c.stale ? 'warn' : c.limit != null ? 'ok' : 'neutral'}>
             {c.warn ? 'Warns Operations' : c.stale ? 'Balance to refresh' : c.limit != null ? 'Within limit' : 'No limit'}
           </Chip>
@@ -91,10 +91,10 @@ function ClientLine({ c, go, busy }: { c: Row; go: Go; busy: boolean }) {
         </span>
       </div>
       {open && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           {c.reasons.length > 0 && <p className="small">Prima warns because the client {c.reasons.join(' and ')}.</p>}
           {c.limit != null && (
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="row fin-end">
               <Field label="Owed now (RM), from SQL Account">
                 <input className="input" inputMode="decimal" value={f.owed ?? ''} onChange={set('owed')} />
               </Field>
@@ -110,7 +110,7 @@ function ClientLine({ c, go, busy }: { c: Row; go: Go; busy: boolean }) {
               </button>
             </div>
           )}
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 8 }}>
+          <div className="row fin-mt fin-end">
             <Field label="Credit limit (RM) (Finance Director or CEO)">
               <input className="input" inputMode="decimal" value={f.limit ?? ''} onChange={set('limit')} />
             </Field>
@@ -160,7 +160,7 @@ export function SupplierStatements({ v }: { v: FinControls }) {
         </h3>
         <Chip tone={done === s.rows.length ? 'ok' : s.late ? 'crit' : 'warn'}>{`${done} of ${s.rows.length} agreed`}</Chip>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         The {s.rows.length} biggest suppliers by money paid in the last 12 months. Compare each supplier&apos;s statement with its balance in SQL Account by{' '}
         {dateLabel(s.dueOn)}; after that the close stays open.
       </p>
@@ -181,8 +181,8 @@ function SupLine({ r, go, busy }: { r: Sup; go: Go; busy: boolean }) {
   const c = r.check;
   const diff = f.statementBalance && f.ledgerBalance ? Math.round((Number(f.statementBalance) - Number(f.ledgerBalance)) * 100) / 100 : null;
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {r.supplier}
           <span className="muted">
@@ -193,7 +193,7 @@ function SupLine({ r, go, busy }: { r: Sup; go: Go; busy: boolean }) {
               : ''}
           </span>
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={c?.reviewed ? 'ok' : c ? 'warn' : 'neutral'}>{c?.reviewed ? 'Agreed and reviewed' : c ? 'To review' : 'To check'}</Chip>
           {!c?.reviewed && (
             <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -203,7 +203,7 @@ function SupLine({ r, go, busy }: { r: Sup; go: Go; busy: boolean }) {
         </span>
       </div>
       {open && !c && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 8 }}>
+        <div className="row fin-pt fin-end">
           <Field label="Supplier's statement says we owe (RM)">
             <input className="input" inputMode="decimal" value={f.statementBalance ?? ''} onChange={set('statementBalance')} />
           </Field>
@@ -240,7 +240,7 @@ function SupLine({ r, go, busy }: { r: Sup; go: Go; busy: boolean }) {
         </div>
       )}
       {open && c && !c.reviewed && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingTop: 8 }}>
+        <div className="row fin-pt fin-end">
           <Field label="What you looked at">
             <input className="input" value={f.comment ?? ''} onChange={set('comment')} />
           </Field>

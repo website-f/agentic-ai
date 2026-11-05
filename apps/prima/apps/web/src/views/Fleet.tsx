@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { CalendarCheckIcon, CarIcon, ClipboardTextIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useApp } from '../App';
 import { RecordButton } from './RecordForm';
 import type { ProofInput, VehicleRenewal } from '@prima/core';
 import { api, type FleetBoard } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import '../styles/ops.css';
 
 /**
  * Fleet (Fauzan, 26 Oct 2026). The head of Transport monitors every company vehicle and is reminded of renewals,
@@ -32,17 +35,30 @@ const STATUS: Record<Request['status'], [Tone, string]> = {
   cancelled: ['neutral', 'Cancelled'],
 };
 
+const dueText = (days: number) => (days < 0 ? `${-days} days late` : days === 0 ? 'Today' : `${days} days`);
+
 export function FleetView() {
   const { data, error } = useLoad(() => api.fleetBoard(), []);
   const [tab, setTab] = useState<string | null>(null);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="vehicles" />;
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="vehicles" />
+      </div>
+    );
   const full = data.role === 'transport' || data.role === 'leader';
+  const waiting = data.requests.filter((r) => r.status === 'requested').length;
   const tabs: [string, string, number][] = full
     ? [
         ['due', 'Reminders', data.reminders.length],
         ['vehicles', 'Vehicles', 0],
-        ['requests', 'Requests', data.requests.filter((r) => r.status === 'requested').length],
+        ['requests', 'Requests', waiting],
         ['monitor', 'Monitor', 0],
         ['hours', 'Trips and driving hours', 0],
       ]
@@ -59,27 +75,45 @@ export function FleetView() {
         : [['mine', 'My requests', 0]];
   const view = tab && tabs.some((t) => t[0] === tab) ? tab : tabs[0][0];
   const unknown = data.board.filter((v) => v.tracker === 'unknown' || v.dashcam === 'unknown' || v.health === 'unknown').length;
+  const go = (k: string) => (tabs.some((t) => t[0] === k) ? () => setTab(k) : undefined);
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>Vehicles</h1>
-        <p className="muted">
-          The head of Transport runs every company vehicle: renewals, servicing, payments, and each trip out and in. Staff request a vehicle here. CMS watches
-          trackers, dashcams and driver health.
-        </p>
-      </div>
+      <PageHead
+        title="Vehicles"
+        sub="The head of Transport runs every company vehicle: renewals, servicing, payments, and each trip out and in. Staff request a vehicle here. CMS watches trackers, dashcams and driver health."
+      />
       {data.board.length > 0 && (
-        <div className="kpis">
+        <Stats>
           {full && (
-            <Kpi
+            <Stat
               label="Due or overdue"
               value={data.reminders.length}
               tone={data.reminders.some((r) => r.tone === 'crit') ? 'crit' : data.reminders.length ? 'warn' : 'ok'}
+              note="Road tax, insurance, service, payments"
+              icon={<CalendarCheckIcon size={16} />}
+              onClick={go('due')}
             />
           )}
-          <Kpi label="Out now" value={data.board.filter((v) => v.out).length} />
-          <Kpi label="Devices unknown" value={unknown} tone={unknown ? 'unknown' : 'ok'} note="Not connected or silent" />
-        </div>
+          <Stat label="Out now" value={data.board.filter((v) => v.out).length} note={`Of ${data.board.length} vehicles`} icon={<CarIcon size={16} />} tone="info" />
+          {full && (
+            <Stat
+              label="Requests waiting"
+              value={waiting}
+              tone={waiting ? 'warn' : undefined}
+              note="For Transport to decide"
+              icon={<ClipboardTextIcon size={16} />}
+              onClick={go('requests')}
+            />
+          )}
+          <Stat
+            label="Devices unknown"
+            value={unknown}
+            tone={unknown ? 'unknown' : 'ok'}
+            note="Not connected or silent"
+            icon={<QuestionIcon size={16} />}
+            onClick={go('monitor')}
+          />
+        </Stats>
       )}
       {tabs.length > 1 && (
         <div className="tabbar" role="tablist" aria-label="Vehicle sections">
@@ -104,49 +138,89 @@ export function FleetView() {
 
 function Reminders({ data }: { data: FleetBoard }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Renewals, servicing and payments</h3>
-      </div>
-      <div className="list">
-        {data.reminders.length === 0 && <div className="empty">Nothing due.</div>}
-        {data.reminders.map((r, i) => (
-          <div key={i} className="list-item">
-            <div>
-              <div style={{ fontWeight: 600 }}>
-                {r.plate}: {r.what}
+    <Card title="Renewals, servicing and payments" sub="Most urgent first" flush>
+      {data.reminders.length === 0 && <Empty title="Nothing due." />}
+      <ul className="op-list">
+        {[...data.reminders]
+          .sort((a, b) => a.days - b.days)
+          .map((r, i) => (
+            <li key={i} className="op-item" data-tone={r.tone}>
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">
+                    <span className="fl-plate">{r.plate}</span>: {r.what}
+                  </span>
+                  <span className="op-meta">
+                    {r.companyName} · {dateLabel(r.due)}
+                  </span>
+                </div>
+                <Chip tone={r.tone}>{dueText(r.days)}</Chip>
               </div>
-              <div className="muted small">
-                {r.companyName} · {dateLabel(r.due)}
-              </div>
-            </div>
-            <Chip tone={r.tone}>{r.days < 0 ? `${-r.days} days late` : r.days === 0 ? 'Today' : `${r.days} days`}</Chip>
-          </div>
-        ))}
-      </div>
-    </section>
+            </li>
+          ))}
+      </ul>
+    </Card>
   );
 }
 
 function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
   const { companyId, company } = useApp();
+  const [pick, setPick] = useState<string | null>(null);
+  const detail = useRef<HTMLDivElement>(null);
+  const sel = data.board.find((v) => v.id === pick) ?? data.board[0];
+  const choose = (id: string) => {
+    setPick(id);
+    const el = detail.current;
+    if (el && window.matchMedia('(max-width: 860px)').matches) requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const list = (
+    <Card
+      title="Vehicles"
+      sub={`${data.board.length} vehicles`}
+      actions={<RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} />}
+      flush
+    >
+      {data.board.length === 0 && <Empty title="No vehicles yet." />}
+      <ul className="op-list">
+        {data.board.map((v) => {
+          const worst = v.reminders?.[0];
+          return (
+            <li key={v.id}>
+              <button className="op-item fl-item" data-tone={worst?.tone} aria-current={sel?.id === v.id} onClick={() => choose(v.id)}>
+                <span className="op-main">
+                  <span className="op-title">
+                    <span className="fl-plate">{v.plate}</span> · {v.model}
+                  </span>
+                  <span className="op-meta">{v.out ? `Out with ${v.out.driver}` : 'In the yard'}</span>
+                  <span className="op-co">{v.companyName}</span>
+                </span>
+                {worst ? <Chip tone={worst.tone}>{worst.what}</Chip> : <Chip tone="ok">Up to date</Chip>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Vehicles</h3>
-        <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} />
-      </div>
-      <div className="list">
-        {data.board.map((v) => (
-          <VehicleLine key={v.id} v={v} edit={edit} approved={data.requests.filter((r) => r.status === 'approved' && r.vehicleId === v.id)} />
-        ))}
-      </div>
-    </section>
+    <Split
+      list={list}
+      detail={
+        <div ref={detail} className="fl-detail">
+          {sel ? (
+            <VehicleDetail key={sel.id} v={sel} edit={edit} approved={data.requests.filter((r) => r.status === 'approved' && r.vehicleId === sel.id)} />
+          ) : (
+            <Card title="Vehicle">
+              <Empty title="No vehicle chosen." />
+            </Card>
+          )}
+        </div>
+      }
+    />
   );
 }
 
-function VehicleLine({ v, edit, approved }: { v: Row; edit: boolean; approved: Request[] }) {
-  const [open, setOpen] = useState(false);
+function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved: Request[] }) {
   const [km, setKm] = useState(0);
   const [requestId, setRequestId] = useState(approved[0]?.id ?? '');
   const [driver, setDriver] = useState('');
@@ -157,157 +231,188 @@ function VehicleLine({ v, edit, approved }: { v: Row; edit: boolean; approved: R
   const [nextDueKm, setNextDueKm] = useState(0);
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
-  const worst = v.reminders?.[0];
+  const facts: [string, string][] = [
+    ['Where', v.out ? `Out with ${v.out.driver} since ${dateTimeLabel(v.out.at)}` : 'In the yard'],
+    ['Odometer', `${v.odometerKm?.toLocaleString() ?? '-'} km`],
+    ...Object.entries(v.renewals ?? {}).map(([k, d]) => [RENEWAL_LABEL[k as VehicleRenewal], dateLabel(d)] as [string, string]),
+    ['Service by', `${dateLabel(v.service?.dueOn)} or ${v.service?.dueKm.toLocaleString()} km`],
+    ...(v.payment
+      ? [['Instalment', `${v.payment.lender} RM${v.payment.monthly.toFixed(2)} on day ${v.payment.dayOfMonth}, until ${dateLabel(v.payment.endsOn)}`] as [string, string]]
+      : []),
+  ];
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {v.plate} · {v.model}
-          </div>
-          <div className="muted small">
-            {v.companyName} · {v.odometerKm?.toLocaleString()} km{v.out ? ` · out with ${v.out.driver} since ${dateTimeLabel(v.out.at)}` : ' · in the yard'}
-          </div>
-        </div>
-        <div className="row" style={{ gap: 6 }}>
-          {worst ? <Chip tone={worst.tone}>{worst.what}</Chip> : <Chip tone="ok">Up to date</Chip>}
-          <RecordButton kind="vehicle" id={v.id} />
-          <button className="btn btn-ghost btn-sm" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? 'Hide' : edit ? 'Act' : 'Details'}
-          </button>
-        </div>
+    <Card title={`${v.plate} · ${v.model}`} sub={v.companyName} actions={<RecordButton kind="vehicle" id={v.id} label="Edit vehicle" />}>
+      <div className="op-chips">
+        {v.reminders && v.reminders.length > 0 ? (
+          v.reminders.map((r, i) => (
+            <Chip key={i} tone={r.tone}>
+              {r.what} · {dueText(r.days)}
+            </Chip>
+          ))
+        ) : (
+          <Chip tone="ok">Up to date</Chip>
+        )}
       </div>
-      {open && (
-        <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div>
-            {Object.entries(v.renewals ?? {})
-              .map(([k, d]) => `${RENEWAL_LABEL[k as VehicleRenewal]} ${dateLabel(d)}`)
-              .join(' · ')}
+      <div className="op-facts">
+        <Facts items={facts} />
+      </div>
+
+      {edit && (
+        <section className="op-sec">
+          <div className="op-sec-head">
+            <h3>{v.out ? 'Log it back in' : 'Log it out'}</h3>
           </div>
-          <div>
-            Service by {dateLabel(v.service?.dueOn)} or {v.service?.dueKm.toLocaleString()} km
-            {v.payment ? ` · ${v.payment.lender} RM${v.payment.monthly.toFixed(2)} on day ${v.payment.dayOfMonth}, until ${dateLabel(v.payment.endsOn)}` : ''}
+          <div className="op-form-grid">
+            {!v.out && (
+              <label className="field">
+                <span className="label">Approved request</span>
+                <select className="select" aria-label="Approved request" value={requestId} onChange={(e) => setRequestId(e.target.value)}>
+                  {approved.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}: {r.purpose}
+                    </option>
+                  ))}
+                  <option value="">No request (name the driver)</option>
+                </select>
+              </label>
+            )}
+            {!v.out && !requestId && (
+              <label className="field">
+                <span className="label">Driver</span>
+                <input className="input" aria-label="Driver" placeholder="Driver" value={driver} onChange={(e) => setDriver(e.target.value)} />
+              </label>
+            )}
+            <label className="field">
+              <span className="label">Odometer km</span>
+              <input
+                className="input"
+                type="number"
+                aria-label="Odometer km"
+                placeholder="Odometer km"
+                value={km || ''}
+                onChange={(e) => setKm(Number(e.target.value) || 0)}
+              />
+            </label>
+            {v.out && (
+              <label className="field">
+                <span className="label">Condition note</span>
+                <input className="input" aria-label="Note" placeholder="Condition note" value={note} onChange={(e) => setNote(e.target.value)} />
+              </label>
+            )}
           </div>
-          {v.log && v.log.length > 0 && (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {v.log.map((l, i) => (
-                <li key={i}>
-                  {l.what} · {l.by}, {dateTimeLabel(l.at)}
-                </li>
-              ))}
-            </ul>
-          )}
-          {edit && (
-            <>
-              <div style={{ fontWeight: 600 }}>{v.out ? 'Log it back in' : 'Log it out'}</div>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                {!v.out && (
-                  <select className="select" aria-label="Approved request" value={requestId} onChange={(e) => setRequestId(e.target.value)}>
-                    {approved.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}: {r.purpose}
-                      </option>
-                    ))}
-                    <option value="">No request (name the driver)</option>
-                  </select>
-                )}
-                {!v.out && !requestId && (
-                  <input className="input" aria-label="Driver" placeholder="Driver" value={driver} onChange={(e) => setDriver(e.target.value)} />
-                )}
+          <div className="op-form-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !km}
+              onClick={() =>
+                act.run(
+                  () => (v.out ? api.vehicleIn(v.id, km, note) : api.vehicleOut(v.id, requestId || null, km, driver)),
+                  v.out ? 'Logged in.' : 'Logged out.',
+                )
+              }
+            >
+              {v.out ? 'Log in' : 'Log out'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {edit && (
+        <section className="op-sec">
+          <div className="op-sec-head">
+            <h3>Record a renewal, service or payment</h3>
+          </div>
+          <div className="op-form-grid">
+            <label className="field">
+              <span className="label">Work</span>
+              <select className="select" aria-label="Work" value={work} onChange={(e) => setWork(e.target.value as typeof work)}>
+                <option value="RENEWAL">Renewal</option>
+                <option value="SERVICE">Service</option>
+                {v.payment && <option value="PAYMENT">Instalment paid</option>}
+              </select>
+            </label>
+            {work === 'RENEWAL' && (
+              <label className="field">
+                <span className="label">Renewal</span>
+                <select className="select" aria-label="Renewal" value={renewal} onChange={(e) => setRenewal(e.target.value as VehicleRenewal)}>
+                  {Object.keys(v.renewals ?? {}).map((k) => (
+                    <option key={k} value={k}>
+                      {RENEWAL_LABEL[k as VehicleRenewal]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {work !== 'PAYMENT' && (
+              <label className="field">
+                <span className="label">{work === 'RENEWAL' ? 'New expiry' : 'Next service'}</span>
+                <input className="input" type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} />
+              </label>
+            )}
+            {work === 'SERVICE' && (
+              <label className="field">
+                <span className="label">Next service km</span>
                 <input
                   className="input"
                   type="number"
-                  aria-label="Odometer km"
-                  placeholder="Odometer km"
-                  value={km || ''}
-                  onChange={(e) => setKm(Number(e.target.value) || 0)}
+                  aria-label="Next service km"
+                  placeholder="Next service km"
+                  value={nextDueKm || ''}
+                  onChange={(e) => setNextDueKm(Number(e.target.value) || 0)}
                 />
-                {v.out && <input className="input" aria-label="Note" placeholder="Condition note" value={note} onChange={(e) => setNote(e.target.value)} />}
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !km}
-                  onClick={() =>
-                    act.run(
-                      () => (v.out ? api.vehicleIn(v.id, km, note) : api.vehicleOut(v.id, requestId || null, km, driver)),
-                      v.out ? 'Logged in.' : 'Logged out.',
-                    )
-                  }
-                >
-                  {v.out ? 'Log in' : 'Log out'}
-                </button>
-              </div>
-              <div style={{ fontWeight: 600 }}>Record a renewal, service or payment</div>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <select className="select" aria-label="Work" value={work} onChange={(e) => setWork(e.target.value as typeof work)}>
-                  <option value="RENEWAL">Renewal</option>
-                  <option value="SERVICE">Service</option>
-                  {v.payment && <option value="PAYMENT">Instalment paid</option>}
-                </select>
-                {work === 'RENEWAL' && (
-                  <select className="select" aria-label="Renewal" value={renewal} onChange={(e) => setRenewal(e.target.value as VehicleRenewal)}>
-                    {Object.keys(v.renewals ?? {}).map((k) => (
-                      <option key={k} value={k}>
-                        {RENEWAL_LABEL[k as VehicleRenewal]}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {work !== 'PAYMENT' && (
-                  <label className="small">
-                    {work === 'RENEWAL' ? 'New expiry' : 'Next service'}{' '}
-                    <input className="input" type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} />
-                  </label>
-                )}
-                {work === 'SERVICE' && (
-                  <input
-                    className="input"
-                    type="number"
-                    aria-label="Next service km"
-                    placeholder="Next service km"
-                    value={nextDueKm || ''}
-                    onChange={(e) => setNextDueKm(Number(e.target.value) || 0)}
-                  />
-                )}
-              </div>
-              <ProofPicker site={null} refText={v.plate} items={proof} onChange={setProof} documentsOnly required />
-              <div>
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !proof.length || (work !== 'PAYMENT' && !nextDue)}
-                  onClick={() =>
-                    act
-                      .run(
-                        () => api.recordVehicleWork(v.id, { kind: work, renewal, nextDue: nextDue || undefined, nextDueKm: nextDueKm || undefined }, proof),
-                        'Recorded.',
-                      )
-                      .then((r) => r && setProof([]))
-                  }
-                >
-                  Record with receipt
-                </button>
-              </div>
-            </>
-          )}
-          <ErrorNotice error={act.error} />
-        </div>
+              </label>
+            )}
+          </div>
+          <ProofPicker site={null} refText={v.plate} items={proof} onChange={setProof} documentsOnly required />
+          <div className="op-form-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !proof.length || (work !== 'PAYMENT' && !nextDue)}
+              onClick={() =>
+                act
+                  .run(() => api.recordVehicleWork(v.id, { kind: work, renewal, nextDue: nextDue || undefined, nextDueKm: nextDueKm || undefined }, proof), 'Recorded.')
+                  .then((r) => r && setProof([]))
+              }
+            >
+              Record with receipt
+            </button>
+          </div>
+        </section>
       )}
-    </div>
+      <ErrorNotice error={act.error} />
+
+      {v.log && v.log.length > 0 && (
+        <section className="op-sec">
+          <div className="op-sec-head">
+            <h3>Recent history</h3>
+          </div>
+          <ul className="fl-log">
+            {v.log.map((l, i) => (
+              <li key={i}>
+                <span>{l.what}</span>
+                <span className="op-meta">
+                  {l.by}, {dateTimeLabel(l.at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </Card>
   );
 }
 
 function Requests({ data, edit }: { data: FleetBoard; edit: boolean }) {
+  const order = [...data.requests].sort((a, b) => (a.status === 'requested' ? 0 : 1) - (b.status === 'requested' ? 0 : 1));
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Requests</h3>
-      </div>
-      <div className="list">
-        {data.requests.length === 0 && <div className="empty">No requests.</div>}
-        {data.requests.map((r) => (
+    <Card title="Requests" sub="Waiting for Transport first" flush>
+      {data.requests.length === 0 && <Empty title="No requests." />}
+      <ul className="op-list">
+        {order.map((r) => (
           <RequestLine key={r.id} r={r} edit={edit && r.status === 'requested'} vehicles={data.board} />
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -318,22 +423,22 @@ function RequestLine({ r, edit, vehicles }: { r: Request; edit: boolean; vehicle
   const [tone, label] = STATUS[r.status];
   const plate = vehicles.find((v) => v.id === r.vehicleId)?.plate;
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
+    <li className="op-item" data-tone={r.status === 'requested' ? 'warn' : undefined}>
+      <div className="op-line">
+        <div className="op-main">
+          <span className="op-title">
             {r.name}: {r.purpose}
-          </div>
-          <div className="muted small">
+          </span>
+          <span className="op-meta">
             {dateTimeLabel(r.from)} to {dateTimeLabel(r.to)}
             {plate ? ` · ${plate}` : ''}
             {r.decision?.note ? ` · ${r.decision.note}` : ''}
-          </div>
+          </span>
         </div>
         <Chip tone={tone}>{label}</Chip>
       </div>
       {edit && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="op-act">
           <select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>
@@ -352,60 +457,57 @@ function RequestLine({ r, edit, vehicles }: { r: Request; edit: boolean; vehicle
           <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.decideVehicleRequest(r.id, false, null, note), 'Rejected.')}>
             Reject
           </button>
-          <ErrorNotice error={act.error} />
         </div>
       )}
-    </div>
+      <ErrorNotice error={act.error} />
+    </li>
   );
 }
 
 function Monitor({ rows }: { rows: Row[] }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>Trackers, dashcams and driver health</h3>
-          <div className="muted small">CMS monitors; the Transport head acts. Unknown means not connected or silent for over 30 minutes, never fine.</div>
-        </div>
-      </div>
-      <div className="list">
+    <Card
+      title="Trackers, dashcams and driver health"
+      sub="CMS monitors; the Transport head acts. Unknown means not connected or silent for over 30 minutes, never fine."
+      flush
+    >
+      {rows.length === 0 && <Empty title="No vehicles." />}
+      <ul className="op-list">
         {rows.map((v) => (
-          <div key={v.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-            <div style={{ fontWeight: 600 }}>
-              {v.plate} · {v.companyName}
-              {v.out ? <span className="muted"> · out with {v.out.driver}</span> : null}
+          <li key={v.id} className="op-item" data-tone={v.driverConsent === 'missing' ? 'crit' : undefined}>
+            <div className="op-main">
+              <span className="op-title">
+                <span className="fl-plate">{v.plate}</span> · {v.companyName}
+              </span>
+              {v.out && <span className="op-meta">Out with {v.out.driver}</span>}
             </div>
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="op-chips">
               <Chip tone={DEVICE[v.tracker][0]}>Tracker: {DEVICE[v.tracker][1]}</Chip>
               <Chip tone={DEVICE[v.dashcam][0]}>Dashcam: {DEVICE[v.dashcam][1]}</Chip>
               <Chip tone={DEVICE[v.health][0]}>Driver health: {DEVICE[v.health][1]}</Chip>
               {v.driverConsent === 'missing' && <Chip tone="crit">Driver consent missing</Chip>}
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
 function Consent({ data }: { data: FleetBoard }) {
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h3>Driver consent to monitoring</h3>
-          <div className="muted small">
-            Dashcam footage and health readings are personal data. File each driver's signed consent before they drive a monitored vehicle.
-          </div>
-        </div>
-      </div>
-      <div className="list">
-        {data.consentNeeded.length === 0 && <div className="empty">No driver is waiting for consent.</div>}
+    <Card
+      title="Driver consent to monitoring"
+      sub="Dashcam footage and health readings are personal data. File each driver's signed consent before they drive a monitored vehicle."
+      flush
+    >
+      {data.consentNeeded.length === 0 && <Empty title="No driver is waiting for consent." />}
+      <ul className="op-list">
         {data.consentNeeded.map((c) => (
           <ConsentLine key={c.personId} c={c} />
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }
 
@@ -413,12 +515,13 @@ function ConsentLine({ c }: { c: FleetBoard['consentNeeded'][number] }) {
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div style={{ fontWeight: 600 }}>
-        {c.name} <span className="muted small">· asked for {c.for}</span>
+    <li className="op-item">
+      <div className="op-main">
+        <span className="op-title">{c.name}</span>
+        <span className="op-meta">Asked for {c.for}</span>
       </div>
       <ProofPicker site={null} refText="Consent" items={proof} onChange={setProof} documentsOnly required />
-      <div>
+      <div className="op-act">
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !proof.length}
@@ -428,7 +531,7 @@ function ConsentLine({ c }: { c: FleetBoard['consentNeeded'][number] }) {
         </button>
       </div>
       <ErrorNotice error={act.error} />
-    </div>
+    </li>
   );
 }
 
@@ -440,32 +543,13 @@ function Mine({ data }: { data: FleetBoard }) {
   const act = useAction();
   const iso = (v: string) => `${v}:00+08:00`;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Request a vehicle</h3>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-        <input className="input" aria-label="Purpose" placeholder="What it is for" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <label className="small">
-            From <input className="input" type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="small">
-            To <input className="input" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
-          <select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-            <option value="">Any vehicle (Transport chooses)</option>
-            {data.vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.plate} · {v.model}
-                {v.busy ? ' (out now)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
+    <div className="op-grid-2">
+      <Card
+        title="Request a vehicle"
+        sub="Transport approves and chooses the vehicle if you leave it open"
+        footer={
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary"
             disabled={act.busy || purpose.trim().length < 3 || !from || !to}
             onClick={() =>
               act
@@ -477,16 +561,47 @@ function Mine({ data }: { data: FleetBoard }) {
           >
             Send request
           </button>
+        }
+      >
+        <div className="op-form">
+          <label className="field">
+            <span className="label">What it is for</span>
+            <input className="input" aria-label="Purpose" placeholder="What it is for" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+          </label>
+          <div className="op-form-grid">
+            <label className="field">
+              <span className="label">From</span>
+              <input className="input" type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">To</span>
+              <input className="input" type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
+          </div>
+          <label className="field">
+            <span className="label">Vehicle</span>
+            <select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+              <option value="">Any vehicle (Transport chooses)</option>
+              {data.vehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.plate} · {v.model}
+                  {v.busy ? ' (out now)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <ErrorNotice error={act.error} />
         </div>
-        <ErrorNotice error={act.error} />
-      </div>
-      <div className="list">
-        {data.mine.length === 0 && <div className="empty">No requests yet.</div>}
-        {data.mine.map((r) => (
-          <RequestLine key={r.id} r={r} edit={false} vehicles={[]} />
-        ))}
-      </div>
-    </section>
+      </Card>
+      <Card title="My requests" flush>
+        {data.mine.length === 0 && <Empty title="No requests yet." />}
+        <ul className="op-list">
+          {data.mine.map((r) => (
+            <RequestLine key={r.id} r={r} edit={false} vehicles={[]} />
+          ))}
+        </ul>
+      </Card>
+    </div>
   );
 }
 
@@ -502,66 +617,68 @@ function TripsAndHours() {
   return (
     <>
       {data.alerts.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Driver alerts</h2>
-          </div>
-          <div className="list">
+        <Card title="Driver alerts" flush>
+          <ul className="op-list">
             {data.alerts.map((a, i) => (
-              <div key={i} className="list-item">
-                <div>
-                  <div style={{ fontWeight: 600 }}>{a.title}</div>
-                  <div className="muted small">{a.detail}</div>
+              <li key={i} className="op-item" data-tone={a.tone}>
+                <div className="op-line">
+                  <div className="op-main">
+                    <span className="op-title">{a.title}</span>
+                    <span className="op-meta">{a.detail}</span>
+                  </div>
+                  <Chip tone={a.tone}>{a.tone === 'crit' ? 'Stop' : 'Break'}</Chip>
                 </div>
-                <Chip tone={a.tone}>{a.tone === 'crit' ? 'Stop' : 'Break'}</Chip>
-              </div>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Card>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h2>On the road</h2>
-          <span className="muted small">
-            Proposed limits: {h(data.rule.maxDayMin)} a day, a {data.rule.breakMin} minute break after {h(data.rule.maxStretchMin)}, {data.rule.speedLimitKmh} km/h
-          </span>
-        </div>
-        <div className="list">
-          {data.onTheRoad.length === 0 && <div className="empty">No vehicle out now.</div>}
-          {data.onTheRoad.map((v) => (
-            <div key={v.vehicleId} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {v.plate} · {v.driver}
+      <div className="op-grid-2">
+        <Card
+          title="On the road"
+          sub={`Proposed limits: ${h(data.rule.maxDayMin)} a day, a ${data.rule.breakMin} minute break after ${h(data.rule.maxStretchMin)}, ${data.rule.speedLimitKmh} km/h`}
+          flush
+        >
+          {data.onTheRoad.length === 0 && <Empty title="No vehicle out now." />}
+          <ul className="op-list">
+            {data.onTheRoad.map((v) => (
+              <li key={v.vehicleId} className="op-item" data-tone={v.trip?.panicAt ? 'crit' : undefined}>
+                <div className="op-line">
+                  <div className="op-main">
+                    <span className="op-title">
+                      <span className="fl-plate">{v.plate}</span> · {v.driver}
+                    </span>
+                    <span className="op-meta">
+                      {v.trip
+                        ? `${v.trip.km} km since ${dateTimeLabel(v.trip.start)} · top ${v.trip.maxKmh} km/h${v.trip.overSpeed ? ` · ${v.trip.overSpeed} over-speed` : ''}`
+                        : 'Tracker not sending'}
+                    </span>
+                  </div>
+                  <Chip tone={v.trip?.panicAt ? 'crit' : v.tracker === 'live' ? 'ok' : 'unknown'}>{v.trip?.panicAt ? 'Panic' : v.tracker}</Chip>
                 </div>
-                <div className="muted small">
-                  {v.trip ? `${v.trip.km} km since ${dateTimeLabel(v.trip.start)} · top ${v.trip.maxKmh} km/h${v.trip.overSpeed ? ` · ${v.trip.overSpeed} over-speed` : ''}` : 'Tracker not sending'}
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Driving hours today" flush>
+          {data.hours.length === 0 && <Empty title="No driving recorded today." />}
+          <ul className="op-list">
+            {data.hours.map((d) => (
+              <li key={d.driverUserId} className="op-item">
+                <div className="op-line">
+                  <div className="op-main">
+                    <span className="op-title">{d.driver}</span>
+                    <span className="op-meta">
+                      {h(d.drivingMin)} driven · {h(d.stretchMin)} since the last break · {d.vehicles.join(', ')}
+                    </span>
+                  </div>
+                  <Chip tone={d.overDay ? 'crit' : d.needsBreak ? 'warn' : 'ok'}>{d.overDay ? 'Over the day' : d.needsBreak ? 'Break due' : 'Fine'}</Chip>
                 </div>
-              </div>
-              <Chip tone={v.trip?.panicAt ? 'crit' : v.tracker === 'live' ? 'ok' : 'unknown'}>{v.trip?.panicAt ? 'Panic' : v.tracker}</Chip>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Driving hours today</h2>
-        </div>
-        <div className="list">
-          {data.hours.length === 0 && <div className="empty">No driving recorded today.</div>}
-          {data.hours.map((d) => (
-            <div key={d.driverUserId} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>{d.driver}</div>
-                <div className="muted small">
-                  {h(d.drivingMin)} driven · {h(d.stretchMin)} since the last break · {d.vehicles.join(', ')}
-                </div>
-              </div>
-              <Chip tone={d.overDay ? 'crit' : d.needsBreak ? 'warn' : 'ok'}>{d.overDay ? 'Over the day' : d.needsBreak ? 'Break due' : 'Fine'}</Chip>
-            </div>
-          ))}
-        </div>
-      </section>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
     </>
   );
 }

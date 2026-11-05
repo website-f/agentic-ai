@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ClockCountdownIcon, FilesIcon, FirstAidKitIcon, PhoneIcon } from '@phosphor-icons/react';
 import {
   SOCSO_STATUS_LABEL,
   SOCSO_TYPE_DETAIL,
@@ -12,8 +13,10 @@ import {
   type SocsoStatus,
 } from '@prima/core';
 import { api, type GuardProfile, type SocsoClaimDetail, type SocsoClaims } from '../api';
-import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import { Card, Empty, Facts, PageHead, Person, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import '../styles/hrx.css';
 
 /**
  * SOCSO (PERKESO) claims (Fauzan, 26 Oct 2026: "Find out about how to claim socso, the sop, the cases that can claim.
@@ -35,6 +38,7 @@ const STATUS_TONE: Record<SocsoStatus, Tone> = {
 };
 
 type Form34 = SocsoClaimDetail['form34'];
+type ClaimRow = SocsoClaims['rows'][number];
 
 function Form34Chip({ f }: { f: Form34 }) {
   if (f.state === 'done') return <Chip tone="ok">Form 34 sent</Chip>;
@@ -47,66 +51,134 @@ function nowLocal(): string {
   return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 16);
 }
 
+/**
+ * Where a claim is in PERKESO's process, read from its status only:
+ * Form 34, papers, PERKESO review, the decision, paid and closed.
+ */
+const PROGRESS: Record<SocsoStatus, StepState[]> = {
+  DRAFT: ['now', 'todo', 'todo', 'todo', 'todo'],
+  REPORTED: ['done', 'now', 'todo', 'todo', 'todo'],
+  DOCS_COMPLETE: ['done', 'done', 'now', 'todo', 'todo'],
+  UNDER_REVIEW: ['done', 'done', 'now', 'todo', 'todo'],
+  APPROVED: ['done', 'done', 'done', 'done', 'now'],
+  REJECTED: ['done', 'done', 'done', 'stopped', 'todo'],
+  APPEAL: ['done', 'done', 'done', 'now', 'todo'],
+  CLOSED: ['done', 'done', 'done', 'done', 'done'],
+};
+function ClaimSteps({ status, form34, perkesoRef }: { status: SocsoStatus; form34: Form34; perkesoRef?: string | null }) {
+  const s = PROGRESS[status];
+  const decision = status === 'APPROVED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : status === 'APPEAL' ? 'Appeal' : "PERKESO's decision";
+  return (
+    <Steps
+      steps={[
+        { label: 'Form 34 in ASSIST', state: s[0], note: perkesoRef ? `PERKESO ${perkesoRef}` : `Due ${dateTimeLabel(form34.due)}` },
+        { label: 'Papers to PERKESO', state: s[1] },
+        { label: 'PERKESO review', state: s[2] },
+        { label: decision, state: s[3] },
+        { label: 'Paid and closed', state: s[4] },
+      ]}
+    />
+  );
+}
+
 /** The HR page: what SOCSO covers, how to claim, and every claim the user may follow. */
 export function SocsoView() {
   const { data, error } = useLoad(() => api.socsoClaims(), []);
   const [open, setOpen] = useState<string | null>(null);
   const [filter, setFilter] = useState<'open' | 'all'>('open');
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="SOCSO claims" />;
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<SocsoStatus | ''>('');
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="SOCSO claims" />
+      </div>
+    );
   const rows = data.rows.filter((r) => filter === 'all' || r.claim.status !== 'CLOSED');
   const due = data.rows.filter((r) => r.form34.state === 'reminder' || r.form34.state === 'overdue').length;
   const missing = data.rows.filter((r) => r.claim.status !== 'CLOSED' && r.missing > 0).length;
   const checkIns = data.rows.filter((r) => r.checkIn?.overdue).length;
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter(
+    (r) =>
+      (!status || r.claim.status === status) &&
+      (!needle ||
+        [r.person?.name ?? '', r.person?.staffNo ?? '', r.companyName, r.typeLabel, r.claim.perkesoRef ?? ''].some((v) => v.toLowerCase().includes(needle))),
+  );
+  const statuses = [...new Set(data.rows.map((r) => r.claim.status))];
+  const count = shown.length === rows.length ? `${rows.length} claim${rows.length === 1 ? '' : 's'}` : `${shown.length} of ${rows.length}`;
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>SOCSO claims</h1>
-        <p className="muted">
-          Start a claim from the person's profile (Guards, then the SOCSO tab). HR submits Form 34 in PERKESO ASSIST and records the reference here.
-        </p>
-      </div>
-      <div className="kpis">
-        <Kpi label="Open claims" value={data.rows.filter((r) => r.claim.status !== 'CLOSED').length} />
-        <Kpi label="Form 34 due or late" value={due} tone={due ? 'crit' : 'ok'} note="Due 48 hours after the company was told" />
-        <Kpi label="Papers missing" value={missing} tone={missing ? 'warn' : 'ok'} />
-        <Kpi label="Check-ins overdue" value={checkIns} tone={checkIns ? 'warn' : 'ok'} note="Officer calls weekly while the person is off" />
-      </div>
-      <SocsoSop />
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Claims</h2>
-          <div className="tabbar" role="tablist" aria-label="Which claims">
-            <button role="tab" aria-selected={filter === 'open'} onClick={() => setFilter('open')}>
-              Open
-            </button>
-            <button role="tab" aria-selected={filter === 'all'} onClick={() => setFilter('all')}>
-              All
-            </button>
-          </div>
-        </div>
-        <div className="list">
-          {rows.length === 0 && <div className="empty">{data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'}</div>}
-          {rows.map((r) => (
-            <button key={r.claim.id} className="list-item" style={{ textAlign: 'left', width: '100%' }} onClick={() => setOpen(r.claim.id)}>
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {r.person?.name ?? 'Unknown person'} · {r.typeLabel}
-                </div>
-                <div className="muted small">
-                  {r.person?.staffNo} · {r.companyName} · {dateTimeLabel(r.claim.incidentAt)}
-                  {r.claim.perkesoRef ? ` · PERKESO ${r.claim.perkesoRef}` : ''}
-                  {r.missing ? ` · ${r.missing} paper(s) missing` : ''}
-                </div>
+      <PageHead
+        title="SOCSO claims"
+        sub="Start a claim from the person's profile (Guards, then the SOCSO tab). HR submits Form 34 in PERKESO ASSIST and records the reference here."
+      />
+      <Stats>
+        <Stat label="Open claims" value={data.rows.filter((r) => r.claim.status !== 'CLOSED').length} icon={<FirstAidKitIcon size={16} />} tone="info" />
+        <Stat
+          label="Form 34 due or late"
+          value={due}
+          tone={due ? 'crit' : 'ok'}
+          note="Due 48 hours after the company was told"
+          icon={<ClockCountdownIcon size={16} />}
+        />
+        <Stat label="Papers missing" value={missing} tone={missing ? 'warn' : 'ok'} icon={<FilesIcon size={16} />} />
+        <Stat
+          label="Check-ins overdue"
+          value={checkIns}
+          tone={checkIns ? 'warn' : 'ok'}
+          note="Officer calls weekly while the person is off"
+          icon={<PhoneIcon size={16} />}
+        />
+      </Stats>
+      <div className="sx-layout">
+        <div className="hx-stack-tight">
+          <Toolbar
+            end={
+              <div className="seg" role="group" aria-label="Which claims">
+                <button aria-pressed={filter === 'open'} onClick={() => setFilter('open')}>
+                  Open
+                </button>
+                <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+                  All
+                </button>
               </div>
-              <div className="row" style={{ gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {r.claim.status === 'DRAFT' && <Form34Chip f={r.form34} />}
-                <Chip tone={STATUS_TONE[r.claim.status]}>{r.statusLabel}</Chip>
-              </div>
-            </button>
-          ))}
+            }
+          >
+            <Search value={q} onChange={setQ} placeholder="Search name, staff no. or PERKESO ref" label="Search claims" />
+            <select className="select hx-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as SocsoStatus | '')}>
+              <option value="">Every status</option>
+              {statuses.map((s) => (
+                <option key={s} value={s}>
+                  {SOCSO_STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </Toolbar>
+          <Card title="Claims" actions={<span className="hx-count">{count}</span>} flush>
+            {rows.length === 0 ? (
+              <Empty title={data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'} />
+            ) : shown.length === 0 ? (
+              <Empty title="No claim matches the search." />
+            ) : (
+              <ul className="hx-rows">
+                {shown.map((r) => (
+                  <li key={r.claim.id}>
+                    <ClaimButton r={r} onOpen={() => setOpen(r.claim.id)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
-      </section>
+        <SocsoSop />
+      </div>
       {open && (
         <Drawer title="SOCSO claim" onClose={() => setOpen(null)}>
           <SocsoClaimBody id={open} />
@@ -116,46 +188,73 @@ export function SocsoView() {
   );
 }
 
+/** One claim in the register: the person, the case and its deadlines. */
+function ClaimButton({ r, onOpen }: { r: ClaimRow; onOpen: () => void }) {
+  const open = r.claim.status !== 'CLOSED';
+  const tone = r.claim.status === 'DRAFT' && r.form34.state === 'overdue' ? 'crit' : open && (r.claim.status === 'DRAFT' || r.missing > 0) ? 'warn' : undefined;
+  return (
+    <button className="sx-claim" data-tone={tone} onClick={onOpen}>
+      <span className="sx-claim-who">
+        <Person name={r.person?.name ?? 'Unknown person'} sub={[r.person?.staffNo, r.companyName].filter(Boolean).join(' · ')} />
+      </span>
+      <span className="sx-claim-case">
+        <span className="hx-row-title">{r.typeLabel}</span>
+        <span className="hx-row-meta">
+          {dateTimeLabel(r.claim.incidentAt)}
+          {r.claim.perkesoRef ? ` · PERKESO ${r.claim.perkesoRef}` : ''}
+        </span>
+      </span>
+      <span className="sx-claim-chips">
+        {r.claim.status === 'DRAFT' && <Form34Chip f={r.form34} />}
+        <Chip tone={STATUS_TONE[r.claim.status]}>{r.statusLabel}</Chip>
+        {r.missing > 0 && <Chip tone={open ? 'warn' : 'neutral'}>{r.missing} paper(s) missing</Chip>}
+        {r.checkIn?.overdue && <Chip tone="warn">Check-in overdue</Chip>}
+      </span>
+    </button>
+  );
+}
+
 /** The SOP in short (SOCSO Claims SOP, 26 Oct 2026). */
 export function SocsoSop() {
   return (
-    <section className="panel" style={{ padding: 12 }}>
-      <h2>How to claim (SOP)</h2>
-      <details className="protocol-section">
-        <summary>What SOCSO pays for</summary>
-        <div className="list">
-          {TYPES.map((t) => (
-            <div key={t} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <div style={{ fontWeight: 600 }}>{SOCSO_TYPE_LABEL[t]}</div>
-              <div className="muted small">{SOCSO_TYPE_DETAIL[t]}</div>
-            </div>
-          ))}
-          <div className="list-item muted small">
-            Not SOCSO: ordinary illness (sick leave), clinic visits (panel or the foreign worker medical ledger), hospital bills of foreign workers (SPIKPA),
-            and job loss (EIS, claimed by the worker).
-          </div>
-        </div>
-      </details>
-      <details className="protocol-section">
-        <summary>Steps and deadlines</summary>
-        <ol className="small" style={{ margin: '6px 0', paddingLeft: 20 }}>
-          <li>The guard or officer tells the OM straight away. Get treatment first: any panel clinic or government hospital.</li>
-          <li>The OM or HR starts the claim on the person's profile, with when it happened and when the company was told.</li>
-          <li>HR submits Form 34 in PERKESO ASSIST within 48 hours of being told, and records the reference. A reminder shows at 24 hours.</li>
-          <li>HR adds the papers on the checklist. Medical papers are seen by HR only.</li>
-          <li>Mark documents complete, then under PERKESO review. Record PERKESO's decision.</li>
-          <li>Rejected: appeal to the Appellate Board within 90 days, or close. Approved: record the amount paid and close.</li>
-          <li>Permanent disablement: claim within 12 months of the last MC day.</li>
-        </ol>
-      </details>
-      <details className="protocol-section">
-        <summary>How the MC days are paid</summary>
-        <p className="small">
-          Basic pay only (Fauzan, 26 Oct 2026). Three MC days or fewer: company sick leave. Four days or more on an accepted claim: PERKESO pays temporary
-          disablement and the company does not pay those days (Employment Act s.60F(4)). While PERKESO decides, the days are held, then settled.
-        </p>
-      </details>
-    </section>
+    <Card title="How to claim (SOP)">
+      <div className="sx-sop">
+        <details className="sx-details">
+          <summary>What SOCSO pays for</summary>
+          <ul className="sx-types">
+            {TYPES.map((t) => (
+              <li key={t}>
+                <strong>{SOCSO_TYPE_LABEL[t]}</strong>
+                <span>{SOCSO_TYPE_DETAIL[t]}</span>
+              </li>
+            ))}
+            <li className="sx-types-not">
+              Not SOCSO: ordinary illness (sick leave), clinic visits (panel or the foreign worker medical ledger), hospital bills of foreign workers (SPIKPA),
+              and job loss (EIS, claimed by the worker).
+            </li>
+          </ul>
+        </details>
+        <details className="sx-details">
+          <summary>Steps and deadlines</summary>
+          <ol className="sx-sop-steps">
+            <li>The guard or officer tells the OM straight away. Get treatment first: any panel clinic or government hospital.</li>
+            <li>The OM or HR starts the claim on the person's profile, with when it happened and when the company was told.</li>
+            <li>HR submits Form 34 in PERKESO ASSIST within 48 hours of being told, and records the reference. A reminder shows at 24 hours.</li>
+            <li>HR adds the papers on the checklist. Medical papers are seen by HR only.</li>
+            <li>Mark documents complete, then under PERKESO review. Record PERKESO's decision.</li>
+            <li>Rejected: appeal to the Appellate Board within 90 days, or close. Approved: record the amount paid and close.</li>
+            <li>Permanent disablement: claim within 12 months of the last MC day.</li>
+          </ol>
+        </details>
+        <details className="sx-details">
+          <summary>How the MC days are paid</summary>
+          <p className="sx-sop-text">
+            Basic pay only (Fauzan, 26 Oct 2026). Three MC days or fewer: company sick leave. Four days or more on an accepted claim: PERKESO pays temporary
+            disablement and the company does not pay those days (Employment Act s.60F(4)). While PERKESO decides, the days are held, then settled.
+          </p>
+        </details>
+      </div>
+    </Card>
   );
 }
 
@@ -166,32 +265,30 @@ export function SocsoTab({ d, personId }: { d: GuardProfile; personId: string })
   const [open, setOpen] = useState<string | null>(null);
   if (open)
     return (
-      <>
+      <div className="sx-tab">
         <div>
           <button className="btn btn-sm" onClick={() => setOpen(null)}>
             Back to claims
           </button>
         </div>
         <SocsoClaimBody id={open} />
-      </>
+      </div>
     );
   return (
-    <>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+    <div className="sx-tab">
+      <div className="sx-tab-head">
         <span className="small">SOCSO no. {d.person.socsoNo ?? 'not on record'}</span>
         {d.person.nationality === 'MY' && (
           <Chip tone={s.lindung === 'covered' ? 'ok' : s.lindung === 'opted_out' ? 'warn' : 'unknown'}>
             LINDUNG 24 Jam: {s.lindung === 'covered' ? 'covered' : s.lindung === 'opted_out' ? 'opted out' : 'unknown'}
           </Chip>
         )}
-      </div>
-      {s.canStart && !starting && (
-        <div>
-          <button className="btn btn-primary btn-sm" onClick={() => setStarting(true)}>
+        {s.canStart && !starting && (
+          <button className="btn btn-primary btn-sm sx-tab-start" onClick={() => setStarting(true)}>
             Start SOCSO claim
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {starting && (
         <StartSocsoForm
           personId={personId}
@@ -203,28 +300,35 @@ export function SocsoTab({ d, personId }: { d: GuardProfile; personId: string })
           }}
         />
       )}
-      <section>
+      <section className="sx-sec">
         <h3>Claims</h3>
-        <div className="list">
-          {s.claims.length === 0 && <div className="empty">No SOCSO claim.</div>}
-          {s.claims.map((c) => (
-            <button key={c.id} className="list-item" style={{ textAlign: 'left', width: '100%' }} onClick={() => setOpen(c.id)}>
-              <div>
-                <div>
-                  {c.typeLabel} · {dateTimeLabel(c.incidentAt)}
-                </div>
-                <div className="muted small">{c.perkesoRef ? `PERKESO ${c.perkesoRef}` : 'Not yet reported to PERKESO'}</div>
-              </div>
-              <div className="row" style={{ gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {c.status === 'DRAFT' && <Form34Chip f={c.form34} />}
-                <Chip tone={STATUS_TONE[c.status]}>{c.statusLabel}</Chip>
-              </div>
-            </button>
-          ))}
+        <div className="sx-box">
+          {s.claims.length === 0 ? (
+            <div className="empty">No SOCSO claim.</div>
+          ) : (
+            <ul className="hx-rows">
+              {s.claims.map((c) => (
+                <li key={c.id}>
+                  <button className="sx-claim sx-claim-short" onClick={() => setOpen(c.id)}>
+                    <span className="sx-claim-case">
+                      <span className="hx-row-title">
+                        {c.typeLabel} · {dateTimeLabel(c.incidentAt)}
+                      </span>
+                      <span className="hx-row-meta">{c.perkesoRef ? `PERKESO ${c.perkesoRef}` : 'Not yet reported to PERKESO'}</span>
+                    </span>
+                    <span className="sx-claim-chips">
+                      {c.status === 'DRAFT' && <Form34Chip f={c.form34} />}
+                      <Chip tone={STATUS_TONE[c.status]}>{c.statusLabel}</Chip>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
       {!s.canStart && <p className="muted small">To claim, tell your OM or the HR office. They start the claim and submit it to PERKESO.</p>}
-    </>
+    </div>
   );
 }
 
@@ -252,13 +356,14 @@ export function StartSocsoForm({
   const triage = socsoTriage(q, nationality);
   const types = TYPES.filter((t) => t !== 'NON_WORK_ACCIDENT' || nationality !== 'MY' || !optedOut);
   const check = (k: keyof typeof q, label: string) => (
-    <label className="row small" style={{ gap: 6 }}>
+    <label className="sx-check">
       <input type="checkbox" checked={q[k]} onChange={(e) => setQ({ ...q, [k]: e.target.checked })} />
       {label}
     </label>
   );
   return (
-    <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="hx-form">
+      <h4 className="hx-form-title">Start a SOCSO claim</h4>
       <label className="field">
         <span className="label">Kind of case</span>
         <select className="select" aria-label="Kind of case" value={type} onChange={(e) => setType(e.target.value as SocsoCaseType | '')}>
@@ -279,13 +384,13 @@ export function StartSocsoForm({
         </div>
       )}
       {unsure && (
-        <div className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="sx-triage">
           {check('illness', 'It is an illness, not an accident')}
           {q.illness && check('permanent', 'It leaves the person permanently unable to work')}
           {!q.illness && check('onDuty', 'Hurt while on duty')}
           {!q.illness && !q.onDuty && check('commuting', 'Hurt on the direct trip between home and work')}
           {!q.illness && !q.onDuty && !q.commuting && check('outsideWorkInMalaysia', 'An accident outside work, in Malaysia')}
-          <div className="small" style={{ marginTop: 4 }}>
+          <div className="sx-triage-advice">
             {triage.advice}
             {triage.type === 'NON_WORK_ACCIDENT' && nationality === 'MY' && optedOut ? ' This person opted out, so it is not covered.' : ''}
           </div>
@@ -298,7 +403,7 @@ export function StartSocsoForm({
           )}
         </div>
       )}
-      <div className="grid-2">
+      <div className="hx-form-grid">
         <label className="field">
           <span className="label">When it happened</span>
           <input className="input" type="datetime-local" aria-label="When it happened" value={incidentAt} onChange={(e) => setIncidentAt(e.target.value)} />
@@ -314,7 +419,7 @@ export function StartSocsoForm({
       </label>
       <label className="field">
         <span className="label">What happened and the injury</span>
-        <textarea className="input" rows={3} aria-label="What happened" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea className="textarea" rows={3} aria-label="What happened" value={description} onChange={(e) => setDescription(e.target.value)} />
       </label>
       <label className="field">
         <span className="label">Witnesses</span>
@@ -322,7 +427,7 @@ export function StartSocsoForm({
       </label>
       <span className="muted small">Form 34 is due in PERKESO ASSIST 48 hours after the company was told.</span>
       <ErrorNotice error={act.error} />
-      <div className="row">
+      <div className="hx-form-actions">
         <button
           className="btn btn-primary"
           disabled={act.busy || !type || description.trim().length < 10}
@@ -361,16 +466,25 @@ export function SocsoClaimBody({ id }: { id: string }) {
   const c = data.claim;
   const p = data.person;
   const openRestrictions = data.rehab.restrictions.filter((r) => !r.clearedAt).length;
+  const papersDone = data.items.filter((i) => i.done).length;
+  const dates: [string, string][] = [
+    ['Happened', dateTimeLabel(c.incidentAt)],
+    ['Company told', dateTimeLabel(c.toldAt)],
+    ['Form 34 due', dateTimeLabel(data.form34.due)],
+  ];
+  if (data.later.permanentBy) dates.push(['Permanent disablement claim by', dateLabel(data.later.permanentBy)]);
+  if (data.later.appealBy) dates.push(['Appeal by', dateLabel(data.later.appealBy)]);
+  if (data.checkIn) dates.push(['Next check-in', data.checkIn.overdue ? `Overdue since ${dateLabel(data.checkIn.due)}` : dateLabel(data.checkIn.due)]);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>
-        <div style={{ fontWeight: 600 }}>
-          {p.name} · {data.typeLabel}
-        </div>
-        <div className="muted small">
-          {p.staffNo} · {p.nationality === 'MY' ? 'Malaysian' : 'Foreign worker'} · SOCSO no. {p.socsoNo ?? 'not on record'}
-        </div>
-        <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+    <div className="sx-claim-body">
+      <header className="sx-claim-head">
+        <Person
+          name={p.name}
+          size={44}
+          sub={`${p.staffNo} · ${p.nationality === 'MY' ? 'Malaysian' : 'Foreign worker'} · SOCSO no. ${p.socsoNo ?? 'not on record'}`}
+        />
+        <div className="sx-claim-type">{data.typeLabel}</div>
+        <div className="sx-chips">
           <Chip tone={STATUS_TONE[c.status]}>{data.statusLabel}</Chip>
           <Form34Chip f={data.form34} />
           {c.perkesoRef && <Chip tone="neutral">PERKESO {c.perkesoRef}</Chip>}
@@ -378,8 +492,11 @@ export function SocsoClaimBody({ id }: { id: string }) {
             <Chip tone={data.checkIn.overdue ? 'warn' : 'info'}>Check-in {data.checkIn.overdue ? 'overdue' : `due ${dateLabel(data.checkIn.due)}`}</Chip>
           )}
         </div>
+      </header>
+      <div className="sx-progress">
+        <ClaimSteps status={c.status} form34={data.form34} perkesoRef={c.perkesoRef} />
       </div>
-      <div className="tabbar" role="tablist" aria-label="Claim sections">
+      <div className="tabbar hx-tabs" role="tablist" aria-label="Claim sections">
         <button role="tab" aria-selected={view === 'claim'} onClick={() => setView('claim')}>
           Claim
         </button>
@@ -391,55 +508,68 @@ export function SocsoClaimBody({ id }: { id: string }) {
       {view === 'rehab' && <RehabPanel d={data} />}
       {view === 'claim' && (
         <>
-          <section>
+          <section className="sx-sec">
             <h3>What happened</h3>
-            <div className="small">{c.description}</div>
-            <div className="muted small">
-              {dateTimeLabel(c.incidentAt)}
-              {c.place ? ` · ${c.place}` : ''} · company told {dateTimeLabel(c.toldAt)}
-              {c.witnesses ? ` · witnesses: ${c.witnesses}` : ''}
+            <p className="sx-text">{c.description}</p>
+            <div className="sx-facts">
+              <Facts items={dates} />
             </div>
-            <div className="muted small">
-              Started by {c.openedBy}, {dateTimeLabel(c.openedAt)}. Form 34 due {dateTimeLabel(data.form34.due)}.
+            <div className="hx-meta-list">
+              {c.place && (
+                <span>
+                  <b>Where</b> {c.place}
+                </span>
+              )}
+              {c.witnesses && (
+                <span>
+                  <b>Witnesses</b> {c.witnesses}
+                </span>
+              )}
+              <span>
+                Started by {c.openedBy}, {dateTimeLabel(c.openedAt)}
+              </span>
             </div>
           </section>
           {data.payroll && (
-            <section>
+            <section className="sx-sec">
               <h3>Pay for the MC days</h3>
-              <div className="small">{data.payroll.text}</div>
+              <p className="sx-text">{data.payroll.text}</p>
             </section>
           )}
-          {(data.later.permanentBy || data.later.appealBy) && (
-            <div className="muted small">
-              {data.later.permanentBy ? `Permanent disablement claim by ${dateLabel(data.later.permanentBy)}. ` : ''}
-              {data.later.appealBy ? `Appeal by ${dateLabel(data.later.appealBy)}.` : ''}
+          <section className="sx-sec">
+            <div className="sx-sec-head">
+              <h3>Papers</h3>
+              <span className="hx-count">
+                {papersDone} of {data.items.length} done
+              </span>
             </div>
-          )}
-          <section>
-            <h3>Papers</h3>
-            <div className="list">
-              {data.items.map((i) => (
-                <PaperRow key={i.id} claimId={c.id} item={i} canManage={data.can.manage} canIncident={data.can.addIncident} closed={c.status === 'CLOSED'} />
-              ))}
+            <div className="sx-box">
+              <ul className="hx-rows">
+                {data.items.map((i) => (
+                  <li key={i.id}>
+                    <PaperRow claimId={c.id} item={i} canManage={data.can.manage} canIncident={data.can.addIncident} closed={c.status === 'CLOSED'} />
+                  </li>
+                ))}
+              </ul>
             </div>
             {!data.can.manage && <p className="muted small">Medical papers are kept by HR and are not shown here.</p>}
           </section>
           {(data.prefill.shifts.length > 0 || data.prefill.attendance.length > 0) && (
-            <section>
+            <section className="sx-sec">
               <h3>From the app: roster and clock-in</h3>
-              <div className="list">
+              <ul className="sx-lines">
                 {data.prefill.shifts.map((s, k) => (
-                  <div key={`s${k}`} className="list-item small">
+                  <li key={`s${k}`}>
                     Rostered {dateLabel(s.date)} {hhmm(s.start)}–{hhmm(s.end)} · {s.site}
-                  </div>
+                  </li>
                 ))}
                 {data.prefill.attendance.map((a, k) => (
-                  <div key={`a${k}`} className="list-item small">
+                  <li key={`a${k}`}>
                     Clocked in {a.clockIn ? `${dateLabel(a.clockIn.slice(0, 10))} ${hhmm(a.clockIn)}` : '-'}
                     {a.clockOut ? `, out ${hhmm(a.clockOut)}` : ', no clock-out'} · {a.site}
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
               {data.prefill.wages && (
                 <p className="muted small">
                   Basic pay RM{data.prefill.wages.basic.toLocaleString()} a month for the wage schedule. {data.prefill.wages.note}
@@ -449,27 +579,31 @@ export function SocsoClaimBody({ id }: { id: string }) {
           )}
           {data.can.manage && <NextStep d={data} />}
           {c.decision && (
-            <section>
+            <section className="sx-sec">
               <h3>PERKESO's decision</h3>
-              <div className="small">
+              <p className="sx-text">
                 {c.decision.outcome === 'APPROVED' ? 'Approved' : 'Rejected'} on {dateLabel(c.decision.on)}: {c.decision.note}
-              </div>
-              {c.amountPaid != null && data.can.manage && <div className="small">Paid RM{c.amountPaid.toLocaleString()}</div>}
-              {c.returnToWork && <div className="small">Back at work {dateLabel(c.returnToWork)}</div>}
+              </p>
+              {(c.amountPaid != null && data.can.manage) || c.returnToWork ? (
+                <div className="hx-meta-list">
+                  {c.amountPaid != null && data.can.manage && <span>Paid RM{c.amountPaid.toLocaleString()}</span>}
+                  {c.returnToWork && <span>Back at work {dateLabel(c.returnToWork)}</span>}
+                </div>
+              ) : null}
             </section>
           )}
-          <section>
+          <section className="sx-sec">
             <h3>History</h3>
-            <div className="list">
+            <ol className="sx-history">
               {[...c.history].reverse().map((h, k) => (
-                <div key={k} className="list-item small" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                  <div>{h.what}</div>
-                  <div className="muted">
+                <li key={k}>
+                  <span>{h.what}</span>
+                  <span className="muted small">
                     {h.by}, {dateTimeLabel(h.at)}
-                  </div>
-                </div>
+                  </span>
+                </li>
               ))}
-            </div>
+            </ol>
           </section>
         </>
       )}
@@ -499,96 +633,101 @@ function PaperRow({
   const mayAdd = !closed && !item.fromApp && (canManage || (canIncident && item.id === 'INCIDENT'));
   const isMc = item.id === 'MC';
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
-        <div>
-          <div>{item.label}</div>
-          <div className="muted small">
-            {item.fromApp ? 'From the app' : item.required ? 'Required' : 'If any'}
-            {item.medical ? ' · HR only' : ''}
-            {item.override ? ` · going ahead without: ${item.override.reason} (${item.override.by})` : ''}
-          </div>
-        </div>
+    <div className="hx-row">
+      <div className="hx-row-main">
+        <span className="hx-row-title">{item.label}</span>
+        <span className="hx-row-meta">
+          {item.fromApp ? 'From the app' : item.required ? 'Required' : 'If any'}
+          {item.medical ? ' · HR only' : ''}
+          {item.override ? ` · going ahead without: ${item.override.reason} (${item.override.by})` : ''}
+        </span>
+      </div>
+      <div className="hx-row-side">
         <Chip tone={item.done ? 'ok' : item.required ? 'warn' : 'neutral'}>
           {item.done ? (item.override ? 'Waived' : 'Done') : item.required ? 'Missing' : 'Optional'}
         </Chip>
       </div>
-      <DocList docs={item.docs} />
-      {mayAdd && !mode && (
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn btn-sm" onClick={() => setMode('add')}>
-            {item.docs.length ? 'Add more' : 'Add paper'}
-          </button>
-          {canManage && item.required && !item.done && (
-            <button className="btn btn-sm" onClick={() => setMode('skip')}>
-              Go ahead without
+      <div className="hx-row-body">
+        {item.docs.length > 0 && <DocList docs={item.docs} />}
+        {mayAdd && !mode && (
+          <div className="hx-row-actions">
+            <button className="btn btn-sm" onClick={() => setMode('add')}>
+              {item.docs.length ? 'Add more' : 'Add paper'}
             </button>
-          )}
-        </div>
-      )}
-      {mode === 'add' && (
-        <>
-          {isMc && (
-            <div className="grid-2">
-              <label className="field">
-                <span className="label">MC from</span>
-                <input className="input" type="date" aria-label="MC from" value={from} onChange={(e) => setFrom(e.target.value)} />
-              </label>
-              <label className="field">
-                <span className="label">MC to</span>
-                <input className="input" type="date" aria-label="MC to" value={to} onChange={(e) => setTo(e.target.value)} />
-              </label>
+            {canManage && item.required && !item.done && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setMode('skip')}>
+                Go ahead without
+              </button>
+            )}
+          </div>
+        )}
+        {mode === 'add' && (
+          <div className="hx-form">
+            {isMc && (
+              <div className="hx-form-grid">
+                <label className="field">
+                  <span className="label">MC from</span>
+                  <input className="input" type="date" aria-label="MC from" value={from} onChange={(e) => setFrom(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="label">MC to</span>
+                  <input className="input" type="date" aria-label="MC to" value={to} onChange={(e) => setTo(e.target.value)} />
+                </label>
+              </div>
+            )}
+            <ProofPicker site={null} refText="SOCSO" items={proof} onChange={setProof} documentsOnly required />
+            <ErrorNotice error={act.error} />
+            <div className="hx-form-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || !proof.length || (isMc && (!from || !to))}
+                onClick={async () => {
+                  const r = await act.run(() => api.addSocsoDoc(claimId, item.id, proof, isMc ? { from, to } : undefined), 'Paper added.');
+                  if (r) {
+                    setMode(null);
+                    setProof([]);
+                  }
+                }}
+              >
+                Save
+              </button>
+              <button className="btn btn-sm" onClick={() => setMode(null)}>
+                Cancel
+              </button>
             </div>
-          )}
-          <ProofPicker site={null} refText="SOCSO" items={proof} onChange={setProof} documentsOnly required />
-          <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={act.busy || !proof.length || (isMc && (!from || !to))}
-              onClick={async () => {
-                const r = await act.run(() => api.addSocsoDoc(claimId, item.id, proof, isMc ? { from, to } : undefined), 'Paper added.');
-                if (r) {
-                  setMode(null);
-                  setProof([]);
-                }
-              }}
-            >
-              Save
-            </button>
-            <button className="btn btn-sm" onClick={() => setMode(null)}>
-              Cancel
-            </button>
           </div>
-        </>
-      )}
-      {mode === 'skip' && (
-        <>
-          <input
-            className="input"
-            aria-label="Why go ahead without it"
-            placeholder="Why the claim goes ahead without it"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <ErrorNotice error={act.error} />
-          <div className="row" style={{ gap: 6 }}>
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={act.busy || reason.trim().length < 5}
-              onClick={async () => {
-                const r = await act.run(() => api.overrideSocsoDoc(claimId, item.id, reason), 'Noted.');
-                if (r) setMode(null);
-              }}
-            >
-              Save
-            </button>
-            <button className="btn btn-sm" onClick={() => setMode(null)}>
-              Cancel
-            </button>
+        )}
+        {mode === 'skip' && (
+          <div className="hx-form">
+            <label className="field">
+              <span className="label">Why go ahead without it</span>
+              <input
+                className="input"
+                aria-label="Why go ahead without it"
+                placeholder="Why the claim goes ahead without it"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+            <ErrorNotice error={act.error} />
+            <div className="hx-form-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={act.busy || reason.trim().length < 5}
+                onClick={async () => {
+                  const r = await act.run(() => api.overrideSocsoDoc(claimId, item.id, reason), 'Noted.');
+                  if (r) setMode(null);
+                }}
+              >
+                Save
+              </button>
+              <button className="btn btn-sm" onClick={() => setMode(null)}>
+                Cancel
+              </button>
+            </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -629,45 +768,47 @@ function NextStep({ d }: { d: SocsoClaimDetail }) {
   const needsAmount = to === 'CLOSED' && c.status === 'APPROVED';
   const ready = to && (to !== 'REPORTED' || ref.trim().length >= 4) && (!needsNote || note.trim().length >= 3) && (!needsAmount || amount !== '');
   return (
-    <section className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <h3 style={{ margin: 0 }}>Next step</h3>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+    <section className="hx-form sx-next">
+      <h3 className="hx-form-title">Next step</h3>
+      <div className="hx-form-actions" role="group" aria-label="Next step">
         {moves.map((m) => (
-          <button key={m.to} className={`btn btn-sm${to === m.to ? ' btn-primary' : ''}`} onClick={() => setTo(m.to)}>
+          <button key={m.to} className={`btn btn-sm${to === m.to ? ' btn-primary' : ''}`} aria-pressed={to === m.to} onClick={() => setTo(m.to)}>
             {m.label}
           </button>
         ))}
       </div>
-      {to === 'REPORTED' && (
-        <label className="field">
-          <span className="label">PERKESO reference from ASSIST</span>
-          <input className="input" aria-label="PERKESO reference" value={ref} onChange={(e) => setRef(e.target.value)} />
-        </label>
-      )}
-      {needsNote && (
-        <label className="field">
-          <span className="label">{to === 'APPEAL' ? 'What the appeal is about' : "PERKESO's decision, in short"}</span>
-          <input className="input" aria-label="Decision note" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-      )}
-      {(to === 'APPROVED' || to === 'REJECTED') && (
-        <label className="field">
-          <span className="label">Date of the decision letter</span>
-          <input className="input" type="date" aria-label="Decision date" value={on} onChange={(e) => setOn(e.target.value)} />
-        </label>
-      )}
-      {to === 'CLOSED' && (
-        <div className="grid-2">
-          {c.status === 'APPROVED' && (
+      {to && (
+        <div className="hx-form-grid">
+          {to === 'REPORTED' && (
+            <label className="field">
+              <span className="label">PERKESO reference from ASSIST</span>
+              <input className="input" aria-label="PERKESO reference" value={ref} onChange={(e) => setRef(e.target.value)} />
+            </label>
+          )}
+          {needsNote && (
+            <label className="field">
+              <span className="label">{to === 'APPEAL' ? 'What the appeal is about' : "PERKESO's decision, in short"}</span>
+              <input className="input" aria-label="Decision note" value={note} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          )}
+          {(to === 'APPROVED' || to === 'REJECTED') && (
+            <label className="field">
+              <span className="label">Date of the decision letter</span>
+              <input className="input" type="date" aria-label="Decision date" value={on} onChange={(e) => setOn(e.target.value)} />
+            </label>
+          )}
+          {to === 'CLOSED' && c.status === 'APPROVED' && (
             <label className="field">
               <span className="label">Amount PERKESO paid (RM)</span>
               <input className="input" type="number" min={0} step="0.01" aria-label="Amount paid" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </label>
           )}
-          <label className="field">
-            <span className="label">Back at work on</span>
-            <input className="input" type="date" aria-label="Back at work" value={back} onChange={(e) => setBack(e.target.value)} />
-          </label>
+          {to === 'CLOSED' && (
+            <label className="field">
+              <span className="label">Back at work on</span>
+              <input className="input" type="date" aria-label="Back at work" value={back} onChange={(e) => setBack(e.target.value)} />
+            </label>
+          )}
         </div>
       )}
       {to === 'DOCS_COMPLETE' && d.items.some((i) => i.required && !i.done) && (
@@ -675,7 +816,7 @@ function NextStep({ d }: { d: SocsoClaimDetail }) {
       )}
       <ErrorNotice error={act.error} />
       {to && (
-        <div>
+        <div className="hx-form-actions">
           <button
             className="btn btn-primary btn-sm"
             disabled={!ready || act.busy}
@@ -739,50 +880,41 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
       <input className="input" type={type} aria-label={label} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
     </label>
   );
+  const rtw: [string, string][] = [];
+  if (d.rtwOffered) {
+    rtw.push(['Referral', `${r.rtwRequestedOn ? `asked ${dateLabel(r.rtwRequestedOn)}` : 'not asked yet'}${r.referralOn ? `, referred ${dateLabel(r.referralOn)}` : ''}`]);
+    rtw.push(['PERKESO case manager', r.caseManager ? `${r.caseManager.name}${r.caseManager.phone ? `, ${r.caseManager.phone}` : ''}` : 'not known yet']);
+  }
+  rtw.push(['Target return', r.targetReturn ? dateLabel(r.targetReturn) : 'not set']);
+  if (r.plan) rtw.push(['Plan', r.plan]);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="sx-rehab">
       {!d.rtwOffered && (
-        <div className="panel small" style={{ padding: 10 }}>
+        <p className="notice" data-tone="info">
           PERKESO gives foreign workers appliances only (such as crutches or a prosthesis), not the Return to Work programme. Foreign Worker Management keeps
           the work pass valid during a long MC.
-        </div>
+        </p>
       )}
-      <section>
-        <h3>Return to work</h3>
-        {!edit && (
-          <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {d.rtwOffered && (
-              <div>
-                Referral: {r.rtwRequestedOn ? `asked ${dateLabel(r.rtwRequestedOn)}` : 'not asked yet'}
-                {r.referralOn ? `, referred ${dateLabel(r.referralOn)}` : ''}
-              </div>
-            )}
-            {d.rtwOffered && (
-              <div>
-                PERKESO case manager: {r.caseManager ? `${r.caseManager.name}${r.caseManager.phone ? `, ${r.caseManager.phone}` : ''}` : 'not known yet'}
-              </div>
-            )}
-            <div>Target return: {r.targetReturn ? dateLabel(r.targetReturn) : 'not set'}</div>
-            {r.plan && <div>Plan: {r.plan}</div>}
-          </div>
-        )}
-        {manage && !edit && (
-          <div style={{ marginTop: 6 }}>
+      <section className="sx-sec">
+        <div className="sx-sec-head">
+          <h3>Return to work</h3>
+          {manage && !edit && (
             <button className="btn btn-sm" onClick={() => setEdit(true)}>
               Update
             </button>
+          )}
+        </div>
+        {!edit && (
+          <div className="sx-facts">
+            <Facts items={rtw} />
           </div>
         )}
         {edit && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="hx-form">
             {d.rtwOffered && (
-              <div className="grid-2">
+              <div className="hx-form-grid">
                 {field('rtwRequestedOn', 'Return to Work asked on', 'date')}
                 {field('referralOn', 'PERKESO referred on', 'date')}
-              </div>
-            )}
-            {d.rtwOffered && (
-              <div className="grid-2">
                 {field('cmName', 'Case manager name')}
                 {field('cmPhone', 'Case manager phone', 'tel')}
               </div>
@@ -790,10 +922,10 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
             {field('targetReturn', 'Target return date', 'date')}
             <label className="field">
               <span className="label">Plan</span>
-              <textarea className="input" rows={2} aria-label="Plan" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} />
+              <textarea className="textarea" rows={2} aria-label="Plan" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} />
             </label>
             <ErrorNotice error={act.error} />
-            <div className="row" style={{ gap: 6 }}>
+            <div className="hx-form-actions">
               <button
                 className="btn btn-primary btn-sm"
                 disabled={act.busy}
@@ -826,87 +958,98 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
         )}
       </section>
 
-      <section>
+      <section className="sx-sec">
         <h3>Work restrictions</h3>
         <p className="muted small">The roster will not place the person against an open restriction until HR clears it.</p>
-        <div className="list">
-          {r.restrictions.length === 0 && <div className="empty">No restriction.</div>}
-          {r.restrictions.map((x) => (
-            <div key={x.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
-                <div>
-                  <div>{SOCSO_RESTRICTION_LABEL[x.kind]}</div>
-                  <div className="muted small">
-                    From {dateLabel(x.from)}
-                    {x.until ? `, doctor's date ${dateLabel(x.until)}` : ''}
-                    {x.note ? ` · ${x.note}` : ''} · set by {x.setBy}
+        {r.restrictions.length === 0 ? (
+          <p className="muted small">No restriction.</p>
+        ) : (
+          <div className="sx-box">
+            <ul className="hx-rows">
+              {r.restrictions.map((x) => (
+                <li key={x.id} className="hx-row" data-tone={x.clearedAt ? undefined : 'warn'}>
+                  <div className="hx-row-main">
+                    <span className="hx-row-title">{SOCSO_RESTRICTION_LABEL[x.kind]}</span>
+                    <span className="hx-row-meta">
+                      From {dateLabel(x.from)}
+                      {x.until ? `, doctor's date ${dateLabel(x.until)}` : ''}
+                      {x.note ? ` · ${x.note}` : ''} · set by {x.setBy}
+                    </span>
+                    {x.clearedAt && (
+                      <span className="hx-row-meta">
+                        Cleared by {x.clearedBy}, {dateTimeLabel(x.clearedAt)}: {x.clearNote}
+                      </span>
+                    )}
                   </div>
-                  {x.clearedAt && (
-                    <div className="muted small">
-                      Cleared by {x.clearedBy}, {dateTimeLabel(x.clearedAt)}: {x.clearNote}
-                    </div>
-                  )}
-                </div>
-                <Chip tone={x.clearedAt ? 'neutral' : 'warn'}>{x.clearedAt ? 'Cleared' : 'Open'}</Chip>
-              </div>
-              {manage && !x.clearedAt && clearing !== x.id && (
-                <div>
-                  <button className="btn btn-sm" onClick={() => setClearing(x.id)}>
-                    Clear
-                  </button>
-                </div>
-              )}
-              {clearing === x.id && (
-                <>
-                  <input
-                    className="input"
-                    aria-label="Why it is cleared"
-                    placeholder="Why, such as the fitness to work certificate"
-                    value={clearNote}
-                    onChange={(e) => setClearNote(e.target.value)}
-                  />
-                  <ErrorNotice error={act.error} />
-                  <div className="row" style={{ gap: 6 }}>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      disabled={act.busy || clearNote.trim().length < 5}
-                      onClick={async () => {
-                        const ok = await act.run(() => api.clearSocsoRestriction(c.id, x.id, clearNote), 'Restriction cleared.');
-                        if (ok) {
-                          setClearing(null);
-                          setClearNote('');
-                        }
-                      }}
-                    >
-                      Save
-                    </button>
-                    <button className="btn btn-sm" onClick={() => setClearing(null)}>
-                      Cancel
-                    </button>
+                  <div className="hx-row-side">
+                    <Chip tone={x.clearedAt ? 'neutral' : 'warn'}>{x.clearedAt ? 'Cleared' : 'Open'}</Chip>
                   </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+                  <div className="hx-row-body">
+                    {manage && !x.clearedAt && clearing !== x.id && (
+                      <div className="hx-row-actions">
+                        <button className="btn btn-sm" onClick={() => setClearing(x.id)}>
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                    {clearing === x.id && (
+                      <div className="hx-form">
+                        <label className="field">
+                          <span className="label">Why it is cleared</span>
+                          <input
+                            className="input"
+                            aria-label="Why it is cleared"
+                            placeholder="Why, such as the fitness to work certificate"
+                            value={clearNote}
+                            onChange={(e) => setClearNote(e.target.value)}
+                          />
+                        </label>
+                        <ErrorNotice error={act.error} />
+                        <div className="hx-form-actions">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={act.busy || clearNote.trim().length < 5}
+                            onClick={async () => {
+                              const ok = await act.run(() => api.clearSocsoRestriction(c.id, x.id, clearNote), 'Restriction cleared.');
+                              if (ok) {
+                                setClearing(null);
+                                setClearNote('');
+                              }
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button className="btn btn-sm" onClick={() => setClearing(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {manage && (
-          <div className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            <label className="field">
-              <span className="label">New restriction</span>
-              <select
-                className="select"
-                aria-label="Restriction"
-                value={rs.kind}
-                onChange={(e) => setRs({ ...rs, kind: e.target.value as SocsoRestrictionKind })}
-              >
-                {RESTRICTIONS.map((k) => (
-                  <option key={k} value={k}>
-                    {SOCSO_RESTRICTION_LABEL[k]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid-2">
+          <div className="hx-form">
+            <h4 className="hx-form-title">Add a restriction</h4>
+            <div className="hx-form-grid">
+              <label className="field">
+                <span className="label">New restriction</span>
+                <select
+                  className="select"
+                  aria-label="Restriction"
+                  value={rs.kind}
+                  onChange={(e) => setRs({ ...rs, kind: e.target.value as SocsoRestrictionKind })}
+                >
+                  {RESTRICTIONS.map((k) => (
+                    <option key={k} value={k}>
+                      {SOCSO_RESTRICTION_LABEL[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="field">
                 <span className="label">From</span>
                 <input className="input" type="date" aria-label="Restriction from" value={rs.from} onChange={(e) => setRs({ ...rs, from: e.target.value })} />
@@ -921,15 +1064,18 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
                   onChange={(e) => setRs({ ...rs, until: e.target.value })}
                 />
               </label>
+              <label className="field">
+                <span className="label">Note</span>
+                <input
+                  className="input"
+                  aria-label="Restriction note"
+                  placeholder="From the doctor's note"
+                  value={rs.note}
+                  onChange={(e) => setRs({ ...rs, note: e.target.value })}
+                />
+              </label>
             </div>
-            <input
-              className="input"
-              aria-label="Restriction note"
-              placeholder="From the doctor's note"
-              value={rs.note}
-              onChange={(e) => setRs({ ...rs, note: e.target.value })}
-            />
-            <div>
+            <div className="hx-form-actions">
               <button
                 className="btn btn-sm"
                 disabled={act.busy || !rs.from}
@@ -944,18 +1090,21 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
         )}
       </section>
 
-      <section>
+      <section className="sx-sec">
         <h3>Appointments</h3>
-        <div className="list">
-          {r.appointments.length === 0 && <div className="empty">No appointment.</div>}
-          {r.appointments.map((a) => (
-            <div key={a.id} className="list-item small">
-              {dateTimeLabel(a.at)} · {a.what}
-            </div>
-          ))}
-        </div>
+        {r.appointments.length === 0 ? (
+          <p className="muted small">No appointment.</p>
+        ) : (
+          <ul className="sx-lines">
+            {r.appointments.map((a) => (
+              <li key={a.id}>
+                <b>{dateTimeLabel(a.at)}</b> · {a.what}
+              </li>
+            ))}
+          </ul>
+        )}
         {manage && (
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <div className="sx-inline">
             <input
               className="input"
               type="datetime-local"
@@ -984,25 +1133,28 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
         )}
       </section>
 
-      <section>
+      <section className="sx-sec">
         <h3>Weekly check-ins</h3>
         <p className="muted small">
           The officer calls every week while the person is off, and for the first month back.
           {d.checkIn ? ` Next one ${d.checkIn.overdue ? 'is overdue since' : 'due'} ${dateLabel(d.checkIn.due)}.` : ''}
         </p>
-        <div className="list">
-          {r.checkIns.length === 0 && <div className="empty">No check-in yet.</div>}
-          {[...r.checkIns].reverse().map((k, i) => (
-            <div key={i} className="list-item small" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <div>{k.note}</div>
-              <div className="muted">
-                {k.by}, {dateTimeLabel(k.at)}
-              </div>
-            </div>
-          ))}
-        </div>
+        {r.checkIns.length === 0 ? (
+          <p className="muted small">No check-in yet.</p>
+        ) : (
+          <ol className="sx-history">
+            {[...r.checkIns].reverse().map((k, i) => (
+              <li key={i}>
+                <span>{k.note}</span>
+                <span className="muted small">
+                  {k.by}, {dateTimeLabel(k.at)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         {d.can.addIncident && (
-          <div className="row" style={{ gap: 6, marginTop: 6 }}>
+          <div className="sx-inline">
             <input
               className="input"
               aria-label="Check-in note"

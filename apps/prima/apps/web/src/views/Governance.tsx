@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { CalendarXIcon, HourglassIcon, KeyIcon, ScalesIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import type { GovArea } from '@prima/core';
 import { api, type GovBoard, type GovMandateInput } from '../api';
 import { useApp } from '../App';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import '../styles/gov.css';
 
 /**
  * Governance and authority (V7, V8, V12). PWVSB acts in a company only under a signed management agreement or board
@@ -27,29 +30,55 @@ const rm = (n: number) => `RM${n.toLocaleString('en-MY')}`;
 export function GovernanceView() {
   const { data, error } = useLoad(() => api.govBoard(), []);
   const [tab, setTab] = useState<Tab>('mandates');
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="mandates" />;
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="mandates" />
+      </div>
+    );
   const k = data.kpis;
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Mandates and authority</h1>
-        <p className="muted">
-          PWVSB acts in a company only under a signed management agreement or board mandate, confirmed by the company's board and verified by PWVSB legal. Where
-          there is none, PWVSB only monitors and the area shows as unknown.
-        </p>
+    <div className="page gv-page">
+      <PageHead
+        title="Mandates and authority"
+        sub="PWVSB acts in a company only under a signed management agreement or board mandate, confirmed by the company's board and verified by PWVSB legal. Where there is none, PWVSB only monitors and the area shows as unknown."
+      >
         <p className="notice" data-tone="info">
           Test data. The areas and wording are proposals for counsel to check against the signed agreements.
         </p>
-      </div>
-      <div className="kpis">
-        <Kpi label="Mandates in force" value={k.active} tone="ok" />
-        <Kpi label={`Ending within ${data.rule.warnDays} days`} value={k.expiring} tone={k.expiring ? 'warn' : 'ok'} />
-        <Kpi label="Expired" value={k.expired} tone={k.expired ? 'crit' : 'ok'} />
-        <Kpi label="Waiting for board or legal" value={k.waiting} tone={k.waiting ? 'warn' : 'ok'} />
-        <Kpi label="Companies with no mandate" value={k.noMandate} tone={k.noMandate ? 'warn' : 'ok'} note="shown as unknown" />
-        <Kpi label="Acting access without a mandate" value={k.unsupportedGrants} tone={k.unsupportedGrants ? 'warn' : 'ok'} />
-      </div>
+      </PageHead>
+      <Stats>
+        <Stat label="Mandates in force" value={k.active} tone="ok" icon={<SealCheckIcon size={16} />} />
+        <Stat
+          label={`Ending within ${data.rule.warnDays} days`}
+          value={k.expiring}
+          tone={k.expiring ? 'warn' : 'ok'}
+          icon={<HourglassIcon size={16} />}
+        />
+        <Stat label="Expired" value={k.expired} tone={k.expired ? 'crit' : 'ok'} icon={<CalendarXIcon size={16} />} />
+        <Stat label="Waiting for board or legal" value={k.waiting} tone={k.waiting ? 'warn' : 'ok'} icon={<ScalesIcon size={16} />} />
+        <Stat
+          label="Companies with no mandate"
+          value={k.noMandate}
+          tone={k.noMandate ? 'warn' : 'ok'}
+          note="shown as unknown"
+          icon={<WarningIcon size={16} />}
+          onClick={() => setTab('coverage')}
+        />
+        <Stat
+          label="Acting access without a mandate"
+          value={k.unsupportedGrants}
+          tone={k.unsupportedGrants ? 'warn' : 'ok'}
+          icon={<KeyIcon size={16} />}
+          onClick={() => setTab('coverage')}
+        />
+      </Stats>
       <div className="tabbar" role="tablist" aria-label="Mandates">
         {(
           [
@@ -76,29 +105,47 @@ function Mandates({ data }: { data: GovBoard }) {
   const canAdd = data.roles.includes('legal') || data.roles.includes('control');
   const rows = data.rows.filter((r) => all || r.state !== 'terminated');
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Management agreements and board mandates</h3>
-        <div className="row" style={{ gap: 6 }}>
+    <Card
+      title="Management agreements and board mandates"
+      sub={`${rows.length} on the register${all ? '' : ', ended ones hidden'}`}
+      flush
+      actions={
+        <>
+          <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
+            {all ? 'Hide ended' : 'Show ended'}
+          </button>
           {canAdd && (
-            <button className="btn btn-sm" onClick={() => setForm(!form)}>
+            <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
               Register a mandate
             </button>
           )}
-          <button className="btn btn-sm" onClick={() => setAll(!all)}>
-            {all ? 'Hide ended' : 'Show ended'}
-          </button>
+        </>
+      }
+    >
+      {form && (
+        <div className="gv-card-intro">
+          <NewMandate data={data} onDone={() => setForm(false)} />
         </div>
-      </div>
-      {form && <NewMandate data={data} onDone={() => setForm(false)} />}
-      <div className="list">
-        {!rows.length && <div className="empty">No mandates registered.</div>}
+      )}
+      {!rows.length && <Empty title="No mandates registered." />}
+      <ul className="gv-list">
         {rows.map((r) => (
-          <MandateLine key={r.mandate.id} r={r} data={data} />
+          <li key={r.mandate.id}>
+            <MandateLine r={r} data={data} />
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
+}
+
+/** How far through its term a mandate is, for the validity bar; null when it has no end date. */
+function elapsed(from: string, to: string | null): number | null {
+  if (!to) return null;
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return null;
+  return Math.min(1, Math.max(0, (Date.now() - a) / (b - a)));
 }
 
 function MandateLine({ r, data }: { r: Row; data: GovBoard }) {
@@ -108,29 +155,58 @@ function MandateLine({ r, data }: { r: Row; data: GovBoard }) {
   const m = r.mandate;
   const [tone, label] = STATE[r.state];
   const areaLabel = (a: GovArea) => data.rule.areas.find((x) => x.area === a)?.label ?? a;
+  const ended = !!m.terminated;
+  const inForce: StepState = r.state === 'active' || r.state === 'expiring' ? 'done' : r.state === 'expired' || ended ? 'stopped' : 'todo';
+  const steps: { label: string; state: StepState; note?: string }[] = [
+    { label: 'Registered', state: 'done', note: m.addedBy },
+    {
+      label: 'Board resolution',
+      state: m.companyConfirm ? 'done' : ended ? 'todo' : 'now',
+      note: m.companyConfirm ? m.companyConfirm.resolutionRef : 'The company board confirms',
+    },
+    {
+      label: 'Legal verified',
+      state: m.legalVerify ? 'done' : m.companyConfirm && !ended ? 'now' : 'todo',
+      note: m.legalVerify ? m.legalVerify.by : 'PWVSB legal checks the signed copy',
+    },
+    { label: 'In force', state: inForce },
+  ];
+  const share = r.live ? elapsed(m.validFrom, m.validTo) : null;
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>
-            {r.companyName}: {m.ref}
+    <div className="gv-item" data-tone={tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined}>
+      <div className="gv-item-head">
+        <div className="gv-item-main">
+          <div className="gv-item-title">
+            <span className="gv-co">{r.companyName}:</span> {m.ref}
           </div>
-          <div className="muted small">
-            {m.kind === 'BOARD_MANDATE' ? 'Board mandate' : 'Management agreement'} · {m.title} · signed {dateLabel(m.signedOn)} · runs {dateLabel(m.validFrom)}{' '}
-            to {m.validTo ? dateLabel(m.validTo) : 'until ended'}
-            {r.daysLeft !== null && r.daysLeft >= 0 && r.live ? ` (${r.daysLeft} days left)` : ''}
+          <div className="gv-item-meta">
+            {m.kind === 'BOARD_MANDATE' ? 'Board mandate' : 'Management agreement'} · {m.title} · signed {dateLabel(m.signedOn)}
           </div>
         </div>
-        <Chip tone={tone}>{label}</Chip>
+        <div className="gv-item-state">
+          <Chip tone={tone}>{label}</Chip>
+        </div>
       </div>
-      <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+      <div className="gv-validity">
+        <span>
+          Runs {dateLabel(m.validFrom)} to {m.validTo ? dateLabel(m.validTo) : 'until ended'}
+          {r.daysLeft !== null && r.daysLeft >= 0 && r.live ? ` (${r.daysLeft} days left)` : ''}
+        </span>
+        {share !== null && (
+          <span className="gv-bar" data-tone={tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined} aria-hidden="true">
+            <span style={{ width: `${Math.round(share * 100)}%` }} />
+          </span>
+        )}
+      </div>
+      <Steps steps={steps} />
+      <div className="gv-chips" aria-label="Powers">
         {m.powers.map((p, i) => (
           <Chip key={i} tone={p.scope === 'act' ? 'info' : 'ok'}>
             {areaLabel(p.area)}: {p.scope === 'act' ? `act${p.limit != null ? ` to ${rm(p.limit)}` : ''}` : 'monitor'}
           </Chip>
         ))}
       </div>
-      <div className="muted small">
+      <div className="gv-item-meta">
         Registered by {m.addedBy}
         {m.companyConfirm ? ` · board resolution ${m.companyConfirm.resolutionRef}` : ' · no board resolution yet'}
         {m.legalVerify ? ` · verified by ${m.legalVerify.by}` : ' · not verified by legal'}
@@ -139,45 +215,54 @@ function MandateLine({ r, data }: { r: Row; data: GovBoard }) {
       {!m.terminated && (
         <>
           {r.role === 'company' && !m.companyConfirm && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <input
-                className="input"
-                aria-label="Board resolution"
-                placeholder="Board resolution reference"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={act.busy || !text.trim()}
-                onClick={() => act.run(() => api.govMandateStep(m.id, 'confirm', { resolutionRef: text }), 'Board confirmation recorded.')}
-              >
-                Board confirmed it
-              </button>
+            <div className="gv-box">
+              <div className="gv-box-title">Record the board's confirmation</div>
+              <div className="gv-inline">
+                <input
+                  className="input"
+                  aria-label="Board resolution"
+                  placeholder="Board resolution reference"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                />
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={act.busy || !text.trim()}
+                  onClick={() => act.run(() => api.govMandateStep(m.id, 'confirm', { resolutionRef: text }), 'Board confirmation recorded.')}
+                >
+                  Board confirmed it
+                </button>
+              </div>
             </div>
           )}
           {r.role === 'legal' && m.companyConfirm && !m.legalVerify && m.addedById !== me.user.id && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <input className="input" aria-label="Verification note" placeholder="What you checked" value={text} onChange={(e) => setText(e.target.value)} />
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={act.busy || !text.trim()}
-                onClick={() => act.run(() => api.govMandateStep(m.id, 'verify', { note: text }), 'Verified.')}
-              >
-                Signed copy verified
-              </button>
+            <div className="gv-box">
+              <div className="gv-box-title">Verify the signed copy</div>
+              <div className="gv-inline">
+                <input className="input" aria-label="Verification note" placeholder="What you checked" value={text} onChange={(e) => setText(e.target.value)} />
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={act.busy || !text.trim()}
+                  onClick={() => act.run(() => api.govMandateStep(m.id, 'verify', { note: text }), 'Verified.')}
+                >
+                  Signed copy verified
+                </button>
+              </div>
             </div>
           )}
           {(r.role === 'legal' || r.role === 'control') && (r.state === 'expired' || r.state === 'expiring' || r.state === 'active') && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <input className="input" aria-label="Reason it ended" placeholder="Reason it ended" value={text} onChange={(e) => setText(e.target.value)} />
-              <button
-                className="btn btn-sm"
-                disabled={act.busy || !text.trim()}
-                onClick={() => act.run(() => api.govMandateStep(m.id, 'terminate', { note: text }), 'Recorded as ended.')}
-              >
-                Mark ended
-              </button>
+            <div className="gv-box">
+              <div className="gv-box-title">End this mandate</div>
+              <div className="gv-inline">
+                <input className="input" aria-label="Reason it ended" placeholder="Reason it ended" value={text} onChange={(e) => setText(e.target.value)} />
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy || !text.trim()}
+                  onClick={() => act.run(() => api.govMandateStep(m.id, 'terminate', { note: text }), 'Recorded as ended.')}
+                >
+                  Mark ended
+                </button>
+              </div>
             </div>
           )}
         </>
@@ -201,121 +286,171 @@ function NewMandate({ data, onDone }: { data: GovBoard; onDone: () => void }) {
       .map((a) => ({ area: a.area, scope: a.v.scope as 'act' | 'monitor', limit: a.v.limit ? Number(a.v.limit) : null })),
   };
   return (
-    <div className="panel" style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
-      <select className="input" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-        {companies.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-      <select className="input" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as GovMandateInput['kind'] })}>
-        <option value="MANAGEMENT_AGREEMENT">Management agreement</option>
-        <option value="BOARD_MANDATE">Board mandate</option>
-      </select>
-      <input className="input" aria-label="Reference" placeholder="Reference" value={f.ref} onChange={(e) => setF({ ...f, ref: e.target.value })} />
-      <input className="input" aria-label="Title" placeholder="Title" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
-      <label className="small">
-        Signed on
-        <input className="input" type="date" value={f.signedOn} onChange={(e) => setF({ ...f, signedOn: e.target.value })} />
-      </label>
-      <label className="small">
-        Runs from
-        <input className="input" type="date" value={f.validFrom} onChange={(e) => setF({ ...f, validFrom: e.target.value })} />
-      </label>
-      <label className="small">
-        Runs to (leave empty if open-ended)
-        <input className="input" type="date" value={f.validTo ?? ''} onChange={(e) => setF({ ...f, validTo: e.target.value || null })} />
-      </label>
-      <div className="small" style={{ fontWeight: 600 }}>
-        Powers the signed document gives PWVSB
-      </div>
-      {list.map((a) => (
-        <div key={a.area} className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="small" style={{ minWidth: 160 }}>
-            {a.label}
-          </span>
-          <select
-            className="input"
-            aria-label={`${a.label} power`}
-            value={a.v.scope}
-            onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, scope: e.target.value as 'none' | 'monitor' | 'act' } })}
-          >
-            <option value="none">None</option>
-            <option value="monitor">Monitor</option>
-            <option value="act">Act</option>
+    <div className="gv-box" aria-label="Register a mandate">
+      <div className="gv-box-title">Register a mandate</div>
+      <div className="gv-form">
+        <label className="field">
+          <span className="label">Company</span>
+          <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
-          {a.v.scope === 'act' && (
-            <input
-              className="input"
-              aria-label={`${a.label} limit`}
-              placeholder="Limit RM (optional)"
-              inputMode="decimal"
-              value={a.v.limit}
-              onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, limit: e.target.value } })}
-            />
-          )}
-        </div>
-      ))}
-      <button
-        className="btn btn-sm btn-primary"
-        disabled={act.busy || !companyId}
-        onClick={() =>
-          act
-            .run(() => api.addGovMandate(companyId, input), 'Registered. The company board confirms it next.')
-            .then((x) => {
-              if (x) onDone();
-            })
-        }
-      >
-        Register
-      </button>
+        </label>
+        <label className="field">
+          <span className="label">Kind</span>
+          <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as GovMandateInput['kind'] })}>
+            <option value="MANAGEMENT_AGREEMENT">Management agreement</option>
+            <option value="BOARD_MANDATE">Board mandate</option>
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Reference</span>
+          <input className="input" aria-label="Reference" placeholder="Reference" value={f.ref} onChange={(e) => setF({ ...f, ref: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Title</span>
+          <input className="input" aria-label="Title" placeholder="Title" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Signed on</span>
+          <input className="input" type="date" value={f.signedOn} onChange={(e) => setF({ ...f, signedOn: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Runs from</span>
+          <input className="input" type="date" value={f.validFrom} onChange={(e) => setF({ ...f, validFrom: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Runs to (leave empty if open-ended)</span>
+          <input className="input" type="date" value={f.validTo ?? ''} onChange={(e) => setF({ ...f, validTo: e.target.value || null })} />
+        </label>
+      </div>
+      <div className="gv-box-title">Powers the signed document gives PWVSB</div>
+      <div className="gv-form">
+        {list.map((a) => (
+          <div key={a.area} className="field">
+            <span className="label">{a.label}</span>
+            <div className="gv-btns">
+              <select
+                className="select"
+                aria-label={`${a.label} power`}
+                value={a.v.scope}
+                onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, scope: e.target.value as 'none' | 'monitor' | 'act' } })}
+              >
+                <option value="none">None</option>
+                <option value="monitor">Monitor</option>
+                <option value="act">Act</option>
+              </select>
+              {a.v.scope === 'act' && (
+                <input
+                  className="input"
+                  aria-label={`${a.label} limit`}
+                  placeholder="Limit RM (optional)"
+                  inputMode="decimal"
+                  value={a.v.limit}
+                  onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, limit: e.target.value } })}
+                />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
       <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || !companyId}
+          onClick={() =>
+            act
+              .run(() => api.addGovMandate(companyId, input), 'Registered. The company board confirms it next.')
+              .then((x) => {
+                if (x) onDone();
+              })
+          }
+        >
+          Register
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
 
 function Coverage({ data }: { data: GovBoard }) {
-  const label = (a: GovArea) => data.rule.areas.find((x) => x.area === a)?.label ?? a;
+  const grants = data.coverage.filter((c) => c.unsupportedGrants.length > 0);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>What PWVSB may do, by company</h3>
-      </div>
-      <p className="muted small">From live, confirmed and verified mandates only. Unknown means nothing verified is on file, so PWVSB only monitors.</p>
-      <div className="list">
-        {data.coverage.map((c) => (
-          <div key={c.companyId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 600 }}>{c.companyName}</div>
-              <Chip tone={c.liveMandates ? 'ok' : 'warn'}>{c.liveMandates ? `${c.liveMandates} in force` : 'No mandate on file'}</Chip>
-            </div>
-            <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-              {c.areas.map((a) => (
-                <Chip key={a.area} tone={a.status === 'act' ? 'info' : a.status === 'monitor' ? 'ok' : 'warn'}>
-                  {label(a.area)}: {a.status === 'act' ? `act${a.limit != null ? ` to ${rm(a.limit)}` : ''}` : a.status === 'monitor' ? 'monitor' : 'unknown'}
-                </Chip>
-              ))}
-            </div>
-            {c.unsupportedGrants.length > 0 && (
-              <div className="small">
-                Acting access with no mandate behind it: {c.unsupportedGrants.map((g) => `${g.userName} (${g.grant.basis})`).join('; ')}
-              </div>
-            )}
+    <div className="gv-stack">
+      <Card
+        title="What PWVSB may do, by company"
+        sub="From live, confirmed and verified mandates only. Unknown means nothing verified is on file, so PWVSB only monitors."
+        flush
+      >
+        {!data.coverage.length && <Empty title="No companies." />}
+        {data.coverage.length > 0 && (
+          <div className="table-wrap">
+            <table className="table gv-matrix">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Mandates</th>
+                  {data.rule.areas.map((a) => (
+                    <th key={a.area}>{a.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.coverage.map((c) => (
+                  <tr key={c.companyId}>
+                    <td>
+                      <strong>{c.companyName}</strong>
+                    </td>
+                    <td>
+                      <Chip tone={c.liveMandates ? 'ok' : 'warn'}>{c.liveMandates ? `${c.liveMandates} in force` : 'No mandate on file'}</Chip>
+                    </td>
+                    {data.rule.areas.map((area) => {
+                      const a = c.areas.find((x) => x.area === area.area);
+                      if (!a) return <td key={area.area} className="muted">–</td>;
+                      return (
+                        <td key={area.area}>
+                          <Chip tone={a.status === 'act' ? 'info' : a.status === 'monitor' ? 'ok' : 'warn'}>
+                            {a.status === 'act' ? `act${a.limit != null ? ` to ${rm(a.limit)}` : ''}` : a.status === 'monitor' ? 'monitor' : 'unknown'}
+                          </Chip>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
-      </div>
-    </section>
+        )}
+      </Card>
+      {grants.length > 0 && (
+        <Card title="Acting access with no mandate behind it" flush>
+          <ul className="gv-list">
+            {grants.map((c) => (
+              <li key={c.companyId} className="gv-item" data-tone="warn">
+                <div className="gv-item-title">{c.companyName}</div>
+                <div className="gv-lines">
+                  Acting access with no mandate behind it: {c.unsupportedGrants.map((g) => `${g.userName} (${g.grant.basis})`).join('; ')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   );
 }
 
 function Matrix({ data }: { data: GovBoard }) {
   return (
-    <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Controlled by the company, monitored by PWVSB</h3>
-        </div>
+    <div className="gv-stack">
+      <Card title="Controlled by the company, monitored by PWVSB" flush>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -328,7 +463,9 @@ function Matrix({ data }: { data: GovBoard }) {
             <tbody>
               {data.rule.areas.map((a) => (
                 <tr key={a.area}>
-                  <td>{a.label}</td>
+                  <td>
+                    <strong>{a.label}</strong>
+                  </td>
                   <td className="small">{a.company}</td>
                   <td className="small">{a.pwvsb}</td>
                 </tr>
@@ -336,24 +473,27 @@ function Matrix({ data }: { data: GovBoard }) {
             </tbody>
           </table>
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Who approves what</h3>
-        </div>
-        <div className="list">
+      </Card>
+      <Card title="Who approves what" flush>
+        <ul className="gv-list">
           {data.rule.matrix.map((m) => (
-            <div key={m.matter} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-              <div style={{ fontWeight: 600 }}>{m.matter}</div>
-              <div className="small">{m.approves}</div>
-              <div className="muted small">
-                {m.source}
-                {/proposed|assumption/i.test(m.source) ? ' · needs your confirmation' : ''}
+            <li key={m.matter} className="gv-item">
+              <div className="gv-item-head">
+                <div className="gv-item-main">
+                  <div className="gv-item-title">{m.matter}</div>
+                  <div className="gv-lines">{m.approves}</div>
+                  <div className="gv-item-meta">{m.source}</div>
+                </div>
+                {/proposed|assumption/i.test(m.source) && (
+                  <div className="gv-item-state">
+                    <Chip tone="warn">needs your confirmation</Chip>
+                  </div>
+                )}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
-      </section>
-    </>
+        </ul>
+      </Card>
+    </div>
   );
 }

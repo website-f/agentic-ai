@@ -1,0 +1,1014 @@
+/* Finance (P75 redesign): exceptions first, then cash, then each company; money right-aligned in tabular figures.
+   Colours come from styles.css tokens only. Every class starts with fin- so nothing leaks into other screens. */
+
+/* ---------- Page and tabs ---------- */
+.fin-body,
+.fin-stack-page {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  align-content: start;
+}
+.fin-stack-page {
+  gap: 20px;
+}
+@media (min-width: 861px) {
+  .fin-tabs {
+    flex-wrap: wrap;
+    border-radius: 18px;
+  }
+}
+.fin-tabs button {
+  padding-left: 11px;
+  padding-right: 11px;
+  font-size: 0.86rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.fin-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.fin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+}
+.fin-section-head h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.fin-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ---------- Overview: Today and cash side by side, then teams ---------- */
+.fin-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.fin-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.fin-today {
+  display: grid;
+}
+.fin-today-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.fin-today-item:last-child {
+  border-bottom: 0;
+}
+.fin-today-item[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.fin-today-item[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.fin-today-item[data-tone='info'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+button.fin-today-item {
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+button.fin-today-item:hover {
+  background: var(--surface-2);
+}
+.fin-today-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.fin-today-title {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.fin-today-title[data-first='yes'] {
+  font-weight: 600;
+}
+.fin-today-detail {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+.fin-caret {
+  color: var(--muted);
+  flex: none;
+}
+
+/* A company on a board: state dot, name, what is wrong, state chip. */
+.fin-cos {
+  display: grid;
+}
+.fin-co {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.fin-co:last-child {
+  border-bottom: 0;
+}
+.fin-co:hover {
+  background: var(--surface-2);
+}
+.fin-co-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  align-self: start;
+  margin-top: 7px;
+}
+.fin-co[data-tone='crit'] .fin-co-dot {
+  background: var(--crit);
+}
+.fin-co[data-tone='warn'] .fin-co-dot {
+  background: var(--warn);
+}
+.fin-co[data-tone='unknown'] .fin-co-dot {
+  background: var(--unknown);
+}
+.fin-co-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fin-co-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fin-co-detail {
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.fin-co-detail > span + span::before {
+  content: ' · ';
+}
+
+/* Label and value rows: the cash position, tests, settings, packs. */
+.fin-rows {
+  display: grid;
+}
+.fin-kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.fin-kv:last-child {
+  border-bottom: 0;
+}
+.fin-kv-wrap {
+  align-items: flex-start;
+}
+.fin-kv-label {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-kv-value {
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fin-kv-fig[data-tone='crit'] .fin-kv-value {
+  color: var(--crit);
+}
+.fin-kv-fig[data-tone='warn'] .fin-kv-value {
+  color: var(--warn);
+}
+.fin-kv-fig[data-tone='ok'] .fin-kv-value {
+  color: var(--ok);
+}
+.fin-kv-fig[data-tone='unknown'] .fin-kv-value {
+  color: var(--unknown);
+}
+@media (min-width: 900px) {
+  .fin-rows-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 0;
+  }
+  .fin-rows-2 > .fin-kv:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+  .fin-rows-2 > .fin-kv:nth-last-child(2):nth-child(odd) {
+    border-bottom: 0;
+  }
+}
+.fin-setting .input,
+.fin-setting .select {
+  flex: none;
+}
+.fin-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.fin-inline-form > .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* ---------- Figures: a strip of small tiles ---------- */
+.fin-figs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.fin-figs-inset {
+  margin: 16px 18px;
+}
+.fin-figs > div {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 12px 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+.fin-figs dt {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fin-figs dd {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.98rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+.drawer .fin-figs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.drawer .fin-table :is(td, th) {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.drawer .fin-table :is(td, th):first-child {
+  padding-left: 18px;
+}
+.drawer .fin-table td:first-child {
+  min-width: 0;
+}
+.fin-stats3 .k-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 700px) {
+  .fin-stats3 .k-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.fin-figs > div[data-tone='crit'] dd {
+  color: var(--crit);
+}
+.fin-figs > div[data-tone='warn'] dd {
+  color: var(--warn);
+}
+.fin-figs > div[data-tone='unknown'] dd {
+  color: var(--unknown);
+}
+.fin-fig {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Tables ---------- */
+.fin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.fin-table td:first-child {
+  min-width: 9rem;
+}
+.fin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.fin-table tbody tr[data-selected='yes'] td {
+  background: var(--accent-soft);
+}
+.fin-table tfoot :is(td, th) {
+  font-weight: 600;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  position: static;
+}
+.fin-table-plain th {
+  background: transparent;
+}
+.fin-table td[rowspan] {
+  background: var(--surface);
+}
+td[data-neg='yes'] {
+  color: var(--crit);
+}
+.fin-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.fin-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fin-framed {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+/* ---------- Payments ---------- */
+.fin-pays {
+  display: grid;
+}
+.fin-pay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.fin-pay:last-child {
+  border-bottom: 0;
+}
+.fin-pay[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.fin-pay[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.fin-pay-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+  align-items: center;
+  gap: 6px 16px;
+  min-width: 0;
+  padding: 12px 18px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.fin-pay-main:hover {
+  background: var(--surface-2);
+}
+.fin-pay-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-pay-payee {
+  font-weight: 600;
+}
+.fin-pay-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.fin-pay-tags {
+  justify-content: flex-end;
+}
+.fin-pay-edit {
+  margin-right: 18px;
+  flex: none;
+}
+
+/* ---------- Month-end close ---------- */
+.fin-closes {
+  display: grid;
+}
+.fin-close {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 1.5fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px 20px;
+  width: 100%;
+  padding: 14px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.fin-close:last-child {
+  border-bottom: 0;
+}
+.fin-close:hover {
+  background: var(--surface-2);
+}
+.fin-close:hover .k-step-text {
+  background: var(--surface-2);
+}
+.fin-close > .chip {
+  justify-self: end;
+}
+.fin-close-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fin-close-steps {
+  min-width: 0;
+}
+.fin-close-steps .k-step {
+  flex-basis: 110px;
+}
+.fin-drawer-steps {
+  padding: 4px 0 2px;
+}
+.fin-check {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.fin-check li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.fin-check li:last-child {
+  border-bottom: 0;
+}
+.fin-check li[data-state='done'] svg {
+  color: var(--ok);
+}
+.fin-check li[data-state='todo'] svg {
+  color: var(--warn);
+}
+.fin-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.fin-trail li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px 16px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.fin-trail li:last-child {
+  border-bottom: 0;
+}
+/* The decision at the foot of a side panel stays in reach while the rest scrolls. */
+.fin-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 -12px 24px -18px color-mix(in srgb, var(--ink) 40%, transparent);
+}
+.fin-actions .row {
+  gap: 8px;
+}
+
+/* Label and value list in a side panel (a payment's details). */
+.fin-dl > .list-item {
+  align-items: baseline;
+}
+.fin-dl > .list-item > span:first-child {
+  flex: 0 1 11rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.fin-dl > .list-item > span:last-child:not(:first-child) {
+  flex: 1 1 220px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.fin-dl > .notice {
+  margin: 8px 18px;
+}
+.fin-doclist {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.fin-subcard {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+/* ---------- Checks: company and section on one bar ---------- */
+.fin-checks-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) minmax(0, 1fr);
+  gap: 12px 20px;
+  align-items: end;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+.fin-checks-bar .fin-tabs {
+  justify-self: start;
+}
+.fin-section-note {
+  margin-top: -12px;
+  max-width: 110ch;
+}
+
+/* ---------- Monthly pack ---------- */
+.fin-anchor {
+  scroll-margin-top: 80px;
+}
+.fin-pack-body {
+  display: grid;
+  gap: 20px;
+}
+.fin-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+.fin-pane {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+.fin-pane h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.fin-pane-wide {
+  grid-column: 1 / -1;
+}
+.fin-pane-flat {
+  padding: 0;
+  border: 0;
+}
+.fin-lines {
+  display: grid;
+}
+.fin-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+.fin-line:last-child {
+  border-bottom: 0;
+}
+.fin-line-total {
+  font-weight: 600;
+  border-top: 1px solid var(--ink);
+}
+.fin-foot-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-end;
+  width: 100%;
+}
+.fin-foot-form > .input {
+  flex: 1 1 260px;
+}
+.fin-foot-wide > .field {
+  flex: 1 1 320px;
+}
+.fin-foot-note {
+  justify-content: flex-start;
+}
+
+/* ---------- Work guide card ---------- */
+.fin-guide {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+  padding: 12px 16px;
+  line-height: 1.5;
+}
+.fin-guide-sum {
+  cursor: pointer;
+  font-weight: 600;
+}
+.fin-guide-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* ---------- The older finance panels: roomier inside the redesigned page ---------- */
+.fin .panel > .fin-intro,
+.fin .k-card .fin-intro,
+.fin-intro {
+  margin: 12px 18px 0;
+  padding: 0;
+  max-width: 110ch;
+  line-height: 1.55;
+}
+.fin .panel > .fin-intro + .list,
+.fin .panel > .notice + .list,
+.fin .panel > .fin-intro + .fin-sep {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.fin .panel > .notice {
+  margin: 12px 18px 0;
+}
+.fin .panel > .list:last-child {
+  border-bottom-left-radius: var(--r-md);
+  border-bottom-right-radius: var(--r-md);
+}
+.fin h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.fin details > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.fin .panel > .fin-scroll,
+.fin .panel > div > table,
+.fin .panel > table {
+  margin-top: 12px;
+}
+
+/* A form inside a panel: fields side by side on a computer, one under the other on a phone. */
+.fin-pad {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 12px 16px;
+  align-items: end;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.fin-pad > :not(.field) {
+  grid-column: 1 / -1;
+}
+.fin-pad > .field:has(textarea),
+.fin-pad > .field:has(.textarea) {
+  grid-column: 1 / -1;
+}
+.fin-pad > .btn,
+.fin-pad > button {
+  justify-self: start;
+}
+.fin-padb {
+  padding: 0 18px 16px;
+  display: grid;
+  gap: 10px;
+}
+.fin-padx {
+  padding: 0 18px;
+}
+.fin-pad-sm {
+  padding: 10px 14px;
+}
+.fin-inset {
+  margin: 12px 18px;
+}
+
+/* ---------- Small helpers used across the finance panels ---------- */
+.fin-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fin-right-text {
+  text-align: right;
+}
+.fin-strong {
+  font-weight: 600;
+}
+.fin-medium {
+  font-weight: 500;
+}
+.fin-min0 {
+  min-width: 0;
+}
+.fin-flex {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.fin-block {
+  display: block;
+}
+.list-item.fin-block {
+  display: grid;
+  gap: 10px;
+}
+.fin-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.list-item.fin-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.fin-grid {
+  display: grid;
+  gap: 8px;
+}
+.fin-flexrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fin-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fin-gap {
+  gap: 8px;
+}
+.fin-wrap {
+  flex-wrap: wrap;
+}
+.fin-between {
+  justify-content: space-between;
+}
+.fin-right {
+  justify-content: flex-end;
+}
+.fin-end {
+  align-items: flex-end;
+}
+.fin-center {
+  align-items: center;
+}
+.fin-self-start {
+  align-self: flex-start;
+}
+.fin-self-center {
+  align-self: center;
+}
+.fin-left {
+  text-align: left;
+}
+.fin-full {
+  width: 100%;
+}
+.fin-w-sm {
+  width: 130px;
+  max-width: 100%;
+}
+.fin-w-md {
+  width: 180px;
+  max-width: 100%;
+}
+.fin-w-lg {
+  width: 280px;
+  max-width: 100%;
+}
+.fin-maxw {
+  max-width: 220px;
+}
+.fin-mt {
+  margin-top: 12px;
+}
+.fin-mb {
+  margin-bottom: 12px;
+}
+.fin-my {
+  margin: 12px 0;
+}
+.fin-m0 {
+  margin: 0;
+}
+.fin-pt {
+  padding-top: 12px;
+}
+.fin-sep {
+  border-top: 1px solid var(--line);
+}
+.fin-ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.fin-subhead {
+  margin: 16px 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.fin-scroll {
+  overflow-x: auto;
+  min-width: 0;
+}
+.fin-click {
+  cursor: pointer;
+}
+.fin-crit {
+  color: var(--crit);
+}
+.fin-warn {
+  color: var(--warn);
+}
+.fin-ok {
+  color: var(--ok);
+}
+.fin-pre {
+  white-space: pre-wrap;
+}
+.fin-nowrap {
+  white-space: nowrap;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 700px) {
+  .fin-co {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .fin-co .fin-caret {
+    display: none;
+  }
+  .fin-pay {
+    flex-wrap: wrap;
+  }
+  .fin-pay-main {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px 16px;
+  }
+  .fin-pay-tags {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .fin-pay-edit {
+    margin: 0 16px 12px;
+  }
+  .fin-close {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px 16px;
+  }
+  .fin-close-steps {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .fin-checks-bar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+  .fin-kv,
+  .fin-today-item,
+  .fin-check li,
+  .fin-trail li {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .fin-figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fin-figs-inset {
+    margin: 14px 16px;
+  }
+  .fin-pad {
+    padding: 14px 16px;
+  }
+  .fin-dl > .list-item > span:last-child:not(:first-child) {
+    text-align: left;
+  }
+}
+
+/* A row of inputs and a button inside a panel stays a row; a fold-out form stays a block. */
+.row.fin-pad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.row.fin-pad.fin-end {
+  align-items: flex-end;
+}
+.row.fin-pad > .input {
+  flex: 1 1 260px;
+}
+details.fin-pad {
+  display: block;
+}
+details.fin-pad > * + * {
+  margin-top: 12px;
+}
+details.fin-pad > summary {
+  color: var(--accent);
+}
+.fin .panel > details.fin-pad {
+  border-top: 1px solid var(--line);
+}
+.fin-table td.fin-num > .muted { white-space: normal; display: inline-block; min-width: 9rem; }
+.fin-dl > .list-item > .chip:last-child {
+  flex: none;
+  margin-left: auto;
+}
+.fin-kv-wrap > .fin-inline-form {
+  flex: 1 1 320px;
+}

@@ -60,7 +60,7 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
     <section className="panel">
       <div className="panel-head">
         <h3>Regular payments</h3>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row">
           {co.canAct && (
             <button
               className="btn btn-sm btn-primary"
@@ -87,7 +87,7 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
           )}
         </div>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Hire purchase, loans, bills, rent, insurance, EPF, PERKESO, HRD, PCB, CP204 and zakat. A second person checks each entry against the agreement or letter.
         Transfers are paid from here for exactly the amount due; direct debits are found on the bank statement by Prima. Statutory, zakat, tax and levy are approved by the
         Finance Director or the CEO.
@@ -101,7 +101,7 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
       )}
       <BatchApprove co={co} companyId={v.companyId} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set('kind')}>
               {v.kinds.map((k) => (
@@ -251,9 +251,9 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const pay = useAction();
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
+        <div className="fin-min0">
           <b>{r.name}</b> · {r.payee} · {KIND[r.kind]?.split(' (')[0] ?? r.kind}
           {r.body ? ` · ${r.body}` : ''}
           <div className="muted small">
@@ -263,7 +263,7 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
             {r.expiresOn && ` · policy ends ${dateLabel(r.expiresOn)}`}
           </div>
         </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row">
           <Chip tone={r.status === 'active' ? 'ok' : r.status === 'pending' ? 'warn' : 'info'}>{r.status === 'pending' ? 'To check' : r.status}</Chip>
           <button className="btn btn-sm" onClick={() => setOpen((x) => !x)}>
             {open ? 'Close' : 'Open'}
@@ -271,18 +271,18 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
         </div>
       </div>
       {open && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           <ErrorNotice error={act.error ?? pay.error} />
           <div className="list">
             {r.next.map((d) => {
               const st = d.state ? STATE[d.state] : null;
               return (
-                <div key={d.period} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
+                <div key={d.period} className="list-item">
                   <span>
                     {dateLabel(d.dueOn)} · {rm(d.expected)}
                     {d.bill?.unusual && <span className="muted small"> · unusual: {d.bill.unusual}</span>}
                   </span>
-                  <span className="row" style={{ gap: 6 }}>
+                  <span className="row">
                     {st && <Chip tone={st[1]}>{st[0]}</Chip>}
                     {co.canAct && r.status === 'active' && r.method === 'transfer' && d.expected != null && !d.paymentId && (d.state === 'due' || d.state === 'late' || d.state === 'upcoming') && (
                       <button
@@ -313,7 +313,7 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
                     <input className="input" placeholder="SQL Account payment voucher no." value={f[`sql-${d.period}`] ?? ''} onChange={set(`sql-${d.period}`)} />
                   )}
                   {co.canAct && r.status === 'active' && r.amount == null && !d.paymentId && !d.debited && (
-                    <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    <span className="row">
                       <input className="input" placeholder="Billed amount" inputMode="decimal" value={f[`amt-${d.period}`] ?? ''} onChange={set(`amt-${d.period}`)} />
                       {(() => {
                         // A14 (Fauzan, 2 Nov 2026): copy last month's amount, then change it if the bill differs.
@@ -339,7 +339,7 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
             })}
           </div>
           {co.canAct && (
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap', paddingTop: 8 }}>
+            <div className="row fin-pt">
               <input className="input" placeholder="Comment" value={f.comment ?? ''} onChange={set('comment')} />
               {r.status === 'pending' && (
                 <button className="btn btn-sm" onClick={() => go('regular', 'check', { regularId: r.id, comment: f.comment }, 'Checked.')}>
@@ -375,12 +375,12 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
           </button>
         )}
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         When the client releases a guarantee or it expires, claim the cash collateral back from the insurer or bank. Prima finds the refund on the bank statement.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           <Field label="Type">
             <select className="select" value={f.kind} onChange={set('kind')}>
               <option value="IG">IG (insurance guarantee)</option>
@@ -448,8 +448,8 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
       <div className="list">
         {v.guarantees.length === 0 && <div className="list-item muted">No guarantees on the list.</div>}
         {v.guarantees.map((g) => (
-          <div key={g.id} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div key={g.id} className="list-item fin-block">
+            <div className="row fin-between">
               <div>
                 <b>
                   {g.kind} {g.number}
@@ -461,13 +461,13 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
                   {g.refund && ` · refund seen ${dateLabel(g.refund.date)}`}
                 </div>
               </div>
-              <span className="row" style={{ gap: 6 }}>
+              <span className="row">
                 {g.claimNow && <Chip tone="crit">Claim collateral</Chip>}
                 <Chip tone={tone(g.status)}>{g.status === 'pending' ? 'To check' : g.status}</Chip>
               </span>
             </div>
             {co.canAct && !['ended', 'refunded', 'called'].includes(g.status) && (
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap', paddingTop: 6 }}>
+              <div className="row fin-pt">
                 <input className="input" placeholder="Comment, document or claim reference" value={f[`x-${g.id}`] ?? ''} onChange={set(`x-${g.id}`)} />
                 {g.status === 'pending' && (
                   <button className="btn btn-sm" onClick={() => go('guarantees', 'check', { guaranteeId: g.id, comment: f[`x-${g.id}`] }, 'Checked.')}>
@@ -500,7 +500,7 @@ export function HostelWatch({ v }: { v: FinControls }) {
       <div className="panel-head">
         <h3>Hostel bills</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Once FWM and the COO approve, record the payment here: the account, the day and the bank reference. FWM and the company see it as paid straight
         away, with the record, and Prima looks for it on the bank statement. No slip is needed.
       </p>
@@ -521,14 +521,14 @@ function HostelLine({ b, v }: { b: FinControls['hostel'][number]; v: FinControls
   const [on, setOn] = useState(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10));
   const [ref, setRef] = useState('');
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
         <span>
           {b.hostel}: {b.kind.toLowerCase()} {b.period} · {rm(b.amount)} · due {dateLabel(b.dueOn)}
           {b.paidOn && ` · paid ${dateLabel(b.paidOn)}`}
           {b.paidBy && <span className="muted"> · {b.paidBy}</span>}
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={b.unseen || b.overdue ? 'crit' : b.onStatement ? 'ok' : b.mayRecord ? 'warn' : 'info'}>
             {b.unseen ? 'Not on bank statement' : b.onStatement ? 'Seen in bank' : b.mayRecord ? 'Approved, to pay' : b.overdue ? 'Overdue' : b.status.replace('_', ' ')}
           </Chip>
@@ -540,7 +540,7 @@ function HostelLine({ b, v }: { b: FinControls['hostel'][number]; v: FinControls
         </span>
       </div>
       {open && b.mayRecord && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="row fin-end">
           <Field label="Paid from">
             <select className="select" value={bankId} onChange={(e) => setBankId(e.target.value)}>
               <option value="">Choose</option>
@@ -582,8 +582,8 @@ function BatchApprove({ co, companyId }: { co: Co; companyId: string }) {
   const ready = co.payments.filter((p) => p.regularId && p.status === 'reviewed' && p.may.includes('approve'));
   if (!ready.length && !result) return null;
   return (
-    <div style={{ padding: '0 12px 12px' }}>
-      <div style={{ fontWeight: 600 }}>Approve reviewed regular payments together</div>
+    <div className="fin-padb">
+      <div className="fin-strong">Approve reviewed regular payments together</div>
       <div className="muted small">
         {ready.map((p) => `${p.payee} ${rm(p.amount)} (${p.regularPeriod})`).join(' · ')} · total {rm(ready.reduce((n, p) => n + p.amount, 0))}
       </div>

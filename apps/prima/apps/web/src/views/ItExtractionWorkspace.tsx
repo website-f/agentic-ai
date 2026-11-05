@@ -29,8 +29,8 @@ export function ItExtractionWorkspace({ actor }: { actor: ReviewActor }) {
   }, [actor.id, actor.opsTier, actor.integration]);
   const reviewState = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   useEffect(() => { session.activate(); void session.load(); setReviewing(false); return () => session.dispose(); }, [session]);
-  if (actor.id !== 'u-fauzan' || actor.opsTier !== 'ceo' || actor.integration) return <p role="alert">This import workspace is restricted to the exact CEO account.</p>;
-  return reviewing || !!reviewState.pendingReviewId || reviewState.phase === 'uncertain' ? <ItImportReview session={session} onBack={() => setReviewing(false)} /> : <ItExtractionView userId={actor.id} reviewDisabled={reviewState.phase === 'loading'} onReview={(extraction, edits) => {
+  if (actor.id !== 'u-fauzan' || actor.opsTier !== 'ceo' || actor.integration) return <div className="page"><p role="alert" className="notice" data-tone="warn">This import workspace is restricted to the exact CEO account.</p></div>;
+  return reviewing || !!reviewState.pendingReviewId || reviewState.phase === 'uncertain' ? <div className="page ix-page"><header className="k-head"><div className="k-head-text"><h1>AI data preview</h1></div></header><ItImportReview session={session} onBack={() => setReviewing(false)} /></div> : <ItExtractionView userId={actor.id} reviewDisabled={reviewState.phase === 'loading'} onReview={(extraction, edits) => {
     session.handoff(extraction, edits);
     setReviewing(true); // Also show expiry/refusal messages instead of silently ignoring the handoff.
   }} />;

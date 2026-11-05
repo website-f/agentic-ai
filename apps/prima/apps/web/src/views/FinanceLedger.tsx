@@ -136,14 +136,14 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
         </tbody>
       </table>
       {fig && (
-        <div className="small" style={{ marginTop: 6 }}>
+        <div className="small fin-mt">
           Figures for {fig.period} from {fig.origin === 'connector' ? 'the SQL Account connector' : fig.source}, recorded by {fig.prepared.by} ·{' '}
           {fig.reviewed ? (
             <Chip tone="ok">Reviewed by {fig.reviewed.by}</Chip>
           ) : !reviewer || fig.prepared.byId === me ? (
             <Chip tone="warn">Waiting for review by someone else (deputy, team leader, FD or CEO)</Chip>
           ) : (
-            <span className="row" style={{ gap: 6, display: 'inline-flex' }}>
+            <span className="row fin-inline">
               <Chip tone="warn">Waiting for review</Chip>
               <input className="input" aria-label="Review comment" placeholder="Review comment" value={comment} onChange={(e) => setComment(e.target.value)} />
               <button
@@ -157,9 +157,9 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
           )}
         </div>
       )}
-      <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} style={{ marginTop: 8 }}>
+      <details className="fin-mt" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
         <summary>Record the {l.period} figures</summary>
-        <div className="grid-2" style={{ gap: 6, marginTop: 6 }}>
+        <div className="grid-2 fin-gap fin-mt">
           <label className="field">
             <span>SQL Account reports filed (file name or SharePoint link)</span>
             <input className="input" aria-label="SQL Account reports filed" value={g('source')} onChange={(e) => setF({ ...f, source: e.target.value })} />
@@ -222,10 +222,10 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
             </>
           )}
         </div>
-        <div className="stack" style={{ gap: 4, marginTop: 6 }}>
+        <div className="stack fin-gap fin-mt">
           <strong className="small">Schedules (FS-12)</strong>
           {sch.map((s, i) => (
-            <div className="row" key={i} style={{ gap: 6, flexWrap: 'wrap' }}>
+            <div className="row" key={i}>
               <select
                 className="select"
                 aria-label={`Schedule ${i + 1} kind`}
@@ -265,18 +265,17 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
             </div>
           ))}
           <button
-            className="btn ghost"
-            style={{ alignSelf: 'flex-start' }}
+            className="btn ghost fin-self-start"
             onClick={() => setSch([...sch, { kind: 'payroll_deductions', gl: '', schedule: '', doc: '' }])}
           >
             Add a schedule
           </button>
         </div>
-        <label className="field" style={{ marginTop: 6 }}>
+        <label className="field fin-mt">
           <span>Note (optional)</span>
           <input className="input" aria-label="Figures note" value={g('note')} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </label>
-        <button className="btn primary" disabled={act.busy} onClick={save} style={{ marginTop: 6 }}>
+        <button className="btn primary fin-mt" disabled={act.busy} onClick={save}>
           Save figures
         </button>
       </details>
@@ -313,7 +312,7 @@ function ChartOfAccounts({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
         )}
       </div>
       {p && (
-        <div className="panel" style={{ marginTop: 6 }}>
+        <div className="panel fin-mt">
           <div className="small">
             Version {p.version} from {p.from}, proposed by {p.proposed.by}: {p.accounts.length} accounts, {p.banks.length} bank account(s), {p.projects.length}{' '}
             project(s).
@@ -326,7 +325,7 @@ function ChartOfAccounts({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
             </ul>
           )}
           {lead && (
-            <div className="row" style={{ gap: 6, marginTop: 4 }}>
+            <div className="row fin-mt">
               <input
                 className="input"
                 aria-label="Mapping comment"
@@ -353,9 +352,9 @@ function ChartOfAccounts({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
         </div>
       )}
       {!p && (
-        <details style={{ marginTop: 8 }}>
+        <details className="fin-mt">
           <summary>Propose a mapping</summary>
-          <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+          <div className="stack fin-gap fin-mt">
             <label className="field">
               <span>First month it applies (YYYY-MM)</span>
               <input className="input" aria-label="First month it applies" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
@@ -393,7 +392,7 @@ function ChartOfAccounts({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
         </details>
       )}
       {l.coaHistory.length > 0 && (
-        <details style={{ marginTop: 6 }}>
+        <details className="fin-mt">
           <summary className="small">All versions</summary>
           <ul className="small">
             {l.coaHistory.map((m) => (
@@ -463,7 +462,7 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
           {d.confirmed ? (
             <Chip tone="ok">Confirmed by {d.confirmed.by}</Chip>
           ) : lead ? (
-            <span className="row" style={{ gap: 6, display: 'inline-flex' }}>
+            <span className="row fin-inline">
               <input className="input" aria-label="Set-up comment" placeholder="Comment" value={comment} onChange={(e) => setComment(e.target.value)} />
               <button
                 className="btn"
@@ -478,9 +477,9 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
           )}
         </div>
       )}
-      <details style={{ marginTop: 6 }}>
+      <details className="fin-mt">
         <summary className="small">Record the SQL Account set-up (team leader, FD or CEO)</summary>
-        <div className="grid-2" style={{ gap: 6, marginTop: 6 }}>
+        <div className="grid-2 fin-gap fin-mt">
           <label className="field">
             <span>Company file or database name</span>
             <input
@@ -514,9 +513,8 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
           </label>
         </div>
         <button
-          className="btn primary"
+          className="btn primary fin-mt"
           disabled={act.busy}
-          style={{ marginTop: 6 }}
           onClick={() =>
             act.run(
               () =>

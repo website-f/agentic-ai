@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import type { FinPackItem, FinPackStatus } from '@prima/core';
+import {
+  ArrowRightIcon,
+  BankIcon,
+  CaretRightIcon,
+  FilesIcon,
+  QuestionIcon,
+  WarningOctagonIcon,
+} from '@phosphor-icons/react';
+import type { FinPackStatus } from '@prima/core';
 import { api, type FinBoard, type FinDesk } from '../api';
 import { useApp } from '../App';
 import { ManagementFeesPanel } from './ManagementFees';
@@ -9,12 +17,17 @@ import { ChecksTab } from './FinanceChecks';
 import { FinanceSettingsTab } from './FinanceSettings';
 import { FinanceKpiTab } from './FinanceKpi';
 import { FinanceDashboardTab } from './FinanceDashboard';
-import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
+import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import '../styles/finance.css';
 
 /**
  * Finance (Fauzan, 27 Oct 2026). The Finance Director and 7 teams keep every company's books in SQL Account, which
  * stays. Prima does not keep accounts: it shows whether each company's books are complete, reconciled and closed, and
  * tracks the papers the teams prepare for the auditor and the tax agent. Figures are test data until SQL is connected.
+ *
+ * P75 layout: the overview puts what failed or is overdue first (status tiles and Today), then the cash position, then
+ * every company by team; each other tab is its own set of cards.
  */
 
 type Row = FinBoard['rows'][number];
@@ -59,57 +72,121 @@ export function FinanceView() {
   const banksLate = data.rows.reduce((n, r) => n + r.banksLate.length, 0);
   const papersOverdue = data.rows.reduce((n, r) => n + r.packsOverdue.length, 0);
   const row = data.rows.find((r) => r.status.companyId === open) ?? null;
+  const tabs: [Tab, string][] = [
+    ['teams', 'Overview'],
+    ...(desk
+      ? ([
+          ['dashboard', 'Dashboard'],
+          ['payments', 'Payments'],
+          ['close', 'Month-end close'],
+        ] as [Tab, string][])
+      : []),
+    ['banks', 'Bank reconciliation'],
+    ['books', 'Closing and posting'],
+    ['papers', 'Auditor and tax'],
+    ...(desk
+      ? ([
+          ['checks', 'Checks'],
+          ...(['director', 'ceo', 'leader'].includes(desk.actor.kind) ? ([['kpi', 'KPIs']] as [Tab, string][]) : []),
+          ['settings', 'Settings'],
+        ] as [Tab, string][])
+      : []),
+  ];
   return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Finance{data.team ? `, Team ${data.team}` : ''}</h1>
-        <p className="muted">
-          The books stay in SQL Account. This shows whether each company's books are complete, reconciled and closed for {dateLabel(data.lastEnd)}, and the
-          papers for the auditor and the tax agent. A company with no figures from SQL Account for {data.rule.staleHours} hours shows as unknown.
-        </p>
+    <div className="page fin">
+      <PageHead
+        title={`Finance${data.team ? `, Team ${data.team}` : ''}`}
+        sub={
+          <>
+            The books stay in SQL Account. This shows whether each company&apos;s books are complete, reconciled and closed for {dateLabel(data.lastEnd)}, and
+            the papers for the auditor and the tax agent. A company with no figures from SQL Account for {data.rule.staleHours} hours shows as unknown.
+          </>
+        }
+      >
         <p className="notice" data-tone="info">
           Test data: SQL Account is not connected yet.
         </p>
-      </div>
-      {desk && <FinanceToday onGo={goTo} />}
-      {desk && <KeyNumbers onGo={() => setTab('dashboard')} />}
-      <div className="kpis">
-        <Kpi label="Companies to act on now" value={count('crit')} tone={count('crit') ? 'crit' : 'ok'} note={`of ${data.rows.length}`} />
-        <Kpi label="Unknown" value={count('unknown')} tone={count('unknown') ? 'unknown' : 'ok'} note="No recent SQL figures, or tests not run" />
-        <Kpi label="Bank accounts not reconciled" value={banksLate} tone={banksLate ? 'crit' : 'ok'} note={`Due by the ${data.rule.reconcileByDay}th`} />
-        <Kpi label="Papers overdue" value={papersOverdue} tone={papersOverdue ? 'crit' : 'ok'} note="Auditor and tax agent" />
-      </div>
-      <div className="tabbar" role="tablist" aria-label="Finance">
-        {(
-          [
-            ['teams', data.role === 'lead' ? 'Teams' : 'Companies'],
-            ...(desk
-              ? ([
-                  ['dashboard', 'Dashboard'],
-                  ['payments', 'Payments'],
-                  ['close', 'Month-end close'],
-                  ['checks', 'Checks'],
-                  ['settings', 'Settings'],
-                  ...(['director', 'ceo', 'leader'].includes(desk.actor.kind) ? ([['kpi', 'KPIs']] as [Tab, string][]) : []),
-                ] as [Tab, string][])
-              : []),
-            ['banks', 'Bank reconciliation'],
-            ['books', 'Closing and posting'],
-            ['papers', 'Auditor and tax'],
-          ] as [Tab, string][]
-        ).map(([t, l]) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {l}
-          </button>
-        ))}
-      </div>
-      {tab === 'teams' && <Teams data={data} onOpen={setOpen} />}
-      {tab === 'payments' && desk && <PaymentsTab desk={desk} />}
-      {tab === 'close' && desk && <CloseTab desk={desk} />}
-      {tab === 'checks' && desk && <ChecksTab key={target?.n ?? 0} desk={desk} target={target} />}
-      {tab === 'settings' && desk && <FinanceSettingsTab />}
-      {tab === 'kpi' && desk && <FinanceKpiTab />}
-      {tab === 'dashboard' && desk && <FinanceDashboardTab />}
+        <div className="tabbar fin-tabs" role="tablist" aria-label="Finance">
+          {tabs.map(([t, l]) => (
+            <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </PageHead>
+      {tab === 'teams' && (
+        <div className="fin-body">
+          <Stats>
+            <Stat
+              label="Companies to act on now"
+              value={count('crit')}
+              tone={count('crit') ? 'crit' : 'ok'}
+              note={`of ${data.rows.length}`}
+              icon={<WarningOctagonIcon size={18} />}
+            />
+            <Stat
+              label="Unknown"
+              value={count('unknown')}
+              tone={count('unknown') ? 'unknown' : 'ok'}
+              note="No recent SQL figures, or tests not run"
+              icon={<QuestionIcon size={18} />}
+            />
+            <Stat
+              label="Bank accounts not reconciled"
+              value={banksLate}
+              tone={banksLate ? 'crit' : 'ok'}
+              note={`Due by the ${data.rule.reconcileByDay}th`}
+              icon={<BankIcon size={18} />}
+              onClick={() => setTab('banks')}
+            />
+            <Stat
+              label="Papers overdue"
+              value={papersOverdue}
+              tone={papersOverdue ? 'crit' : 'ok'}
+              note="Auditor and tax agent"
+              icon={<FilesIcon size={18} />}
+              onClick={() => setTab('papers')}
+            />
+          </Stats>
+          {desk && (
+            <div className="fin-top">
+              <FinanceToday onGo={goTo} />
+              <KeyNumbers onGo={() => setTab('dashboard')} />
+            </div>
+          )}
+          <Teams data={data} onOpen={setOpen} />
+        </div>
+      )}
+      {tab === 'payments' && desk && (
+        <div className="fin-body">
+          <PaymentsTab desk={desk} />
+        </div>
+      )}
+      {tab === 'close' && desk && (
+        <div className="fin-body">
+          <CloseTab desk={desk} />
+        </div>
+      )}
+      {tab === 'checks' && desk && (
+        <div className="fin-body">
+          <ChecksTab key={target?.n ?? 0} desk={desk} target={target} />
+        </div>
+      )}
+      {tab === 'settings' && desk && (
+        <div className="fin-body">
+          <FinanceSettingsTab />
+        </div>
+      )}
+      {tab === 'kpi' && desk && (
+        <div className="fin-body">
+          <FinanceKpiTab />
+        </div>
+      )}
+      {tab === 'dashboard' && desk && (
+        <div className="fin-body">
+          <FinanceDashboardTab />
+        </div>
+      )}
       {tab === 'banks' && <Banks data={data} onOpen={setOpen} />}
       {tab === 'books' && <Books data={data} onOpen={setOpen} />}
       {tab === 'papers' && <Papers data={data} onOpen={setOpen} />}
@@ -119,19 +196,26 @@ export function FinanceView() {
   );
 }
 
-function CompanyLine({ r, onOpen, detail }: { r: Row; onOpen: (id: string) => void; detail: string }) {
+/** One company on a board: its name, what is wrong (each item a tag), and its state. */
+function CompanyLine({ r, onOpen, detail }: { r: Row; onOpen: (id: string) => void; detail: string[] }) {
   return (
-    <button className="list-item" style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={() => onOpen(r.status.companyId)}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>{r.companyName}</div>
-        <div className="muted small">{detail}</div>
-      </div>
+    <button type="button" className="fin-co" data-tone={r.tone} onClick={() => onOpen(r.status.companyId)}>
+      <span className="fin-co-dot" aria-hidden="true" />
+      <span className="fin-co-text">
+        <span className="fin-co-name">{r.companyName}</span>
+        <span className="fin-co-detail">
+          {detail.map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </span>
+      </span>
       <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip>
+      <CaretRightIcon className="fin-caret" size={14} aria-hidden="true" />
     </button>
   );
 }
 
-function reasons(r: Row): string {
+function reasons(r: Row): string[] {
   const out: string[] = [];
   if (r.stale) out.push('no recent SQL figures');
   if (r.closeLate) out.push('month not closed');
@@ -142,96 +226,124 @@ function reasons(r: Row): string {
   if (r.gaps.length) out.push(`${r.gaps.length} posting gap${r.gaps.length === 1 ? '' : 's'}`);
   if (r.packsOverdue.length) out.push(`${r.packsOverdue.length} paper${r.packsOverdue.length === 1 ? '' : 's'} overdue`);
   else if (r.packsDue.length) out.push(`${r.packsDue.length} paper${r.packsDue.length === 1 ? '' : 's'} due soon`);
-  return out.join(' · ') || 'Closed, reconciled and posted';
+  return out.length ? out : ['Closed, reconciled and posted'];
 }
+
+const RANK: Record<Row['tone'], number> = { crit: 0, unknown: 1, warn: 2, ok: 3 };
 
 function Teams({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
   return (
-    <>
-      {data.teams.map((t) => (
-        <section key={t.team} className="panel">
-          <div className="panel-head">
-            <h3>Team {t.team}</h3>
-            <span className="muted small">
-              {t.leader ?? 'No leader set'} · {t.companies} companies
-              {t.members.length > 1 ? ` · ${t.members.length} people` : ''}
-            </span>
-          </div>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            {t.crit > 0 && <Chip tone="crit">{t.crit} act now</Chip>}
-            {t.unknown > 0 && <Chip tone="unknown">{t.unknown} unknown</Chip>}
-            {t.warn > 0 && <Chip tone="warn">{t.warn} to finish</Chip>}
-            {t.ok > 0 && <Chip tone="ok">{t.ok} in order</Chip>}
-          </div>
-          <div className="list">
-            {data.rows
-              .filter((r) => r.status.team === t.team)
-              .map((r) => (
-                <CompanyLine key={r.status.id} r={r} onOpen={onOpen} detail={reasons(r)} />
-              ))}
-          </div>
-        </section>
-      ))}
-    </>
+    <section className="fin-section" aria-labelledby="fin-teams-h">
+      <div className="fin-section-head">
+        <h2 id="fin-teams-h">{data.role === 'lead' ? 'Teams' : 'Companies'}</h2>
+        <span className="muted small">Press a company for its banks, tests, postings and papers</span>
+      </div>
+      <div className="fin-teams">
+        {data.teams.map((t) => (
+          <Card
+            key={t.team}
+            title={`Team ${t.team}`}
+            sub={`${t.leader ?? 'No leader set'} · ${t.companies} companies${t.members.length > 1 ? ` · ${t.members.length} people` : ''}`}
+            actions={
+              <span className="fin-chips">
+                {t.crit > 0 && <Chip tone="crit">{t.crit} act now</Chip>}
+                {t.unknown > 0 && <Chip tone="unknown">{t.unknown} unknown</Chip>}
+                {t.warn > 0 && <Chip tone="warn">{t.warn} to finish</Chip>}
+                {t.ok > 0 && <Chip tone="ok">{t.ok} in order</Chip>}
+              </span>
+            }
+            flush
+          >
+            <div className="fin-cos">
+              {data.rows
+                .filter((r) => r.status.team === t.team)
+                .sort((a, b) => RANK[a.tone] - RANK[b.tone])
+                .map((r) => (
+                  <CompanyLine key={r.status.id} r={r} onOpen={onOpen} detail={reasons(r)} />
+                ))}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }
 
 function Banks({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
   const rows = data.rows.filter((r) => r.banksBehind.length);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Not reconciled to {dateLabel(data.lastEnd)}</h3>
-        <span className="muted small">Reconcile in SQL Account by the {data.rule.reconcileByDay}th</span>
-      </div>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">Every bank account is reconciled.</div>}
-        {rows.map((r) => (
-          <CompanyLine
-            key={r.status.id}
-            r={r}
-            onOpen={onOpen}
-            detail={r.banksBehind
-              .map(
-                (b) =>
-                  `${b.bank} ${b.accountMasked}: ${b.reconciledTo ? `reconciled to ${dateLabel(b.reconciledTo)}` : 'never reconciled'}, ${b.openItems} open items, difference ${rm(b.statementBalance - b.glBalance)}`,
-              )
-              .join(' · ')}
-          />
-        ))}
-      </div>
-    </section>
+    <Card title={`Not reconciled to ${dateLabel(data.lastEnd)}`} sub={`Reconcile in SQL Account by the ${data.rule.reconcileByDay}th`} flush>
+      {rows.length === 0 ? (
+        <Empty title="Every bank account is reconciled." />
+      ) : (
+        <table className="fin-table">
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Bank account</th>
+              <th>Reconciled to</th>
+              <th className="fin-num">Open items</th>
+              <th className="fin-num">Difference</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.flatMap((r) =>
+              r.banksBehind.map((b, i) => (
+                <tr key={`${r.status.id}-${b.id}`}>
+                  {i === 0 && (
+                    <td rowSpan={r.banksBehind.length}>
+                      <button type="button" className="fin-link" onClick={() => onOpen(r.status.companyId)}>
+                        {r.companyName}
+                      </button>
+                    </td>
+                  )}
+                  <td>
+                    {b.bank} {b.accountMasked}
+                  </td>
+                  <td>{b.reconciledTo ? `reconciled to ${dateLabel(b.reconciledTo)}` : 'never reconciled'}</td>
+                  <td className="fin-num">{b.openItems}</td>
+                  <td className="fin-num">{rm(b.statementBalance - b.glBalance)}</td>
+                  {i === 0 && (
+                    <td rowSpan={r.banksBehind.length}>
+                      <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip>
+                    </td>
+                  )}
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }
 
 function Books({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
   const rows = data.rows.filter((r) => r.closeBehind || r.testsFailed.length || r.testsNotRun.length || r.gaps.length || r.stale);
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Closing and posting for {dateLabel(data.lastEnd)}</h3>
-        <span className="muted small">Close by the {data.rule.closeByDay}th · FS-01, FS-02 and FS-06 must be RM0.00</span>
-      </div>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">Every company is closed, posted and passes the tests.</div>}
-        {rows.map((r) => (
-          <CompanyLine
-            key={r.status.id}
-            r={r}
-            onOpen={onOpen}
-            detail={[
-              r.stale ? `SQL figures ${r.status.sqlLastAt ? `last received ${dateTimeLabel(r.status.sqlLastAt)}` : 'never received'}` : '',
-              r.closeBehind ? `closed to ${r.status.closedTo ? dateLabel(r.status.closedTo) : 'never'}` : '',
-              ...r.testsFailed.map((t) => `${t.id} off by ${rm(t.diff ?? 0)}`),
-              r.testsNotRun.length ? 'tests not run' : '',
-              ...r.gaps,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          />
-        ))}
-      </div>
-    </section>
+    <Card title={`Closing and posting for ${dateLabel(data.lastEnd)}`} sub={`Close by the ${data.rule.closeByDay}th · FS-01, FS-02 and FS-06 must be RM0.00`} flush>
+      {rows.length === 0 ? (
+        <Empty title="Every company is closed, posted and passes the tests." />
+      ) : (
+        <div className="fin-cos">
+          {rows.map((r) => (
+            <CompanyLine
+              key={r.status.id}
+              r={r}
+              onOpen={onOpen}
+              detail={[
+                r.stale ? `SQL figures ${r.status.sqlLastAt ? `last received ${dateTimeLabel(r.status.sqlLastAt)}` : 'never received'}` : '',
+                r.closeBehind ? `closed to ${r.status.closedTo ? dateLabel(r.status.closedTo) : 'never'}` : '',
+                ...r.testsFailed.map((t) => `${t.id} off by ${rm(t.diff ?? 0)}`),
+                r.testsNotRun.length ? 'tests not run' : '',
+                ...r.gaps,
+              ].filter(Boolean)}
+            />
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -240,31 +352,46 @@ function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void
     .flatMap((r) => [...r.packsOverdue.map((i) => ({ r, i, late: true })), ...r.packsDue.map((i) => ({ r, i, late: false }))])
     .sort((a, b) => a.i.dueOn.localeCompare(b.i.dueOn));
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Papers overdue or due within {data.rule.packWarnDays} days</h3>
-        <span className="muted small">Data entry prepares, the leader or deputy reviews, the leader sends; reviewing and sending need a comment</span>
-      </div>
-      <div className="list">
-        {items.length === 0 && <div className="empty">Nothing due.</div>}
-        {items.map(({ r, i, late }) => (
-          <button
-            key={`${r.status.id}-${i.id}`}
-            className="list-item"
-            style={{ width: '100%', textAlign: 'left', flexWrap: 'wrap', gap: 6 }}
-            onClick={() => onOpen(r.status.companyId)}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600 }}>{i.label}</div>
-              <div className="muted small">
-                {r.companyName} · Team {r.status.team} · {i.pack === 'audit' ? 'auditor' : 'tax agent'} · due {dateLabel(i.dueOn)}
-              </div>
-            </div>
-            <Chip tone={late ? 'crit' : PACK[i.status][0]}>{late ? 'Overdue' : PACK[i.status][1]}</Chip>
-          </button>
-        ))}
-      </div>
-    </section>
+    <Card
+      title={`Papers overdue or due within ${data.rule.packWarnDays} days`}
+      sub="Data entry prepares, the leader or deputy reviews, the leader sends; reviewing and sending need a comment"
+      flush
+    >
+      {items.length === 0 ? (
+        <Empty title="Nothing due." />
+      ) : (
+        <table className="fin-table">
+          <thead>
+            <tr>
+              <th>Paper</th>
+              <th>Company</th>
+              <th>For</th>
+              <th>Due</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(({ r, i, late }) => (
+              <tr key={`${r.status.id}-${i.id}`}>
+                <td>
+                  <button type="button" className="fin-link" onClick={() => onOpen(r.status.companyId)}>
+                    {i.label}
+                  </button>
+                </td>
+                <td>
+                  {r.companyName} <span className="muted small">· Team {r.status.team}</span>
+                </td>
+                <td>{i.pack === 'audit' ? 'auditor' : 'tax agent'}</td>
+                <td className="fin-nowrap">due {dateLabel(i.dueOn)}</td>
+                <td>
+                  <Chip tone={late ? 'crit' : PACK[i.status][0]}>{late ? 'Overdue' : PACK[i.status][1]}</Chip>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }
 
@@ -273,80 +400,98 @@ function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk
   const d = desk?.companies.find((c) => c.companyId === f.companyId) ?? null;
   const me = desk?.me ?? null;
   const p = f.posting;
+  const closeTone = r.closeLate ? 'crit' : r.closeBehind ? 'warn' : 'ok';
   return (
     <Drawer title={r.companyName} sub={`Team ${f.team} · year ends ${f.fyEnd.split('-').reverse().join('/')}`} onClose={onClose}>
-      <div className="kpis">
-        <Kpi label="Closed to" value={f.closedTo ? dateLabel(f.closedTo) : 'Never'} tone={r.closeLate ? 'crit' : r.closeBehind ? 'warn' : 'ok'} />
-        <Kpi label="SQL figures" value={f.sqlLastAt ? dateTimeLabel(f.sqlLastAt) : 'Never'} tone={r.stale ? 'unknown' : 'ok'} />
-        <Kpi label="Customers over 90 days" value={rm(f.arOver90)} tone={f.arOver90 ? 'warn' : 'ok'} />
-        <Kpi label="Suppliers overdue" value={rm(f.apOverdue)} tone={f.apOverdue ? 'warn' : 'ok'} />
-      </div>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Bank accounts</h3>
+      <dl className="fin-figs">
+        <div data-tone={closeTone}>
+          <dt>Closed to</dt>
+          <dd>{f.closedTo ? dateLabel(f.closedTo) : 'Never'}</dd>
         </div>
-        <div className="list">
-          {f.banks.map((b) => (
-            <div key={b.id} className="list-item" style={{ flexWrap: 'wrap', gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
-                  {b.bank} {b.accountMasked} · {b.purpose}
-                </div>
-                <div className="muted small">
-                  Books {rm(b.glBalance)} · statement {rm(b.statementBalance)} · {b.openItems} open items
-                </div>
-              </div>
-              <Chip tone={b.reconciledTo === r.lastEnd ? 'ok' : r.banksLate.some((x) => x.id === b.id) ? 'crit' : 'warn'}>
-                {b.reconciledTo ? `To ${dateLabel(b.reconciledTo)}` : 'Never reconciled'}
-              </Chip>
-            </div>
-          ))}
+        <div data-tone={r.stale ? 'unknown' : 'ok'}>
+          <dt>SQL figures</dt>
+          <dd>{f.sqlLastAt ? dateTimeLabel(f.sqlLastAt) : 'Never'}</dd>
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Integrity tests</h3>
+        <div data-tone={f.arOver90 ? 'warn' : 'ok'}>
+          <dt>Customers over 90 days</dt>
+          <dd>{rm(f.arOver90)}</dd>
         </div>
-        <div className="list">
+        <div data-tone={f.apOverdue ? 'warn' : 'ok'}>
+          <dt>Suppliers overdue</dt>
+          <dd>{rm(f.apOverdue)}</dd>
+        </div>
+      </dl>
+      <Card title="Bank accounts" flush>
+        <table className="fin-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th className="fin-num">Books</th>
+              <th className="fin-num">Statement</th>
+              <th className="fin-num">Open items</th>
+              <th>Reconciled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {f.banks.map((b) => (
+              <tr key={b.id}>
+                <td>
+                  <span className="fin-strong">
+                    {b.bank} {b.accountMasked}
+                  </span>
+                  <span className="muted small fin-block">{b.purpose}</span>
+                </td>
+                <td className="fin-num">{rm(b.glBalance)}</td>
+                <td className="fin-num">{rm(b.statementBalance)}</td>
+                <td className="fin-num">{b.openItems}</td>
+                <td>
+                  <Chip tone={b.reconciledTo === r.lastEnd ? 'ok' : r.banksLate.some((x) => x.id === b.id) ? 'crit' : 'warn'}>
+                    {b.reconciledTo ? `To ${dateLabel(b.reconciledTo)}` : 'Never reconciled'}
+                  </Chip>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+      <Card title="Integrity tests" flush>
+        <div className="fin-rows">
           {f.tests.map((t) => (
-            <div key={t.id} className="list-item">
+            <div key={t.id} className="fin-kv">
               <span>
-                {t.id} {t.label}
+                <span className="fin-strong">{t.id}</span> {t.label}
               </span>
               <Chip tone={t.diff == null ? 'unknown' : Math.abs(t.diff) < 0.005 ? 'ok' : 'crit'}>{t.diff == null ? 'Not run' : rm(t.diff)}</Chip>
             </div>
           ))}
         </div>
-      </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Posted in SQL Account, {p.period}</h3>
-        </div>
-        <div className="list">
-          <div className="list-item">
+      </Card>
+      <Card title={`Posted in SQL Account, ${p.period}`} flush>
+        <div className="fin-rows">
+          <div className="fin-kv">
             <span>Sales invoices against billing</span>
-            <span>
+            <span className="fin-num">
               {rm(p.billedPosted)} of {rm(p.billed)}
             </span>
           </div>
-          <div className="list-item">
+          <div className="fin-kv">
             <span>Staff payroll journal</span>
             <Chip tone={!p.staffPayPaid ? 'neutral' : p.staffPayPosted ? 'ok' : 'warn'}>
               {!p.staffPayPaid ? 'No staff pay' : p.staffPayPosted ? 'Posted' : 'Not posted'}
             </Chip>
           </div>
-          <div className="list-item">
+          <div className="fin-kv">
             <span>Guard payroll journal (JA app)</span>
             <Chip tone={!p.guardPayPaid ? 'neutral' : p.guardPayPosted ? 'ok' : 'warn'}>
               {!p.guardPayPaid ? 'No guard pay' : p.guardPayPosted ? 'Posted' : 'Not posted'}
             </Chip>
           </div>
-          <div className="list-item">
+          <div className="fin-kv">
             <span>Supplier bills not posted</span>
-            <span>{p.supplierBillsUnposted}</span>
+            <span className="fin-num">{p.supplierBillsUnposted}</span>
           </div>
         </div>
-      </section>
+      </Card>
       <FinPackPanel title="For the auditor" companyId={f.companyId} pack="audit" items={f.audit} canSet={r.canSet} may={may} meId={me} />
       <FinPackPanel title="For the tax agent" companyId={f.companyId} pack="tax" items={f.tax} canSet={r.canSet} may={may} meId={me} />
       {d && (
@@ -360,7 +505,6 @@ function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk
   );
 }
 
-/** Automation A13 (Fauzan, 2 Nov 2026): one list of what waits for this person today, urgent first. */
 /** Key numbers for the companies the person sees (Fauzan, 2 Nov 2026: A17): from the dashboard, never a ranking. */
 function KeyNumbers({ onGo }: { onGo: () => void }) {
   const { data } = useLoad(() => api.finDashboard().catch(() => null), []);
@@ -370,51 +514,96 @@ function KeyNumbers({ onGo }: { onGo: () => void }) {
   const cashUnknown = data.rows.filter((r) => r.cash == null).length;
   const ageUnknown = data.rows.filter((r) => r.over90 == null).length;
   const all = data.rows.length;
+  const figs: { label: string; value: string | number; tone?: Tone; note: string }[] = [
+    {
+      label: 'Cash in the banks',
+      value: cashUnknown === all ? 'UNKNOWN' : k(data.totals.cash),
+      tone: cashUnknown === all ? 'unknown' : data.attention.shortOfCash ? 'warn' : 'ok',
+      note: cashUnknown
+        ? `${cashUnknown} of ${all} with no statement for ${data.period}`
+        : data.attention.shortOfCash
+          ? `${data.attention.shortOfCash} short within 13 weeks`
+          : 'Last statements',
+    },
+    { label: 'Payments due in 7 days', value: k(data.due7), note: 'Approved, not yet released' },
+    {
+      label: 'Invoices over 90 days',
+      value: ageUnknown === all ? 'UNKNOWN' : k(data.totals.over90),
+      tone: ageUnknown === all ? 'unknown' : data.totals.over90 ? 'warn' : 'ok',
+      note: ageUnknown ? `${ageUnknown} of ${all} with no ageing for ${data.period}` : `${data.attention.over90} companies`,
+    },
+    {
+      label: `Not closed for ${data.period}`,
+      value: data.attention.closeOpen,
+      tone: data.attention.closeOpen ? 'warn' : 'ok',
+      note: `of ${all} companies`,
+    },
+  ];
   return (
-    <div className="kpis" role="button" tabIndex={0} onClick={onGo} onKeyDown={(e) => e.key === 'Enter' && onGo()} style={{ cursor: 'pointer' }}>
-      <Kpi
-        label="Cash in the banks"
-        value={cashUnknown === all ? 'UNKNOWN' : k(data.totals.cash)}
-        tone={cashUnknown === all ? 'unknown' : data.attention.shortOfCash ? 'warn' : 'ok'}
-        note={cashUnknown ? `${cashUnknown} of ${all} with no statement for ${data.period}` : data.attention.shortOfCash ? `${data.attention.shortOfCash} short within 13 weeks` : 'Last statements'}
-      />
-      <Kpi label="Payments due in 7 days" value={k(data.due7)} note="Approved, not yet released" />
-      <Kpi
-        label="Invoices over 90 days"
-        value={ageUnknown === all ? 'UNKNOWN' : k(data.totals.over90)}
-        tone={ageUnknown === all ? 'unknown' : data.totals.over90 ? 'warn' : 'ok'}
-        note={ageUnknown ? `${ageUnknown} of ${all} with no ageing for ${data.period}` : `${data.attention.over90} companies`}
-      />
-      <Kpi label={`Not closed for ${data.period}`} value={data.attention.closeOpen} tone={data.attention.closeOpen ? 'warn' : 'ok'} note={`of ${all} companies`} />
-    </div>
+    <Card
+      title="Cash position"
+      sub={`${data.period}, from the dashboard`}
+      actions={
+        <button type="button" className="btn btn-sm" onClick={onGo}>
+          Dashboard
+          <ArrowRightIcon size={14} aria-hidden="true" />
+        </button>
+      }
+      flush
+    >
+      <div className="fin-rows">
+        {figs.map((x) => (
+          <div key={x.label} className="fin-kv fin-kv-fig" data-tone={x.value === 'UNKNOWN' ? 'unknown' : x.tone}>
+            <span className="fin-kv-label">
+              <span>{x.label}</span>
+              <span className="muted small">{x.note}</span>
+            </span>
+            <span className="fin-kv-value">{x.value}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
+/** Automation A13 (Fauzan, 2 Nov 2026): one list of what waits for this person today, urgent first. */
 function FinanceToday({ onGo }: { onGo: (t: FinTarget) => void }) {
   const { data } = useLoad(() => api.financeToday().catch(() => []), []);
   if (!data || !data.length) return null;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Today</h3>
-      </div>
-      <div className="list">
-        {data.map((t, i) => (
-          <div key={i} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ gap: 6 }}>
-              <Chip tone={t.tone === 'crit' ? 'crit' : t.tone === 'warn' ? 'warn' : 'info'}>{t.tone === 'crit' ? 'Urgent' : t.tone === 'warn' ? 'To do' : 'Note'}</Chip>
-              {t.go.tab ? (
-                <button className="link-button" style={{ fontWeight: i === 0 ? 600 : 500 }} onClick={() => onGo({ tab: t.go.tab!, section: t.go.section, companyId: t.go.companyId })}>
+    <Card title="Today" sub="What waits for you, urgent first" flush>
+      <div className="fin-today">
+        {data.map((t, i) => {
+          const tone = t.tone === 'crit' ? 'crit' : t.tone === 'warn' ? 'warn' : 'info';
+          const body = (
+            <>
+              <span className="fin-today-top">
+                <Chip tone={tone}>{t.tone === 'crit' ? 'Urgent' : t.tone === 'warn' ? 'To do' : 'Note'}</Chip>
+                <span className="fin-today-title" data-first={i === 0 ? 'yes' : undefined}>
                   {t.title}
-                </button>
-              ) : (
-                <span style={{ fontWeight: i === 0 ? 600 : 500 }}>{t.title}</span>
-              )}
+                </span>
+              </span>
+              <span className="fin-today-detail">{t.detail}</span>
+            </>
+          );
+          return t.go.tab ? (
+            <button
+              key={i}
+              type="button"
+              className="fin-today-item"
+              data-tone={tone}
+              onClick={() => onGo({ tab: t.go.tab!, section: t.go.section, companyId: t.go.companyId })}
+            >
+              {body}
+              <CaretRightIcon className="fin-caret" size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <div key={i} className="fin-today-item" data-tone={tone}>
+              {body}
             </div>
-            <div className="muted small">{t.detail}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </section>
+    </Card>
   );
 }

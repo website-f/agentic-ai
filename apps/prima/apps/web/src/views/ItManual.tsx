@@ -32,13 +32,13 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
   const [review,setReview]=useState<string|null>(null);
   const [reviewAsCheck,setReviewAsCheck]=useState(false);
   const {data,error,reload}=useLoad(async()=>decodeManualBoard(await api.itManualAct(userId,'manualBoard',{}),userId),[userId]);
-  if(error)return <div className="panel"><ErrorNotice error={error}/><button className="btn" onClick={reload}>Retry manual IT options</button></div>;
+  if(error)return <div className="panel it-sheet"><ErrorNotice error={error}/><button className="btn" onClick={reload}>Retry manual IT options</button></div>;
   if(!data||data.userId!==userId)return <Loading what="manual IT options for your account"/>;
-  return <section className="panel" aria-label="Manual IT records">
+  return <section className="panel it-sheet" aria-label="Manual IT records">
     {data.configuration==='setup_required'&&<p className="notice" data-tone="warn">Setup required: the protected manual IT record store is not ready. No saving or checking is enabled. IT must complete the reviewed database setup before these records can be used.</p>}
     <h3>{mode==='intake'?'Record a joining or leaving request':mode==='assets'?'Register an existing device':'Register existing systems and SharePoint guidance'}</h3>
     <p className="muted small">Manual records only. This does not create or revoke accounts, grant permissions, create a SharePoint site, or prove a connection is working. Never enter passwords, tokens or recovery codes.</p>
-    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row" style={{gap:8}}>{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn" key={kind} onClick={()=>setOpened(kind as ManualKind)}>{kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}</div>}
+    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn" key={kind} onClick={()=>setOpened(kind as ManualKind)}>{kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}</div>}
     {!(mode==='assets'?data.canCreateAsset:data.canCreate)&&<p className="muted">Read-only here. Authorized IT staff record these details; system access still follows CEO approval.</p>}
     {opened&&data.configuration==='ready'&&(opened==='asset'?data.canCreateAsset:data.canCreate)&&<ManualEditor key={`${userId}:${opened}`} kind={opened} board={data} onClose={()=>{setOpened(null);reload();}}/>}
     {mode==='systems'&&data.accounts.filter(a=>(a.manual as {kind?:unknown}|undefined)?.kind==='guidance').map(a=>{
@@ -54,7 +54,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
         {m.jobId&&<p className="small">Related IT job: {data.jobs?.find(j=>j.id===m.jobId)?.title??'Linked job'} ({m.jobId})</p>}
         <p className="small">Guidance note: {m.guidanceNote||'Not recorded'}</p><p className="small">Evidence: {m.evidence||'Not recorded'}</p>
         {review===record.id&&data.configuration==='ready'&&(canRecord||canCheck)?<GuidanceUpdate key={`${userId}:${record.id}:${m.version}`} record={record} board={data} check={canCheck} defaultCheck={reviewAsCheck} onClose={()=>{setReview(null);reload();}}/>:
-          !opened&&!review&&<div className="row" style={{gap:8}}>{canRecord&&<button className="btn" onClick={()=>{setReviewAsCheck(false);setReview(record.id);}}>Record guidance / evidence</button>}{canCheck&&<button className="btn" onClick={()=>{setReviewAsCheck(true);setReview(record.id);}}>Independently check evidence</button>}</div>}
+          !opened&&!review&&<div className="row it-actions">{canRecord&&<button className="btn" onClick={()=>{setReviewAsCheck(false);setReview(record.id);}}>Record guidance / evidence</button>}{canCheck&&<button className="btn" onClick={()=>{setReviewAsCheck(true);setReview(record.id);}}>Independently check evidence</button>}</div>}
       </article>;
     })}
     {correctionVisible(me.user)&&<><ItCorrections mode={mode}/><ItCleanup mode={mode}/></>}
@@ -92,9 +92,9 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
   return <div className="card" aria-label="Manual IT editor">
     {s.message&&<p role="status">{s.message}</p>}{validation&&<p role="alert">{validation}</p>}
     {s.pending&&<p className="small">Recovery request: <code>{s.pending.requestId}</code></p>}
-    {s.phase==='uncertain'&&<div className="row" style={{gap:8}}><button className="btn" onClick={()=>void session.recover()} disabled={!s.pending}>Check saved receipt</button><button className="btn" disabled={!s.pending} onClick={()=>void session.cancelPending()}>Resolve or cancel pending request safely</button></div>}
+    {s.phase==='uncertain'&&<div className="row it-actions"><button className="btn" onClick={()=>void session.recover()} disabled={!s.pending}>Check saved receipt</button><button className="btn" disabled={!s.pending} onClick={()=>void session.cancelPending()}>Resolve or cancel pending request safely</button></div>}
     {s.phase==='done'?<><p>Saved as an administrative record. Refresh the register to continue the existing IT workflow.</p><button className="btn" onClick={onClose}>Back to register</button></>:<form onSubmit={submit}>
-      <fieldset disabled={blocked} style={{border:0,padding:0}}>
+      <fieldset disabled={blocked} className="it-fieldset">
         {kind==='intake'?<>
           <label className="field">Request type<select value={form.kind} onChange={e=>put('kind',e.target.value)}><option value="join">Joining</option><option value="leave">Leaving</option></select></label>
           <Select label="Existing authorized staff identity (optional)" value={form.personUserId??''} onChange={v=>put('personUserId',v)} items={board.staff} optional/>
@@ -116,7 +116,7 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
           <Select label="Related existing IT job (optional)" value={form.jobId??''} onChange={v=>put('jobId',v)} items={(board.jobs??[]).map(j=>({id:j.id,name:j.title}))} optional/>
         </>}
         {(kind==='system'||kind==='guidance')&&field('Record note / setup needed','note','text',true)}
-        <div className="row" style={{gap:8}}><button type="submit" className="btn btn-primary">Save manual record</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
+        <div className="row it-actions"><button type="submit" className="btn btn-primary">Save manual record</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
       </fieldset>
       {blocked&&<p className="small">A submitted request cannot be cancelled by closing this form. Its recovery identity is preserved if you leave or reload.</p>}
     </form>}
@@ -130,14 +130,14 @@ function GuidanceUpdate({record,board,check,defaultCheck,onClose}:{record:Guidan
   useEffect(()=>{session.start();return()=>session.dispose();},[session]);const s=session.snapshot(),blocked=s.phase!=='editing';
   return <form aria-label="Record manual SharePoint evidence" onSubmit={e=>{e.preventDefault();if(!blocked)void session.save('guidance',{state:target,evidence:evidence.trim(),note:note.trim(),nextReviewOn:nextReviewOn||null},record.id,record.manual.version);}}>
     {s.message&&<p role="status">{s.message}</p>}{s.pending&&<p className="small">Recovery request: <code>{s.pending.requestId}</code></p>}
-    {s.phase==='uncertain'&&<div className="row" style={{gap:8}}><button type="button" className="btn" disabled={!s.pending} onClick={()=>void session.recover()}>Check saved receipt</button><button type="button" className="btn" disabled={!s.pending} onClick={()=>void session.cancelPending()}>Resolve or cancel pending request safely</button></div>}
-    {s.phase==='done'?<button type="button" className="btn" onClick={onClose}>Back to register</button>:<fieldset disabled={blocked} style={{border:0,padding:0}}>
+    {s.phase==='uncertain'&&<div className="row it-actions"><button type="button" className="btn" disabled={!s.pending} onClick={()=>void session.recover()}>Check saved receipt</button><button type="button" className="btn" disabled={!s.pending} onClick={()=>void session.cancelPending()}>Resolve or cancel pending request safely</button></div>}
+    {s.phase==='done'?<button type="button" className="btn" onClick={onClose}>Back to register</button>:<fieldset disabled={blocked} className="it-fieldset">
       <p className="small">This records manual guidance and evidence only; it does not certify security or establish Microsoft connectivity.</p>
       {check&&<label className="field">Action<select value={target} onChange={e=>setTarget(e.target.value)}><option value="manually_checked">Independently check recorded evidence</option><option value="guidance_given">Record guidance (not an independent check)</option></select></label>}
       <label className="field">Evidence reference / what was inspected<input required maxLength={500} value={evidence} onChange={e=>setEvidence(e.target.value)}/></label>
       <label className="field">Work / review note<input required maxLength={500} value={note} onChange={e=>setNote(e.target.value)}/></label>
       <label className="field">Next review date<input type="date" value={nextReviewOn} onChange={e=>setNextReviewOn(e.target.value)}/></label>
-      <div className="row" style={{gap:8}}><button type="submit" className="btn btn-primary">Save manual evidence</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
+      <div className="row it-actions"><button type="submit" className="btn btn-primary">Save manual evidence</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
     </fieldset>}
   </form>;
 }

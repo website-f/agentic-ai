@@ -1,0 +1,1445 @@
+/* HR extended and compliance: foreign workers, SOCSO claims, hostels, hand-overs, PDPA, licences, renewals and the
+   panels inside HR monitor. Colours come from styles.css tokens only. */
+
+/* ========== Shared register parts (hx-) ========== */
+
+/* A register: rows with dividers inside a flush card. */
+.hx-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hx-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+
+/* One record: title and meta on the left, status chips on the right, details and actions under it. */
+.hx-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'main side'
+    'body body';
+  gap: 8px 16px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.hx-row[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.hx-row[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.hx-row[data-tone='unknown'] {
+  box-shadow: inset 3px 0 0 var(--unknown);
+}
+.hx-row-main {
+  grid-area: main;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.hx-row-title {
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.hx-row-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.hx-row-side {
+  grid-area: side;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-content: start;
+  align-items: center;
+  max-width: 320px;
+}
+.hx-row-body {
+  grid-area: body;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.hx-row-body:empty {
+  display: none;
+}
+.hx-row-text {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.hx-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Small label: value lines under a record (dates, who, references). */
+.hx-meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.hx-meta-list > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hx-meta-list b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* An inline form opened from a record: tinted box, fields on a grid, buttons at the end. */
+.hx-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.hx-form :is(.input, .select, .textarea, input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  background: var(--surface);
+}
+.hx-form-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.hx-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.hx-form-grid > * {
+  min-width: 0;
+}
+.hx-form-wide {
+  grid-column: 1 / -1;
+}
+.hx-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* The rule or source behind a list, under the card. */
+.hx-source {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* A filter select that sits in a toolbar or card head. */
+.hx-filter {
+  width: auto;
+  flex: 0 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A count next to a list title. */
+.hx-count {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* A short checklist of papers or steps. */
+.hx-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.hx-checks label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.hx-checks label input {
+  margin-top: 2px;
+  flex: none;
+}
+.hx-checks .hx-check-by {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Sections stacked inside a tab or panel. */
+.hx-stack {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.hx-stack-tight {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* The tab bar scrolls sideways on a phone instead of widening the page. */
+.hx-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hx-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .hx-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'main'
+      'side'
+      'body';
+    padding: 14px 16px;
+  }
+  .hx-row-side {
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .hx-filter {
+    flex: 1 1 160px;
+  }
+}
+
+/* ========== Foreign workers, PDPA, licences, renewals (fw-, pd-, rn-) ========== */
+
+/* A person's row: avatar on the left of the usual register row. */
+.hx-row.fw-row {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'av main side'
+    '. body body';
+}
+.fw-row > .k-avatar {
+  grid-area: av;
+}
+.fw-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+.fw-dates > span {
+  display: grid;
+  gap: 2px;
+}
+.fw-dates b {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Welfare: the three checks of one worker as small tiles. */
+.fw-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.fw-checks > div {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.fw-checks > div[data-due] dd {
+  color: var(--warn);
+  font-weight: 600;
+}
+.fw-stats > .k-stats {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.fw-checks dt {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fw-checks dd {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+.fw-filter {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.fw-pager {
+  justify-content: space-between;
+  align-items: center;
+}
+.fw-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.fw-hist {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.fw-hist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+}
+.fw-concerns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.fw-concerns legend {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.fw-concerns label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+}
+
+/* PDPA */
+.pd-new {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.pd-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.pd-text {
+  white-space: pre-wrap;
+  max-width: 75ch;
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+.pd-sec {
+  display: grid;
+  gap: 8px;
+}
+.pd-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  border-left: 2px solid var(--line);
+  padding-left: 14px;
+}
+.pd-log > li {
+  display: grid;
+  gap: 1px;
+  font-size: 0.88rem;
+  position: relative;
+}
+.pd-log > li::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+.pd-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+/* Licences and renewals: a compliance calendar */
+.rn-group-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.rn-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.rn-group[data-tone='crit'] .rn-dot {
+  background: var(--crit);
+}
+.rn-group[data-tone='warn'] .rn-dot {
+  background: var(--warn);
+}
+.rn-group[data-tone='unknown'] .rn-dot {
+  background: var(--unknown);
+}
+.rn-group[data-tone='ok'] .rn-dot {
+  background: var(--ok);
+}
+.rn-group[data-tone='info'] .rn-dot {
+  background: var(--accent);
+}
+.hx-row.rn-row {
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'leaf main side'
+    'leaf body body';
+  align-items: start;
+}
+.rn-row > .rn-leaf {
+  grid-area: leaf;
+}
+.rn-leaf {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  width: 56px;
+  min-height: 60px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  line-height: 1.1;
+  text-align: center;
+}
+.rn-leaf-mon {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.rn-leaf-day {
+  font-size: 1.3rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.rn-leaf-year {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.rn-leaf[data-tone='crit'] {
+  background: var(--crit-soft);
+  border-color: color-mix(in srgb, var(--crit) 35%, var(--line));
+}
+.rn-leaf[data-tone='crit'] :is(.rn-leaf-day, .rn-leaf-mon) {
+  color: var(--crit);
+}
+.rn-leaf[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+}
+.rn-leaf[data-tone='warn'] :is(.rn-leaf-day, .rn-leaf-mon) {
+  color: var(--warn);
+}
+.rn-leaf[data-tone='unknown'] {
+  background: var(--unknown-soft);
+}
+.rn-leaf[data-tone='unknown'] :is(.rn-leaf-day, .rn-leaf-mon) {
+  color: var(--unknown);
+}
+.rn-progress {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+.rn-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.rn-detail-block {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.rn-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+.rn-log > li {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.rn-log > li[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+.rn-log > li[data-tone='ok'] {
+  border-left-color: var(--ok);
+}
+.rn-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.rn-line > .input {
+  flex: 1 1 220px;
+  min-width: 0;
+  width: auto;
+}
+
+@media (max-width: 860px) {
+  .hx-row.fw-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-areas:
+      'av main'
+      'side side'
+      'body body';
+  }
+  .hx-row.rn-row {
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas:
+      'leaf main'
+      'side side'
+      'body body';
+  }
+  .rn-leaf {
+    width: 52px;
+  }
+  .fw-checks {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+  }
+  .fw-checks > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .fw-checks > div + div {
+    border-top: 1px solid var(--line);
+  }
+  .fw-checks dd {
+    margin: 0;
+    text-align: right;
+  }
+  .fw-stats > .k-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fw-filter {
+    padding: 12px 16px;
+  }
+  .pd-new {
+    padding: 14px 16px;
+  }
+}
+
+/* ========== end fw/pd/rn ========== */
+
+/* ========== SOCSO claims, hostels, hand-overs (sx-, hs-, ho-) ========== */
+
+/* --- SOCSO: the register on the left, the SOP beside it --- */
+.sx-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 24px;
+  align-items: start;
+}
+.sx-claim {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, auto);
+  gap: 8px 16px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 3px 0 0 transparent;
+  transition: background-color 0.12s;
+}
+.sx-claim:hover {
+  background: var(--surface-2);
+}
+.sx-claim:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.sx-claim[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.sx-claim[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.sx-claim-short {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.sx-claim-who {
+  min-width: 0;
+  display: flex;
+}
+.sx-claim-case {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.sx-claim-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 280px;
+}
+
+/* The SOP: three folding sections. */
+.sx-sop {
+  display: grid;
+}
+.sx-details {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+.sx-details:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.sx-details:last-child {
+  padding-bottom: 0;
+}
+.sx-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  list-style-position: inside;
+}
+.sx-details[open] > summary {
+  margin-bottom: 12px;
+}
+.sx-types {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.sx-types li {
+  display: grid;
+  gap: 2px;
+  font-size: 0.86rem;
+}
+.sx-types li span,
+.sx-types-not {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.sx-sop-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.sx-sop-text {
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* --- A claim (drawer, profile tab) --- */
+.sx-claim-body,
+.sx-rehab,
+.sx-tab {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.sx-claim-head {
+  display: grid;
+  gap: 10px;
+}
+.sx-claim-type {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.sx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sx-progress {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+/* Five equal columns, the label under its dot, so the steps fit the drawer on one line. */
+.sx-progress .k-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+}
+.sx-progress .k-step {
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 8px;
+}
+.sx-progress .k-step:not(:last-child)::after {
+  left: 32px;
+  right: 4px;
+}
+.sx-progress .k-step-text {
+  background: none;
+  padding-right: 0;
+}
+.sx-sec {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.sx-sec h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.sx-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sx-text {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.sx-facts {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.sx-facts .k-facts {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+.sx-box {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+.sx-box .hx-row {
+  padding: 14px 16px;
+}
+.sx-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.sx-lines li {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+.sx-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.sx-history li {
+  display: grid;
+  gap: 2px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+  font-size: 0.88rem;
+}
+.sx-history li:first-child {
+  border-left-color: var(--accent);
+}
+.sx-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.sx-inline:has(> :nth-child(2):last-child) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.sx-next {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+.sx-tab-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.sx-tab-start {
+  margin-left: auto;
+}
+.sx-triage {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.sx-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+}
+.sx-check input {
+  margin-top: 2px;
+  flex: none;
+}
+.sx-triage-advice {
+  font-size: 0.86rem;
+  padding-top: 4px;
+  line-height: 1.45;
+}
+
+/* --- Hostels --- */
+.hs-top {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.hs-beds {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.hs-beds b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.hs-beds-text {
+  flex: none;
+}
+.hs-meter {
+  flex: 1 1 auto;
+  max-width: 220px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.hs-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.hs-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hs-add {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.hs-steps {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.hs-note {
+  max-width: 420px;
+}
+/* Long "waiting on" wording wraps inside its chip instead of running off the card. */
+.hs-bills .hx-row-side .chip,
+.sx-claim-chips .chip {
+  white-space: normal;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.hs-foot {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+/* --- Hand-overs --- */
+.ho-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ho-foot {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ho-foot-note {
+  flex: 1 1 auto;
+  margin: 0;
+}
+.ho-link,
+.ho-joining {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.ho-link .btn-ghost {
+  padding-left: 0;
+  color: var(--accent);
+}
+.ho-close {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  max-width: 720px;
+}
+.ho-close:has(> :only-child) {
+  grid-template-columns: auto;
+  justify-content: start;
+}
+.ho-targets {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.ho-import {
+  display: grid;
+  gap: 16px;
+}
+.ho-template {
+  font-size: 0.86rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.ho-template code {
+  color: var(--ink);
+}
+.ho-csv {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1100px) {
+  .sx-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 860px) {
+  .sx-claim {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+  .sx-claim-chips {
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .sx-inline,
+  .ho-close {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sx-inline .btn,
+  .ho-close .btn {
+    justify-self: start;
+  }
+  .hs-top,
+  .hs-add {
+    padding: 14px 16px;
+  }
+  .sx-progress .k-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .sx-progress .k-step {
+    flex-direction: row;
+  }
+}
+
+/* ========== end sx/hs/ho ========== */
+
+/* ========== HR monitor panels (hp-) ========== */
+
+/* A padded band inside a flush card: a form, a notice or a footnote. */
+.hp-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.k-card-body > .hp-section:first-child,
+.hp-subhead + .hp-section,
+.hp-section.hp-section-first {
+  border-top: 0;
+}
+.hp-section:empty {
+  display: none;
+}
+
+/* A sub-list title inside a card (Filings, Probation, Staff monthly allowances). */
+.hp-subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.k-card-body > .hp-subhead:first-child {
+  border-top: 0;
+}
+.hp-subhead h3 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+/* A comment box with its buttons on one line; wraps on a phone. */
+.hp-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.hp-inline > :is(.input, .select, input, select) {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 420px;
+}
+
+/* A single checkbox with its words. */
+.hp-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  cursor: pointer;
+  min-width: 0;
+}
+.hp-check input {
+  flex: none;
+  margin: 0;
+}
+.hp-switch {
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+.hp-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.hp-fieldset > legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.hp-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+/* The staff who may claim overtime: a scrolling box of ticks in columns. */
+.hp-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 16px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.hp-result {
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Appraisal notes: what went well, to improve, training. */
+.hp-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.hp-notes dt {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.hp-notes dd {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+/* A policy's text when it is open. */
+.hp-doc {
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  max-width: 80ch;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+
+/* A short history: who did what, newest as given. */
+.hp-history {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  display: grid;
+  gap: 4px;
+  border-left: 2px solid var(--line);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.hp-history > li {
+  overflow-wrap: anywhere;
+}
+.hp-history > li[data-tone='ok']::first-letter {
+  color: var(--ok);
+}
+.hp-history > li[data-tone='crit'] {
+  color: var(--crit);
+}
+
+/* A date that matters on a record (reply due, waiting for approval). */
+.hp-due {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+.hx-row[data-tone='crit'] .hp-due {
+  color: var(--crit);
+}
+
+/* The steps in a staff HR file: a vertical timeline. */
+.hp-tl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.hp-tl > li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 12px;
+  position: relative;
+  padding-bottom: 14px;
+}
+.hp-tl > li:last-child {
+  padding-bottom: 0;
+}
+.hp-tl > li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+.hp-tl-dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+}
+.hp-tl > li:last-child .hp-tl-dot {
+  background: var(--accent);
+}
+.hp-tl-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.hp-tl-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: baseline;
+  font-size: 0.88rem;
+}
+
+/* Office safety: a titled block of items inside an employer. */
+.hp-block {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.hp-block-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.hp-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hp-items > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.hp-items > li[data-tone='crit'] {
+  border-left: 3px solid var(--crit);
+}
+.hp-items > li[data-tone='warn'] {
+  border-left: 3px solid var(--warn);
+}
+.hp-item-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+.hp-item-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.hp-item-act {
+  grid-column: 1 / -1;
+}
+.hp-details > summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--accent);
+  width: fit-content;
+}
+.hp-details[open] > summary {
+  margin-bottom: 12px;
+}
+
+/* Allowances: what each counts for, as small chips. */
+.hp-counts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.hp-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 160px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+/* Probation: comment, confirm, new date, extend. */
+.hp-probation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 180px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+/* Leaving guide. */
+.hp-guide {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+.hp-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.hp-guide-head h3 {
+  font-size: 0.95rem;
+}
+.hp-guide-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+}
+
+/* Guard training: one tile per company above the guard list. */
+.hp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.hp-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  min-width: 0;
+}
+.hp-tile-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.hp-tile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+/* Legal points: status, director and note on one line on a computer. */
+.hx-form-grid.hp-grid-legal {
+  grid-template-columns: minmax(0, 200px) minmax(0, 240px) minmax(0, 1fr);
+}
+.hp-allow .hx-row-side {
+  max-width: 460px;
+}
+.hp-guards .hx-row-main {
+  align-content: center;
+}
+.hp-guards .hx-row-side {
+  max-width: 420px;
+}
+
+@media (max-width: 860px) {
+  .hp-section,
+  .hp-tiles {
+    padding: 14px 16px;
+  }
+  .hp-subhead {
+    padding: 10px 16px;
+  }
+  .hp-inline > :is(.input, .select, input, select) {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .hp-line {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 120px);
+  }
+  .hp-line > .btn {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .hp-probation {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hp-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hp-switch {
+    white-space: normal;
+  }
+  .hp-guards .hx-row-side,
+  .hp-allow .hx-row-side {
+    max-width: none;
+  }
+  .hx-form-grid.hp-grid-legal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ========== end hp ========== */

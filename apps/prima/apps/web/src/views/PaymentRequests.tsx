@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { CheckCircleIcon, HourglassIcon, PlusIcon, TrayIcon, ArrowUUpLeftIcon } from '@phosphor-icons/react';
 import { FinGuide } from './FinGuide';
 import type { FinRequestAction } from '@prima/core';
 import { api, type FinRequestList } from '../api';
+import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import '../styles/biz.css';
 
 /**
  * Payment requests (Fauzan, 1 Nov 2026): the company head creates the request and says what it is for; the head of that
@@ -28,13 +31,61 @@ const ACT: Record<FinRequestAction, string> = {
   resubmit: 'Resubmit',
   cancel: 'Cancel',
 };
+const IN_PROGRESS: Req['status'][] = ['head_review', 'finance_verify', 'final_approval'];
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, span }: { label: string; children: React.ReactNode; span?: boolean }) {
   return (
-    <label className="field" style={{ display: 'block', marginBottom: 8 }}>
-      <span className="small muted">{label}</span>
+    <label className={span ? 'field bz-span' : 'field'}>
+      <span className="label">{label}</span>
       {children}
     </label>
+  );
+}
+
+/** Where a request is in its chain: created, department head (when there is one), Finance check, final approval, Finance pays. */
+function chainSteps(r: Req): { label: string; state: StepState; note?: string }[] {
+  const keys: ('created' | 'head' | 'verify' | 'final' | 'pay')[] = ['created', ...(r.headName ? (['head'] as const) : []), 'verify', 'final', 'pay'];
+  const label = {
+    created: 'Created by the company head',
+    head: `Approved by the ${r.headName}`,
+    verify: 'Calculation checked by Finance',
+    final: `Approved by the ${r.finalName}`,
+    pay: 'Finance pays',
+  };
+  const at: Record<Req['status'], number> = {
+    head_review: keys.indexOf('head'),
+    finance_verify: keys.indexOf('verify'),
+    final_approval: keys.indexOf('final'),
+    approved: keys.indexOf('pay'),
+    returned: 0,
+    cancelled: 0,
+  };
+  const now = at[r.status];
+  const stopped = r.status === 'returned' || r.status === 'cancelled';
+  return keys.map((k, i) => ({
+    label: label[k],
+    state: stopped ? (i === 0 ? 'stopped' : 'todo') : i < now ? 'done' : i === now ? 'now' : 'todo',
+    note:
+      k === 'created'
+        ? stopped
+          ? STATUS[r.status][1]
+          : r.created.by
+        : k === 'pay' && r.paymentId
+          ? `Payment ${r.paymentId}`
+          : undefined,
+  }));
+}
+
+/** A compact progress strip for a row: one segment per step of the chain. */
+function Track({ r }: { r: Req }) {
+  const steps = chainSteps(r);
+  const done = steps.filter((s) => s.state === 'done').length;
+  return (
+    <span className="bz-pr-track" aria-label={`Step ${Math.min(done + 1, steps.length)} of ${steps.length}`}>
+      {steps.map((s, i) => (
+        <span key={i} data-state={s.state} />
+      ))}
+    </span>
   );
 }
 
@@ -43,8 +94,18 @@ export function PaymentRequestsView() {
   const { data, error } = useLoad(() => api.finRequests(), [tick]);
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="payment requests" />;
+  if (error)
+    return (
+      <div className="page">
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="page">
+        <Loading what="payment requests" />
+      </div>
+    );
   const mine = data.requests.filter((r) => r.may.some((m) => m !== 'cancel'));
   const others = data.requests.filter((r) => !mine.includes(r));
   const sel = data.requests.find((r) => r.id === open) ?? null;
@@ -53,61 +114,70 @@ export function PaymentRequestsView() {
     setAdding(false);
     setTick((t) => t + 1);
   };
+  const sum = (list: Req[]) => rm(list.reduce((a, r) => a + r.amount, 0));
+  const moving = data.requests.filter((r) => IN_PROGRESS.includes(r.status));
+  const returned = data.requests.filter((r) => r.status === 'returned');
+  const approved = data.requests.filter((r) => r.status === 'approved');
   return (
-    <div className="page">
-      <h2>Payment requests</h2>
-      <p className="notice" data-tone="info">
-        The company head creates the request and chooses what it is for. The head of that department approves, Finance checks the calculation, and the COO (or
-        the Finance Director, for Finance) approves. Finance then pays it; that final approval is the payment&apos;s approval. Nobody acts twice on a request,
-        and a return sends it back to the company head for the whole chain again.
-      </p>
-      {data.canCreate.length > 0 && (
-        <div className="row" style={{ marginBottom: 8 }}>
-          <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
-            New payment request
-          </button>
-        </div>
-      )}
-      {[
-        ['Waiting for you', mine],
-        ['Other requests', others],
-      ].map(([title, list]) => (
-        <section className="panel" key={title as string}>
-          <div className="panel-head">
-            <h3>{title as string}</h3>
-            <span className="muted small">{(list as Req[]).length}</span>
-          </div>
-          <div className="list">
-            {(list as Req[]).length === 0 && <div className="empty">None.</div>}
-            {(list as Req[]).map((r) => (
-              <div key={r.id} className="row" style={{ gap: 6, alignItems: 'stretch' }}>
-                <button className="list-item" style={{ flex: 1, textAlign: 'left', flexWrap: 'wrap', gap: 6 }} onClick={() => setOpen(r.id)}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>
-                      {r.title} · {rm(r.amount)}
-                    </div>
-                    <div className="muted small">
-                      {r.companyName} · {r.subjectLabel}
-                      {r.sector ? ` (${r.sector})` : ''} · needed by {dateLabel(r.dueOn)}
-                      {r.paymentId ? ` · payment ${r.paymentId}` : ''}
-                    </div>
-                  </div>
-                  <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
-                </button>
-                {r.may.includes('resubmit') && (
-                  <button
-                    className="btn btn-sm btn-primary"
-                    style={{ alignSelf: 'center' }}
-                    aria-label={`Edit returned request ${r.title}`}
-                    onClick={() => setOpen(r.id)}
-                  >
-                    Edit
+    <div className="page bz-pr-page">
+      <PageHead
+        title="Payment requests"
+        sub="The company head creates the request and chooses what it is for. The head of that department approves, Finance checks the calculation, and the COO (or the Finance Director, for Finance) approves. Finance then pays it; that final approval is the payment's approval. Nobody acts twice on a request, and a return sends it back to the company head for the whole chain again."
+        actions={
+          data.canCreate.length > 0 && (
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              New payment request
+            </button>
+          )
+        }
+      />
+      <Stats>
+        <Stat label="Waiting for you" value={mine.length} note={mine.length ? sum(mine) : 'Nothing to act on'} tone={mine.length ? 'warn' : undefined} icon={<TrayIcon size={16} />} />
+        <Stat label="In the chain" value={moving.length} note={moving.length ? sum(moving) : 'None moving'} tone="info" icon={<HourglassIcon size={16} />} />
+        <Stat label="Returned" value={returned.length} note="Back with the company head" tone={returned.length ? 'crit' : undefined} icon={<ArrowUUpLeftIcon size={16} />} />
+        <Stat label="Approved" value={approved.length} note={approved.length ? sum(approved) : 'Finance pays approved requests'} tone={approved.length ? 'ok' : undefined} icon={<CheckCircleIcon size={16} />} />
+      </Stats>
+      {(
+        [
+          ['Waiting for you', mine, 'Your step in the chain. Open one to approve, check or return it.'],
+          ['Other requests', others, 'Requests you can see that are with someone else, or finished.'],
+        ] as [string, Req[], string][]
+      ).map(([title, list, sub]) => (
+        <Card key={title} title={title} sub={sub} actions={<span className="bz-count">{list.length}</span>} flush>
+          {list.length === 0 ? (
+            <Empty title="None." />
+          ) : (
+            <ul className="bz-rows">
+              {list.map((r) => (
+                <li key={r.id} className="bz-pr-item">
+                  <button className="bz-row bz-pr-row" data-tone={r.status === 'returned' ? 'crit' : title === 'Waiting for you' ? 'warn' : undefined} onClick={() => setOpen(r.id)}>
+                    <span className="bz-row-main">
+                      <span className="bz-row-title">{r.title}</span>
+                      <span className="bz-row-meta">
+                        {r.companyName} · {r.subjectLabel}
+                        {r.sector ? ` (${r.sector})` : ''} · needed by {dateLabel(r.dueOn)}
+                        {r.paymentId ? ` · payment ${r.paymentId}` : ''}
+                      </span>
+                      <span className="bz-pr-progress">
+                        <Track r={r} />
+                        <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
+                      </span>
+                    </span>
+                    <span className="bz-row-side">
+                      <span className="bz-amt bz-pr-amt">{rm(r.amount)}</span>
+                    </span>
                   </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+                  {r.may.includes('resubmit') && (
+                    <button className="btn btn-sm btn-primary bz-pr-edit" aria-label={`Edit returned request ${r.title}`} onClick={() => setOpen(r.id)}>
+                      Edit
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       ))}
       {sel && <RequestDrawer r={sel} onClose={() => setOpen(null)} onDone={done} />}
       {adding && <NewRequest data={data} onClose={() => setAdding(false)} onDone={done} />}
@@ -150,120 +220,122 @@ function RequestDrawer({ r, onClose, onDone }: { r: Req; onClose: () => void; on
     const ok = await act.run(() => api.finRequestStep(r.companyId, r.id, a, { comment }), `${ACT[a]}: done.`);
     if (ok) onDone();
   };
-  const chain = [
-    ['Created by the company head', r.created.by],
-    ...(r.headName ? [[`Approved by the ${r.headName}`, null]] : []),
-    ['Calculation checked by Finance', null],
-    [`Approved by the ${r.finalName}`, null],
-  ];
   return (
-    <Drawer title={`${r.title} · ${rm(r.amount)}`} sub={`${r.companyName} · ${r.id}`} onClose={onClose}>
+    <Drawer title={r.title} sub={`${r.companyName} · ${r.id}`} onClose={onClose}>
       <ErrorNotice error={act.error} />
-      <section className="panel">
-        <div className="list">
-          <div className="list-item">
-            <span>Status</span>
-            <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
-          </div>
-          <div className="list-item">
-            <span>For</span>
-            <span>
-              {r.subjectLabel}
-              {r.sector ? ` (${r.sector} sites)` : ''}
-            </span>
-          </div>
-          <div className="list-item">
-            <span>Pay to</span>
-            <span>{r.payee}</span>
-          </div>
-          <div className="list-item">
-            <span>Why</span>
-            <span>{r.purpose}</span>
-          </div>
-          <div className="list-item">
-            <span>How the amount was worked out</span>
-            <span>{r.calc}</span>
-          </div>
-          <div className="list-item">
-            <span>Documents</span>
-            <span>{r.evidence.join(', ')}</span>
-          </div>
-          <div className="list-item">
-            <span>The chain</span>
-            <span>{chain.map((c) => c[0]).join(' → ')} → Finance pays</span>
-          </div>
-        </div>
+      <div className="bz-pr-total">
+        <strong className="bz-amt">{rm(r.amount)}</strong>
+        <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
+      </div>
+      <section className="bz-sec">
+        <h3>The chain</h3>
+        <Steps steps={chainSteps(r)} />
       </section>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>History</h3>
-        </div>
-        <div className="list">
-          <div className="list-item small">
-            Created by {r.created.by}, {dateTimeLabel(r.created.at)}
-          </div>
+      <div className="bz-facts">
+        <Facts
+          items={[
+            ['For', `${r.subjectLabel}${r.sector ? ` (${r.sector} sites)` : ''}`],
+            ['Pay to', r.payee],
+            ['Needed by', dateLabel(r.dueOn)],
+            ['Payment', r.paymentId ?? 'Not prepared yet'],
+          ]}
+        />
+      </div>
+      <section className="bz-sec">
+        <h3>Why</h3>
+        <p className="bz-pr-text">{r.purpose}</p>
+      </section>
+      <section className="bz-sec">
+        <h3>How the amount was worked out</h3>
+        <p className="bz-pr-text">{r.calc}</p>
+      </section>
+      <section className="bz-sec">
+        <h3>Documents</h3>
+        {r.evidence.length === 0 ? (
+          <p className="muted small">None listed.</p>
+        ) : (
+          <ul className="bz-pr-docs">
+            {r.evidence.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="bz-sec">
+        <h3>History</h3>
+        <ol className="bz-pr-history">
+          <li>
+            <span>Created by {r.created.by}</span>
+            <time>{dateTimeLabel(r.created.at)}</time>
+          </li>
           {r.steps.map((s, i) => (
-            <div key={i} className="list-item small">
-              {s.step.replace('_', ' ')} by {s.by}, {dateTimeLabel(s.at)}
-              {s.comment ? `: ${s.comment}` : ''}
-            </div>
+            <li key={i}>
+              <span>
+                {s.step.replace('_', ' ')} by {s.by}
+                {s.comment ? `: ${s.comment}` : ''}
+              </span>
+              <time>{dateTimeLabel(s.at)}</time>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
       {r.may.includes('resubmit') && (
-        <section className="panel" style={{ padding: 12 }}>
-          <div className="panel-head">
-            <h3>Correct and resubmit</h3>
-          </div>
+        <section className="bz-act">
+          <h3 className="bz-pr-act-title">Correct and resubmit</h3>
           <FinGuide id="fin.request.create" />
           {lastReturn && (
             <p className="notice" data-tone="warn">
               Returned by {lastReturn.by}: {lastReturn.comment}
             </p>
           )}
-          <Field label="What the payment is">
-            <input className="input" value={e.title} onChange={setF('title')} />
-          </Field>
-          <Field label="Why it is needed">
-            <textarea className="textarea" rows={2} value={e.purpose} onChange={setF('purpose')} />
-          </Field>
-          <Field label="Amount (RM)">
-            <input className="input" inputMode="decimal" value={e.amount} onChange={setF('amount')} />
-          </Field>
-          <Field label="How the amount was worked out">
-            <textarea className="textarea" rows={2} value={e.calc} onChange={setF('calc')} />
-          </Field>
-          <Field label="Who is paid">
-            <input className="input" value={e.payee} onChange={setF('payee')} />
-          </Field>
-          <Field label="Needed by">
-            <input className="input" type="date" value={e.dueOn} onChange={setF('dueOn')} />
-          </Field>
-          <div className="muted small">Documents attached (kept): {r.evidence.join(', ')}</div>
-          <Field label="Add documents (one per line)">
-            <textarea className="textarea" rows={2} value={e.docs} onChange={setF('docs')} />
-          </Field>
-          <Field label="What you changed">
-            <textarea className="textarea" rows={2} value={comment} onChange={(x) => setComment(x.target.value)} />
-          </Field>
-          <button className="btn btn-sm btn-primary" disabled={act.busy || !(Number(e.amount) > 0)} onClick={() => void resubmit()}>
-            Save and resubmit
-          </button>
+          <div className="bz-form">
+            <Field label="What the payment is" span>
+              <input className="input" value={e.title} onChange={setF('title')} />
+            </Field>
+            <Field label="Why it is needed" span>
+              <textarea className="textarea" rows={2} value={e.purpose} onChange={setF('purpose')} />
+            </Field>
+            <Field label="Amount (RM)">
+              <input className="input" inputMode="decimal" value={e.amount} onChange={setF('amount')} />
+            </Field>
+            <Field label="Needed by">
+              <input className="input" type="date" value={e.dueOn} onChange={setF('dueOn')} />
+            </Field>
+            <Field label="How the amount was worked out" span>
+              <textarea className="textarea" rows={2} value={e.calc} onChange={setF('calc')} />
+            </Field>
+            <Field label="Who is paid" span>
+              <input className="input" value={e.payee} onChange={setF('payee')} />
+            </Field>
+            <div className="bz-span bz-note">Documents attached (kept): {r.evidence.join(', ')}</div>
+            <Field label="Add documents (one per line)" span>
+              <textarea className="textarea" rows={2} value={e.docs} onChange={setF('docs')} />
+            </Field>
+            <Field label="What you changed" span>
+              <textarea className="textarea" rows={2} value={comment} onChange={(x) => setComment(x.target.value)} />
+            </Field>
+          </div>
+          <div className="bz-actions">
+            <button className="btn btn-primary" disabled={act.busy || !(Number(e.amount) > 0)} onClick={() => void resubmit()}>
+              Save and resubmit
+            </button>
+          </div>
         </section>
       )}
       {r.may.some((a) => a !== 'resubmit') && (
-        <section className="panel">
+        <section className="bz-act">
+          <h3 className="bz-pr-act-title">Your step</h3>
           <FinGuide id="fin.request.check" />
           <Field label="Comment (every step needs one; a return needs the reason)">
             <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
           </Field>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="bz-actions">
             {r.may
               .filter((a) => a !== 'resubmit')
               .map((a) => (
                 <button
                   key={a}
-                  className={`btn btn-sm ${a === 'return' || a === 'cancel' ? '' : 'btn-primary'}`}
+                  className={`btn ${a === 'return' || a === 'cancel' ? '' : 'btn-primary'}`}
                   disabled={act.busy || !comment.trim()}
                   onClick={() => void run(a)}
                 >
@@ -313,63 +385,67 @@ function NewRequest({ data, onClose, onDone }: { data: FinRequestList; onClose: 
     <Drawer title="New payment request" sub="Choose what it is for; that decides who approves" onClose={onClose}>
       <FinGuide id="fin.request.create" />
       <ErrorNotice error={act.error} />
-      {data.canCreate.length > 1 && (
-        <Field label="Company">
-          <select className="select" value={f.companyId} onChange={set('companyId')}>
-            {data.canCreate.map((c) => (
-              <option key={c} value={c}>
-                {c}
+      <div className="bz-form">
+        {data.canCreate.length > 1 && (
+          <Field label="Company" span>
+            <select className="select" value={f.companyId} onChange={set('companyId')}>
+              {data.canCreate.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Field label="What it is for" span={f.subject !== 'operations'}>
+          <select className="select" value={f.subject} onChange={set('subject')}>
+            {data.subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
               </option>
             ))}
           </select>
         </Field>
-      )}
-      <Field label="What it is for">
-        <select className="select" value={f.subject} onChange={set('subject')}>
-          {data.subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {f.subject === 'operations' && (
-        <Field label="Sites">
-          <select className="select" value={f.sector} onChange={set('sector')}>
-            <option value="government">Government (the Operations General Manager approves)</option>
-            <option value="private">Private (the Operations Director approves)</option>
-          </select>
+        {f.subject === 'operations' && (
+          <Field label="Sites">
+            <select className="select" value={f.sector} onChange={set('sector')}>
+              <option value="government">Government (the Operations General Manager approves)</option>
+              <option value="private">Private (the Operations Director approves)</option>
+            </select>
+          </Field>
+        )}
+        <p className="bz-span bz-pr-chain">
+          Chain:{' '}
+          {subj?.id === 'operations' ? (f.sector === 'government' ? 'Operations General Manager' : 'Operations Director') : (subj?.head ?? 'no department head')}{' '}
+          → Finance checks the calculation → {subj?.final} → Finance pays.
+        </p>
+        <Field label="What the payment is" span>
+          <input className="input" value={f.title} onChange={set('title')} />
         </Field>
-      )}
-      <p className="muted small">
-        Chain:{' '}
-        {subj?.id === 'operations' ? (f.sector === 'government' ? 'Operations General Manager' : 'Operations Director') : (subj?.head ?? 'no department head')}{' '}
-        → Finance checks the calculation → {subj?.final} → Finance pays.
-      </p>
-      <Field label="What the payment is">
-        <input className="input" value={f.title} onChange={set('title')} />
-      </Field>
-      <Field label="Why it is needed">
-        <textarea className="textarea" rows={2} value={f.purpose} onChange={set('purpose')} />
-      </Field>
-      <Field label="Amount (RM)">
-        <input className="input" inputMode="decimal" value={f.amount} onChange={set('amount')} />
-      </Field>
-      <Field label="How the amount was worked out (Finance checks it)">
-        <textarea className="textarea" rows={2} value={f.calc} onChange={set('calc')} />
-      </Field>
-      <Field label="Who is paid">
-        <input className="input" value={f.payee} onChange={set('payee')} />
-      </Field>
-      <Field label="Needed by">
-        <input className="input" type="date" value={f.dueOn} onChange={set('dueOn')} />
-      </Field>
-      <Field label="Supporting documents, one per line (never bank passwords or account numbers)">
-        <textarea className="textarea" rows={2} value={f.evidence} onChange={set('evidence')} />
-      </Field>
-      <button className="btn btn-primary" disabled={act.busy} onClick={() => void submit()}>
-        Create request
-      </button>
+        <Field label="Why it is needed" span>
+          <textarea className="textarea" rows={2} value={f.purpose} onChange={set('purpose')} />
+        </Field>
+        <Field label="Amount (RM)">
+          <input className="input" inputMode="decimal" value={f.amount} onChange={set('amount')} />
+        </Field>
+        <Field label="Needed by">
+          <input className="input" type="date" value={f.dueOn} onChange={set('dueOn')} />
+        </Field>
+        <Field label="How the amount was worked out (Finance checks it)" span>
+          <textarea className="textarea" rows={2} value={f.calc} onChange={set('calc')} />
+        </Field>
+        <Field label="Who is paid" span>
+          <input className="input" value={f.payee} onChange={set('payee')} />
+        </Field>
+        <Field label="Supporting documents, one per line (never bank passwords or account numbers)" span>
+          <textarea className="textarea" rows={2} value={f.evidence} onChange={set('evidence')} />
+        </Field>
+      </div>
+      <div className="bz-form-foot">
+        <button className="btn btn-primary" disabled={act.busy} onClick={() => void submit()}>
+          Create request
+        </button>
+      </div>
     </Drawer>
   );
 }

@@ -89,10 +89,10 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
     );
   const base = { contractId: r.contractId, period };
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
         <div>
-          <div style={{ fontWeight: 600 }}>
+          <div className="fin-strong">
             {r.client} · {r.contractRef}
           </div>
           <div className="muted small">
@@ -106,7 +106,7 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
         </div>
         {chip}
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="row">
         {r.status !== 'invoiced' && (
           <button className="btn btn-sm" aria-pressed={mode === 'invoice'} onClick={() => setMode(mode === 'invoice' ? null : 'invoice')}>
             Record invoice
@@ -124,7 +124,7 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
         )}
       </div>
       {mode === 'invoice' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
             className="input"
             aria-label="SQL Account invoice number"
@@ -164,10 +164,9 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
         </div>
       )}
       {(mode === 'none' || mode === 'check') && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
-            className="input"
-            style={{ flex: 1, minWidth: 220 }}
+            className="input fin-flex"
             aria-label={mode === 'none' ? 'Why there is no invoice' : 'Check comment'}
             placeholder={mode === 'none' ? 'Why (suspended, billed under another contract…)' : 'What you checked'}
             value={text}
@@ -230,7 +229,7 @@ function GovtClaims({ m, co }: { m: MoneyIn; co: Co }) {
         )}
       </div>
       {adding && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div className="row fin-mb">
           <input
             className="input"
             aria-label="Government client"
@@ -297,7 +296,7 @@ function GovtClaims({ m, co }: { m: MoneyIn; co: Co }) {
       )}
       <ErrorNotice error={act.error} />
       {open.length > 0 && (
-        <div className="muted small" style={{ marginBottom: 6 }}>
+        <div className="muted small fin-mb">
           {open.length} waiting, {rm(open.reduce((n, c) => n + c.amount, 0))}; {open.filter((c) => c.overdue).length} past the expected date.
         </div>
       )}
@@ -334,10 +333,10 @@ function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co;
     );
   const last = c.log[c.log.length - 1];
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
         <div>
-          <div style={{ fontWeight: 600 }}>
+          <div className="fin-strong">
             {c.agency} · {c.invoiceNo} · {rm(c.amount)}
           </div>
           <div className="muted small">
@@ -355,7 +354,7 @@ function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co;
         {chip}
       </div>
       {open && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           {(['follow', 'query', 'resubmit', 'cancel'] as const).map((k) => (
             <button
               key={k}
@@ -386,10 +385,9 @@ function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co;
         </div>
       )}
       {mode && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
-            className="input"
-            style={{ flex: 1, minWidth: 220 }}
+            className="input fin-flex"
             aria-label="What happened"
             placeholder={
               mode === 'follow'
@@ -456,7 +454,7 @@ function Unidentified({ m, co }: { m: MoneyIn; co: Co }) {
           <UnidLine key={u.lineId} u={u} co={co} />
         ))}
       </div>
-      {m.toCheck.length > 0 && <h4 style={{ marginTop: 12 }}>Allocations to check</h4>}
+      {m.toCheck.length > 0 && <h4 className="fin-mt">Allocations to check</h4>}
       <div className="list">
         {m.toCheck.map((a) => (
           <AllocCheck key={a.lineId} a={a} co={co} />
@@ -471,10 +469,10 @@ function UnidLine({ u, co }: { u: MoneyIn['unidentified'][number]; co: Co }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ to: 'invoice', ref: '', payer: '', note: '' });
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
         <div>
-          <div style={{ fontWeight: 600 }}>
+          <div className="fin-strong">
             {rm(u.amount)} · {dateLabel(u.date)}
           </div>
           <div className="muted small">
@@ -485,7 +483,7 @@ function UnidLine({ u, co }: { u: MoneyIn['unidentified'][number]; co: Co }) {
         <Chip tone={u.late ? 'crit' : 'warn'}>{u.late ? `${u.days} days, late` : `${u.days} days`}</Chip>
       </div>
       {!open ? (
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row">
           <button className="btn btn-sm" onClick={() => setOpen(true)}>
             Allocate
           </button>
@@ -496,7 +494,7 @@ function UnidLine({ u, co }: { u: MoneyIn['unidentified'][number]; co: Co }) {
           ))}
         </div>
       ) : (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <select className="select" aria-label="What it is for" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })}>
             <option value="invoice">Customer invoice</option>
             <option value="intercompany">Group company transfer</option>
@@ -543,9 +541,9 @@ function AllocCheck({ a, co }: { a: MoneyIn['toCheck'][number]; co: Co }) {
   const [text, setText] = useState('');
   const base = { statementId: a.statementId, lineId: a.lineId };
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+    <div className="list-item fin-stack">
       <div>
-        <div style={{ fontWeight: 600 }}>
+        <div className="fin-strong">
           {rm(a.amount)} · {dateLabel(a.date)} → {a.to} {a.ref}
         </div>
         <div className="muted small">
@@ -553,10 +551,9 @@ function AllocCheck({ a, co }: { a: MoneyIn['toCheck'][number]; co: Co }) {
           {a.note ? ` · ${a.note}` : ''} · allocated by {a.by}
         </div>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="row">
         <input
-          className="input"
-          style={{ flex: 1, minWidth: 200 }}
+          className="input fin-flex"
           aria-label="Check comment"
           placeholder="What you checked"
           value={text}
@@ -624,7 +621,7 @@ export function StampDuty({ v, co }: { v: FinControls; co: Co }) {
         </div>
       )}
       {adding && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div className="row fin-mb">
           <select className="select" aria-label="Kind" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
             {Object.entries(STAMP_KIND).map(([k, l]) => (
               <option key={k} value={k}>
@@ -720,10 +717,10 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
     </button>
   );
   return (
-    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-stack">
+      <div className="row fin-between">
         <div>
-          <div style={{ fontWeight: 600 }}>
+          <div className="fin-strong">
             {it.title} · {STAMP_KIND[it.kind]}
           </div>
           <div className="muted small">
@@ -740,7 +737,7 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
         </div>
         <Chip tone={it.state.late ? 'crit' : it.state.due ? 'warn' : it.status === 'closed' ? 'neutral' : 'ok'}>{it.status.replace('_', ' ')}</Chip>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      <div className="row">
         {it.status === 'to_stamp' && btn('stamped', 'Record certificate')}
         {it.status === 'stamped' && it.stamped && !it.stamped.checked && btn('check', 'Check certificate')}
         {(it.status === 'to_stamp' || it.status === 'stamped') && btn('cancelled', 'Agreement cancelled')}
@@ -749,7 +746,7 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
         {it.status === 'refund_submitted' && btn('outcome', 'LHDN answered')}
       </div>
       {mode === 'stamped' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <input
             className="input"
             aria-label="Certificate number"
@@ -800,7 +797,7 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
         </div>
       )}
       {(mode === 'check' || mode === 'cancelled' || mode === 'outcome' || mode === 'submit') && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           {(mode === 'cancelled' || mode === 'submit' || mode === 'outcome') && (
             <input className="input" type="date" aria-label="Date" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
           )}
@@ -834,8 +831,7 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
           )}
           {mode !== 'submit' && (
             <input
-              className="input"
-              style={{ flex: 1, minWidth: 200 }}
+              className="input fin-flex"
               aria-label="Comment"
               placeholder={mode === 'cancelled' ? 'Why it was cancelled' : 'Comment'}
               value={f.comment}
@@ -869,10 +865,9 @@ function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
         </div>
       )}
       {mode === 'docs' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="row">
           <textarea
-            className="input"
-            style={{ flex: 1, minWidth: 260 }}
+            className="input fin-flex"
             rows={3}
             aria-label="Documents, one per line"
             placeholder="One document per line"

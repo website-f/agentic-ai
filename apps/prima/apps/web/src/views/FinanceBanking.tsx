@@ -35,7 +35,7 @@ export function FixedDeposits({ v }: { v: FinControls }) {
           {adding ? 'Close' : 'Add fixed deposit'}
         </button>
       </div>
-      <p className="small" style={{ padding: '0 12px' }}>
+      <p className="small fin-intro">
         Current accounts {rm(b.current)} (last statements) · fixed deposits {rm(b.placed)}
         <span className="muted">
           {' '}
@@ -44,7 +44,7 @@ export function FixedDeposits({ v }: { v: FinControls }) {
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
-        <div style={{ padding: 12 }}>
+        <div className="fin-pad">
           {(
             [
               ['bank', 'Bank'],
@@ -115,8 +115,8 @@ function FdLine({ d, go, busy }: { d: Fd; go: (action: string, input: Record<str
               ? ['neutral', 'Closed']
               : ['info', 'Placed'];
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+    <div className="list-item fin-block">
+      <div className="row fin-between">
         <span>
           {d.bank} {d.refMasked} · {rm(d.amount)} at {d.rate}% · matures {dateLabel(d.maturesOn)}
           <span className="muted">
@@ -125,7 +125,7 @@ function FdLine({ d, go, busy }: { d: Fd; go: (action: string, input: Record<str
             {d.placedSeen ? ' · placement seen in bank' : ''}
           </span>
         </span>
-        <span className="row" style={{ gap: 6 }}>
+        <span className="row">
           <Chip tone={chip[0]}>{chip[1]}</Chip>
           {(d.status === 'pending' || d.status === 'placed' || (d.status === 'uplifted' && !d.upliftSeen)) && (
             <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -135,7 +135,7 @@ function FdLine({ d, go, busy }: { d: Fd; go: (action: string, input: Record<str
         </span>
       </div>
       {open && (
-        <div style={{ paddingTop: 8 }}>
+        <div className="fin-pt">
           {d.status === 'pending' && (
             <>
               <Field label="What you checked it against">
@@ -147,7 +147,7 @@ function FdLine({ d, go, busy }: { d: Fd; go: (action: string, input: Record<str
             </>
           )}
           {d.status === 'placed' && (
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="row fin-end">
               <Field label="Renew to">
                 <input className="input" type="date" value={f.to ?? ''} onChange={set('to')} />
               </Field>
@@ -206,20 +206,20 @@ export function BankCharges({ v }: { v: FinControls }) {
       <div className="panel-head">
         <h3>Bank charges, {v.banking.period}</h3>
       </div>
-      <p className="muted small" style={{ padding: '0 12px' }}>
+      <p className="muted small fin-intro">
         Prima adds up the charges and fees on each statement. Record what the bank agreed once per account; a month above it is explained by a reviewer (refund
         asked, or why it is right).
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">
         {v.banking.charges.map((c) => (
-          <div key={c.bankId} className="list-item" style={{ display: 'block' }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+          <div key={c.bankId} className="list-item fin-block">
+            <div className="row fin-between">
               <span>
                 {c.bank} · {c.charges == null ? 'no statement' : `${rm(c.charges)} in ${c.lines.length} line(s)`}
                 <span className="muted"> · agreed {c.terms ? `up to ${rm(c.terms.monthlyMax)}` : 'not recorded'}</span>
               </span>
-              <span className="row" style={{ gap: 6 }}>
+              <span className="row">
                 <Chip tone={c.toExplain ? 'warn' : c.over ? 'info' : 'ok'}>
                   {c.toExplain ? 'Above agreed' : c.review ? 'Explained' : c.charges == null ? 'Waiting' : 'Within'}
                 </Chip>
@@ -229,9 +229,9 @@ export function BankCharges({ v }: { v: FinControls }) {
               </span>
             </div>
             {edit === c.bankId && (
-              <div style={{ paddingTop: 8 }}>
+              <div className="fin-pt">
                 {c.lines.length > 0 && (
-                  <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+                  <ul className="small fin-ul">
                     {c.lines.map((l, i) => (
                       <li key={i}>
                         {dateLabel(l.date)} · {l.description} · {rm(l.amount)}
@@ -258,7 +258,7 @@ export function BankCharges({ v }: { v: FinControls }) {
                     </button>
                   </>
                 )}
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 8 }}>
+                <div className="row fin-mt fin-end">
                   <Field label="Agreed charges a month (team leader, FD, CEO)">
                     <input className="input" inputMode="decimal" value={f.monthlyMax ?? ''} onChange={set('monthlyMax')} />
                   </Field>

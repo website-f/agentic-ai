@@ -15,15 +15,15 @@ const inputError = (e: unknown) => {
 const who = (a: { name: string; address: string }) => a.name ? `${a.name} <${a.address}>` : a.address;
 
 function Email({ s }: { s: EmailSnapshot }) {
-  return <div style={{ minWidth: 0 }}>
-    <p className="small" style={{ overflowWrap: 'anywhere', margin: 0 }}>
+  return <div className="ix-min">
+    <p className="small ix-wrap ix-flush">
       <strong>{s.subject || '(no subject)'}</strong><br />
       {s.from && <>From: {who(s.from)}<br /></>}
       {s.to.length > 0 && <>To: {s.to.map(who).join(', ')}<br /></>}
       {s.cc.length > 0 && <>Cc: {s.cc.map(who).join(', ')}<br /></>}
       {s.sentAt && <>Sent: <time dateTime={s.sentAt}>{s.sentAt}</time></>}
     </p>
-    <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 320, overflow: 'auto' }}>{s.body}</pre>
+    <pre className="ix-mail-body">{s.body}</pre>
     {s.bodyTruncated && <p className="small muted">The message is long; only the first part was copied. Open it in Outlook for the rest.</p>}
     {s.hasAttachments && <p className="small muted">This email has files in Outlook. Prima does not copy them.</p>}
   </div>;
@@ -79,10 +79,10 @@ export function JobEmails({ client, userId, jobId }: { client: JobEmailClient; u
     {state.configured&&setupPending&&<button className="btn" disabled={busy} onClick={()=>void run(()=>requestMailboxSetup(client,userId,setupMarker),r=>{setSetupRef(r.ticketRef);setSetupPending(false);})}>Check pending IT setup request</button>}
     <button className="btn" disabled={busy} onClick={()=>void run(async()=>{const next=await client.status(userId);const list=next.configured?await client.list(userId,jobId):[];return {next,list};},({next,list})=>{setState(next);setEmails(list);const p=pending.current;if(p&&list.some(x=>p.kind==='attach'?x.webLink===p.id&&x.state==='Available':x.id===p.id&&x.state==='Removed')){pending.current=null;setUncertain(false);setPreview(null);setLink('');}else if(uncertain)setError('No confirming saved result is visible yet. Keep this screen and ask IT to reconcile; do not submit a new copy.');})}>Refresh setup and saved copies</button>
     {emails?.length === 0 && <p className="small">No emails attached yet.</p>}
-    {emails && emails.length > 0 && <ul style={{ listStyle: 'none', padding: 0 }}>
-      {emails.map(e => <li key={e.id} className="panel" style={{ padding: 8, marginBottom: 8, minWidth: 0 }}>
+    {emails && emails.length > 0 && <ul className="ix-mail-list">
+      {emails.map(e => <li key={e.id} className="ix-item">
         {e.state === 'Available' && e.snapshot ? <Email s={e.snapshot} /> : <p className="small">{e.state === 'Removed' ? 'Removed from this job by the person who attached it.' : `The copy is unavailable after ${state.keepDays} days; storage cleanup is separate.`}</p>}
-        <p className="small muted" style={{ overflowWrap: 'anywhere' }}>Attached by {e.attachedByName} on <time dateTime={e.attachedAt}>{e.attachedAt}</time>.{' '}
+        <p className="small muted ix-wrap">Attached by {e.attachedByName} on <time dateTime={e.attachedAt}>{e.attachedAt}</time>.{' '}
           {e.state !== 'Removed' && <a href={e.webLink} target="_blank" rel="noopener noreferrer">Open in Outlook</a>}</p>
         {e.canRemove && <button className="btn btn-sm" disabled={busy||uncertain} onClick={() => {if(uncertain||inFlight.current)return;pending.current={kind:'remove',id:e.id};void run(() => client.remove(userId, jobId, e.id),v=>{replace(v);pending.current=null;},true);}}>Remove from this job</button>}
       </li>)}
@@ -92,10 +92,10 @@ export function JobEmails({ client, userId, jobId }: { client: JobEmailClient; u
       <input id={`job-email-link-${jobId}`} className="input" value={link} onChange={ev => setLink(ev.target.value)} autoComplete="off" inputMode="url" placeholder="https://outlook.office.com/mail/…" />
       <button className="btn" type="submit" disabled={busy || uncertain || !validOutlookMessageLink(link.trim())}>Preview this email</button>
     </form>}
-    {preview && <div className="panel" style={{ padding: 8, minWidth: 0 }} aria-label="Preview before attaching" role="region">
+    {preview && <div className="ix-item" aria-label="Preview before attaching" role="region">
       <p className="small"><strong>Check this is the right email.</strong> Nothing is saved until you press Attach. Preview expires at {preview.data.expiresAt}; refresh the preview if expired.</p>
       <Email s={preview.data.snapshot} />
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <div className="ix-actions">
         <button className="btn btn-primary" disabled={busy||uncertain||!previewStillCurrent(preview.data.expiresAt)} onClick={() => {if(uncertain||inFlight.current)return;if(!previewStillCurrent(preview.data.expiresAt)){setPreview(null);setError('Preview expired. Preview the email again before attaching.');return;}pending.current={kind:'attach',id:preview.data.snapshot.webLink};void run(() => client.attach(userId, jobId, preview.link, preview.data.previewToken), v => { replace(v);pending.current=null; setPreview(null); setLink(''); },true);}}>Attach to this job</button>
         <button className="btn" disabled={busy||uncertain} onClick={() => { setPreview(null); setError(''); }}>Cancel</button>
       </div>

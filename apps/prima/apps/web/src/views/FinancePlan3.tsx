@@ -106,15 +106,15 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
   if (pv.plan?.budget.status !== 'approved') return null;
   const open = finOpenRevision(pv.revisions);
   return (
-    <div style={{ padding: 12 }}>
+    <div className="fin-pad">
       <ErrorNotice error={act.error} />
-      <h4 style={{ margin: '8px 0' }}>Budget revisions</h4>
+      <h4 className="fin-my">Budget revisions</h4>
       <p className="muted small">
         The approved budget is kept as it is. A revision applies from an open month onward once the Finance Director or the CEO approves it with a comment
         (either is enough); whoever drafted or sent it does not approve it, and the FD and the CEO never both write the same revision.
       </p>
       {pv.revisions.map((r) => (
-        <div key={r.no} className="list-item small" style={{ flexWrap: 'wrap', gap: 6 }}>
+        <div key={r.no} className="list-item small">
           <Chip tone={tone(r.status)}>{r.status}</Chip>
           <span>
             Revision {r.no} from {r.fromMonth}: {r.reason} · drafted by {r.prepared.by}
@@ -124,7 +124,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
             {r.returned && r.status === 'returned' ? ` · returned by ${r.returned.by}: "${r.returned.comment}"` : ''}
           </span>
           {canAct && ['draft', 'submitted', 'returned'].includes(r.status) && (r.authorIds.includes(me) || r.submitted?.byId === me) && (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row">
               <input
                 className="input"
                 aria-label="Withdraw reason"
@@ -142,7 +142,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
             </span>
           )}
           {canAct && approver && r.status === 'submitted' && !r.authorIds.includes(me) && !(role === 'director' ? r.fdApproved : r.ceoApproved) && (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row">
               <input
                 className="input"
                 aria-label="Revision comment"
@@ -200,14 +200,14 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
         </details>
       )}
 
-      <h4 style={{ margin: '16px 0 8px' }}>Three-statement forecasts</h4>
+      <h4 className="fin-subhead">Three-statement forecasts</h4>
       <p className="muted small">
         Profit and loss, balance sheet and cash flow, linked: Prima works the cash flow out from the profit and the balance sheet movements, and the closing
         cash ties to the balance sheet. The opening must balance and agree to the reviewed SQL Account figures for that month, including the cash, when there
         are any. The FD or the CEO approves, never whoever prepared or sent it.
       </p>
       {pv.threeStatements.map((x) => (
-        <details key={x.id} className="list-item small" style={{ display: 'block' }}>
+        <details key={x.id} className="list-item small fin-block">
           <summary>
             <Chip tone={tone(x.status)}>{x.status}</Chip> {x.kind} · {x.scenario} · from {x.asOf} · version {x.version} · prepared by {x.prepared.by}
             {x.approved ? ` · approved by ${x.approved.by}: "${x.approved.comment}"` : ''}
@@ -219,7 +219,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
               {p}
             </p>
           ))}
-          <div style={{ overflowX: 'auto' }}>
+          <div className="fin-scroll">
             <table className="table small">
               <thead>
                 <tr>
@@ -263,7 +263,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
             </p>
           )}
           {canAct && ['draft', 'submitted', 'returned'].includes(x.status) && (x.authorIds.includes(me) || x.submitted?.byId === me) && (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row">
               <input
                 className="input"
                 aria-label="Forecast withdraw reason"
@@ -286,7 +286,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
             </button>
           )}
           {canAct && approver && x.status === 'submitted' && !x.authorIds.includes(me) && (
-            <span className="row" style={{ gap: 6 }}>
+            <span className="row">
               <input
                 className="input"
                 aria-label="Forecast comment"
@@ -315,7 +315,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
       {canAct && preparer && (
         <details>
           <summary>Prepare a three-statement forecast</summary>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="row">
             <select className="input" aria-label="Kind" value={f.fcKind ?? 'quarterly'} onChange={set('fcKind')}>
               <option value="quarterly">Quarterly (from a quarter end)</option>
               <option value="yearly">Yearly</option>
@@ -341,9 +341,9 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
             <span>Opening balance sheet from (the SQL Account balance sheet filed)</span>
             <input className="input" value={f.fcSource ?? ''} onChange={set('fcSource')} />
           </label>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <div className="row">
             {OPENING.map((k) => (
-              <label key={k} className="field" style={{ minWidth: 140 }}>
+              <label key={k} className="field fin-flex">
                 <span>Opening {k}</span>
                 <input className="input" inputMode="decimal" value={f[`op-${k}`] ?? ''} onChange={set(`op-${k}`)} />
               </label>
