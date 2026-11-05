@@ -10,7 +10,8 @@ import { resetDb } from '../src/reset-db';
 import { extractionAudit } from '../src/arisha-it-extraction-audit';
 import { ItExtractionPreviewService } from '../src/arisha-it-extraction';
 import { officePayload, officeSign } from '../src/office';
-import { AuthGuard, entraSetup, issueToken, resetEntraSetup, userForEntra, verifyFeed, verifyToken } from '../src/auth';
+import { OfficeController } from '../src/controllers';
+import { AuthGuard, OfficeSystemGuard, entraSetup, issueToken, resetEntraSetup, userForEntra, verifyFeed, verifyToken } from '../src/auth';
 import { linkEntra } from '../src/entra-link';
 import { createHmac, createSign, generateKeyPairSync } from 'node:crypto';
 import type { ExecutionContext } from '@nestjs/common';
@@ -931,11 +932,11 @@ describe('Microsoft sign-in links to one staff record', () => {
     await assert.rejects(guard.canActivate(ctx().c), /Sign in again/);
   });
 
-  it('signs in a linked person through the Agentic Office, and only with a valid signature', async () => {
+  it('signs in the staff record the Agentic Office names, and only with a valid signature', async () => {
     const SECRET = 'o'.repeat(40);
     process.env.OFFICE_SIGNING_SECRET = SECRET;
-    const office = (over: { oid?: string; tid?: string; via?: string; ts?: string; url?: string; body?: string; secret?: string } = {}) => {
-      const call = { oid: over.oid ?? LEAD, tid: over.tid ?? TENANT, via: over.via ?? 'agent:Chief of Staff' };
+    const office = (over: { user?: string; via?: string; ts?: string; url?: string; body?: string; secret?: string } = {}) => {
+      const call = { user: over.user ?? 'u-it-lead', via: over.via ?? 'agent:Chief of Staff' };
       const ts = over.ts ?? new Date().toISOString();
       const body = over.body ?? '{"a":1}';
       const sig = officeSign(over.secret ?? SECRET, officePayload(ts, 'POST', '/api/me', call, body));
@@ -943,7 +944,7 @@ describe('Microsoft sign-in links to one staff record', () => {
         method: 'POST',
         originalUrl: over.url ?? '/api/me',
         rawBody: Buffer.from('{"a":1}'),
-        headers: { 'x-office-ts': ts, 'x-office-oid': call.oid, 'x-office-tid': call.tid, 'x-office-via': call.via, 'x-office-signature': sig } as Record<string, string>,
+        headers: { 'x-office-ts': ts, 'x-office-user': call.user, 'x-office-via': call.via, 'x-office-signature': sig } as Record<string, string>,
       } as { method: string; originalUrl: string; rawBody: Buffer; headers: Record<string, string>; userId?: string; office?: { via: string } };
       return { req, c: { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext };
     };
@@ -952,16 +953,35 @@ describe('Microsoft sign-in links to one staff record', () => {
       assert.equal(await guard.canActivate(ok.c), true);
       assert.equal(ok.req.userId, 'u-it-lead');
       assert.equal(ok.req.office?.via, 'agent:Chief of Staff');
-      // A wrong secret, another body, another path, an old call, another tenant: all refused, never a fallback.
+      // A wrong secret, another body, another path, an old call: all refused, never a fallback.
       await assert.rejects(guard.canActivate(office({ secret: 'x'.repeat(40) }).c), /Open Prima from the office again/);
       await assert.rejects(guard.canActivate(office({ body: '{"a":2}' }).c), /Open Prima from the office again/);
       await assert.rejects(guard.canActivate(office({ url: '/api/payroll' }).c), /Open Prima from the office again/);
       await assert.rejects(guard.canActivate(office({ ts: new Date(Date.now() - 6 * 60_000).toISOString() }).c), /Open Prima from the office again/);
-      await assert.rejects(guard.canActivate(office({ tid: '22222222-2222-3333-4444-555555555555' }).c), /Open Prima from the office again/);
       await assert.rejects(guard.canActivate(office({ via: 'root' }).c), /Open Prima from the office again/);
-      // Linking rules are Microsoft's: an unlinked account and someone outside the pilot are refused the same way.
-      await assert.rejects(guard.canActivate(office({ oid: '0a0a0a0a-0000-4000-8000-0000000000ff' }).c), /not linked/);
-      await assert.rejects(guard.canActivate(office({ oid: ROM }).c), /not part of the pilot/);
+      // The office itself (no person) never opens a screen or a record.
+      await assert.rejects(guard.canActivate(office({ user: '', via: 'system' }).c), /Open Prima from the office again/);
+      // Prima's own sign-in rules: no such record, a system feed, someone outside the pilot.
+      await assert.rejects(guard.canActivate(office({ user: 'u-nobody' }).c), /no longer exists/);
+      await assert.rejects(guard.canActivate(office({ user: 'u-ja-sync' }).c), /system feed/);
+      await assert.rejects(guard.canActivate(office({ user: 'u-rom-central' }).c), /not part of the pilot/);
+
+      // The staff list for linking: only for the office's own system call.
+      const sys = office({ user: '', via: 'system' });
+      sys.req.method = 'GET';
+      sys.req.originalUrl = '/api/office/staff';
+      sys.req.rawBody = Buffer.alloc(0);
+      const ts = new Date().toISOString();
+      sys.req.headers['x-office-ts'] = ts;
+      sys.req.headers['x-office-signature'] = officeSign(SECRET, officePayload(ts, 'GET', '/api/office/staff', { user: '', via: 'system' }, ''));
+      assert.equal(new OfficeSystemGuard().canActivate(sys.c), true);
+      assert.throws(() => new OfficeSystemGuard().canActivate(office().c), /Only the Agentic Office/);
+      const staff = await new OfficeController(db).staff();
+      const lead = staff.find((x) => x.id === 'u-it-lead');
+      assert.equal(lead?.entraOid, LEAD.toLowerCase());
+      assert.equal(lead?.canSignIn, true);
+      assert.equal(staff.find((x) => x.id === 'u-rom-central')?.canSignIn, false);
+      assert.ok(!staff.some((x) => x.id === 'u-ja-sync'));
       // Without a secret on the server the office cannot sign anyone in.
       delete process.env.OFFICE_SIGNING_SECRET;
       await assert.rejects(guard.canActivate(office().c), /Open Prima from the office again/);

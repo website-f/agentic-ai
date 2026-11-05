@@ -1840,4 +1840,14 @@ MS: dict[str, str] = {
     "Find a Prima action": "Cari tindakan Prima",
     "Read from Prima": "Baca daripada Prima",
     "Record in Prima": "Rekod dalam Prima",
+    # ------------------------------------------------------------ P67 who is who in Prima
+    "You are not linked to your Prima staff record yet. The office owner links people on the Prisma page.": (  # noqa: E501
+        "Anda belum dipautkan kepada rekod staf Prima anda. Pemilik pejabat memautkan orang di "
+        "halaman Prisma."
+    ),
+    "That person is not in this office.": "Orang itu tiada dalam pejabat ini.",
+    "That Prima record is already linked to someone else in the office.": (
+        "Rekod Prima itu sudah dipautkan kepada orang lain dalam pejabat."
+    ),
+    "That Prima record does not exist.": "Rekod Prima itu tidak wujud.",
 }

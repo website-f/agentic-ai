@@ -15,25 +15,29 @@ AI tool ────────────────────────
 
 The office never holds a Prima password or token.
 
-1. The office names the person by the Microsoft work account they signed in to the office with. That is `memberships.ms_tenant_id` / `ms_oid` (migration 0047), recorded after Microsoft's answer is verified at every **Sign in with Microsoft**, and whenever a mailbox is connected.
+1. **Who is who (P67).** The office is Prima's sign-in. Each person in the office is linked to one Prima staff record (`prisma_links`, migration 0048), one person per record:
+   - **By themselves:** the first time they open Prisma, if they signed in to the office with Microsoft (`memberships.ms_oid`, migration 0047, recorded after Microsoft's answer is verified) and IT recorded that same account on a Prima record (`entraOid`).
+   - **By the owner, otherwise:** **Prisma → People in Prima** lists everyone in the office beside Prima's records, with the likely record already picked. The pick is the record carrying the person's Microsoft account, or else the only record with exactly the same name, when nobody else in the office has that name. **Link all suggested** links them in one click, and any row can be changed or cleared.
+
+   A name match is never linked without that click: a link decides whose pay, leave and HR records someone (and their AI) sees. No script is needed. `deploy/scripts/prima-link-user.sh` still records a Microsoft account on a Prima record if IT wants that.
 2. Each call is signed with `PRIMA_OFFICE_SECRET` using HMAC-SHA256. The office side has it as `AGENTIC_PRIMA_SECRET`; Prima has it as `OFFICE_SIGNING_SECRET`. The signature covers:
    - the time;
    - the method;
    - the path with its query;
-   - the account (object ID and tenant);
-   - who acted (`person` or `agent:<name>`);
+   - the linked Prima record;
+   - who acted (`person`, `agent:<name>`, or `system` for the staff list used for linking);
    - the exact body bytes.
 3. Prima checks the call in `apps/prima/apps/api/src/office.ts` and the `AuthGuard`:
    - the signature must match;
-   - the call must be under 5 minutes old;
-   - the tenant must be Prima's own Entra tenant.
+   - the call must be under 5 minutes old.
 
-   It then links the account exactly as it links a Microsoft token: through `userForEntra`, by `entraOid` only. Closed accounts, pilot rules and leadership-only mode are all refused the same way. Once the office headers are present, the call must verify; it never falls back to another way in.
+   It then applies the same sign-in rules as a Microsoft sign-in (`userForOffice`): no system feed, no closed account, the pilot, leadership-only mode. A `system` call never opens a screen or a record; it only reads the staff list (`OfficeController`, `GET api/office/staff`: id, name, title, role, the recorded Microsoft account, and whether the record may sign in). Once the office headers are present, the call must verify; it never falls back to another way in.
 4. From there, Prima's own roles, record rules and row-level security decide everything. A refusal comes back word for word.
 
 **What is never reachable through the office:**
 - Prima's signed system feeds (`api/integrations/...`);
-- development sign-in (`api/auth/dev-login`, `api/auth/users`).
+- development sign-in (`api/auth/dev-login`, `api/auth/users`);
+- the office's own staff list (`api/office/...`).
 
 Paths are limited to a plain alphabet, so the path Prima sees is the path that was signed.
 
@@ -87,13 +91,10 @@ python -m agentic.prisma.routes ../prima/apps/api/src > agentic/prisma/routes.js
 
 - **Secret:** `deploy/scripts/prima-secrets.sh` adds `PRIMA_OFFICE_SECRET` to `.env`. `deploy-vps.sh` now runs it before its first config check.
 - **Deploy script:** it now restarts itself when a pull changes it. A deploy that changed its own script used to carry on with the old copy.
-- **Each person:**
-  1. They sign in to the office once with **Sign in with Microsoft**.
-  2. IT links their Microsoft account to their Prima staff record:
-     ```
-     ./deploy/scripts/prima-link-user.sh <prima-user-id> <entra-object-id> "<who links>"
-     ```
-  3. **Prisma** then opens Prima with no second sign-in. Until then, the page says what is missing.
+- **Each person:** nothing to run.
+  - If they sign in with Microsoft and IT recorded that account in Prima, they are linked the first time they open **Prisma**.
+  - Otherwise the owner opens **Prisma → People in Prima** and clicks **Link all suggested** (or picks a record per person).
+  - **Prisma** then opens Prima with no second sign-in. Until then, the page says what is missing.
 - **Microsoft redirect URI:** not needed for the office path. Prima's own Microsoft sign-in (MSAL) is not used inside the office.
 
 ## Not covered
@@ -104,6 +105,15 @@ Prima's Microsoft-only features still need Prima's own Microsoft token, so they 
 
 They say so when opened.
 
+## Tasks and reports from Prima
+
+An agent given a task in the office reads Prima as the person who gave the task. A scheduled task reads as whoever made the schedule. So "summarise this week's attendance and the leave waiting for co-1" works the same in a task as in chat:
+1. `prisma_read api/me` gives the person's role and the companies they see.
+2. The task reads `api/companies/<id>/attendance`, `api/leave`, `api/claims`, `api/staff-pay` and so on.
+3. The agent writes the summary or report (a document, if asked).
+
+`prisma_read` lists these starting points in its description.
+
 ## Tests
 
 - `apps/api/tests/test_p66_prisma.py`:
@@ -111,7 +121,9 @@ They say so when opened.
   - catalog drift;
   - path rules;
   - screens through the office, including CSRF, refusals and sign-out;
-  - the AI tools: acting as the person who asked, refusing when nobody asked, and policy and offering.
+  - who is who: sure-match suggestions, one-click linking, linking by Microsoft, a record never linked to two people, owner only;
+  - the AI tools: acting as the person who asked, refusing when nobody asked, and policy and offering;
+  - a task given in the office reading Prima attendance as the person who gave it.
 - `apps/api/tests/test_p63_microsoft_signin.py`: the Microsoft account is recorded at sign-in, with or without a mailbox.
 - `apps/prima/apps/api/test/office.test.ts`: the same test vector, and every tampering refused.
-- `apps/prima/apps/api/test/rls.test.ts`: office sign-in through the real `AuthGuard` and database (linked, unlinked, outside the pilot, wrong tenant, old call, no secret).
+- `apps/prima/apps/api/test/rls.test.ts`: office sign-in through the real `AuthGuard` and database (a named record, a missing one, a system feed, outside the pilot, an old call, a system call refused, no secret), and the staff list for the office's system call only.

@@ -92,7 +92,11 @@ export async function userForEntra(db: Db, who: EntraIdentity): Promise<User> {
         : 'This Microsoft account is linked to more than one staff record. IT must fix the link before you can sign in.',
     );
   }
-  const user = res.rows[0].data as User;
+  return admitted(res.rows[0].data as User);
+}
+
+/** The sign-in rules every way in applies, before anything is shown: no system feed, no closed account, the pilot. */
+function admitted(user: User): User {
   if (user.integration) throw new ForbiddenException('A system feed cannot sign in to screens.');
   // Offboarding: a closed account is refused before anything else is checked or shown.
   if (accessClosed(user, dateOf(fromMs(Date.now()))))
@@ -100,6 +104,13 @@ export async function userForEntra(db: Db, who: EntraIdentity): Promise<User> {
   if (RULES.pilot.value.on && !inPilot(user)) throw new ForbiddenException('You are not part of the pilot yet.');
   if (!leadershipOnboardingPermits(user)) throw new ForbiddenException('Prima is in leadership-only onboarding mode.');
   return user;
+}
+
+/** The staff record the Agentic Office named on a verified call (office.ts), under the same sign-in rules. */
+export async function userForOffice(db: Db, userId: string): Promise<User> {
+  const res = await db.pool.query(`SELECT data FROM prima.users WHERE id = $1`, [userId]);
+  if (res.rowCount !== 1) throw new ForbiddenException('This office account is linked to a Prima staff record that no longer exists. Ask the office owner to link it again.');
+  return admitted(res.rows[0].data as User);
 }
 
 @Injectable()
@@ -111,24 +122,19 @@ export class AuthGuard implements CanActivate {
     // Never trust a header/body property or a reused development request as an OBO assertion.
     verifiedEntraAssertions.delete(req);
     delete req.office;
-    const setup = entraSetup();
     // The Agentic Office (office.ts): a signed call naming a Microsoft account. Once the headers are present the call
     // must verify; it never falls through to another way in.
     if (isOfficeCall(req.headers as Record<string, unknown>)) {
-      const call = verifyOffice(
-        req.headers as Record<string, unknown>,
-        req.method,
-        req.originalUrl,
-        (req as AuthedRequest & { rawBody?: Buffer }).rawBody,
-        setup?.cfg.tenantId ?? null,
-      );
-      if (!call) throw new UnauthorizedException('Open Prima from the office again.');
-      req.userId = (await userForEntra(this.db, { oid: call.oid, tid: call.tid, name: '', username: '' })).id;
+      const call = verifyOffice(req.headers as Record<string, unknown>, req.method, req.originalUrl, (req as AuthedRequest & { rawBody?: Buffer }).rawBody);
+      // A system call (no person) only lists staff for linking (OfficeController), never a screen or a record.
+      if (!call || call.via === 'system') throw new UnauthorizedException('Open Prima from the office again.');
+      req.userId = (await userForOffice(this.db, call.user)).id;
       req.office = call;
       return true;
     }
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const setup = entraSetup();
     if (setup && token.split('.').length === 3) {
       let who: EntraIdentity;
       try {
@@ -211,6 +217,20 @@ export class PlannerFeedGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
     if (!verifyFeed(req.headers as Record<string, unknown>, req.rawBody, Date.now(), 'PLANNER'))
       throw new UnauthorizedException('Feed key or signature not valid.');
+    return true;
+  }
+}
+
+/**
+ * The Agentic Office itself (office.ts, via "system"): only for OfficeController, which lists staff records so the
+ * office can link its people. A person's or an AI's call is refused here.
+ */
+@Injectable()
+export class OfficeSystemGuard implements CanActivate {
+  canActivate(ctx: ExecutionContext): boolean {
+    const req = ctx.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
+    const call = verifyOffice(req.headers as Record<string, unknown>, req.method, req.originalUrl, req.rawBody);
+    if (!call || call.via !== 'system') throw new UnauthorizedException('Only the Agentic Office may ask this.');
     return true;
   }
 }

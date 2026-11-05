@@ -45,4 +45,17 @@ export const PRISMA: Record<string, string> = {
   "Set-up for IT": "Persediaan untuk IT",
   "Link each person's Microsoft account to their Prima user, one line per person on the server:":
     "Pautkan akaun Microsoft setiap orang kepada pengguna Prima mereka, satu baris setiap orang di pelayan:",
+  // P67: the owner links people to their Prima staff records.
+  "People in Prima": "Orang dalam Prima",
+  "Prima opens with your office sign-in once you are linked to your Prima staff record. If you sign in with Microsoft and IT recorded your account in Prima, that happens by itself; otherwise the office owner links you on this page.":
+    "Prima dibuka dengan log masuk pejabat anda sebaik sahaja anda dipautkan kepada rekod staf Prima anda. Jika anda log masuk dengan Microsoft dan IT telah merekod akaun anda dalam Prima, ia berlaku dengan sendiri; jika tidak, pemilik pejabat memautkan anda di halaman ini.",
+  "Link all suggested ({n})": "Pautkan semua cadangan ({n})",
+  "Who in the office is which Prima staff record. It decides whose pay, leave and HR records each person (and their AI) can see, so check the picks before linking. People who sign in with Microsoft are linked by themselves when IT recorded their account in Prima.":
+    "Siapa dalam pejabat ialah rekod staf Prima yang mana. Ia menentukan rekod gaji, cuti dan HR siapa yang boleh dilihat oleh setiap orang (dan AI mereka), jadi semak pilihan sebelum memautkan. Orang yang log masuk dengan Microsoft dipautkan dengan sendiri apabila IT telah merekod akaun mereka dalam Prima.",
+  "Not linked": "Belum dipautkan",
+  "cannot sign in yet": "belum boleh log masuk",
+  "Linked by Microsoft": "Dipautkan melalui Microsoft",
+  "Prima record for {name}": "Rekod Prima untuk {name}",
+  "Link {name}": "Pautkan {name}",
+  "Back to Prima": "Kembali ke Prima",
 };

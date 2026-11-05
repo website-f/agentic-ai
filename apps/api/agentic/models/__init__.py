@@ -2554,5 +2554,30 @@ class CrmAccess(Timestamps, Base):
     granted_by: Mapped[str] = mapped_column(String(80))
 
 
+class PrismaLink(Timestamps, Base):
+    """P67: which Prima staff record a person in the office is (agentic/prisma). The office is
+    Prima's sign-in: every call it signs names this record, and Prima applies its own rules to
+    it. Made automatically when the person's verified Microsoft account is the one IT recorded
+    in Prima (how="microsoft"), else by the owner on the Prisma page (how="owner"). One record
+    per person and one person per record."""
+
+    __tablename__ = "prisma_links"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "prima_user_id", name="uq_prisma_links_record"),
+        CheckConstraint("how IN ('microsoft', 'owner')", name="ck_prisma_links_how"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    prima_user_id: Mapped[str] = mapped_column(String(100))
+    prima_name: Mapped[str] = mapped_column(String(200), default="")
+    how: Mapped[str] = mapped_column(String(10))
+    linked_by: Mapped[str] = mapped_column(String(80))
+
+
 # P57: export and erase a workspace (agentic/erasure/models.py).
 from ..erasure.models import ErasureRecord, WorkspaceExport  # noqa: E402, F401

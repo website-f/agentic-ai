@@ -1,19 +1,22 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-// The Agentic Office link (P66). Prima runs inside the office (one sign-in, at /prisma/), and the office's AI staff
-// work in Prima for the person they act for. The office never holds a Prima password or token: it signs each call
-// with OFFICE_SIGNING_SECRET (from the environment, never from code) and names the person by their Microsoft account
-// (tenant + object ID), verified by the office's own Microsoft sign-in. Prima then links that object ID exactly as a
-// Microsoft token is linked (userForEntra: by entraOid only, closed accounts and pilot rules refused), so every
-// role, record rule and row-level policy applies unchanged. Calls older than 5 minutes are refused.
+// The Agentic Office link (P66, P67). Prima runs inside the office: people sign in to the office once, and the office's
+// AI staff work in Prima for the person they act for. The office is the sign-in: it links each of its people to one
+// Prima staff record (automatically when their verified Microsoft account is the one IT recorded here, else when the
+// office owner confirms it), and names that record on every call. It holds no Prima password or token: each call is
+// signed with OFFICE_SIGNING_SECRET (from the environment, never from code). Prima then applies, unchanged, every
+// sign-in rule (closed accounts, the pilot, leadership-only mode, no system feeds) and every role, record rule and
+// row-level policy. Calls older than 5 minutes are refused.
+//
+// via: "person" (someone in Prima's screens), "agent:<name>" (an AI acting for that person), or "system" (the office
+// itself, with no person: only the office controller's staff list, never a screen or record).
 
 const SKEW_MS = 5 * 60_000;
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const USER_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 
 export interface OfficeCall {
-  oid: string;
-  tid: string;
-  /** "person" (someone in Prima's screens) or "agent:<name>" (an AI acting for that person). */
+  /** The Prima staff record the office names ("" for a system call). */
+  user: string;
   via: string;
 }
 
@@ -22,9 +25,9 @@ export function officeSecret(env: NodeJS.ProcessEnv = process.env): string | nul
   return s.length >= 32 ? s : null;
 }
 
-/** The string the office signs: the time, the method, the full path with its query, who, through what, and the body. */
+/** The bytes the office signs: the time, the method, the full path with its query, who, through what, and the body. */
 export function officePayload(ts: string, method: string, url: string, call: OfficeCall, body: Buffer | string): Buffer {
-  const head = `${ts}\n${method.toUpperCase()}\n${url}\n${call.oid}\n${call.tid}\n${call.via}\n`;
+  const head = `${ts}\n${method.toUpperCase()}\n${url}\n${call.user}\n${call.via}\n`;
   return Buffer.concat([Buffer.from(head), Buffer.isBuffer(body) ? body : Buffer.from(body)]);
 }
 
@@ -43,32 +46,25 @@ export function isOfficeCall(headers: Record<string, unknown>): boolean {
   return headers['x-office-signature'] !== undefined;
 }
 
-/**
- * The verified office call, or null. The tenant must be Prima's own Microsoft tenant: a person from another
- * organisation can never be linked, whatever the office says.
- */
+/** The verified office call, or null. A person or agent call names a staff record; a system call names none. */
 export function verifyOffice(
   headers: Record<string, unknown>,
   method: string,
   url: string,
   rawBody: Buffer | undefined,
-  tenantId: string | null,
   now = Date.now(),
   env: NodeJS.ProcessEnv = process.env,
 ): OfficeCall | null {
   const secret = officeSecret(env);
-  if (!secret || !tenantId) return null;
+  if (!secret) return null;
   const ts = String(headers['x-office-ts'] ?? '');
   const sig = String(headers['x-office-signature'] ?? '').toLowerCase();
-  const call: OfficeCall = {
-    oid: String(headers['x-office-oid'] ?? '').toLowerCase(),
-    tid: String(headers['x-office-tid'] ?? '').toLowerCase(),
-    via: String(headers['x-office-via'] ?? ''),
-  };
+  const call: OfficeCall = { user: String(headers['x-office-user'] ?? ''), via: String(headers['x-office-via'] ?? '') };
   const t = Date.parse(ts);
   if (!sig || Number.isNaN(t) || Math.abs(now - t) > SKEW_MS) return null;
-  if (!GUID.test(call.oid) || call.tid !== tenantId.toLowerCase()) return null;
-  if (!/^(person|agent:[^\n]{1,80})$/.test(call.via)) return null;
+  if (call.via === 'system') {
+    if (call.user !== '') return null;
+  } else if (!/^(person|agent:[^\n]{1,80})$/.test(call.via) || !USER_ID.test(call.user)) return null;
   const want = officeSign(secret, officePayload(ts, method, url, call, rawBody ?? Buffer.alloc(0)));
   return same(sig, want) ? call : null;
 }

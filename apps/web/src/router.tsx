@@ -711,7 +711,13 @@ const approvedServicesRoute = createRoute({
 
 // P60: how the agents' browsers reach websites (this server, a company computer, proxies).
 // P65: Prima Secure's launch page (the app itself is at /prisma/, outside this one).
-const prismaRoute = createRoute({ getParentRoute: () => appRoute, path: "/prisma", component: page.prisma });
+const prismaRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/prisma",
+  component: page.prisma,
+  // P67: ?people=1 opens the owner's "People in Prima" instead of Prima itself.
+  validateSearch: (s: Record<string, unknown>): { people?: number } => ({ people: s.people ? 1 : undefined }),
+});
 const webConnectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/web-connections",

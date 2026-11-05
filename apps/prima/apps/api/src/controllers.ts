@@ -19,10 +19,10 @@ import type {
   RecordValues,
   User,
 } from '@prima/core';
-import { RECORD_KINDS, RULES, arishaFormView, dataModeOf, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type ArishaReviewDraft } from '@prima/core';
+import { RECORD_KINDS, RULES, accessClosed, arishaFormView, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type ArishaReviewDraft } from '@prima/core';
 import { ArishaBusy, IdentityToken, arishaConfig, askArisha } from './arisha';
 import { arishaPilotAllowed } from './arisha-pilot';
-import { AuthGuard, DoorFeedGuard, FeedGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken } from './auth';
+import { AuthGuard, DoorFeedGuard, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken } from './auth';
 import { officeSecret } from './office';
 import { Db, schemaState } from './db';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
@@ -229,6 +229,34 @@ export class AuthController {
     const user = await this.db.asUser(userId, async (_svc, u) => u);
     if (user.integration) throw new ForbiddenException('A system feed cannot sign in to screens.');
     return { token: issueToken(userId), user };
+  }
+}
+
+/**
+ * P67: the Agentic Office links its people to staff records (office.ts). It reads the list here with a signed system
+ * call: who each record is (name, title, role), whether IT recorded a Microsoft account (the office links that person
+ * automatically) and whether the record may sign in now. Nothing else of a person is shown.
+ */
+@Controller('api/office')
+@UseGuards(OfficeSystemGuard)
+export class OfficeController {
+  constructor(private db: Db) {}
+
+  @Get('staff')
+  async staff() {
+    const res = await this.db.pool.query(`SELECT data FROM prima.users WHERE NOT (data ? 'integration') ORDER BY data->>'name', id`);
+    const today = dateOf(fromMs(Date.now()));
+    return res.rows.map((r) => {
+      const u = r.data as User;
+      return {
+        id: u.id,
+        name: u.name,
+        title: u.title,
+        role: u.role,
+        entraOid: u.entraOid ? u.entraOid.toLowerCase() : null,
+        canSignIn: !accessClosed(u, today) && (!RULES.pilot.value.on || inPilot(u)),
+      };
+    });
   }
 }
 

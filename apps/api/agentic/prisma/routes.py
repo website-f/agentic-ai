@@ -17,8 +17,9 @@ _ROUTE = re.compile(r"@(Get|Post)\(\s*(?:'([^']*)')?\s*\)")
 _GUARD = re.compile(r"@UseGuards\((\w+)\)")
 _DOC = re.compile(r"/\*\*(.*?)\*/\s*$", re.S)
 _METHOD = re.compile(r"^\s*(?:async\s+)?(\w+)\s*\(", re.M)
-# Signed system feeds (their own keys) and development sign-in: never through the office.
-_SKIP_GUARDS = {"FeedGuard", "DoorFeedGuard", "PlannerFeedGuard"}
+# Signed system feeds (their own keys), the office's own staff list and development sign-in:
+# never through the office.
+_SKIP_GUARDS = {"FeedGuard", "DoorFeedGuard", "PlannerFeedGuard", "OfficeSystemGuard"}
 _SKIP_PATHS = ("api/auth/dev-login", "api/auth/users")
 
 

@@ -1,12 +1,16 @@
-"""Calls to Prima Secure, signed for one person (P66).
+"""Calls to Prima Secure, signed for one person (P66, P67).
 
-The office holds no Prima password or token. Each call names the person by the Microsoft
-account they signed in to the office with (Membership.ms_tenant_id / ms_oid, verified by
-Microsoft at sign-in) and is signed with settings.prima_secret, which Prima checks
-(apps/prima/apps/api/src/office.ts). Prima then links that account to its own staff record
-exactly as it links a Microsoft sign-in, so its roles, record rules and row-level security
-decide what the person, or their AI, may see and do. The signature covers the time, the
-method, the path with its query, who, through what, and the exact body bytes.
+The office is Prima's sign-in. Each person in the office is linked to one Prima staff record
+(models.PrismaLink): automatically the first time they open Prima, when the Microsoft account
+they signed in to the office with (Membership.ms_oid, verified by Microsoft) is the one IT
+recorded on a Prima record; otherwise by the owner on the Prisma page (agentic/prisma/people).
+Nobody runs a script.
+
+The office holds no Prima password or token. Each call names the linked record and is signed
+with settings.prima_secret, which Prima checks (apps/prima/apps/api/src/office.ts) before
+applying its own sign-in rules, roles, record rules and row-level security to that record. The
+signature covers the time, the method, the path with its query, the record, through what
+(person, agent:<name>, or system for the staff list), and the exact body bytes.
 
 Tests swap in a fake Prima: `client.transport = httpx.MockTransport(handler)`.
 """
@@ -18,11 +22,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..i18n import Msg
-from ..models import Membership
+from ..models import Membership, PrismaLink
+from ..services import audit
 
 transport: httpx.AsyncBaseTransport | None = None
 TIMEOUT = httpx.Timeout(30.0, connect=5.0)
@@ -30,8 +37,9 @@ TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 # Prima's own paths only, in a plain alphabet so the path Prima sees is the one signed.
 _PATH = re.compile(r"^api/[A-Za-z0-9_\-./~]{0,300}$")
 _QUERY = re.compile(r"^[A-Za-z0-9_\-.~%=&+:,]{0,1000}$")
-# Never through the office: the signed system feeds (their own keys), development sign-in.
-_CLOSED = ("api/integrations/", "api/auth/dev-login", "api/auth/users")
+# Never through the office: the signed system feeds (their own keys), development sign-in,
+# and the office's own staff list (a system call, staff() below).
+_CLOSED = ("api/integrations/", "api/auth/dev-login", "api/auth/users", "api/office/")
 # The AI's Prima tools (agents/prisma_tools.py): offered only when enabled() for the workspace.
 TOOL_NAMES = frozenset({"prisma_find", "prisma_read", "prisma_record"})
 PROMPT_NOTE = (
@@ -88,18 +96,93 @@ def clean_path(path: str, query: str = "") -> str:
     return f"/{p}" + (f"?{query}" if query else "")
 
 
-async def identity(db: AsyncSession, workspace_id: str, user_id: str) -> tuple[str, str]:
-    """(tenant, object ID) of the Microsoft account this person signed in with."""
-    m = await db.get(Membership, (workspace_id, user_id))
-    if m is None or not m.ms_oid or not m.ms_tenant_id:
-        raise PrimaError(
-            403,
-            Msg(
-                "Prima knows people by their Microsoft work account. Sign out, then use Sign in "
-                "with Microsoft once, and open Prima again."
-            ),
+@dataclass(frozen=True)
+class StaffRecord:
+    id: str
+    name: str
+    title: str
+    role: str
+    entra_oid: str | None
+    can_sign_in: bool
+
+
+def _not_linked() -> PrimaError:
+    return PrimaError(
+        403,
+        Msg(
+            "You are not linked to your Prima staff record yet. The office owner links people "
+            "on the Prisma page."
+        ),
+    )
+
+
+async def staff() -> list[StaffRecord]:
+    """Prima's staff records, for linking (the office's own signed call, no person)."""
+    ans = await _send("GET", "/api/office/staff", "", "system", b"", "")
+    if ans.status != 200:
+        raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
+    rows = ans.json()
+    return [
+        StaffRecord(
+            id=str(r["id"]),
+            name=str(r.get("name") or ""),
+            title=str(r.get("title") or ""),
+            role=str(r.get("role") or ""),
+            entra_oid=(str(r["entraOid"]).lower() if r.get("entraOid") else None),
+            can_sign_in=bool(r.get("canSignIn")),
         )
-    return m.ms_tenant_id.lower(), m.ms_oid.lower()
+        for r in (rows if isinstance(rows, list) else [])
+        if isinstance(r, dict) and r.get("id")
+    ]
+
+
+async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrismaLink:
+    """This person's Prima record. Made here, once, when their verified Microsoft account is
+    the one IT recorded in Prima and that record is not someone else's in this office."""
+    link = await db.get(PrismaLink, (workspace_id, user_id))
+    if link is not None:
+        return link
+    m = await db.get(Membership, (workspace_id, user_id))
+    oid = (m.ms_oid or "").lower() if m is not None else ""
+    if not oid:
+        raise _not_linked()
+    record = next((r for r in await staff() if r.entra_oid == oid), None)
+    if record is None:
+        raise _not_linked()
+    taken = await db.scalar(
+        select(PrismaLink).where(
+            PrismaLink.workspace_id == workspace_id, PrismaLink.prima_user_id == record.id
+        )
+    )
+    if taken is not None:
+        raise _not_linked()
+    link = PrismaLink(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        prima_user_id=record.id,
+        prima_name=record.name[:200],
+        how="microsoft",
+        linked_by="microsoft",
+    )
+    db.add(link)
+    try:
+        await db.commit()
+    except IntegrityError:  # opened twice at once: the other request linked it
+        await db.rollback()
+        link = await db.get(PrismaLink, (workspace_id, user_id))
+        if link is None:
+            raise _not_linked() from None
+        return link
+    await audit.record(
+        db,
+        workspace_id,
+        "system:prisma",
+        "prisma.link",
+        target=user_id,
+        note=f"Linked to Prima record {record.id} by their Microsoft account",
+    )
+    await db.commit()
+    return link
 
 
 def via_agent(name: str) -> str:
@@ -108,9 +191,40 @@ def via_agent(name: str) -> str:
     return f"agent:{plain[:80]}"
 
 
-def sign(ts: str, method: str, url: str, oid: str, tid: str, via: str, body: bytes) -> str:
-    head = f"{ts}\n{method.upper()}\n{url}\n{oid}\n{tid}\n{via}\n".encode()
+def sign(ts: str, method: str, url: str, user: str, via: str, body: bytes) -> str:
+    head = f"{ts}\n{method.upper()}\n{url}\n{user}\n{via}\n".encode()
     return hmac.new(settings.prima_secret.encode(), head + body, hashlib.sha256).hexdigest()
+
+
+async def _send(method: str, url: str, user: str, via: str, body: bytes, client_ip: str) -> Answer:
+    ts = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    headers = {
+        "x-office-ts": ts,
+        "x-office-user": user,
+        "x-office-via": via,
+        "x-office-signature": sign(ts, method, url, user, via, body),
+        "accept": "application/json",
+    }
+    if body:
+        headers["content-type"] = "application/json"
+    if client_ip:
+        # Prima limits calls per address (behind one trusted proxy): the person's, not ours.
+        headers["x-forwarded-for"] = client_ip
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT, transport=transport) as http:
+            r = await http.request(
+                method, settings.prima_url.rstrip("/") + url, headers=headers, content=body or None
+            )
+    except httpx.HTTPError as e:
+        raise PrimaError(
+            503, Msg("Prima is not answering right now. Try again in a minute.")
+        ) from e
+    return Answer(
+        status=r.status_code,
+        content_type=r.headers.get("content-type", "application/json"),
+        body=r.content,
+        disposition=r.headers.get("content-disposition", ""),
+    )
 
 
 async def call(
@@ -134,33 +248,5 @@ async def call(
     if len(body) > MAX_BODY:
         raise PrimaError(413, Msg("That is too large for Prima (3 MB at most)."))
     url = clean_path(path, query)
-    tid, oid = await identity(db, workspace_id, user_id)
-    ts = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    headers = {
-        "x-office-ts": ts,
-        "x-office-oid": oid,
-        "x-office-tid": tid,
-        "x-office-via": via,
-        "x-office-signature": sign(ts, method, url, oid, tid, via, body),
-        "accept": "application/json",
-    }
-    if body:
-        headers["content-type"] = "application/json"
-    if client_ip:
-        # Prima limits calls per address (behind one trusted proxy): the person's, not ours.
-        headers["x-forwarded-for"] = client_ip
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, transport=transport) as http:
-            r = await http.request(
-                method, settings.prima_url.rstrip("/") + url, headers=headers, content=body or None
-            )
-    except httpx.HTTPError as e:
-        raise PrimaError(
-            503, Msg("Prima is not answering right now. Try again in a minute.")
-        ) from e
-    return Answer(
-        status=r.status_code,
-        content_type=r.headers.get("content-type", "application/json"),
-        body=r.content,
-        disposition=r.headers.get("content-disposition", ""),
-    )
+    link = await link_for(db, workspace_id, user_id)
+    return await _send(method, url, link.prima_user_id, via, body, client_ip)

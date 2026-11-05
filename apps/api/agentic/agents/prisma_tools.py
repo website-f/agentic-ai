@@ -133,9 +133,13 @@ PRISMA_TOOLS = [
     Tool(
         "prisma_read",
         "Read from Prima",
-        "Read from Prima Secure as the person you are helping, with their access only: e.g. "
-        "path 'api/me/home', 'api/leave', 'api/companies/co-1/attendance'. Use prisma_find for "
-        "the path.",
+        "Read from Prima Secure as the person you are helping, with their access only. Start "
+        "with 'api/me' (who they are in Prima and the companies they see: the company ids for "
+        "':id'), then e.g. 'api/home', 'api/companies/<id>/attendance' (query date), "
+        "'api/companies/<id>/attendance/alerts', 'api/leave' (query companyId, status), "
+        "'api/claims', 'api/staff-pay' and 'api/staff-pay/<run id>', 'api/pay-changes', "
+        "'api/companies/<id>/people', 'api/reports'. Use prisma_find for anything else. For a "
+        "summary or report, read what it needs, then write it (a document, if asked).",
         _p(
             {
                 "path": {"type": "string", "description": "a GET path from prisma_find"},

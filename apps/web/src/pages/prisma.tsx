@@ -1,21 +1,23 @@
-/** P65/P66: Prisma, Prima Secure (apps/prima) inside the office. Prima opens with the office's
- * own sign-in: the office signs each call for the person (apps/api/agentic/prisma), and Prima
- * knows them by the Microsoft work account they signed in with. On a computer it fills this
- * page beside the office menu; on a phone (Prima has its own bottom tabs) it opens full screen.
- * Until the person is linked, the page says what is missing. Its SOPs, workflows, rules and
- * forms are in the Library, and the AI works in Prima for whoever asks it, as them. */
+/** P65-P67: Prisma, Prima Secure (apps/prima) inside the office. Prima opens with the office's
+ * own sign-in: the office signs each call for the person (apps/api/agentic/prisma) and names
+ * their Prima staff record. People are linked to their record automatically when they signed in
+ * with Microsoft and IT recorded that account in Prima; the owner links everyone else here, with
+ * the likely record already picked, in one click. On a computer Prima fills this page beside the
+ * office menu; on a phone (Prima has its own bottom tabs) it opens full screen. Its SOPs and
+ * workflows are in the Library, and the AI works in Prima for whoever asks it, as them. */
 import {
-  ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, ShieldCheckIcon, WarningCircleIcon,
+  ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, ShieldCheckIcon, UsersThreeIcon, WarningCircleIcon,
 } from "@phosphor-icons/react";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 
 const APP = "/prisma/";
@@ -37,19 +39,30 @@ const statusQuery = {
 
 export function PrismaPage() {
   const status = useQuery(statusQuery);
-  if (status.data?.linked) return <PrismaFrame />;
+  const search = useSearch({ strict: false }) as { people?: number };
+  if (status.data?.linked && !search.people) return <PrismaFrame />;
   return <PrismaSetup status={status.data} loading={status.isLoading} />;
 }
 
-/** Prima itself, filling the page under the office header (computers); a button on phones. */
+/** Prima itself, filling the page under the office header (computers); a button on phones.
+ * Owners get a slim bar above it to link people. */
 function PrismaFrame() {
   const t = useT();
+  const { data: me } = useSuspenseQuery(meQuery);
+  const owner = me.permissions.includes("org.manage");
   return (
     <>
+      {owner ? (
+        <div className="hidden h-10 items-center justify-end gap-2 border-b border-border bg-surface px-3 md:flex">
+          <Button asChild size="sm" variant="ghost"><Link to="/prisma" search={{ people: 1 }}><UsersThreeIcon size={15} /> {t("People in Prima")}</Link></Button>
+        </div>
+      ) : null}
       <iframe
         src={APP}
         title={t("Prima Secure")}
-        className="hidden h-[calc(100dvh-3.5rem)] w-full border-0 bg-bg md:block"
+        className={owner
+          ? "hidden h-[calc(100dvh-6rem)] w-full border-0 bg-bg md:block"
+          : "hidden h-[calc(100dvh-3.5rem)] w-full border-0 bg-bg md:block"}
         allow="camera; geolocation"
       />
       <div className="md:hidden">
@@ -88,11 +101,10 @@ function PrismaSetup({ status: s, loading }: { status?: PrimaStatus; loading: bo
         )}
       </Section>
 
+      {owner && s?.enabled ? <PeopleSection /> : null}
+
       <Section title={t("How you get in")}>
-        <ol className="grid list-decimal gap-1.5 pl-5 text-[13px]">
-          <li>{t("Sign in to the office with Microsoft (Sign in with Microsoft on the sign-in page), once. Prima knows people by their Microsoft work account.")}</li>
-          <li>{t("IT links your Microsoft account to your Prima staff record. Then this page opens Prima, with no second sign-in.")}</li>
-        </ol>
+        <p className="text-[13px]">{t("Prima opens with your office sign-in once you are linked to your Prima staff record. If you sign in with Microsoft and IT recorded your account in Prima, that happens by itself; otherwise the office owner links you on this page.")}</p>
         <a href={PREVIEW} className="mt-3 grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface p-4 hover:border-accent/40">
           <span className="flex items-center gap-2 text-[14.5px] font-semibold"><EyeIcon size={18} className="text-accent" /> {t("Preview with sample data")}</span>
           <span className="text-[12.5px] text-muted">{t("The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.")}</span>
@@ -109,12 +121,83 @@ function PrismaSetup({ status: s, loading }: { status?: PrimaStatus; loading: bo
         </div>
       </Section>
 
-      {owner && s?.enabled ? (
-        <Section title={t("Set-up for IT")}>
-          <p className="text-[13px]">{t("Link each person's Microsoft account to their Prima user, one line per person on the server:")}</p>
-          <code className="mt-2 block overflow-x-auto rounded bg-surface-2 px-2 py-1.5 font-mono text-[12px]">./deploy/scripts/prima-link-user.sh &lt;prima-user-id&gt; &lt;entra-object-id&gt; "&lt;your name&gt;"</code>
-        </Section>
-      ) : null}
     </Page>
+  );
+}
+
+interface StaffRow { id: string; name: string; title: string; role: string; can_sign_in: boolean; linked_to: string | null }
+interface PersonRow {
+  user_id: string; name: string; email: string; role: string; microsoft: boolean;
+  link: { prima_user_id: string; prima_name: string; how: "microsoft" | "owner" } | null;
+  suggestion: string | null;
+}
+interface PeopleData { staff: StaffRow[]; people: PersonRow[] }
+
+const NONE = "none";
+
+/** The owner links the office's people to Prima's staff records: the likely one is picked,
+ * one button links them all, and any row can be changed or cleared. */
+function PeopleSection() {
+  const t = useT();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const q = useQuery({ queryKey: ["prisma", "people"], queryFn: () => api<PeopleData>("/api/prisma/people") });
+  const done = () => {
+    void qc.invalidateQueries({ queryKey: ["prisma"] });
+  };
+  const linkAll = useMutation({
+    mutationFn: () => api<{ linked: number }>("/api/prisma/people/link-suggested", "POST", {}),
+    onSuccess: done,
+  });
+  const linkOne = useMutation({
+    mutationFn: (v: { user_id: string; prima_user_id: string | null }) => api("/api/prisma/people/link", "POST", v),
+    onSuccess: done,
+  });
+  const d = q.data;
+  const names = new Map((d?.staff ?? []).map((r) => [r.id, r]));
+  const waiting = (d?.people ?? []).filter((p) => !p.link && p.suggestion).length;
+  const error = q.error ?? linkAll.error ?? linkOne.error;
+  return (
+    <Section title={t("People in Prima")}
+      actions={<Button size="sm" disabled={!waiting || linkAll.isPending} onClick={() => linkAll.mutate()}><LinkIcon size={15} /> {t("Link all suggested ({n})", { n: waiting })}</Button>}>
+      <p className="mb-3 text-[13px] text-muted">{t("Who in the office is which Prima staff record. It decides whose pay, leave and HR records each person (and their AI) can see, so check the picks before linking. People who sign in with Microsoft are linked by themselves when IT recorded their account in Prima.")}</p>
+      {error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(error)}</p> : null}
+      {q.isLoading ? <Skeleton className="h-24" /> : (
+        <div className="grid gap-2">
+          {(d?.people ?? []).map((p) => {
+            const value = p.link?.prima_user_id ?? p.suggestion ?? NONE;
+            const options = [
+              { value: NONE, label: t("Not linked") },
+              ...(d?.staff ?? [])
+                .filter((r) => !r.linked_to || r.linked_to === p.user_id)
+                .map((r) => ({ value: r.id, label: r.name, hint: [r.title, r.can_sign_in ? "" : t("cannot sign in yet")].filter(Boolean).join(" · ") })),
+            ];
+            return (
+              <div key={p.user_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-medium">{p.name}</div>
+                  <div className="truncate text-[12px] text-muted">{p.email}</div>
+                </div>
+                {p.link
+                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : t("Linked")}</Pill>
+                  : p.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : null}
+                <Select size="sm" className="w-64" label={t("Prima record for {name}", { name: p.name })} value={value} options={options}
+                  disabled={linkOne.isPending}
+                  onValueChange={(v) => linkOne.mutate({ user_id: p.user_id, prima_user_id: v === NONE ? null : v })} />
+                {!p.link && p.suggestion ? (
+                  <Button size="sm" variant="secondary" disabled={linkOne.isPending}
+                    onClick={() => linkOne.mutate({ user_id: p.user_id, prima_user_id: p.suggestion })}>
+                    {t("Link {name}", { name: names.get(p.suggestion)?.name ?? "" })}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="mt-3">
+        <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prisma", search: {} })}>{t("Back to Prima")}</Button>
+      </div>
+    </Section>
   );
 }
