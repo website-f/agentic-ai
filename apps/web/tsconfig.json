@@ -32,7 +32,9 @@
   },
   "include": [
     "src",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vite.widget.config.ts",
+    "widget-i18n-plugin.ts"
   ],
   "exclude": [
     "src/sw.ts"

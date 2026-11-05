@@ -140,4 +140,11 @@ export const FEEDBACK: Record<string, string> = {
   "Add a rule": "Tambah peraturan",
   "Save house rules": "Simpan peraturan syarikat",
   "Tip: open Rules & guide from the feedback button on any page to see what people read there.": "Petua: buka Peraturan & panduan dari butang maklum balas di mana-mana halaman untuk lihat apa yang orang baca di situ.",
+
+  // P75: the same button inside Prima (feedback-widget/)
+  "What this Prima screen is for, what you may do here, and the rules that apply.": "Untuk apa skrin Prima ini, apa yang boleh anda buat di sini, dan peraturan yang terpakai.",
+  "How to use it": "Cara menggunakannya",
+  "A screen of Prima Secure, the group's operations app.": "Satu skrin Prima Secure, aplikasi operasi kumpulan.",
+  "In the office: {role}": "Di pejabat: {role}",
+  "Prima's rules for this screen": "Peraturan Prima untuk skrin ini",
 };

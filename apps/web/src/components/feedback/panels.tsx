@@ -1,16 +1,12 @@
 /** P73: the panels the floating button opens besides the screenshot: write feedback without a
  * screenshot, the rules and guide for the page you are on, and what you sent with the answers. */
 import {
-  ArrowSquareOutIcon,
-  BookOpenTextIcon,
   CameraIcon,
   ChatTeardropTextIcon,
   CheckCircleIcon,
   ClockCounterClockwiseIcon,
   EyeIcon,
   GavelIcon,
-  IdentificationBadgeIcon,
-  LightbulbIcon,
   LockKeyIcon,
   PaperPlaneTiltIcon,
   ScalesIcon,
@@ -21,22 +17,16 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
-import { guidePageFor } from "@/guide/lookup";
 import { msg, useT } from "@/i18n";
 import { CATEGORIES, categoryOf, myFeedbackQuery, screenshotUrl, statusOf, type FeedbackCategory, type HouseRule } from "@/lib/feedback";
-import { tipFor } from "@/lib/page-tips";
-import { staffOnly } from "@/lib/twin";
-import { ROLE_INFO, type Me } from "@/lib/types";
 import { useIsPhone } from "@/lib/use-media";
 import { cn, timeAgo } from "@/lib/utils";
-import { navItemFor } from "@/nav";
 
 /** A panel docked on the right (a tall sheet on phones) over a dimmed page. */
 export function Panel({ title, sub, icon: I, onClose, children, footer }: { title: string; sub?: string; icon: Icon; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
@@ -153,7 +143,7 @@ export function GeneralForm({
 // ------------------------------------------------------------------ rules and guide
 
 // How the system is governed: the same for everyone, wherever they are.
-const SYSTEM_RULES: { icon: Icon; title: string; body: string }[] = [
+export const SYSTEM_RULES: { icon: Icon; title: string; body: string }[] = [
   { icon: SealCheckIcon, title: msg("The AI asks before anything important"), body: msg("Agents stop and ask a person before payments, sending outside the company, deleting or anything risky. You decide in Approvals, or from a phone notification.") },
   { icon: UsersThreeIcon, title: msg("Everyone sees only their own area"), body: msg("Staff see their own work and their AI; a supervisor or head of department their department; a branch manager their company; owners and admins everything.") },
   { icon: ClockCounterClockwiseIcon, title: msg("Every change is recorded"), body: msg("What people and agents change is written to a tamper-evident activity log that cannot be edited afterwards.") },
@@ -163,7 +153,7 @@ const SYSTEM_RULES: { icon: Icon; title: string; body: string }[] = [
   { icon: EyeIcon, title: msg("Your feedback goes to the developer"), body: msg("What you send here, screenshot included, is read by the system's developer. Leave out anything private before you send.") },
 ];
 
-function Block({ title, icon: I, children }: { title: string; icon: Icon; children: ReactNode }) {
+export function Block({ title, icon: I, children }: { title: string; icon: Icon; children: ReactNode }) {
   return (
     <section className="grid gap-2.5">
       <h3 className="flex items-center gap-2 text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">
@@ -174,89 +164,66 @@ function Block({ title, icon: I, children }: { title: string; icon: Icon; childr
   );
 }
 
-export function RulesPanel({ me, path, rules, onClose }: { me: Me; path: string; rules: HouseRule[]; onClose: () => void }) {
+/** Does a house rule tied to a page belong to this one? "/tasks" covers "/tasks/abc", and
+ * "/prima" covers every Prima screen ("/prima/#staffpay"). `also` is another name the page goes
+ * by (the menu entry it sits under). */
+export function ruleOnPage(rule: HouseRule, path: string, also?: string): boolean {
+  if (!rule.page) return false;
+  const p = rule.page.replace(/\/+$/, "") || "/";
+  if (path === rule.page || path === p || (also && also === rule.page)) return true;
+  return p !== "/" && (path.startsWith(`${p}/`) || path.startsWith(`${p}#`));
+}
+
+/** The developer's rules tied to this page, under "This page". */
+export function PageRuleCards({ rules }: { rules: HouseRule[] }) {
   const t = useT();
-  const item = navItemFor(path);
-  const tip = tipFor(item?.to ?? path, staffOnly(me.permissions) ? "staff" : "manager");
-  const guide = guidePageFor(path);
-  const pageRules = rules.filter((r) => r.page && (path === r.page || path.startsWith(`${r.page}/`) || (item && item.to === r.page)));
-  const houseRules = rules.filter((r) => !r.page);
-  const role = ROLE_INFO[me.role];
   return (
-    <Panel title={t("Rules & guide")} sub={t("What this page is for, what you may do here, and how the system is run.")} icon={GavelIcon} onClose={onClose}>
-      <div className="grid gap-6">
-        <Block title={t("This page")} icon={BookOpenTextIcon}>
-          <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/50 px-4 py-3">
-            <p className="text-[14px] font-semibold">{item ? t(item.label) : document.title}</p>
-            {item ? <p className="mt-1 text-[13px] text-fg/85">{t(item.blurb)}</p> : null}
-            {tip ? (
-              <div className="mt-3 grid gap-1.5">
-                <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-accent">
-                  <LightbulbIcon size={14} weight="fill" /> {t(tip.what)}
-                </p>
-                <ol className="grid gap-1 text-[12.5px] text-fg/85">
-                  {tip.steps.map((s, i) => (
-                    <li key={s} className="flex gap-2">
-                      <span className="mt-px grid size-[17px] shrink-0 place-items-center rounded-full bg-surface text-[10.5px] font-semibold text-accent ring-1 ring-accent/25">{i + 1}</span>
-                      <span>{t(s)}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-            {guide ? (
-              <Link to="/guide/$page" params={{ page: guide.id }} onClick={onClose} className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-accent hover:underline">
-                {t("Open the guide for this page")} <ArrowSquareOutIcon size={13} />
-              </Link>
-            ) : null}
-          </div>
-          {pageRules.map((r) => (
-            <div key={r.id} className="rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/40 px-4 py-3">
-              <p className="text-[13px] font-semibold">{r.title || t("Rule for this page")}</p>
-              {r.body ? <p className="mt-1 text-[12.5px] whitespace-pre-line text-fg/85">{r.body}</p> : null}
+    <>
+      {rules.map((r) => (
+        <div key={r.id} className="rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/40 px-4 py-3">
+          <p className="text-[13px] font-semibold">{r.title || t("Rule for this page")}</p>
+          {r.body ? <p className="mt-1 text-[12.5px] whitespace-pre-line text-fg/85">{r.body}</p> : null}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** The developer's rules for every page. */
+export function HouseRulesBlock({ rules }: { rules: HouseRule[] }) {
+  const t = useT();
+  if (!rules.length) return null;
+  return (
+    <Block title={t("House rules")} icon={GavelIcon}>
+      <ul className="grid gap-2">
+        {rules.map((r) => (
+          <li key={r.id} className="rounded-[var(--radius-md)] border border-border px-4 py-3">
+            <p className="text-[13px] font-semibold">{r.title}</p>
+            {r.body ? <p className="mt-1 text-[12.5px] whitespace-pre-line text-fg/85">{r.body}</p> : null}
+          </li>
+        ))}
+      </ul>
+    </Block>
+  );
+}
+
+/** How the system is run: the governance cards at the foot of Rules & guide. */
+export function SystemRulesBlock({ items = SYSTEM_RULES }: { items?: typeof SYSTEM_RULES }) {
+  const t = useT();
+  return (
+    <Block title={t("How the system is run")} icon={ScalesIcon}>
+      <ul className="grid gap-2">
+        {items.map((r) => (
+          <li key={r.title} className="flex gap-3 rounded-[var(--radius-md)] border border-border px-3.5 py-3">
+            <r.icon size={18} weight="duotone" className="mt-0.5 shrink-0 text-accent" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold">{t(r.title)}</p>
+              <p className="mt-0.5 text-[12.5px] text-fg/80">{t(r.body)}</p>
             </div>
-          ))}
-        </Block>
-
-        <Block title={t("Your role")} icon={IdentificationBadgeIcon}>
-          <div className="rounded-[var(--radius-md)] border border-border px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill tone="accent">{role ? t(role.label) : me.role}</Pill>
-              {me.user.is_developer ? <Pill tone="info">{t("Developer")}</Pill> : null}
-              {me.scope?.label ? <span className="text-[12.5px] text-muted">{me.scope.label}</span> : null}
-            </div>
-            {role ? <p className="mt-2 text-[12.5px] text-fg/85">{t(role.blurb)}</p> : null}
-          </div>
-        </Block>
-
-        {houseRules.length ? (
-          <Block title={t("House rules")} icon={GavelIcon}>
-            <ul className="grid gap-2">
-              {houseRules.map((r) => (
-                <li key={r.id} className="rounded-[var(--radius-md)] border border-border px-4 py-3">
-                  <p className="text-[13px] font-semibold">{r.title}</p>
-                  {r.body ? <p className="mt-1 text-[12.5px] whitespace-pre-line text-fg/85">{r.body}</p> : null}
-                </li>
-              ))}
-            </ul>
-          </Block>
-        ) : null}
-
-        <Block title={t("How the system is run")} icon={ScalesIcon}>
-          <ul className="grid gap-2">
-            {SYSTEM_RULES.map((r) => (
-              <li key={r.title} className="flex gap-3 rounded-[var(--radius-md)] border border-border px-3.5 py-3">
-                <r.icon size={18} weight="duotone" className="mt-0.5 shrink-0 text-accent" />
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold">{t(r.title)}</p>
-                  <p className="mt-0.5 text-[12.5px] text-fg/80">{t(r.body)}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      </div>
-    </Panel>
+          </li>
+        ))}
+      </ul>
+    </Block>
   );
 }
 

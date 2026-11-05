@@ -282,6 +282,8 @@ function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => v
       ]
     : [];
   const pageIsApp = !!item?.page_path && item.page_path.startsWith("/") && !item.page_path.startsWith("//");
+  // P75: Prima (/prima/#staffpay) is its own app beside the office: a plain link, a full load.
+  const pageIsPrima = pageIsApp && !!item && item.page_path.startsWith("/prima/");
 
   return (
     <>
@@ -293,7 +295,13 @@ function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => v
         size="lg"
         actions={item ? (
           <>
-            {pageIsApp ? (
+            {pageIsPrima ? (
+              <Button variant="outline" size="sm" asChild>
+                <a href={item.page_path} target="_blank" rel="noreferrer">
+                  <ArrowSquareOutIcon size={15} /> {t("Open that page")}
+                </a>
+              </Button>
+            ) : pageIsApp ? (
               <Button variant="outline" size="sm" asChild>
                 <Link to={item.page_path as "/"} onClick={onClose}>
                   <ArrowSquareOutIcon size={15} /> {t("Open that page")}

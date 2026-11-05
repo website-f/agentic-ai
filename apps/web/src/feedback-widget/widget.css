@@ -1,0 +1,64 @@
+/* P75: the feedback widget's styles. They live inside its shadow root, so the office's look stays
+   on the widget and never reaches the page it is on (Prima), nor the page's on the widget.
+   Only the classes the feedback screens use are generated (source(none) + the folders below). */
+@import "tailwindcss" source(none);
+@import "../theme.css";
+
+@source "../components/feedback";
+@source "../components/ui/button.tsx";
+@source "../components/ui/pill.tsx";
+@source "../components/ui/skeleton.tsx";
+@source "./";
+
+/* Nothing of the host page's text styles leaks in through the shadow boundary. */
+:host {
+  all: initial;
+}
+
+.fb-root {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.fb-root :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.fb-root ::selection {
+  background: var(--accent-soft);
+}
+.fb-root .tabular {
+  font-variant-numeric: tabular-nums;
+}
+.fb-root * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--border) 85%, var(--text)) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-root *,
+  .fb-root *::before,
+  .fb-root *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (pointer: coarse) {
+  /* iOS Safari zooms the whole page into any field under 16px when it gets focus. */
+  .fb-root input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  .fb-root textarea {
+    font-size: 16px;
+  }
+  .fb-root button {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}

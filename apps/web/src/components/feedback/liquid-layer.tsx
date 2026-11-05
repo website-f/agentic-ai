@@ -14,6 +14,14 @@ import { createPortal } from "react-dom";
 // Events a page's open dialog listens for on the document.
 const KEEP = ["pointerdown", "mousedown", "touchstart", "focusin", "focusout", "wheel", "touchmove"] as const;
 let layer: HTMLDivElement | null = null;
+let parent: Element | null = null;
+
+/** Where the overlays go: <body> in the office; the widget's own shadow root elsewhere (Prima),
+ * so they wear the office's styles and the host page's styles stay out. */
+export function setFeedbackLayerParent(el: Element | null): void {
+  parent = el;
+  layer = null;
+}
 
 function feedbackLayer(): HTMLDivElement {
   if (layer && layer.isConnected) return layer;
@@ -21,7 +29,7 @@ function feedbackLayer(): HTMLDivElement {
   layer.setAttribute("data-feedback-ignore", "");
   layer.style.pointerEvents = "auto";
   for (const type of KEEP) layer.addEventListener(type, (e) => e.stopPropagation(), { passive: true });
-  document.body.appendChild(layer);
+  (parent ?? document.body).appendChild(layer);
   return layer;
 }
 
