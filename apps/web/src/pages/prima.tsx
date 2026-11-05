@@ -2,14 +2,15 @@
  * own sign-in: the office signs each call for the person (apps/api/agentic/prima) and names
  * their Prima staff record. People are linked to their record automatically when they signed in
  * with Microsoft and IT recorded that account in Prima; the owner links everyone else here, with
- * the likely record already picked, in one click. On a computer Prima fills this page beside the
- * office menu; on a phone (Prima has its own bottom tabs) it opens full screen. Its SOPs and
+ * the likely record already picked, in one click. Prima opens as its own full page (P71), a
+ * module of the office with "Back to the office" in its menu. Its SOPs and
  * workflows are in the Library, and the AI works in Prima for whoever asks it, as them. */
 import {
   ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon, UsersThreeIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { Page, PageHeader, Section } from "@/components/page";
@@ -53,29 +54,23 @@ function PrimaFrame() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const owner = me.permissions.includes("org.manage");
+  // P71: Prima opens as its own full page, a module of the office (its menu has "Back to the
+  // office"), not framed inside this one: one menu at a time, on every screen size. Owners
+  // stop here once a day only if they come to link people (?people=1 shows that instead).
+  useEffect(() => {
+    window.location.assign(APP);
+  }, []);
   return (
-    <>
-      {owner ? (
-        <div className="hidden h-10 items-center justify-end gap-2 border-b border-border bg-surface px-3 md:flex">
-          <Button asChild size="sm" variant="ghost"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={15} /> {t("People in Prima")}</Link></Button>
-        </div>
-      ) : null}
-      <iframe
-        src={APP}
-        title={t("Prima Secure")}
-        className={owner
-          ? "hidden h-[calc(100dvh-6rem)] w-full border-0 bg-bg md:block"
-          : "hidden h-[calc(100dvh-3.5rem)] w-full border-0 bg-bg md:block"}
-        allow="camera; geolocation"
-      />
-      <div className="md:hidden">
-        <Page>
-          <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
-            description={t("Prima Secure, the group's operations app: people and sites, rosters, attendance, cases, HR, claims, IT and more.")} />
-          <Button asChild size="lg"><a href={APP}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
-        </Page>
+    <Page>
+      <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
+        description={t("Opening Prima…")} />
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="lg"><a href={APP}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
+        {owner ? (
+          <Button asChild size="lg" variant="secondary"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={16} /> {t("People in Prima")}</Link></Button>
+        ) : null}
       </div>
-    </>
+    </Page>
   );
 }
 

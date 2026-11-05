@@ -7,6 +7,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Company, User } from '@prima/core';
 import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, jaOwns, seesArmsDetail } from '@prima/core';
 import { ApiError, api, type Me } from './api';
+import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
 import { Arisha } from './Arisha';
@@ -154,12 +156,15 @@ export const useApp = () => useContext(Ctx);
  * P68 (Agentic Office): the menu in sections, so a long menu reads at a glance. Each screen keeps its own rank inside
  * its section; a short menu (8 or fewer) stays one plain list.
  */
+/** P71: opened inside the Agentic Office (its sign-in, its menu link back). */
+const inOffice = (api as { office?: boolean }).office === true;
+
 const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
-  { title: 'Today', views: ['home', 'overview', 'company', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
+  { title: 'Today', views: ['home', 'overview', 'company', 'office', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
   { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'fleet', 'arms', 'cms'] },
-  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'fwm', 'socso', 'hostels', 'requests', 'memos', 'pdpa'] },
-  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'branches', 'assets', 'insurance', 'ja'] },
-  { title: 'Compliance and governance', views: ['compliance', 'audit', 'grc', 'act', 'governance', 'corporate', 'continuity'] },
+  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'fwm', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
+  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja'] },
+  { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'grc', 'act', 'governance', 'corporate', 'continuity'] },
   { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
 ];
 
@@ -960,17 +965,24 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           <div className="brand">
             <div className="brand-mark">P</div>
             <div>
-              <div className="brand-name">Prima Secure</div>
-              <div className="brand-sub">PWVSB Security Group</div>
+              <div className="brand-name">Prima</div>
+              <div className="brand-sub">{inOffice ? 'Agentic Office' : 'PWVSB Security Group'}</div>
             </div>
           </div>
+          {inOffice && (
+            // P71: Prima is a module of the Agentic Office; one step back to the rest of it.
+            <a className="rail-back" href="/" target="_top">
+              <ArrowLeftIcon size={16} aria-hidden="true" />
+              Back to the office
+            </a>
+          )}
           <nav className="nav" aria-label="Main">
             {navSections(nav).map((sec) => (
               <div className="nav-section" key={sec.title ?? 'all'}>
                 {sec.title && <div className="nav-heading">{sec.title}</div>}
                 {sec.items.map((n) => (
                   <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
-                    <Icon name={n.icon} />
+                    <ViewIcon view={n.view} fallback={n.icon} />
                     {n.label}
                   </button>
                 ))}
@@ -1044,7 +1056,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         <nav className="tabs" aria-label="Main">
           {tabNav.map((n) => (
             <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
-              <Icon name={n.icon} />
+              <ViewIcon view={n.view} fallback={n.icon} />
               {n.label.split(' ')[0]}
             </button>
           ))}
@@ -1073,7 +1085,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                         go({ view: n.view });
                       }}
                     >
-                      <Icon name={n.icon} />
+                      <ViewIcon view={n.view} fallback={n.icon} />
                       {n.label}
                     </button>
                   ))}

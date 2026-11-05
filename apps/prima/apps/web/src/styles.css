@@ -1570,3 +1570,648 @@ button.list-item:last-child {
 .panel:has(> table) {
   overflow-x: auto;
 }
+
+/* =====================================================================================================================
+   P71: Prima's design system, the Agentic Office's own (apps/web/src/styles.css): every control drawn by us, not the
+   browser, in both themes. Later rules here win over the older ones above; screens keep their class names.
+   ===================================================================================================================== */
+:root {
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --ctl-h: 40px;
+  --ctl-h-sm: 32px;
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 256 256'%3E%3Cpath fill='none' stroke='%235a6762' stroke-linecap='round' stroke-linejoin='round' stroke-width='20' d='M208 96l-80 80-80-80'/%3E%3C/svg%3E");
+  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E");
+  --tick-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%2306130d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E");
+  --cal-filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 256 256'%3E%3Cpath fill='none' stroke='%2393a39c' stroke-linecap='round' stroke-linejoin='round' stroke-width='20' d='M208 96l-80 80-80-80'/%3E%3C/svg%3E");
+    --tick: var(--tick-dark);
+    --cal-filter: invert(0.8);
+  }
+}
+:root[data-theme='dark'] {
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 256 256'%3E%3Cpath fill='none' stroke='%2393a39c' stroke-linecap='round' stroke-linejoin='round' stroke-width='20' d='M208 96l-80 80-80-80'/%3E%3C/svg%3E");
+  --tick: var(--tick-dark);
+  --cal-filter: invert(0.8);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* ---------- Text fields, selects, text areas: every one, with or without a class ---------- */
+.input,
+.select,
+.textarea,
+input:not([type]),
+input[type='text'],
+input[type='email'],
+input[type='number'],
+input[type='password'],
+input[type='search'],
+input[type='tel'],
+input[type='url'],
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'],
+input[type='month'],
+input[type='week'],
+select,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  min-height: var(--ctl-h);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  min-width: 0;
+  max-width: 100%;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 3%, transparent);
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+:is(.input, .select, .textarea, input, select, textarea):hover:not(:disabled):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']) {
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--line));
+}
+:is(.input, .select, .textarea, input, select, textarea):focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+:is(.input, .select, .textarea, input, select, textarea):focus-visible:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']) {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+:is(.input, .select, .textarea, input, select, textarea):disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+::placeholder {
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+  opacity: 1;
+}
+:is(input, textarea)[aria-invalid='true'],
+:is(input, textarea, select):user-invalid {
+  border-color: var(--crit);
+}
+select,
+.select {
+  padding-right: 36px;
+  background-image: var(--chev);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+select[multiple],
+select[size]:not([size='1']) {
+  padding-right: 12px;
+  background-image: none;
+  min-height: 120px;
+}
+select option,
+select optgroup {
+  background: var(--surface);
+  color: var(--ink);
+}
+textarea,
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+input[type='number'] {
+  font-variant-numeric: tabular-nums;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  opacity: 0.4;
+}
+input[type='search']::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+/* Date and time: our field, the browser's picker opened by its icon, recoloured for the dark theme. */
+input:is([type='date'], [type='time'], [type='datetime-local'], [type='month'], [type='week']) {
+  font-variant-numeric: tabular-nums;
+}
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  filter: var(--cal-filter);
+  border-radius: 4px;
+  padding: 2px;
+}
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background: var(--surface-2);
+}
+
+/* ---------- Checkboxes and radios ---------- */
+input[type='checkbox'],
+input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  display: inline-grid;
+  place-content: center;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 60%, var(--line));
+  background: var(--surface);
+  cursor: pointer;
+  vertical-align: -3px;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+input[type='checkbox'] {
+  border-radius: 5px;
+}
+input[type='radio'] {
+  border-radius: 50%;
+}
+input[type='checkbox']:checked {
+  background: var(--accent) var(--tick) center / 14px 14px no-repeat;
+  border-color: var(--accent);
+}
+input[type='radio']:checked {
+  border-color: var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 4.5px, var(--surface) 5px);
+}
+input[type='checkbox']:indeterminate {
+  background: var(--accent) linear-gradient(var(--on-primary), var(--on-primary)) center / 9px 2px no-repeat;
+  border-color: var(--accent);
+}
+input:is([type='checkbox'], [type='radio']):hover:not(:disabled) {
+  border-color: var(--accent);
+}
+input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* A switch: <input type="checkbox" role="switch">. */
+input[type='checkbox'][role='switch'] {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 0;
+  background: color-mix(in srgb, var(--muted) 35%, var(--line));
+  position: relative;
+}
+input[type='checkbox'][role='switch']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s;
+}
+input[type='checkbox'][role='switch']:checked {
+  background: var(--accent);
+}
+input[type='checkbox'][role='switch']:checked::after {
+  transform: translateX(16px);
+}
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+/* ---------- File pickers ---------- */
+input[type='file'] {
+  max-width: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+input[type='file']::file-selector-button {
+  margin-right: 10px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+input[type='file']::file-selector-button:hover {
+  background: var(--surface-2);
+}
+
+/* ---------- Fields: a label over its control, a hint under it ---------- */
+.field {
+  gap: 6px;
+  min-width: 0;
+}
+.field > .label,
+.field > span:first-child {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.field > .muted,
+.field > .small {
+  font-size: 0.78rem;
+}
+label.row,
+label.small,
+label.row.small {
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  min-height: var(--ctl-h);
+  padding: 8px 16px;
+  border-radius: var(--r-sm);
+  font-size: 0.875rem;
+  font-weight: 550;
+  gap: 8px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+  filter: none;
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--crit) 88%, #000);
+}
+.btn-ghost {
+  box-shadow: none;
+  color: var(--muted);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--ink);
+}
+.btn-sm {
+  min-height: var(--ctl-h-sm);
+  padding: 4px 12px;
+  font-size: 0.82rem;
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.btn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* Segmented buttons (seg): the office's soft pills. */
+.seg {
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 2px;
+  gap: 2px;
+}
+.seg button {
+  border-radius: 6px;
+  background: transparent;
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 5px 12px;
+}
+.seg button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+/* Section tabs: soft pills like the office's page tabs, the current one tinted. */
+.tabbar {
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  width: fit-content;
+  max-width: 100%;
+}
+.tabbar button {
+  border: 0;
+  background: transparent;
+  min-height: 32px;
+  padding: 5px 14px;
+  border-radius: 999px;
+}
+.tabbar button:hover {
+  background: var(--surface-2);
+}
+.tabbar button[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 0;
+  font-weight: 600;
+}
+
+/* ---------- Cards and their headings ---------- */
+.panel {
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+.panel-head {
+  min-height: 52px;
+  padding: 12px 18px;
+}
+.panel-head :is(h2, h3) {
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.panel-head .muted {
+  font-size: 0.82rem;
+}
+
+/* ---------- Tables: one card, quiet headings, roomy rows ---------- */
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.panel .table-wrap,
+.drawer .table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  padding: 11px 14px;
+  font-size: 0.875rem;
+}
+tr.clickable td:first-child {
+  font-weight: 550;
+}
+
+/* ---------- Lists ---------- */
+.list-item {
+  transition: background-color 0.12s;
+}
+button.list-item:hover,
+.list-item:has(> button:only-child):hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+/* ---------- Status chips ---------- */
+.chip {
+  padding: 2px 9px;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+/* ---------- Notices ---------- */
+.notice {
+  border-radius: var(--r-sm);
+  border-left-width: 3px;
+  padding: 11px 14px;
+}
+.notice[data-tone='info'] {
+  border-color: var(--line);
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+
+/* ---------- Empty and loading states ---------- */
+.empty {
+  padding: 36px 20px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.empty::before {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='none' stroke='%2393a39c' stroke-width='16' stroke-linecap='round' stroke-linejoin='round' d='M32 136h48l16 24h64l16-24h48M32 136l28-68a16 16 0 0115-10h106a16 16 0 0115 10l28 68v56a16 16 0 01-16 16H48a16 16 0 01-16-16z'/%3E%3C/svg%3E") center / 22px no-repeat;
+}
+
+/* ---------- Side panels (drawers) ---------- */
+.scrim {
+  background: color-mix(in srgb, #0d1210 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+.drawer {
+  width: min(600px, 100%);
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+  box-shadow: -24px 0 48px -24px rgb(0 0 0 / 0.35);
+  animation: drawer-in 0.18s ease-out;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.6;
+  }
+}
+.drawer-head {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+  padding: 18px 22px;
+}
+.drawer-head h2 {
+  font-size: 1.1rem;
+}
+.drawer-body {
+  padding: 20px 22px 28px;
+  gap: 18px;
+}
+
+/* ---------- Sign-in card ---------- */
+.signin {
+  background: radial-gradient(1200px 600px at 50% -10%, var(--accent-soft), transparent 60%), var(--bg);
+}
+.signin-card {
+  border-radius: var(--r-lg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 24px 48px -24px rgb(0 0 0 / 0.25);
+}
+
+@media (max-width: 860px) {
+  :root {
+    --ctl-h: 44px;
+  }
+  .drawer {
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    top: auto;
+    max-height: 92vh;
+    animation-name: sheet-in;
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(32px);
+      opacity: 0.6;
+    }
+  }
+  .tabbar {
+    border-radius: var(--r-md);
+    width: auto;
+  }
+  /* 16px text stops phones from zooming into a field. */
+  :is(.input, .select, .textarea, input, select, textarea):not([type='checkbox']):not([type='radio']):not([type='file']) {
+    font-size: 16px;
+  }
+}
+
+/* ---------- P71: the frame, drawn like the Agentic Office's own ---------- */
+:root {
+  --rail: 244px;
+}
+.rail {
+  padding: 16px 12px 14px;
+  gap: 12px;
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+.brand {
+  padding: 2px 8px 6px;
+  gap: 10px;
+}
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-primary);
+  font-size: 0.95rem;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.brand-name {
+  font-size: 1.02rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.brand-sub {
+  font-size: 0.72rem;
+}
+.rail-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+  text-decoration: none;
+  transition: background-color 0.12s, color 0.12s;
+}
+.rail-back:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.nav {
+  gap: 16px;
+}
+.nav-heading {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding: 0 10px 6px;
+}
+.nav button {
+  min-height: 36px;
+  padding: 6px 10px;
+  gap: 10px;
+  font-size: 0.86rem;
+  border-radius: var(--r-sm);
+}
+.nav button svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.85;
+}
+.nav button[aria-current='page'] svg {
+  opacity: 1;
+}
+.rail-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  gap: 10px;
+}
+.topbar {
+  min-height: 56px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+.topbar strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.topbar .select {
+  min-height: 36px;
+  font-weight: 550;
+}
+.page {
+  max-width: 1360px;
+}
+.demo-band {
+  font-size: 0.8rem;
+}
+/* Phones: the bottom tabs, like the office's. */
+@media (max-width: 860px) {
+  .tabs {
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .tabs button {
+    padding: 8px 2px 6px;
+    font-size: 0.68rem;
+    font-weight: 500;
+  }
+  .tabs button svg {
+    width: 22px;
+    height: 22px;
+  }
+  .tabs button[aria-current='page'] {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .sheet-item svg {
+    width: 20px;
+    height: 20px;
+  }
+}

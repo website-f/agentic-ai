@@ -66,4 +66,5 @@ export const PRIMA: Record<string, string> = {
   "Connect Microsoft": "Sambungkan Microsoft",
   "Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.":
     "Prima dibuka dengan log masuk pejabat anda sebaik sahaja akaun kerja Microsoft anda disambungkan ke pejabat. Kali pertama, pejabat mencari rekod staf Prima anda melalui akaun itu atau nama tepat anda; jika tidak pasti, pemilik pejabat memilihnya di halaman ini.",
+  "Opening Prima…": "Membuka Prima…",
 };
