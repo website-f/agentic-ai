@@ -14,6 +14,8 @@ import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, HrLegalPanel, OvertimePanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { PayChangesPanel } from './PayChanges';
 import { HrGuide } from './HrGuide';
+import { AttendanceReportsSummary } from './AttendanceReports';
+import { ATT_TAB_KEY } from './Attendance';
 import '../styles/people.css';
 
 /** The HR work queues, grouped; each group hides itself (and its jump link) when none of its panels apply to this user. */
@@ -23,6 +25,8 @@ const GROUPS: { id: string; title: string; sub: string }[] = [
   { id: 'hr-g-cases', title: 'Cases, safety and legal', sub: 'Staff HR files, office safety and legal points for the directors' },
   { id: 'hr-g-grow', title: 'Appraisals, training and policies', sub: 'Appraisals, training, the handbook and how to do it' },
   { id: 'hr-g-leave', title: 'Leave and holidays', sub: 'Leave requests, flexible work, extra leave and public holidays' },
+  // P81: the monthly attendance reports from the attendance system.
+  { id: 'hr-g-att', title: 'Attendance reports', sub: 'Import the monthly attendance PDFs and see each month' },
 ];
 
 /** Scrolls to a group; the app keeps its own view in the address, so these are buttons, not # links. */
@@ -70,7 +74,7 @@ export function HrView() {
     setCompanyId(id);
     go({ view: 'people' });
   };
-  const [pay, move, cases, grow, leave] = GROUPS;
+  const [pay, move, cases, grow, leave, att] = GROUPS;
   return (
     <div className="page hr-page">
       <PageHead
@@ -187,6 +191,18 @@ export function HrView() {
         <FlexPanel />
         <HrLeaveSettingsPanel />
         <HolidaysPanel />
+      </Group>
+      <Group {...att}>
+        <AttendanceReportsSummary
+          onOpen={() => {
+            try {
+              sessionStorage.setItem(ATT_TAB_KEY, 'reports');
+            } catch {
+              /* the Attendance screen then opens on its day sheet */
+            }
+            go({ view: 'attendance' });
+          }}
+        />
       </Group>
     </div>
   );

@@ -486,3 +486,8 @@ app.include_router(prima_model_router.router)
 from .routers import feedback as feedback_router  # noqa: E402
 
 app.include_router(feedback_router.router)
+
+# P81: delete many files and SOPs at once (Library, Browse, SOPs).
+from .routers import bulk_delete as bulk_delete_router  # noqa: E402
+
+app.include_router(bulk_delete_router.router)

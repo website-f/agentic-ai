@@ -21,6 +21,7 @@ import type {
   RecordValues,
   User,
 } from '@prima/core';
+import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES } from '@prima/core';
 import { RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames } from '@prima/core';
 import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel } from './arisha';
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
@@ -346,9 +347,15 @@ export class OfficeController {
       await client.query(`SELECT set_config('app.user_id', '', true)`);
       await client.query(`SELECT set_config('app.group_user', 'off', true)`);
       await client.query(`SELECT set_config('app.walls', '', true)`);
-      const res = await client.query(`SELECT id, data->>'name' AS name FROM prima.companies ORDER BY data->>'name', id`);
+      const res = await client.query(`SELECT id, data->>'name' AS name, data->'aliases' AS aliases FROM prima.companies ORDER BY data->>'name', id`);
       await client.query('COMMIT');
-      return res.rows.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id) }));
+      // P81: the central employers too (no company record, but they employ the office's HQ units), and each company's
+      // other names from the staff list, so the office's branch-to-company suggestion finds "UNIT HR" or "OPERASI JOHOR".
+      const aliases = (v: unknown) => (Array.isArray(v) ? v.filter((a): a is string => typeof a === 'string').slice(0, 20) : []);
+      return [
+        ...CENTRAL_EMPLOYER_IDS.map((id) => ({ id, name: CENTRAL_FULL_NAMES[id] ?? id, aliases: [...(CENTRAL_ALIASES[id] ?? [])] })),
+        ...res.rows.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id), aliases: aliases(r.aliases) })),
+      ];
     } catch (e) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw e;

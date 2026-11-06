@@ -61,6 +61,8 @@ export interface Store {
   list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]>;
   get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined>;
   insert<T extends TableName>(table: T, row: Row<T>): Promise<void>;
+  /** P81: many rows in a few statements (a month of attendance is thousands of rows); callers fall back to insert. */
+  insertMany?<T extends TableName>(table: T, rows: Row<T>[]): Promise<void>;
   update<T extends TableName>(table: T, id: Id, patch: Partial<Row<T>>): Promise<Row<T>>;
   audit(body: AuditBody): Promise<AuditEntry>;
   /** Run several writes as one unit. */

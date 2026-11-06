@@ -1,6 +1,6 @@
 // Rebuild the database with fresh mock data dated to today. Development only: refuses to
 // run unless the target is a local database.
-import { generateDataset, dateOf, type Dataset, type DataWall, type TableName } from '@prima/core';
+import { CENTRAL_EMPLOYER_IDS, generateDataset, dateOf, type Dataset, type DataWall, type TableName } from '@prima/core';
 import { Client } from 'pg';
 import { nowMyt } from './db';
 import { companyOfficeModuleSql, companyRunLinksModuleSql, migrationSql } from './schema';
@@ -175,7 +175,8 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   // The department walls (access.ts DataWall) are opened the same way, so the CMS roster and arms rows can be loaded.
   await client.query(
     `SELECT set_config('app.company_ids', $1, true), set_config('app.group_user', 'on', true), set_config('app.walls', $2, true)`,
-    [ds.companies.map((c) => c.id).join(','), LOAD_WALLS.join(',')],
+    // P81: and the central employers, which have no company record but do employ staff (a real-data load writes them).
+    [[...ds.companies.map((c) => c.id), ...CENTRAL_EMPLOYER_IDS].join(','), LOAD_WALLS.join(',')],
   );
   const bulk = async (table: string, rows: unknown[], cols: (r: any) => unknown[], colNames: string) => {
     for (let i = 0; i < rows.length; i += 1000) {
@@ -216,6 +217,11 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('flex_requests', ds.flexRequests, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('vacancies', ds.vacancies, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('staff_movements', ds.staffMovements, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  // P81: check-in places and rules are set in the app; the seed carries none, but a dataset that has them keeps them.
+  await bulk('checkin_places', ds.checkinPlaces ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('checkin_rules', ds.checkinRules ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('checkin_settings', ds.checkinSettings ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('checkin_events', ds.checkinEvents ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('login_handovers', ds.loginHandovers, (r) => [r.id, r], 'id,data');
   await bulk('hr_filings', ds.hrFilings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('hr_cases', ds.hrCases, (r) => [r.id, r.companyId, r], 'id,company_id,data');

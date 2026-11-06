@@ -1,0 +1,253 @@
+/* P81: the import drawer (choose the file, match the columns, check the rows, done). Tokens from styles.css. */
+
+.imp-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.imp-busy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.imp-bar {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.imp-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--primary);
+  animation: imp-slide 1.1s ease-in-out infinite;
+}
+@keyframes imp-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .imp-bar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+.imp-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  text-align: center;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.imp-drop:hover,
+.imp-drop:focus-within {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.imp-drop svg {
+  color: var(--primary);
+}
+.imp-drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.imp-drop-off {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.imp-template {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.imp-cols,
+.imp-rows,
+.imp-problems,
+.imp-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.imp-cols {
+  display: grid;
+  gap: 8px;
+}
+.imp-col {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.imp-col[data-used='no'] {
+  background: var(--surface-2);
+}
+.imp-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.imp-col-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imp-col-sample,
+.imp-row-values {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.imp-tally {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.imp-tally span {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--muted);
+}
+.imp-tally strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.imp-tally [data-tone='ok'] strong {
+  color: var(--ok);
+}
+.imp-tally [data-tone='crit'] strong {
+  color: var(--crit);
+}
+
+.imp-h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.imp-rows {
+  display: grid;
+  gap: 8px;
+}
+.imp-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--r);
+}
+.imp-row[data-tone='crit'] {
+  border-left-color: var(--crit);
+}
+.imp-row[data-tone='ok'] {
+  border-left-color: var(--ok);
+}
+.imp-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.imp-row-btns {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.imp-problems {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--crit);
+}
+.imp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.imp-fix {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.imp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.imp-sticky {
+  position: sticky;
+  bottom: -16px;
+  margin: 0 -18px -16px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.imp-done {
+  align-items: center;
+  text-align: center;
+  padding-top: 12px;
+}
+.imp-done svg {
+  color: var(--ok);
+}
+.imp-done h3 {
+  margin: 0;
+}
+.imp-done .imp-actions {
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .imp-template {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .imp-actions .btn {
+    flex: 1;
+  }
+  .imp-sticky {
+    margin: 0 -16px -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

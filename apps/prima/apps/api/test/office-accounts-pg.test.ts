@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 import { Pool } from 'pg';
-import { verifyChain, type AuditEntry, type User } from '@prima/core';
+import { CENTRAL_EMPLOYER_IDS, verifyChain, type AuditEntry, type Person, type User } from '@prima/core';
 import { Db } from '../src/db';
 import { resetDb } from '../src/reset-db';
 import { OfficeController } from '../src/controllers';
@@ -134,17 +134,143 @@ describe('office accounts in the database', () => {
     }
   });
 
-  it('lists the companies for the office: id and name, nothing else', async () => {
+  it('lists the companies for the office: id, name and other names, nothing else', async () => {
     const list = await new OfficeController(db).companies();
-    const all = (await pool.query(`SELECT id FROM prima.companies`)).rows.map((r) => r.id as string).sort();
-    assert.deepEqual(list.map((c) => c.id).sort(), all);
+    const all = (await pool.query(`SELECT id FROM prima.companies`)).rows.map((r) => r.id as string);
+    // P81: the central employers first (no company record), then every company record.
+    assert.deepEqual(list.map((c) => c.id).sort(), [...CENTRAL_EMPLOYER_IDS, ...all].sort());
     assert.ok(list.length > 0);
-    for (const c of list) assert.deepEqual(Object.keys(c).sort(), ['id', 'name']);
+    for (const c of list) assert.deepEqual(Object.keys(c).sort(), ['aliases', 'id', 'name']);
     assert.ok(list.some((c) => c.id === 'co-sasa' && /Sasa/.test(c.name)));
+    assert.ok(list.some((c) => c.id === 'pwvsb' && /PW Venture/.test(c.name) && c.aliases.includes('Unit HR')));
+    assert.ok(list.some((c) => c.id === 'goodwill' && c.aliases.includes('Operasi Johor')));
   });
 
   it('a new office account signs in through the office like any staff record', async () => {
     const u = await db.asUser('u-off-us_01jhttp', async (_svc, me) => me);
     assert.equal(u.id, 'u-off-us_01jhttp');
+  });
+
+
+  // P81: the real staff are loaded as office staff records; a sign-in the office makes is linked to its own record.
+  describe('linking the account to the person', () => {
+    const person = (id: string, companyId: string, name: string, extra: Partial<Person> = {}): Person => ({
+      id,
+      companyId,
+      branchId: companyId === 'pwvsb' ? 'br-pwvsb-hq' : '',
+      staffNo: '',
+      name,
+      nationality: '' as Person['nationality'],
+      idMasked: '',
+      dob: '',
+      phone: '',
+      role: 'office',
+      status: 'active',
+      hiredOn: '',
+      faceEnrolledOn: null,
+      ...extra,
+    });
+    const add = (p: Person) => pool.query(`INSERT INTO prima.people (id, company_id, data) VALUES ($1, $2, $3)`, [p.id, p.companyId, p]);
+
+    before(async () => {
+      await add(person('pr-p81-mail', 'pwvsb', 'Synthetic Mail Person', { email: 'mail.person@example.test', otherEmails: ['mail.hq@example.test'] }));
+      await add(person('pr-p81-other', 'pwvsb', 'Synthetic Other Mailbox', { email: 'other.person@example.test', otherEmails: ['other.hq@example.test'] }));
+      await add(person('pr-p81-name', 'co-sasa', 'Synthetic Name Only'));
+      await add(person('pr-p81-twin1', 'co-arsh', 'Synthetic Twin'));
+      await add(person('pr-p81-twin2', 'co-arsh', 'Synthetic Twin'));
+      await add(person('pr-p81-inas', 'co-inas', 'Synthetic Inas Staff', { email: 'inas.staff@example.test' }));
+      await add(person('pr-p81-left', 'pwvsb', 'Synthetic Leaver', { email: 'left@example.test', status: 'left' }));
+      // A company's own office staff member whose facts HR has filled in, to use their own screens below.
+      await add(
+        person('pr-p81-hq', 'co-sasa', 'Synthetic Sasa HQ', {
+          email: 'sasa.hq.staff@example.test',
+          staffNo: 'SASAP81',
+          nationality: 'MY',
+          idMasked: '900101-**-***1',
+          dob: '1990-01-01',
+          phone: '012-000 0000',
+          hiredOn: '2024-01-02',
+          branchId: 'br-sasa-1',
+          basicPay: 3000,
+        }),
+      );
+    });
+
+    it('links by email, any case, any of the person mailboxes; a central employer account is central staff', async () => {
+      const got = await upsert({ officeUserId: 'us_p81mail', name: 'Mail Person', title: 'Branch manager', role: 'admin_exec', companyIds: ['pwvsb'], email: 'Mail.Person@Example.TEST' });
+      assert.equal(got.personId, 'pr-p81-mail');
+      assert.equal(got.role, 'pwvsb_officer');
+      const u = await user('u-off-us_p81mail');
+      assert.equal(u?.personId, 'pr-p81-mail');
+      assert.equal(u?.role, 'pwvsb_officer');
+      assert.equal((u as unknown as Record<string, unknown>).email, undefined, 'the email is never stored on the account');
+      assert.match((await audits('u-off-us_p81mail'))[0].summary, /linked to staff record pr-p81-mail \(same email\)/);
+      const other = await upsert({ officeUserId: 'us_p81other', name: 'Someone', title: 'Staff', role: 'pwvsb_officer', companyIds: ['pwvsb'], email: 'other.hq@example.test' });
+      assert.equal(other.personId, 'pr-p81-other');
+      // The linked sign-in reads its own record through the company wall.
+      const mine = await db.asUser('u-off-us_p81mail', async (_svc, me, store) => (me.personId ? store.get('people', me.personId) : undefined));
+      assert.equal(mine?.name, 'Synthetic Mail Person');
+    });
+
+    it('a licensed company office staff member becomes admin_exec of that one company, audited, once', async () => {
+      const input = { officeUserId: 'us_p81inas', name: 'Inas Staff', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-inas'], email: 'inas.staff@example.test' };
+      const got = await upsert(input);
+      assert.deepEqual([got.personId, got.role, got.companyIds], ['pr-p81-inas', 'admin_exec', ['co-inas']]);
+      const u = await user('u-off-us_p81inas');
+      assert.deepEqual([u?.role, u?.companyIds, u?.personId], ['admin_exec', ['co-inas'], 'pr-p81-inas']);
+      assert.match((await audits('u-off-us_p81inas'))[0].summary, /created: admin_exec for co-inas \(the office asked pwvsb_officer; their own staff record is in co-inas/);
+      // Idempotent: the office's next call (still "staff") changes nothing.
+      const again = await upsert(input);
+      assert.deepEqual([again.role, again.companyIds, again.personId], ['admin_exec', ['co-inas'], 'pr-p81-inas']);
+      const a = await audits('u-off-us_p81inas');
+      assert.equal(a.length, 2);
+      assert.doesNotMatch(a[1].summary, /\(was /);
+      assert.deepEqual(await user('u-off-us_p81inas'), u);
+    });
+
+    it('links by the same name in the same company when the record has no email', async () => {
+      const got = await upsert({ officeUserId: 'us_p81name', name: '  synthetic   NAME only ', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-sasa'] });
+      assert.deepEqual([got.personId, got.role, got.companyIds], ['pr-p81-name', 'admin_exec', ['co-sasa']]);
+      assert.match((await audits('u-off-us_p81name'))[0].summary, /\(same name\)/);
+    });
+
+    it('never guesses, never takes a held record, never a company the office did not name, never a leaver', async () => {
+      const twin = await upsert({ officeUserId: 'us_p81twin', name: 'Synthetic Twin', title: '', role: 'pwvsb_officer', companyIds: ['co-arsh'] });
+      assert.deepEqual([twin.personId, twin.role], [undefined, 'pwvsb_officer'], 'two records of that name: the owner links by hand');
+      const held = await upsert({ officeUserId: 'us_p81held', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['pwvsb'], email: 'mail.person@example.test' });
+      assert.equal(held.personId, undefined, 'already linked to another sign-in');
+      // The office mapped this person to Sasa; their record is in Inas: no link and no Inas access.
+      const elsewhere = await upsert({ officeUserId: 'us_p81else', name: 'X', title: '', role: 'admin_exec', companyIds: ['co-sasa'], email: 'inas.staff@example.test' });
+      assert.deepEqual([elsewhere.personId, elsewhere.role, elsewhere.companyIds], [undefined, 'admin_exec', ['co-sasa']]);
+      // A branch manager of a licensed company never reaches a central staff record.
+      const bm = await upsert({ officeUserId: 'us_p81bm', name: 'Synthetic Other Mailbox', title: '', role: 'admin_exec', companyIds: ['co-arsh'], email: 'other.person@example.test' });
+      assert.deepEqual([bm.personId, bm.role, bm.companyIds], [undefined, 'admin_exec', ['co-arsh']]);
+      const left = await upsert({ officeUserId: 'us_p81left', name: 'Synthetic Leaver', title: '', role: 'pwvsb_officer', companyIds: ['pwvsb'], email: 'left@example.test' });
+      assert.equal(left.personId, undefined);
+      for (const id of ['u-off-us_p81twin', 'u-off-us_p81held', 'u-off-us_p81else', 'u-off-us_p81bm', 'u-off-us_p81left'])
+        assert.equal((await user(id))?.personId, undefined, id);
+    });
+
+    it('links later: an account made before the record existed becomes the company office staff when it is found', async () => {
+      const input = { officeUserId: 'us_p81later', name: 'Synthetic Later', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-arsh'], email: 'later@example.test' };
+      const first = await upsert(input);
+      assert.deepEqual([first.personId, first.role], [undefined, 'pwvsb_officer']);
+      await add(person('pr-p81-later', 'co-arsh', 'Synthetic Later', { email: 'later@example.test' }));
+      const second = await upsert(input);
+      assert.deepEqual([second.personId, second.role, second.companyIds], ['pr-p81-later', 'admin_exec', ['co-arsh']]);
+      assert.match((await audits('u-off-us_p81later'))[1].summary, /updated: admin_exec for co-arsh \(was pwvsb_officer for co-arsh\).*linked to staff record pr-p81-later/);
+    });
+
+    it('the company office staff member has their own details, clock, leave and claims', async () => {
+      const got = await upsert({ officeUserId: 'us_p81hq', name: 'Sasa HQ', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-sasa'], email: 'sasa.hq.staff@example.test' });
+      assert.deepEqual([got.personId, got.role, got.companyIds], ['pr-p81-hq', 'admin_exec', ['co-sasa']]);
+      await db.asUser('u-off-us_p81hq', async (svc, me) => {
+        assert.ok(JSON.stringify(await svc.myDuty(me)).includes('Synthetic Sasa HQ'), 'My details shows their own record');
+        assert.equal((await svc.myStaffClock(me)).allowed, true, 'staff clock');
+        assert.equal((await svc.staffClaims(me)).canClaim, true, 'claims');
+        const leave = await svc.requestLeave(me, { personId: 'pr-p81-hq', kind: 'ANNUAL', from: '2099-01-05', to: '2099-01-05', reason: 'Family matter (synthetic)' } as never);
+        assert.equal((leave as { personId: string }).personId, 'pr-p81-hq', 'leave');
+      });
+    });
   });
 });

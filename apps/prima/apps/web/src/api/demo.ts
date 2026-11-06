@@ -1,7 +1,7 @@
 // In-browser demo: the same PrimaService and rules as the server, running on generated
 // mock data. Changes are kept as a short replay log in this browser only, so a reload
 // keeps what you did today; a new day starts from fresh mock data.
-import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader } from '@prima/core';
+import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader, type OrgImportReceipt } from '@prima/core';
 import type { ProofInput, ReportDef, CmsServiceKind, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction } from '@prima/core';
 import type { ExpenseInput, PdpaCaseInput, PdpaStepName, ProductCertInput, ProductInput, VehicleRequestInput, VehicleWorkInput, ArmsRequestAction, ArmsRequestStepExtra, AmBuyInput, RaiseArmsRequestInput, OfficeDeskInput, WorkAdjustInput, WorkReassignInput, FinControlArea } from './types';
 import { ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput } from './types';
@@ -341,6 +341,12 @@ type Mutations =
   | 'readMemo'
   | 'staffClockOut'
   | 'staffPing'
+  | 'checkIn'
+  | 'saveCheckinPlace'
+  | 'setCheckinPlaceActive'
+  | 'setCheckinPolicy'
+  | 'setCheckinRules'
+  | 'decideCheckin'
   | 'remoteApply'
   | 'remotePlan'
   | 'remoteTask'
@@ -446,8 +452,8 @@ export class DemoApi implements Api {
     read: (taskId) => this.write<unknown>('orgRead', [taskId]).catch(orgError),
     map: () => this.read((s, u) => s.orgLinks.map(u)).then((m) => ({ ...m, rollouts: registeredRollouts() })).catch(orgError),
     importTemplate: (kind) => this.read(async (s) => s.orgImport.template(kind)).catch(orgError),
-    importPreview: (kind, companyId, csv) => this.read((s, u) => s.orgImport.preview(u, kind, companyId, csv)).catch(orgError),
-    importCommit: (kind, companyId, csv, fingerprint) => this.write<unknown>('orgImport', [kind, companyId, csv, fingerprint]).catch(orgError),
+    importPreview: (kind, companyId, csv, opts) => this.read((s, u) => s.orgImport.preview(u, kind, companyId, csv, opts)).catch(orgError),
+    importCommit: (kind, companyId, csv, fingerprint, opts) => this.write<OrgImportReceipt>('orgImport', [kind, companyId, csv, fingerprint, opts]).catch(orgError),
   };
 
   private booted: PrimaService | null = null;
@@ -762,7 +768,7 @@ export class DemoApi implements Api {
       case 'orgRead':
         return this.svc.orgLinks.markRead(u, a[0]);
       case 'orgImport':
-        return this.svc.orgImport.commit(u, a[0], a[1], a[2], a[3]);
+        return this.svc.orgImport.commit(u, a[0], a[1], a[2], a[3], a[4]);
       case 'raiseActFinding':
         return this.svc.raiseActFinding(u, a[0]);
       case 'actFindingStep':
@@ -1098,6 +1104,18 @@ export class DemoApi implements Api {
         return this.svc.staffClockOut(u, a[0]);
       case 'staffPing':
         return this.svc.staffPing(u, a[0]);
+      case 'checkIn':
+        return this.svc.checkIn(u, a[0], a[1]);
+      case 'saveCheckinPlace':
+        return this.svc.saveCheckinPlace(u, a[0]);
+      case 'setCheckinPlaceActive':
+        return this.svc.setCheckinPlaceActive(u, a[0], a[1]);
+      case 'setCheckinPolicy':
+        return this.svc.setCheckinPolicy(u, a[0], a[1]);
+      case 'setCheckinRules':
+        return this.svc.setCheckinRules(u, a[0], a[1]);
+      case 'decideCheckin':
+        return this.svc.decideCheckin(u, a[0], a[1], a[2]);
       case 'remoteApply':
         return this.svc.remoteApply(u, a[0]);
       case 'remotePlan':
@@ -1530,6 +1548,49 @@ export class DemoApi implements Api {
   }
   staffPing(input: Parameters<Api['staffPing']>[0]) {
     return this.write('staffPing', [input]);
+  }
+  // P81: staff check-in by place. The test version has no address lookup (shown as "not looked up").
+  myCheckin() {
+    return this.read((s, u) => s.myCheckin(u));
+  }
+  checkinPreview(fix: Parameters<Api['checkinPreview']>[0]) {
+    return this.read((s, u) => s.checkinPreview(u, fix));
+  }
+  checkIn(kind: 'in' | 'out', input: Parameters<Api['checkIn']>[1]) {
+    return this.write<Awaited<ReturnType<Api['checkIn']>>>('checkIn', [kind, input]);
+  }
+  checkinSetup() {
+    return this.read((s, u) => s.checkinSetup(u));
+  }
+  saveCheckinPlace(input: Parameters<Api['saveCheckinPlace']>[0]) {
+    return this.write('saveCheckinPlace', [input]);
+  }
+  setCheckinPlaceActive(id: string, active: boolean) {
+    return this.write('setCheckinPlaceActive', [id, active]);
+  }
+  setCheckinPolicy(companyId: string, outOfArea: Parameters<Api['setCheckinPolicy']>[1]) {
+    return this.write('setCheckinPolicy', [companyId, outOfArea]);
+  }
+  setCheckinRules(userIds: string[], rule: Parameters<Api['setCheckinRules']>[1]) {
+    return this.write<{ updated: number }>('setCheckinRules', [userIds, rule]);
+  }
+  checkinSites(companyId: string) {
+    return this.read((s, u) => s.checkinSites(u, companyId));
+  }
+  checkinDay(date?: string) {
+    return this.read((s, u) => s.checkinDay(u, date));
+  }
+  checkinReviews() {
+    return this.read((s, u) => s.checkinReviews(u));
+  }
+  decideCheckin(id: string, decision: 'cleared' | 'upheld', note: string) {
+    return this.write('decideCheckin', [id, decision, note]);
+  }
+  async geoSearch(_q: string): Promise<{ results: import('./checkin').GeoResult[] }> {
+    throw new ApiError('The test version has no address search. Drop the pin on the map instead.', 503);
+  }
+  async geoReverse(_lat: number, _lng: number) {
+    return { address: null, status: 'off' as const };
   }
   staffClockBoard(date?: string) {
     return this.read((s, u) => s.staffClockBoard(u, date));

@@ -128,9 +128,34 @@ export class HttpApi implements Api {
     read: (taskId) => this.call('POST', `/org/inbox/${encodeURIComponent(taskId)}/read`, {}),
     map: () => this.call('GET', '/org/map'),
     importTemplate: (kind) => this.call('GET', `/org/import/${encodeURIComponent(kind)}/template`),
-    importPreview: (kind, companyId, csv) => this.call('POST', `/org/import/${encodeURIComponent(kind)}/preview`, { companyId, csv }),
-    importCommit: (kind, companyId, csv, fingerprint) =>
-      this.call('POST', `/org/import/${encodeURIComponent(kind)}/commit`, { companyId, csv, fingerprint }),
+    importPreview: (kind, companyId, csv, opts) => this.call('POST', `/org/import/${encodeURIComponent(kind)}/preview`, { companyId, csv, ...opts }),
+    importCommit: (kind, companyId, csv, fingerprint, opts) =>
+      this.call('POST', `/org/import/${encodeURIComponent(kind)}/commit`, { companyId, csv, fingerprint, ...opts }),
+  };
+
+  /** P81: past attendance from the monthly PDF reports, sent in 1 MB pieces (the office signs JSON of at most 3 MB). */
+  readonly attendanceReports: import('./attendance-reports').AttendanceReportsClient = {
+    // Built here, not imported: the IT screens' test harnesses load this file with a fixed import list.
+    overview: (f) => {
+      const p = new URLSearchParams();
+      if (f.month) p.set('month', f.month);
+      if (f.companyId) p.set('companyId', f.companyId);
+      if (f.department) p.set('department', f.department);
+      if (f.q?.trim()) p.set('q', f.q.trim());
+      const qs = p.toString();
+      return this.call('GET', `/attendance-reports${qs ? `?${qs}` : ''}`);
+    },
+    person: (importId, key) => this.call('GET', `/attendance-reports/person?importId=${encodeURIComponent(importId)}&key=${encodeURIComponent(key)}`),
+    unmatched: () => this.call('GET', '/attendance-reports/unmatched'),
+    staff: (companyId, q) => this.call('GET', `/attendance-reports/staff?companyId=${encodeURIComponent(companyId)}&q=${encodeURIComponent(q)}`),
+    match: (companyId, key, personId) => this.call('POST', '/attendance-reports/match', { companyId, key, personId }),
+    start: (file) => this.call('POST', '/attendance-reports/uploads', file),
+    chunk: (id, index, data) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/chunk`, { index, data }),
+    finish: (id) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/finish`, {}),
+    status: (id) => this.call('GET', `/attendance-reports/uploads/${encodeURIComponent(id)}`),
+    preview: (id, companies) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/preview`, { companies }),
+    save: (id, companies, replace) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/save`, { companies, replace }),
+    cancel: (id) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/cancel`, {}),
   };
 
   private async call<T>(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal, microsoftOnly = false): Promise<T> {
@@ -488,6 +513,49 @@ export class HttpApi implements Api {
   }
   staffPing(input: Parameters<Api['staffPing']>[0]) {
     return this.call('POST', '/me/clock/ping', input);
+  }
+  // P81: staff check-in by place (apps/api/src/checkin.controller.ts).
+  myCheckin() {
+    return this.call<Awaited<ReturnType<Api['myCheckin']>>>('GET', '/me/checkin');
+  }
+  checkinPreview(fix: Parameters<Api['checkinPreview']>[0]) {
+    return this.call<Awaited<ReturnType<Api['checkinPreview']>>>('POST', '/me/checkin/preview', fix);
+  }
+  checkIn(kind: 'in' | 'out', input: Parameters<Api['checkIn']>[1]) {
+    return this.call<Awaited<ReturnType<Api['checkIn']>>>('POST', `/me/checkin/${kind}`, input);
+  }
+  checkinSetup() {
+    return this.call<Awaited<ReturnType<Api['checkinSetup']>>>('GET', '/checkin/setup');
+  }
+  saveCheckinPlace(input: Parameters<Api['saveCheckinPlace']>[0]) {
+    return this.call('POST', '/checkin/places', input);
+  }
+  setCheckinPlaceActive(id: string, active: boolean) {
+    return this.call('POST', `/checkin/places/${encodeURIComponent(id)}/active`, { active });
+  }
+  setCheckinPolicy(companyId: string, outOfArea: Parameters<Api['setCheckinPolicy']>[1]) {
+    return this.call('POST', '/checkin/policy', { companyId, outOfArea });
+  }
+  setCheckinRules(userIds: string[], rule: Parameters<Api['setCheckinRules']>[1]) {
+    return this.call<{ updated: number }>('POST', '/checkin/rules', { userIds, rule });
+  }
+  checkinSites(companyId: string) {
+    return this.call<Awaited<ReturnType<Api['checkinSites']>>>('GET', `/checkin/sites?companyId=${encodeURIComponent(companyId)}`);
+  }
+  checkinDay(date?: string) {
+    return this.call<Awaited<ReturnType<Api['checkinDay']>>>('GET', `/checkin/day${date ? `?date=${encodeURIComponent(date)}` : ''}`);
+  }
+  checkinReviews() {
+    return this.call<Awaited<ReturnType<Api['checkinReviews']>>>('GET', '/checkin/reviews');
+  }
+  decideCheckin(id: string, decision: 'cleared' | 'upheld', note: string) {
+    return this.call('POST', `/checkin/reviews/${encodeURIComponent(id)}`, { decision, note });
+  }
+  geoSearch(q: string) {
+    return this.call<Awaited<ReturnType<Api['geoSearch']>>>('GET', `/geo/search?q=${encodeURIComponent(q)}`);
+  }
+  geoReverse(lat: number, lng: number) {
+    return this.call<Awaited<ReturnType<Api['geoReverse']>>>('GET', `/geo/reverse?lat=${lat}&lng=${lng}`);
   }
   staffClockBoard(date?: string) {
     return this.call<Awaited<ReturnType<Api['staffClockBoard']>>>('GET', `/staff-clock${date ? `?date=${encodeURIComponent(date)}` : ''}`);

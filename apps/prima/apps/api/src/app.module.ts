@@ -11,13 +11,15 @@ import { OrgController, OrgHealthController } from './org.controller';
 import { SPECIAL_OPS_CONTROLLERS } from './special-ops.controller';
 import { WHATSAPP_CONTROLLERS, WhatsAppRunner } from './whatsapp';
 import { m365ConnectionsModule } from './connections-m365/controller';
+import { CheckinController } from './checkin.controller';
+import { AttendanceReportsController, AttendanceUploads } from './attendance-reports.controller';
 
 const jobEmail = jobEmailRuntimeModule();
 const teamsEvidence=teamsEvidenceModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, OrgHealthController, OrgController, AuthController, OfficeController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers, ...teamsEvidence.controllers, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, ...m365.controllers, ShareController],
-  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, ...jobEmail.providers, ...teamsEvidence.providers, WhatsAppRunner, ...m365.providers],
+  controllers: [HealthController, OrgHealthController, OrgController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers, ...teamsEvidence.controllers, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, ...m365.controllers, ShareController],
+  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers, ...teamsEvidence.providers, WhatsAppRunner, ...m365.providers],
 })
 export class AppModule {}

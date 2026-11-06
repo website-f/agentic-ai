@@ -131,6 +131,9 @@ class StaffRecord:
 class Company:
     id: str
     name: str
+    # P81: the other names Prima knows the company by ("UNIT HR", "OPERASI JOHOR"), for the
+    # branch-to-company suggestion only; never shown or saved.
+    aliases: tuple[str, ...] = ()
 
 
 def prima_role(office_role: str) -> str:
@@ -187,27 +190,41 @@ async def companies() -> list[Company]:
         raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
     rows = ans.json()
     return [
-        Company(id=str(r["id"]), name=str(r.get("name") or r["id"]))
+        Company(
+            id=str(r["id"]),
+            name=str(r.get("name") or r["id"]),
+            aliases=tuple(
+                str(a)[:200] for a in (r.get("aliases") or [])[:20] if isinstance(a, str) and a
+            ),
+        )
         for r in (rows if isinstance(rows, list) else [])
         if isinstance(r, dict) and r.get("id")
     ]
 
 
 async def create_account(
-    *, office_user_id: str, name: str, title: str, role: str, company_ids: list[str]
+    *,
+    office_user_id: str,
+    name: str,
+    title: str,
+    role: str,
+    company_ids: list[str],
+    email: str = "",
 ) -> str:
     """Make (or bring up to date) this person's own Prima account; its Prima id. A system call
-    to Prima's accounts service, signed like every other ("/accounts")."""
-    body = json.dumps(
-        {
-            "officeUserId": office_user_id,
-            "name": name[:120],
-            "title": title[:120],
-            "role": role,
-            "companyIds": company_ids,
-        },
-        separators=(",", ":"),
-    ).encode()
+    to Prima's accounts service, signed like every other ("/accounts"). P81: with their sign-in
+    email, Prima links the account to their own staff record (the real staff list), so My
+    details, the staff clock and payroll are theirs."""
+    payload: dict[str, object] = {
+        "officeUserId": office_user_id,
+        "name": name[:120],
+        "title": title[:120],
+        "role": role,
+        "companyIds": company_ids,
+    }
+    if email and "@" in email and len(email) <= 254:
+        payload["email"] = email.strip().lower()
+    body = json.dumps(payload, separators=(",", ":")).encode()
     ans = await _send("POST", "/accounts", "", "system", body, "", base=settings.prima_accounts_url)
     data = ans.json() if ans.status in (200, 400) else None
     rid = str(data.get("id") or "") if isinstance(data, dict) else ""
@@ -220,7 +237,7 @@ async def create_account(
     raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
 
 
-async def _own_account(db: AsyncSession, m: Membership, name: str) -> PrimaLink:
+async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = "") -> PrimaLink:
     """P75: the person's own Prima account, in the Prima company of their branch."""
     branch_id = m.branch_id
     if branch_id is None:
@@ -259,6 +276,7 @@ async def _own_account(db: AsyncSession, m: Membership, name: str) -> PrimaLink:
         title=str(role_label(m.role)),
         role=role,
         company_ids=[company],
+        email=email,
     )
     link = PrimaLink(
         workspace_id=m.workspace_id,
@@ -329,7 +347,7 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
         # owner opens Prima as its top record (P74), never as a made account.
         if me.role == "owner":
             raise _not_linked()
-        return await _own_account(db, m, me.name)
+        return await _own_account(db, m, me.name, me.email)
     how = (
         "microsoft"
         if me.ms_oid and record.entra_oid == me.ms_oid

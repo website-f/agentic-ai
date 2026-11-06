@@ -11,9 +11,10 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
+import { BulkBar, RowCheck, SelectAll, useSelection } from "@/components/bulk-select";
 import { FileDrop } from "@/components/file-drop";
 import { LibraryStatusPill, parseScope, ScopeSelect, scopeOptions, WHOLE } from "@/components/library-toggle";
 import { EmptyState, IconTile, Page } from "@/components/page";
@@ -27,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
+import { bulkDelete } from "@/lib/bulk";
 import { docKeys } from "@/lib/documents";
 import {
   libraryKeys,
@@ -40,6 +42,7 @@ import {
 } from "@/lib/library";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
+import { workKeys } from "@/lib/work";
 import { FileTile } from "./documents/visuals";
 import { LibraryHeader } from "./library-hub/hub";
 import { LinkedSources } from "./library-hub/linked-sources";
@@ -204,6 +207,36 @@ export function LibraryPage() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
+  // P81: pick many and delete them: files for those who may change files, SOPs for those who
+  // manage them (the server checks each one again).
+  const canDeleteSops = !!me?.permissions.includes("org.manage");
+  const pickable = useMemo(
+    () => shown.filter((s) => (s.kind === "file" ? !!data?.can_edit : canDeleteSops)).map((s) => `${s.kind}:${s.id}`),
+    [shown, data?.can_edit, canDeleteSops],
+  );
+  const sel = useSelection(pickable);
+  const [bulkAsk, setBulkAsk] = useState(false);
+  const picked = sel.selected.length;
+  const deleteSelected = async () => {
+    const fileIds = sel.selected.filter((k) => k.startsWith("file:")).map((k) => k.slice(5));
+    const sopIds = sel.selected.filter((k) => k.startsWith("sop:")).map((k) => k.slice(4));
+    try {
+      const r = await bulkDelete({ files: fileIds, sops: sopIds });
+      const gone = r.files + r.sops;
+      if (gone) toast.success(gone === 1 ? tr("Deleted 1 item.") : tr("Deleted {n} items.", { n: gone }), {
+        description: r.skipped.length ? tr("{n} could not be deleted: not yours to delete, or already gone.", { n: r.skipped.length }) : undefined,
+      });
+      else toast.error(tr("Nothing was deleted: these are not yours to delete, or already gone."));
+      sel.clear();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      qc.invalidateQueries({ queryKey: libraryKeys.all });
+      qc.invalidateQueries({ queryKey: docKeys.files });
+      qc.invalidateQueries({ queryKey: workKeys.sops });
+    }
+  };
+
   const open = (s: LibrarySource) =>
     s.kind === "file" ? navigate({ to: "/files", search: { f: s.id } }) : navigate({ to: "/sops", search: { sop: s.id } });
 
@@ -242,7 +275,9 @@ export function LibraryPage() {
             { value: "file", label: t("Files"), count: files.length },
             { value: "sop", label: t("SOPs"), count: sources.length - files.length },
           ]} />
+        {pickable.length ? <SelectAll sel={sel} total={pickable.length} /> : null}
       </Toolbar>
+      <BulkBar sel={sel} onDelete={() => setBulkAsk(true)} />
 
       {isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
         : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
@@ -253,7 +288,16 @@ export function LibraryPage() {
           <ListCard data-guide="library.sources">
             {shown.map((s) => (
               <ListRow key={`${s.kind}-${s.id}`}
-                leading={s.kind === "file" ? <FileTile mime={s.mime} name={s.name} /> : <IconTile icon={FileTextIcon} tone="violet" />}
+                leading={<span className="flex items-center gap-3">
+                  {pickable.length ? (
+                    <span className="grid w-4 place-items-center pointer-coarse:w-5">
+                      {(s.kind === "file" ? data?.can_edit : canDeleteSops) ? (
+                        <RowCheck checked={sel.isOn(`${s.kind}:${s.id}`)} onChange={() => sel.toggle(`${s.kind}:${s.id}`)} label={t("Select {name}", { name: s.title })} />
+                      ) : null}
+                    </span>
+                  ) : null}
+                  {s.kind === "file" ? <FileTile mime={s.mime} name={s.name} /> : <IconTile icon={FileTextIcon} tone="violet" />}
+                </span>}
                 title={
                   <button type="button" onClick={() => open(s)} className="max-w-full text-left break-words hover:text-accent hover:underline focus-visible:underline">
                     {s.title}
@@ -284,6 +328,11 @@ export function LibraryPage() {
       <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} title={t("Take this file out of the guidelines?")}
         confirmLabel={t("Take out")} body={t("Agents stop finding it in searches. The file stays in Files, and you can add it back any time.")}
         onConfirm={async () => { if (removing) await takeOut.mutateAsync(removing.id); }} />
+      <ConfirmDialog open={bulkAsk} onOpenChange={setBulkAsk} danger
+        title={picked === 1 ? t("Delete 1 item?") : t("Delete {n} items?", { n: picked })}
+        confirmLabel={picked === 1 ? t("Delete 1 item") : t("Delete {n} items", { n: picked })}
+        body={t("Files are deleted from Files and Browse too, and SOPs stop applying to every agent. Agents no longer find them. This cannot be undone.")}
+        onConfirm={deleteSelected} />
     </Page>
   );
 }

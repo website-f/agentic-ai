@@ -5,6 +5,7 @@ import { api, type ClientBoard, type ClientShareReport } from '../api';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
 
 /**
@@ -87,10 +88,13 @@ export function ClientsView() {
         sub="Operations Managers, the Operations Director and officers look after each client. The COO monitors every company; each company manager monitors their own. Unknown is never shown as fine."
         actions={
           data.canAdd.length > 0 && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              New client
-            </button>
+            <>
+              <ImportButton kind="client" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                New client
+              </button>
+            </>
           )
         }
       />

@@ -12,6 +12,7 @@ import {
 } from "../ui";
 import { Avatar, Card, Empty, Search, Steps, Toolbar } from "../kit";
 import "../styles/leave.css";
+import { ImportButton } from "./ImportDrawer";
 
 /**
  * HR Phase 3, slice 3C (Fauzan, 2 Nov 2026): public holidays HR keeps (more than the Act if HR wants), leave days HR
@@ -280,10 +281,13 @@ export function HrLeaveSettingsPanel() {
       title="Working from home and extra leave"
       sub="Working from home stays blocked until HR allows it for the staff member. HR may give more leave than the Act, never less."
       actions={
-        <Chip tone="info">
-          {list.data.staff.filter((s) => s.wfhAllowed).length} may work from
-          home
-        </Chip>
+        <>
+          <Chip tone="info">
+            {list.data.staff.filter((s) => s.wfhAllowed).length} may work from
+            home
+          </Chip>
+          <ImportButton kind="leaveEntitlement" label="Import leave days" />
+        </>
       }
       flush
     >

@@ -12,6 +12,7 @@ import {
   WrenchIcon,
 } from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { OpsGuide } from './OpsGuide';
 import { Card, Empty, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
@@ -553,6 +554,8 @@ function Suppliers({ data }: { data: ArmsControl }) {
           <>
             <RecordButton kind="armsSupplier" label="Add supplier" />
             <RecordButton kind="supplierItem" label="Add item and price" />
+            <ImportButton kind="armsSupplier" label="Import suppliers" />
+            <ImportButton kind="supplierItem" label="Import price list" />
           </>
         }
         flush

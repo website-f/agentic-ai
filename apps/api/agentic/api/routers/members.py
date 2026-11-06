@@ -261,6 +261,10 @@ async def add_one(
         raise api_error(
             status.HTTP_409_CONFLICT, "already_member", "{email} is already a member.", email=email
         )
+    # P81: someone a go-live reset left with no workspace was deactivated; adding them back
+    # is the deliberate act that turns their account on again (their own password stays).
+    reactivated = not user.is_active
+    user.is_active = True
 
     m = Membership(
         workspace_id=principal.workspace_id,
@@ -270,9 +274,16 @@ async def add_one(
         department_id=department_id,
     )
     db.add(m)
-    after = {"email": email, "role": role, "branch_id": branch_id, "department_id": department_id}
+    after: dict[str, object] = {
+        "email": email,
+        "role": role,
+        "branch_id": branch_id,
+        "department_id": department_id,
+    }
     if via:
         after["via"] = via
+    if reactivated:
+        after["reactivated"] = True
     await audit.record(
         db, principal.workspace_id, principal.actor, "member.added", target=user.id, after=after
     )

@@ -51,6 +51,7 @@ import { TWO_FACTOR } from "./two-factor";
 import { EXPLORER } from "./explorer";
 import { FEEDBACK } from "./feedback";
 import { SHAREPOINT } from "./sharepoint";
+import { GOLIVE } from "./golive";
 
 export const MS: Record<string, string> = {
   // P73: first, so an existing translation of the same English always wins.
@@ -102,4 +103,5 @@ export const MS: Record<string, string> = {
   ...ERASE,
   ...EXPLORER,
   ...SHAREPOINT,
+  ...GOLIVE,
 };

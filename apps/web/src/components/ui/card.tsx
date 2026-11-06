@@ -75,6 +75,7 @@ export function ListRow({
   active,
   className,
   children,
+  selector,
 }: {
   leading?: ReactNode;
   title: ReactNode;
@@ -84,6 +85,8 @@ export function ListRow({
   active?: boolean;
   className?: string;
   children?: ReactNode;
+  /** P81: a checkbox before the row, outside its button (a box inside a button is invalid). */
+  selector?: ReactNode;
 }) {
   const body = (
     <>
@@ -107,17 +110,22 @@ export function ListRow({
     active && "bg-accent-soft/50",
     className,
   );
-  return (
-    <li>
-      {onClick ? (
-        <button type="button" onClick={onClick} className={cls}>
-          {body}
-        </button>
-      ) : (
-        <div className={cls}>{body}</div>
-      )}
-    </li>
+  const row = onClick ? (
+    <button type="button" onClick={onClick} className={cls}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
   );
+  if (selector) {
+    return (
+      <li className={cn("grid grid-cols-[auto_minmax(0,1fr)] items-center", active && "bg-accent-soft/50")}>
+        <span className="grid place-items-center pl-4">{selector}</span>
+        {row}
+      </li>
+    );
+  }
+  return <li>{row}</li>;
 }
 
 /** Dot separators between metadata bits, skipping empty ones (no stray leading dots). */

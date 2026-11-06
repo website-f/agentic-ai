@@ -15,6 +15,7 @@ import { api, type PurBoard, type PurRequestInput } from '../api';
 import { ProofPicker } from './Proof';
 import { DeliveryProofPanel } from './DeliveryProof';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { WitnessField, emptyWitness } from './Witness';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -1163,7 +1164,7 @@ function Store({ data }: { data: PurBoard }) {
           </ul>
         </Card>
       )}
-      <Card title="Stock" sub={`${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in the store`} actions={<RecordButton kind="stockItem" label="Add store item" />} flush>
+      <Card title="Stock" sub={`${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in the store`} actions={<><ImportButton kind="stockItem" /><RecordButton kind="stockItem" label="Add store item" /></>} flush>
         <div className="table-wrap bz-pu-stock">
           <table className="table">
             <thead>

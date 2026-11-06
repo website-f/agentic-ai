@@ -5,6 +5,7 @@ import { useApp } from '../App';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { SiteVisitsSection } from './Visits';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, hhmm, useAction, useLoad } from '../ui';
 import { SHIFT_STATE } from './shared';
 import '../styles/ops.css';
@@ -45,7 +46,12 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
       <PageHead
         title="Sites"
         sub={`${data.length} sites. Problems counts no-shows, late guards and unfilled shifts today.`}
-        actions={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}
+        actions={
+          <>
+            <ImportButton kind="site" companyId={companyId} />
+            <RecordButton kind="site" companyId={companyId} label="Add site" primary />
+          </>
+        }
       />
       <Stats>
         <Stat label="Sites" value={data.length} note={`${sum('posts')} posts${armed ? `, ${armed} armed sites` : ''}`} icon={<BuildingsIcon size={16} />} tone="info" />
@@ -217,7 +223,10 @@ export function SiteDrawer({ siteId, onClose }: { siteId: string; onClose: () =>
           <section className="op-sec">
             <div className="op-sec-head">
               <h3>Posts</h3>
-              <RecordButton kind="post" companyId={data.site.companyId} label="Add post" />
+              <span className="row" style={{ gap: 6 }}>
+                <ImportButton kind="post" companyId={data.site.companyId} />
+                <RecordButton kind="post" companyId={data.site.companyId} label="Add post" />
+              </span>
             </div>
             <div className="op-box">
               {data.posts.length === 0 && <Empty title="No posts yet." />}
@@ -242,7 +251,10 @@ export function SiteDrawer({ siteId, onClose }: { siteId: string; onClose: () =>
           <section className="op-sec">
             <div className="op-sec-head">
               <h3>Patrol checkpoints today</h3>
-              <RecordButton kind="checkpoint" companyId={data.site.companyId} label="Add checkpoint" />
+              <span className="row" style={{ gap: 6 }}>
+                <ImportButton kind="checkpoint" companyId={data.site.companyId} />
+                <RecordButton kind="checkpoint" companyId={data.site.companyId} label="Add checkpoint" />
+              </span>
             </div>
             <div className="op-box">
               {data.checkpoints.map((c) => (

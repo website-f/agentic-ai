@@ -448,7 +448,7 @@ async def test_staff_open_prima_with_their_own_account(client, prima_on):
         await c.aclose()
     assert _accounts(prima_on) == [
         {"officeUserId": siti_id, "name": "Siti", "title": "Staff", "role": "pwvsb_officer",
-         "companyIds": ["co-maju"]},
+         "companyIds": ["co-maju"], "email": "siti@example.com"},
     ]  # fmt: skip
     async with SessionLocal() as db:
         link = await db.get(PrimaLink, (ws, siti_id))
@@ -563,3 +563,26 @@ async def test_the_owner_always_opens_prima_as_its_top_record(client, prima_on, 
     n = len(prima_on)
     await client.get("/api/prima/api/leave")
     assert len(prima_on) == n + 1
+
+
+def test_branch_suggestion_knows_the_companies_other_names():
+    """P81: Prima lists each company's other names from the staff list (and the central
+    employers' units), so an office branch named "UNIT HR" or "OPERASI JOHOR" finds its company."""
+    from agentic.api.routers.prima import _suggest
+
+    cos = [
+        prima.Company("pwvsb", "PW Venture Sdn Bhd (PWVSB)", ("Unit HR", "Unit Kewangan (DE)")),
+        prima.Company("goodwill", "Goodwill Empire Sdn Bhd", ("Operasi Johor", "Operasi KL / Selangor")),  # noqa: E501
+        prima.Company("co-arrow", "Arrow Shield Security Services Sdn Bhd", ("ARROW SHIELD SECURITY SDN BHD",)),  # noqa: E501
+        prima.Company("co-maju", "Maju Sdn Bhd"),
+    ]  # fmt: skip
+    assert _suggest("UNIT HR", cos) == "pwvsb"
+    assert _suggest("UNIT KEWANGAN  (DE)", cos) == "pwvsb"
+    assert _suggest("OPERASI JOHOR", cos) == "goodwill"
+    assert _suggest("OPERASI KL/ SELANGOR", cos) == "goodwill"
+    assert _suggest("ARROW SHIELD SECURITY SDN BHD", cos) == "co-arrow"
+    assert _suggest("Maju Sdn Bhd", cos) == "co-maju"
+    assert _suggest("Something Else Entirely", cos) is None
+    # Two companies answering to one name: the owner picks.
+    twin = [*cos, prima.Company("co-other", "Other Sdn Bhd", ("Unit HR",))]
+    assert _suggest("UNIT HR", twin) is None

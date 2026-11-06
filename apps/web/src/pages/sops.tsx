@@ -5,6 +5,7 @@ import { RadioGroup } from "radix-ui";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { BulkBar, RowCheck, SelectAll, useSelection } from "@/components/bulk-select";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
@@ -20,6 +21,8 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { bulkDelete } from "@/lib/bulk";
+import { libraryKeys } from "@/lib/library";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { sopsQuery, workKeys, type SOP } from "@/lib/work";
@@ -211,6 +214,28 @@ export function SopsPage() {
   const count = (scope: Scope) => (sops ?? []).filter((s) => s.scope === scope).length;
   const drafts = (sops ?? []).filter((s) => s.status === "draft").length;
 
+  // P81: pick many SOPs (those listed now) and delete them in one go.
+  const qc = useQueryClient();
+  const listed = useMemo(() => (canManage ? groups.flatMap((g) => g.items.map((s) => s.id)) : []), [groups, canManage]);
+  const sel = useSelection(listed);
+  const [bulkAsk, setBulkAsk] = useState(false);
+  const picked = sel.selected.length;
+  const deleteSelected = async () => {
+    try {
+      const r = await bulkDelete({ sops: sel.selected });
+      if (r.sops) toast.success(r.sops === 1 ? tr("Deleted 1 item.") : tr("Deleted {n} items.", { n: r.sops }), {
+        description: r.skipped.length ? tr("{n} could not be deleted: not yours to delete, or already gone.", { n: r.skipped.length }) : undefined,
+      });
+      else toast.error(tr("Nothing was deleted: these are not yours to delete, or already gone."));
+      sel.clear();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      qc.invalidateQueries({ queryKey: workKeys.sops });
+      qc.invalidateQueries({ queryKey: libraryKeys.all });
+    }
+  };
+
   return (
     <Page>
       <LibraryHeader tab="/sops"
@@ -238,7 +263,9 @@ export function SopsPage() {
                 ...(drafts ? [{ value: "draft" as const, label: t("Drafts"), count: drafts }] : []),
               ]} />
             <SearchInput value={q} onChange={setQ} placeholder={t("Search SOPs")} className="sm:ml-auto sm:max-w-72" />
+            {listed.length ? <SelectAll sel={sel} total={listed.length} /> : null}
           </Toolbar>
+          <BulkBar sel={sel} onDelete={() => setBulkAsk(true)} />
           {!groups.length ? (
             <EmptyState icon={FileTextIcon} title={t("No SOP matches")} body={t("Try another word, or show every scope.")} />
           ) : (
@@ -253,7 +280,8 @@ export function SopsPage() {
                     </div>
                     <ListCard>
                       {g.items.map((s) => (
-                        <ListRow key={s.id} onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} active={s.id === search.sop}
+                        <ListRow key={s.id} onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} active={s.id === search.sop || sel.isOn(s.id)}
+                          selector={canManage ? <RowCheck checked={sel.isOn(s.id)} onChange={() => sel.toggle(s.id)} label={t("Select {name}", { name: s.title })} /> : undefined}
                           leading={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
                           title={<span className="block whitespace-normal break-words">{s.title}</span>}
                           trailing={s.status === "draft" ? <Pill tone="warn">{t("Draft")}</Pill> : undefined}
@@ -269,6 +297,11 @@ export function SopsPage() {
       )}
       {openSop ? <Editor key={openSop.id + openSop.version} sop={openSop} open canManage={canManage} onOpenChange={(o) => !o && navigate({ to: "/sops", search: {} })} /> : null}
       {creating ? <Editor key={`new-${creating}`} sop={null} open canManage={canManage} onOpenChange={(o) => !o && setCreating(0)} /> : null}
+      <ConfirmDialog open={bulkAsk} onOpenChange={setBulkAsk} danger
+        title={picked === 1 ? t("Delete 1 SOP?") : t("Delete {n} SOPs?", { n: picked })}
+        confirmLabel={picked === 1 ? t("Delete 1 item") : t("Delete {n} items", { n: picked })}
+        body={t("Agents stop following them immediately and they are detached from every agent. This cannot be undone.")}
+        onConfirm={deleteSelected} />
     </Page>
   );
 }

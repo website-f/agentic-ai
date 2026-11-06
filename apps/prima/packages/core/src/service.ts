@@ -17,6 +17,7 @@ import {
 } from './special-ops';
 import { RENT_REMINDERS, inSendingHours, isStopReply, rentDueOn, rentReminderFor, waNumber, type RentReminderSkip } from './rent-reminders';
 import { activeGrants } from './access';
+import { staffPayGaps } from './real-data';
 import type { AmRentReminder, AmmoStock, SiteSystem, CmsService, CmsServiceKind, ArmsSupplier, ArmsTradeDetail, InsuranceKind, SupplierPaper, Vault, ApprovalLimits, FinAgeing } from './types';
 import { CMS_SERVICE_EQUIPMENT, CMS_SERVICE_KINDS, commissioningGaps, contractedCoverage, observe, serviceTestGaps, windowProblem } from './cms-commissioning';
 import { growthPanel, marginSummary, type GrowthMargin, type GrowthPanel } from './growth';
@@ -42,6 +43,7 @@ import { ItImportReviewService } from './it-import-review';
 import { OrgLinkService, orgLinksOn } from './org-links';
 import { arishaGuideView, guideCardsFor } from './guide-cards';
 import { OrgImportService } from './org-import';
+import { AttendanceReportService } from './attendance-reports';
 import { arishaLeader } from './arisha-policy';
 import { IT_IMPORT_MAX_CHARS, IT_IMPORT_MAX_LEN, IT_IMPORT_MAX_ROWS, itImportInputHash, previewItImport, type ItImportKind, type ItImportPreview } from './it-import';
 // Wave 1 application service. Every method takes the acting user, checks access, and
@@ -102,6 +104,8 @@ import { FILING_LABEL, eaFigures, filingsDue, noticeWeeks, probationsDue, retire
 import { OSH_INCIDENT_LABEL, oshEmployers, oshForm, oshNextReview, oshReportBy } from './hr-osh';
 import { CALENDAR_DAY_LEAVE, familyLeaveEntitlement, holidayDates, holidayYearCheck, officeLeaveDays, withOverride } from './hr-leave';
 import { faceScore, validFaceDescriptor } from './face';
+import { CheckinService, checkinState, type CheckinAddress, type CheckinFix, type CheckinInput, type CheckinPlaceInput, type CheckinRuleInput } from './checkin-service';
+import type { CheckinPolicy } from './checkin';
 import {
   checkAssignment,
   checkRequirement,
@@ -1230,6 +1234,8 @@ export class PrimaService {
 
   /** Real-data import through the record forms' own save, with a dry run (org-import.ts). */
   get orgImport(): OrgImportService { return new OrgImportService(this.store, this, () => this.now()); }
+  /** P81: past attendance from the InfoTech monthly PDF reports (attendance-reports.ts). */
+  get attendanceReports(): AttendanceReportService { return new AttendanceReportService(this.store, () => this.now()); }
   /** Guide cards for this person (Arisha review section A): the same role-scoped mapping the screen and Arisha read. */
   guideCards(user: User) { return guideCardsFor(user, this.recordKindsFor(user), { handovers: orgLinksOn(this.store) }); }
   /** Arisha's task_guide tool: the same guideCards call, cut to what she needs. */
@@ -15968,11 +15974,17 @@ export class PrimaService {
     });
   }
 
-  async staffSessionStart(user: User) {
+  async staffSessionStart(user: User, opts?: { checkIn?: boolean }) {
     if (!this.staffClockAllowed(user)) return null;
     const at = this.now();
     const open = await this.openStaffClock(user);
     if (open && dateOf(open.in.receivedAt) === this.today()) return open;
+    // P81: a check-out ends the working day. Opening Prima again that day does not start a new clock; a new check-in does.
+    if (!opts?.checkIn && !open) {
+      const d = this.today();
+      const today = await this.store.list('checkinEvents', { userId: user.id }, { field: 'at', from: d, before: addDays(d, 1) });
+      if (checkinState(today) === 'out') return null;
+    }
     const companyId = this.staffCompany(user);
     const n = (await this.store.list('staffClocks', { userId: user.id })).length;
     const rec: StaffClock = {
@@ -16039,7 +16051,7 @@ export class PrimaService {
    * Signing out clocks the staff member out. If the office door shows they left well before signing out (the session
    * left running), the clock is flagged for HR (Fauzan, 27 Oct 2026); the sign-out time stays the record until HR confirms.
    */
-  async staffSessionEnd(user: User) {
+  async staffSessionEnd(user: User, place?: Pick<StaffClockShot, 'lat' | 'lng' | 'accuracyM' | 'distanceM'>) {
     const open = await this.openStaffClock(user);
     if (!open) return null;
     const at = this.now();
@@ -16047,7 +16059,8 @@ export class PrimaService {
     const late = !!exit && toMs(at) - toMs(exit.at) > RULES.staffDoorCheck.value.leftBeforeSignOutMin * 60_000;
     return this.store.transaction(async (tx) => {
       const updated = await tx.update('staffClocks', open.id, {
-        out: this.loginShot(at),
+        // P81: a check-out closes the clock with the place it was made at.
+        out: place ? { ...this.loginShot(at), ...place, source: 'checkin' as const } : this.loginShot(at),
         flags: late ? [...new Set([...open.flags, 'LEFT_BEFORE_SIGN_OUT' as const])] : open.flags,
       });
       await tx.audit({
@@ -16280,6 +16293,83 @@ export class PrimaService {
     }
     const home = await this.homeArrangement(c.userId, dateOf(c.in.receivedAt));
     return { clock: c, pings, base: who?.base ?? null, gaps, state: this.staffLocationState(who, c, pings.at(-1) ?? null, !!home) };
+  }
+
+  // ---------- Check-in places (P81, 6 Nov 2026; checkin.ts and checkin-service.ts) ----------
+
+  private checkins(): CheckinService {
+    return new CheckinService(this.store, () => this.now(), {
+      allowed: (u) => this.staffClockAllowed(u),
+      openClock: (u) => this.openStaffClock(u),
+      ensureClock: (u) => this.staffSessionStart(u, { checkIn: true }),
+      closeClock: (u, place) => this.staffSessionEnd(u, place),
+      faceCheck: (u, f) => this.staffFaceCheck(u, { image: f.image, capturedAt: f.capturedAt, lat: null, lng: null, accuracyM: null, face: { score: 0, live: f.live }, descriptor: f.descriptor }),
+      faceEnrolled: (u) => this.staffFaceEnrolled(u),
+    });
+  }
+
+  myCheckin(user: User) {
+    return this.checkins().mine(user);
+  }
+
+  checkinPreview(user: User, fix: CheckinFix, address: CheckinAddress = { status: 'off', text: null }) {
+    return this.checkins().preview(user, fix, address);
+  }
+
+  /** Check in (or out): the server decides in or out of the area. A refused attempt is kept, then the refusal raised. */
+  async checkIn(user: User, kind: 'in' | 'out', input: CheckinInput, address: CheckinAddress = { status: 'off', text: null }) {
+    const r = await this.checkins().record(user, kind, input, address);
+    if (r.blocked) {
+      const n = r.event.nearest;
+      throw new RefusedAfterSave(
+        `Check-in refused: you are ${n ? `${n.outsideByM.toLocaleString('en-MY')} m outside ${n.label}` : 'outside your allowed area'}, and your company does not allow check-ins outside it. Your manager can see this attempt.`,
+      );
+    }
+    return r;
+  }
+
+  checkinSetAddress(user: User, id: Id, address: CheckinAddress) {
+    return this.checkins().setAddress(user, id, address);
+  }
+
+  checkinSetAddressAt(user: User, lat: number, lng: number, address: CheckinAddress) {
+    return this.checkins().setAddressAt(user, lat, lng, address);
+  }
+
+  checkinSetup(user: User) {
+    return this.checkins().setup(user);
+  }
+
+  saveCheckinPlace(user: User, input: CheckinPlaceInput) {
+    return this.checkins().savePlace(user, input);
+  }
+
+  setCheckinPlaceActive(user: User, id: Id, active: boolean) {
+    return this.checkins().setPlaceActive(user, id, active);
+  }
+
+  setCheckinPolicy(user: User, companyId: Id, outOfArea: CheckinPolicy) {
+    return this.checkins().setPolicy(user, companyId, outOfArea);
+  }
+
+  setCheckinRules(user: User, userIds: Id[], rule: CheckinRuleInput) {
+    return this.checkins().setRules(user, userIds, rule);
+  }
+
+  checkinSites(user: User, companyId: Id) {
+    return this.checkins().sites(user, companyId);
+  }
+
+  checkinDay(user: User, date?: IsoDate) {
+    return this.checkins().day(user, date);
+  }
+
+  checkinReviews(user: User) {
+    return this.checkins().reviews(user);
+  }
+
+  decideCheckin(user: User, id: Id, decision: 'cleared' | 'upheld', note: string) {
+    return this.checkins().decide(user, id, decision, note);
   }
 
   // ---------- Working from home (Fauzan, 27 Oct 2026) ----------
@@ -35857,6 +35947,11 @@ export class PrimaService {
     const now = new Map(people.filter((p) => this.paidInPeriod(p, run.period)).map((p) => [p.id, window(p)]));
     const had = new Map(run.lines.map((l) => [l.personId, l.partMonth ? `${l.partMonth.from}..${l.partMonth.to}` : 'full']));
     const changed = now.size !== had.size || [...now].some(([id, w]) => had.get(id) !== w);
+    // P81: a record loaded from the staff list has no birth date, joining date or nationality yet ("not recorded yet").
+    // EPF, SOCSO and the part-month depend on them, so it is never paid on a guess: HR fills them in first.
+    const gaps = people.filter((p) => this.paidInPeriod(p, run.period) && staffPayGaps(p).length);
+    if (gaps.length)
+      out.push(`Not recorded yet: ${gaps.map((p) => `${p.name} (${staffPayGaps(p).join(', ')})`).join('; ')}. HR adds them on the staff record first.`);
     // Pay inputs too (Arisha main review, 3 Nov 2026): basic pay, allowances and their ticks, unpaid leave.
     const types = await this.store.list('allowanceTypes', {});
     const leaves = (await this.store.list('leaveRequests', { companyId: run.companyId })).filter(

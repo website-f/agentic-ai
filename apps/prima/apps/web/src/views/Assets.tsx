@@ -9,6 +9,7 @@ import {
 import { api, type AmBoard, type DisposalBody } from "../api";
 import { FixedAssetsPanel, METHOD as DISPOSAL_METHOD } from "./FixedAssets";
 import { RecordButton } from "./RecordForm";
+import { ImportButton } from "./ImportDrawer";
 import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from "../kit";
 import {
   Chip,
@@ -313,7 +314,14 @@ function Units({ data }: { data: AmBoard }) {
   );
   return (
     <>
-      <Toolbar end={<RecordButton kind="amUnit" label="Add unit" primary />}>
+      <Toolbar
+        end={
+          <>
+            <ImportButton kind="amUnit" />
+            <RecordButton kind="amUnit" label="Add unit" primary />
+          </>
+        }
+      >
         <Search
           value={q}
           onChange={setQ}
@@ -956,7 +964,12 @@ function Maintenance({ data }: { data: AmBoard }) {
     <Card
       title="Work orders"
       sub="Each closes with photos before and after, the cost and the contractor."
-      actions={<RecordButton kind="amWorkOrder" label="Add work order" />}
+      actions={
+        <>
+          <ImportButton kind="amWorkOrder" />
+          <RecordButton kind="amWorkOrder" label="Add work order" />
+        </>
+      }
       flush
     >
       {data.workOrders.length === 0 && <Empty title="No work orders." />}
@@ -1003,7 +1016,12 @@ function Assets({ data }: { data: AmBoard }) {
       <Card
         title="Register"
         sub={`${data.assets.count} in use · ${rm(data.assets.cost)} at cost · ${data.assets.poor} in poor condition`}
-        actions={<RecordButton kind="amAsset" label="Add asset" />}
+        actions={
+          <>
+            <ImportButton kind="amAsset" />
+            <RecordButton kind="amAsset" label="Add asset" />
+          </>
+        }
       >
         <div className="bz-stack">
           <div className="bz-am-cats">

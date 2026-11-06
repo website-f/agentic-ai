@@ -38,6 +38,14 @@ export interface Company {
   /** Who last saved the draft (Central Admin 5A part 3): the person who checks it against SSM is someone else. */
   draftById?: Id | null;
   draftBy?: string | null;
+  /**
+   * P81 (real data): what the company is in the group. Missing means a licensed security company. 'asset' is Prisma
+   * Wiramaju, asset management. The central employers (PWVSB, Merdeka Network, Goodwill Empire, Sasa Team) have no
+   * company record at all (access.ts CENTRAL_EMPLOYER_IDS).
+   */
+  groupRole?: 'licensed' | 'asset';
+  /** P81: other names the staff list uses for the company, so the office's branches match it (api/office/companies). */
+  aliases?: string[];
 }
 
 export interface Branch {
@@ -338,6 +346,10 @@ export interface Person {
   maritalStatus?: 'single' | 'married' | 'divorced' | 'widowed';
   children?: number;
   email?: string;
+  /** P81: the person's other work mailboxes on the staff list (an office sign-in with any of them is theirs). */
+  otherEmails?: string[];
+  /** P81: the operations area an office staff member works in (Goodwill Empire's regional offices). */
+  area?: { label: string; regionId: string; states: string[] } | null;
   address?: string;
   department?: string;
   /** Who the staff member reports to, by name. */
@@ -1300,7 +1312,9 @@ export type StaffClockFlag =
   /** Signed out more than the allowed minutes after the office door last recorded them leaving (Fauzan, 27 Oct 2026). */
   | 'LEFT_BEFORE_SIGN_OUT'
   /** Clocked in at sign-in; the face check has not been done yet (Fauzan, 2 Nov 2026). */
-  | 'FACE_PENDING';
+  | 'FACE_PENDING'
+  /** P81: checked in or out outside the allowed area, with a reason, for the manager or HR to review (checkin.ts). */
+  | 'OUT_OF_AREA';
 
 /**
  * One office door reading from the access-control system, monitored by CMS (Fauzan, 27 Oct 2026). Used to check the
@@ -1330,8 +1344,8 @@ export interface StaffClockShot {
   /** Metres from the base, when the staff member has one and the phone gave a location. */
   distanceM: number | null;
   face: FaceCapture | null;
-  /** 'login': taken automatically when the staff member signed in or out (no photo). */
-  source: 'in_app_camera' | 'test_picture' | 'login' | 'door';
+  /** 'login': taken automatically when the staff member signed in or out (no photo). P81 'checkin': at a check-out, with its place. */
+  source: 'in_app_camera' | 'test_picture' | 'login' | 'door' | 'checkin';
 }
 
 /**
@@ -2510,6 +2524,11 @@ export interface Dataset {
   companyDesks: import('./company-office').CompanyDeskAssignment[];
   /** Which licensed company's office runs a company (Fauzan, 3 Nov 2026), set by the CEO. */
   companyRunLinks: import('./company-office').CompanyRunLink[];
+  /** P81: staff check-in by place (checkin.ts): each company's places, who checks in where, the company's out-of-area choice, and every check-in. */
+  checkinPlaces: import('./checkin').CheckinPlace[];
+  checkinRules: import('./checkin').CheckinRule[];
+  checkinSettings: import('./checkin').CheckinSettings[];
+  checkinEvents: import('./checkin').CheckinEvent[];
   itMetricStreams:MetricStream[];
   itMetricReceipts:{id:string;receipt:MetricReceipt}[];
   itMetricTargets:{id:string;target:MetricTarget}[];
@@ -2661,6 +2680,10 @@ export interface Dataset {
   orgTasks: import('./org-links').OrgTask[];
   orgNotices: import('./org-links').OrgNotice[];
   orgImports: import('./org-import').OrgImportReceipt[];
+  /** P81: past attendance read from the InfoTech monthly PDF reports (attendance-reports.ts). */
+  attendanceImports: import('./attendance-reports').AttendanceImport[];
+  attendanceDays: import('./attendance-reports').AttendanceDayRow[];
+  attendanceMatches: import('./attendance-reports').AttendanceMatch[];
   hrItRequests: HrItRequest[];
   hrItApprovals: HrItApproval[];
   hrItDelegations: HrItDelegation[];

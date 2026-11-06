@@ -1,5 +1,7 @@
 import type { ExtractionClient } from './it-extraction';
 import type { ConnectionsClient } from './connections';
+import type { CheckinClient } from './checkin';
+export type * from './checkin';
 export type { ConnectionsClient, SharePointStatus, SharePointCheck, SharePointLibraries, SharePointItems } from './connections';
 import type { ClientShareLink, ClientShareReport } from '@prima/core';
 export type { ClientShareLink, ClientShareReport } from '@prima/core';
@@ -32,6 +34,9 @@ import type {
   IsoDate,
   PrimaService,
   RecordKind,
+  ImportKind,
+  ImportOptions,
+  OrgImportReceipt,
   ReportDef,
   RecordValues,
   EvidenceDoc,
@@ -341,9 +346,11 @@ export interface NewQuotation {
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
-export interface Api extends ConnectionsClient, ExtractionClient {
+export interface Api extends ConnectionsClient, ExtractionClient, CheckinClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
+  /** P81: past attendance from the monthly PDF reports; server only (the demo has none). */
+  readonly attendanceReports?: import('./attendance-reports').AttendanceReportsClient;
   m365Call(expectedUserId: string, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<unknown>;
   readonly mode: 'demo' | 'server';
   itImportReviewAssertOwner?(): Promise<void>;
@@ -942,7 +949,7 @@ export interface OrgClient {
   close(taskId: string, outcome: 'done' | 'not_needed', note: string): Promise<unknown>;
   read(taskId: string): Promise<unknown>;
   map(): Promise<OrgMap>;
-  importTemplate(kind: RecordKind): Promise<OrgImportTemplate>;
-  importPreview(kind: RecordKind, companyId: string | null, csv: string): Promise<OrgImportPreview>;
-  importCommit(kind: RecordKind, companyId: string | null, csv: string, fingerprint: string): Promise<unknown>;
+  importTemplate(kind: ImportKind): Promise<OrgImportTemplate>;
+  importPreview(kind: ImportKind, companyId: string | null, csv: string, opts?: ImportOptions): Promise<OrgImportPreview>;
+  importCommit(kind: ImportKind, companyId: string | null, csv: string, fingerprint: string, opts?: ImportOptions): Promise<OrgImportReceipt>;
 }

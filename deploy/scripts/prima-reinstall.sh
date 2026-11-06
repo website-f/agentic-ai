@@ -12,13 +12,20 @@
 #   2. prima-api, prima-setup and prima-db removed, then the primadata volume;
 #   3. prima-db, prima-setup (base + every module of the release manifest) and prima-api
 #      started again. The office's links to Prima staff records (prima_links) keep working:
-#      the sample records keep their ids.
+#      the sample records keep their ids. P81: with PRIMA_REAL_DATA, only u-fauzan (the CEO, the
+#      owner's link) and the system feeds remain. The office's other prima_links point at records
+#      that are gone: clear them (removing those members does), and the office makes each person's
+#      account again, linked to their staff record, the next time they open Prima.
 # Restore a backup: docs/P66-PRIMA-ONE-SYSTEM.md, "Reinstalling Prima".
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [ "${1:-}" = "--yes" ] || { echo "This replaces Prima's database (after a backup). Run with --yes." >&2; exit 64; }
 
 DC=(docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile prima)
+# P81: with PRIMA_REAL_DATA set in .env, the new database gets the real companies and staff from
+# data/prima-real/prima-real-data.json. The file is checked (counts only) before anything is
+# backed up or removed; a missing or wrong file stops here with nothing changed.
+"${DC[@]}" run --rm --no-deps -T prima-setup node dist/src/db-setup.js --check-real-data
 mkdir -p data/backups
 out="data/backups/prima-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
 if [ -n "$("${DC[@]}" ps -q prima-db 2>/dev/null)" ]; then

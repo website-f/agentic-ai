@@ -11,7 +11,7 @@ import {
   UserCheckIcon,
   UserMinusIcon,
 } from '@phosphor-icons/react';
-import { fromMs, type StaffClockFlag } from '@prima/core';
+import { checkinScope, fromMs, type CheckinEvent, type StaffClockFlag } from '@prima/core';
 import { api, type MyStaffClock, type StaffClockBoard } from '../api';
 import { Card, Empty, PageHead, Person, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -23,6 +23,8 @@ import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { HrGuide } from './HrGuide';
 import { useApp } from '../App';
+import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
+import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import '../styles/selfservice.css';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
@@ -35,8 +37,9 @@ const FLAG_LABEL: Record<StaffClockFlag, string> = {
   NO_SIGN_OUT: 'Did not sign out',
   LEFT_BEFORE_SIGN_OUT: 'Left the office before signing out',
   FACE_PENDING: 'Face check not done',
+  OUT_OF_AREA: 'Checked in or out outside the area',
 };
-const FLAG_TONE: Partial<Record<StaffClockFlag, Tone>> = { PHOTO_ONLY: 'neutral', NO_GPS: 'warn', AWAY_FROM_BASE: 'warn' };
+const FLAG_TONE: Partial<Record<StaffClockFlag, Tone>> = { PHOTO_ONLY: 'neutral', NO_GPS: 'warn', AWAY_FROM_BASE: 'warn', OUT_OF_AREA: 'warn' };
 const LOCATION: Record<'tracked' | 'away' | 'unknown' | 'off' | 'desk' | 'remote', { label: string; tone: Tone }> = {
   remote: { label: 'Working from home', tone: 'info' },
   desk: { label: 'Signed in, location not followed', tone: 'neutral' },
@@ -193,6 +196,9 @@ export function MyClockView() {
         )}
       </section>
 
+      {/* P81: check in and out by place, with the location checked by the server. */}
+      <MyCheckinCard />
+
       <div className="ss-cols">
         <Card title="Last 7 days" flush>
           <ul className="ss-rows">
@@ -294,8 +300,13 @@ const STATUS_ORDER: Record<Row['status'], number> = { in: 0, out: 1, not_in: 2 }
 /** Who of the staff is clocked in and where, for the company manager, central HR and top management. */
 export function StaffClockBoardView() {
   const { data, error } = useLoad(() => api.staffClockBoard(), []);
+  const { me } = useApp();
+  // P81: HR, managers and leaders set check-in places and review check-ins outside the area.
+  const places = checkinScope(me.user) !== null;
+  const day = useLoad(() => (places ? api.checkinDay().catch(() => null) : Promise.resolve(null)), [places]);
+  const reviews = useLoad(() => (places ? api.checkinReviews().catch(() => null) : Promise.resolve(null)), [places]);
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<'clock' | 'home'>('clock');
+  const [tab, setTab] = useState<'clock' | 'home' | 'places' | 'review'>('clock');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   if (error)
@@ -361,9 +372,23 @@ export function StaffClockBoardView() {
         <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}>
           Working from home
         </button>
+        {places && (
+          <>
+            <button role="tab" aria-selected={tab === 'places'} onClick={() => setTab('places')}>
+              Check-in places
+            </button>
+            <button role="tab" aria-selected={tab === 'review'} onClick={() => setTab('review')}>
+              Out of area{reviews.data?.open.length ? <span className="ss-count">{reviews.data.open.length}</span> : null}
+            </button>
+          </>
+        )}
       </div>
       {tab === 'home' ? (
         <RemoteBoardView />
+      ) : tab === 'places' ? (
+        <CheckinPlacesView />
+      ) : tab === 'review' ? (
+        <CheckinReviewView />
       ) : (
         <>
           <Stats>
@@ -409,7 +434,7 @@ export function StaffClockBoardView() {
               {rows.length === 0 && <li className="empty">Nobody here.</li>}
               {rows.map((r) => (
                 <li key={r.userId}>
-                  <BoardRow r={r} problem={problem(r)} onOpen={() => r.clock && setOpen(r.clock.id)} />
+                  <BoardRow r={r} problem={problem(r)} checkins={day.data?.events.filter((e) => e.userId === r.userId) ?? []} onOpen={() => r.clock && setOpen(r.clock.id)} />
                 </li>
               ))}
             </ul>
@@ -425,7 +450,7 @@ export function StaffClockBoardView() {
   );
 }
 
-function BoardRow({ r, problem, onOpen }: { r: Row; problem: boolean; onOpen: () => void }) {
+function BoardRow({ r, problem, onOpen, checkins = [] }: { r: Row; problem: boolean; onOpen: () => void; checkins?: CheckinEvent[] }) {
   const flags = r.clock ? r.clock.flags.filter((f) => f !== 'PHOTO_ONLY') : [];
   const status =
     r.status === 'in' ? LOCATION[r.location] : r.status === 'out' ? { label: 'Clocked out', tone: 'neutral' as Tone } : { label: 'Not in', tone: 'neutral' as Tone };
@@ -469,6 +494,16 @@ function BoardRow({ r, problem, onOpen }: { r: Row; problem: boolean; onOpen: ()
           <span className="ss-meta">
             Last reading {time(r.last.at)}
             {r.last.distanceM !== null ? `, ${fmtDistance(r.last.distanceM)} from base` : ''}
+          </span>
+        )}
+        {checkins.length > 0 && (
+          <span className="ci-board-line">
+            {checkins.map((e) => (
+              <Chip key={e.id} tone={e.outcome === 'accepted' ? VERDICT[e.verdict].tone : OUTCOME[e.outcome].tone}>
+                {e.kind === 'in' ? 'In' : 'Out'} {time(e.at)} · {e.outcome === 'blocked' ? 'refused, ' : ''}
+                {whereText(e)}
+              </Chip>
+            ))}
           </span>
         )}
         {(r.door.firstIn || r.door.lastOut) && (
@@ -546,7 +581,9 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
                           <img src={s.image} alt={`${k} photo`} className="ss-photo" />
                         ) : (
                           <span className="muted">
-                            {s.source === 'door'
+                            {s.source === 'checkin'
+                              ? 'At check-out, no photo'
+                              : s.source === 'door'
                               ? 'Not signed out: closed at the last office door exit'
                               : s.source === 'login'
                                 ? k === 'in'

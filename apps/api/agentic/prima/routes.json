@@ -597,6 +597,115 @@
   "name": "fixedAssets"
  },
  {
+  "method": "GET",
+  "path": "api/attendance-reports",
+  "name": "overview",
+  "doc": "Past attendance from the monthly reports: tiles, monthly trend, company and department breakdowns, who is often late.",
+  "query": [
+   "month",
+   "companyId",
+   "department",
+   "q"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/match",
+  "name": "match",
+  "doc": "Remember which staff record an employee on the reports is, for this and later imports.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/attendance-reports/person",
+  "name": "person",
+  "doc": "One person's month from a report, day by day, with their other months.",
+  "query": [
+   "importId",
+   "key"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/attendance-reports/staff",
+  "name": "staff",
+  "doc": "Staff of one company to match a report employee to (name or staff number).",
+  "query": [
+   "companyId",
+   "q"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/attendance-reports/unmatched",
+  "name": "unmatched",
+  "doc": "Employees on the reports that no staff record is matched to yet."
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads",
+  "name": "start",
+  "doc": "Start sending an attendance report PDF: refused at once for a file already imported or a person who does not import.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/attendance-reports/uploads/:id",
+  "name": "status",
+  "doc": "How far sending and reading have got.",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads/:id/cancel",
+  "name": "cancel",
+  "doc": "Forget an upload that will not be saved.",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads/:id/chunk",
+  "name": "chunk",
+  "doc": "One piece of the file (base64, 1 MB before encoding).",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads/:id/finish",
+  "name": "finish",
+  "doc": "Every piece is in: check the file and start reading it.",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads/:id/preview",
+  "name": "preview",
+  "doc": "What the report holds and where it would go: month, companies, employees, matches, unreadable pages.",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/attendance-reports/uploads/:id/save",
+  "name": "save",
+  "doc": "Save the report. An earlier import of the same month and company is replaced only with replace: true.",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/attendance/follow-up",
   "name": "followUp",
@@ -742,6 +851,68 @@
   "path": "api/ceo/instructions",
   "name": "ceoInstruct",
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/checkin/day",
+  "name": "day",
+  "query": [
+   "date"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/checkin/places",
+  "name": "savePlace",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/checkin/places/:id/active",
+  "name": "placeActive",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/checkin/policy",
+  "name": "policy",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/checkin/reviews",
+  "name": "reviews"
+ },
+ {
+  "method": "POST",
+  "path": "api/checkin/reviews/:id",
+  "name": "decide",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/checkin/rules",
+  "name": "rules",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/checkin/setup",
+  "name": "setup"
+ },
+ {
+  "method": "GET",
+  "path": "api/checkin/sites",
+  "name": "sites",
+  "query": [
+   "companyId"
+  ]
  },
  {
   "method": "POST",
@@ -2317,6 +2488,23 @@
  },
  {
   "method": "GET",
+  "path": "api/geo/reverse",
+  "name": "reverse",
+  "query": [
+   "lat",
+   "lng"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/geo/search",
+  "name": "search",
+  "query": [
+   "q"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/governance",
   "name": "govBoard"
  },
@@ -3031,6 +3219,29 @@
   "method": "GET",
   "path": "api/me",
   "name": "me"
+ },
+ {
+  "method": "GET",
+  "path": "api/me/checkin",
+  "name": "mine"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/checkin/in",
+  "name": "checkIn",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/checkin/out",
+  "name": "checkOut",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/checkin/preview",
+  "name": "preview",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",

@@ -1,0 +1,776 @@
+/* P81: staff check-in by place. The check-in card and flow, the Check-in places screen, the review list and the map.
+   Tokens only (styles.css), so light and dark follow the office's choice; motion stops for reduced motion. */
+
+/* ---------- Map ---------- */
+.ci-map {
+  width: 100%;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: var(--surface-2);
+  /* Leaflet's panes use z-index 400+; keep them inside the map, under drawers and the camera. */
+  isolation: isolate;
+  position: relative;
+  z-index: 0;
+}
+.ci-map .leaflet-container,
+.ci-map.leaflet-container {
+  font: inherit;
+  background: var(--surface-2);
+}
+.ci-map-wait {
+  background: linear-gradient(100deg, var(--surface-2) 30%, var(--line) 50%, var(--surface-2) 70%) 0 0 / 300% 100%;
+  animation: ci-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes ci-shimmer {
+  to {
+    background-position: -150% 0;
+  }
+}
+.ci-map .leaflet-control-attribution {
+  font-size: 10px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--muted);
+}
+.ci-map .leaflet-control-attribution a {
+  color: var(--primary);
+}
+.ci-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.ci-map .leaflet-tooltip {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-size: 0.78rem;
+}
+/* Dark theme: the light OpenStreetMap tiles, turned dark (the shapes on top keep their colours). */
+:root[data-theme='dark'] .ci-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .ci-map .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.6);
+  }
+}
+.ci-pin {
+  background: none;
+  border: 0;
+}
+.ci-pin-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 2px 3px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--pin, var(--primary));
+  border: 3px solid #fff;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.3);
+  transition: transform 160ms ease;
+}
+.leaflet-marker-dragging .ci-pin-dot,
+.ci-pin.leaflet-drag-target .ci-pin-dot {
+  transform: rotate(-45deg) scale(1.15);
+}
+.ci-map-tools {
+  justify-content: space-between;
+}
+
+/* ---------- The check-in card ---------- */
+.ci-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.ci-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ci-card-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--muted);
+  flex: none;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+.ci-card-icon[data-state='in'] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.ci-card-title {
+  margin: 0;
+  font-weight: 650;
+  font-size: 1.05rem;
+}
+.ci-card-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.ci-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-inline: 20px;
+  font-weight: 600;
+}
+.ci-where {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ci-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ci-chips .chip svg {
+  vertical-align: -2px;
+}
+.ci-timeline {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.ci-timeline li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  animation: ci-in 220ms ease both;
+}
+.ci-tl-time {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding-top: 1px;
+}
+.ci-tl-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ci-tl-title {
+  font-weight: 550;
+}
+.ci-tl-sub {
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.ci-notice {
+  margin-top: 12px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.ci-notice summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 550;
+}
+.ci-notice ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+/* ---------- The flow ---------- */
+.ci-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: ci-in 220ms ease both;
+}
+@keyframes ci-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.ci-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 18px 8px;
+}
+.ci-ask-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--primary);
+}
+.ci-ask-title {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+.ci-ask-sub {
+  margin: 0;
+  color: var(--muted);
+  max-width: 42ch;
+}
+.ci-radar {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 6px var(--accent-soft);
+}
+.ci-radar::before,
+.ci-radar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  animation: ci-ping 1.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+.ci-radar::after {
+  animation-delay: 0.9s;
+}
+@keyframes ci-ping {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.ci-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ci-tips {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  display: grid;
+  gap: 4px;
+}
+.ci-verdict {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  animation: ci-in 220ms ease both;
+}
+.ci-verdict[data-tone='ok'] {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+.ci-verdict[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.ci-verdict[data-tone='crit'] {
+  background: var(--crit-soft);
+  border-color: color-mix(in srgb, var(--crit) 45%, transparent);
+}
+.ci-verdict-icon {
+  flex: none;
+  color: var(--muted);
+}
+.ci-verdict[data-tone='ok'] .ci-verdict-icon {
+  color: var(--ok);
+}
+.ci-verdict[data-tone='warn'] .ci-verdict-icon {
+  color: var(--warn);
+}
+.ci-verdict[data-tone='crit'] .ci-verdict-icon {
+  color: var(--crit);
+}
+.ci-verdict-title {
+  margin: 0;
+  font-weight: 650;
+}
+.ci-verdict-sub {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.ci-address {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.ci-address svg {
+  flex: none;
+  margin-top: 2px;
+}
+.ci-done {
+  align-items: center;
+  text-align: center;
+  padding: 24px 8px;
+}
+.ci-done-mark {
+  color: var(--ok);
+  animation: ci-pop 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes ci-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+
+/* ---------- Permission help ---------- */
+.ci-help {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  padding: 12px 14px;
+  background: var(--surface);
+  text-align: left;
+  font-size: 0.88rem;
+}
+.ci-help-title {
+  margin: 0 0 4px;
+  font-weight: 650;
+}
+.ci-help-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+.ci-help-more {
+  margin-top: 10px;
+}
+.ci-help-more summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 550;
+}
+.ci-help-other {
+  margin-top: 10px;
+}
+
+/* Inside the full-screen camera's "camera not available" sheet. */
+.cam-help {
+  flex: 1 1 100%;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cam-help .ci-help {
+  border: 0;
+  padding: 0;
+}
+
+/* ---------- Check-in places ---------- */
+.ci-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ci-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: flex-end;
+}
+.ci-company {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+.ci-places {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.ci-places li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.ci-places li[data-archived] {
+  opacity: 0.6;
+}
+.ci-place-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--primary);
+}
+.ci-place-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ci-place-name {
+  font-weight: 600;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ci-place-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.ci-search {
+  display: flex;
+  gap: 8px;
+}
+.ci-search .k-search {
+  max-width: none;
+}
+.ci-search .k-search input {
+  width: 100%;
+}
+.ci-results {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: ci-in 160ms ease both;
+}
+.ci-results button {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.ci-results button:hover,
+.ci-results button:focus-visible {
+  background: var(--surface-2);
+}
+.ci-results svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--primary);
+}
+
+/* A smooth slider that fills to its value. */
+.ci-range {
+  --fill: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+.ci-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) var(--fill), var(--line) var(--fill));
+}
+.ci-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.ci-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+.ci-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--primary);
+  box-shadow: var(--shadow);
+  transition: transform 120ms ease;
+}
+.ci-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--primary);
+}
+.ci-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+.ci-range:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.ci-radius-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Staff and their rules. */
+.ci-tools .select {
+  width: auto;
+  min-width: 180px;
+}
+.ci-check {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.ci-staff .ss-row {
+  align-items: center;
+  transition: background-color 160ms ease;
+}
+.ci-staff .ss-row[data-picked] {
+  background: var(--accent-soft);
+}
+.ci-staff-pick {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+.ci-staff-pick input,
+.ci-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  flex: none;
+}
+.ci-pickbar {
+  position: sticky;
+  bottom: 12px;
+  margin: 8px 12px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.35);
+  animation: ci-in 200ms ease both;
+  z-index: 2;
+}
+.ci-pickbar > span {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.ci-kinds {
+  display: grid;
+  gap: 8px;
+}
+.ci-kind {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+.ci-kind[aria-checked='true'] {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+.ci-kind-title {
+  font-weight: 650;
+}
+.ci-kind-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.ci-add-zone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ci-add-zone .select {
+  flex: 1 1 180px;
+  width: auto;
+}
+.ci-add-zone .btn[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.ci-zones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.ci-zones li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  animation: ci-in 200ms ease both;
+}
+.ci-zone-radius {
+  display: flex;
+  flex-direction: column;
+}
+.ci-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ci-days button {
+  min-width: 46px;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.ci-days button[aria-pressed='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.ci-trip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.ci-add-trip {
+  align-self: flex-start;
+}
+.ci-decided summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+/* Staff clock board: the check-in line under each person. */
+.ci-board-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .ci-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ci-go {
+    justify-content: center;
+    width: 100%;
+  }
+  .ci-zones li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .ci-zone-radius {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .ci-trip {
+    grid-template-columns: 1fr 1fr auto;
+  }
+  .ci-trip input:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .ci-search {
+    flex-direction: column;
+  }
+  .ci-pickbar {
+    margin-inline: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-step,
+  .ci-verdict,
+  .ci-results,
+  .ci-zones li,
+  .ci-timeline li,
+  .ci-pickbar,
+  .ci-done-mark,
+  .ci-map-wait {
+    animation: none;
+  }
+  .ci-radar::before,
+  .ci-radar::after {
+    animation: none;
+    opacity: 0;
+  }
+  .ci-card-icon,
+  .ci-kind,
+  .ci-days button,
+  .ci-staff .ss-row,
+  .ci-pin-dot,
+  .ci-range::-webkit-slider-thumb {
+    transition: none;
+  }
+}

@@ -19,6 +19,20 @@ MS: dict[str, str] = {
     ),
     "Set a new password before continuing.": "Tetapkan kata laluan baharu sebelum teruskan.",
     "Your role ({role}) cannot do this.": "Peranan anda ({role}) tidak boleh buat ini.",
+    # ------------------------------------------------------------ P81 start fresh for go-live
+    "That workspace was not found.": "Ruang kerja itu tidak dijumpai.",
+    "One of the companies picked is not in this office.": (
+        "Salah satu syarikat yang dipilih tiada dalam pejabat ini."
+    ),
+    "The company that takes in the AI workers and files must be one you keep.": (
+        "Syarikat yang menerima pekerja AI dan fail mestilah syarikat yang anda kekalkan."
+    ),
+    "Pick the company that takes in the AI workers and files of the companies you remove.": (
+        "Pilih syarikat yang menerima pekerja AI dan fail daripada syarikat yang anda buang."
+    ),
+    "This office has no owner, so nobody would be left.": (
+        "Pejabat ini tiada pemilik, jadi tiada sesiapa akan tinggal."
+    ),
     # ------------------------------------------------------------ P80 SharePoint folders in the Library
     "Paste the link to a SharePoint or OneDrive folder.": (
         "Tampal pautan folder SharePoint atau OneDrive."
@@ -35,6 +49,9 @@ MS: dict[str, str] = {
     ),
     "Microsoft did not say which folder that link opens.": (
         "Microsoft tidak memberitahu folder mana yang dibuka oleh pautan itu."
+    ),
+    "That address is not inside a SharePoint document library.": (
+        "Alamat itu bukan di dalam pustaka dokumen SharePoint."
     ),
     "Refused a download address that is not Microsoft's.": (
         "Alamat muat turun yang bukan milik Microsoft ditolak."

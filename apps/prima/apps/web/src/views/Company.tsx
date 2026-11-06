@@ -6,6 +6,7 @@ import { Card, Empty, PageHead, Person, Stat, Stats } from '../kit';
 import { VacanciesPanel } from './HrJoinLeave';
 import { StaffMovementPanel } from './HrMovement';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import '../styles/leadership.css';
 
 export function CompanyView() {
@@ -48,7 +49,7 @@ export function CompanyView() {
   const open = cases.filter((c) => c.status !== 'resolved');
   return (
     <div className="page ld">
-      <PageHead title={data.company.name} sub={<>Head of company: {data.company.headOfCompany}</>}>
+      <PageHead title={data.company.name} sub={<>Head of company: {data.company.headOfCompany || 'not recorded yet'}</>}>
         {branches.length > 0 && (
           <div className="ld-branches" aria-label="Branches">
             <span className="label">Branches</span>
@@ -241,6 +242,7 @@ function Licences({
       actions={
         <>
           <RecordButton kind="licence" companyId={companyId} label="Add licence" />
+          <ImportButton kind="licence" companyId={companyId} />
           <button className="btn btn-sm" onClick={onAll}>
             All licences
           </button>

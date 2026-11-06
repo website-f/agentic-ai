@@ -1,7 +1,7 @@
 // Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026).
 // Every route runs as the signed-in person (Db.asUser): the database walls and the service checks decide what they see.
 import { Body, Controller, Get, HttpException, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { IMPORTABLE_KINDS, ImportError, OrgLinkError, registeredRollouts, type RecordKind } from '@prima/core';
+import { IMPORTABLE_KINDS, ImportError, OrgLinkError, registeredRollouts, type ImportKind, type ImportOptions } from '@prima/core';
 import { AuthGuard, UserId } from './auth';
 import { Db } from './db';
 import { orgLinksProblems } from './org-links-readiness';
@@ -10,10 +10,18 @@ function str(v: unknown, max: number): string {
   return typeof v === 'string' ? v.slice(0, max) : '';
 }
 
-function kindOf(v: unknown): RecordKind {
-  const k = str(v, 40) as RecordKind;
+function kindOf(v: unknown): ImportKind {
+  const k = str(v, 40) as ImportKind;
   if (!IMPORTABLE_KINDS.includes(k)) throw new HttpException({ message: 'This kind of record is not imported in bulk.' }, 400);
   return k;
+}
+
+/** P81: the person's column choices, header row and skipped rows, bounded; anything malformed is left out. */
+function importOptions(b: Record<string, unknown> | undefined): ImportOptions {
+  const mapping = Array.isArray(b?.mapping) && b.mapping.length <= 300 ? b.mapping.map((x) => str(x, 40)) : null;
+  const headerRow = Number.isInteger(b?.headerRow) && (b!.headerRow as number) >= 0 && (b!.headerRow as number) < 100_000 ? (b!.headerRow as number) : null;
+  const skip = Array.isArray(b?.skip) ? b.skip.filter((n): n is number => Number.isInteger(n) && n > 0 && n < 100_000).slice(0, 1000) : null;
+  return { mapping, headerRow, skip };
 }
 
 /** Map the layer's own errors to HTTP; everything else goes to the shared filter. */
@@ -70,14 +78,14 @@ export class OrgController {
   @Post('import/:kind/preview')
   preview(@UserId() uid: string, @Param('kind') kind: string, @Body() b: Record<string, unknown>) {
     const k = kindOf(kind);
-    return mapped(this.db.asUser(uid, (svc, u) => svc.orgImport.preview(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001))));
+    return mapped(this.db.asUser(uid, (svc, u) => svc.orgImport.preview(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), importOptions(b))));
   }
 
   @Post('import/:kind/commit')
   commit(@UserId() uid: string, @Param('kind') kind: string, @Body() b: Record<string, unknown>) {
     const k = kindOf(kind);
     return mapped(
-      this.db.asUser(uid, (svc, u) => svc.orgImport.commit(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), str(b?.fingerprint, 64))),
+      this.db.asUser(uid, (svc, u) => svc.orgImport.commit(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), str(b?.fingerprint, 64), importOptions(b))),
     );
   }
 }

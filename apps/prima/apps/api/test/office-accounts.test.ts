@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
-import { AccountRefused, accountsHandler, checkAccountInput, officeAccountId } from '../src/office-accounts';
+import { AccountRefused, accessFor, accountsHandler, checkAccountInput, officeAccountId } from '../src/office-accounts';
 import { officePayload, officeSign, type OfficeCall } from '../src/office';
 
 const SECRET = 'o'.repeat(40);
@@ -22,6 +22,27 @@ describe('office accounts: what an office account can be', () => {
     const got = checkAccountInput({ ...GOOD, name: '  Siti   Aminah ', companyIds: ['co-sasa', 'co-sasa'], department: 'transport' });
     assert.deepEqual(got, { ...GOOD, companyIds: ['co-sasa'], department: 'transport' });
     assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec' }).role, 'admin_exec');
+  });
+
+  it('P81: takes the sign-in email (to find their staff record), and makes a central employer account central staff', () => {
+    assert.equal(checkAccountInput({ ...GOOD, email: ' Siti.Aminah@Example.TEST ' }).email, 'siti.aminah@example.test');
+    assert.equal(checkAccountInput({ ...GOOD, email: '' }).email, undefined);
+    assert.throws(() => checkAccountInput({ ...GOOD, email: 'not-an-email' }), /not an email/);
+    assert.throws(() => checkAccountInput({ ...GOOD, email: 42 }), /email must be text/);
+    for (const c of ['pwvsb', 'merdeka', 'goodwill', 'sasateam']) assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', companyIds: [c] }).role, 'pwvsb_officer', c);
+    assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', companyIds: ['co-sasa', 'pwvsb'] }).role, 'pwvsb_officer');
+    assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec' }).role, 'admin_exec');
+  });
+
+  it('P81: the role follows the linked staff record: a licensed company record makes its office staff, one company only', () => {
+    const staff = { role: 'pwvsb_officer' as const, companyIds: ['co-sasa'] };
+    assert.deepEqual(accessFor(staff, 'co-sasa').role, 'admin_exec');
+    assert.deepEqual(accessFor(staff, 'co-sasa').companyIds, ['co-sasa']);
+    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa', 'co-arsh'] }, 'co-arsh').companyIds, ['co-arsh'], 'never wider than the one company');
+    assert.deepEqual(accessFor(staff, 'co-inas'), { role: 'pwvsb_officer', companyIds: ['co-sasa'], why: '' }, 'a company the office did not name: nothing changes');
+    assert.deepEqual(accessFor({ role: 'pwvsb_officer', companyIds: ['pwvsb'] }, 'pwvsb'), { role: 'pwvsb_officer', companyIds: ['pwvsb'], why: '' });
+    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa'] }, null), { role: 'admin_exec', companyIds: ['co-sasa'], why: '' }, 'a branch manager stays admin_exec');
+    assert.deepEqual(accessFor(staff, null).role, 'pwvsb_officer');
   });
 
   it('refuses a role, department or field it never sets, and another record id', () => {

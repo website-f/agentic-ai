@@ -289,7 +289,7 @@ export function guideCardsFor(
   const mine = new Set(recordKinds);
   // Import only for someone who may add at least one importable kind; otherwise the card would promise a task the
   // server refuses.
-  const imports = IMPORTABLE_KINDS.some((k) => mine.has(k));
+  const imports = IMPORTABLE_KINDS.some((k) => mine.has(k as RecordKind));
   const handovers = HANDOVER_CARDS.filter((c) => c.allowed(user) && (c.id !== 'org.import' || imports)).map((c) =>
     env.handovers
       ? c

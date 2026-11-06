@@ -8,6 +8,11 @@ export * from './rollouts';
 export * from './walls';
 export * from './org-links';
 export * from './org-import';
+// P81: any spreadsheet, auto-aligned to the record's fields; .xlsx read without a library.
+export * from './import-align';
+export * from './xlsx-read';
+// P81: past attendance from the InfoTech monthly PDF reports.
+export * from './attendance-reports';
 export * from './walls';
 export * from './audit';
 export * from './store';
@@ -116,7 +121,12 @@ export * from './central-admin-guide';
 export * from './act-guide-cards';
 export * from './work-rebalance';
 export * from './work-rebalance-guide';
+// P81: staff check-in by place (offices on a map, who checks in where, out-of-area review).
+export * from './checkin';
+export * from './checkin-service';
 // Rehearsal: two guide modules name their own GuideField/GuideCardSpec; the shared guide-cards types win here.
 export type { GuideField, GuideCardSpec } from './guide-cards';
 export * from './read-memo';
 export * from './guide-registry';
+// P81: the group's real companies and staff, loaded into an empty database instead of sample data.
+export * from './real-data';

@@ -682,8 +682,14 @@ services:
       DATABASE_URL: postgres://prima_owner:${PRIMA_OWNER_PASSWORD:-prima_owner_dev_password}@prima-db:5432/prima
       PRIMA_API_DB_PASSWORD: ${PRIMA_API_DB_PASSWORD:-prima_api_dev_password_0123456789}
       ENTRA_BOOTSTRAP_LINKS: ${PRIMA_ENTRA_BOOTSTRAP_LINKS:-}
+      # P81: the group's real companies and staff (apps/prima/scripts/build-real-data.mjs), loaded
+      # into an EMPTY database instead of the sample clean slate. Personal data: the file lives in
+      # ./data/prima-real/ (gitignored, readable by uid 1000), never in the repository. Empty = the
+      # clean slate as before; a database already in use never reads it.
+      PRIMA_REAL_DATA: ${PRIMA_REAL_DATA:-}
     volumes:
       - ./deploy/prima/prima-setup.cjs:/setup/prima-setup.cjs:ro
+      - ./data/prima-real:/run/prima-real:ro
     depends_on:
       prima-db: { condition: service_healthy }
     mem_limit: 256m
@@ -715,6 +721,9 @@ services:
       # P68: everyone linked in the office opens Prima (not only the pilot group). The pilot's
       # own workflow rules are unchanged. false = only the pilot group signs in again.
       PRIMA_SIGNIN_EVERYONE: ${PRIMA_SIGNIN_EVERYONE:-true}
+      # P81: hand-overs between departments and the real-data import ("Import" on each page) run on
+      # Prima's org_links module, which prima-setup installs with every release. false = both off.
+      PRIMA_ORG_LINKS: ${PRIMA_ORG_LINKS:-true}
       # P80: Prima's assistant Arisha runs on the office's AI: each model turn goes to the office
       # api on the private network (edge; nginx never serves /internal/), signed with
       # OFFICE_SIGNING_SECRET, and counts toward the person's daily AI allowance. Empty = Arisha

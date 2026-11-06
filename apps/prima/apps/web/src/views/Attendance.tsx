@@ -17,6 +17,10 @@ import { Card, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
 import { AlertState, FollowUpDrawer, ISSUE_TONE, isAbsence } from './FollowUp';
 import { LeavePanel } from './Leave';
+import { AttendanceReports } from './AttendanceReports';
+
+/** P81: sessionStorage key another screen sets to open Attendance on its monthly reports. */
+export const ATT_TAB_KEY = 'prima-attendance-tab';
 import { FLAG_LABEL, FLAG_TONE, SHIFT_STATE } from './shared';
 import '../styles/attendance.css';
 
@@ -36,7 +40,16 @@ const ISSUE_ICON: Record<Issue, ReactNode> = {
 
 export function AttendanceView() {
   const { companyId } = useApp();
-  const [tab, setTab] = useState<'day' | 'record' | 'leave'>('day');
+  // P81: the HR screen opens this screen on the monthly reports (ATT_TAB_KEY).
+  const [tab, setTab] = useState<'day' | 'record' | 'leave' | 'reports'>(() => {
+    try {
+      const t = sessionStorage.getItem(ATT_TAB_KEY);
+      sessionStorage.removeItem(ATT_TAB_KEY);
+      return t === 'reports' ? 'reports' : 'day';
+    } catch {
+      return 'day';
+    }
+  });
   const alerts = useLoad(() => api.attendanceAlerts(companyId), [companyId]);
   const [open, setOpen] = useState<AttendanceIssueView | null>(null);
   const a = alerts.data;
@@ -64,9 +77,13 @@ export function AttendanceView() {
         <button role="tab" aria-selected={tab === 'leave'} onClick={() => setTab('leave')}>
           Leave requests
         </button>
+        <button role="tab" aria-selected={tab === 'reports'} onClick={() => setTab('reports')}>
+          Monthly reports
+        </button>
       </div>
 
-      {alerts.error && <ErrorNotice error={alerts.error} />}
+      {alerts.error && tab !== 'reports' && <ErrorNotice error={alerts.error} />}
+      {tab === 'reports' && <AttendanceReports />}
       {tab === 'day' && (
         <DaySheet
           onOpen={setOpen}

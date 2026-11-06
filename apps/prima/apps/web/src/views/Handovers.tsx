@@ -2,8 +2,9 @@ import { useContext, useState } from 'react';
 import { ArrowSquareOutIcon, BellIcon, ClockCountdownIcon, TrayIcon } from '@phosphor-icons/react';
 import { Ctx, useApp, type ViewName } from '../App';
 import { MyGuide } from './GuideCard';
+import { ImportButton } from './ImportDrawer';
 import { api, type OrgImportPreview, type OrgInbox } from '../api';
-import { GROUP_EMPLOYER_ID, JOINING_SAY, JOINING_SAY_HR, joiningAllows, type RecordKind } from '@prima/core';
+import { GROUP_EMPLOYER_ID, JOINING_SAY, JOINING_SAY_HR, joiningAllows, type ImportKind, type RecordKind } from '@prima/core';
 import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/hrx.css';
@@ -18,7 +19,7 @@ import '../styles/hrx.css';
 type Tab = 'mine' | 'guide' | 'map' | 'import';
 type Item = OrgInbox['items'][number];
 
-const IMPORT_KINDS: [RecordKind, string][] = [
+const IMPORT_KINDS: [ImportKind, string][] = [
   ['site', 'Sites'],
   ['post', 'Posts'],
   ['checkpoint', 'Checkpoints'],
@@ -32,6 +33,17 @@ const IMPORT_KINDS: [RecordKind, string][] = [
   ['amUnit', 'Rental units'],
   ['amAsset', 'Fixed assets'],
   ['itDomain', 'Domains and websites'],
+  // P81: kinds added with the auto-aligning import (each page's Import button opens the same check).
+  ['insuranceClaim', 'Insurance claims'],
+  ['amWorkOrder', 'Work orders'],
+  ['phoneExtension', 'Phone extensions'],
+  ['siteSystem', 'CCTV and alarm panels'],
+  ['cmsStaff', 'CMS staff'],
+  ['armsSupplier', 'Arms suppliers'],
+  ['supplierItem', 'Arms price list'],
+  ['client', 'Clients'],
+  ['contract', 'Client contracts'],
+  ['leaveEntitlement', 'Leave days above the Act'],
 ];
 
 const STATUS = { live: 'Ready', in_pr: 'Waits for its department PR', direct: 'Already linked; notice added', waits: 'Waits for an outside system' } as const;
@@ -342,7 +354,7 @@ function OrgMapView() {
 
 function ImportView() {
   const { me } = useApp();
-  const [kind, setKind] = useState<RecordKind>('site');
+  const [kind, setKind] = useState<ImportKind>('site');
   const [companyId, setCompanyId] = useState('');
   const [csv, setCsv] = useState('');
   const [preview, setPreview] = useState<OrgImportPreview | null>(null);
@@ -363,6 +375,7 @@ function ImportView() {
         sub="For records that already exist. Save the spreadsheet as CSV with the column names in the first row. Prima first checks every row exactly as the form would and keeps nothing; you then import the same file, all rows or none. The same file cannot be imported twice. Imported records do not send hand-overs (they are not new)."
         footer={
           <>
+            <ImportButton kind={kind} companyId={companyId || null} label="Excel or any sheet, step by step" />
             <button className="btn" disabled={busy || !csv.trim()} onClick={() => run(async () => setPreview(await api.org.importPreview(kind, companyId || null, csv)))}>
               Check the file
             </button>
@@ -385,7 +398,7 @@ function ImportView() {
           <div className="hx-form-grid">
             <label className="field">
               <span className="label">Kind</span>
-              <select className="select" aria-label="Kind of record" value={kind} onChange={(e) => (setKind(e.target.value as RecordKind), reset())}>
+              <select className="select" aria-label="Kind of record" value={kind} onChange={(e) => (setKind(e.target.value as ImportKind), reset())}>
                 {IMPORT_KINDS.map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}

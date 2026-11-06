@@ -206,8 +206,21 @@ def _similar(a: str, b: str) -> float:
 
 
 def _suggest(branch: str, companies: list[client.Company]) -> str | None:
-    """The Prima company whose name is clearly the branch's, else none."""
-    scored = sorted(((_similar(branch, c.name), c.id) for c in companies), reverse=True)
+    """The Prima company whose name is clearly the branch's, else none. P81: a branch named
+    exactly as one company's name or other name ("UNIT HR" is PWVSB, "OPERASI JOHOR" Goodwill
+    Empire) is that company; else the closest name or other name, when clearly closest."""
+    key = people.name_key(branch)
+    exact = {
+        c.id for c in companies if key and key in {people.name_key(n) for n in (c.name, *c.aliases)}
+    }
+    if len(exact) == 1:
+        return exact.pop()
+    if exact:
+        return None  # two companies answer to that name: the owner picks
+    scored = sorted(
+        ((max(_similar(branch, n) for n in (c.name, *c.aliases)), c.id) for c in companies),
+        reverse=True,
+    )
     if not scored or scored[0][0] < 0.6:
         return None
     if len(scored) > 1 and scored[1][0] == scored[0][0]:

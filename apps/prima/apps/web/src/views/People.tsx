@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns } from '@prima/core';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -10,6 +10,7 @@ import { SocsoTab } from './Socso';
 import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory, Sec } from './HrFile';
 import { SHIFT_STATE } from './shared';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { GuardTrainingPanel } from './HrDevelop';
 import { FaceCapture } from './FaceCheck';
 import '../styles/people.css';
@@ -47,7 +48,12 @@ export function People({ openPersonId }: { openPersonId?: string }) {
             app; office staff are added here.
           </>
         }
-        actions={<RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />}
+        actions={
+          <>
+            <ImportButton kind="officeStaff" companyId={companyId} />
+            <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
+          </>
+        }
       />
 
       {data && (
@@ -112,7 +118,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
                       </button>
                     </td>
                     <td className="hide-sm pp-cap">{r.person.role.replace('_', ' ')}</td>
-                    <td className="hide-sm">{r.person.nationality === 'NP' ? 'Nepal' : 'Malaysia'}</td>
+                    <td className="hide-sm">{nationalityLabel(r.person.nationality)}</td>
                     <td>{r.deployable ? r.warnings ? <Chip tone="warn">Yes, papers due</Chip> : <Chip tone="ok">Yes</Chip> : <Chip tone="crit">No</Chip>}</td>
                   </tr>
                 ))}
@@ -184,7 +190,7 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
           <div className="pp-hero">
             <div className="pp-hero-chips">
               {status && <Chip tone={status[1]}>{status[0]}</Chip>}
-              <Chip tone="neutral">{p.nationality === 'NP' ? 'Nepal' : 'Malaysia'}</Chip>
+              <Chip tone="neutral">{nationalityLabel(p.nationality)}</Chip>
               {p.role !== 'office' &&
                 (blocked ? (
                   <Chip tone="crit">Cannot work today</Chip>
@@ -257,18 +263,31 @@ function FaceNotEnrolled({ personId, office }: { personId: string; office: boole
 
 const ROLE_LABEL: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
+// P81: a record loaded from the staff list has no nationality, IC, birth date, phone or joining date yet. It says so,
+// never a default that looks like a fact.
+const NOT_RECORDED = 'Not recorded yet';
+function nationalityLabel(n: string | undefined): string {
+  return n === 'NP' ? 'Nepal' : n === 'MY' ? 'Malaysia' : 'Nationality not recorded yet';
+}
+
 export function WorkTab({ data }: { data: PersonDetail }) {
   const p = data.person;
+  const missing = missingStaffFacts(p);
   return (
     <div className="pp-tab">
+      {missing.length > 0 && (
+        <div className="notice" data-tone="warn">
+          Not recorded yet: {missing.join(', ')}. HR adds them with Edit on this record; payroll waits for the birth date, joining date and nationality.
+        </div>
+      )}
       <Sec title="Personal and employment">
         <div className="pp-box pp-pad">
           <Facts
             items={[
-              ['Identity (masked)', <span className="mono">{p.idMasked}</span>],
-              ['Born', dateLabel(p.dob)],
-              ['Phone', <span className="mono">{p.phone}</span>],
-              ['Joined', dateLabel(p.hiredOn)],
+              ['Identity (masked)', p.idMasked ? <span className="mono">{p.idMasked}</span> : NOT_RECORDED],
+              ['Born', p.dob ? dateLabel(p.dob) : NOT_RECORDED],
+              ['Phone', p.phone ? <span className="mono">{p.phone}</span> : NOT_RECORDED],
+              ['Joined', p.hiredOn ? dateLabel(p.hiredOn) : NOT_RECORDED],
               ['Face for clock-in', p.faceEnrolledOn ? `Enrolled ${dateLabel(p.faceEnrolledOn)}` : <FaceNotEnrolled personId={p.id} office={p.role === 'office'} />],
             ]}
           />

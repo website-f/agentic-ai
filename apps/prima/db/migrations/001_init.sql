@@ -45,7 +45,11 @@ BEGIN
                            -- HR Phase 3, slice 3F (Fauzan, 2 Nov 2026): training, appraisals, policy acknowledgements.
                            'staff_training','staff_appraisals','policy_acks',
                            -- HR, staff movement (Fauzan, 3 Nov 2026): promotion, transfer to another group company, secondment.
-                           'staff_movements']
+                           'staff_movements',
+                           -- P81, staff check-in by place: offices on a map, who checks in where, out-of-area choice, each check-in.
+                           'checkin_places','checkin_rules','checkin_settings','checkin_events',
+                           -- P81, past attendance from the InfoTech monthly PDF reports: imports, day rows, remembered staff matches.
+                           'attendance_imports','attendance_days','attendance_matches']
   LOOP
     EXECUTE format($f$
       CREATE TABLE IF NOT EXISTS prima.%1$I (
@@ -71,6 +75,8 @@ END $$;
 CREATE INDEX IF NOT EXISTS shifts_site_date_idx ON prima.shifts ((data->>'siteId'), (data->>'date'));
 CREATE INDEX IF NOT EXISTS shifts_person_idx ON prima.shifts ((data->>'personId'));
 CREATE INDEX IF NOT EXISTS attendance_person_idx ON prima.attendance ((data->>'personId'));
+-- P81: the day's check-ins and the review list read check-ins by time.
+CREATE INDEX IF NOT EXISTS checkin_events_at_idx ON prima.checkin_events ((data->>'at'));
 
 -- Companies: the wall is on the company's own id.
 CREATE TABLE IF NOT EXISTS prima.companies (

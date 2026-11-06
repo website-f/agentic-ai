@@ -6,6 +6,7 @@ import { Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepSt
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 
 /**
@@ -56,7 +57,12 @@ export function HostelsView() {
       <PageHead
         title="Hostels"
         sub="Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM approves, then the COO."
-        actions={<RecordButton kind="hostel" label="Add hostel" primary />}
+        actions={
+          <>
+            <ImportButton kind="hostel" />
+            <RecordButton kind="hostel" label="Add hostel" primary />
+          </>
+        }
       />
       <Stats>
         <Stat label="Waiting for you" value={mine.length} tone={mine.length ? 'warn' : 'ok'} icon={<TrayIcon size={16} />} />

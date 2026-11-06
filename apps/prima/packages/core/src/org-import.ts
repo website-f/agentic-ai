@@ -15,16 +15,105 @@
 // Imported records are existing ones, so they do not start hand-overs between departments (no "new joiner" to-dos for
 // staff already working). Restricted fields (IC and passport numbers) are never echoed back in the preview.
 // The CEO's company master data and the arms register are not importable: they keep their own reviewed paths.
+//
+// P81 (any spreadsheet, auto-aligned): the file no longer has to be the template. The header row is found wherever it
+// is, each column is matched to a field (import-align.ts) and the person may change any match before importing; rows
+// may be skipped (the commit is all or none for the rows chosen); a "Company" column sends each row to the company it
+// names. Clients, contracts and leave entitlements import too, each row through the same service call as its own form
+// (addClientAccount, addContract, setLeaveOverride), never a side door.
 
 import { sha256Hex } from './audit';
+import { BILLING_METHOD_LABEL } from './contracts';
 import { cleanupCanonical } from './it-cleanup-hash';
-import { RECORD_KINDS, type RecordKind, type RecordValues } from './records';
+import { COMPANY_FIELD, alignColumns, findHeaderRow, matchCompany, matchOption, normBool, normDate, normHeader, normMoney, type AlignField, type ColumnMatch } from './import-align';
+import { RECORD_KINDS, type FieldSpec, type RecordKind, type RecordValues } from './records';
 import type { Store } from './store';
-import type { Id, IsoDateTime, User } from './types';
+import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKind, User } from './types';
 import { orgLinksOn, withoutHandOvers } from './org-links';
 
+/** P81: records that are not plain record forms but have their own add path, imported row by row through it. */
+export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement';
+export type ImportKind = RecordKind | ExtraImportKind;
+
+export interface ImportSpec {
+  kind: ImportKind;
+  label: string;
+  table: keyof Dataset;
+  companyScoped: boolean;
+  keptBy: string;
+  screen: string;
+  fields: (FieldSpec & { words?: string[] })[];
+  note?: string;
+}
+
+const sitesField: FieldSpec = {
+  key: 'sites',
+  label: 'Sites',
+  type: 'text',
+  help: 'Site codes or names of this company, separated by commas. Leave empty if none yet.',
+};
+
+export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
+  client: {
+    kind: 'client',
+    label: 'Client',
+    table: 'clientAccounts',
+    companyScoped: true,
+    keptBy: 'Company manager, or Operations for clients in their area',
+    screen: 'Clients',
+    note: 'Each client opens as a new client of the company, with its onboarding checklist, exactly as the Add client form does.',
+    fields: [{ key: 'name', label: 'Client', type: 'text', required: true, words: ['client name', 'nama pelanggan', 'pelanggan', 'customer', 'klien', 'agensi'] }, sitesField, { key: 'contractEndsOn', label: 'Contract ends on', type: 'date' }],
+  },
+  contract: {
+    kind: 'contract',
+    label: 'Client contract',
+    table: 'contracts',
+    companyScoped: true,
+    keptBy: 'Company manager',
+    screen: 'Contracts',
+    note: 'Each contract is recorded as the Add contract form records it (awarded, with its mobilisation list). A client of the same name is linked.',
+    fields: [
+      { key: 'clientName', label: 'Client', type: 'text', required: true },
+      sitesField,
+      { key: 'signedRef', label: 'Signed contract or award reference', type: 'text', required: true },
+      { key: 'startOn', label: 'Starts on', type: 'date', required: true },
+      { key: 'endOn', label: 'Ends on', type: 'date', required: true },
+      { key: 'billingMethod', label: 'Billing method', type: 'select', required: true, options: Object.entries(BILLING_METHOD_LABEL) as [string, string][] },
+      { key: 'rate', label: 'Rate per guard-hour (RM)', type: 'number', min: 0 },
+      { key: 'fixedFee', label: 'Monthly fee (RM)', type: 'number', min: 0, help: 'For a fixed monthly fee.' },
+      { key: 'contractedHours', label: 'Contracted hours a month', type: 'number', min: 0, help: 'Method 2 only.' },
+    ],
+  },
+  leaveEntitlement: {
+    kind: 'leaveEntitlement',
+    label: 'Leave days above the Act',
+    table: 'people',
+    companyScoped: true,
+    keptBy: 'HR',
+    screen: 'HR, Leave',
+    note: 'For office staff whose leave days are above the Employment Act, as in their contract. HR may give more, never less; each row is saved as HR saves it by hand.',
+    fields: [
+      { key: 'staffNo', label: 'Staff number', type: 'text', required: true, help: 'Or the name exactly as in Prima.' },
+      {
+        key: 'leaveKind',
+        label: 'Leave',
+        type: 'select',
+        required: true,
+        options: [
+          ['ANNUAL', 'Annual leave'],
+          ['SICK', 'Sick leave'],
+          ['MATERNITY', 'Maternity leave'],
+          ['PATERNITY', 'Paternity leave'],
+        ],
+      },
+      { key: 'days', label: 'Days a year', type: 'number', required: true, min: 1, max: 365 },
+      { key: 'note', label: 'Reason', type: 'text', required: true, help: 'For example the contract clause or the old system.' },
+    ],
+  },
+};
+
 /** Record kinds that may be imported in bulk. */
-export const IMPORTABLE_KINDS: readonly RecordKind[] = Object.freeze([
+export const IMPORTABLE_KINDS: readonly ImportKind[] = Object.freeze([
   'site',
   'post',
   'checkpoint',
@@ -38,41 +127,98 @@ export const IMPORTABLE_KINDS: readonly RecordKind[] = Object.freeze([
   'amUnit',
   'amAsset',
   'itDomain',
-] as RecordKind[]);
+  // P81: the audit's other kinds with a plain form (arms register kinds stay out: vault, firearm, dealer licence,
+  // armed job agreements keep their own reviewed paths).
+  'insuranceClaim',
+  'amWorkOrder',
+  'phoneExtension',
+  'siteSystem',
+  'cmsStaff',
+  'armsSupplier',
+  'supplierItem',
+  'client',
+  'contract',
+  'leaveEntitlement',
+] as ImportKind[]);
 
 export const IMPORT_MAX_ROWS = 500;
 export const IMPORT_MAX_BYTES = 1_000_000;
+
+const isRecordKind = (k: ImportKind): k is RecordKind => Object.prototype.hasOwnProperty.call(RECORD_KINDS, k);
+
+/** The fields and keeper of an importable kind. */
+export function importSpec(kind: ImportKind): ImportSpec {
+  if (!IMPORTABLE_KINDS.includes(kind)) throw new ImportError('This kind of record is not imported in bulk.', 400);
+  return isRecordKind(kind) ? (RECORD_KINDS[kind] as ImportSpec) : EXTRA_IMPORTS[kind as ExtraImportKind];
+}
 
 export interface OrgImportReceipt {
   id: Id;
   /** SHA-256 of kind, company and the cleaned rows. */
   fingerprint: string;
-  kind: RecordKind;
+  kind: ImportKind;
   companyId: Id | null;
   rows: number;
   recordIds: Id[];
   byId: Id;
   by: string;
   at: IsoDateTime;
+  /** P81: rows of the file the person chose not to import. */
+  skippedRows?: number[];
+  /** P81: the companies the rows went to, when a Company column sent them to more than one. */
+  companyIds?: Id[];
 }
 
 export interface ImportRowResult {
   row: number;
   ok: boolean;
+  /** P81: left out by the person; not checked, not imported. */
+  skipped: boolean;
   problems: string[];
   /** What will be saved, restricted fields masked to the last 4. */
   values: Record<string, string>;
+  /** P81: the company the row goes to (from a Company column), and whether the name was a close guess. */
+  company: { id: Id; name: string; guess: boolean } | null;
 }
+
+export interface ImportOptions {
+  /** The field for each column of the header row ('' for a column not used). Without it, Prima's own matching. */
+  mapping?: string[] | null;
+  /** The header row, as an index into the file's rows (blank rows not counted). Without it, Prima finds it. */
+  headerRow?: number | null;
+  /** File row numbers (as the preview gives them) not to import. */
+  skip?: number[] | null;
+}
+
+type RecordFormLike = {
+  spec: (typeof RECORD_KINDS)[RecordKind];
+  companyId: Id | null;
+  options: Record<string, [string, string][]>;
+  chooseCompany?: [string, string][] | null;
+};
 
 /** The narrow part of PrimaService the import uses. */
 export interface ImportSaver {
-  recordForm(user: User, kind: RecordKind, id: Id | null, companyId: Id | null): Promise<{
-    spec: (typeof RECORD_KINDS)[RecordKind];
-    companyId: Id | null;
-    options: Record<string, [string, string][]>;
-    chooseCompany?: [string, string][] | null;
-  }>;
+  recordForm(user: User, kind: RecordKind, id: Id | null, companyId: Id | null): Promise<RecordFormLike>;
   saveRecord(user: User, kind: RecordKind, id: Id | null, companyId: Id | null, raw: RecordValues): Promise<unknown>;
+  addClientAccount(user: User, input: { companyId: Id; name: string; siteIds: Id[]; contractEndsOn: IsoDate | null }): Promise<{ id: Id }>;
+  addContract(
+    user: User,
+    input: {
+      companyId: Id;
+      clientAccountId: Id | null;
+      clientName: string;
+      siteIds: Id[];
+      startOn: IsoDate;
+      endOn: IsoDate;
+      billingMethod: BillingMethod;
+      rate: number;
+      fixedFee: number | null;
+      contractedHours?: number | null;
+      signedRef: string;
+    },
+  ): Promise<{ id: Id }>;
+  setLeaveOverride(user: User, personId: Id, kind: LeaveOverrideKind, days: number | null, note: string): Promise<unknown>;
 }
 
 export class ImportError extends Error {
@@ -119,47 +265,40 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** True only for a date on the calendar: 2027-02-30 and 2027-13-01 are not. */
-function realDate(iso: string): boolean {
-  const t = Date.parse(iso + 'T00:00:00Z');
-  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === iso;
-}
-
-const norm = (x: string) => x.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-/** A spreadsheet value to the form's value: yes/no, select by key or label, refs by id or name, dd/mm/yyyy dates. */
-function convert(
-  f: (typeof RECORD_KINDS)[RecordKind]['fields'][number],
-  raw: string,
-  options: [string, string][] | undefined,
-): { value: unknown; problem?: string } {
+/**
+ * A spreadsheet value to the form's value: yes/no (English or Malay), a choice by key, label or Malay word, refs by id
+ * or name, dates as typed in Malaysia or as Excel serials, amounts with RM and commas.
+ */
+function convert(f: FieldSpec, raw: string, options: [string, string][] | undefined): { value: unknown; problem?: string } {
   const v = raw.trim();
   if (v === '') return { value: f.type === 'bool' ? false : null };
   switch (f.type) {
     case 'bool': {
-      const n = v.toLowerCase();
-      if (['yes', 'y', 'true', '1', 'ya'].includes(n)) return { value: true };
-      if (['no', 'n', 'false', '0', 'tidak'].includes(n)) return { value: false };
-      return { value: null, problem: `${f.label}: write yes or no.` };
+      const b = normBool(v);
+      return b === null ? { value: null, problem: `${f.label}: write yes or no (ya or tidak).` } : { value: b };
     }
     case 'date': {
-      const m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v);
-      const iso = m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : v;
+      const d = normDate(v);
       // A date that is not on the calendar (30/02, 31/04) is refused here, not stored as text.
-      if (/^\d{4}-\d{2}-\d{2}$/.test(iso) && !realDate(iso))
-        return { value: null, problem: `${f.label}: "${v}" is not a real date.` };
-      return { value: iso };
+      if (d.matched && !d.iso) return { value: null, problem: `${f.label}: "${v}" is not a real date.` };
+      if (!d.matched) return { value: null, problem: `${f.label}: "${v}" is not a date. Write it as DD/MM/YYYY.` };
+      return { value: d.iso };
     }
-    case 'number':
-      return { value: v.replace(/,/g, '') };
+    case 'number': {
+      const n = normMoney(v);
+      return n === null ? { value: null, problem: `${f.label}: "${v.slice(0, 40)}" is not a number.` } : { value: n };
+    }
     case 'select': {
-      const hit = (f.options ?? []).filter(([k, label]) => k === v || norm(label) === norm(v) || norm(k) === norm(v));
-      return hit.length === 1 ? { value: hit[0][0] } : { value: v };
+      const hit = matchOption(v, f.options ?? []);
+      // Unknown choices go on to the form's own check, which names the field ("Choose ... from the list").
+      return hit !== null ? { value: hit } : { value: v };
     }
     case 'ref': {
-      const hit = (options ?? []).filter(([k, label]) => k === v || norm(label) === norm(v));
+      const exact = (options ?? []).filter(([k, label]) => k === v || normHeader(label) === normHeader(v));
+      // The list shows "code name" (or "policy number cover"): the code or number alone names it too.
+      const hit = exact.length ? exact : (options ?? []).filter(([, label]) => normHeader(label).startsWith(normHeader(v) + ' '));
       if (hit.length === 1) return { value: hit[0][0] };
-      return { value: null, problem: hit.length ? `${f.label}: "${v}" matches more than one; use the id.` : `${f.label}: "${v}" is not on the list.` };
+      return { value: null, problem: hit.length ? `${f.label}: "${v}" matches more than one; use the code.` : `${f.label}: "${v}" is not on the list.` };
     }
     default:
       return { value: v };
@@ -193,6 +332,11 @@ function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'This row could not be saved.';
 }
 
+const COMPANY_ALIGN: AlignField = { key: COMPANY_FIELD, label: 'Company', type: 'text' };
+
+type Company = { id: Id; name: string; code?: string };
+type Form = { companyId: Id | null; options: Record<string, [string, string][]> };
+
 export class OrgImportService {
   constructor(
     private store: Store,
@@ -201,14 +345,14 @@ export class OrgImportService {
   ) {}
 
   /** The template for a kind: the column headers, with which are needed and the choices. */
-  template(kind: RecordKind) {
-    if (!IMPORTABLE_KINDS.includes(kind)) throw new ImportError('This kind of record is not imported in bulk.', 400);
-    const spec = RECORD_KINDS[kind];
+  template(kind: ImportKind) {
+    const spec = importSpec(kind);
     return {
       kind,
       label: spec.label,
       keptBy: spec.keptBy,
       companyScoped: spec.companyScoped,
+      note: spec.note ?? null,
       columns: spec.fields.map((f) => ({
         key: f.key,
         label: f.label,
@@ -221,41 +365,145 @@ export class OrgImportService {
     };
   }
 
-  private async prepare(user: User, kind: RecordKind, companyId: Id | null, csv: string) {
-    if (!IMPORTABLE_KINDS.includes(kind)) throw new ImportError('This kind of record is not imported in bulk.', 400);
-    if (typeof csv !== 'string' || !csv.trim()) throw new ImportError('Attach the file (CSV, first row the column names).', 400);
+  /** The companies a Company column may name: those the person keeps this record for. */
+  private async companyChoices(user: User, kind: ImportKind): Promise<Company[]> {
+    const all = (await this.store.list('companies', {})) as unknown as Company[];
+    if (!isRecordKind(kind)) return all.map((c) => ({ id: c.id, name: c.name, code: c.code }));
+    let form: RecordFormLike;
+    try {
+      form = await this.saver.recordForm(user, kind, null, null);
+    } catch {
+      return [];
+    }
+    const byId = new Map(all.map((c) => [c.id, c]));
+    return (form.chooseCompany ?? []).map(([id, label]) => {
+      const c = byId.get(id);
+      return c ? { id, name: c.name, code: c.code } : { id, name: label };
+    });
+  }
+
+  /** The form for one company: its permission check (throws for someone who does not keep it) and lists. */
+  private async formFor(user: User, kind: ImportKind, spec: ImportSpec, cid: Id | null): Promise<Form> {
+    if (isRecordKind(kind)) {
+      const form = await this.saver.recordForm(user, kind, null, cid);
+      if (form.chooseCompany) throw new ImportError('Choose the company the records belong to, or add a Company column.', 400);
+      return { companyId: form.companyId, options: form.options };
+    }
+    if (spec.companyScoped && !cid) throw new ImportError('Choose the company the records belong to, or add a Company column.', 400);
+    return { companyId: cid, options: {} };
+  }
+
+  private async prepare(user: User, kind: ImportKind, companyId: Id | null, csv: string, opt: ImportOptions = {}) {
+    const spec = importSpec(kind);
+    if (typeof csv !== 'string' || !csv.trim()) throw new ImportError('Attach the file (Excel or CSV).', 400);
     if (csv.length > IMPORT_MAX_BYTES) throw new ImportError('The file is too big; split it into parts of 500 rows.', 400);
     // Same permission as adding one record by hand; throws for anyone who does not keep this record.
-    const form = await this.saver.recordForm(user, kind, null, companyId);
-    if (form.chooseCompany) throw new ImportError('Choose the company the records belong to.', 400);
-    const spec = form.spec;
+    const base = spec.companyScoped && !companyId ? null : await this.formFor(user, kind, spec, companyId);
     const table = parseCsv(csv);
-    if (table.length < 2) throw new ImportError('The file has no rows under the column names.', 400);
-    if (table.length - 1 > IMPORT_MAX_ROWS) throw new ImportError(`At most ${IMPORT_MAX_ROWS} rows at a time.`, 400);
-    const header = table[0];
-    const fieldOf = header.map((h) => spec.fields.find((f) => norm(f.key) === norm(h) || norm(f.label) === norm(h)) ?? null);
+    const fields: AlignField[] = [...(spec.fields as AlignField[]), ...(spec.companyScoped ? [COMPANY_ALIGN] : [])];
+    let headerRow = findHeaderRow(table, fields);
+    if (opt.headerRow !== undefined && opt.headerRow !== null) {
+      if (!Number.isInteger(opt.headerRow) || opt.headerRow < 0 || opt.headerRow >= table.length) throw new ImportError('Choose a header row inside the file.', 400);
+      headerRow = opt.headerRow;
+    }
+    const header = table[headerRow] ?? [];
+    const body = table.slice(headerRow + 1);
+    if (!body.length) throw new ImportError('The file has no rows under the column names.', 400);
+    if (body.length > IMPORT_MAX_ROWS) throw new ImportError(`At most ${IMPORT_MAX_ROWS} rows at a time.`, 400);
+    const width = Math.max(header.length, ...body.map((r) => r.length));
+    const head = Array.from({ length: width }, (_, i) => header[i] ?? '');
+    const auto = alignColumns(head, body, fields);
+    let columns: ColumnMatch[] = auto;
+    if (opt.mapping) {
+      if (!Array.isArray(opt.mapping) || opt.mapping.length > width + 1) throw new ImportError('The column choices do not fit this file. Check the file again.', 400);
+      const seen = new Map<string, number>();
+      columns = auto.map((c) => {
+        const want = typeof opt.mapping![c.index] === 'string' ? opt.mapping![c.index] : '';
+        if (want && !fields.some((f) => f.key === want)) throw new ImportError('A column is set to a field this record does not have.', 400);
+        if (want && seen.has(want)) throw new ImportError(`Two columns are set to "${fields.find((f) => f.key === want)!.label}". Choose one of them.`, 400);
+        if (want) seen.set(want, c.index);
+        return want === c.field ? c : { ...c, field: want || null, how: want ? 'manual' : null, score: want ? 1 : 0 };
+      });
+    }
+    const fieldOf = columns.map((c) => fields.find((f) => f.key === c.field) ?? null);
+    const companyCol = columns.findIndex((c) => c.field === COMPANY_FIELD);
+    if (spec.companyScoped && !base && companyCol < 0) throw new ImportError('Choose the company the records belong to, or add a Company column.', 400);
+    const choices = companyCol >= 0 ? await this.companyChoices(user, kind) : [];
+    const forms = new Map<string, Promise<Form>>();
+    const formOf = (cid: Id | null) => {
+      const key = cid ?? '';
+      if (base && cid === base.companyId) return Promise.resolve(base);
+      if (!forms.has(key)) forms.set(key, this.formFor(user, kind, spec, cid));
+      return forms.get(key)!;
+    };
+    const missing = spec.fields.filter((f) => f.required && !fieldOf.includes(f as AlignField)).map((f) => f.label);
+    const ignored = columns.filter((c) => !c.field && c.header).map((c) => c.header);
+    const skip = new Set((opt.skip ?? []).filter((n) => Number.isInteger(n)));
+    const companyName = new Map(choices.map((c) => [c.id, c.name]));
     const seen = new Set<string>();
-    const ignored = header.filter((_, i) => !fieldOf[i]).map((h) => h.trim()).filter(Boolean);
-    const missing = spec.fields.filter((f) => f.required && !fieldOf.includes(f)).map((f) => f.label);
-    const rows = table.slice(1).map((cells, i) => {
+    const rows: { row: number; skipped: boolean; companyId: Id | null; company: ImportRowResult['company']; raw: RecordValues; problems: string[] }[] = [];
+    for (const [i, cells] of body.entries()) {
+      const rowNo = headerRow + 2 + i;
       const problems: string[] = [];
+      let cid: Id | null = base?.companyId ?? null;
+      let company: ImportRowResult['company'] = null;
+      if (companyCol >= 0) {
+        const text = (cells[companyCol] ?? '').trim();
+        const hit = text ? matchCompany(text, choices) : null;
+        if (hit) {
+          cid = hit.id;
+          company = { id: hit.id, name: companyName.get(hit.id) ?? hit.id, guess: !hit.exact };
+        } else if (text) problems.push(`Company "${text.slice(0, 80)}" is not one of the companies you keep this record for.`);
+        else if (!base) problems.push('Company is empty on this row.');
+      }
+      let form: Form | null = null;
+      if (!problems.length || !spec.companyScoped)
+        try {
+          form = await formOf(cid);
+        } catch (e) {
+          problems.push(messageOf(e));
+        }
       const raw: RecordValues = {};
       fieldOf.forEach((f, c) => {
-        if (!f) return;
-        const { value, problem } = convert(f, cells[c] ?? '', form.options[f.key]);
+        if (!f || f.key === COMPANY_FIELD) return;
+        const { value, problem } = convert(f as FieldSpec, cells[c] ?? '', form?.options[f.key]);
         if (problem) problems.push(problem);
         (raw as Record<string, unknown>)[f.key] = value;
       });
-      const key = cleanupCanonical(raw);
-      if (seen.has(key)) problems.push('The same row appears earlier in the file.');
-      seen.add(key);
-      return { row: i + 2, raw, problems };
-    });
-    const fingerprint = sha256Hex(cleanupCanonical({ kind, companyId: form.companyId, rows: rows.map((r) => r.raw) }));
-    return { spec, companyId: form.companyId, rows, ignored, missing, fingerprint };
+      const skipped = skip.has(rowNo);
+      if (!skipped) {
+        const key = cleanupCanonical({ cid, raw });
+        if (seen.has(key)) problems.push('The same row appears earlier in the file.');
+        seen.add(key);
+      }
+      rows.push({ row: rowNo, skipped, companyId: form?.companyId ?? cid, company, raw, problems });
+    }
+    const chosen = rows.filter((r) => !r.skipped);
+    const baseId = base?.companyId ?? null;
+    // One company and nothing skipped prints exactly as before P81, so a file imported then is still refused now.
+    const fingerprint = sha256Hex(
+      cleanupCanonical({ kind, companyId: baseId, rows: chosen.map((r) => (r.companyId === baseId ? r.raw : { ...r.raw, [COMPANY_FIELD]: r.companyId })) }),
+    );
+    const sample = (i: number, f: AlignField | null) =>
+      body
+        .map((r) => (r[i] ?? '').trim())
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((v) => (f?.restricted ? `••••${v.slice(-4)}` : v.slice(0, 60)));
+    return {
+      spec,
+      companyId: baseId,
+      headerRow,
+      columns: columns.map((c, i) => ({ ...c, sample: sample(c.index, fieldOf[i]) })),
+      fields: fields.map((f) => ({ key: f.key, label: f.label, required: !!f.required, type: f.type })),
+      rows,
+      ignored,
+      missing,
+      fingerprint,
+    };
   }
 
-  private shown(spec: (typeof RECORD_KINDS)[RecordKind], raw: RecordValues): Record<string, string> {
+  private shown(spec: ImportSpec, raw: RecordValues): Record<string, string> {
     const out: Record<string, string> = {};
     for (const f of spec.fields) {
       const v = (raw as Record<string, unknown>)[f.key];
@@ -266,100 +514,194 @@ export class OrgImportService {
     return out;
   }
 
-  /** Dry run: every row through the real save, then everything rolled back. */
+  /** Sites named in a cell ("S-01, Menara A"), as ids of this company's sites. */
+  private async siteIds(cid: Id, text: unknown): Promise<Id[]> {
+    const names = String(text ?? '')
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!names.length) return [];
+    const sites = (await this.store.list('sites', { companyId: [cid] })) as unknown as { id: Id; code: string; name: string }[];
+    return names.map((n) => {
+      const k = normHeader(n);
+      const hit = sites.filter((s) => s.id === n || normHeader(s.code) === k || normHeader(s.name) === k);
+      if (hit.length !== 1) throw new ImportError(hit.length ? `Site "${n}" matches more than one site; use its code.` : `Site "${n}" is not a site of this company.`, 400);
+      return hit[0].id;
+    });
+  }
+
+  /** One row through the record's own save. Returns the new record's id where the save gives it. */
+  private async saveRow(user: User, kind: ImportKind, cid: Id | null, raw: RecordValues): Promise<Id | null> {
+    if (isRecordKind(kind)) {
+      await this.saver.saveRecord(user, kind, null, cid, raw);
+      return null;
+    }
+    const v = raw as Record<string, unknown>;
+    const companyId = cid as Id;
+    const num = (x: unknown) => (x === null || x === undefined || x === '' ? null : Number(x));
+    if (kind === 'client') {
+      const a = await this.saver.addClientAccount(user, {
+        companyId,
+        name: String(v.name ?? ''),
+        siteIds: await this.siteIds(companyId, v.sites),
+        contractEndsOn: (v.contractEndsOn as IsoDate | null) ?? null,
+      });
+      return a.id;
+    }
+    if (kind === 'contract') {
+      const name = String(v.clientName ?? '').trim();
+      const accounts = (await this.store.list('clientAccounts', { companyId })) as unknown as { id: Id; name: string; stage: string }[];
+      const acct = accounts.filter((a) => a.stage !== 'ended' && normHeader(a.name) === normHeader(name));
+      const c = await this.saver.addContract(user, {
+        companyId,
+        clientAccountId: acct.length === 1 ? acct[0].id : null,
+        clientName: name,
+        siteIds: await this.siteIds(companyId, v.sites),
+        startOn: String(v.startOn ?? ''),
+        endOn: String(v.endOn ?? ''),
+        billingMethod: String(v.billingMethod ?? '') as BillingMethod,
+        rate: num(v.rate) ?? 0,
+        fixedFee: num(v.fixedFee),
+        contractedHours: num(v.contractedHours),
+        signedRef: String(v.signedRef ?? ''),
+      });
+      return c.id;
+    }
+    // leaveEntitlement: the staff member by staff number (or the exact name) within this company.
+    const who = String(v.staffNo ?? '').trim();
+    const people = ((await this.store.list('people', { companyId: [companyId] })) as unknown as { id: Id; staffNo: string; name: string; role: string }[]).filter(
+      (p) => p.role === 'office',
+    );
+    const byNo = people.filter((p) => normHeader(p.staffNo) === normHeader(who));
+    const hit = byNo.length ? byNo : people.filter((p) => normHeader(p.name) === normHeader(who));
+    if (hit.length !== 1) throw new ImportError(hit.length ? `"${who}" matches more than one staff member; use the staff number.` : `No office staff member "${who}" in this company.`, 400);
+    const days = Number(v.days);
+    if (!Number.isInteger(days)) throw new ImportError('Days a year must be a whole number.', 400);
+    await this.saver.setLeaveOverride(user, hit[0].id, String(v.leaveKind ?? '') as LeaveOverrideKind, days, String(v.note ?? ''));
+    return hit[0].id;
+  }
+
   /** Import runs with the hand-over layer (same switch, same database module); the guide card says the same. */
   private assertOn() {
     if (!orgLinksOn(this.store)) throw new ImportError('Import is switched off here until the release owner turns hand-overs and import on.', 403);
   }
 
-  async preview(user: User, kind: RecordKind, companyId: Id | null, csv: string) {
+  /** Dry run: every chosen row through the real save, then everything rolled back. */
+  async preview(user: User, kind: ImportKind, companyId: Id | null, csv: string, opt: ImportOptions = {}) {
     this.assertOn();
-    const p = await this.prepare(user, kind, companyId, csv);
+    const p = await this.prepare(user, kind, companyId, csv, opt);
     const results: ImportRowResult[] = await rolledBack(this.store, () =>
       withoutHandOvers(this.store, async () => {
         const out: ImportRowResult[] = [];
         for (const r of p.rows) {
           const problems = [...r.problems];
-          if (!problems.length && !p.missing.length) {
+          if (!r.skipped && !problems.length && !p.missing.length) {
             try {
-              await this.store.transaction(() => this.saver.saveRecord(user, kind, null, p.companyId, r.raw));
+              await this.store.transaction(() => this.saveRow(user, kind, r.companyId, r.raw));
             } catch (e) {
               problems.push(messageOf(e));
             }
           }
-          out.push({ row: r.row, ok: !problems.length && !p.missing.length, problems, values: this.shown(p.spec, r.raw) });
+          out.push({
+            row: r.row,
+            ok: !r.skipped && !problems.length && !p.missing.length,
+            skipped: r.skipped,
+            problems: r.skipped ? [] : problems,
+            values: this.shown(p.spec, r.raw),
+            company: r.company,
+          });
         }
         return out;
       }),
     );
     const already = (await this.store.list('orgImports', {})).find((x) => x.fingerprint === p.fingerprint) ?? null;
+    const chosen = results.filter((r) => !r.skipped);
     return {
       kind,
       label: p.spec.label,
       companyId: p.companyId,
       fingerprint: p.fingerprint,
+      headerRow: p.headerRow,
+      columns: p.columns,
+      fields: p.fields,
       rows: results,
-      okRows: results.filter((r) => r.ok).length,
-      badRows: results.filter((r) => !r.ok).length,
+      okRows: chosen.filter((r) => r.ok).length,
+      badRows: chosen.filter((r) => !r.ok).length,
+      skippedRows: results.filter((r) => r.skipped).length,
       missingColumns: p.missing,
       ignoredColumns: p.ignored,
       alreadyImported: already ? { at: already.at, by: already.by } : null,
-      canImport: !already && !p.missing.length && results.every((r) => r.ok),
+      canImport: !already && !p.missing.length && chosen.length > 0 && chosen.every((r) => r.ok),
     };
   }
 
-  /** Import the previewed file: unchanged, every row clean, never twice. All rows or none. */
-  async commit(user: User, kind: RecordKind, companyId: Id | null, csv: string, fingerprint: string) {
+  /** Import the previewed file: unchanged, every chosen row clean, never twice. All chosen rows or none. */
+  async commit(user: User, kind: ImportKind, companyId: Id | null, csv: string, fingerprint: string, opt: ImportOptions = {}) {
     this.assertOn();
-    const p = await this.prepare(user, kind, companyId, csv);
+    const p = await this.prepare(user, kind, companyId, csv, opt);
     if (!/^[0-9a-f]{64}$/.test(fingerprint ?? '') || fingerprint !== p.fingerprint)
       throw new ImportError('The file changed since the preview. Preview it again.', 409);
     if (p.missing.length) throw new ImportError(`Columns needed: ${p.missing.join(', ')}.`, 400);
-    const bad = p.rows.filter((r) => r.problems.length);
-    if (bad.length) throw new ImportError(`Fix rows ${bad.map((r) => r.row).slice(0, 10).join(', ')} first.`, 400);
+    const chosen = p.rows.filter((r) => !r.skipped);
+    if (!chosen.length) throw new ImportError('Every row is skipped. Choose at least one row to import.', 400);
+    const bad = chosen.filter((r) => r.problems.length);
+    if (bad.length) throw new ImportError(`Fix or skip rows ${bad.map((r) => r.row).slice(0, 10).join(', ')} first.`, 400);
     return this.commitOnce(user, kind, p).catch((e) => {
       if (sameTimeClash(e)) throw new ImportError(SAME_TIME, 409);
       throw e;
     });
   }
 
-  private commitOnce(user: User, kind: RecordKind, p: Awaited<ReturnType<OrgImportService['prepare']>>) {
-    return this.store.transaction(async (tx) => {
+  private commitOnce(user: User, kind: ImportKind, p: Awaited<ReturnType<OrgImportService['prepare']>>) {
+    const chosen = p.rows.filter((r) => !r.skipped);
+    // P81: the database transaction makes it all or none; the in-memory store (demo, tests) has no rollback of its
+    // own, so there the snapshot unit wraps it and a refused row puts back what the earlier rows wrote.
+    const unit = <R,>(fn: (tx: Store) => Promise<R>): Promise<R> =>
+      this.store.cleanupTransaction ? this.store.cleanupTransaction(() => this.store.transaction(fn)) : this.store.transaction(fn);
+    return unit(async (tx) => {
       const receipts = await tx.list('orgImports', {});
       if (receipts.some((x) => x.fingerprint === p.fingerprint)) throw new ImportError('This file was already imported.', 409);
       const before = new Set((await tx.list(p.spec.table as never, {})).map((r) => (r as { id: Id }).id));
+      const returned: Id[] = [];
       await withoutHandOvers(tx, async () => {
-        for (const r of p.rows) {
+        for (const r of chosen) {
           try {
-            await this.saver.saveRecord(user, kind, null, p.companyId, r.raw);
+            const id = await this.saveRow(user, kind, r.companyId, r.raw);
+            if (id) returned.push(id);
           } catch (e) {
             if (sameTimeClash(e)) throw new ImportError(SAME_TIME, 409);
             throw new ImportError(`Row ${r.row}: ${messageOf(e)} Nothing was imported.`, 400);
           }
         }
       });
-      const recordIds = (await tx.list(p.spec.table as never, {})).map((r) => (r as { id: Id }).id).filter((id) => !before.has(id));
+      const recordIds = isRecordKind(kind)
+        ? (await tx.list(p.spec.table as never, {})).map((r) => (r as { id: Id }).id).filter((id) => !before.has(id))
+        : [...new Set(returned)];
       const at = this.now();
+      const companyIds = [...new Set(chosen.map((r) => r.companyId).filter((x): x is Id => !!x))];
+      const skippedRows = p.rows.filter((r) => r.skipped).map((r) => r.row);
       const receipt: OrgImportReceipt = {
         id: `oimp-${p.fingerprint.slice(0, 16)}`,
         fingerprint: p.fingerprint,
         kind,
-        companyId: p.companyId,
-        rows: p.rows.length,
+        companyId: p.companyId ?? (companyIds.length === 1 ? companyIds[0] : null),
+        rows: chosen.length,
         recordIds,
         byId: user.id,
         by: user.name,
         at,
+        ...(skippedRows.length ? { skippedRows } : {}),
+        ...(companyIds.length > 1 ? { companyIds } : {}),
       };
       await tx.insert('orgImports', receipt);
       await tx.audit({
         at,
         actor: user.name,
-        companyId: p.companyId,
+        companyId: receipt.companyId,
         action: 'org.import',
         entity: 'org_import',
         entityId: receipt.id,
-        summary: `${p.rows.length} ${p.spec.label.toLowerCase()} record${p.rows.length === 1 ? '' : 's'} imported from a file (fingerprint ${p.fingerprint.slice(0, 12)}).`,
+        summary: `${chosen.length} ${p.spec.label.toLowerCase()} record${chosen.length === 1 ? '' : 's'} imported from a file${skippedRows.length ? `, ${skippedRows.length} row${skippedRows.length === 1 ? '' : 's'} skipped` : ''}${companyIds.length > 1 ? `, into ${companyIds.length} companies` : ''} (fingerprint ${p.fingerprint.slice(0, 12)}).`,
       });
       return receipt;
     });

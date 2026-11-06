@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { CalendarCheckIcon, CarIcon, ClipboardTextIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useApp } from '../App';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import type { ProofInput, VehicleRenewal } from '@prima/core';
 import { api, type FleetBoard } from '../api';
 import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from '../kit';
@@ -82,7 +83,14 @@ export function FleetView() {
       <PageHead
         title="Vehicles"
         sub="The head of Transport runs every company vehicle: renewals, servicing, payments, and each trip out and in. Staff request a vehicle here. CMS watches trackers, dashcams and driver health."
-        actions={full && <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} primary />}
+        actions={
+          full && (
+            <>
+              <ImportButton kind="vehicle" companyId={companyId} />
+              <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} primary />
+            </>
+          )
+        }
       />
       {data.board.length > 0 && (
         <Stats>
@@ -179,7 +187,12 @@ function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
     <Card
       title="Vehicles"
       sub={`${data.board.length} vehicles`}
-      actions={<RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} />}
+      actions={
+        <>
+          <ImportButton kind="vehicle" companyId={companyId} />
+          <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} />
+        </>
+      }
       flush
     >
       {data.board.length === 0 && (

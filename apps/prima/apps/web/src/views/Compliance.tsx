@@ -4,6 +4,7 @@ import { api } from '../api';
 import { Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, ErrorNotice, ExpiryChip, Loading, dateLabel, useLoad } from '../ui';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 
 type Status = 'OK' | 'DUE' | 'OVERDUE' | 'UNKNOWN';
@@ -107,6 +108,7 @@ export function ComplianceView() {
                 All
               </button>
             </div>
+            <ImportButton kind="licence" />
             <RecordButton kind="licence" primary label="Add licence" />
           </>
         }

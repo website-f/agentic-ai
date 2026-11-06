@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { t } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { bulkDelete } from "@/lib/bulk";
 import { docKeys } from "@/lib/documents";
 import {
   copyFiles, createFolder, deleteFolder, joinPath, planPaste, renameFile, renameFolder,
@@ -195,7 +196,19 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
   /** Delete files, and folders that hold nothing; a folder with files in it is explained. */
   const remove = async (files: ExplorerFile[], folders: string[]) => {
     let gone = 0;
-    for (const f of files) {
+    // P81: one call for many files (the server checks each one); one by one on an older server.
+    let oneByOne = false;
+    if (files.length) {
+      try {
+        const r = await bulkDelete({ files: files.map((f) => f.id) });
+        gone = r.files;
+        if (r.skipped.length) toast.error(t("{n} could not be deleted: not yours to delete, or already gone.", { n: r.skipped.length }));
+      } catch (e) {
+        if (notThere(e)) oneByOne = true;
+        else toast.error(errorMessage(e));
+      }
+    }
+    for (const f of oneByOne ? files : []) {
       try {
         await deleteFile(f.id);
         gone += 1;

@@ -6,6 +6,7 @@ import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar } fro
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { useApp } from '../App';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
 
 /**
@@ -78,10 +79,13 @@ export function ContractsView() {
         sub="Each site is mobilised against 12 workstreams (the 12th is CMS activation) and goes live only with the Site Ready-to-Operate Certificate. Reviews follow at day 1, 7, 14 and 30. The billing method changes only by a signed variation."
         actions={
           data.canAdd.length > 0 && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              New contract
-            </button>
+            <>
+              <ImportButton kind="contract" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                New contract
+              </button>
+            </>
           )
         }
       />

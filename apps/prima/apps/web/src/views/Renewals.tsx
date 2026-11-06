@@ -6,6 +6,7 @@ import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui
 import { CentralAdminGuide } from './CentralAdminGuide';
 import { CalendarGroup, DateLeaf } from './Compliance';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 
 /**
@@ -107,7 +108,12 @@ export function RenewalsView() {
       <PageHead
         title="Renewals"
         sub="Every licence, registration and certificate each company holds: KDN, MOF and vendor panels, council licences, ISO, fire certificate, insurance and SSM. Each company renews its own; Central Admin monitors and confirms the new expiry. The app never lodges or pays."
-        actions={<RecordButton kind="licence" primary label="Add licence" />}
+        actions={
+          <>
+            <ImportButton kind="licence" />
+            <RecordButton kind="licence" primary label="Add licence" />
+          </>
+        }
       >
         <p className="notice" data-tone="info">
           Test data. Lead times and paper lists are starting proposals; the agency's current form decides.

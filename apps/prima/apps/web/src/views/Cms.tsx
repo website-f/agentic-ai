@@ -24,6 +24,7 @@ import {
 } from "../ui";
 import { AlertState, FollowUpDrawer } from "./FollowUp";
 import { RecordButton } from "./RecordForm";
+import { ImportButton } from "./ImportDrawer";
 import "../styles/ops.css";
 
 type Tab =
@@ -549,7 +550,12 @@ function Phones({ data }: { data: Cms }) {
         <Card
           title="Company extensions"
           sub={`Forward to CMS after ${data.settings.forwardAfterSec} seconds of ringing; set in each phone system`}
-          actions={<RecordButton kind="phoneExtension" label="Add extension" />}
+          actions={
+            <>
+              <ImportButton kind="phoneExtension" />
+              <RecordButton kind="phoneExtension" label="Add extension" />
+            </>
+          }
           flush
         >
           <ul className="op-list">
@@ -829,7 +835,12 @@ function Staff({ data }: { data: Cms }) {
     <Card
       title="CMS staff"
       sub="Head Control staff can also sit as Monitor Officer"
-      actions={<RecordButton kind="cmsStaff" label="Add CMS staff" />}
+      actions={
+        <>
+          <ImportButton kind="cmsStaff" />
+          <RecordButton kind="cmsStaff" label="Add CMS staff" />
+        </>
+      }
       flush
     >
       <ul className="op-list">
@@ -1537,6 +1548,7 @@ function Sites({ data }: { data: Cms }) {
         sub={`${rows.length} shown`}
         actions={
           <>
+            <ImportButton kind="siteSystem" label="Import CCTV and alarms" />
             <select
               className="select op-filter"
               aria-label="Company"

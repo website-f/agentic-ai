@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BuildingsIcon, CoinsIcon, FileTextIcon, ScalesIcon, ShieldWarningIcon, UmbrellaIcon } from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { api, type Insurance } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
@@ -181,7 +182,7 @@ function Alerts({ data }: { data: Insurance }) {
 
 function Policies({ data }: { data: Insurance }) {
   return (
-    <Card title="Policies" sub={`Renewal starts ${data.rules.renewDays} days before expiry`} actions={<AddFor kind="insurancePolicy" label="Add policy" />} flush>
+    <Card title="Policies" sub={`Renewal starts ${data.rules.renewDays} days before expiry`} actions={<><ImportFor kind="insurancePolicy" /><AddFor kind="insurancePolicy" label="Add policy" /></>} flush>
       {data.policies.length === 0 ? (
         <Empty title="No policies recorded." action={<AddFor kind="insurancePolicy" label="Add policy" primary />} />
       ) : (
@@ -276,7 +277,7 @@ function Claims({ data }: { data: Insurance }) {
     <Card
       title="Claims"
       sub={`Tell the insurer within ${data.rules.noticeDays} days of the incident; chase after ${data.rules.claimAge} days`}
-      actions={<AddFor kind="insuranceClaim" label="Add claim" />}
+      actions={<><ImportFor kind="insuranceClaim" /><AddFor kind="insuranceClaim" label="Add claim" /></>}
       flush
     >
       {data.claims.length === 0 ? (
@@ -526,7 +527,7 @@ function Guarantees({ data }: { data: Insurance }) {
     <Card
       title="Guarantees and bonds"
       sub="Must stay valid until the contract ends; ask for release after"
-      actions={<AddFor kind="insuranceGuarantee" label="Add guarantee" />}
+      actions={<><ImportFor kind="insuranceGuarantee" /><AddFor kind="insuranceGuarantee" label="Add guarantee" /></>}
       flush
     >
       {data.guarantees.length === 0 ? (
@@ -574,6 +575,12 @@ function Guarantees({ data }: { data: Insurance }) {
 function AddFor({ kind, label, primary = false }: { kind: 'insurancePolicy' | 'insuranceClaim' | 'insuranceGuarantee'; label: string; primary?: boolean }) {
   const { companyId, company } = useApp();
   return <RecordButton kind={kind} companyId={companyId} label={company ? `${label} (${company.code})` : label} primary={primary} />;
+}
+
+/** P81: Import next to Add on each tab; the company chosen at the top, or chosen in the drawer. */
+function ImportFor({ kind }: { kind: 'insurancePolicy' | 'insuranceClaim' | 'insuranceGuarantee' }) {
+  const { companyId } = useApp();
+  return <ImportButton kind={kind} companyId={companyId} />;
 }
 
 function Companies({ data }: { data: Insurance }) {

@@ -126,6 +126,10 @@ const TABLE: Record<TableName, string> = {
   itProcurementReceipts:'prima.it_procurement_receipts',
   itCleanupNominations:'prima.it_cleanup_nominations',itCleanupArchives:'prima.it_cleanup_archives',itCleanupReceipts:'prima.it_cleanup_receipts',itCleanupPlanBindings:'prima.it_cleanup_plan_bindings',
   orgEvents:'prima.org_events',orgTasks:'prima.org_tasks',orgNotices:'prima.org_notices',orgImports:'prima.org_imports',
+  // P81: past attendance from the InfoTech monthly PDF reports.
+  attendanceImports: 'prima.attendance_imports',
+  attendanceDays: 'prima.attendance_days',
+  attendanceMatches: 'prima.attendance_matches',
   hrItRequests:'prima.hr_it_requests', hrItApprovals:'prima.hr_it_approvals', hrItDelegations:'prima.hr_it_delegations', hrItAuthorityMappings:'prima.hr_it_authority_mappings', hrItReceipts:'prima.hr_it_receipts',
   confidentialityAcks: 'prima.confidentiality_acks',
   itAccounts: 'prima.it_accounts',
@@ -149,6 +153,11 @@ const TABLE: Record<TableName, string> = {
   flexRequests: 'prima.flex_requests',
   vacancies: 'prima.vacancies',
   staffMovements: 'prima.staff_movements',
+  // P81: staff check-in by place (checkin.ts).
+  checkinPlaces: 'prima.checkin_places',
+  checkinRules: 'prima.checkin_rules',
+  checkinSettings: 'prima.checkin_settings',
+  checkinEvents: 'prima.checkin_events',
   loginHandovers: 'prima.login_handovers',
   hrFilings: 'prima.hr_filings',
   hrCases: 'prima.hr_cases',
@@ -202,10 +211,15 @@ const TABLE: Record<TableName, string> = {
 // rows: plain column comparisons such as company_id = $1 or id = ANY($1). Conditions on JSON fields (data->>'x',
 // data @> ...) are checked only after the wall, row by row (review, 3 Nov 2026). So company and id filters below go to
 // the plain columns, and callers add a company filter wherever they know it.
-const COMPANY_INDEXED = new Set<TableName>(['branches', 'sites', 'posts', 'people', 'credentials', 'licences', 'shifts', 'attendance', 'cases', 'firearms', 'armsMovements', 'contracts', 'staffClaims', 'finStatus']);
+const COMPANY_INDEXED = new Set<TableName>(['branches', 'sites', 'posts', 'people', 'credentials', 'licences', 'shifts', 'attendance', 'cases', 'firearms', 'armsMovements', 'contracts', 'staffClaims', 'finStatus',
+  // P81: a month of report attendance is thousands of day rows; a person's month is read by id (primary key).
+  'attendanceImports', 'attendanceDays', 'attendanceMatches']);
 
 /** Tables whose rows carry companyId in a company_id column. */
 const HAS_COMPANY_COLUMN = new Set<TableName>([
+  'attendanceImports',
+  'attendanceDays',
+  'attendanceMatches',
   'delegations',
   'criticalRoles',
   'legalHolds',
@@ -251,6 +265,10 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'flexRequests',
   'vacancies',
   'staffMovements',
+  'checkinPlaces',
+  'checkinRules',
+  'checkinSettings',
+  'checkinEvents',
   'hrFilings',
   'hrCases',
   'officeOsh',
@@ -503,6 +521,12 @@ export class PgStore implements Store {
       return;
     }
     if (table === 'webSettings') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`web-settings:${id}`]);
+    // P81: one attendance import per company and month at a time, and one remembered match per employee key, even
+    // before any row exists.
+    if ((table === 'attendanceImports' && id.startsWith('attendance-import:')) || table === 'attendanceMatches') {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${table}:${id}`]);
+      return;
+    }
     // Leave: "a refusal is corrected once" and "one MC is used once" serialize on a key, not a row (Arisha review, 3 Nov 2026).
     if (table === 'leaveRequests' && /^leave-(correct|mc):/.test(id)) {
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
@@ -518,6 +542,25 @@ export class PgStore implements Store {
       await this.client.query(`INSERT INTO ${TABLE[table]} (id, company_id, data) VALUES ($1, $2, $3)`, [r.id, r.companyId, row]);
     } else {
       await this.client.query(`INSERT INTO ${TABLE[table]} (id, data) VALUES ($1, $2)`, [r.id, row]);
+    }
+  }
+
+  /**
+   * P81: many rows of one company-column table in a few statements (2,000 rows each): a month of report attendance is
+   * thousands of rows, and one INSERT each would hold the request for seconds. The company wall checks every row.
+   */
+  async insertMany<T extends TableName>(table: T, rows: Row<T>[]): Promise<void> {
+    if (table === 'audit') throw new Error('Use audit() to append to the audit log');
+    if (!HAS_COMPANY_COLUMN.has(table)) {
+      for (const row of rows) await this.insert(table, row);
+      return;
+    }
+    for (let i = 0; i < rows.length; i += 2000) {
+      const part = rows.slice(i, i + 2000);
+      await this.client.query(
+        `INSERT INTO ${TABLE[table]} (id, company_id, data) SELECT x->>'id', x->>'companyId', x FROM jsonb_array_elements($1::jsonb) AS x`,
+        [JSON.stringify(part)],
+      );
     }
   }
 

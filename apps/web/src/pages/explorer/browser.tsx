@@ -1100,7 +1100,8 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
           void ops.transfer(picker.mode === "move" ? "cut" : "copy", its.map(toClipItem), cleanFolder(dest)).then((ok) => { if (ok) act({ type: "clear" }); });
         }} />
       <LabelsDialog open={!!labelsFor} onOpenChange={(o) => !o && setLabelsFor(null)} files={labelsFor ?? []} branchId={branch.id} />
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} danger confirmLabel={t("Delete")}
+      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} danger
+        confirmLabel={removing ? t("Delete {what}", { what: itemsWord(removing.files.length, removing.folders.length) }) : t("Delete")}
         title={removing ? t("Delete {what}?", { what: itemsWord(removing.files.length, removing.folders.length) }) : ""}
         body={removing?.files.length ? t("Agents can no longer read them, and packs that use them will show them as missing.") : t("The empty folders are removed.")}
         onConfirm={async () => {

@@ -8,6 +8,9 @@
 - POST   /api/workspace/data/erasure              {confirm_name, password, code?} request it
 - DELETE /api/workspace/data/erasure/{id}         cancel (only before the erase starts)
 - POST   /api/workspace/data/erasure/{id}/start   {confirm_name, password, code?} erase now
+- GET    /api/workspace/data/golive               P81: what a go-live reset would touch
+- POST   /api/workspace/data/golive               {confirm_name, password, code?,
+                                                  remove_branch_ids, move_to} start fresh
 
 The erase signs everyone out, so its progress and the certificate are read with the access
 token the start answered with (no session needed):
@@ -34,6 +37,7 @@ from ...core.db import get_db
 from ...core.security import new_token, token_hash, verify_password
 from ...erasure import certificate, erase, export, inventory, jobs
 from ...erasure.models import ErasureRecord, WorkspaceExport
+from ...golive import service as golive
 from ...models import User, Workspace
 from ...services import audit
 from ..deps import Principal, api_error, current_principal
@@ -430,6 +434,67 @@ async def start_erasure(
             "The background job engine is not reachable. Try again in a minute.",
         ) from e
     return {**(_erasure_out(r) or {}), "access_token": token}
+
+
+# ---------------------------------------------------------------- P81 start fresh for go-live
+
+
+class GoLiveIn(ConfirmName):
+    remove_branch_ids: list[str] = Field(default_factory=list, max_length=500)
+    move_to: str | None = Field(default=None, max_length=40)
+
+
+@router.get("/api/workspace/data/golive")
+async def golive_overview(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Counts only: members (owners stay), companies with what is in each, departments, AI
+    workers, files, SOPs, and the last server backup when this server can see it."""
+    _owner(principal)
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    tf = _two_factor()
+    return {
+        "workspace": {"id": ws.id, "name": ws.name},
+        **await golive.survey(db, ws.id),
+        "needs_code": bool(tf is not None and tf.enabled(principal.user)),
+    }
+
+
+@router.post("/api/workspace/data/golive")
+async def golive_reset(
+    body: GoLiveIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Every member but the owners leaves, the companies picked go (agents, files and linked
+    folders move to `move_to` first), SOPs and settings stay. One transaction, audited."""
+    _owner(principal)
+    ws = await db.get(Workspace, principal.workspace_id)
+    assert ws is not None
+    _check_name(ws, body.confirm_name)
+    await _check(db, principal, body)
+    if await _open_erasure(db, ws.id):
+        raise api_error(
+            status.HTTP_409_CONFLICT, "erasure_open", "An erase of this workspace is already open."
+        )
+    try:
+        res = await golive.reset(
+            db,
+            ws.id,
+            principal.actor,
+            remove_branch_ids=body.remove_branch_ids,
+            move_to=body.move_to or None,
+            via="settings",
+        )
+    except golive.ResetError as e:
+        await db.rollback()
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, e.code, e.message) from e
+    await db.commit()
+    from ...engine import privacy
+
+    privacy.invalidate(ws.id)  # removed companies and people are no longer masked by name
+    return res.counts()
 
 
 # ---------------------------------------------------------------- after the session is gone

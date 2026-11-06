@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CameraIcon, CameraRotateIcon, XIcon } from '@phosphor-icons/react';
 import { FACE_DESCRIPTOR_LEN } from '@prima/core';
+import { PermissionHelp } from './PermissionHelp';
+import { CAMERA_PROBLEM_TEXT, cameraProblem, type CameraProblem } from './checkin-permissions';
 import '../styles/camera.css';
+import '../styles/checkin.css';
 
 declare const __DEMO__: boolean;
 
@@ -152,6 +155,8 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
   const steady = useRef(0);
   const [ready, setReady] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  // P81: why the camera did not open (NotAllowedError, NotFoundError ...), to show the right help.
+  const [problem, setProblem] = useState<CameraProblem | null>(null);
   const [engineOk, setEngineOk] = useState(__DEMO__);
   const [busy, setBusy] = useState(false);
   const [mirrored, setMirrored] = useState(true);
@@ -169,8 +174,13 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
   /** Front camera first (facingMode 'user'); a chosen camera after the switch button. */
   const start = useCallback(async (id: string | null) => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      if (!__DEMO__) setBlocked('This browser cannot open the camera.');
-      else setReady(true);
+      if (__DEMO__) setReady(true);
+      else {
+        // No camera API at all: an insecure address (http) or an old browser.
+        const p: CameraProblem = window.isSecureContext === false ? 'insecure' : 'unsupported';
+        setProblem(p);
+        setBlocked(CAMERA_PROBLEM_TEXT[p]);
+      }
       return;
     }
     stop();
@@ -193,11 +203,16 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
       }
       setReady(true);
       setBlocked(null);
+      setProblem(null);
       const all = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
       setCameras(all.filter((d) => d.kind === 'videoinput'));
-    } catch {
+    } catch (e) {
       if (__DEMO__) setReady(true);
-      else setBlocked('The camera is blocked. Allow the camera for this app in the phone or browser settings, then try again.');
+      else {
+        const p = cameraProblem(e);
+        setProblem(p);
+        setBlocked(CAMERA_PROBLEM_TEXT[p]);
+      }
     }
   }, []);
 
@@ -352,6 +367,11 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
       <div className="cam-bottom">
         {blocked ? (
           <div className="cam-sheet">
+            {problem === 'denied' && (
+              <div className="cam-help">
+                <PermissionHelp kind="camera" compact />
+              </div>
+            )}
             <button type="button" className="btn btn-primary" onClick={() => {
                 setBlocked(null);
                 void start(deviceId);
