@@ -3,7 +3,8 @@
  * rules, and that feedback goes to the developer. */
 import { BookOpenTextIcon, GavelIcon, IdentificationBadgeIcon, LightbulbIcon, ScalesIcon } from "@phosphor-icons/react";
 
-import { Block, HouseRulesBlock, PageRuleCards, Panel, ruleOnPage, SYSTEM_RULES, SystemRulesBlock } from "@/components/feedback/panels";
+import type { GuideStep } from "@/components/feedback/guide-targets";
+import { Block, HouseRulesBlock, PageRuleCards, Panel, ruleOnPage, SYSTEM_RULES, SystemRulesBlock, TourButton } from "@/components/feedback/panels";
 import { Pill } from "@/components/ui/pill";
 import { useT } from "@/i18n";
 import type { HouseRule } from "@/lib/feedback";
@@ -11,14 +12,17 @@ import { ROLE_INFO, type Me } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import type { PrimaPageInfo } from "./prima";
+import { primaLayoutSteps } from "./prima-tour";
 
 // Of the office's governance cards, the one that holds in Prima too: who reads the feedback.
 const PRIMA_SYSTEM_RULES = SYSTEM_RULES.filter((r) => r.title === "Your feedback goes to the developer");
 
-export function PrimaRulesPanel({ me, page, path, rules, onClose }: { me: Me; page: PrimaPageInfo; path: string; rules: HouseRule[]; onClose: () => void }) {
+export function PrimaRulesPanel({ me, page, path, rules, onClose, onTour }: { me: Me; page: PrimaPageInfo; path: string; rules: HouseRule[]; onClose: () => void; onTour: (steps: GuideStep[]) => void }) {
   const t = useT();
   const pageRules = rules.filter((r) => ruleOnPage(r, path));
   const office = ROLE_INFO[me.role];
+  // Prima's own steps for the screen, else a walk through its layout as it is now.
+  const steps = page.steps.length ? page.steps : primaLayoutSteps(t);
   return (
     <Panel title={t("Rules & guide")} sub={t("What this Prima screen is for, what you may do here, and the rules that apply.")} icon={GavelIcon} onClose={onClose}>
       <div className="grid gap-6">
@@ -26,22 +30,23 @@ export function PrimaRulesPanel({ me, page, path, rules, onClose }: { me: Me; pa
           <div className="rounded-[var(--radius-md)] border border-border bg-surface-2/50 px-4 py-3">
             <p className="text-[14px] font-semibold">{page.title}</p>
             {page.blurb ? <p className="mt-1 text-[13px] text-fg/85">{page.blurb}</p> : null}
-            {page.steps.length ? (
+            {steps.length ? (
               <div className="mt-3 grid gap-1.5">
                 <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-accent">
                   <LightbulbIcon size={14} weight="fill" /> {t("How to use it")}
                 </p>
                 <ol className="grid gap-1 text-[12.5px] text-fg/85">
-                  {page.steps.map((s, i) => (
-                    <li key={`${i}-${s}`} className="flex gap-2">
+                  {steps.map((s, i) => (
+                    <li key={`${i}-${s.text}`} className="flex gap-2">
                       <span className="mt-px grid size-[17px] shrink-0 place-items-center rounded-full bg-surface text-[10.5px] font-semibold text-accent ring-1 ring-accent/25">{i + 1}</span>
-                      <span>{s}</span>
+                      <span>{s.text}</span>
                     </li>
                   ))}
                 </ol>
+                <TourButton onClick={() => onTour(steps)} />
               </div>
             ) : null}
-            {!page.blurb && !page.steps.length ? <p className="mt-1 text-[12.5px] text-muted">{t("A screen of Prima Secure, the group's operations app.")}</p> : null}
+            {!page.blurb && !steps.length ? <p className="mt-1 text-[12.5px] text-muted">{t("A screen of Prima Secure, the group's operations app.")}</p> : null}
           </div>
           <PageRuleCards rules={pageRules} />
         </Block>

@@ -61,14 +61,12 @@ export const TIPS: Record<string, string> = {
   "Every piece of work you gave or that your AI does, from waiting to done.":
     "Setiap kerja yang anda beri atau yang AI anda buat, dari menunggu hingga siap.",
   "Press New task to hand out work.": "Tekan Tugasan baharu untuk memberi kerja.",
-  "Waiting for a person means you need to decide something: open it.":
-    "Menunggu seseorang bermaksud anda perlu membuat keputusan: bukanya.",
+  "A card under Waiting means you need to decide something: open it.": "Kad di bawah Menunggu bermaksud anda perlu membuat keputusan: bukanya.",
   "A task stuck or failed? Open it and use Stop, Try another AI or Finish it myself.":
     "Tugasan tersekat atau gagal? Bukanya dan guna Hentikan, Cuba AI lain atau Selesaikannya sendiri.",
   "All the office's work, from waiting to done. Columns show where each task stands.":
     "Semua kerja pejabat, dari menunggu hingga siap. Lajur menunjukkan kedudukan setiap tugasan.",
-  "Check the Waiting for a person column daily: those tasks need a decision.":
-    "Semak lajur Menunggu seseorang setiap hari: tugasan itu perlukan keputusan.",
+  "Check the Waiting column daily: those tasks need a decision.": "Semak lajur Menunggu setiap hari: tugasan itu perlukan keputusan.",
   "Open a failed task to retry it on another AI or agent, or finish it yourself.":
     "Buka tugasan yang gagal untuk cuba semula dengan AI atau ejen lain, atau selesaikannya sendiri.",
   "Filter by company or agent to see one team's load.": "Tapis mengikut syarikat atau ejen untuk melihat beban kerja satu pasukan.",
@@ -101,12 +99,12 @@ export const TIPS: Record<string, string> = {
   // outlook
   "Your Outlook, read by your AI: sorted, summarised, with drafts waiting for you.":
     "Outlook anda, dibaca oleh AI anda: diisih, diringkaskan, dengan draf menunggu anda.",
-  "Check Drafts waiting: send, edit or discard each one.": "Semak Draf menunggu: hantar, ubah atau buang setiap satu.",
+  "Check Waiting for your approval: send, edit or discard each draft.": "Semak Menunggu kelulusan anda: hantar, ubah atau buang setiap draf.",
   "Add Rules: when mail is from someone or about something, draft a reply or save its attachments.":
     "Tambah Peraturan: bila mel datang daripada seseorang atau tentang sesuatu, draf balasan atau simpan lampirannya.",
   "Your Outlook and the shared mailboxes: sorted mail, drafts waiting, and inbox rules.":
     "Outlook anda dan peti mel kongsi: mel yang diisih, draf menunggu, dan peraturan peti masuk.",
-  "Pick a mailbox at the top, then check Drafts waiting.": "Pilih peti mel di atas, kemudian semak Draf menunggu.",
+  "Pick a mailbox at the top, then check Waiting for your approval.": "Pilih peti mel di atas, kemudian semak Menunggu kelulusan anda.",
   "Add Rules so routine mail is handled the same way every time.":
     "Tambah Peraturan supaya mel rutin diuruskan dengan cara yang sama setiap kali.",
   "Shared mailboxes save attachments into the Library and turn bills into payables.":
@@ -118,7 +116,7 @@ export const TIPS: Record<string, string> = {
   "For bigger work, ask it to make a task.": "Untuk kerja yang lebih besar, minta ia buat tugasan.",
   "Talk to any agent you look after. Quick questions here; bigger work as tasks.":
     "Bersembang dengan mana-mana ejen jagaan anda. Soalan pantas di sini; kerja lebih besar sebagai tugasan.",
-  "Pick an agent on the left.": "Pilih ejen di sebelah kiri.",
+  "Pick an agent to talk to.": "Pilih ejen untuk berbual.",
   "Say \"make this a task\" when the job needs steps or approvals.":
     "Katakan \"jadikan ini tugasan\" bila kerja itu perlukan beberapa langkah atau kelulusan.",
 
@@ -128,14 +126,14 @@ export const TIPS: Record<string, string> = {
   "Open one to read it, or download its tables as CSV.": "Buka satu untuk membacanya, atau muat turun jadualnya sebagai CSV.",
   "Every report the agents wrote: summaries, digests, weekly learning, end-of-day reports.":
     "Setiap laporan yang ditulis ejen: ringkasan, ringkasan mel, pembelajaran mingguan, laporan hujung hari.",
-  "Filter by agent or company.": "Tapis mengikut ejen atau syarikat.",
+  "Use Search reports to find one.": "Guna Cari laporan untuk mencarinya.",
   "Download any table as CSV for Excel.": "Muat turun mana-mana jadual sebagai CSV untuk Excel.",
 
   // objectives, workflows
   "Big goals the agents work towards over weeks, with a budget and progress.":
     "Objektif besar yang diusahakan ejen selama beberapa minggu, dengan bajet dan kemajuannya.",
   "Write a goal in plain words; the agents plan the steps.": "Tulis objektif dalam ayat biasa; ejen merancang langkahnya.",
-  "Check progress and cost; pause it any time.": "Semak kemajuan dan kos; jeda bila-bila masa.",
+  "Check progress and what it has cost so far.": "Semak kemajuan dan kosnya setakat ini.",
   "Step-by-step jobs your AI can run the same way every time.":
     "Kerja langkah demi langkah yang AI anda boleh jalankan dengan cara yang sama setiap kali.",
   "Start one from a template, or ask your AI to draft one.": "Mulakan daripada templat, atau minta AI anda mendrafnya.",
@@ -144,7 +142,7 @@ export const TIPS: Record<string, string> = {
     "Kerja berulang yang dilukis sebagai langkah, dengan siapa buat setiap satu dan di mana seseorang menyemak.",
   "Start from a template or let the AI draft one from your SOP.": "Mulakan daripada templat atau biar AI mendrafnya daripada SOP anda.",
   "Add an approval step where a person must agree.": "Tambah langkah kelulusan di mana seseorang mesti bersetuju.",
-  "Run it or put it on a schedule.": "Jalankannya atau letakkan dalam jadual.",
+  "Run it, then follow each run under Recent runs.": "Jalankannya, kemudian ikuti setiap larian di bawah Larian terkini.",
 
   // contacts, deals, money
   "Customers and suppliers, with everything that happened with each.":
@@ -160,7 +158,6 @@ export const TIPS: Record<string, string> = {
   "The sales pipeline: every deal, its value and stage.": "Saluran jualan: setiap urusan jualan, nilai dan peringkatnya.",
   "Drag deals between stages, or let agents update them from email.":
     "Seret urusan jualan antara peringkat, atau biar ejen mengemas kininya daripada e-mel.",
-  "Check deals with no recent activity.": "Semak urusan jualan tanpa aktiviti terkini.",
   "What customers owe you and what you owe suppliers, with what is overdue and coming.":
     "Apa yang pelanggan hutang kepada anda dan apa yang anda hutang kepada pembekal, termasuk yang tertunggak dan akan tiba.",
   "Approve bills in Payables: check what the AI read, correct it if needed, then Approve.":
@@ -242,8 +239,7 @@ export const TIPS: Record<string, string> = {
     "Pilih cara AI anda bercakap: standard, bahasa Melayu santai atau dialek negeri anda.",
   "Your account and the office's settings.": "Akaun anda dan tetapan pejabat.",
   "Set your language and how your AI speaks.": "Tetapkan bahasa anda dan cara AI anda bercakap.",
-  "Members, AI use, storage and approval limits are in the menu under Setup.":
-    "Ahli, penggunaan AI, storan dan had kelulusan ada dalam menu di bawah Tetapan sistem.",
+  "Members, AI use, storage and approval limits are in the menu under Settings.": "Ahli, penggunaan AI, storan dan had kelulusan ada dalam menu di bawah Tetapan.",
   "How much AI each person may use a day, and what staff may use it for.":
     "Berapa banyak AI yang boleh digunakan setiap orang sehari, dan untuk apa kakitangan boleh menggunakannya.",
   "Set a daily allowance per person or per role.": "Tetapkan elaun harian untuk setiap orang atau peranan.",
@@ -282,9 +278,9 @@ export const TIPS: Record<string, string> = {
   "Every job that runs by itself at set times, and how each run went.":
     "Setiap kerja yang berjalan sendiri pada waktu ditetapkan, dan hasil setiap larian.",
   "Add a schedule in plain words, like every Monday at 9am.": "Tambah jadual dalam ayat biasa, seperti setiap Isnin pukul 9 pagi.",
-  "Check Runs and Incidents for anything that failed.": "Semak Larian dan Insiden untuk apa-apa yang gagal.",
+  "Check Run ledger and Incidents for anything that failed.": "Semak Rekod larian dan Insiden untuk apa-apa yang gagal.",
   "Extra tools from other systems, connected through MCP.": "Alat tambahan daripada sistem lain, disambungkan melalui MCP.",
-  "Add a server, then choose which agents may use its tools.": "Tambah pelayan, kemudian pilih ejen mana yang boleh menggunakan alatnya.",
+  "Add a server: its tools reach your agents, and every call is approved first.": "Tambah pelayan: alatnya sampai kepada ejen anda, dan setiap panggilan diluluskan dahulu.",
   "Who changed what, and when: the office's audit log.": "Siapa ubah apa, dan bila: log audit pejabat.",
   "Filter by kind to find a change.": "Tapis mengikut jenis untuk mencari sesuatu perubahan.",
   "Entries cannot be edited or deleted.": "Catatan tidak boleh diubah atau dipadam.",

@@ -30,10 +30,10 @@ describe("P75 feedback widget: the Prima screen", () => {
     expect(fromContract({ view: "it", title: "IT" }, "work")).toBeNull();
     expect(fromContract({ view: "work" }, "work")).toBeNull();
     const got = fromContract(
-      { view: "work", title: "  Work\n", role: { label: "IT Manager" }, steps: ["a", 3, ""], rules: [{ id: "IT-1", title: "Short.", body: "Short. More.", source: "Policy" }, "bad", { body: "no title" }] },
+      { view: "work", title: "  Work\n", role: { label: "IT Manager" }, steps: ["a", 3, "", { text: "New claim", target: "[data-guide=new-claim]" }, { target: "x" }], rules: [{ id: "IT-1", title: "Short.", body: "Short. More.", source: "Policy" }, "bad", { body: "no title" }] },
       "work",
     );
-    expect(got).toMatchObject({ view: "work", title: "Work", role: { label: "IT Manager", blurb: "" }, steps: ["a"] });
+    expect(got).toMatchObject({ view: "work", title: "Work", role: { label: "IT Manager", blurb: "" }, steps: [{ text: "a" }, { text: "New claim", target: "[data-guide=new-claim]" }] });
     expect(got?.rules).toEqual([{ id: "IT-1", title: "Short.", body: "More.", source: "Policy" }]);
     // The first screen (no hash yet) takes Prima's word for which it is.
     expect(fromContract({ view: "it", title: "IT" }, "")?.view).toBe("it");

@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 
 import { Annotator, composeNote, composeShot, type Mark, type Shot } from "./annotator";
 import { canCaptureScreen, capturePage, captureScreen } from "./capture";
+import { areaOf, boxOf, findStep, type GuideStep } from "./guide-targets";
+import { GuideTour, type Tour } from "./guide-tour";
 import { LiquidLayer, type Origin } from "./liquid-layer";
 import { GeneralForm, MinePanel } from "./panels";
 
@@ -38,7 +40,7 @@ export interface FeedbackPage {
   title: string;
 }
 
-type View = "shot" | "general" | "rules" | "mine";
+type View = "shot" | "general" | "rules" | "mine" | "tour";
 
 const ITEMS: { view: View; icon: Icon; label: string; hint: string }[] = [
   { view: "shot", icon: CameraIcon, label: msg("Mark up this screen"), hint: msg("Screenshot, then circle what you mean") },
@@ -81,13 +83,20 @@ function usePageDialog(): boolean {
  * change under a button that stays mounted); `rules` draws the Rules & guide panel.
  * `onOpen` runs as the drops come out (the widget refreshes the language there).
  */
+type RulesProps = { rules: HouseRule[]; onClose: () => void; onTour: (steps: GuideStep[], heading?: string) => void };
+
+/** The page's own Rules & guide, drawn as an element (its handlers run on clicks, not while drawing). */
+function RulesSlot({ render, ...p }: RulesProps & { render: (p: RulesProps) => ReactNode }) {
+  return <>{render(p)}</>;
+}
+
 export function Feedback({
   page: pageOf,
   rules: rulesPanel,
   onOpen,
 }: {
   page: () => FeedbackPage;
-  rules: (p: { rules: HouseRule[]; onClose: () => void }) => ReactNode;
+  rules: (p: RulesProps) => ReactNode;
   onOpen?: () => void;
 }) {
   const t = useT();
@@ -98,6 +107,8 @@ export function Feedback({
   const [view, setView] = useState<View | null>(null);
   const [busy, setBusy] = useState(false); // taking the picture
   const [shot, setShot] = useState<Shot | null>(null);
+  const [tour, setTour] = useState<Tour | null>(null);
+  const [moving, setMoving] = useState(false); // the tour taking a new picture
   const [y, setY] = useState(readY);
   const [origin, setOrigin] = useState<Origin>({ x: 0, y: 0 });
   const button = useRef<HTMLButtonElement>(null);
@@ -166,6 +177,60 @@ export function Feedback({
     } finally {
       setBusy(false);
     }
+  };
+
+  // P79 Show me on this page: find each step's element, then take the picture (Rules & guide
+  // is left out of it, as the feedback button is) and open the tour at step `at`.
+  // `again`: the tour is open and moves to a step out of sight: the page scrolls there under it
+  // and the picture is taken anew, without closing (the tour is not part of the picture).
+  const startTour = async (steps: GuideStep[], at = 0, heading?: string, again = false) => {
+    if (again) setMoving(true);
+    else {
+      setView(null);
+      setBusy(true);
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    try {
+      const els = steps.map((s) => {
+        const el = findStep(s);
+        return el ? areaOf(el) : null;
+      });
+      // The step it opens at is in the picture: scrolled to first when it is out of sight.
+      const first = els[at];
+      if (first && boxOf(first).off) {
+        first.scrollIntoView({ block: "center", inline: "nearest" });
+        await new Promise((r) => setTimeout(r, 380));
+      }
+      const boxes = els.map((el) => (el ? boxOf(el) : null));
+      const canvas = await capturePage({ scale: 1 });
+      setTour({
+        url: canvas.toDataURL("image/png"),
+        width: canvas.width,
+        height: canvas.height,
+        title: pageOf().title,
+        heading,
+        // Each step keeps the element it was found at, so the next picture finds the same one.
+        steps: steps.map((s, i) => ({ ...s, el: els[i] ?? s.el, box: boxes[i] ?? null })),
+        at,
+      });
+      if (!again) {
+        setOrigin(where());
+        setView("tour");
+      }
+    } catch {
+      toast.error(t("The picture of this page did not work."), { description: t("The steps are still listed under Rules & guide.") });
+      setOrigin(where());
+      setView("rules");
+    } finally {
+      if (again) setMoving(false);
+      else setBusy(false);
+    }
+  };
+
+  // A step scrolled out of sight: the page goes there, then a new picture.
+  const goToStep = (i: number) => {
+    if (!tour || moving) return;
+    void startTour(tour.steps.map(({ box: _box, ...step }) => step), i, tour.heading, true);
   };
 
   const openView = (v: View) => {
@@ -241,12 +306,18 @@ export function Feedback({
   };
 
   const closeView = useCallback(() => setView(null), []);
+  const backToGuide = useCallback(() => setView("rules"), []);
   // Free the picture's memory once the circle has shrunk away.
   useEffect(() => {
     if (view === "shot" || !shot) return;
     const id = setTimeout(() => setShot(null), 600);
     return () => clearTimeout(id);
   }, [view, shot]);
+  useEffect(() => {
+    if (view === "tour" || !tour) return;
+    const id = setTimeout(() => setTour(null), 600);
+    return () => clearTimeout(id);
+  }, [view, tour]);
 
   const showButton = !busy && !view;
   // Over the page's own dialogs and sheets the button steps back (smaller, see-through) until
@@ -401,7 +472,10 @@ export function Feedback({
         <GeneralForm pageLabel={page.title} sending={send.isPending} onSend={sendGeneral} onScreenshot={() => void takeShot()} onClose={closeView} />
       </LiquidLayer>
       <LiquidLayer open={view === "rules"} origin={origin} onClose={closeView} label={t("Rules & guide")}>
-        {rulesPanel({ rules: cfg.data?.rules ?? [], onClose: closeView })}
+        <RulesSlot render={rulesPanel} rules={cfg.data?.rules ?? []} onClose={closeView} onTour={(steps, heading) => void startTour(steps, 0, heading)} />
+      </LiquidLayer>
+      <LiquidLayer open={view === "tour" && !!tour} origin={origin} onClose={closeView} label={t("Show me on this page")}>
+        {tour ? <GuideTour tour={tour} moving={moving} onBack={backToGuide} onClose={closeView} onGo={goToStep} /> : null}
       </LiquidLayer>
       <LiquidLayer open={view === "mine"} origin={origin} onClose={closeView} label={t("My feedback")}>
         <MinePanel onClose={closeView} onNew={() => setView("general")} />

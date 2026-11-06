@@ -7,6 +7,7 @@
  * (`.k-head h1`, `.k-head-sub`, Prima's page head) is read instead. Everything here is plain text
  * from the page, shown as text, never as HTML.
  */
+import type { GuideStep } from "@/components/feedback/guide-targets";
 import type { Lang } from "@/i18n";
 
 export interface PrimaRule {
@@ -23,7 +24,9 @@ export interface PrimaPageInfo {
   /** For the developer's list: "Prima · " and Prima's own name for the screen (English), else the heading. */
   name: string;
   blurb: string;
-  steps: string[];
+  /** How to use the screen; `target` is the element a step is about (a CSS selector, e.g.
+   * `[data-guide="new-claim"]`), marked in Show me on this page. */
+  steps: GuideStep[];
   role: { label: string; blurb: string } | null;
   rules: PrimaRule[];
 }
@@ -71,6 +74,17 @@ export function oneTelling(r: PrimaRule): PrimaRule {
   return r;
 }
 
+/** One step: a plain sentence, or { text, target } with the element it is about. */
+function stepOf(s: unknown): GuideStep | null {
+  if (typeof s === "string") return text(s, 300) ? { text: text(s, 300) } : null;
+  if (!s || typeof s !== "object") return null;
+  const o = s as Record<string, unknown>;
+  const said = text(o.text, 300);
+  if (!said) return null;
+  const target = text(o.target, 200);
+  return target ? { text: said, target } : { text: said };
+}
+
 /** Prima's own description of the screen, if it gave one for this screen. */
 export function fromContract(raw: unknown, view: string): Omit<PrimaPageInfo, "name"> | null {
   if (!raw || typeof raw !== "object") return null;
@@ -80,7 +94,7 @@ export function fromContract(raw: unknown, view: string): Omit<PrimaPageInfo, "n
   if (view && said && said !== view) return null;
   const title = text(o.title, 200);
   if (!title) return null;
-  const steps = Array.isArray(o.steps) ? o.steps.map((s) => text(s, 300)).filter(Boolean).slice(0, 12) : [];
+  const steps = Array.isArray(o.steps) ? o.steps.map(stepOf).filter((s): s is GuideStep => !!s).slice(0, 12) : [];
   const r = o.role && typeof o.role === "object" ? (o.role as Record<string, unknown>) : null;
   const role = r && text(r.label, 80) ? { label: text(r.label, 80), blurb: text(r.blurb, 600) } : null;
   const rules = Array.isArray(o.rules)

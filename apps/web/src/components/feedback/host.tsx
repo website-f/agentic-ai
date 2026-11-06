@@ -39,7 +39,7 @@ function OfficeFeedback({ me, path }: { me: Me; path: string }) {
   return (
     <Feedback
       page={() => pageInfo(path, t)}
-      rules={({ rules, onClose }) => <RulesPanel me={me} path={path} rules={rules} onClose={onClose} />}
+      rules={({ rules, onClose, onTour }) => <RulesPanel me={me} path={path} rules={rules} onClose={onClose} onTour={onTour} />}
     />
   );
 }

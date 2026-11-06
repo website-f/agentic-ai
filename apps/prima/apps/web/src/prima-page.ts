@@ -9,7 +9,9 @@ export interface PrimaPage {
   view: string;
   title: string;
   blurb?: string;
-  steps?: string[];
+  /** How to use the screen; `target` (a CSS selector, best a data-guide attribute) is the element a step is about,
+   * lit in the widget's "Show me on this page". Without steps the widget walks the screen's layout itself. */
+  steps?: (string | { text: string; target?: string })[];
   role?: { label: string; blurb?: string };
   rules?: { id: string; title: string; body?: string; source?: string }[];
 }

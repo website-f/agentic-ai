@@ -1,27 +1,35 @@
 /** P73: Rules & guide in the office: what the page you are on is for (its menu entry, tips and
  * guide page), the developer's rules for it, your role, the house rules and how the system is
  * run. Prima's own version is feedback-widget/prima-rules.tsx. */
-import { ArrowSquareOutIcon, BookOpenTextIcon, GavelIcon, IdentificationBadgeIcon, LightbulbIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, BookOpenTextIcon, CaretRightIcon, GavelIcon, IdentificationBadgeIcon, LightbulbIcon, ListNumbersIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
 import { Pill } from "@/components/ui/pill";
 import { guidePageFor } from "@/guide/lookup";
-import { useT } from "@/i18n";
+import { useLang, useT } from "@/i18n";
 import type { HouseRule } from "@/lib/feedback";
+import { guideSteps, recipeSteps } from "@/lib/page-tip-marks";
 import { tipFor } from "@/lib/page-tips";
 import { staffOnly } from "@/lib/twin";
 import { ROLE_INFO, type Me } from "@/lib/types";
 import { navItemFor } from "@/nav";
 
-import { Block, HouseRulesBlock, PageRuleCards, Panel, ruleOnPage, SystemRulesBlock } from "./panels";
+import type { GuideStep } from "./guide-targets";
+import { Block, HouseRulesBlock, PageRuleCards, Panel, ruleOnPage, SystemRulesBlock, TourButton } from "./panels";
 
-export function RulesPanel({ me, path, rules, onClose }: { me: Me; path: string; rules: HouseRule[]; onClose: () => void }) {
+export function RulesPanel({ me, path, rules, onClose, onTour }: { me: Me; path: string; rules: HouseRule[]; onClose: () => void; onTour: (steps: GuideStep[], heading?: string) => void }) {
   const t = useT();
   const item = navItemFor(path);
   const tip = tipFor(item?.to ?? path, staffOnly(me.permissions) ? "staff" : "manager");
   const guide = guidePageFor(path);
   const pageRules = rules.filter((r) => ruleOnPage(r, path, item?.to));
   const role = ROLE_INFO[me.role];
+  // The User Guide's recipes for this page, in the person's language (loaded when asked for:
+  // the guide's words are a chunk of their own).
+  const lang = useLang((s) => s.lang);
+  const docs = useQuery({ queryKey: ["guide-text", lang], queryFn: () => import("@/guide/lang").then((m) => m.guideText(lang).docs), staleTime: Infinity, enabled: !!guide });
+  const recipes = guide ? (docs.data?.[guide.id]?.howto ?? []).filter((r) => r.steps.length) : [];
   return (
     <Panel title={t("Rules & guide")} sub={t("What this page is for, what you may do here, and how the system is run.")} icon={GavelIcon} onClose={onClose}>
       <div className="grid gap-6">
@@ -42,6 +50,7 @@ export function RulesPanel({ me, path, rules, onClose }: { me: Me; path: string;
                     </li>
                   ))}
                 </ol>
+                {tip.steps.length ? <TourButton onClick={() => onTour(guideSteps(tip, t))} /> : null}
               </div>
             ) : null}
             {guide ? (
@@ -50,6 +59,28 @@ export function RulesPanel({ me, path, rules, onClose }: { me: Me; path: string;
               </Link>
             ) : null}
           </div>
+          {recipes.length ? (
+            <div className="grid gap-1.5">
+              <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-accent">
+                <ListNumbersIcon size={14} weight="bold" /> {t("Step by step on this page")}
+              </p>
+              <ul className="grid gap-1">
+                {recipes.map((r) => (
+                  <li key={r.title}>
+                    <button
+                      type="button"
+                      onClick={() => onTour(recipeSteps(r), r.title)}
+                      className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-border px-3 py-2 text-left text-[12.5px] transition-colors hover:border-accent/40 hover:bg-accent-soft/30"
+                    >
+                      <span className="min-w-0 flex-1">{r.title}</span>
+                      <span className="shrink-0 text-[11.5px] text-muted tabular">{t("{n} steps", { n: r.steps.length })}</span>
+                      <CaretRightIcon size={13} className="shrink-0 text-muted" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <PageRuleCards rules={pageRules} />
         </Block>
 

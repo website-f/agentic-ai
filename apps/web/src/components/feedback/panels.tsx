@@ -8,6 +8,7 @@ import {
   EyeIcon,
   GavelIcon,
   LockKeyIcon,
+  MapTrifoldIcon,
   PaperPlaneTiltIcon,
   ScalesIcon,
   SealCheckIcon,
@@ -152,6 +153,26 @@ export const SYSTEM_RULES: { icon: Icon; title: string; body: string }[] = [
   { icon: LockKeyIcon, title: msg("Saved logins stay hidden"), body: msg("Agents sign in to websites with saved logins without ever seeing the password.") },
   { icon: EyeIcon, title: msg("Your feedback goes to the developer"), body: msg("What you send here, screenshot included, is read by the system's developer. Leave out anything private before you send.") },
 ];
+
+/** P79: opens the picture tour of the page's guide (guide-tour.tsx). */
+export function TourButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-3 flex w-full items-center gap-3 rounded-[var(--radius-sm)] border border-accent/30 bg-surface px-3 py-2.5 text-left transition-colors hover:bg-accent-soft/40"
+    >
+      <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent text-accent-fg">
+        <MapTrifoldIcon size={17} weight="fill" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13px] font-semibold">{t("Show me on this page")}</span>
+        <span className="block text-[12px] text-muted">{t("A picture of this screen with each step marked on it.")}</span>
+      </span>
+    </button>
+  );
+}
 
 export function Block({ title, icon: I, children }: { title: string; icon: Icon; children: ReactNode }) {
   return (

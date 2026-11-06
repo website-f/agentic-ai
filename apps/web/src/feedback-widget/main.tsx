@@ -85,7 +85,7 @@ function Widget({ applyTheme }: { applyTheme: (t: Theme) => void }) {
       {signedIn && who && cfg.data?.enabled ? (
         <Feedback
           page={() => ({ path: here(), title: readPrimaPage().name })}
-          rules={({ rules, onClose }) => <PrimaRulesPanel me={who} page={readPrimaPage()} path={here()} rules={rules} onClose={onClose} />}
+          rules={({ rules, onClose, onTour }) => <PrimaRulesPanel me={who} page={readPrimaPage()} path={here()} rules={rules} onClose={onClose} onTour={onTour} />}
           onOpen={syncLang}
         />
       ) : null}

@@ -84,14 +84,14 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       what: msg("Every piece of work you gave or that your AI does, from waiting to done."),
       steps: [
         msg("Press New task to hand out work."),
-        msg("Waiting for a person means you need to decide something: open it."),
+        msg("A card under Waiting means you need to decide something: open it."),
         msg("A task stuck or failed? Open it and use Stop, Try another AI or Finish it myself."),
       ],
     },
     manager: {
       what: msg("All the office's work, from waiting to done. Columns show where each task stands."),
       steps: [
-        msg("Check the Waiting for a person column daily: those tasks need a decision."),
+        msg("Check the Waiting column daily: those tasks need a decision."),
         msg("Open a failed task to retry it on another AI or agent, or finish it yourself."),
         msg("Filter by company or agent to see one team's load."),
       ],
@@ -125,14 +125,14 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     staff: {
       what: msg("Your Outlook, read by your AI: sorted, summarised, with drafts waiting for you."),
       steps: [
-        msg("Check Drafts waiting: send, edit or discard each one."),
+        msg("Check Waiting for your approval: send, edit or discard each draft."),
         msg("Add Rules: when mail is from someone or about something, draft a reply or save its attachments."),
       ],
     },
     manager: {
       what: msg("Your Outlook and the shared mailboxes: sorted mail, drafts waiting, and inbox rules."),
       steps: [
-        msg("Pick a mailbox at the top, then check Drafts waiting."),
+        msg("Pick a mailbox at the top, then check Waiting for your approval."),
         msg("Add Rules so routine mail is handled the same way every time."),
         msg("Shared mailboxes save attachments into the Library and turn bills into payables."),
       ],
@@ -145,7 +145,7 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     },
     manager: {
       what: msg("Talk to any agent you look after. Quick questions here; bigger work as tasks."),
-      steps: [msg("Pick an agent on the left."), msg("Say \"make this a task\" when the job needs steps or approvals.")],
+      steps: [msg("Pick an agent to talk to."), msg("Say \"make this a task\" when the job needs steps or approvals.")],
     },
   },
   "/reports": {
@@ -155,13 +155,13 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     },
     manager: {
       what: msg("Every report the agents wrote: summaries, digests, weekly learning, end-of-day reports."),
-      steps: [msg("Filter by agent or company."), msg("Download any table as CSV for Excel.")],
+      steps: [msg("Use Search reports to find one."), msg("Download any table as CSV for Excel.")],
     },
   },
   "/objectives": {
     manager: {
       what: msg("Big goals the agents work towards over weeks, with a budget and progress."),
-      steps: [msg("Write a goal in plain words; the agents plan the steps."), msg("Check progress and cost; pause it any time.")],
+      steps: [msg("Write a goal in plain words; the agents plan the steps."), msg("Check progress and what it has cost so far.")],
     },
   },
   "/workflows": {
@@ -174,7 +174,7 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       steps: [
         msg("Start from a template or let the AI draft one from your SOP."),
         msg("Add an approval step where a person must agree."),
-        msg("Run it or put it on a schedule."),
+        msg("Run it, then follow each run under Recent runs."),
       ],
     },
   },
@@ -221,7 +221,7 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     },
     manager: {
       what: msg("The sales pipeline: every deal, its value and stage."),
-      steps: [msg("Drag deals between stages, or let agents update them from email."), msg("Check deals with no recent activity.")],
+      steps: [msg("Drag deals between stages, or let agents update them from email.")],
     },
   },
   "/money": {
@@ -328,7 +328,7 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     },
     manager: {
       what: msg("Your account and the office's settings."),
-      steps: [msg("Set your language and how your AI speaks."), msg("Members, AI use, storage and approval limits are in the menu under Setup.")],
+      steps: [msg("Set your language and how your AI speaks."), msg("Members, AI use, storage and approval limits are in the menu under Settings.")],
     },
   },
   "/settings/ai-use": {
@@ -381,13 +381,13 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
   "/schedules": {
     manager: {
       what: msg("Every job that runs by itself at set times, and how each run went."),
-      steps: [msg("Add a schedule in plain words, like every Monday at 9am."), msg("Check Runs and Incidents for anything that failed.")],
+      steps: [msg("Add a schedule in plain words, like every Monday at 9am."), msg("Check Run ledger and Incidents for anything that failed.")],
     },
   },
   "/mcp-servers": {
     manager: {
       what: msg("Extra tools from other systems, connected through MCP."),
-      steps: [msg("Add a server, then choose which agents may use its tools.")],
+      steps: [msg("Add a server: its tools reach your agents, and every call is approved first.")],
     },
   },
   "/activity": {
