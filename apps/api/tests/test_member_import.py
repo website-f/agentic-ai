@@ -361,3 +361,54 @@ async def test_template_download(client):
     # The Malay sheet reads back too.
     p = (await preview(client, r.content)).json()
     assert p["rows"][0]["role"] == "staff" and p["rows"][0]["status"] == "ok"
+
+
+async def test_companies_the_sheet_names_can_be_added_from_the_preview(client):
+    """P80: a sheet from HR names companies the office does not have yet; the owner adds them
+    from the preview, and the same sheet then places everyone."""
+    await office(client)
+    data = xlsx(
+        [
+            ["Name", "Email", "Role", "Company"],
+            ["Aina Example", "aina@example.com", "Staff", "ARROW SHIELD SECURITY SERVICES"],
+            ["Bala Example", "bala@example.com", "Staff", "Arrow Shield Security Services"],
+            ["Chen Example", "chen@example.com", "Staff", "Maju Sdn Bhd"],
+        ]
+    )
+    p = (await preview(client, data)).json()
+    assert p["missing_companies"] == ["ARROW SHIELD SECURITY SERVICES"]  # said once
+    assert p["can_add_companies"] is True
+
+    r = await client.post(
+        "/api/members/import/companies",
+        json={"names": [*p["missing_companies"], "Maju Sdn Bhd"]},
+        headers=csrf(client),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "created": ["Arrow Shield Security Services"],
+        "existing": ["Maju Sdn Bhd"],  # never a second company with the same name
+    }
+    async with SessionLocal() as db:
+        logged = await db.scalar(select(AuditLog).where(AuditLog.action == "branch.created"))
+        assert logged is not None
+
+    p = (await preview(client, data)).json()
+    assert p["missing_companies"] == [] and p["counts"]["error"] == 0
+    assert {x["branch_name"] for x in p["rows"]} == {
+        "Arrow Shield Security Services",
+        "Maju Sdn Bhd",
+    }
+
+
+async def test_only_org_managers_add_companies_from_a_sheet(client):
+    o = await office(client)
+    m = await member(client, "staffer@example.com", "staff", branch_id=o["branch"]["id"])
+    c = await signed_in("staffer@example.com", m["temp_password"])
+    try:
+        r = await c.post(
+            "/api/members/import/companies", json={"names": ["New Co"]}, headers=csrf(c)
+        )
+        assert r.status_code == 403
+    finally:
+        await c.aclose()

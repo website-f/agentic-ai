@@ -46,6 +46,10 @@ export interface ImportPreview {
   rows: PreviewRow[];
   counts: { ok: number; warn: number; error: number };
   capped: boolean;
+  /** P80: companies the sheet names that the office does not have yet. */
+  missing_companies: string[];
+  /** Whether this person may add them from the preview (org.manage). */
+  can_add_companies: boolean;
 }
 
 export interface ImportResult {

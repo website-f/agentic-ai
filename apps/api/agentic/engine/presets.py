@@ -139,6 +139,43 @@ PRESETS: tuple[Preset, ...] = (
             "Free tier: Google uses prompts to improve its products; paid tier does not."
         ),
     ),
+    # P80 (Arisha master plan, section 5): the plan's eight provider families. These three
+    # complete them; like every preset, nothing is used until a key is added, and the
+    # approved-services lock (compliance.py) and company data levels still decide what each
+    # may see. Endpoints as published on 2026-11-06; the page lets every field be edited.
+    Preset(
+        id="xai",
+        name="xAI Grok",
+        base_url="https://api.x.ai/v1",
+        tier="paid",
+        priority=90,
+        key_url="https://console.x.ai",
+        suggested_models=("grok-3-mini", "grok-4"),
+        notes="Optional. OpenAI-compatible endpoint.",
+        data_policy_note="Check xAI's retention and training terms for your plan.",
+    ),
+    Preset(
+        id="perplexity",
+        name="Perplexity",
+        base_url="https://api.perplexity.ai",
+        tier="paid",
+        priority=100,
+        key_url="https://www.perplexity.ai/settings/api",
+        suggested_models=("sonar", "sonar-pro"),
+        notes="Research answers with web sources. Best for public research, not company data.",
+        data_policy_note="API data is not used for training; check retention for your plan.",
+    ),
+    Preset(
+        id="qwen",
+        name="Qwen (Alibaba Cloud)",
+        base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        tier="paid",
+        priority=110,
+        key_url="https://modelstudio.console.alibabacloud.com/",
+        suggested_models=("qwen-plus", "qwen-turbo"),
+        notes="Optional. International (Singapore) endpoint. Qwen also runs locally (Ollama).",
+        data_policy_note="Processed by Alibaba Cloud; check the region and retention terms.",
+    ),
 )
 
 BY_ID = {p.id: p for p in PRESETS}

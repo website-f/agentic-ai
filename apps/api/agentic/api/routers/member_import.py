@@ -34,7 +34,7 @@ from ...i18n import MS, current_lang, render, tr
 from ...i18n import labels as i18n_labels
 from ...models import Branch, Department, Membership, User
 from ...services import audit
-from ..deps import Principal, api_error
+from ..deps import Principal, api_error, require
 from . import members
 
 router = APIRouter(prefix="/api/members/import", tags=["members"])
@@ -43,6 +43,7 @@ log = logging.getLogger("agentic.api.member_import")
 UPLOAD_PATH = "/api/members/import/preview"
 MAX_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 500
+MAX_COMPANIES = 150  # P80: companies added at once from a sheet
 HEADER_SCAN = 20  # rows looked at for the header row
 FIELDS = ("name", "email", "role", "company", "department", "phone", "notes")
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -184,6 +185,19 @@ class PreviewOut(BaseModel):
     rows: list[RowOut]
     counts: dict[str, int]
     capped: bool  # more than MAX_ROWS people: only the first MAX_ROWS were read
+    # P80: the companies the sheet names that the office does not have yet, and whether this
+    # person may add them as companies here (org.manage) instead of one by one in Org.
+    missing_companies: list[str] = Field(default_factory=list)
+    can_add_companies: bool = False
+
+
+class CompaniesIn(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=MAX_COMPANIES)
+
+
+class CompaniesOut(BaseModel):
+    created: list[str]
+    existing: list[str]
 
 
 class RowsIn(BaseModel):
@@ -872,6 +886,13 @@ async def preview(
         if any(x.level == "error" and x.field in ("company", "department") for x in r.notes_found):
             skip.add(r.row)
     await _check_rows(db, principal, org, out, skip)
+    missing: dict[str, str] = {}
+    for r in out:
+        if r.company_text.strip() and any(
+            x.level == "error" and x.field == "company" and x.source == "match"
+            for x in r.notes_found
+        ):
+            missing.setdefault(_norm(r.company_text), r.company_text.strip())
     return PreviewOut(
         file_name=name,
         sheet=sheet,
@@ -881,7 +902,65 @@ async def preview(
         rows=out,
         counts=_counts(out),
         capped=capped,
+        missing_companies=sorted(missing.values(), key=str.lower),
+        can_add_companies=can(principal.role, "org.manage"),
     )
+
+
+def _company_name(text: str) -> str:
+    """A sheet's "ARROW SHIELD SECURITY SERVICES" as "Arrow Shield Security Services"; names
+    already in mixed case are kept as written."""
+    name = " ".join(text.split())[:120]
+    if name.isupper():
+        # Short all-letter words that are not Malay or English words stay as written (IT, HQ, KL).
+        keep = {"IT", "HQ", "KL", "HR", "PKK", "KBK", "JA", "PWVSB", "FWM"}
+        name = " ".join(w if w in keep else w.capitalize() for w in name.split())
+    return name
+
+
+@router.post("/companies")
+async def add_companies(
+    body: CompaniesIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> CompaniesOut:
+    """P80: add the companies a sheet names that the office does not have yet, so its people
+    can be placed in one go. Never a second company with a name the office already has."""
+    from ...engine import privacy
+    from .org import _unique_slug
+
+    org = await Org.load(db, principal.workspace_id)
+    known = {b.id: b.name for b in org.branches.values()}
+    created: list[str] = []
+    existing: list[str] = []
+    for raw in body.names:
+        name = _company_name(raw)
+        if not name.strip():
+            continue
+        hit = best_match(name, known, _company_key)
+        if hit is not None and hit[1]:
+            existing.append(known[hit[0]])
+            continue
+        slug = await _unique_slug(
+            db, Branch, Branch.workspace_id, principal.workspace_id, name, "branch"
+        )
+        b = Branch(workspace_id=principal.workspace_id, name=name, slug=slug)
+        db.add(b)
+        await db.flush()
+        known[b.id] = name
+        created.append(name)
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "branch.created",
+            target=b.id,
+            after={"name": name, "via": "member import"},
+        )
+    await db.commit()
+    if created:
+        privacy.invalidate(principal.workspace_id)  # the new companies' names are masked at once
+    return CompaniesOut(created=created, existing=existing)
 
 
 def _rows_out(rows: list[ImportRow]) -> list[RowOut]:

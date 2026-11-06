@@ -61,4 +61,15 @@ export const PEOPLE: Record<string, string> = {
   "Every later step sees it, and any files you attach.": "Setiap langkah seterusnya akan nampak jawapan ini dan fail yang anda lampirkan.",
   "Uploading…": "Memuat naik…",
   "Attach files": "Lampirkan fail",
+  // P80: companies a member sheet names that the office does not have yet
+  "1 company in the sheet is not in the office yet": "1 syarikat dalam helaian belum ada di pejabat",
+  "{n} companies in the sheet are not in the office yet": "{n} syarikat dalam helaian belum ada di pejabat",
+  "Add them as companies here, then their people are placed in them. Untick any that are not companies.":
+    "Tambah sebagai syarikat di sini, kemudian kakitangannya diletakkan dalamnya. Nyahtanda yang bukan syarikat.",
+  "Ask an admin to add these companies first, or pick a company on each row.":
+    "Minta pentadbir menambah syarikat ini dahulu, atau pilih syarikat pada setiap baris.",
+  "Add 1 company": "Tambah 1 syarikat",
+  "Add {n} companies": "Tambah {n} syarikat",
+  "Added 1 company": "1 syarikat ditambah",
+  "Added {n} companies": "{n} syarikat ditambah",
 };

@@ -1,6 +1,6 @@
 /** Settings → Members → Import from Excel: template, the sheet, a preview to fix, then the
  * new accounts' one-time passwords (api/routers/member_import.py). */
-import { CheckCircleIcon, CopyIcon, DownloadSimpleIcon, FileXlsIcon, SparkleIcon, UploadSimpleIcon, WarningCircleIcon, WarningIcon } from "@phosphor-icons/react";
+import { BuildingsIcon, CheckCircleIcon, CopyIcon, DownloadSimpleIcon, FileXlsIcon, SparkleIcon, UploadSimpleIcon, WarningCircleIcon, WarningIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
@@ -152,6 +152,50 @@ function Results({ results }: { results: ImportResult[] }) {
   );
 }
 
+/** P80: companies the sheet names that the office does not have yet; the owner adds them here
+ * (ticked ones), and the sheet is read again so their people are placed. */
+function MissingCompanies({ names, canAdd, skip, onToggle, busy, onAdd }: {
+  names: string[];
+  canAdd: boolean;
+  skip: Set<string>;
+  onToggle: (name: string) => void;
+  busy: boolean;
+  onAdd: () => void;
+}) {
+  const t = useT();
+  const picked = names.length - names.filter((n) => skip.has(n)).length;
+  return (
+    <section className="grid gap-2.5 rounded-[var(--radius-md)] border border-warn/40 bg-warn/5 p-3.5">
+      <div className="flex items-start gap-2.5">
+        <BuildingsIcon size={18} weight="duotone" className="mt-0.5 shrink-0 text-warn" />
+        <div className="min-w-0">
+          <p className="text-[13.5px] font-medium">
+            {names.length === 1 ? t("1 company in the sheet is not in the office yet") : t("{n} companies in the sheet are not in the office yet", { n: names.length })}
+          </p>
+          <p className="text-[12.5px] text-muted">
+            {canAdd ? t("Add them as companies here, then their people are placed in them. Untick any that are not companies.") : t("Ask an admin to add these companies first, or pick a company on each row.")}
+          </p>
+        </div>
+      </div>
+      <ul className="grid max-h-44 gap-1 overflow-auto pr-1 sm:grid-cols-2">
+        {names.map((n) => (
+          <li key={n}>
+            <label className={cn("flex min-w-0 items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-[13px]", canAdd && "cursor-pointer hover:bg-surface-2")}>
+              {canAdd ? <input type="checkbox" className="size-4 shrink-0 accent-[var(--color-accent)]" checked={!skip.has(n)} onChange={() => onToggle(n)} /> : null}
+              <span className="truncate">{n}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {canAdd ? (
+        <Button size="sm" className="w-fit" loading={busy} disabled={!picked} onClick={onAdd}>
+          {picked === 1 ? t("Add 1 company") : t("Add {n} companies", { n: picked })}
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
 export function ImportMembersDialog({ open, onOpenChange, roles, lockBranch }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -170,10 +214,21 @@ export function ImportMembersDialog({ open, onOpenChange, roles, lockBranch }: {
   const [fetchingTemplate, setFetchingTemplate] = useState(false);
   const [edited, setEdited] = useState<Set<number>>(new Set());
   const seq = useRef(0); // only the latest check's answer is used
+  const lastFile = useRef<File | null>(null); // P80: read again after companies are added
+  const [skipCompanies, setSkipCompanies] = useState<Set<string>>(new Set());
 
   const read = useMutation({
-    mutationFn: previewSheet,
-    onSuccess: (p) => { setPreview(p); setRows(p.rows); },
+    mutationFn: (f: File) => { lastFile.current = f; return previewSheet(f); },
+    onSuccess: (p) => { setPreview(p); setRows(p.rows); setEdited(new Set()); setSkipCompanies(new Set()); },
+  });
+  const addCompanies = useMutation({
+    mutationFn: (names: string[]) => api<{ created: string[]; existing: string[] }>("/api/members/import/companies", "POST", { names }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: keys.branches });
+      toast.success(r.created.length === 1 ? t("Added 1 company") : t("Added {n} companies", { n: r.created.length }));
+      if (lastFile.current) read.mutate(lastFile.current);
+    },
+    onError: (e) => toast.error(errorMessage(e)),
   });
   const check = useMutation({
     mutationFn: (next: PreviewRow[]) => api<{ rows: PreviewRow[] }>("/api/members/import/check", "POST", { rows: next.map(toImportRow) }),
@@ -268,6 +323,16 @@ export function ImportMembersDialog({ open, onOpenChange, roles, lockBranch }: {
             {counts.error ? <Pill tone="danger">{t("{n} to fix", { n: counts.error })}</Pill> : null}
             {check.isPending ? <span className="text-[12px] text-muted">{t("Checking…")}</span> : null}
           </div>
+          {preview.missing_companies.length > 0 ? (
+            <MissingCompanies
+              names={preview.missing_companies}
+              canAdd={preview.can_add_companies}
+              skip={skipCompanies}
+              onToggle={(n) => setSkipCompanies((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; })}
+              busy={addCompanies.isPending || read.isPending}
+              onAdd={() => addCompanies.mutate(preview.missing_companies.filter((n) => !skipCompanies.has(n)))}
+            />
+          ) : null}
           {preview.capped ? <p className="text-[12.5px] text-warn">{t("Only the first {n} people are read. Split the sheet and import the rest after.", { n: rows.length })}</p> : null}
           <div data-scroll-x className="max-h-[52dvh] min-w-0 overflow-auto rounded-[var(--radius-md)] border border-border">
             <table className="w-full min-w-[46rem] border-collapse text-left">
