@@ -97,6 +97,7 @@ import {
   seesStaffNumbersOf,
   accessClosed,
   AccessClosed,
+  isForeign,
 } from './access';
 import { sha256Bytes, sha256Hex, toHex, verifyChain } from './audit';
 import { hrKeeps, isHrAdmin, staffClockUser, staffPayRole, vcConsents } from './hr';
@@ -1695,21 +1696,26 @@ export class PrimaService {
   /** Leave entitlement this calendar year under the Employment Act (rule EA-LEAVE), prorated in the first year. */
   private leaveEntitlement(p: Person, today: IsoDate) {
     const r = RULES.leaveEntitlement.value;
-    const months = Math.floor(daysBetween(p.hiredOn, today) / 30.44);
-    const years = months / 12;
-    const lawDays = r.annual.find((x) => years < x.underYears)!.days;
+    // P83: a joining date not recorded yet (staff loaded from the staff list) gives no length of service: the lowest
+    // entitlement of the Act is shown, not prorated, with a note, until HR records the date. Never a crash.
+    const hired = isRealDate(p.hiredOn);
+    const months = hired ? Math.max(0, Math.floor(daysBetween(p.hiredOn, today) / 30.44)) : 12;
+    const years = hired ? months / 12 : 0;
+    const tier = <T extends { underYears: number }>(rows: T[]): T => rows.find((x) => years < x.underYears) ?? rows[rows.length - 1];
+    const lawDays = tier(r.annual).days;
     // Nepali guards: at most 12 days, as in their contract (rule FWM-AL-CAP, Fauzan 26 Oct 2026).
-    const annualFull = p.nationality !== 'MY' ? Math.min(lawDays, RULES.foreignAnnualLeaveCap.value) : lawDays;
-    const sick = r.sick.find((x) => years < x.underYears)!.days;
+    const annualFull = isForeign(p) ? Math.min(lawDays, RULES.foreignAnnualLeaveCap.value) : lawDays;
+    const sick = tier(r.sick).days;
     // Under 12 months of service: annual leave in proportion to completed months (s.60E(1A)), rounded to the day.
-    const annualLaw = months < 12 ? Math.round((annualFull * months) / 12) : annualFull;
+    const annualLaw = hired && months < 12 ? Math.round((annualFull * months) / 12) : annualFull;
     // HR may give office staff more than the Act, never less (Fauzan, 2 Nov 2026).
     const annualO = withOverride(p, 'ANNUAL', annualLaw);
-    const sickO = withOverride(p, 'SICK', r.sick.find((x) => years < x.underYears)!.days);
+    const sickO = withOverride(p, 'SICK', sick);
     const annual = annualO.days;
     // Shahirah and Fauzan, 26 Oct 2026: Nepali workers take 8 to 12 days, never more (their contract).
-    const note =
-      p.nationality !== 'MY'
+    const note = !hired
+      ? 'Joining date not recorded yet: the lowest entitlement of the Employment Act is shown until HR records it.'
+      : isForeign(p)
         ? `Nepali worker: 8 days in the first 2 years, then 12 days at most, as in the contract (${RULES.foreignAnnualLeaveCap.id}).${lawDays > annualFull ? ' The Act gives 16 days from year 5; the cap is waiting for legal confirmation.' : ''}`
         : null;
     const fam = familyLeaveEntitlement(p, today);
@@ -14975,7 +14981,7 @@ export class PrimaService {
       this.store.list('fwmTasks', { companyId: ids }),
       this.store.list('branches', { companyId: ids }),
     ]);
-    const foreign = people.filter((p) => p.nationality !== 'MY' && p.status !== 'left');
+    const foreign = people.filter((p) => isForeign(p) && p.status !== 'left');
     const companyName = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
     const who = (p: Person) => ({ id: p.id, name: p.name, staffNo: p.staffNo, companyId: p.companyId, companyName: companyName(p.companyId) });
     const level = this.fwLevelOf(user);
@@ -15036,6 +15042,8 @@ export class PrimaService {
     }
     const year10 = seeBoard
       ? foreign
+          // P83: a joining date not recorded yet has no service plan (never an invalid date).
+          .filter((p) => isRealDate(p.hiredOn))
           .map((p) => ({ person: who(p), plan: fwServicePlan(p.hiredOn, today) }))
           .filter((x) => x.plan.daysToLeave <= 365)
           .sort((a, b) => a.plan.daysToLeave - b.plan.daysToLeave)
@@ -15302,7 +15310,7 @@ export class PrimaService {
     ]);
     const confidential = role === 'staff' || role === 'escalation';
     const companyName = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
-    const foreign = people.filter((p) => p.nationality !== 'MY' && p.status !== 'left');
+    const foreign = people.filter((p) => isForeign(p) && p.status !== 'left');
     // Newest first: by date of the check, then time recorded, then the order recorded (two checks in the same second).
     const order = new Map(checks.map((c, i) => [c.id, i]));
     const newest = (a: FwWelfareCheck, b: FwWelfareCheck) =>

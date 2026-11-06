@@ -20,7 +20,8 @@ import {
   type Store,
 } from '@prima/core';
 import { Pool } from 'pg';
-import { PgStore } from './pg-store';
+import { PgStore, TABLE } from './pg-store';
+import { withReadSnapshots } from './read-cache';
 import { migrationSha } from './schema';
 
 export function nowMyt(): string {
@@ -79,7 +80,9 @@ export class Db implements OnModuleDestroy {
       await client.query(`SELECT set_config('app.group_user', $1, true)`, [isGroupRole(user) ? 'on' : 'off']);
       await client.query(`SELECT set_config('app.walls', $1, true)`, [dataWalls(user).join(',')]);
       // Hand-overs between departments ride the audit log in this same transaction, when switched on.
-      const store = this.orgLinks ? withOrgLinks(new PgStore(client)) : new PgStore(client);
+      // P83: per-request read snapshots (read-cache.ts): one query per table instead of one per company.
+      const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? new PgStore(client) : withReadSnapshots(new PgStore(client), client, (t) => TABLE[t]);
+      const store = this.orgLinks ? withOrgLinks(reads) : reads;
       const svc = new PrimaService(store, clock);
       svc.pins = this.pins;
       svc.teamsApprovals = process.env.TEAMS_APPROVALS_READ === 'true';
@@ -133,7 +136,8 @@ function makePool(): Pool {
     max: Number(process.env.DB_POOL_MAX ?? 10),
     // Fail fast instead of hanging a request when the database is away, and let Azure close idle connections.
     connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
+    // P83: a new connection costs ~0.4 s on a busy server (password check, role setup); keep them for 10 minutes.
+    idleTimeoutMillis: 600_000,
     // No single statement may hold a connection for more than 30 seconds.
     statement_timeout: 30_000,
     idle_in_transaction_session_timeout: 60_000,
@@ -141,6 +145,9 @@ function makePool(): Pool {
   // A connection the server drops while idle (Azure maintenance, failover) must not crash the API: log it and let
   // the pool open a new one.
   pool.on('error', (e) => console.error(`Database connection dropped: ${e.message}`));
+  // P83: open a few connections at start, so the first screens after a deploy do not each pay for a new one.
+  const warm = Math.min(3, Number(process.env.DB_POOL_MAX ?? 10));
+  void Promise.all(Array.from({ length: warm }, () => pool.connect().then((c) => c.release(), () => undefined)));
   return pool;
 }
 

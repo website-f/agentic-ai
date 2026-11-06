@@ -137,6 +137,16 @@ export function isGroupLeader(user: User): boolean {
 }
 
 /**
+ * P83: a foreign worker is someone whose RECORDED nationality is not Malaysian. A nationality not recorded yet (staff
+ * loaded from the real staff list, 6 Nov 2026) is not "foreign": it must not move a person from HR to the foreign
+ * worker team, nor onto foreign-worker boards. Safety rules (armed posts, government sites) keep treating "not
+ * recorded" as "not shown to be Malaysian" and stay strict.
+ */
+export function isForeign(person: Pick<Person, 'nationality'>): boolean {
+  return !!person.nationality && person.nationality !== 'MY';
+}
+
+/**
  * P78 (Agentic Office): the owner, signed in as Prima's CEO record, is the master administrator of every module
  * ("the CEO is the owner and master administrator of every system", PILOT-IT). Where a module lets a department
  * enter or start a record (a maker step), the owner may enter it too, for any company. Checks, approvals and
@@ -343,8 +353,8 @@ export function canSeePerson(
   action: 'hr.profile' | 'hr.pay',
   person: Pick<Person, 'companyId' | 'nationality'>,
 ): boolean {
-  if (user.role === 'pwvsb_officer' && user.department === 'fwm' && person.nationality === 'MY') return false;
-  if (user.role === 'pwvsb_officer' && user.department === 'hr' && person.nationality !== 'MY') return false;
+  if (user.role === 'pwvsb_officer' && user.department === 'fwm' && !isForeign(person)) return false;
+  if (user.role === 'pwvsb_officer' && user.department === 'hr' && isForeign(person)) return false;
   return can(user, grants, today, action, person.companyId);
 }
 

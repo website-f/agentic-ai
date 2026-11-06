@@ -665,7 +665,9 @@ services:
       timeout: 3s
       retries: 30
     mem_limit: 512m
-    cpus: 0.5
+    # P83: half a core throttled every query (the kernel paused the database in slices: ~4 ms per tiny query and
+    # ~0.4 s per new connection under load, 196 s of throttling measured). Two cores; it is idle most of the time.
+    cpus: 2.0
     networks: [prima]
     <<: [*hardening, *logging]
 
@@ -738,7 +740,8 @@ services:
       retries: 5
       start_period: 20s
     mem_limit: 384m
-    cpus: 0.5
+    # P83: one Node process plus its garbage collector; half a core was throttled 318 s under load.
+    cpus: 1.5
     # prima: its database. edge: the office api reaches it (P66, signed calls only), and it
     # checks Microsoft sign-in keys.
     networks: [prima, edge]

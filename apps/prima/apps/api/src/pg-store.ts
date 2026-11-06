@@ -10,7 +10,7 @@ import { itManualProblems } from './it-manual-readiness';
 import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket } from '@prima/core';
 import type { PoolClient } from 'pg';
 
-const TABLE: Record<TableName, string> = {
+export const TABLE: Record<TableName, string> = {
   itMetricStreams:'prima.it_metric_streams',
   itMetricReceipts:'prima.it_metric_receipts',
   itMetricTargets:'prima.it_metric_targets',

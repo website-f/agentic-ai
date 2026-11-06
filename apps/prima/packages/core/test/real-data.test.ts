@@ -10,6 +10,7 @@ import {
   RealDataError,
   dataWalls,
   generateDataset,
+  isForeign,
   isOwnerAdmin,
   missingStaffFacts,
   myt,
@@ -159,5 +160,28 @@ describe('real-data dataset', () => {
     const run = await svc.prepareStaffPay(ceo, GROUP_EMPLOYER_ID, TODAY.slice(0, 7));
     const view = await svc.staffPayRun(ceo, run.id);
     expect(view.blockers.join(' ')).toMatch(/Not recorded yet: .*Test Person One \(nationality, date of birth, date joined\)/);
+  });
+});
+
+describe('P83: screens on staff whose facts are not recorded yet', () => {
+  it('a nationality not recorded is not foreign, and stays with HR, not the foreign worker team', () => {
+    expect(isForeign({ nationality: null as never })).toBe(false);
+    expect(isForeign({ nationality: 'MY' })).toBe(false);
+    expect(isForeign({ nationality: 'NP' as never })).toBe(true);
+  });
+
+  it("the CEO's home, the group overview and staff 'My details' load (no invalid date from a missing joining date)", async () => {
+    const ds = build();
+    const person = ds.people.find((p) => p.companyId === 'pwvsb')!;
+    expect(person.hiredOn || null).toBeNull(); // not recorded yet
+    ds.users.push({ id: 'u-staff-test', name: person.name, role: 'pwvsb_officer', department: 'hr', companyIds: ['pwvsb'], siteIds: [], personId: person.id } as never);
+    ds.grants.push({ id: 'g-staff-test', userId: 'u-staff-test', companyId: 'pwvsb', scope: 'act', validFrom: TODAY, validTo: '2027-11-06' } as never);
+    const svc = new PrimaService(new MemoryStore(ds), () => NOW);
+    const ceo = await svc.user('u-fauzan');
+    await expect(svc.home(ceo)).resolves.toBeTruthy();
+    await expect(svc.groupOverview(ceo)).resolves.toBeTruthy();
+    const staff = await svc.user('u-staff-test');
+    const duty = await svc.myDuty(staff);
+    expect(JSON.stringify(duty)).toMatch(/Joining date not recorded yet/);
   });
 });
