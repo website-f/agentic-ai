@@ -4,7 +4,7 @@
  * (../explorer/frame.tsx) whose header carries Back, the company, the search and these tabs;
  * each tab page starts with <LibraryHeader>: the tab's own title, description and actions. */
 import {
-  BooksIcon, FileMagnifyingGlassIcon, FileTextIcon, FilesIcon, FolderOpenIcon, IdentificationCardIcon, PackageIcon, StackIcon,
+  BooksIcon, CloudIcon, FileMagnifyingGlassIcon, FileTextIcon, FilesIcon, FolderOpenIcon, IdentificationCardIcon, PackageIcon, StackIcon,
   type Icon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -12,9 +12,11 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/page";
+import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/search-box";
 import { msg, useT } from "@/i18n";
 import type { StoreView } from "@/lib/file-store";
+import { linkedQuery } from "@/lib/linked-sources";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { ALL_NAV } from "@/nav";
@@ -144,10 +146,24 @@ export function LibraryTabs({ className, bar = false, browse }: { className?: st
  * and its actions (Upload, New document, New SOP...); the frame already shows "Library", the
  * search and the tabs. On its own: the title "Library", the description, the actions, a box that
  * searches the whole Library, then the tabs. */
-export function LibraryHeader({ tab, actions }: { tab: LibraryPath; actions?: ReactNode }) {
+/** P80: linking a SharePoint or OneDrive folder lives on the Library tab; from every other tab
+ * (Browse first of all, where people look for files) one button takes them there. */
+function SharePointShortcut({ tab }: { tab: LibraryPath }) {
+  const t = useT();
+  const { data } = useQuery({ ...linkedQuery, enabled: tab !== "/library" });
+  if (tab === "/library" || !data?.can_connect) return null;
+  return (
+    <Button variant="outline" asChild>
+      <Link to="/library" hash="sharepoint"><CloudIcon size={16} /> {t("Link SharePoint or OneDrive")}</Link>
+    </Button>
+  );
+}
+
+export function LibraryHeader({ tab, actions: own }: { tab: LibraryPath; actions?: ReactNode }) {
   const t = useT();
   const here = libraryTab(tab);
   const framed = !!useLibraryFrame();
+  const actions = <>{own}<SharePointShortcut tab={tab} /></>;
   if (framed) return <PageHeader title={t(here.label)} eyebrow={false} icon={here.icon} description={t(here.description)} actions={actions} />;
   return (
     <div className="grid min-w-0 gap-4">

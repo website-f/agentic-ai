@@ -337,10 +337,14 @@ export function LinkedSources() {
   const t = useT();
   useSharePointReturn();
   const { data, isLoading } = useQuery(linkedQuery);
+  // Opened from the "Link SharePoint or OneDrive" button on another tab (#sharepoint).
+  useEffect(() => {
+    if (data && window.location.hash === "#sharepoint") document.getElementById("sharepoint")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [data]);
   if (isLoading) return <Skeleton className="h-28 rounded-[var(--radius-md)]" />;
   if (!data || (!data.can_connect && !data.sources.length)) return null;
   return (
-    <Card data-guide="library.sharepoint">
+    <Card id="sharepoint" data-guide="library.sharepoint" className="scroll-mt-24">
       <CardHeader icon={<IconTile icon={CloudIcon} size="sm" />} title={t("SharePoint and OneDrive")}
         description={t("Files stay in SharePoint. Only their searchable text is kept here, so agents find and cite them.")} />
       <CardBody className="grid gap-4">

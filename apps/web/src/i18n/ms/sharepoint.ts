@@ -52,4 +52,5 @@ export const SHAREPOINT: Record<string, string> = {
   "Disconnected. Its searchable text was removed.": "Sambungan diputuskan. Teks carian folder itu sudah dibuang.",
   "Open in SharePoint": "Buka dalam SharePoint",
   "Microsoft 365 reconnected. You can link SharePoint folders now.": "Microsoft 365 disambung semula. Anda boleh pautkan folder SharePoint sekarang.",
+  "Link SharePoint or OneDrive": "Pautkan SharePoint atau OneDrive",
 };
