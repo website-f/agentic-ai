@@ -599,3 +599,26 @@ async def test_short_rate_limit_is_waited_out_not_failed(client: httpx.AsyncClie
     assert r.status_code == 200, r.text
     assert r.json()["content"] == "OK" and calls["n"] == 2 and slept and slept[0] <= 31
     _ = _asyncio
+
+
+def test_azure_foundry_gets_its_key_header_and_others_do_not():
+    """P80: Azure AI Foundry's v1 endpoint reads the resource key from "api-key"; no other
+    provider is ever sent that header."""
+    from agentic.engine import client, presets
+
+    azure = client._headers("k1", "my-co.openai.azure.com")  # noqa: SLF001
+    assert azure["api-key"] == "k1" and azure["Authorization"] == "Bearer k1"
+    assert "api-key" not in client._headers("k2", "api.openai.com")  # noqa: SLF001
+    assert "api-key" not in client._headers("k3", "evil.azure.com.example.org")  # noqa: SLF001
+    p = presets.BY_ID["azure-foundry"]
+    assert p.trusted and p.base_url.endswith("/openai/v1")
+    assert {
+        "xai",
+        "perplexity",
+        "qwen",
+        "openai",
+        "anthropic",
+        "gemini",
+        "deepseek",
+        "mistral",
+    } <= set(presets.BY_ID)

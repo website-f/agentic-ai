@@ -176,6 +176,29 @@ PRESETS: tuple[Preset, ...] = (
         notes="Optional. International (Singapore) endpoint. Qwen also runs locally (Ollama).",
         data_policy_note="Processed by Alibaba Cloud; check the region and retention terms.",
     ),
+    # P80: models bought through the company's own Azure subscription (Azure AI Foundry), on
+    # Microsoft's enterprise terms and in a region the company picks. Replace YOUR-RESOURCE
+    # with the Foundry resource's name; the model to use is the DEPLOYMENT name given in
+    # Foundry (e.g. "gpt-4.1-mini"), not the catalogue name.
+    Preset(
+        id="azure-foundry",
+        name="Azure AI Foundry",
+        base_url="https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+        tier="paid",
+        priority=5,
+        key_url="https://ai.azure.com",
+        suggested_models=("gpt-4.1-mini", "gpt-4o-mini"),
+        notes=(
+            "Your company's Azure subscription. In ai.azure.com: open the project, Models + "
+            "endpoints, copy Key 1, and put the resource name in the address. Model = the "
+            "deployment name."
+        ),
+        data_policy_note=(
+            "Not used for training; kept in the Azure region you chose, on Microsoft's "
+            "enterprise data terms."
+        ),
+        trusted=True,
+    ),
 )
 
 BY_ID = {p.id: p for p in PRESETS}

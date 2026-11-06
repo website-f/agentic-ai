@@ -102,8 +102,16 @@ def _url(base_url: str, path: str) -> str:
     return path if path.startswith("http") else f"{base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
-def _headers(key: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {key}", "User-Agent": "agentic-ai/0.1"}
+AZURE_HOSTS = (".openai.azure.com", ".services.ai.azure.com", ".cognitiveservices.azure.com")
+
+
+def _headers(key: str, host: str = "") -> dict[str, str]:
+    h = {"Authorization": f"Bearer {key}", "User-Agent": "agentic-ai/0.1"}
+    # P80: Azure AI Foundry's OpenAI-compatible v1 endpoint takes its resource key in the
+    # "api-key" header (Bearer is for Entra tokens); sent only to Azure's own hosts.
+    if host.endswith(AZURE_HOSTS):
+        h["api-key"] = key
+    return h
 
 
 @dataclass
@@ -156,7 +164,7 @@ async def _request(
             r = await http.request(
                 method,
                 target,
-                headers={**_headers(key), **pin},
+                headers={**_headers(key, host), **pin},
                 json=json,
                 files=files,
                 data=form,
