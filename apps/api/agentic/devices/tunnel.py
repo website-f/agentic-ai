@@ -37,10 +37,12 @@ import base64
 import contextlib
 import hashlib
 import hmac
+import json
 import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
@@ -142,6 +144,14 @@ async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[
     if d.paused:
         return f"{d.name} is paused"
     if not all(core.host_in(s, d.tunnel_hosts or []) for s in sites):
+        from ..api.routers.devices import ASK_VERSION, _version
+
+        if _version(d.version) < ASK_VERSION:
+            # P84: an older app has no Allow button: say what to do, not "press Allow".
+            return (
+                f"{d.name} has not allowed it yet: it has an older Agentic Office app (on that "
+                "computer, open My computers, download the app again and run it, then press Allow)"
+            )
         return (
             f"{d.name} has not allowed it yet (on that computer, press Allow on the Agentic "
             "Office page)"
@@ -277,38 +287,49 @@ async def route(workspace_id: str, host: str, agent_id: str = "") -> Route:
     (no person) uses the company's chosen one."""
     async with SessionLocal() as db:
         ws = await db.get(Workspace, workspace_id)
-        m = mode_of(ws)
-        if not m.covers(host):
-            return Route("server", "not routed")
-        site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
-        if m.mode == "pc":
-            person = await person_of_agent(db, agent_id)
-            if person:
-                device_id, why = await person_computer(db, workspace_id, person, [host])
-                if why:
-                    return Route("refuse", why)
-                return Route("computer", device_id=device_id, site=site)
-            device_id = setting(ws).device_id or await any_computer(db, workspace_id, host)
-            why = await computer_down(db, workspace_id, device_id, [host])
-            if why == "no computer is chosen":
-                why = (
-                    "ePerolehan is opened through a company computer, and none is linked or "
-                    "has allowed it yet. Link your PC on Staff computers (download Agentic "
-                    "Office PC), then press Allow on that PC"
-                )
+        return await _route(db, ws, workspace_id, mode_of(ws), host, agent_id)
+
+
+async def _route(
+    db: Any,
+    ws: Workspace | None,
+    workspace_id: str,
+    m: Mode,
+    host: str,
+    agent_id: str = "",
+    device_id: str = "",
+) -> Route:
+    """route() for a given choice `m` (P84: the Check button tries the choice on the screen,
+    saved or not; `device_id` is that choice's computer)."""
+    if not m.covers(host):
+        return Route("server", "not routed")
+    site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
+    if m.mode == "pc":
+        person = await person_of_agent(db, agent_id)
+        if person:
+            device_id, why = await person_computer(db, workspace_id, person, [host])
             if why:
                 return Route("refuse", why)
             return Route("computer", device_id=device_id, site=site)
-        px = proxies_mod.setting(ws)
-        if not px.proxies:
-            return Route("refuse", "no proxies are saved on Settings > Web connections")
-        # Asked only when proxies would carry it, so the approved-services lock records a
-        # request only then.
-        if not await compliance.allowed(db, workspace_id, "proxy", "Web proxies", host):
-            return Route(
-                "refuse", "the web proxies wait for an owner's approval on Approved services"
+        device_id = device_id or setting(ws).device_id or await any_computer(db, workspace_id, host)
+        why = await computer_down(db, workspace_id, device_id, [host])
+        if why == "no computer is chosen":
+            why = (
+                "ePerolehan is opened through a company computer, and none is linked or "
+                "has allowed it yet. Link your PC on Staff computers (download Agentic "
+                "Office PC), then press Allow on that PC"
             )
-        return Route("proxy", proxies=px.proxies, site=site)
+        if why:
+            return Route("refuse", why)
+        return Route("computer", device_id=device_id, site=site)
+    px = proxies_mod.setting(ws)
+    if not px.proxies:
+        return Route("refuse", "no proxies are saved on Settings > Web connections")
+    # Asked only when proxies would carry it, so the approved-services lock records a
+    # request only then.
+    if not await compliance.allowed(db, workspace_id, "proxy", "Web proxies", host):
+        return Route("refuse", "the web proxies wait for an owner's approval on Approved services")
+    return Route("proxy", proxies=px.proxies, site=site)
 
 
 async def unavailable(workspace_id: str, host: str, agent_id: str = "") -> str:
@@ -554,18 +575,34 @@ def read_answer(status: int, html: str) -> dict[str, Any]:
     }
 
 
-async def check(workspace_id: str, site: str) -> dict[str, Any]:
+async def check(
+    workspace_id: str, site: str, choice: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """P62 (Settings > Web connections > Check): open `site` once the way the agents' browsers
     would (through the egress proxy with the workspace's credentials, so the gateway chooses
-    as it does for them): the way it went, the site's answer, the address it saw."""
+    as it does for them): the way it went, the site's answer, the address it saw.
+
+    P84: `choice` is what is on the screen ({mode, sites, device_id, show}), saved or not, so
+    the person checks the way they are choosing. Through a computer whose screen shows the
+    AI's work, the site opens in that computer's own browser window (its person sees it),
+    and the answer is read from that page."""
     import httpx
 
     host = site.strip().lower()
-    r = await route(workspace_id, host)
+    async with SessionLocal() as db:
+        ws = await db.get(Workspace, workspace_id)
+        m, dev, show = mode_of(ws), "", setting(ws).show
+        if choice and choice.get("mode") in MODES:
+            m = Mode(choice["mode"], clean_sites(choice["mode"], choice.get("sites")))
+            dev = str(choice.get("device_id") or "")
+            show = choice.get("show") is not False
+        r = await _route(db, ws, workspace_id, m, host, "", dev)
     way = {"computer": "pc"}.get(r.kind, r.kind)
     out: dict[str, Any] = {"site": host, "way": way, "why": r.why if way == "refuse" else ""}
     if way == "refuse":
         return out
+    if way == "pc" and show and r.device_id:
+        return await check_on_screen(r.device_id, host, out)
     if way == "proxy" and r.proxies:
         p = (await proxies_mod.order(workspace_id, r.site, r.proxies))[0]
         out["via"] = p.key
@@ -588,6 +625,124 @@ async def check(workspace_id: str, site: str) -> dict[str, Any]:
                 continue
             return {**out, "site": name, **read_answer(resp.status_code, resp.text[:40_000])}
     return {**out, "error": err}
+
+
+# P84: the Check window stays on the computer's screen this long, so its person sees it.
+CHECK_SHOWN_FOR = 15.0
+_closing: set[asyncio.Task[None]] = set()
+
+
+async def check_on_screen(device_id: str, host: str, out: dict[str, Any]) -> dict[str, Any]:
+    """Open `host` in the computer's own browser window (its own internet line), wait for the
+    page, and read what it answered (the navigation status, the page text, the address a
+    block page shows). The window closes CHECK_SHOWN_FOR seconds later."""
+    name = host if host.startswith("www.") else f"www.{host}"
+    try:
+        channel, ws_url = await bridge.open_browser(
+            device_id, f"https://{name}/", sites=[host], timeout=45
+        )
+    except DeviceError as e:
+        why = {
+            "offline": "the computer is offline (turned off, asleep, or the app is not running)",
+            "paused": "the computer is paused",
+            "revoked": "the computer was unlinked",
+            "no_browser": "the computer has no Chrome or Edge",
+            "busy": "its browser is in use by an AI task right now",
+        }.get(e.code, e.message or e.code)
+        return {**out, "screen": True, "error": f"The browser on the computer did not open: {why}"}
+    try:
+        page = await read_page(ws_url, host)
+    finally:
+        task = asyncio.create_task(_close_later(device_id, channel))
+        _closing.add(task)
+        task.add_done_callback(_closing.discard)
+    if page is None:
+        return {
+            **out,
+            "screen": True,
+            "error": "The page did not finish loading on the computer within 25 seconds",
+        }
+    status = int(page.get("status") or 0)
+    text = str(page.get("text") or "")
+    if not status:  # an older browser does not report it: judge by the page
+        status = 403 if _BLOCK_WORDS.search(text) else 200
+    opened = urlsplit(str(page.get("url") or "")).hostname or name
+    title = str(page.get("title") or "")
+    return {**out, "screen": True, "site": opened, **read_answer(status, f"{title} {text}")}
+
+
+async def _close_later(device_id: str, channel: str) -> None:
+    await asyncio.sleep(CHECK_SHOWN_FOR)
+    with contextlib.suppress(Exception):
+        await bridge.close_browser(device_id, channel)
+
+
+_PAGE_JS = (
+    "JSON.stringify({ready: document.readyState, url: location.href, title: document.title,"
+    " status: (performance.getEntriesByType('navigation')[0] || {}).responseStatus || 0,"
+    " text: (document.body ? document.body.innerText : '').slice(0, 4000)})"
+)
+
+
+async def read_page(ws_url: str, host: str, wait: float = 25.0) -> dict[str, Any] | None:
+    """The loaded page on the computer's browser, through its CDP relay: the tab that opened
+    `host`, once it has finished loading (None when it does not within `wait` seconds)."""
+    import websockets
+
+    loop = asyncio.get_running_loop()
+    until = loop.time() + wait
+    bare = host.removeprefix("www.")
+    try:
+        async with websockets.connect(
+            ws_url, additional_headers={"X-Browser-Token": settings.browser_token}, max_size=2**22
+        ) as cdp:
+            ids = iter(range(1, 10_000))
+
+            async def send(method: str, params: dict[str, Any], session: str = "") -> Any:
+                n = next(ids)
+                msg: dict[str, Any] = {"id": n, "method": method, "params": params}
+                if session:
+                    msg["sessionId"] = session
+                await cdp.send(json.dumps(msg))
+                while True:
+                    left = until - loop.time()
+                    if left <= 0:
+                        raise TimeoutError
+                    data = json.loads(await asyncio.wait_for(cdp.recv(), left))
+                    if data.get("id") == n:
+                        return data.get("result") or {}
+
+            session = ""
+            while loop.time() < until:
+                if not session:
+                    targets = (await send("Target.getTargets", {})).get("targetInfos") or []
+                    page = next(
+                        (
+                            t
+                            for t in targets
+                            if t.get("type") == "page" and bare in str(t.get("url") or "")
+                        ),
+                        None,
+                    )
+                    if page:
+                        att = await send(
+                            "Target.attachToTarget",
+                            {"targetId": page["targetId"], "flatten": True},
+                        )
+                        session = str(att.get("sessionId") or "")
+                if session:
+                    res = await send(
+                        "Runtime.evaluate", {"expression": _PAGE_JS, "returnByValue": True}, session
+                    )
+                    value = (res.get("result") or {}).get("value")
+                    if isinstance(value, str):
+                        info = json.loads(value)
+                        if info.get("ready") == "complete":
+                            return dict(info)
+                await asyncio.sleep(1.0)
+    except (TimeoutError, OSError, ValueError, websockets.WebSocketException):
+        return None
+    return None
 
 
 async def screen_for(

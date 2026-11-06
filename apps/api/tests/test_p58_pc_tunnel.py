@@ -9,6 +9,7 @@ import base64
 from sqlalchemy import select
 
 from agentic.core.db import SessionLocal
+from agentic.core.valkey import valkey
 from agentic.devices import tunnel
 from agentic.models import Device
 
@@ -453,3 +454,90 @@ async def test_p72_each_persons_work_goes_through_their_own_pc(client, llm, temp
     assert tunnel._credentials({"proxy-authorization": f"Basic {good}"}) == (ws_id, twin.id)
     bad = base64.b64encode(f"{ws_id}.{shared_id}:{tunnel.sign(user)}".encode()).decode()
     assert tunnel._credentials({"proxy-authorization": f"Basic {bad}"}) is None
+
+
+async def test_p84_check_opens_the_site_in_the_computers_own_browser(
+    client, llm, temporal, monkeypatch
+):
+    """P84: Check tries the way on the screen (saved or not). Through a computer whose screen
+    shows the AI's work, the site opens in that computer's own browser window and the answer
+    is read from that page; never from a proxy or the server. An older app is told to update."""
+    await office(client)
+    dev = await link(client)
+    pc = await SitePC(dev["token"]).start()
+    try:
+        await pc.ws.send_json(
+            {"type": "state", "tunnel": {"on": True, "hosts": ["eperolehan.gov.my"]}}
+        )
+        for _ in range(50):
+            async with SessionLocal() as db:
+                d = await db.scalar(select(Device).where(Device.id == dev["device_id"]))
+                if d.tunnel_hosts == ["eperolehan.gov.my"]:
+                    break
+            await asyncio.sleep(0.05)
+        async with SessionLocal() as db:  # a current app (it asks with Allow)
+            d = await db.get(Device, dev["device_id"])
+            d.version = "0.6.0"
+            await db.commit()
+        opened: list[tuple[str, str, list]] = []
+        closed: list[str] = []
+
+        async def open_browser(device_id, start_url=None, **kw):
+            opened.append((device_id, start_url, kw.get("sites")))
+            return "ch-1", "ws://relay/ch-1"
+
+        async def read_page(ws_url, host, wait=25.0):
+            assert ws_url == "ws://relay/ch-1" and host == "eperolehan.gov.my"
+            return {
+                "ready": "complete",
+                "url": "https://www.eperolehan.gov.my/home",
+                "title": "ePerolehan",
+                "status": 200,
+                "text": "Selamat datang",
+            }
+
+        async def close_later(device_id, channel):
+            closed.append(channel)
+
+        monkeypatch.setattr(tunnel.bridge, "open_browser", open_browser)
+        monkeypatch.setattr(tunnel, "read_page", read_page)
+        monkeypatch.setattr(tunnel, "_close_later", close_later)
+
+        # Saved: proxies. On the screen: this computer, not saved yet. Check uses the screen.
+        choice = {
+            "site": "eperolehan.gov.my",
+            "mode": "pc",
+            "sites": ["eperolehan.gov.my"],
+            "device_id": dev["device_id"],
+            "show": True,
+        }
+        r = await client.post("/api/org/web/check", json=choice, headers=csrf(client))
+        assert r.status_code == 200, r.text
+        got = r.json()
+        assert got["way"] == "pc" and got["screen"] is True and got["ok"] is True
+        assert got["site"] == "www.eperolehan.gov.my" and not got.get("via")
+        assert opened == [
+            (dev["device_id"], "https://www.eperolehan.gov.my/", ["eperolehan.gov.my"])
+        ]
+        await asyncio.sleep(0)
+        assert closed == ["ch-1"]  # the window closes a little later
+
+        # Another office's computer cannot be named.
+        _, ws_id = await ids_of("owner@example.com")
+        await valkey().delete(f"web:check:{ws_id}")  # one check at a time: the next one now
+        bad = await client.post(
+            "/api/org/web/check", json={**choice, "device_id": "dev_other"}, headers=csrf(client)
+        )
+        assert bad.status_code == 422
+
+        # An older app that has not allowed the site: told to update, not "press Allow".
+        async with SessionLocal() as db:
+            d = await db.get(Device, dev["device_id"])
+            d.version, d.tunnel_hosts = "0.4.2", []
+            await db.commit()
+        await valkey().delete(f"web:check:{ws_id}")
+        r = await client.post("/api/org/web/check", json=choice, headers=csrf(client))
+        got = r.json()
+        assert got["way"] == "refuse" and "older Agentic Office app" in got["why"]
+    finally:
+        await pc.stop()

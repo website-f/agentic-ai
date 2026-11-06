@@ -519,6 +519,8 @@ export interface WebRoute {
 
 export interface WebCheck {
   site: string;
+  /** P84: opened in the computer's own browser window (its person saw it). */
+  screen?: boolean;
   way: "server" | "pc" | "proxy" | "refuse";
   why: string;
   /** The proxy it went through, and the address sites see through it. */
@@ -543,7 +545,10 @@ export const setWebRoute = (body: { mode: WebMode; sites: string[]; device_id: s
 
 export const askComputer = () => api<{ asked: boolean }>("/api/org/web/ask", "POST", {});
 
-export const checkWeb = (site: string) => api<WebCheck>("/api/org/web/check", "POST", { site });
+/** P84: `choice` is what is on the screen, saved or not: Check tries the way being chosen. */
+export interface WebCheckChoice { mode: WebMode; sites: string[]; device_id: string; show: boolean }
+export const checkWeb = (site: string, choice?: WebCheckChoice) =>
+  api<WebCheck>("/api/org/web/check", "POST", { site, ...(choice ?? {}) });
 
 export interface ProxyTest { key: string; ok: boolean; ip: string; ms: number; error: string }
 

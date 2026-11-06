@@ -66,7 +66,8 @@ function ComputerState({ c, sites }: { c: WebComputer; sites: string[] }) {
 
 function CheckResult({ r, computer }: { r: WebCheck; computer?: WebComputer }) {
   const t = useT();
-  const way = r.way === "pc" ? t("through {name}", { name: computer?.name ?? t("the company computer") })
+  const name = computer?.name ?? t("the company computer");
+  const way = r.way === "pc" ? (r.screen ? t("in the browser on {name}, over its own internet line", { name }) : t("through {name}", { name }))
     : r.way === "proxy" ? t("through the proxy {via}", { via: r.via ?? "" })
       : t("from this server");
   if (r.way === "refuse") {
@@ -165,7 +166,8 @@ export function WebConnectionsPage() {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const check = useMutation({
-    mutationFn: () => checkWeb(parseSites(checkSite)[0] ?? ""),
+    // P84: the way chosen above, saved or not (new proxies are tried once saved).
+    mutationFn: () => checkWeb(parseSites(checkSite)[0] ?? "", { mode, sites: siteList, device_id: deviceId, show }),
     onSuccess: setResult,
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -308,7 +310,7 @@ export function WebConnectionsPage() {
             <Field label={t("Site")} value={checkSite} onChange={(e) => setCheckSite(e.target.value)} placeholder={siteList.find((s) => s !== "*") ?? EPEROLEHAN} className="min-w-0 flex-1 sm:max-w-sm" />
             <Button type="submit" variant="outline" loading={check.isPending}>{t("Check")}</Button>
           </div>
-          {!saved && data ? <span className="text-[12px] text-muted">{t("Checks what is saved now: save your change first to check it.")}</span> : null}
+          {!saved && data ? <span className="text-[12px] text-muted">{list.trim() ? t("Checks the way chosen above. New proxies are tried once saved.") : t("Checks the way chosen above, saved or not.")}</span> : null}
           {result ? <CheckResult r={result} computer={computers.find((c) => c.id === data?.device_id)} /> : null}
         </form>
       </Section>

@@ -964,6 +964,15 @@ class SiteIn(BaseModel):
     site: str = Field(default="", max_length=120)
 
 
+class CheckIn(SiteIn):
+    """P84: the choice on the screen, saved or not, so Check tries the way being chosen."""
+
+    mode: str | None = Field(default=None, pattern="^(server|pc|proxy)$")
+    sites: list[str] | None = Field(default=None, max_length=50)
+    device_id: str | None = Field(default=None, max_length=40)
+    show: bool | None = None
+
+
 async def _web(db: AsyncSession, workspace_id: str) -> dict[str, Any]:
     from ...devices import proxies, tunnel
     from ...engine import compliance
@@ -1103,7 +1112,7 @@ async def ask_web(
 
 @router.post("/api/org/web/check")
 async def check_web(
-    body: SiteIn,
+    body: CheckIn,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -1126,7 +1135,23 @@ async def check_web(
             "slow_down",
             "One check at a time. Try again shortly.",
         )
-    return await tunnel.check(principal.workspace_id, site)
+    choice = None
+    if body.mode:
+        if body.device_id:  # only this office's own linked computers
+            d = await db.get(Device, body.device_id)
+            if d is None or d.workspace_id != principal.workspace_id or d.revoked_at is not None:
+                raise api_error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "no_computer",
+                    "Choose one of the company's linked computers.",
+                )
+        choice = {
+            "mode": body.mode,
+            "sites": body.sites or [],
+            "device_id": body.device_id or "",
+            "show": body.show is not False,
+        }
+    return await tunnel.check(principal.workspace_id, site, choice)
 
 
 # ---------------------------------------------------------------- inside the stack

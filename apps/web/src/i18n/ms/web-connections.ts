@@ -79,8 +79,10 @@ export const WEB_CONNECTIONS: Record<string, string> = {
   "Opens a site once, the way the AI's browser would, and shows which way it went and what the site answered.":
     "Membuka laman sekali, seperti pelayar AI, dan menunjukkan jalan yang dilalui dan jawapan laman itu.",
   "Site": "Laman",
-  "Checks what is saved now: save your change first to check it.":
-    "Menyemak tetapan yang disimpan sekarang: simpan perubahan anda dahulu untuk menyemaknya.",
+  "Checks the way chosen above, saved or not.": "Menyemak cara yang dipilih di atas, sudah disimpan atau belum.",
+  "Checks the way chosen above. New proxies are tried once saved.":
+    "Menyemak cara yang dipilih di atas. Proksi baharu dicuba selepas disimpan.",
+  "in the browser on {name}, over its own internet line": "dalam pelayar di {name}, melalui talian internetnya sendiri",
   "through {name}": "melalui {name}",
   "the company computer": "komputer syarikat",
   "through the proxy {via}": "melalui proksi {via}",
