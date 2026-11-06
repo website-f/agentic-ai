@@ -13,6 +13,7 @@ pre-signed address Graph redirects to; that address must be https on Microsoft's
 """
 
 import base64
+import time
 import urllib.parse
 from collections import deque
 from dataclasses import dataclass, field
@@ -132,10 +133,88 @@ class Walk:
     skipped: int = 0  # files of other types (pictures, zips, videos)
     capped: bool = False  # more than the limits: only the first files were taken
     folders: int = 0
+    partial: bool = False  # P80: stopped at its time budget (a preview); the import walks it all
+
+
+SITE_ROOTS = frozenset({"sites", "teams", "personal"})
+
+
+def folder_path(url: str) -> tuple[str, str] | None:
+    """(host, server-relative path) of a SharePoint / OneDrive for Business address that is
+    not a sharing link: what people copy from the browser's address bar.
+
+    - ".../Shared Documents/Forms/AllItems.aspx?id=/sites/X/Shared Documents/2026/SOP": the
+      folder is the `id` (a library view opened on a folder);
+    - ".../Shared Documents/Forms/AllItems.aspx": the library itself;
+    - ".../sites/X/Shared Documents/2026/SOP": the path as it is.
+    None for sharing links ("/:f:/s/...", "/:w:/r/...") and personal OneDrive: those go
+    through /shares."""
+    u = urllib.parse.urlsplit(url)
+    host = (u.hostname or "").lower()
+    if not _host_ok(host, LINK_HOSTS) or u.path.startswith("/:"):
+        return None
+    q = urllib.parse.parse_qs(u.query)
+    for key in ("id", "RootFolder"):
+        if q.get(key) and q[key][0].startswith("/"):
+            return host, q[key][0].rstrip("/")
+    path = urllib.parse.unquote(u.path)
+    low = path.lower()
+    if low.endswith(".aspx"):
+        cut = low.find("/forms/")
+        if cut <= 0:
+            return None  # a page (SitePages/Home.aspx), not a library
+        path = path[:cut]
+    path = path.rstrip("/")
+    return (host, path) if path else None
+
+
+async def resolve_path(g: Graph, host: str, path: str) -> Item:
+    """The folder (or file) at a server-relative path: its site, then the document library
+    whose address the path starts with, then the item by its path in that library."""
+    parts = [p for p in path.split("/") if p]
+    site_path = (
+        "/" + "/".join(parts[:2]) if len(parts) >= 2 and parts[0].lower() in SITE_ROOTS else ""
+    )
+    site = await g.request(
+        "GET",
+        f"/sites/{host}:{urllib.parse.quote(site_path)}" if site_path else f"/sites/{host}",
+        params={"$select": "id"},
+    )
+    drives = await g.request(
+        "GET", f"/sites/{_q(str(site.get('id') or ''))}/drives", params={"$select": "id,webUrl"}
+    )
+    best: tuple[str, str] | None = None
+    for d in drives.get("value") or []:
+        lib = urllib.parse.unquote(urllib.parse.urlsplit(str(d.get("webUrl") or "")).path).rstrip(
+            "/"
+        )
+        if lib and (path.lower() == lib.lower() or path.lower().startswith(lib.lower() + "/")):
+            if best is None or len(lib) > len(best[1]):
+                best = (str(d.get("id") or ""), lib)
+    if best is None:
+        raise GraphError(Msg("That address is not inside a SharePoint document library."), 404)
+    drive_id, lib = best
+    rel = path[len(lib) :].strip("/")
+    where = f"/drives/{_q(drive_id)}/root" + (f":/{urllib.parse.quote(rel)}:" if rel else "")
+    item = Item.of(await g.request("GET", where, params={"$select": ITEM_FIELDS}), drive_id)
+    if not item.item_id:
+        raise GraphError(Msg("Microsoft did not say which folder that link opens."), 404)
+    return item
 
 
 async def resolve(g: Graph, url: str) -> Item:
-    """What the link points to (a folder or a file). Raises GraphError subclasses."""
+    """What the link points to (a folder or a file). Raises GraphError subclasses.
+
+    P80: a plain SharePoint address (the browser's address bar, including a library view
+    opened on a folder) is found by its path; a sharing link through /shares. When the path
+    way cannot place it, /shares is tried as well."""
+    target = folder_path(url)
+    if target is not None:
+        try:
+            return await resolve_path(g, *target)
+        except GraphError as e:
+            if getattr(e, "status", 0) not in (400, 404):
+                raise
     body = await g.request(
         "GET",
         f"/shares/{share_id(url)}/driveItem",
@@ -173,8 +252,11 @@ async def walk(
     max_files: int | None = None,
     max_depth: int | None = None,
     max_folders: int | None = None,
+    budget: float | None = None,
 ) -> Walk:
-    """The supported files under a folder (or the one file a link points to), bounded."""
+    """The supported files under a folder (or the one file a link points to), bounded.
+    `budget` (seconds): stop when it runs out and say so (partial), for a quick preview."""
+    until = time.monotonic() + budget if budget else None
     max_files = max_files or settings.sharepoint_max_files
     max_depth = settings.sharepoint_max_depth if max_depth is None else max_depth
     max_folders = max_folders or settings.sharepoint_max_folders
@@ -188,6 +270,9 @@ async def walk(
         return out
     queue: deque[tuple[str, str, int]] = deque([(root.item_id, "", 0)])
     while queue:
+        if until is not None and time.monotonic() > until:
+            out.partial = True
+            break
         folder_id, prefix, depth = queue.popleft()
         out.folders += 1
         rows = sorted(await children(g, root.drive_id, folder_id), key=lambda d: str(d["name"]))

@@ -630,3 +630,92 @@ async def test_files_become_sop_drafts_that_agents_do_not_see(
     llm.say(SOP_REPLY).say(SOP_REPLY)
     r = await client.post(f"/api/library/linked/{src['id']}/sops", json={}, headers=csrf(client))
     assert r.status_code == 202 and r.json()["count"] == 2
+
+
+# ---------------------------------------------------------------- P80: browser addresses
+
+
+VIEW = (
+    "https://contoso.sharepoint.com/sites/HQ/Shared%20Documents/Forms/AllItems.aspx?e=5%3Aab"
+    "&sharingv2=true&fromShare=true&id=%2Fsites%2FHQ%2FShared%20Documents%2F2026%2F"
+    "CHECK%20LIST%20%26%20SOP%20TUGASAN&FolderCTID=0x0120"
+)
+
+
+def test_browser_addresses_are_read_by_their_folder_path():
+    """What people copy from the address bar: a library view opened on a folder, the library
+    itself, a plain folder path. Sharing links (/:f:/...) still go through /shares."""
+    assert links.folder_path(VIEW) == (
+        "contoso.sharepoint.com",
+        "/sites/HQ/Shared Documents/2026/CHECK LIST & SOP TUGASAN",
+    )
+    lib = "https://contoso.sharepoint.com/sites/HQ/Shared%20Documents/Forms/AllItems.aspx"
+    assert links.folder_path(lib) == ("contoso.sharepoint.com", "/sites/HQ/Shared Documents")
+    plain = "https://contoso.sharepoint.com/sites/HQ/Shared%20Documents/2026"
+    assert links.folder_path(plain) == ("contoso.sharepoint.com", "/sites/HQ/Shared Documents/2026")
+    assert links.folder_path(LINK) is None  # a sharing link
+    assert links.folder_path("https://contoso.sharepoint.com/SitePages/Home.aspx") is None
+    assert links.folder_path("https://onedrive.live.com/?id=ABC") is None
+
+
+class PathGraph:
+    """Graph for a site, its libraries and an item by path; anything else is not found."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def request(self, method, path, *, params=None, prefer=None, **_):
+        from agentic.microsoft.errors import NotFound
+
+        self.calls.append(path)
+        if path == "/sites/contoso.sharepoint.com:/sites/HQ":
+            return {"id": "contoso.sharepoint.com,s1,w1"}
+        if path == "/sites/contoso.sharepoint.com%2Cs1%2Cw1/drives":
+            return {
+                "value": [
+                    {"id": "d-pol", "webUrl": "https://contoso.sharepoint.com/sites/HQ/Policies"},
+                    {
+                        "id": "d-docs",
+                        "webUrl": "https://contoso.sharepoint.com/sites/HQ/Shared%20Documents",
+                    },
+                ]
+            }
+        if path == "/drives/d-docs/root:/2026/CHECK%20LIST%20%26%20SOP%20TUGASAN:":
+            return {
+                "id": "it-sop",
+                "name": "CHECK LIST & SOP TUGASAN",
+                "folder": {"childCount": 3},
+                "webUrl": "https://contoso.sharepoint.com/sites/HQ/Shared%20Documents/2026/x",
+                "parentReference": {"driveId": "d-docs", "id": "it-2026"},
+            }
+        raise NotFound(f"no {path}", 404)
+
+
+async def test_a_library_view_link_opens_its_folder_without_shares():
+    g = PathGraph()
+    item = await links.resolve(g, VIEW)  # type: ignore[arg-type]
+    assert (item.drive_id, item.item_id, item.is_folder) == ("d-docs", "it-sop", True)
+    assert not any(c.startswith("/shares/") for c in g.calls)
+
+
+async def test_a_path_outside_any_library_falls_back_to_shares():
+    g = PathGraph()
+    from agentic.microsoft.errors import NotFound
+
+    with pytest.raises(NotFound):  # the fake has no /shares: it says not found
+        await links.resolve(g, "https://contoso.sharepoint.com/sites/HQ/Elsewhere/x")  # type: ignore[arg-type]
+    assert g.calls[-1].startswith("/shares/")
+
+
+async def test_a_big_folder_preview_stops_at_its_time_budget(monkeypatch):
+    """A preview answers within a few seconds and says it counted only part."""
+    clock = iter([0.0, 0.0, 99.0, 99.0])
+    monkeypatch.setattr(links.time, "monotonic", lambda: next(clock, 99.0))
+
+    async def kids(g, drive_id, folder_id):
+        return [{"id": f"{folder_id}-sub", "name": "sub", "folder": {}}]
+
+    monkeypatch.setattr(links, "children", kids)
+    root = links.Item("d", "root", "Big", "", True)
+    out = await links.walk(None, root, budget=12)  # type: ignore[arg-type]
+    assert out.partial and out.folders == 1

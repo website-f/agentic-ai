@@ -46,6 +46,7 @@ from ..deps import Principal, api_error, require
 from .library import Names
 
 router = APIRouter(prefix="/api/library/linked", tags=["library"])
+PREVIEW_SECONDS = 12.0  # P80: well inside the proxies' time limits
 log = logging.getLogger("agentic.api.linked_sources")
 
 MAX_SOP_DRAFTS = 10
@@ -107,6 +108,7 @@ class PreviewOut(BaseModel):
     files: int  # supported files that will be read
     skipped: int  # pictures, zips and other files that are not read
     capped: bool  # more than the limits: only the first files are read
+    partial: bool = False  # P80: counted for a few seconds only; the import finds the rest
     already: bool  # this folder is in the Library already
 
 
@@ -340,7 +342,8 @@ async def resolve_link(
     g = await _my_files_graph(db, principal)
     try:
         item = await links.resolve(g, url)
-        found = await links.walk(g, item)
+        # P80: a preview answers within the proxies' patience; the import walks it all.
+        found = await links.walk(g, item, budget=PREVIEW_SECONDS)
     except MicrosoftError as e:
         raise _graph_fail(e) from e
     already = await db.scalar(
@@ -358,6 +361,7 @@ async def resolve_link(
         files=len(found.files),
         skipped=found.skipped,
         capped=found.capped,
+        partial=found.partial,
         already=already is not None,
     )
 

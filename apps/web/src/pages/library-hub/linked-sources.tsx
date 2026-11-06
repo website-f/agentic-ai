@@ -159,6 +159,7 @@ function ConnectForm({ maxFiles }: { maxFiles: number }) {
                 {preview.files === 1 ? t("1 file will be read") : t("{n} files will be read", { n: preview.files })}
                 {preview.skipped ? ` · ${t("{n} other files (pictures, zips) are left out", { n: preview.skipped })}` : ""}
               </p>
+              {preview.partial ? <p className="text-[12.5px] text-muted">{t("A big folder: these are the files found so far. Connecting reads all of it.")}</p> : null}
               {preview.capped ? <p className="text-[12.5px] text-warn">{t("This folder is large: only the first {n} files are read.", { n: maxFiles })}</p> : null}
               {preview.already ? <p className="text-[12.5px] text-warn">{t("This folder is in the Library already.")}</p> : null}
             </div>

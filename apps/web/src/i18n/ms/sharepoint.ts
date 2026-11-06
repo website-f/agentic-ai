@@ -53,4 +53,6 @@ export const SHAREPOINT: Record<string, string> = {
   "Open in SharePoint": "Buka dalam SharePoint",
   "Microsoft 365 reconnected. You can link SharePoint folders now.": "Microsoft 365 disambung semula. Anda boleh pautkan folder SharePoint sekarang.",
   "Link SharePoint or OneDrive": "Pautkan SharePoint atau OneDrive",
+  "A big folder: these are the files found so far. Connecting reads all of it.":
+    "Folder besar: ini fail yang dijumpai setakat ini. Bila disambung, semuanya akan dibaca.",
 };

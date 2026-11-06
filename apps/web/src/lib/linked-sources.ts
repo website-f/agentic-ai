@@ -47,6 +47,8 @@ export interface LinkPreview {
   files: number;
   skipped: number;
   capped: boolean;
+  /** P80: counted for a few seconds only (a big folder); connecting reads all of it. */
+  partial?: boolean;
   already: boolean;
 }
 
