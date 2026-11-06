@@ -66,7 +66,7 @@ function ComputerState({ c, sites }: { c: WebComputer; sites: string[] }) {
 
 function CheckResult({ r, computer }: { r: WebCheck; computer?: WebComputer }) {
   const t = useT();
-  const name = computer?.name ?? t("the company computer");
+  const name = r.computer || computer?.name || t("the company computer");
   const way = r.way === "pc" ? (r.screen ? t("in the browser on {name}, over its own internet line", { name }) : t("through {name}", { name }))
     : r.way === "proxy" ? t("through the proxy {via}", { via: r.via ?? "" })
       : t("from this server");
@@ -78,7 +78,7 @@ function CheckResult({ r, computer }: { r: WebCheck; computer?: WebComputer }) {
       </p>
     );
   }
-  const tone = r.error || r.blocked ? "border-danger/30 bg-danger/8" : "border-ok/30 bg-ok/8";
+  const tone = r.error || r.blocked ? "border-danger/30 bg-danger/8" : r.maintenance ? "border-warn/30 bg-warn/8" : "border-ok/30 bg-ok/8";
   return (
     <div className={cn("grid gap-1.5 rounded-sm border px-3 py-2.5 text-[13px]", tone)}>
       <span className="text-muted">{t("{site} went {way}.", { site: r.site, way })}{r.proxy_ip ? ` ${t("Sites see {ip} through it.", { ip: r.proxy_ip })}` : ""}</span>
@@ -88,6 +88,11 @@ function CheckResult({ r, computer }: { r: WebCheck; computer?: WebComputer }) {
         <span className="flex items-start gap-2 font-medium text-danger">
           <WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0" />
           {r.seen_ip ? t("The site refused it ({status}). It saw the address {ip}.", { status: r.status ?? 0, ip: r.seen_ip }) : t("The site refused it ({status}).", { status: r.status ?? 0 })}
+        </span>
+      ) : r.maintenance ? (
+        <span className="flex items-start gap-2 font-medium text-warn">
+          <WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0" />
+          {t("Reached {site}, but it is down for its own maintenance right now ({status}). Not a block: the connection works. Try again later.", { site: r.site, status: r.status ?? 0 })}
         </span>
       ) : r.ok ? (
         <span className="flex items-start gap-2 font-medium text-ok"><CheckCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0" /> {t("The site opened ({status}).", { status: r.status ?? 0 })}</span>
@@ -311,7 +316,7 @@ export function WebConnectionsPage() {
             <Button type="submit" variant="outline" loading={check.isPending}>{t("Check")}</Button>
           </div>
           {!saved && data ? <span className="text-[12px] text-muted">{list.trim() ? t("Checks the way chosen above. New proxies are tried once saved.") : t("Checks the way chosen above, saved or not.")}</span> : null}
-          {result ? <CheckResult r={result} computer={computers.find((c) => c.id === data?.device_id)} /> : null}
+          {result ? <CheckResult r={result} computer={computers.find((c) => c.id === (mode === "pc" ? deviceId : data?.device_id))} /> : null}
         </form>
       </Section>
     </Page>

@@ -363,6 +363,16 @@ async def test_the_chosen_way_is_used_or_refused_never_the_servers_address(clien
         gateway.close()
 
 
+def test_p84_a_maintenance_page_is_reached_not_blocked():
+    """ePerolehan's weekly maintenance answers 503 with a Malay notice: the connection works."""
+    page = "Selamat Datang ke Portal ePerolehan AKTIVITI PENYELENGGARAAN MINGGUAN Dimaklumkan"
+    got = tunnel.read_answer(503, page)
+    assert got["maintenance"] is True and got["blocked"] is False and got["ok"] is False
+    blocked = tunnel.read_answer(403, "Your request was blocked for security reasons")
+    assert blocked["blocked"] is True and blocked["maintenance"] is False
+    assert tunnel.read_answer(200, "Selamat datang")["maintenance"] is False
+
+
 def test_a_sites_answer_reads_as_opened_or_blocked():
     """P62: the check reads ePerolehan's block page: refused, and the address it saw."""
     page = (
@@ -516,6 +526,7 @@ async def test_p84_check_opens_the_site_in_the_computers_own_browser(
         got = r.json()
         assert got["way"] == "pc" and got["screen"] is True and got["ok"] is True
         assert got["site"] == "www.eperolehan.gov.my" and not got.get("via")
+        assert got["computer"]  # the computer by its own name
         assert opened == [
             (dev["device_id"], "https://www.eperolehan.gov.my/", ["eperolehan.gov.my"])
         ]

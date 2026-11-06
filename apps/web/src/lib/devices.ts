@@ -521,6 +521,10 @@ export interface WebCheck {
   site: string;
   /** P84: opened in the computer's own browser window (its person saw it). */
   screen?: boolean;
+  /** P84: the computer it went through, by name. */
+  computer?: string;
+  /** P84: reached, but the site is down for its own maintenance (not a block). */
+  maintenance?: boolean;
   way: "server" | "pc" | "proxy" | "refuse";
   why: string;
   /** The proxy it went through, and the address sites see through it. */

@@ -556,6 +556,11 @@ _BLOCK_WORDS = re.compile(r"blocked|access denied|forbidden|not authori[sz]ed|ca
 _SEEN_IP = re.compile(
     r"your ip(?: address)?\s*(?:is)?\s*:?\s*([0-9a-f]{1,4}(?:[.:][0-9a-f]{0,4}){3,7})", re.I
 )
+_MAINTENANCE = re.compile(
+    r"maintenance|penyelenggaraan|dinaik ?taraf|under construction|temporarily unavailable|"
+    r"try again later|cuba lagi kemudian",
+    re.I,
+)
 _TAGS = re.compile(r"<(script|style)\b.*?</\1>|<[^>]+>", re.I | re.S)
 CHECK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
 
@@ -566,10 +571,16 @@ def read_answer(status: int, html: str) -> dict[str, Any]:
     text = re.sub(r"\s+", " ", _TAGS.sub(" ", html)).strip()
     seen = _SEEN_IP.search(text)
     blocked = status in (401, 403, 429, 451) or (status >= 400 and bool(_BLOCK_WORDS.search(text)))
+    # P84: reached, but the site is down for its own maintenance (ePerolehan's weekly window
+    # answers 503 with "Aktiviti Penyelenggaraan Mingguan"): not a block, try again later.
+    maintenance = not blocked and (
+        status in (502, 503, 504) or (status >= 400 and bool(_MAINTENANCE.search(text)))
+    )
     return {
         "status": status,
         "ok": 200 <= status < 400,
         "blocked": blocked,
+        "maintenance": maintenance,
         "seen_ip": seen.group(1) if seen else "",
         "says": text[:200] if status >= 400 else "",
     }
@@ -597,8 +608,11 @@ async def check(
             dev = str(choice.get("device_id") or "")
             show = choice.get("show") is not False
         r = await _route(db, ws, workspace_id, m, host, "", dev)
+        pc = await db.get(Device, r.device_id) if r.kind == "computer" and r.device_id else None
     way = {"computer": "pc"}.get(r.kind, r.kind)
     out: dict[str, Any] = {"site": host, "way": way, "why": r.why if way == "refuse" else ""}
+    if pc is not None:
+        out["computer"] = pc.name  # P84: say which computer, not "the company computer"
     if way == "refuse":
         return out
     if way == "pc" and show and r.device_id:

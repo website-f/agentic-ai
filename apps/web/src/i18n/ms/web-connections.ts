@@ -84,6 +84,8 @@ export const WEB_CONNECTIONS: Record<string, string> = {
     "Menyemak cara yang dipilih di atas. Proksi baharu dicuba selepas disimpan.",
   "in the browser on {name}, over its own internet line": "dalam pelayar di {name}, melalui talian internetnya sendiri",
   "through {name}": "melalui {name}",
+  "Reached {site}, but it is down for its own maintenance right now ({status}). Not a block: the connection works. Try again later.":
+    "Sampai ke {site}, tetapi laman itu sedang diselenggara sekarang ({status}). Bukan sekatan: sambungan berfungsi. Cuba lagi kemudian.",
   "the company computer": "komputer syarikat",
   "through the proxy {via}": "melalui proksi {via}",
   "from this server": "dari pelayan ini",
