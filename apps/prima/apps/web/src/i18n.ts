@@ -37,6 +37,71 @@ export function saveLang(l: Lang) {
 
 type Row = [string, string, string | null];
 const ROWS: Row[] = [
+  // P80 (UI audit): the menu and its section headings, so a person who picks one language sees one language.
+  ['Home', 'Utama', '='],
+  ['Work', 'Kerja', null],
+  ['Group', 'Kumpulan', 'Group'],
+  ['Company today', 'Syarikat hari ini', null],
+  ['Company office', 'Pejabat syarikat', null],
+  ['Director Office', 'Pejabat Pengarah', null],
+  ['Meetings', 'Mesyuarat', 'Meeting'],
+  ['Clock', 'Jam kerja', 'Clock'],
+  ['My details', 'Butiran saya', null],
+  ['Staff clock', 'Jam kerja staf', 'Clock staf'],
+  ['Regional ops', 'Operasi wilayah', 'Ops wilayah'],
+  ['Cases', 'Kes', null],
+  ['Sites', 'Tapak', 'Site'],
+  ['Roster', 'Jadual tugas', 'Roster'],
+  ['People', 'Kakitangan', '='],
+  ['Attendance', 'Kehadiran', null],
+  ['Arms control', 'Kawalan senjata', null],
+  ['Far branches', 'Cawangan jauh', null],
+  ['Vehicles', 'Kenderaan', null],
+  ['HR monitor', 'Pemantauan HR', 'Monitor HR'],
+  ['Foreign workers', 'Pekerja asing', null],
+  ['SOCSO claims', 'Tuntutan PERKESO', 'Claim SOCSO'],
+  ['Hostels', 'Asrama', 'Hostel'],
+  ['Claims', 'Tuntutan', 'Claim'],
+  ['Requests', 'Permohonan', 'Request'],
+  ['Hand-overs', 'Serah tugas', 'Hand-over'],
+  ['Staff payroll', 'Gaji staf', 'Payroll staf'],
+  ['Memos', 'Memo', null],
+  ['Tenders & quotes', 'Tender & sebut harga', 'Tender & quotation'],
+  ['Insurance', 'Insurans', null],
+  ['Clients', 'Pelanggan', 'Client'],
+  ['Payment requests', 'Permohonan bayaran', 'Payment request'],
+  ['JA app data', 'Data aplikasi JA', 'Data app JA'],
+  ['Asset Management', 'Pengurusan Aset', null],
+  ['Contracts', 'Kontrak', null],
+  ['Branches', 'Cawangan', null],
+  ['Finance', 'Kewangan', 'Finance'],
+  ['PWVSB credit', 'Kredit PWVSB', null],
+  ['Procurement', 'Perolehan', 'Procurement'],
+  ['Licences', 'Lesen', null],
+  ['Audit trail', 'Jejak audit', 'Audit trail'],
+  ['Speak up and assurance', 'Lapor isu dan jaminan', 'Speak up dan assurance'],
+  ['Mandates', 'Mandat', null],
+  ['Company secretary', 'Setiausaha syarikat', null],
+  ['Renewals', 'Pembaharuan', 'Renewal'],
+  ['Continuity', 'Kesinambungan', 'Continuity'],
+  ['AI data preview', 'Pratonton data AI', 'Preview data AI'],
+  ['IT purchase fulfilment', 'Pemenuhan pembelian IT', 'Fulfilment pembelian IT'],
+  ['Workflow time & quality', 'Masa & kualiti aliran kerja', 'Masa & kualiti workflow'],
+  ['HR / IT coordination', 'Penyelarasan HR / IT', 'Koordinasi HR / IT'],
+  ['Site device', 'Peranti tapak', 'Device site'],
+  ['Duty', 'Tugas', 'Duty'],
+  ['Guards', 'Pengawal', 'Guard'],
+  ['Operations', 'Operasi', null],
+  ['People and HR', 'Kakitangan dan HR', 'People dan HR'],
+  ['Business and finance', 'Perniagaan dan kewangan', 'Business dan finance'],
+  ['Compliance and governance', 'Pematuhan dan tadbir urus', 'Compliance dan governance'],
+  ['IT and systems', 'IT dan sistem', null],
+  ['More', 'Lagi', null],
+  ['Guide', 'Panduan', null],
+  ['Workflow guide', 'Panduan aliran kerja', 'Panduan workflow'],
+  ['Open help requests', 'Buka permintaan bantuan', 'Buka help request'],
+  ['Joiners, leavers and tenders', 'Staf masuk, keluar dan tender', null],
+  ['Health inspection due / initial check', 'Pemeriksaan kesihatan perlu / semakan awal', 'Health inspection due / check awal'],
   // Added after the gap check (28 Oct 2026)
   [
     'IT department pilot, test version with made-up data. Only the IT team, the COO, the CEO, the ACT head, the HR administrator and the Finance Director sign in during the pilot, and they run the whole system; everyone else reaches them on Teams, email or phone. Pick a person to see what they would see. Real sign-in will use Microsoft 365 accounts.',
@@ -848,7 +913,43 @@ const DICT = new Map<string, [string, string]>();
 for (const [en, ms, mix] of ROWS) DICT.set(en, [ms, mix === null ? ms : mix === '=' ? en : mix]);
 
 const MONTH_MS: Record<string, string> = { May: 'Mei', Aug: 'Ogo', Oct: 'Okt', Dec: 'Dis', Mar: 'Mac' };
-const dates = (s: string) => s.replace(/\b(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})\b/g, (_m, d, m, y) => `${d} ${MONTH_MS[m] ?? m} ${y}`);
+const dates = (s: string) => s.replace(/\b(\d{1,2} )?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})\b/g, (_m, d, m, y) => `${d ?? ''}${MONTH_MS[m] ?? m} ${y}`);
+
+/**
+ * P80 (UI audit): what people read never shows a computer's date or amount. Text that reaches the screen from the
+ * records ("due 2026-11-03", "RM2150.00", "statement for 2026-10") is shown as "3 Nov 2026", "RM2,150.00" and
+ * "Oct 2026", in every language. Record numbers that hold a date (LM-SASA-2026-11-03, pay-20261106-005) stay as typed:
+ * a date joined to letters, slashes or hyphens is part of a number, not a date.
+ */
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// No look-behind (older iPhone Safari cannot read it): the character before is captured and put back.
+const ISO_DT = /(^|[^\w/.-])(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?(?![\w/-]|\.\d)/g;
+const ISO_MONTH = /(^|[^\w/.-])(\d{4})-(0[1-9]|1[0-2])(?![\w/-]|\.\d)/g;
+const RM_RAW = /\bRM( ?)(-?)(\d+)(?:\.(\d+))?(?![\d,]|\.\d)/g;
+export function tidy(s: string): string {
+  if (!/\d/.test(s)) return s;
+  let out = s.replace(ISO_DT, (m, pre: string, y: string, mo: string, d: string, hh?: string, mm?: string, zone?: string) => {
+    if (zone) {
+      // A time with its zone is shown in Malaysia time, like the clock at the top.
+      const t = new Date(m.slice(pre.length));
+      if (!Number.isNaN(t.getTime())) {
+        const my = new Date(t.getTime() + 8 * 3600_000);
+        return `${pre}${my.getUTCDate()} ${MONTHS_EN[my.getUTCMonth()]} ${my.getUTCFullYear()}, ${String(my.getUTCHours()).padStart(2, '0')}:${String(my.getUTCMinutes()).padStart(2, '0')}`;
+      }
+    }
+    return `${pre}${Number(d)} ${MONTHS_EN[Number(mo) - 1]} ${y}${hh ? `, ${hh}:${mm}` : ''}`;
+  });
+  out = out.replace(ISO_MONTH, (_m, pre, y, mo) => `${pre}${MONTHS_EN[Number(mo) - 1]} ${y}`);
+  if (out.includes('RM'))
+    out = out.replace(RM_RAW, (m, sp, neg, whole: string, frac: string | undefined) => {
+      // "RM450" and "RM1,234.50" are already clear; only long whole numbers and odd decimals are rewritten.
+      if (frac === undefined && whole.length < 4) return m;
+      if (frac !== undefined && frac.length === 2 && whole.length < 4) return m;
+      const v = Number(`${whole}.${frac ?? '0'}`);
+      return `RM${sp}${neg}${v.toLocaleString('en-MY', { minimumFractionDigits: frac === undefined ? 0 : 2, maximumFractionDigits: frac === undefined ? 0 : 2 })}`;
+    });
+  return out;
+}
 
 /** "1 h 30 min", "45 min", "2 days" in Malay. */
 const dur = (s: string, mix: boolean) =>
@@ -860,6 +961,10 @@ const dur = (s: string, mix: boolean) =>
 type Pat = [RegExp, (m: RegExpMatchArray, mix: boolean) => string];
 const who = (s: string, mix: boolean) => (mix ? s : s.replace('IT Manager', 'Pengurus IT').replace('IT Lead', 'Ketua Teknikal IT'));
 const PATTERNS: Pat[] = [
+  // P80 (UI audit)
+  [/^(\d+) given to you$/, (m) => `${m[1]} diberi kepada anda`],
+  [/^Sent back to (.+)$/, (m) => `Dipulangkan kepada ${m[1]}`],
+  [/^(\d+) to fill$/, (m) => `${m[1]} untuk diisi`],
   [/^The PDF is over (\d+) KB\. Scan it smaller\.$/, (m, x) => (x ? `PDF melebihi ${m[1]} KB. Scan dengan saiz lebih kecil.` : `PDF melebihi ${m[1]} KB. Imbas dengan saiz lebih kecil.`)],
   [/^Not allowed: \S+ for company (.+)\. Ask the company or check your authority grant\.$/, (m, x) => `${x ? 'Tak dibenarkan' : 'Tidak dibenarkan'} ${tr(m[1], x ? 'mix' : 'ms')}.`],
   [/^(\d{6}) is listed twice\.$/, (m) => `${m[1]} disenarai dua kali.`],
@@ -923,12 +1028,12 @@ const PATTERNS: Pat[] = [
   [/^(\d+) live websites? missing an owner or backup$/, (m, x) => (x ? `${m[1]} website live tiada owner atau backup` : `${m[1]} laman web aktif tanpa pemilik atau pengganti`)],
   [/^(\d{4}-Q\d) reviews done$/, (m, x) => (x ? `Review ${m[1]} selesai` : `Semakan ${m[1]} selesai`)],
   [/^Open (\d{4}-Q\d) reviews$/, (m, x) => (x ? `Buka review ${m[1]}` : `Buka semakan ${m[1]}`)],
-  [/^Open (\d{4}-\d\d) monthly checks$/, (m, x) => (x ? `Buka check bulanan ${m[1]}` : `Buka semakan bulanan ${m[1]}`)],
+  [/^Open (\d{4}-\d\d|[A-Z][a-z]{2} \d{4}) monthly checks$/, (m, x) => (x ? `Buka check bulanan ${dates(m[1])}` : `Buka semakan bulanan ${dates(m[1])}`)],
   [/^(\d+) companies$/, (m) => `${m[1]} syarikat`],
   [/^(\d+) companies in the company list$/, (m) => `${m[1]} syarikat dalam senarai syarikat`],
   [/^(\d+) monthly checks? overdue across the team$/, (m, x) => (x ? `${m[1]} check bulanan overdue dalam team` : `${m[1]} semakan bulanan lewat dalam pasukan`)],
   [/^within 30 days · (\d+) within 60 · (\d+) expired$/, (m, x) => `dalam 30 hari · ${m[1]} dalam 60 · ${m[2]} ${x ? 'expired' : 'tamat'}`],
-  [/^Monthly check (\d{4}-\d\d): (.+) \(overdue\)$/, (m, x) => (x ? `Check bulanan ${m[1]}: ${m[2]} (overdue)` : `Semakan bulanan ${m[1]}: ${m[2]} (lewat)`)],
+  [/^Monthly check (\d{4}-\d\d|[A-Z][a-z]{2} \d{4}): (.+) \(overdue\)$/, (m, x) => (x ? `Check bulanan ${dates(m[1])}: ${m[2]} (overdue)` : `Semakan bulanan ${dates(m[1])}: ${m[2]} (lewat)`)],
   [/^(.+): (Waiting for the company|Business owner to verify|Waiting for approval|IT testing|Waiting to be published) \((\d{4}-Q\d)\)(, overdue)?$/, (m, x) => `${m[1]}: ${tr(m[2], x ? 'mix' : 'ms')} (${m[3]})${m[4] ? (x ? ', overdue' : ', lewat') : ''}`],
   [/^(.+): company has not answered the (\d{4}-Q\d) review$/, (m, x) => (x ? `${m[1]}: syarikat belum jawab review ${m[2]}` : `${m[1]}: syarikat belum menjawab semakan ${m[2]}`)],
   [/^Answer recorded by IT for (.+?): (Teams chat|Phone call|Email reply|.+?), recorded by (.+)\. Sample-check with the person\.$/, (m, x) =>
@@ -988,8 +1093,10 @@ const PATTERNS: Pat[] = [
 ];
 
 /** One piece of screen text in the chosen language; text not in the table is returned as it is. */
-export function tr(text: string, lang: Lang): string {
-  if (lang === 'en' || !text) return text;
+export function tr(text: string, lang: Lang, raw = false): string {
+  if (!text) return text;
+  if (!raw) text = tidy(text);
+  if (lang === 'en') return text;
   const lead = text.match(/^\s*/)![0];
   const trail = text.match(/\s*$/)![0];
   const core = text.trim();
@@ -1001,16 +1108,17 @@ export function tr(text: string, lang: Lang): string {
 function trCore(core: string, lang: Exclude<Lang, 'en'>): string {
   const hit = DICT.get(core);
   if (hit) return lang === 'ms' ? hit[0] : hit[1];
+  // P80: a whole-line pattern first ("5 to fill · 18 days"), then the pieces of a line joined by middle dots.
+  for (const [re, fn] of PATTERNS) {
+    const m = core.match(re);
+    if (m) return fn(m, lang === 'mix');
+  }
   // A leading or trailing middle dot joins pieces on one line: translate the piece.
   if (core.startsWith('· ')) return `· ${trCore(core.slice(2), lang)}`;
   if (core.includes(' · ')) {
     const parts = core.split(' · ');
     const done = parts.map((p) => trCore(p, lang));
     if (done.some((d, i) => d !== parts[i])) return done.join(' · ');
-  }
-  for (const [re, fn] of PATTERNS) {
-    const m = core.match(re);
-    if (m) return fn(m, lang === 'mix');
   }
   // Several sentences side by side (a fixed sentence with a count after it): translate each one.
   // No look-behind in the pattern: older iPhone Safari (before 16.4) cannot read it.
@@ -1097,7 +1205,8 @@ function doAttrs(e: Element, lang: Lang) {
     if (!rec) originalAttr.set(e, (rec = {}));
     const prevOut = rec[`${a}:out`];
     if (prevOut !== v) rec[a] = v;
-    const out = tr(rec[a], lang);
+    // A placeholder shows the format to type (2026-11-06): it is never rewritten.
+    const out = tr(rec[a], lang, a === 'placeholder');
     rec[`${a}:out`] = out;
     if (out !== v) e.setAttribute(a, out);
   }

@@ -76,4 +76,9 @@ export const PRIMA: Record<string, string> = {
   "Own Prima account": "Akaun Prima sendiri",
   "Ask the office owner to set which Prima company your branch is. Prima then makes your own account the next time you open it.":
     "Minta pemilik pejabat menetapkan syarikat Prima bagi cawangan anda. Prima kemudian membuat akaun anda sendiri apabila anda membukanya semula.",
+  // P82: owners open Prima as its top record
+  "Owners open Prima straight away as its CEO, with no link and no Microsoft step. Prima's records show the CEO; the office's activity log shows which owner recorded what.":
+    "Pemilik terus membuka Prima sebagai CEO, tanpa pautan dan tanpa langkah Microsoft. Rekod Prima menunjukkan CEO; log aktiviti pejabat menunjukkan pemilik mana yang merekodkan apa.",
+  "Opens Prima as the CEO (owner)": "Membuka Prima sebagai CEO (pemilik)",
+  "Opens Prima as the COO (owner)": "Membuka Prima sebagai COO (pemilik)",
 };

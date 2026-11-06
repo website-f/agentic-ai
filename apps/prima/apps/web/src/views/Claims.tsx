@@ -61,7 +61,8 @@ const VEHICLE_LABEL: Record<ClaimVehicle, string> = {
   MOTORCYCLE: 'Own motorcycle',
   COMPANY_CAR: 'Company car',
 };
-const rm = (n: number) => `RM${n.toFixed(2)}`;
+// P80: amounts with thousands commas (RM1,234.50), like every other screen.
+const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function today(): string {
   return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);

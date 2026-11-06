@@ -947,3 +947,27 @@ td.op-num[data-tone='warn'],
     justify-self: start;
   }
 }
+
+/* P80: the no-guard heat table names each company in full; a long name is cut to one line (full name on hover). */
+.op-heat-co {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .op-heat-co {
+    max-width: 120px;
+  }
+}
+.op-unknown {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.op-unknown summary {
+  cursor: pointer;
+}
+.op-unknown p {
+  margin-top: 6px;
+}

@@ -19,7 +19,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
-from ...models import Branch, Workspace
+from ...models import Branch, Membership, Workspace
 from ...prima import client, people
 from ...prima.client import PrimaError
 from ...services import audit
@@ -122,8 +122,13 @@ async def people_list(
     persons = await people.people(db, principal.workspace_id)
     guess = people.suggestions(persons, client.matchable(staff))
     linked = {p.link.prima_user_id: p.user_id for p in persons if p.link}
+    # P82: owners (the developer is one) open Prima as its top record, with no link.
+    top = client.top_of(staff)
     return {
         "staff": [_staff_row(r, linked.get(r.id)) for r in staff],
+        "top": {"id": top.id, "name": top.name, "title": top.title, "top": top.top}
+        if top
+        else None,
         "people": [
             {
                 "user_id": p.user_id,
@@ -131,6 +136,7 @@ async def people_list(
                 "email": p.email,
                 "role": p.role,
                 "microsoft": bool(p.ms_oid),
+                "opens_as": top.top if top and p.role == "owner" else None,
                 "link": (
                     {"prima_user_id": p.link.prima_user_id, "prima_name": p.link.prima_name,
                      "how": p.link.how}
@@ -154,7 +160,14 @@ async def people_link(
     try:
         record = None
         if body.prima_user_id:
-            record = next((r for r in await client.staff() if r.id == body.prima_user_id), None)
+            staff = await client.staff()
+            m = await db.get(Membership, (principal.workspace_id, body.user_id))
+            if m is not None and m.role == "owner" and client.top_of(staff):
+                raise PrimaError(
+                    409,
+                    Msg("Owners open Prima as its top record. They need no link of their own."),
+                )
+            record = next((r for r in staff if r.id == body.prima_user_id), None)
             if record is None:
                 raise PrimaError(404, Msg("That Prima record does not exist."))
         await people.set_link(db, principal.workspace_id, body.user_id, record, principal.actor)

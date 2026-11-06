@@ -18,6 +18,7 @@ import {
   Loading,
   dateLabel,
   hhmm,
+  humanize,
   useAction,
   useLoad,
   type Tone,
@@ -1174,7 +1175,7 @@ function Emergencies({ data }: { data: Cms }) {
                       </span>
                       <span className="op-meta">
                         {k.case.ref} · {k.siteName} · opened {hhmm(k.case.openedAt)} ·{" "}
-                        {k.case.status}
+                        {humanize(k.case.status)}
                       </span>
                       <span className="op-co">{k.companyName}</span>
                     </span>

@@ -17,30 +17,34 @@ import { api, type ActBoard, type ActFindingInput } from '../api';
 import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { actGuide, type ActGuideCtx, type ActGuideKind } from '../act-guide/guide';
+import { useLang } from '../i18n';
 import '../styles/gov.css';
 
 /** Read-only guide card for the task in front of this person (BM with English); names only people on the record. */
 function GuideCard({ kind, ctx }: { kind: ActGuideKind | null; ctx: ActGuideCtx }) {
+  const { lang } = useLang();
   if (!kind) return null;
   const g = actGuide(kind, ctx);
+  // P80: the guide's labels in the chosen language; both only in BM + English.
+  const L = (bm: string, en: string) => (lang === 'en' ? en : lang === 'ms' ? bm : `${bm} / ${en}`);
   return (
     <details className="gv-details small" data-testid={`act-guide-${kind}`}>
-      <summary>Panduan / Guide: {g.title}</summary>
+      <summary>{L('Panduan', 'Guide')}: {g.title}</summary>
       <div className="gv-details-body">
-        <div>Masukkan / Enter:</div>
+        <div>{L('Masukkan', 'Enter')}:</div>
         <ul>
           {g.enter.map((x) => (
             <li key={x}>{x}</li>
           ))}
         </ul>
-        <div>Dokumen / Documents:</div>
+        <div>{L('Dokumen', 'Documents')}:</div>
         <ul>
           {g.documents.map((x) => (
             <li key={x}>{x}</li>
           ))}
         </ul>
-        <div>Di mana / Where: {g.where}</div>
-        <div>Tanya / Ask: {g.ask}</div>
+        <div>{L('Di mana', 'Where')}: {g.where}</div>
+        <div>{L('Tanya', 'Ask')}: {g.ask}</div>
       </div>
     </details>
   );

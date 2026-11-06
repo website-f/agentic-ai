@@ -67,12 +67,12 @@ async def people(db: AsyncSession, workspace_id: str) -> list[Person]:
 
 def suggestions(persons: list[Person], staff: list[StaffRecord]) -> dict[str, str]:
     """user_id -> Prima record id, for unlinked people and records only: the record IT gave
-    the person's Microsoft account, else (P74) for the office's owner Prima's top record (its
-    CEO, else its COO: the owner runs the company), else the only record with the same name
-    (and nobody else in the office with that name)."""
+    the person's Microsoft account, else the only record with the same name (and nobody else
+    in the office with that name). P82: owners open Prima as its top record (its CEO, else its
+    COO) with no link, so they get no suggestion while Prima has one."""
     taken = {p.link.prima_user_id for p in persons if p.link}
+    has_top = any(r.top for r in staff)
     free = [r for r in staff if r.id not in taken]
-    tops = [r.id for r in sorted(free, key=lambda r: 0 if r.top == "ceo" else 1) if r.top]
     by_oid = {r.entra_oid: r.id for r in free if r.entra_oid}
     by_name: dict[str, list[str]] = {}
     for r in free:
@@ -82,13 +82,10 @@ def suggestions(persons: list[Person], staff: list[StaffRecord]) -> dict[str, st
         office_names[name_key(p.name)] = office_names.get(name_key(p.name), 0) + 1
     out: dict[str, str] = {}
     for p in persons:
-        if p.link:
+        if p.link or (p.role == "owner" and has_top):
             continue
         if p.ms_oid and p.ms_oid in by_oid:
             out[p.user_id] = by_oid[p.ms_oid]
-            continue
-        if p.role == "owner" and tops:
-            out[p.user_id] = tops.pop(0)
             continue
         key = name_key(p.name)
         hits = by_name.get(key, [])

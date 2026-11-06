@@ -3,7 +3,7 @@ import { ClockCounterClockwiseIcon, FingerprintIcon, SealCheckIcon, UsersThreeIc
 import { api, type AuditLog } from '../api';
 import { useApp } from '../App';
 import { Empty, Facts, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
-import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, dayLabel, hhmm, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, dayLabel, hhmm, humanize, useLoad } from '../ui';
 import '../styles/gov.css';
 
 type Entry = AuditLog['entries'][number];
@@ -118,7 +118,7 @@ export function AuditView() {
           <option value="">All areas</option>
           {areas.map((a) => (
             <option key={a} value={a}>
-              {a}
+              {humanize(a)}
             </option>
           ))}
         </select>
@@ -154,10 +154,11 @@ export function AuditView() {
                         </span>
                         <span className="gv-ev-what">
                           <span className="gv-ev-sum">{e.summary}</span>
-                          <span className="gv-ev-act mono">{e.action}</span>
+                          {/* P80: the kind of change in words ("CMS: visit update"); its code stays in the entry. */}
+                          <span className="gv-ev-act">{humanize(e.action)}</span>
                         </span>
                         <span className="gv-ev-rec">
-                          {e.entity} <span className="mono">{e.entityId.length > 14 ? `${e.entityId.slice(0, 14)}…` : e.entityId}</span>
+                          {humanize(e.entity)} <span className="mono">{e.entityId.length > 14 ? `${e.entityId.slice(0, 14)}…` : e.entityId}</span>
                         </span>
                         <span className="gv-ev-seal mono" title={e.hash}>
                           #{e.seq} · {e.hash.slice(0, 6)}…
@@ -205,8 +206,8 @@ export function AuditView() {
             items={[
               ['Who', open.actor],
               ['When', dateTimeLabel(open.at)],
-              ['What', <span className="mono">{open.action}</span>],
-              ['Record', <>{open.entity} <span className="mono">{open.entityId}</span></>],
+              ['What', <>{humanize(open.action)} <span className="mono muted small">({open.action})</span></>],
+              ['Record', <>{humanize(open.entity)} <span className="mono">{open.entityId}</span></>],
               ['Company', open.companyId ? (companyName.get(open.companyId) ?? open.companyId) : 'Group-wide'],
               ['Entry', `#${open.seq} of ${data.total}`],
             ]}

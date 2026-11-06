@@ -6,7 +6,8 @@
  * module of the office with "Back to the office" in its menu. Its SOPs and
  * workflows are in the Library, and the AI works in Prima for whoever asks it, as them.
  * P75: anyone with no Prima record of their own gets their own account the first time they open
- * Prima, in the Prima company the owner set for their branch here ("Prima companies"). */
+ * Prima, in the Prima company the owner set for their branch here ("Prima companies").
+ * P82: every owner (the developer is one) opens Prima as its top record (the CEO) at once. */
 import {
   ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon, UsersThreeIcon,
   WarningCircleIcon,
@@ -100,7 +101,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
                 : s.running
                   ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {t("Running on this server")}</Pill>
                   : <Pill tone="warn"><WarningCircleIcon size={13} weight="fill" /> {t("Not running right now")}</Pill>}
-              {s?.running && !s.needs_microsoft ? <Pill tone="warn">{t("Your account is not linked yet")}</Pill> : null}
+              {s?.running && !s.needs_microsoft && !s.linked ? <Pill tone="warn">{t("Your account is not linked yet")}</Pill> : null}
             </div>
             {s?.problem ? <p className="text-[13px] text-muted">{s.problem}</p> : null}
             {companyNeeded && !owner ? <p className="text-[13px]">{t("Ask the office owner to set which Prima company your branch is. Prima then makes your own account the next time you open it.")}</p> : null}
@@ -113,6 +114,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
 
       <Section title={t("How you get in")}>
         <p className="text-[13px]">{t("Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.")}</p>
+        <p className="mt-2 text-[13px] text-muted">{t("Owners open Prima straight away as its CEO, with no link and no Microsoft step. Prima's records show the CEO; the office's activity log shows which owner recorded what.")}</p>
         <a href={PREVIEW} className="mt-3 grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface p-4 hover:border-accent/40">
           <span className="flex items-center gap-2 text-[14.5px] font-semibold"><EyeIcon size={18} className="text-accent" /> {t("Preview with sample data")}</span>
           <span className="text-[12.5px] text-muted">{t("The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.")}</span>
@@ -138,8 +140,10 @@ interface PersonRow {
   user_id: string; name: string; email: string; role: string; microsoft: boolean;
   link: { prima_user_id: string; prima_name: string; how: "microsoft" | "name" | "owner" | "auto" } | null;
   suggestion: string | null;
+  /** P82: owners (the developer is one) open Prima as its top record, with no link. */
+  opens_as?: "ceo" | "coo" | null;
 }
-interface PeopleData { staff: StaffRow[]; people: PersonRow[] }
+interface PeopleData { staff: StaffRow[]; people: PersonRow[]; top?: { id: string; name: string; title: string; top: "ceo" | "coo" } | null }
 
 const NONE = "none";
 
@@ -173,6 +177,17 @@ function PeopleSection() {
       {q.isLoading ? <Skeleton className="h-24" /> : (
         <div className="grid gap-2">
           {(d?.people ?? []).map((p) => {
+            if (p.opens_as) {
+              return (
+                <div key={p.user_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-medium">{p.name}</div>
+                    <div className="truncate text-[12px] text-muted">{p.email}</div>
+                  </div>
+                  <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.opens_as === "ceo" ? t("Opens Prima as the CEO (owner)") : t("Opens Prima as the COO (owner)")}</Pill>
+                </div>
+              );
+            }
             const value = p.link?.prima_user_id ?? p.suggestion ?? NONE;
             const options = [
               { value: NONE, label: t("Not linked") },

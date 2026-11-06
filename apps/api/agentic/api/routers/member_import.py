@@ -824,9 +824,15 @@ async def preview(
                 "Files can be up to {mb} MB.",
                 mb=MAX_BYTES // (1024 * 1024),
             )
+    return await read_sheet(db, principal, bytes(data), name)
+
+
+async def read_sheet(db: AsyncSession, principal: Principal, data: bytes, name: str) -> PreviewOut:
+    """The preview of a sheet's bytes: one path for the upload and the server's import command
+    (agentic/members_import.py, P82). Nothing is saved."""
     if not data:
         raise api_error(status.HTTP_400_BAD_REQUEST, "empty_file", "That file is empty.")
-    sheet, rows = _read_rows(bytes(data), name)
+    sheet, rows = _read_rows(data, name)
     found = find_header(rows)
     mapped_by: Literal["headers", "ai"] = "headers"
     if found is None or "name" not in found[1] or "email" not in found[1]:
@@ -927,13 +933,25 @@ async def add_companies(
     """P80: add the companies a sheet names that the office does not have yet, so its people
     can be placed in one go. Never a second company with a name the office already has."""
     from ...engine import privacy
+
+    out = await add_company_names(db, principal, body.names)
+    await db.commit()
+    if out.created:
+        privacy.invalidate(principal.workspace_id)  # the new companies' names are masked at once
+    return out
+
+
+async def add_company_names(
+    db: AsyncSession, principal: Principal, names: list[str]
+) -> CompaniesOut:
+    """The companies step, for the endpoint and the import command; the caller commits."""
     from .org import _unique_slug
 
     org = await Org.load(db, principal.workspace_id)
     known = {b.id: b.name for b in org.branches.values()}
     created: list[str] = []
     existing: list[str] = []
-    for raw in body.names:
+    for raw in names:
         name = _company_name(raw)
         if not name.strip():
             continue
@@ -957,9 +975,6 @@ async def add_companies(
             target=b.id,
             after={"name": name, "via": "member import"},
         )
-    await db.commit()
-    if created:
-        privacy.invalidate(principal.workspace_id)  # the new companies' names are masked at once
     return CompaniesOut(created=created, existing=existing)
 
 
@@ -988,8 +1003,16 @@ async def import_members(
 ) -> ImportOut:
     """Add every row that passes the checks; skip (and say why) the rest. Each new account
     gets a one-time password, shown here only; existing accounts keep their own."""
+    out = await import_rows(db, principal, _rows_out(body.rows))
+    await db.commit()
+    return out
+
+
+async def import_rows(db: AsyncSession, principal: Principal, rows: list[RowOut]) -> ImportOut:
+    """The rows checked again and added, for the endpoint and the import command (P82). A
+    second row with the same email, or someone already a member, is skipped, never added
+    twice. The caller commits."""
     org = await Org.load(db, principal.workspace_id)
-    rows = _rows_out(body.rows)
     await _check_rows(db, principal, org, rows, set())
     results: list[ResultOut] = []
     for r in rows:
@@ -1032,5 +1055,4 @@ async def import_members(
         "members.imported",
         after={"added": added, "skipped": len(results) - added},
     )
-    await db.commit()
     return ImportOut(results=results, added=added, skipped=len(results) - added)

@@ -1,24 +1,32 @@
-import { CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, PencilSimpleIcon, RobotIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import {
+  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, MicrosoftOutlookLogoIcon,
+  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon, XIcon,
+} from "@phosphor-icons/react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Page, PageHeader, Section } from "@/components/page";
+import { EmptyState, Page, PageHeader, Section } from "@/components/page";
 import { ResetTwoFactorDialog, TwoFactorPill, useMemberTwoFactor } from "@/components/two-factor";
 import { Button } from "@/components/ui/button";
-import { Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
+import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
-import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
+import {
+  FIRST_PAGE, memberStatus, membersPageUrl, nextSort, PAGE_SIZES, pageRange, toggleAll, withFilter,
+  type MemberSort, type MembersFilters, type MembersPage, type MemberStatus, type PageSize,
+} from "@/lib/members";
+import { useDebounced } from "@/lib/paged";
+import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
 
@@ -187,30 +195,51 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
   );
 }
 
-function AccessDialog({ member, me, open, onOpenChange }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void }) {
+/** Role and place for one member, or (P82) for everyone ticked in the table at once. */
+function AccessDialog({ members, me, open, onOpenChange, onDone }: {
+  members: Member[];
+  me: Me;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onDone?: () => void;
+}) {
   const t = useT();
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const roles = assignable(me);
   const lockBranch = me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
-  const [role, setRole] = useState<Role>(member.role);
-  const [branchId, setBranchId] = useState(member.branch_id ?? lockBranch ?? "");
-  const [departmentId, setDepartmentId] = useState(member.department_id ?? "");
+  const one = members.length === 1 ? members[0] : null;
+  const [role, setRole] = useState<Role>(one?.role ?? (roles.includes("staff") ? "staff" : roles[0] ?? "viewer"));
+  const [branchId, setBranchId] = useState(one?.branch_id ?? lockBranch ?? "");
+  const [departmentId, setDepartmentId] = useState(one?.department_id ?? "");
   const save = useMutation({
-    mutationFn: () => api(`/api/members/${member.user_id}`, "PATCH", { role, ...placementBody(role, branchId || branches[0]?.id || "", departmentId) }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const place = placementBody(role, branchId || branches[0]?.id || "", departmentId);
+      if (one) {
+        await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place });
+        return { done: 1, skipped: 0, first: null as string | null };
+      }
+      const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: members.map((m) => m.user_id), action: "access", role, ...place });
+      return { done: r.done, skipped: r.skipped, first: r.results.find((x) => !x.ok)?.message ?? null };
+    },
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: keys.members });
-      toast.success(t("{name} is now {role}.", { name: member.name, role: t(ROLE_INFO[role].label).toLowerCase() }));
+      if (one) toast.success(t("{name} is now {role}.", { name: one.name, role: t(ROLE_INFO[role].label).toLowerCase() }));
+      else bulkToast(r.done, r.skipped, r.first);
+      onDone?.();
       onOpenChange(false);
     },
   });
+  const options = one && !roles.includes(one.role) ? [one.role, ...roles] : roles;
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Access for {name}", { name: member.name })}
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}
+      title={one ? t("Access for {name}", { name: one.name }) : t("Access for {n} people", { n: members.length })}
+      description={one ? undefined : t("Everyone ticked gets this role and place. Anyone the rules stop is skipped and keeps what they have.")}
       footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button></>}>
       <div className="grid gap-4">
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Role")}</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles.includes(member.role) ? roles : [member.role, ...roles])} label={t("Role")} />
+          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(options)} label={t("Role")} />
           <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
         <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
@@ -221,25 +250,78 @@ function AccessDialog({ member, me, open, onOpenChange }: { member: Member; me: 
   );
 }
 
-function where(m: Member): string | null {
-  if (m.department_name && m.branch_name) return `${m.department_name}, ${m.branch_name}`;
-  return m.branch_name ?? null;
+interface BulkOut { results: { user_id: string; ok: boolean; message: string | null }[]; done: number; skipped: number }
+
+function bulkToast(done: number, skipped: number, first: string | null) {
+  if (done) toast.success(done === 1 ? tr("1 person changed.") : tr("{n} people changed.", { n: done }));
+  if (skipped) {
+    const line = skipped === 1 ? tr("1 person skipped.") : tr("{n} people skipped.", { n: skipped });
+    toast.warning(first ? `${line} ${first}` : line);
+  }
 }
 
-function MemberRow({ member, me }: { member: Member; me: Me }) {
+const STATUS_INFO: Record<MemberStatus, { label: string; tone: "ok" | "warn" | "danger" }> = {
+  active: { label: msg("Active"), tone: "ok" },
+  pending: { label: msg("Temporary password"), tone: "warn" },
+  disabled: { label: msg("Switched off"), tone: "danger" },
+};
+
+function StatusPill({ member }: { member: Member }) {
+  const t = useT();
+  const s = STATUS_INFO[memberStatus(member)];
+  return <Pill tone={s.tone}>{t(s.label)}</Pill>;
+}
+
+function RolePill({ role }: { role: Role }) {
+  const t = useT();
+  return <Pill tone={role === "owner" || role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[role] ? t(ROLE_INFO[role].label) : role}</Pill>;
+}
+
+/** How they sign in: with Microsoft or a password, and when they last did. */
+function SignIn({ member }: { member: Member }) {
+  const t = useT();
+  return (
+    <div className="grid justify-items-start gap-0.5">
+      {member.microsoft
+        ? <Pill tone="ok"><MicrosoftOutlookLogoIcon size={12} weight="fill" /> {t("Microsoft")}</Pill>
+        : <Pill tone="neutral">{t("Password only")}</Pill>}
+      <span className="text-[12px] text-muted">
+        {member.last_login_at ? t("Signed in {when}", { when: timeAgo(member.last_login_at).toLowerCase() }) : t("Never signed in")}
+      </span>
+    </div>
+  );
+}
+
+function Avatar({ member, isMe }: { member: Member; isMe: boolean }) {
+  return (
+    <span className={cn(
+      "grid size-9 shrink-0 place-items-center rounded-full text-[12px] font-semibold ring-1",
+      isMe ? "bg-accent text-accent-fg ring-accent/30" : "bg-accent-soft text-accent ring-accent/15",
+    )}>
+      {initials(member.name)}
+    </span>
+  );
+}
+
+function Tick({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <input type="checkbox" checked={checked} onChange={onChange} aria-label={label}
+      className="size-4 shrink-0 cursor-pointer accent-[var(--accent)]" />
+  );
+}
+
+/** The ⋯ menu of one member: role and place, password, two-step sign-in, remove. */
+function MemberActions({ member, me }: { member: Member; me: Me }) {
   const t = useT();
   const qc = useQueryClient();
   const isMe = member.user_id === me.user.id;
-  const roles = assignable(me);
-  const editable = !isMe && roles.includes(member.role) && hasAny(me, "members.manage", "team.manage");
+  const editable = !isMe && assignable(me).includes(member.role) && hasAny(me, "members.manage", "team.manage");
   const [removing, setRemoving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [reset, setReset] = useState<string | null>(null);
   // P57: owners and admins see who has two-step sign-in on; owners reset it (a lost phone).
-  const seesTwoFactor = me.permissions.includes("members.manage");
-  const hasTwoFactor = useMemberTwoFactor(member.user_id, seesTwoFactor);
+  const hasTwoFactor = useMemberTwoFactor(member.user_id, me.permissions.includes("members.manage"));
   const [resetting2fa, setResetting2fa] = useState(false);
-
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
     qc.invalidateQueries({ queryKey: keys.status });
@@ -249,60 +331,26 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
     onSuccess: (r) => { refresh(); setReset(r.temp_password); },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const place = where(member);
-
+  if (!editable) return <span aria-hidden className="block size-10" />;
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-5">
-      <span
-        className={cn(
-          "row-span-2 grid size-10 shrink-0 place-items-center self-start rounded-full text-[12.5px] font-semibold ring-1 sm:row-span-1 sm:self-center",
-          isMe ? "bg-accent text-accent-fg ring-accent/30" : "bg-accent-soft text-accent ring-accent/15",
-        )}
-      >
-        {initials(member.name)}
-      </span>
-      <div className="col-start-2 row-start-1 min-w-0">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
-          <span className="min-w-0 break-words">{member.name}</span>
-          {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
-          {member.must_change_password ? <Pill tone="warn">{t("Temporary password")}</Pill> : null}
-          <TwoFactorPill userId={member.user_id} enabled={seesTwoFactor} />
-        </p>
-        <p className="text-[12.5px] break-all text-muted">{member.email}</p>
-        <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
-          <Meta
-            items={[
-              member.last_login_at ? t("Signed in {when}", { when: timeAgo(member.last_login_at).toLowerCase() }) : t("Never signed in"),
-              member.agents ? (member.agents === 1 ? t("1 personal agent") : t("{n} personal agents", { n: member.agents })) : null,
-            ]}
-          />
-        </p>
-      </div>
-      <div className="col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:col-start-3 sm:row-start-1 sm:grid sm:justify-items-end sm:gap-0.5 sm:text-right">
-        <Pill tone={member.role === "owner" || member.role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[member.role] ? t(ROLE_INFO[member.role].label) : member.role}</Pill>
-        {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
-      </div>
-      <div className="col-start-3 row-start-1 sm:col-start-4">
-        {editable ? (
-          <Menu>
-            <MenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={t("Options for {name}", { name: member.name })}>
-                <DotsThreeIcon size={20} weight="bold" />
-              </Button>
-            </MenuTrigger>
-            <MenuContent>
-              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
-              <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
-              {me.role === "owner" && hasTwoFactor ? (
-                <MenuItem icon={<ShieldSlashIcon />} onSelect={() => setResetting2fa(true)}>{t("Reset two-step sign-in")}</MenuItem>
-              ) : null}
-              <MenuSeparator />
-              <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Remove from workspace")}</MenuItem>
-            </MenuContent>
-          </Menu>
-        ) : <span aria-hidden className="block size-10" />}
-      </div>
-      {editing ? <AccessDialog member={member} me={me} open={editing} onOpenChange={setEditing} /> : null}
+    <>
+      <Menu>
+        <MenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={t("Options for {name}", { name: member.name })}>
+            <DotsThreeIcon size={20} weight="bold" />
+          </Button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
+          <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
+          {me.role === "owner" && hasTwoFactor ? (
+            <MenuItem icon={<ShieldSlashIcon />} onSelect={() => setResetting2fa(true)}>{t("Reset two-step sign-in")}</MenuItem>
+          ) : null}
+          <MenuSeparator />
+          <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Remove from workspace")}</MenuItem>
+        </MenuContent>
+      </Menu>
+      {editing ? <AccessDialog members={[member]} me={me} open={editing} onOpenChange={setEditing} /> : null}
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
@@ -324,15 +372,183 @@ function MemberRow({ member, me }: { member: Member; me: Me }) {
       <ResponsiveDialog open={!!reset} onOpenChange={() => setReset(null)} title={t("Password reset")} footer={<Button onClick={() => setReset(null)}>{t("Done")}</Button>}>
         {reset ? <TempPassword email={member.email} password={reset} /> : null}
       </ResponsiveDialog>
-    </li>
+    </>
+  );
+}
+
+function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesTwoFactor: boolean }) {
+  const t = useT();
+  const isMe = member.user_id === me.user.id;
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar member={member} isMe={isMe} />
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
+          <span className="min-w-0 break-words">{member.name}</span>
+          {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
+          <TwoFactorPill userId={member.user_id} enabled={seesTwoFactor} />
+        </p>
+        <p className="text-[12.5px] break-all text-muted">{member.email}</p>
+        {member.agents ? (
+          <p className="text-[12px] text-muted">{member.agents === 1 ? t("1 personal agent") : t("{n} personal agents", { n: member.agents })}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const COLUMNS: { key: MemberSort | null; label: string }[] = [
+  { key: "name", label: msg("Name") },
+  { key: "role", label: msg("Role") },
+  { key: "company", label: msg("Company") },
+  { key: "department", label: msg("Department") },
+  { key: "last_seen", label: msg("Sign-in") },
+  { key: null, label: msg("Status") },
+];
+
+function SortHeading({ col, f, onSort }: { col: (typeof COLUMNS)[number]; f: MembersFilters; onSort: (k: MemberSort) => void }) {
+  const t = useT();
+  const key = col.key;
+  const on = key !== null && f.sort === key;
+  return (
+    <th scope="col" aria-sort={on ? (f.dir === "asc" ? "ascending" : "descending") : undefined}
+      className="px-3 py-2.5 text-left text-[12px] font-medium tracking-wide text-muted uppercase">
+      {key ? (
+        <button type="button" onClick={() => onSort(key)} className={cn("inline-flex items-center gap-1 hover:text-fg", on && "text-fg")}>
+          {t(col.label)}
+          {on ? (f.dir === "asc" ? <CaretUpIcon size={12} weight="bold" /> : <CaretDownIcon size={12} weight="bold" />) : null}
+        </button>
+      ) : t(col.label)}
+    </th>
+  );
+}
+
+function MembersTable({ rows, me, f, onSort, selected, onTick, onTickPage, canBulk }: {
+  rows: Member[];
+  me: Me;
+  f: MembersFilters;
+  onSort: (k: MemberSort) => void;
+  selected: Set<string>;
+  onTick: (id: string) => void;
+  onTickPage: () => void;
+  canBulk: boolean;
+}) {
+  const t = useT();
+  const seesTwoFactor = me.permissions.includes("members.manage");
+  const others = rows.filter((m) => m.user_id !== me.user.id);
+  const all = others.length > 0 && others.every((m) => selected.has(m.user_id));
+  return (
+    <div className="hidden overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface md:block">
+      <table className="w-full min-w-[56rem] border-collapse text-[13px]">
+        <thead className="border-b border-border bg-surface-2/60">
+          <tr>
+            {canBulk ? (
+              <th scope="col" className="w-10 px-3 py-2.5"><Tick checked={all} onChange={onTickPage} label={t("Select everyone on this page")} /></th>
+            ) : null}
+            {COLUMNS.map((c) => <SortHeading key={c.label} col={c} f={f} onSort={onSort} />)}
+            <th scope="col" className="w-12 px-3 py-2.5"><span className="sr-only">{t("Actions")}</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((m) => (
+            <tr key={m.user_id} className={cn("align-middle", selected.has(m.user_id) && "bg-accent-soft/40")}>
+              {canBulk ? (
+                <td className="px-3 py-2.5">
+                  {m.user_id === me.user.id ? null : <Tick checked={selected.has(m.user_id)} onChange={() => onTick(m.user_id)} label={t("Select {name}", { name: m.name })} />}
+                </td>
+              ) : null}
+              <td className="max-w-[20rem] px-3 py-2.5"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></td>
+              <td className="px-3 py-2.5"><RolePill role={m.role} /></td>
+              <td className="px-3 py-2.5 break-words">{m.branch_name ?? <span className="text-muted">-</span>}</td>
+              <td className="px-3 py-2.5 break-words">{m.department_name ?? <span className="text-muted">-</span>}</td>
+              <td className="px-3 py-2.5"><SignIn member={m} /></td>
+              <td className="px-3 py-2.5"><StatusPill member={m} /></td>
+              <td className="px-1 py-1.5 text-right"><MemberActions member={m} me={me} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Phones: one card per member instead of the table. */
+function MemberCards({ rows, me, selected, onTick, canBulk }: {
+  rows: Member[];
+  me: Me;
+  selected: Set<string>;
+  onTick: (id: string) => void;
+  canBulk: boolean;
+}) {
+  const t = useT();
+  const seesTwoFactor = me.permissions.includes("members.manage");
+  return (
+    <ul className="grid gap-2 md:hidden">
+      {rows.map((m) => {
+        const place = [m.department_name, m.branch_name].filter(Boolean).join(", ");
+        return (
+          <li key={m.user_id} className={cn("grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3", selected.has(m.user_id) && "border-accent/40 bg-accent-soft/40")}>
+            <div className="flex items-start gap-2">
+              {canBulk && m.user_id !== me.user.id ? (
+                <span className="pt-2.5"><Tick checked={selected.has(m.user_id)} onChange={() => onTick(m.user_id)} label={t("Select {name}", { name: m.name })} /></span>
+              ) : null}
+              <div className="min-w-0 flex-1"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></div>
+              <MemberActions member={m} me={me} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <RolePill role={m.role} />
+              <StatusPill member={m} />
+              {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
+            </div>
+            <SignIn member={m} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Pager({ f, total, onChange }: { f: MembersFilters; total: number; onChange: (c: Partial<MembersFilters>) => void }) {
+  const t = useT();
+  const { pages, from, to } = pageRange(f.page, f.pageSize, total);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-[13px] text-muted tabular">{total ? t("Showing {from} to {to} of {total}", { from, to, total }) : null}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select size="sm" className="w-36" label={t("Rows per page")} value={String(f.pageSize)}
+          options={PAGE_SIZES.map((n) => ({ value: String(n), label: t("{n} a page", { n }) }))}
+          onValueChange={(v) => onChange({ pageSize: Number(v) as PageSize })} />
+        <Button size="sm" variant="outline" disabled={f.page <= 1} onClick={() => onChange({ page: f.page - 1 })} aria-label={t("Previous page")}>
+          <CaretLeftIcon size={14} />
+        </Button>
+        <span className="text-[13px] tabular">{t("Page {page} of {pages}", { page: Math.min(f.page, pages), pages })}</span>
+        <Button size="sm" variant="outline" disabled={f.page >= pages} onClick={() => onChange({ page: f.page + 1 })} aria-label={t("Next page")}>
+          <CaretRightIcon size={14} />
+        </Button>
+      </div>
+    </div>
   );
 }
 
 export function MembersPage() {
   const t = useT();
+  const qc = useQueryClient();
   const { data: me } = useSuspenseQuery(meQuery);
   const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
-  const { data: members, isLoading, error } = useQuery(membersQuery);
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const [f, setF] = useState<MembersFilters>(FIRST_PAGE);
+  const [typed, setTyped] = useState("");
+  // The search box asks the server once typing settles; a new search starts on page 1.
+  const q = useDebounced(typed, 300);
+  const filters = q.trim() === f.q ? f : withFilter(f, { q: q.trim() });
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: [...keys.members, "page", filters],
+    queryFn: () => api<MembersPage>(membersPageUrl(filters)),
+    placeholderData: keepPreviousData,
+  });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAccess, setBulkAccess] = useState(false);
+  const [bulkRemove, setBulkRemove] = useState(false);
   const search = useSearch({ strict: false }) as { add?: number };
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
@@ -346,7 +562,39 @@ export function MembersPage() {
     if (!o && search.add) navigate({ to: "/settings/members", search: {}, replace: true });
   };
   const scoped = me.scope && me.scope.kind !== "all";
-  const list = members ?? [];
+  const change = (c: Partial<MembersFilters>) => {
+    setF(withFilter(filters, c));
+    if (!("page" in c) && !("pageSize" in c)) setSelected(new Set()); // ticks follow the filters
+  };
+  const clearAll = () => {
+    setTyped("");
+    setF(FIRST_PAGE);
+    setSelected(new Set());
+  };
+  const rows = data?.items ?? [];
+  const summary = data?.summary;
+  const total = data?.total ?? 0;
+  const pageIds = rows.filter((m) => m.user_id !== me.user.id).map((m) => m.user_id);
+  const tick = (id: string) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  // The ticked people this page shows (the role dialog needs their names and roles).
+  const ticked = rows.filter((m) => selected.has(m.user_id));
+  const filtered = !!(filters.q || filters.company || filters.role || filters.status);
+  const removeTicked = async () => {
+    try {
+      const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: [...selected], action: "remove" });
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: keys.members });
+      qc.invalidateQueries({ queryKey: keys.status });
+      bulkToast(r.done, r.skipped, r.results.find((x) => !x.ok)?.message ?? null);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
 
   return (
     <Page>
@@ -369,28 +617,95 @@ export function MembersPage() {
           <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>
           <Skeleton className="h-64 rounded-[var(--radius-md)]" />
         </div>
-      ) : error ? (
+      ) : error && !data ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
           {t("Could not load members.")} {errorMessage(error)}
         </div>
-      ) : (
+      ) : summary ? (
         <>
           <StatGrid>
-            <Stat label={t("Members")} value={list.length} icon={UsersIcon} hint={t("Can sign in here")} />
-            <Stat label={t("Owners and admins")} value={list.filter((m) => m.role === "owner" || m.role === "admin").length} icon={CrownSimpleIcon} tone="violet" hint={t("Full workspace access")} />
-            <Stat label={t("Temporary password")} value={list.filter((m) => m.must_change_password).length} icon={KeyIcon} tone={list.some((m) => m.must_change_password) ? "warn" : "neutral"} hint={t("Yet to pick their own")} />
-            <Stat label={t("Personal agents")} value={list.reduce((n, m) => n + (m.agents ?? 0), 0)} icon={RobotIcon} tone="info" hint={t("Owned by members")} />
+            <Stat label={t("Members")} value={summary.members} icon={UsersIcon} hint={t("Can sign in here")} onClick={clearAll} active={!filtered} />
+            <Stat label={t("Owners and admins")} value={summary.owners_admins} icon={CrownSimpleIcon} tone="violet" hint={t("Full workspace access")} />
+            <Stat label={t("Temporary password")} value={summary.temp_password} icon={KeyIcon} tone={summary.temp_password ? "warn" : "neutral"} hint={t("Yet to pick their own")}
+              onClick={() => change({ status: filters.status === "pending" ? "" : "pending" })} active={filters.status === "pending"} />
+            <Stat label={t("Signed in with Microsoft")} value={summary.microsoft} icon={MicrosoftOutlookLogoIcon} tone="info" hint={t("Their work account is connected")} />
           </StatGrid>
-          <ul data-guide="settings.list" className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-            {list.map((m) => <MemberRow key={m.user_id} member={m} me={me} />)}
-          </ul>
+
+          <div data-guide="settings.list" className="grid gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 className="text-[17px] font-semibold tabular">
+                {summary.members === 1 ? t("1 member") : t("{n} members", { n: summary.members })}
+              </h2>
+              {filtered ? <p className="text-[13px] text-muted tabular">{t("{n} match the filters", { n: total })}</p> : null}
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+              <SearchInput value={typed} onChange={setTyped} placeholder={t("Search by name or email")} className="sm:col-span-2 lg:col-span-1" />
+              <Select label={t("Company")} value={filters.company || "all"} onValueChange={(v) => change({ company: v === "all" ? "" : v })}
+                options={[{ value: "all", label: t("All companies") }, { value: "none", label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+              <Select label={t("Role")} value={filters.role || "all"} onValueChange={(v) => change({ role: v === "all" ? "" : (v as Role) })}
+                options={[{ value: "all", label: t("All roles") }, ...ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))]} />
+              <Select label={t("Status")} value={filters.status || "all"} onValueChange={(v) => change({ status: v === "all" ? "" : (v as MemberStatus) })}
+                options={[{ value: "all", label: t("All statuses") }, ...(Object.keys(STATUS_INFO) as MemberStatus[]).map((s) => ({ value: s, label: t(STATUS_INFO[s].label) }))]} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 md:hidden">
+              <Select size="sm" className="w-56" label={t("Sort by")} value={`${filters.sort}:${filters.dir}`}
+                onValueChange={(v) => {
+                  const [sort, dir] = v.split(":") as [MemberSort, "asc" | "desc"];
+                  change({ sort, dir });
+                }}
+                options={[
+                  { value: "name:asc", label: t("Name, A to Z") },
+                  { value: "name:desc", label: t("Name, Z to A") },
+                  { value: "company:asc", label: t("Company") },
+                  { value: "role:asc", label: t("Role") },
+                  { value: "last_seen:desc", label: t("Signed in most recently") },
+                  { value: "joined:desc", label: t("Joined most recently") },
+                ]} />
+              {canAdd && pageIds.length ? (
+                <Button size="sm" variant="outline" onClick={() => setSelected(toggleAll(selected, pageIds))}>
+                  {pageIds.every((id) => selected.has(id)) ? t("Untick this page") : t("Tick this page")}
+                </Button>
+              ) : null}
+            </div>
+
+            {canAdd && selected.size ? (
+              <div role="region" aria-label={t("Ticked members")}
+                className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-surface px-3 py-2 shadow-sm">
+                <span className="text-[13px] font-medium tabular">{selected.size === 1 ? t("1 ticked") : t("{n} ticked", { n: selected.size })}</span>
+                <Button size="sm" variant="secondary" disabled={!ticked.length} onClick={() => setBulkAccess(true)}>
+                  <PencilSimpleIcon size={14} /> {t("Change role or place")}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setBulkRemove(true)}>
+                  <TrashIcon size={14} /> {t("Remove")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  <XIcon size={14} /> {t("Clear")}
+                </Button>
+                {ticked.length < selected.size ? (
+                  <span className="text-[12px] text-muted">{t("A role change applies to the ticked people on this page.")}</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {rows.length ? (
+              <div className={cn("grid gap-3 transition-opacity", isFetching && "opacity-70")}>
+                <MembersTable rows={rows} me={me} f={filters} canBulk={canAdd} selected={selected}
+                  onSort={(k) => change(nextSort(filters, k))} onTick={tick} onTickPage={() => setSelected(toggleAll(selected, pageIds))} />
+                <MemberCards rows={rows} me={me} canBulk={canAdd} selected={selected} onTick={tick} />
+                <Pager f={filters} total={total} onChange={change} />
+              </div>
+            ) : (
+              <EmptyState icon={UsersIcon} title={t("Nobody matches")} body={t("Try another name or email, or clear the filters.")}
+                action={<Button variant="outline" onClick={clearAll}>{t("Clear the filters")}</Button>} />
+            )}
+          </div>
         </>
-      )}
+      ) : null}
 
       <Section title={t("Roles")} description={t("What each role lets a person do. Scoped roles only see their own part of the workspace.")}>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ROLES.map((r) => {
-            const count = list.filter((m) => m.role === r).length;
+            const count = summary?.roles[r] ?? 0;
             return (
               <div key={r} className="grid content-start gap-1 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
@@ -408,6 +723,18 @@ export function MembersPage() {
       {importing ? (
         <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={scoped ? me.scope?.branch_id ?? null : null} />
       ) : null}
+      {bulkAccess ? (
+        <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />
+      ) : null}
+      <ConfirmDialog
+        open={bulkRemove}
+        onOpenChange={setBulkRemove}
+        title={selected.size === 1 ? t("Remove 1 person?") : t("Remove {n} people?", { n: selected.size })}
+        body={t("They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner.")}
+        confirmLabel={t("Remove")}
+        danger
+        onConfirm={removeTicked}
+      />
     </Page>
   );
 }

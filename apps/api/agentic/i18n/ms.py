@@ -1981,4 +1981,9 @@ MS: dict[str, str] = {
     ),
     "That branch is not in this office.": "Cawangan itu tiada dalam pejabat ini.",
     "That Prima company does not exist.": "Syarikat Prima itu tidak wujud.",
+    # ------------------------------------------------------------ P82 members table, owners in Prima
+    "Show 25, 50 or 100 a page.": "Tunjukkan 25, 50 atau 100 setiap halaman.",
+    "Owners open Prima as its top record. They need no link of their own.": (
+        "Pemilik membuka Prima sebagai rekod teratasnya. Mereka tidak perlu dipautkan."
+    ),
 }

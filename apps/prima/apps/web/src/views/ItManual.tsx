@@ -63,7 +63,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
   </section>;
 }
 function Select({label,value,onChange,items,optional=false}:{label:string;value:string;onChange:(value:string)=>void;items:Choice[];optional?:boolean}) {
-  return <label className="field"><span className="label">{label}</span><select className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</select></label>;
+  return <label className="field">{label}<select className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</select></label>;
 }
 function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:()=>void}) {
   const [,render]=useReducer(x=>x+1,0);

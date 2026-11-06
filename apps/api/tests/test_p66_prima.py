@@ -117,6 +117,7 @@ def prima_on(monkeypatch):
         )
 
     monkeypatch.setattr(prima, "transport", httpx.MockTransport(handler))
+    monkeypatch.setattr(prima, "_TOP", {})  # P82: the top record is cached per process
     return seen
 
 
@@ -192,17 +193,18 @@ def test_suggestions_pick_only_a_sure_match():
         Person("us-3", "Ahmad", "h@x", "staff", None, None),  # two Prima records named Ahmad
     ]
     assert suggestions(people, rec) == {"us-1": "u-owner", "us-2": "u-aina"}
-    # P74: the office's owner opens Prima as its top record (the CEO's), whatever their name;
-    # a second owner gets the COO's; nobody else ever gets them.
+    # P82: while Prima has a top record (CEO, else COO), every owner opens Prima as it with no
+    # link, so owners get no suggestion; staff are matched as before.
     ceo = StaffRecord("u-ceo", "Fauzan", "CEO", "director", None, True, top="ceo")
     coo = StaffRecord("u-coo", "Ahmad Faisal", "COO", "director", None, True, top="coo")
     owners = [
         Person("us-o1", "Fitri", "f@x", "owner", None, None),
-        Person("us-o2", "Siti", "s@x", "owner", None, None),
-        Person("us-s", "Staff One", "x@x", "staff", None, None),
+        Person("us-o2", "Owner One", "s@x", "owner", None, None),
+        Person("us-s", "Someone Else", "x@x", "staff", OID, None),
     ]
-    got = suggestions(owners, [*rec, ceo, coo])
-    assert got["us-o1"] == "u-ceo" and got["us-o2"] == "u-coo" and "us-s" not in got
+    assert suggestions(owners, [*rec, ceo, coo]) == {"us-s": "u-aina"}
+    assert prima.top_of([*rec, coo, ceo]) == ceo and prima.top_of([*rec, coo]) == coo
+    assert prima.top_of(rec) is None
     assert name_key("Mohd. Fauzan  bin Ali") == name_key("mohd fauzan bin ali")
 
 
@@ -219,18 +221,24 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     assert rows[owner_id]["suggestion"] == "u-owner" and rows[aina_id]["suggestion"] is None
     assert {r["id"] for r in d["staff"]} == {s["id"] for s in STAFF}
 
-    # P70: Prima and the office are one: not connected to Microsoft yet, Prima asks for that
-    # first, and nothing is sent as anyone.
+    # P70: Prima and the office are one: staff not connected to Microsoft yet are asked for
+    # that first, and nothing is sent as anyone.
+    from .test_office_roles import signed_in
+
     n = len(prima_on)
-    s = (await client.get("/api/prima/status")).json()
-    assert s["needs_microsoft"] and not s["linked"] and "Connect your Microsoft" in s["problem"]
-    r = await client.get("/api/prima/api/me")
-    assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+    c = await signed_in("aina@example.com", aina["temp_password"])
+    try:
+        s = (await c.get("/api/prima/status")).json()
+        assert s["needs_microsoft"] and not s["linked"] and "Connect your Microsoft" in s["problem"]
+        r = await c.get("/api/prima/api/me")
+        assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+    finally:
+        await c.aclose()
     assert len(prima_on) == n
 
-    # Connected (another Microsoft account than any IT recorded in Prima): the only record with
-    # their exact name is theirs, so they are in at once, with no click and no second sign-in.
-    await _microsoft("owner@example.com", OWNER_OID)
+    # P82: the owner is never asked to connect Microsoft first. This Prima has no top record,
+    # so the owner opens it by their own link: the only record with their exact name, with no
+    # click and no second sign-in.
     s = (await client.get("/api/prima/status")).json()
     assert s["linked"] and s["me"]["name"] == "Owner One"
     async with SessionLocal() as db:
@@ -529,8 +537,9 @@ async def test_only_the_owner_sets_the_branch_companies(client, prima_on):
 
 
 async def test_the_owner_always_opens_prima_as_its_top_record(client, prima_on, monkeypatch):
-    """P78: a link made before the owner rule (or before Prima was reinstalled) opened Prima as
-    an ordinary staff record with no access. The owner is moved to Prima's top record once."""
+    """P78/P82: a link made before the owner rule (or before Prima was reinstalled) opened
+    Prima as an ordinary staff record with no access. The owner opens it as the top record,
+    and the old link is let go once, so that record is free for its own person."""
     await office(client)
     await _microsoft("owner@example.com", OWNER_OID)
     owner_id, ws = await _ids("owner@example.com")
@@ -557,9 +566,8 @@ async def test_the_owner_always_opens_prima_as_its_top_record(client, prima_on, 
     r = await client.get("/api/prima/api/leave")
     assert r.json()["as"] == "u-ceo"
     async with SessionLocal() as db:
-        link = await db.get(PrimaLink, (ws, owner_id))
-        assert (link.prima_user_id, link.how) == ("u-ceo", "owner")
-    # Once moved, no more checks: the next call goes straight through.
+        assert await db.get(PrimaLink, (ws, owner_id)) is None
+    # The top record is known now: the next call goes straight through.
     n = len(prima_on)
     await client.get("/api/prima/api/leave")
     assert len(prima_on) == n + 1
@@ -586,3 +594,124 @@ def test_branch_suggestion_knows_the_companies_other_names():
     # Two companies answering to one name: the owner picks.
     twin = [*cos, prima.Company("co-other", "Other Sdn Bhd", ("Unit HR",))]
     assert _suggest("UNIT HR", twin) is None
+
+
+CEO = {"id": "u-ceo", "name": "Fauzan", "title": "CEO", "role": "director",
+       "entraOid": None, "canSignIn": True, "top": "ceo"}  # fmt: skip
+COO = {"id": "u-coo", "name": "Ahmad Faisal", "title": "COO", "role": "director",
+       "entraOid": None, "canSignIn": True, "top": "coo"}  # fmt: skip
+
+
+async def test_owners_and_the_developer_open_prima_as_the_ceo(client, prima_on, monkeypatch):
+    """P82: every owner, and the developer, opens Prima as its top record (the CEO) with no
+    link and no Microsoft step; several share it. Each record made through it is in the
+    office's audit log under the person who made it. Staff are unchanged."""
+    from agentic.models import AuditLog
+
+    from .test_office_roles import signed_in
+
+    monkeypatch.setattr(sys.modules[__name__], "STAFF", [*STAFF, COO, CEO])
+    o = await office(client)
+    bid = o["branch"]["id"]
+    second = await member(client, "owner2@example.com", "owner")
+    dev = await member(client, "dev@example.com", "owner")
+    aina = await member(client, "aina@example.com", "staff", branch_id=bid)
+    rani = await member(client, "rani@example.com", "staff", branch_id=bid)
+    async with SessionLocal() as db:
+        u = await db.scalar(select(User).where(User.email == "dev@example.com"))
+        u.is_developer = True  # what python -m agentic.admin make-developer sets
+        await db.commit()
+    await _microsoft("aina@example.com")  # IT recorded this account on Aina's record
+    owner_id, ws = await _ids("owner@example.com")
+
+    # The first owner: no Microsoft, no link, straight in as the CEO.
+    s = (await client.get("/api/prima/status")).json()
+    assert s["linked"] and s["me"]["name"] == "Fauzan" and not s["needs_microsoft"], s
+    r = await client.post(
+        "/api/prima/api/leave/approve",
+        content=b'{"id":"l1"}',
+        headers={**csrf(client), "content-type": "application/json"},
+    )
+    assert r.json()["as"] == "u-ceo"
+    assert prima_on[-1].headers["x-office-via"] == "person"  # what Prima's office.ts takes
+
+    # A second owner and the developer share the same record; nothing was linked.
+    ids = {}
+    for email, m in (("owner2@example.com", second), ("dev@example.com", dev)):
+        c = await signed_in(email, m["temp_password"])
+        try:
+            s = (await c.get("/api/prima/status")).json()
+            assert s["linked"] and s["me"]["name"] == "Fauzan", (email, s)
+            r = await c.post(
+                "/api/prima/api/claims",
+                content=b'{"amount":5}',
+                headers={**csrf(c), "content-type": "application/json"},
+            )
+            assert r.json()["as"] == "u-ceo"
+            assert (await c.get("/api/prima/api/leave")).json()["as"] == "u-ceo"
+        finally:
+            await c.aclose()
+        ids[email], _ = await _ids(email)
+    async with SessionLocal() as db:
+        links = (await db.scalars(select(PrimaLink).where(PrimaLink.workspace_id == ws))).all()
+        assert {lk.user_id for lk in links} <= {(await _ids("aina@example.com"))[0]}
+        rows = (
+            await db.scalars(
+                select(AuditLog).where(AuditLog.action == "prima.recorded").order_by(AuditLog.id)
+            )
+        ).all()
+    # Every record made through the shared record names who made it (reads are not logged).
+    assert [r.actor for r in rows] == [
+        f"user:{owner_id}",
+        f"user:{ids['owner2@example.com']}",
+        f"user:{ids['dev@example.com']}",
+    ]
+    assert rows[0].target == "u-ceo" and rows[0].after["path"] == "/api/leave/approve"
+    assert rows[1].after == {"path": "/api/claims", "via": "person", "status": 200}
+
+    # Staff are unchanged: Aina by her Microsoft account; Rani is asked to connect it first.
+    c = await signed_in("aina@example.com", aina["temp_password"])
+    try:
+        assert (await c.get("/api/prima/api/me")).json()["user"]["id"] == "u-aina"
+    finally:
+        await c.aclose()
+    c = await signed_in("rani@example.com", rani["temp_password"])
+    try:
+        r = await c.get("/api/prima/api/me")
+        assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+    finally:
+        await c.aclose()
+
+    # The owner's Prima page: owners open it as the CEO (no record to pick), staff as before.
+    d = (await client.get("/api/prima/people")).json()
+    assert d["top"]["id"] == "u-ceo" and d["top"]["top"] == "ceo"
+    rows = {p["email"]: p for p in d["people"]}
+    for email in ("owner@example.com", "owner2@example.com", "dev@example.com"):
+        assert rows[email]["opens_as"] == "ceo" and rows[email]["suggestion"] is None
+    assert rows["rani@example.com"]["opens_as"] is None
+    bad = await client.post(
+        "/api/prima/people/link",
+        json={"user_id": ids["owner2@example.com"], "prima_user_id": "u-ahmad-2"},
+        headers=csrf(client),
+    )
+    assert bad.status_code == 409 and "need no link" in bad.json()["message"]
+
+
+async def test_an_owner_made_staff_needs_microsoft_again(client, prima_on, monkeypatch):
+    """P82: the top record goes with the owner role, not with the person."""
+    monkeypatch.setattr(sys.modules[__name__], "STAFF", [*STAFF, CEO])
+    o = await office(client)
+    await member(client, "owner2@example.com", "owner")
+    uid, ws = await _ids("owner2@example.com")
+    async with SessionLocal() as db:
+        assert (await prima.link_for(db, ws, uid)).prima_user_id == "u-ceo"
+    r = await client.patch(
+        f"/api/members/{uid}",
+        json={"role": "staff", "branch_id": o["branch"]["id"]},
+        headers=csrf(client),
+    )
+    assert r.status_code == 200, r.text
+    async with SessionLocal() as db:
+        with pytest.raises(PrimaError) as e:
+            await prima.link_for(db, ws, uid)
+        assert e.value.code == "microsoft_needed"

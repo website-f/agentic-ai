@@ -79,7 +79,8 @@ export function JobLine({ r, onOpen }: { r: JobRow; onOpen: () => void }) {
       </span>
       <span className="iw-job-owner">
         <Avatar name={j.assignee} size={26} />
-        <span>{j.assignee}</span>
+        {/* P80: cut to fit on a phone; the full name on hover. */}
+        <span title={j.assignee}>{j.assignee}</span>
       </span>
       <span className="iw-job-due">
         <span className="iw-job-due-label">Due</span> {dateLabel(j.dueOn)}

@@ -24,6 +24,7 @@ import hashlib
 import hmac
 import json
 import re
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -312,13 +313,27 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     """This person's Prima record. Made here, the first time they open Prima, when the match is
     sure (people.suggestions): the record IT gave their verified Microsoft account, else the
     only record with exactly their name while nobody else in the office has it. The owner sees
-    and can change every link on the Prima page."""
+    and can change every link on the Prima page. P82: every owner, and the developer, opens
+    Prima as its top record with no link (opens_as_top)."""
     from . import people  # late: people builds on this module
 
-    # P70: Prima and the office are one system, and Prima knows people by their Microsoft work
-    # account: no way in (screens or the AI) until the person has connected it in the office.
     m = await db.get(Membership, (workspace_id, user_id))
-    if m is None or not m.ms_oid:
+    if m is not None and opens_as_top(m):
+        top = await top_record()
+        if top is not None:
+            await _let_go(db, workspace_id, user_id)
+            return PrimaLink(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                prima_user_id=top.id,
+                prima_name=top.name[:200],
+                how="owner",
+                linked_by=TOP_LINK,
+            )
+        # Prima has no top record: the owner opens it by their own link, as anyone else.
+    elif m is None or not m.ms_oid:
+        # P70: Prima and the office are one system, and Prima knows people by their Microsoft
+        # work account: no way in (screens or the AI) until the person has connected it here.
         raise PrimaError(
             403,
             Msg(
@@ -328,33 +343,22 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
             code="microsoft_needed",
         )
     link = await db.get(PrimaLink, (workspace_id, user_id))
-    if link is not None and (m.role != "owner" or link.how == "owner"):
-        return link
     if link is not None:
-        # P78: the owner runs the company, so they always open Prima as its top record (CEO,
-        # else COO). A link made before that rule, or before Prima was reinstalled, would open
-        # it as an ordinary staff record with no access: moved to the top record once.
-        return await _owner_to_top(db, link)
+        return link
     records = matchable(await staff())
     persons = await people.people(db, workspace_id)
     rid = people.suggestions(persons, records).get(user_id)
     record = next((r for r in records if r.id == rid), None)
     me = next((p for p in persons if p.user_id == user_id), None)
-    if me is None:
+    if me is None or m is None:
         raise _not_linked()
     if record is None:
-        # P75: no record of their own in Prima: they get one, from their office role. The
+        # P75: no record of their own in Prima: they get one, from their office role. An
         # owner opens Prima as its top record (P74), never as a made account.
         if me.role == "owner":
             raise _not_linked()
         return await _own_account(db, m, me.name, me.email)
-    how = (
-        "microsoft"
-        if me.ms_oid and record.entra_oid == me.ms_oid
-        else "owner"
-        if me.role == "owner" and record.top
-        else "name"
-    )
+    how = "microsoft" if me.ms_oid and record.entra_oid == me.ms_oid else "name"
     link = PrimaLink(
         workspace_id=workspace_id,
         user_id=user_id,
@@ -385,42 +389,55 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     return link
 
 
-async def _owner_to_top(db: AsyncSession, link: PrimaLink) -> PrimaLink:
-    """P78: the owner's link, moved to Prima's top record (CEO, else COO) when it is not on one.
-    Left as it is when Prima has no top record or another person already holds it (the owner
-    can move it on the Prima page)."""
-    records = await staff()
+# P82: every office owner, and the system's developer, opens Prima as its top record (the CEO,
+# else the COO): they run the company. No link, no Microsoft step, and several people may share
+# that record; the office's audit log says which of them recorded what (call). The top record
+# is asked of Prima at most every TOP_TTL seconds, not on every call.
+TOP_LINK = "auto:top"  # linked_by of the link link_for hands back for them (never saved)
+TOP_TTL = 300.0
+_TOP: dict[str, tuple[float, StaffRecord | None]] = {}
+
+
+def opens_as_top(m: Membership) -> bool:
+    """An owner, or the developer (deps.is_developer: an owner the operator marked)."""
+    from ..api.deps import is_developer  # late: the api builds on this module
+
+    return m.role == "owner" or is_developer(m.user, m.role)
+
+
+def top_of(records: list[StaffRecord]) -> StaffRecord | None:
+    """Prima's top record: its CEO, else its COO, else none."""
     tops = sorted((r for r in records if r.top), key=lambda r: 0 if r.top == "ceo" else 1)
-    if not tops:
-        return link
-    top = tops[0]
-    if link.prima_user_id == top.id:
-        link.how = "owner"
-        await db.commit()
-        return link
-    holder = await db.scalar(
-        select(PrimaLink).where(
-            PrimaLink.workspace_id == link.workspace_id,
-            PrimaLink.prima_user_id == top.id,
-        )
-    )
-    if holder is not None:
-        return link
-    before = link.prima_user_id
-    link.prima_user_id = top.id
-    link.prima_name = top.name[:200]
-    link.how = "owner"
-    link.linked_by = "auto:owner"
+    return tops[0] if tops else None
+
+
+async def top_record() -> StaffRecord | None:
+    now = time.monotonic()
+    hit = _TOP.get(settings.prima_url)
+    if hit is not None and now - hit[0] < TOP_TTL:
+        return hit[1]
+    top = top_of(await staff())
+    _TOP[settings.prima_url] = (now, top)
+    return top
+
+
+async def _let_go(db: AsyncSession, workspace_id: str, user_id: str) -> None:
+    """An owner's own link from before P82 (a staff record by name, or the top record itself)
+    is let go once, so that record is free for its own person."""
+    old = await db.get(PrimaLink, (workspace_id, user_id))
+    if old is None:
+        return
+    await db.delete(old)
     await audit.record(
         db,
-        link.workspace_id,
+        workspace_id,
         "system:prima",
-        "prima.link",
-        target=link.user_id,
-        note=f"The owner opens Prima as its top record {top.id} (was {before})",
+        "prima.unlink",
+        target=user_id,
+        before={"prima_user_id": old.prima_user_id},
+        note="Owners open Prima as its top record, with no link of their own",
     )
     await db.commit()
-    return link
 
 
 def via_agent(name: str) -> str:
@@ -492,4 +509,18 @@ async def call(
         raise PrimaError(413, Msg("That is too large for Prima (3 MB at most)."))
     url = clean_path(path, query)
     link = await link_for(db, workspace_id, user_id)
-    return await _send(method, url, link.prima_user_id, via, body, client_ip)
+    ans = await _send(method, url, link.prima_user_id, via, body, client_ip)
+    if link.linked_by == TOP_LINK and method == "POST":
+        # P82: several people share the top record, and Prima's office.ts takes only "person"
+        # or "agent:<name>" as `via`, so Prima's own log names the record. The office's log
+        # names the person: every record made through the shared record, by whom and how.
+        await audit.record(
+            db,
+            workspace_id,
+            f"user:{user_id}",
+            "prima.recorded",
+            target=link.prima_user_id,
+            after={"path": url.split("?", 1)[0], "via": via, "status": ans.status},
+        )
+        await db.commit()
+    return ans

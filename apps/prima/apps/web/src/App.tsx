@@ -1028,7 +1028,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </div>
           )}
           <header className="topbar">
-            {companyScoped && isGroup ? (
+            {/* P80: no company list to pick from (central staff with no company): the group's name, not an empty box. */}
+            {companyScoped && isGroup && me.companies.length > 0 ? (
               <label className="row" style={{ gap: 6 }}>
                 <span className="label">Company</span>
                 <select id="company-select" className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
@@ -1051,7 +1052,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                 </select>
               </label>
             ) : (
-              <strong>{companyScoped || route.view === 'device' ? company?.name : 'PWVSB Security Group'}</strong>
+              <strong>{(companyScoped || route.view === 'device') && company ? company.name : 'PWVSB Security Group'}</strong>
             )}
             <span className="grow" />
             <span className="muted small hide-sm">{dept === 'it' ? 'Merdeka Network' : ROLE_LABEL[role]}</span>

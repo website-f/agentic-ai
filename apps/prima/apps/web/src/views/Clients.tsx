@@ -3,7 +3,7 @@ import { BuildingsIcon, PlusIcon, SmileyIcon, UsersThreeIcon, WarningIcon } from
 import type { ProofInput } from '@prima/core';
 import { api, type ClientBoard, type ClientShareReport } from '../api';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
-import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, humanize, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
@@ -891,9 +891,9 @@ function SharePreview({ r, onClose }: { r: ClientShareReport; onClose: () => voi
                     <td className="mono">{c.ref}</td>
                     <td>{dateLabel(c.on)}</td>
                     <td>{c.site}</td>
-                    <td>{c.kind}</td>
+                    <td>{humanize(c.kind)}</td>
                     <td>{c.severity}</td>
-                    <td>{c.status}</td>
+                    <td>{humanize(c.status)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -42,6 +42,8 @@ import { Card, Stat, Stats } from '../kit';
 // Growth panel on the leaders' home (Fauzan, 3 Nov 2026, "Recommended set"): is the group growing, and which company
 // is pulling it down. Read only. A figure with no source recorded shows Unknown, never zero; never a ranking of people.
 
+// P80: inside a sentence an unknown amount reads "Unknown", not the record's UNKNOWN.
+const unk = (v: string) => (v === 'UNKNOWN' ? 'Unknown' : v);
 const rmK = (n: number | null | undefined) => (n == null ? 'UNKNOWN' : `RM${Math.round(n / 1000).toLocaleString('en-MY')}k`);
 const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n: number | null) => (n == null ? 'Unknown' : `${n > 0 ? '+' : ''}${n}%`);
@@ -138,7 +140,7 @@ export function GrowthPanel() {
           label="Contracts ending in 90 days"
           value={g.ending90Count ?? 'UNKNOWN'}
           tone={g.ending90Count == null ? 'neutral' : g.ending90Count ? 'warn' : 'ok'}
-          note={g.ending90Count == null ? 'No contracts recorded in Prima yet' : `${rmK(g.ending90Monthly)} a month to renew or replace · ${of(g.known.contracts)}`}
+          note={g.ending90Count == null ? 'No contracts recorded in Prima yet' : `${unk(rmK(g.ending90Monthly))} a month to renew or replace · ${of(g.known.contracts)}`}
         />
         <Fig
           label="Sales pipeline"
@@ -183,7 +185,7 @@ export function GrowthPanel() {
                 label={`${s.sector === 'government' ? 'Government' : 'Private'} sites margin, ${margin.month}`}
                 value={s.error ? s.error : s.known ? (s.marginPct == null ? 'UNKNOWN' : `${s.marginPct}%`) : 'UNKNOWN'}
                 tone={s.error || !s.known ? 'neutral' : s.lossSites ? 'warn' : 'ok'}
-                note={s.error ? undefined : `${s.known} of ${s.sites} sites complete${s.known ? ` · ${rmK(s.margin)} on ${rmK(s.revenue)} · ${s.lossSites} losing money` : ''}`}
+                note={s.error ? undefined : `${s.known} of ${s.sites} sites complete${s.known ? ` · ${unk(rmK(s.margin))} on ${unk(rmK(s.revenue))} · ${s.lossSites} losing money` : ''}`}
               />
             ))}
           </Stats>

@@ -22,37 +22,44 @@ function Say({ text, block = false }: { text: Text; block?: boolean }) {
   );
 }
 
-const STATUS: Record<GuideCardItem['status'], [string, 'ok' | 'warn' | 'unknown']> = {
-  ready: ['Sedia / Ready', 'ok'],
-  partial: ['Sebahagian / Partly built', 'warn'],
-  not_built: ['Belum dibina / Not built', 'unknown'],
-  off: ['Dimatikan di sini / Switched off here', 'unknown'],
+/** P80: a fixed label in the chosen language; both ("BM / EN") only in BM + English. */
+function useL() {
+  const { lang } = useLang();
+  return (bm: string, en: string) => (lang === 'en' ? en : lang === 'ms' ? bm : `${bm} / ${en}`);
+}
+
+const STATUS: Record<GuideCardItem['status'], [string, string, 'ok' | 'warn' | 'unknown']> = {
+  ready: ['Sedia', 'Ready', 'ok'],
+  partial: ['Sebahagian', 'Partly built', 'warn'],
+  not_built: ['Belum dibina', 'Not built', 'unknown'],
+  off: ['Dimatikan di sini', 'Switched off here', 'unknown'],
 };
 
 export function GuideCardView({ card, open: startOpen = false }: { card: GuideCardItem; open?: boolean }) {
   const [open, setOpen] = useState(startOpen);
+  const L = useL();
   return (
-    <article className="card" aria-label={card.title.en}>
+    <article className="card" aria-label={card.title.en} data-no-translate>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button className="link-button" aria-expanded={open} onClick={() => setOpen(!open)}>
           <Say text={card.title} />
         </button>
-        <Chip tone={STATUS[card.status][1]}>{STATUS[card.status][0]}</Chip>
+        <Chip tone={STATUS[card.status][2]}>{L(STATUS[card.status][0], STATUS[card.status][1])}</Chip>
       </div>
       {open && (
         <div className="small" style={{ display: 'grid', gap: 6, marginTop: 6 }}>
           <Say block text={card.purpose} />
           <div>
-            <strong>Siapa / Who:</strong> <Say text={card.who} />
+            <strong>{L('Siapa', 'Who')}:</strong> <Say text={card.who} />
           </div>
           <div>
-            <strong>Skrin / Screen:</strong> {card.screen.name}. <Say text={card.screen.action} />
+            <strong>{L('Skrin', 'Screen')}:</strong> {card.screen.name}. <Say text={card.screen.action} />
           </div>
           <div className="notice" data-tone="info">
-            <strong>Kunci sekali, guna semula / Entered once, reused:</strong> <Say text={card.enteredOnce} />
+            <strong>{L('Kunci sekali, guna semula', 'Entered once, reused')}:</strong> <Say text={card.enteredOnce} />
             {card.feeds.length > 0 && (
               <div>
-                Dihantar terus kepada / Sent on to: {card.feeds.map((f) => `${f.desk}${f.kind === 'todo' ? ' (tugas / to do)' : ''}`).join(', ')}.
+                {L('Dihantar terus kepada', 'Sent on to')}: {card.feeds.map((f) => `${f.desk}${f.kind === 'todo' ? ` (${L('tugas', 'to do')})` : ''}`).join(', ')}.
               </div>
             )}
           </div>
@@ -60,9 +67,9 @@ export function GuideCardView({ card, open: startOpen = false }: { card: GuideCa
             <table className="table">
               <thead>
                 <tr>
-                  <th>Medan / Field</th>
+                  <th>{L('Medan', 'Field')}</th>
                   <th>Format</th>
-                  <th>Contoh / Example</th>
+                  <th>{L('Contoh', 'Example')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -77,7 +84,7 @@ export function GuideCardView({ card, open: startOpen = false }: { card: GuideCa
                       {f.choices ? ` ${f.choices.join(' / ')}` : ''}
                       {f.rule && (
                         <div>
-                          <strong>Peraturan / Rule:</strong> <Say text={f.rule} />
+                          <strong>{L('Peraturan', 'Rule')}:</strong> <Say text={f.rule} />
                         </div>
                       )}
                     </td>
@@ -89,7 +96,7 @@ export function GuideCardView({ card, open: startOpen = false }: { card: GuideCa
           )}
           {card.sources.map((s, i) => (
             <div key={i}>
-              <strong>Sumber / Source:</strong> <Say text={s.what} /> <strong>Tanya / Ask:</strong> {s.askDeskName}.
+              <strong>{L('Sumber', 'Source')}:</strong> <Say text={s.what} /> <strong>{L('Tanya', 'Ask')}:</strong> {s.askDeskName}.
             </div>
           ))}
           <ol style={{ margin: 0 }}>
@@ -114,7 +121,7 @@ export function GuideCardView({ card, open: startOpen = false }: { card: GuideCa
               <Say text={n} />
             </p>
           ))}
-          <p className="muted">Panduan sahaja; tiada apa disimpan dari sini. / Guidance only; nothing is saved from here. v{card.version}</p>
+          <p className="muted">{L('Panduan sahaja; tiada apa disimpan dari sini.', 'Guidance only; nothing is saved from here.')}</p>
         </div>
       )}
     </article>
@@ -124,14 +131,15 @@ export function GuideCardView({ card, open: startOpen = false }: { card: GuideCa
 /** All my cards (Hand-overs, Guide tab). */
 export function MyGuide() {
   const { data, error } = useLoad(() => api.org.guide(), []);
+  const L = useL();
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="your guide" />;
   return (
     <>
-      <p className="muted">
-        Tugas yang anda dibenarkan sahaja. / Only the tasks you are allowed to do. Versi / Version {data.version}.
+      <p className="muted" data-no-translate title={data.version}>
+        {L('Tugas yang anda dibenarkan sahaja.', 'Only the tasks you are allowed to do.')}
       </p>
-      {!data.cards.length && <p className="muted">Tiada tugas untuk dipandu. / No tasks to guide.</p>}
+      {!data.cards.length && <p className="muted" data-no-translate>{L('Tiada tugas untuk dipandu.', 'No tasks to guide.')}</p>}
       <div className="list">
         {data.cards.map((c) => (
           <GuideCardView key={c.id} card={c} />

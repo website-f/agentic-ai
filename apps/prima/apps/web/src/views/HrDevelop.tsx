@@ -476,7 +476,7 @@ export function HrLegalPanel() {
               </div>
               <div className="hx-row-body">
                 <p className="hx-row-text">{r.issue}</p>
-                <p className="hx-row-meta">Sources: {r.sources.join("; ")}</p>
+                <p className="hx-row-meta">Sources: {readableSources(r.sources)}</p>
                 {r.affected.sample.length > 0 && (
                   <p className="hx-row-meta">
                     Includes: {r.affected.sample.map((x) => x.name).join(", ")}
@@ -732,8 +732,8 @@ export function GuardTrainingPanel() {
                 <Person name={r.name} sub={`${r.staffNo} · ${r.courses} other course${r.courses === 1 ? "" : "s"}`} size={34} />
               </div>
               <div className="hx-row-side">
-                <Chip tone={tone(r.kdn.level)}>{r.kdn.chip ?? (r.kdn.level === "ok" ? `KDN to ${r.kdn.expiresOn ? dateLabel(r.kdn.expiresOn) : "?"}` : "KDN")}</Chip>
-                <Chip tone={tone(r.csg.level)}>{r.csg.chip ?? (r.csg.level === "ok" ? "CSG done" : "CSG")}</Chip>
+                <Chip tone={tone(r.kdn.level)}>{r.kdn.chip ?? (r.kdn.level === "ok" ? (r.kdn.expiresOn ? `KDN to ${dateLabel(r.kdn.expiresOn)}` : "KDN held, no expiry date") : r.kdn.level === "block" ? "KDN card not valid" : "KDN to check")}</Chip>
+                <Chip tone={tone(r.csg.level)}>{r.csg.chip ?? (r.csg.level === "ok" ? "CSG done" : r.csg.level === "block" ? "CSG not done" : "CSG due")}</Chip>
                 {r.tng && <Chip tone="ok">TNG</Chip>}
                 {r.canManage && (
                   <button className="btn btn-sm" aria-expanded={open === r.personId} onClick={() => (setOpen(open === r.personId ? null : r.personId), setF({}))}>
@@ -824,4 +824,16 @@ export function GuardTrainingPanel() {
       )}
     </Card>
   );
+}
+
+/**
+ * P80: sources as people read them. Laws and agreements stay; the builders' file names (docs/HR_PHASE3.md) are dropped
+ * and a record store (prima.staff_faces) is named as Prima's records.
+ */
+function readableSources(sources: string[]): string {
+  const out = sources
+    .map((s) => s.replace(/\bdocs\/[\w./-]+\.md,?\s*/g, '').trim())
+    .flatMap((s) => (/^prima\.[a-z_]+(, prima\.[a-z_]+)*$/.test(s) ? s.split(', ').map((x) => `Prima's ${x.slice(6).replace(/_/g, ' ')} records`) : [s]))
+    .filter(Boolean);
+  return out.length ? [...new Set(out)].join('; ') : 'Prima records';
 }

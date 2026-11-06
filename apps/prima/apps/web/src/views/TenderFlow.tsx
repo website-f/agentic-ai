@@ -501,7 +501,8 @@ export function PriorityChip({ p }: { p: Row['priority'] }) {
   if (!p || !p.level) return null;
   return (
     <Chip tone={p.level === 'URGENT' ? 'crit' : 'warn'} title={`${p.days} days to the ${p.what}`}>
-      {p.level === 'URGENT' ? 'URGENT' : 'SHORT WINDOW'} · {p.days <= 0 ? 'today' : `${p.days}d`} to {p.what}
+      {/* P80: words, not the guide's capitals and "6d": "Short window · 6 days to closing". */}
+      {p.level === 'URGENT' ? 'Urgent' : 'Short window'} · {p.days <= 0 ? `${p.what} today` : `${p.days} day${p.days === 1 ? '' : 's'} to ${p.what}`}
     </Chip>
   );
 }

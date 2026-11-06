@@ -132,6 +132,31 @@ export function dateTimeLabel(t: string): string {
   return `${dateLabel(t)}, ${hhmm(t)}`;
 }
 
+/** P80: an amount as people read it: "RM1,234.50"; nothing recorded is a dash, never "RMNaN". */
+export function money(v: number | null | undefined, opts: { whole?: boolean } = {}): string {
+  if (v == null || !Number.isFinite(v)) return '–';
+  const d = opts.whole ? 0 : 2;
+  return `RM${v.toLocaleString('en-MY', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+}
+
+const ACRONYMS = new Set(['ok', 'cms', 'it', 'hr', 'pdpa', 'ja', 'socso', 'fwm', 'doa', 'grc', 'ai', 'id', 'ic', 'mof', 'ssm', 'kpkt', 'cos', 'coo', 'ceo', 'om', 'ogm', 'po', 'pr', 'nfc', 'gps', 'sop', 'kpi', 'bg', 'ib', 'lhdn', 'epf', 'eis', 'pcb', 'sst', 'cctv', 'vpn', 'm365']);
+/**
+ * P80: a computer's key as words people read: "OUT_OF_AREA" is "Out of area", "cms.visit_update" is "CMS: visit
+ * update", "on_time" is "On time". Use it only where a screen has no proper label for the key.
+ */
+export function humanize(key: string | null | undefined): string {
+  if (!key) return '–';
+  const word = (w: string, i: number) => (ACRONYMS.has(w) ? w.toUpperCase() : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w);
+  const part = (p: string) =>
+    p
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((w, i) => word(w.toLowerCase(), i))
+      .join(' ');
+  return key.split('.').map(part).join(': ');
+}
+
 export function n(v: number | 'UNKNOWN'): string {
   return v === 'UNKNOWN' ? 'Unknown' : v.toLocaleString('en-MY');
 }
@@ -140,10 +165,21 @@ export function n(v: number | 'UNKNOWN'): string {
 
 export type Tone = 'ok' | 'warn' | 'crit' | 'unknown' | 'neutral' | 'info';
 
+const ENUM_WORDS = new Set(['UNKNOWN', 'PENDING', 'APPROVED', 'REJECTED', 'OVERDUE', 'DRAFT', 'ACTIVE', 'CLOSED', 'DONE', 'SUBMITTED', 'CANCELLED', 'EXPIRED', 'VALID', 'PAID', 'UNPAID', 'ISSUED', 'RETURNED', 'OPEN']);
+/** P80: a status passed straight from a record ("acknowledged", "on_time", "OUT_OF_AREA") reads as words. */
+export function chipText(c: ReactNode): ReactNode {
+  if (typeof c !== 'string') return c;
+  if (/^[a-z]+(?:_[a-z]+)*$/.test(c)) return humanize(c);
+  if (/^[A-Z]+(?:_[A-Z]+)+$/.test(c) || ENUM_WORDS.has(c)) return humanize(c.toLowerCase());
+  return c;
+}
+
 export function Chip({ tone, children, title }: { tone: Tone; children: ReactNode; title?: string }) {
+  const text = chipText(children);
   return (
-    <span className="chip" data-tone={tone} title={title}>
-      {children}
+    // P80: a chip cut short in a narrow column still says its full text on hover.
+    <span className="chip" data-tone={tone} title={title ?? (typeof text === 'string' ? text : undefined)}>
+      {text}
     </span>
   );
 }
@@ -175,7 +211,9 @@ export function Kpi({ label, value, note, tone }: { label: string; value: number
   return (
     <div className="kpi" data-tone={value === 'UNKNOWN' ? 'unknown' : tone}>
       <span className="label">{label}</span>
-      <span className="kpi-value">{typeof value === 'number' || value === 'UNKNOWN' ? n(value) : value}</span>
+      <span className="kpi-value" data-text={value === 'UNKNOWN' || (typeof value === 'string' && !/\d/.test(value) && value.length > 3) || undefined}>
+        {typeof value === 'number' || value === 'UNKNOWN' ? n(value) : value}
+      </span>
       {note && <span className="kpi-note">{note}</span>}
     </div>
   );

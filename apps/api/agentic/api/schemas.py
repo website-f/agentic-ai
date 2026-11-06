@@ -100,6 +100,48 @@ class MemberOut(BaseModel):
     department_id: str | None = None
     department_name: str | None = None
     agents: int = 0  # personal agents
+    microsoft: bool = False  # P82: signed in with their Microsoft work account here
+
+
+class MembersSummary(BaseModel):
+    """P82: the whole list the reader may see (filters and search left out)."""
+
+    members: int
+    owners_admins: int
+    temp_password: int
+    microsoft: int
+    agents: int
+    roles: dict[str, int]
+
+
+class MembersPageOut(BaseModel):
+    """P82: one page of members (GET /api/members?page=...)."""
+
+    items: list[MemberOut]
+    total: int  # matching the filters and search
+    page: int
+    page_size: int
+    summary: MembersSummary
+
+
+class MembersBulkIn(BaseModel):
+    user_ids: list[str] = Field(min_length=1, max_length=100)
+    action: Literal["remove", "access"]
+    role: Role | None = None
+    branch_id: str | None = None
+    department_id: str | None = None
+
+
+class MembersBulkResult(BaseModel):
+    user_id: str
+    ok: bool
+    message: str | None = None
+
+
+class MembersBulkOut(BaseModel):
+    results: list[MembersBulkResult]
+    done: int
+    skipped: int
 
 
 class MemberCreateIn(BaseModel):

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { centralAdminGuideFor, type GuideCard } from '@prima/core';
 import { useApp } from '../App';
 import { useLang } from '../i18n';
+import { dateLabel } from '../ui';
 
 /**
  * Guide cards for Central Admin tasks (Arisha main review, 2 Nov 2026): Bahasa Melayu first with matching English,
@@ -14,9 +15,13 @@ export function CentralAdminGuide({ view, tab }: { view: GuideCard['view']; tab?
   const g = centralAdminGuideFor(me.user, view);
   const cards = g.cards.filter((c) => !tab || !c.tab || c.tab === tab);
   if (!cards.length) return null;
-  const both = lang !== 'en';
+  // P80: one language when the person chose one (Bahasa Melayu or English); both side by side only in BM + English.
+  const both = lang === 'mix';
+  const bm = lang !== 'en';
   const say = (x: { ms: string; en: string }) =>
-    both ? (
+    lang === 'ms' ? (
+      x.ms
+    ) : both ? (
       <>
         {x.ms}
         <span className="muted"> · {x.en}</span>
@@ -27,36 +32,40 @@ export function CentralAdminGuide({ view, tab }: { view: GuideCard['view']; tab?
   return (
     <details className="notice" data-tone="info" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} aria-label="Panduan / Guide">
       <summary>
-        {both ? 'Panduan langkah demi langkah' : 'Step-by-step guide'} ({cards.length}) <span className="muted small">{g.version}</span>
+        {lang !== 'en' ? 'Panduan langkah demi langkah' : 'Step-by-step guide'} ({cards.length}){' '}
+        {/* P80: the guide's date, not its version code ("central-admin-guide 2026-11-03.1"). */}
+        <span className="muted small" title={g.version}>
+          {guideDate(g.version, lang !== 'en')}
+        </span>
       </summary>
       {cards.map((c) => (
         <article key={c.id} className="small" style={{ marginTop: 8 }}>
           <strong>{say(c.title)}</strong>
           <p>{say(c.purpose)}</p>
           <p>
-            <b>{both ? 'Siapa' : 'Who'}:</b> {say(c.responsible)}
+            <b>{bm ? 'Siapa' : 'Who'}:</b> {say(c.responsible)}
           </p>
           <p>
-            <b>{both ? 'Di mana' : 'Where'}:</b> {say(c.where)}
+            <b>{bm ? 'Di mana' : 'Where'}:</b> {say(c.where)}
           </p>
           {c.fields.length > 0 && (
             <ul>
               {c.fields.map((f, i) => (
                 <li key={i}>
-                  {say(f.name)} {f.required ? (both ? '(wajib)' : '(required)') : both ? '(pilihan)' : '(optional)'}: {say(f.format)}.{' '}
-                  {both ? 'Contoh' : 'Example'}: {f.example}
+                  {say(f.name)} {f.required ? (bm ? '(wajib)' : '(required)') : bm ? '(pilihan)' : '(optional)'}: {say(f.format)}.{' '}
+                  {bm ? 'Contoh' : 'Example'}: {f.example}
                 </li>
               ))}
             </ul>
           )}
           <p>
-            <b>{both ? 'Dokumen sumber' : 'Source document'}:</b> {say(c.source)}
+            <b>{bm ? 'Dokumen sumber' : 'Source document'}:</b> {say(c.source)}
           </p>
           <p>
-            <b>{both ? 'Tanya' : 'Ask'}:</b> {say(c.ask)}
+            <b>{bm ? 'Tanya' : 'Ask'}:</b> {say(c.ask)}
           </p>
           <p>
-            <b>{both ? 'Kunci sekali' : 'Key once'}:</b> {say(c.reuse)}
+            <b>{bm ? 'Kunci sekali' : 'Key once'}:</b> {say(c.reuse)}
           </p>
           <ol>
             {c.steps.map((s, i) => (
@@ -64,19 +73,24 @@ export function CentralAdminGuide({ view, tab }: { view: GuideCard['view']; tab?
             ))}
           </ol>
           <p>
-            <b>{both ? 'Dipulangkan' : 'Sent back'}:</b> {say(c.returned)}
+            <b>{bm ? 'Dipulangkan' : 'Sent back'}:</b> {say(c.returned)}
           </p>
           <p>
-            <b>{both ? 'Bukti selesai' : 'Done evidence'}:</b> {say(c.evidence)}
+            <b>{bm ? 'Bukti selesai' : 'Done evidence'}:</b> {say(c.evidence)}
           </p>
           <p>
-            <b>{both ? 'Jika ada ralat' : 'If something fails'}:</b> {say(c.recover)}
+            <b>{bm ? 'Jika ada ralat' : 'If something fails'}:</b> {say(c.recover)}
           </p>
           <p className="muted">
-            <b>{both ? 'Had' : 'Limits'}:</b> {say(c.limits)}
+            <b>{bm ? 'Had' : 'Limits'}:</b> {say(c.limits)}
           </p>
         </article>
       ))}
     </details>
   );
+}
+
+function guideDate(version: string, ms: boolean): string {
+  const d = version.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+  return d ? `${ms ? 'Dikemas kini' : 'Updated'} ${dateLabel(d)}` : '';
 }

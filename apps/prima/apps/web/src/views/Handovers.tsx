@@ -70,7 +70,8 @@ export function HandoversView() {
         {(
           [
             ['mine', 'My hand-overs'],
-            ['guide', 'Panduan / Guide'],
+            // P80: one language at a time; the translator shows Panduan in Bahasa Melayu.
+            ['guide', 'Guide'],
             ['map', 'How departments connect'],
             ['import', 'Import existing records'],
           ] as [Tab, string][]

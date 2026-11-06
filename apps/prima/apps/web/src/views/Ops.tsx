@@ -6,7 +6,7 @@ import { LeavePanel } from './Leave';
 import { GovOpsMonitorPanel } from './GovOps';
 import { ManagementFeeBillsPanel } from './ManagementFees';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
-import { Chip, ErrorNotice, Loading, dayLabel, hhmm, useLoad } from '../ui';
+import { Chip, ErrorNotice, Loading, dayLabel, hhmm, money, useLoad } from '../ui';
 import '../styles/ops.css';
 
 type Item = RegionalOps['attention'][number];
@@ -168,20 +168,24 @@ export function OpsView() {
                   <Num v={r.blockedNext7} tone="crit" hide />
                 </tr>
               ))}
-              {t.unknownCompanies > 0 && (
-                <tr>
-                  <td colSpan={8} className="muted small">
-                    Unknown, site data not loaded yet:{' '}
-                    {data.rows
-                      .filter((r) => !r.hasDetail)
-                      .map((r) => r.company.code)
-                      .join(', ')}
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+        {/* P80: the companies with no data by name, not by code (C04, C05), below the table so a phone does not
+            scroll sideways to read them; the list opens on request. */}
+        {t.unknownCompanies > 0 && (
+          <details className="op-unknown muted small">
+            <summary>
+              {t.unknownCompanies} {t.unknownCompanies === 1 ? 'company has' : 'companies have'} no site data in Prima yet, so their numbers are unknown
+            </summary>
+            <p>
+              {data.rows
+                .filter((r) => !r.hasDetail)
+                .map((r) => r.company.name)
+                .join(', ')}
+            </p>
+          </details>
+        )}
       </Card>
 
       <div className="op-stack">
@@ -201,7 +205,9 @@ export function OpsView() {
               <tbody>
                 {detailed.map((r) => (
                   <tr key={r.company.id}>
-                    <td>{r.company.code}</td>
+                    <td className="op-heat-co" title={r.company.name}>
+                      {r.company.name}
+                    </td>
                     {r.unfilledByDay.map((v, i) => (
                       <Num key={i} v={v} tone="warn" />
                     ))}
@@ -227,7 +233,7 @@ export function OpsView() {
                     {p.shares.length > 0 && (
                       <span className="op-co">
                         Salary shared by guards:{' '}
-                        {p.shares.map((x) => `${x.company.split(' ')[0]} ${x.pct}%${x.amount != null ? ` (RM${x.amount.toFixed(2)})` : ''}`).join(', ')}
+                        {p.shares.map((x) => `${x.company.split(' ')[0]} ${x.pct}%${x.amount != null ? ` (${money(x.amount)})` : ''}`).join(', ')}
                       </span>
                     )}
                   </div>

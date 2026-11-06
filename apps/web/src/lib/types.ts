@@ -49,6 +49,8 @@ export interface Member {
   department_name?: string | null;
   agents?: number;
   joined_at: string;
+  /** P82: signed in with their Microsoft work account here. */
+  microsoft?: boolean;
 }
 
 export interface Department {

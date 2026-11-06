@@ -631,7 +631,8 @@ function CompanyDrawer({
 function KeyNumbers({ onGo }: { onGo: () => void }) {
   const { data } = useLoad(() => api.finDashboard().catch(() => null), []);
   if (!data || !data.rows.length) return null;
-  const k = (n: number) => `RM${(n / 1000).toLocaleString('en-MY', { maximumFractionDigits: 0 })}k`;
+  // P80: under RM1,000 is shown in full (RM0, RM450), not as "RM0k".
+  const k = (n: number) => (Math.abs(n) < 1000 ? `RM${Math.round(n).toLocaleString('en-MY')}` : `RM${(n / 1000).toLocaleString('en-MY', { maximumFractionDigits: 0 })}k`);
   // No statement or ageing for the month is unknown, never zero.
   const cashUnknown = data.rows.filter((r) => r.cash == null).length;
   const ageUnknown = data.rows.filter((r) => r.over90 == null).length;
@@ -680,7 +681,7 @@ function KeyNumbers({ onGo }: { onGo: () => void }) {
               <span>{x.label}</span>
               <span className="muted small">{x.note}</span>
             </span>
-            <span className="fin-kv-value">{x.value}</span>
+            <span className="fin-kv-value">{x.value === 'UNKNOWN' ? 'Unknown' : x.value}</span>
           </div>
         ))}
       </div>

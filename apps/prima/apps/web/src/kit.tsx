@@ -43,7 +43,8 @@ export function Stat({ label, value, note, tone, icon, onClick }: {
         {icon && <span className="k-stat-icon" aria-hidden="true">{icon}</span>}
         <span className="k-stat-label">{label}</span>
       </span>
-      <span className="k-stat-value">{value}</span>
+      {/* P80: a word in place of a number (Unknown, Not set) is set smaller so it never breaks inside the word. */}
+      <span className="k-stat-value" data-text={isWord(value) || undefined}>{value === 'UNKNOWN' ? 'Unknown' : value}</span>
       {note && <span className="k-stat-note">{note}</span>}
     </>
   );
@@ -56,6 +57,11 @@ export function Stat({ label, value, note, tone, icon, onClick }: {
       {body}
     </div>
   );
+}
+
+/** A value that is words, not a number or an amount. */
+export function isWord(v: ReactNode): boolean {
+  return typeof v === 'string' && !/\d/.test(v) && v.length > 3;
 }
 
 export function Toolbar({ children, end }: { children: ReactNode; end?: ReactNode }) {
@@ -126,8 +132,9 @@ export function Person({ name, sub, size }: { name: string; sub?: ReactNode; siz
     <span className="k-person">
       <Avatar name={name} size={size} />
       <span className="k-person-text">
-        <span className="k-person-name">{name}</span>
-        {sub && <span className="k-person-sub">{sub}</span>}
+        {/* P80: a long name or line is cut to fit; the full text shows on hover. */}
+        <span className="k-person-name" title={name}>{name}</span>
+        {sub && <span className="k-person-sub" title={typeof sub === 'string' ? sub : undefined}>{sub}</span>}
       </span>
     </span>
   );

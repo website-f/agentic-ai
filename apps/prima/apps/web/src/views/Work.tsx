@@ -40,7 +40,7 @@ const SCORE: Record<ScoreState, { label: string; tone: Tone }> = {
   green: { label: 'Green', tone: 'ok' },
   amber: { label: 'Amber', tone: 'warn' },
   red: { label: 'Red', tone: 'crit' },
-  unknown: { label: 'UNKNOWN', tone: 'neutral' },
+  unknown: { label: 'Unknown', tone: 'neutral' },
 };
 const EVERY = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' } as const;
 const WEEKDAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -571,7 +571,7 @@ function Results({ m }: { m: MyWork['measures'] }) {
       title="Results, last 4 weeks"
       actions={
         <Chip tone={m.atStandard === null ? 'neutral' : m.atStandard ? 'ok' : 'warn'}>
-          {m.atStandard === null ? 'UNKNOWN: no tasks due yet' : m.atStandard ? 'At standard' : 'Below standard'}
+          {m.atStandard === null ? 'Unknown: no tasks due yet' : m.atStandard ? 'At standard' : 'Below standard'}
         </Chip>
       }
       flush
@@ -596,7 +596,7 @@ function Results({ m }: { m: MyWork['measures'] }) {
               <tr key={w.week}>
                 <td>{dateLabel(w.week)}</td>
                 <td className="num">{w.due}</td>
-                <td className="num">{w.onTimePct === null ? 'UNKNOWN' : `${w.onTimePct}%`}</td>
+                <td className="num">{w.onTimePct === null ? 'Unknown' : `${w.onTimePct}%`}</td>
                 <td className="num">{w.returned}</td>
                 {w.measures.map((x) => (
                   <td key={x.id} className="num">
@@ -764,7 +764,7 @@ function TeamTab({ data }: { data: TeamWork }) {
                     {p.openHelp > 0 && <Chip tone="warn">Asked for help</Chip>}
                     {p.oneOnOneDue && <Chip tone="neutral">One-to-one due</Chip>}
                     <Chip tone={p.atStandard === null ? 'neutral' : p.atStandard ? 'ok' : 'warn'}>
-                      {p.onTimePct === null ? 'Results UNKNOWN' : `${p.onTimePct}% on time`}
+                      {p.onTimePct === null ? 'Results unknown' : `${p.onTimePct}% on time`}
                     </Chip>
                   </span>
                   {p.talk.length > 0 && <span className="ss-talk">Talk to them: {p.talk.join('; ')}</span>}
@@ -1048,7 +1048,7 @@ function RebalanceTab() {
             <li className="empty">
               {data.coverage.people === 0
                 ? 'Nobody in your line yet, so there is no advice.'
-                : `No rule fired on the tasks Prima holds. This is not a finding that the work is fair or on time: ${data.coverage.unknownUsualTime} of ${data.coverage.people} people have too few finished tasks for a usual time (UNKNOWN), ${data.coverage.openWithoutActTiming} of ${data.coverage.openTasks} open tasks have no ACT timing, and work outside Prima is not counted.`}
+                : `No rule fired on the tasks Prima holds. This is not a finding that the work is fair or on time: ${data.coverage.unknownUsualTime} of ${data.coverage.people} people have too few finished tasks for a usual time (Unknown), ${data.coverage.openWithoutActTiming} of ${data.coverage.openTasks} open tasks have no ACT timing, and work outside Prima is not counted.`}
             </li>
           )}
           {data.advice.map((a) => (
@@ -1062,8 +1062,8 @@ function RebalanceTab() {
         title="Your team’s load"
         sub={
           <>
-            Open tasks (high priority counts twice); team average {data.teamLoadAverage ?? 'UNKNOWN'}. Usual time is from getting a task to finishing it, over the
-            last {data.rules.lookBackDays} days; under {data.rules.minFinished} finished tasks it is UNKNOWN.
+            Open tasks (high priority counts twice); team average {data.teamLoadAverage ?? 'Unknown'}. Usual time is from getting a task to finishing it, over the
+            last {data.rules.lookBackDays} days; under {data.rules.minFinished} finished tasks it shows as Unknown.
           </>
         }
         flush
@@ -1077,7 +1077,7 @@ function RebalanceTab() {
                 <span className="ss-chips">
                   <Chip tone="neutral">{p.openTasks} open</Chip>
                   {p.overdue > 0 && <Chip tone="crit">{p.overdue} overdue</Chip>}
-                  <Chip tone="neutral">{p.typicalHours === null ? 'Usual time UNKNOWN' : `Usually ${p.typicalHours} h per task`}</Chip>
+                  <Chip tone="neutral">{p.typicalHours === null ? 'Usual time unknown' : `Usually ${p.typicalHours} h per task`}</Chip>
                   {p.awaySoon && (
                     <Chip tone="info">
                       Leave {p.awaySoon.from}
@@ -1288,7 +1288,7 @@ function Summary({ s }: { s: WorkSummary }) {
                   <td>{d.name}</td>
                   <td className="num">{d.people}</td>
                   <td className="num">{d.due}</td>
-                  <td className="num">{d.onTimePct === null ? 'UNKNOWN' : `${d.onTimePct}%`}</td>
+                  <td className="num">{d.onTimePct === null ? 'Unknown' : `${d.onTimePct}%`}</td>
                   <td className="num">{d.returned}</td>
                   <td className="num">{d.overdue}</td>
                   <td className="num">{d.oneOnOnePct}%</td>
@@ -1409,7 +1409,7 @@ export function BranchWorkView() {
             </li>
           ))}
         </ul>
-        <p className="ss-note ss-foot">A measure with no data shows UNKNOWN, never green. Visit and spot-check limits are proposals for approval.</p>
+        <p className="ss-note ss-foot">A measure with no data shows as Unknown, never green. Visit and spot-check limits are proposals for approval.</p>
       </Card>
       {b && <BranchDrawer b={b} checklists={data.checklists} onClose={() => setOpen(null)} />}
     </div>

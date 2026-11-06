@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import delete, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...assistants import access as assistant_access
 from ...core.db import get_db
 from ...core.security import SCOPED_ROLES, can, hash_password, temp_password
-from ...i18n import Msg
+from ...i18n import Msg, current_lang, render
 from ...i18n.labels import role_label
 from ...models import (
     Agent,
@@ -22,6 +23,11 @@ from ..schemas import (
     MemberCreateIn,
     MemberCreateOut,
     MemberOut,
+    MembersBulkIn,
+    MembersBulkOut,
+    MembersBulkResult,
+    MembersPageOut,
+    MembersSummary,
     MemberUpdateIn,
     TempPasswordOut,
 )
@@ -54,6 +60,7 @@ def _out(
         must_change_password=u.must_change_password,
         last_login_at=u.last_login_at,
         joined_at=m.created_at,
+        microsoft=bool(m.ms_oid),
     )
 
 
@@ -195,37 +202,185 @@ async def _names(db: AsyncSession, ws: str) -> dict[str, str]:
     return out
 
 
+def _scope_where(principal: Principal) -> ColumnElement[bool]:
+    """_member_in_scope in SQL, for the paged list (P82)."""
+    sc = principal.scope
+    if sc.everything:
+        return true()
+    me = Membership.user_id == principal.user.id
+    if sc.kind == "branch":
+        return or_(me, Membership.branch_id == sc.branch_id)
+    if sc.kind == "department":
+        return or_(me, Membership.department_id == sc.department_id)
+    return me
+
+
+def _agent_counts(principal: Principal, user_ids: list[str] | None = None) -> Select:
+    q = select(Agent.owner_user_id, func.count()).where(
+        Agent.workspace_id == principal.workspace_id,
+        Agent.owner_user_id.is_not(None),
+        Agent.status != "retired",
+        Agent.clone_of.is_(None),
+    )
+    if user_ids is not None:
+        q = q.where(Agent.owner_user_id.in_(user_ids))
+    return q.group_by(Agent.owner_user_id)
+
+
+# P82: what the Members table filters and sorts by.
+STATUSES = ("active", "pending", "disabled")
+SORTS = ("name", "email", "role", "company", "department", "last_seen", "joined")
+PAGE_SIZES = (25, 50, 100)
+
+
+def _status_where(value: str) -> ColumnElement[bool]:
+    """active: signs in with their own password; pending: still on the one-time password;
+    disabled: the account is off (a go-live reset left them with no workspace)."""
+    if value == "disabled":
+        return User.is_active.is_(False)
+    if value == "pending":
+        return and_(User.is_active.is_(True), User.must_change_password.is_(True))
+    return and_(User.is_active.is_(True), User.must_change_password.is_(False))
+
+
+async def _summary(db: AsyncSession, principal: Principal) -> MembersSummary:
+    base = and_(Membership.workspace_id == principal.workspace_id, _scope_where(principal))
+    roles = {
+        r: n
+        for r, n in (
+            await db.execute(
+                select(Membership.role, func.count()).where(base).group_by(Membership.role)
+            )
+        ).all()
+    }
+    temp, ms = (
+        await db.execute(
+            select(
+                func.count().filter(User.must_change_password.is_(True)),
+                func.count().filter(Membership.ms_oid.is_not(None)),
+            )
+            .select_from(Membership)
+            .join(User, User.id == Membership.user_id)
+            .where(base)
+        )
+    ).one()
+    in_scope = select(Membership.user_id).where(base)
+    agents = await db.scalar(
+        select(func.count()).where(
+            Agent.workspace_id == principal.workspace_id,
+            Agent.owner_user_id.in_(in_scope),
+            Agent.status != "retired",
+            Agent.clone_of.is_(None),
+        )
+    )
+    return MembersSummary(
+        members=sum(roles.values()),
+        owners_admins=roles.get("owner", 0) + roles.get("admin", 0),
+        temp_password=temp or 0,
+        microsoft=ms or 0,
+        agents=agents or 0,
+        roles=roles,
+    )
+
+
 @router.get("")
 async def list_members(
-    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
-) -> list[MemberOut]:
+    page: int | None = Query(default=None, ge=1, le=100_000),
+    page_size: int = Query(default=25),
+    q: str = Query(default="", max_length=200),
+    company: str = Query(default="", max_length=40),
+    department: str = Query(default="", max_length=40),
+    role: str = Query(default="", max_length=20),
+    status_: str = Query(default="", alias="status", max_length=20),
+    sort: str = Query(default="name", max_length=20),
+    dir: str = Query(default="asc", max_length=4),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[MemberOut] | MembersPageOut:
+    """Everyone the reader may see. With `page` (P82): one page of the Members table, with
+    search (name or email), filters (company: a branch id or "none"; role; status) and a sort,
+    the total that matches and the summary of the whole list. Without it, the plain list every
+    other screen (people pickers) has always read."""
+    ws = principal.workspace_id
+    if page is None:
+        rows = (
+            await db.scalars(
+                select(Membership)
+                .where(Membership.workspace_id == ws)
+                .order_by(Membership.created_at)
+            )
+        ).all()
+        agents = {uid: n for uid, n in (await db.execute(_agent_counts(principal))).all() if uid}
+        names = await _names(db, ws)
+        return [_out(m, names, agents) for m in rows if _member_in_scope(principal, m)]
+
+    if page_size not in PAGE_SIZES:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_page_size", "Show 25, 50 or 100 a page."
+        )
+    where = [Membership.workspace_id == ws, _scope_where(principal)]
+    words = q.strip().lower()
+    if words:
+        like = "%" + words.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append(
+            or_(
+                func.lower(User.name).like(like, escape="\\"),
+                func.lower(User.email).like(like, escape="\\"),
+            )
+        )
+    if company == "none":
+        where.append(Membership.branch_id.is_(None))
+    elif company:
+        where.append(Membership.branch_id == company)
+    if department:
+        where.append(Membership.department_id == department)
+    if role:
+        where.append(Membership.role == role)
+    if status_ in STATUSES:
+        where.append(_status_where(status_))
+    branch = aliased(Branch)
+    dept = aliased(Department)
+    key = sort if sort in SORTS else "name"
+    desc = dir == "desc"
+    # Empty values (no company, never signed in) always go last, either way round.
+    col = {
+        "name": func.lower(User.name),
+        "email": User.email,
+        "role": Membership.role,
+        "company": func.lower(branch.name),
+        "department": func.lower(dept.name),
+        "last_seen": User.last_login_at,
+        "joined": Membership.created_at,
+    }[key]
+    order = [(col.desc() if desc else col.asc()).nulls_last()]
+    if key != "name":
+        order.append(func.lower(User.name).asc())
+    order.append(User.id.asc())  # a stable order across pages
+    base = (
+        select(Membership)
+        .join(User, User.id == Membership.user_id)
+        .outerjoin(branch, branch.id == Membership.branch_id)
+        .outerjoin(dept, dept.id == Membership.department_id)
+        .where(*where)
+    )
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = (
-        await db.scalars(
-            select(Membership)
-            .where(Membership.workspace_id == principal.workspace_id)
-            .order_by(Membership.created_at)
-        )
+        await db.scalars(base.order_by(*order).offset((page - 1) * page_size).limit(page_size))
     ).all()
-    agents: dict[str, int] = {
-        uid: n
-        for uid, n in (
-            (
-                await db.execute(
-                    select(Agent.owner_user_id, func.count())
-                    .where(
-                        Agent.workspace_id == principal.workspace_id,
-                        Agent.owner_user_id.is_not(None),
-                        Agent.status != "retired",
-                        Agent.clone_of.is_(None),
-                    )
-                    .group_by(Agent.owner_user_id)
-                )
-            ).all()
-        )
-        if uid
-    }
-    names = await _names(db, principal.workspace_id)
-    return [_out(m, names, agents) for m in rows if _member_in_scope(principal, m)]
+    ids = [m.user_id for m in rows]
+    agents = (
+        {uid: n for uid, n in (await db.execute(_agent_counts(principal, ids))).all() if uid}
+        if ids
+        else {}
+    )
+    names = await _names(db, ws)
+    return MembersPageOut(
+        items=[_out(m, names, agents) for m in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+        summary=await _summary(db, principal),
+    )
 
 
 async def add_one(
@@ -323,6 +478,22 @@ async def update_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
+    m = await change_access(db, principal, user_id, body.role, body.branch_id, body.department_id)
+    await db.commit()
+    await db.refresh(m)
+    return _out(m, await _names(db, principal.workspace_id))
+
+
+async def change_access(
+    db: AsyncSession,
+    principal: Principal,
+    user_id: str,
+    role: str,
+    branch_id: str | None,
+    department_id: str | None,
+) -> Membership:
+    """One person's role and place, with every rule (one path for the row and the bulk
+    change, P82); the caller commits."""
     if user_id == principal.user.id:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
@@ -332,16 +503,14 @@ async def update_member(
     m = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, m):
         raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
-    _check_can_touch(principal, m.role, body.role)
-    branch_id, department_id = await _placement(
-        db, principal, body.role, body.branch_id, body.department_id
-    )
-    if m.role == "owner" and body.role != "owner" and await _owner_count(db, m.workspace_id) <= 1:
+    _check_can_touch(principal, m.role, role)
+    branch_id, department_id = await _placement(db, principal, role, branch_id, department_id)
+    if m.role == "owner" and role != "owner" and await _owner_count(db, m.workspace_id) <= 1:
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "last_owner", "A workspace needs at least one owner."
         )
     before = {"role": m.role, "branch_id": m.branch_id, "department_id": m.department_id}
-    m.role, m.branch_id, m.department_id = body.role, branch_id, department_id
+    m.role, m.branch_id, m.department_id = role, branch_id, department_id
     await audit.record(
         db,
         principal.workspace_id,
@@ -349,23 +518,18 @@ async def update_member(
         "member.role_changed",
         target=user_id,
         before=before,
-        after={"role": body.role, "branch_id": branch_id, "department_id": department_id},
+        after={"role": role, "branch_id": branch_id, "department_id": department_id},
     )
-    if before["role"] != body.role:  # P30: assistants follow the role (kept, never deleted)
+    if before["role"] != role:  # P30: assistants follow the role (kept, never deleted)
         await assistant_access.follow_role(
-            db, principal.workspace_id, user_id, body.role, principal.actor
+            db, principal.workspace_id, user_id, role, principal.actor
         )
-    await db.commit()
-    await db.refresh(m)
-    return _out(m, await _names(db, principal.workspace_id))
+    await db.flush()
+    return m
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_member(
-    user_id: str,
-    principal: Principal = Depends(people_manager()),
-    db: AsyncSession = Depends(get_db),
-) -> Response:
+async def remove_one(db: AsyncSession, principal: Principal, user_id: str) -> None:
+    """Take one person out of the workspace, with every rule; the caller commits."""
     if user_id == principal.user.id:
         raise api_error(status.HTTP_400_BAD_REQUEST, "self_remove", "You cannot remove yourself.")
     m = await _membership(db, principal.workspace_id, user_id)
@@ -391,8 +555,56 @@ async def remove_member(
         target=user_id,
         before={"email": email},
     )
+    await db.flush()
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_member(
+    user_id: str,
+    principal: Principal = Depends(people_manager()),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await remove_one(db, principal, user_id)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/bulk")
+async def bulk(
+    body: MembersBulkIn,
+    principal: Principal = Depends(people_manager()),
+    db: AsyncSession = Depends(get_db),
+) -> MembersBulkOut:
+    """P82: the people ticked in the Members table: removed, or given one role and place.
+    Each goes through the same rules as one; anyone those rules stop is skipped and says why
+    (never half done: one person's refusal never undoes the others)."""
+    if body.action == "access" and body.role is None:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "role_required", "Pick a role.")
+    results: list[MembersBulkResult] = []
+    for user_id in dict.fromkeys(body.user_ids):  # each person once
+        try:
+            async with db.begin_nested():
+                if body.action == "remove":
+                    await remove_one(db, principal, user_id)
+                else:
+                    assert body.role is not None
+                    await change_access(
+                        db, principal, user_id, body.role, body.branch_id, body.department_id
+                    )
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, dict) else {"message": str(e.detail)}
+            results.append(
+                MembersBulkResult(
+                    user_id=user_id,
+                    ok=False,
+                    message=render(detail.get("message", ""), current_lang()),
+                )
+            )
+            continue
+        results.append(MembersBulkResult(user_id=user_id, ok=True))
+    await db.commit()
+    done = sum(1 for r in results if r.ok)
+    return MembersBulkOut(results=results, done=done, skipped=len(results) - done)
 
 
 @router.post("/{user_id}/reset-password")

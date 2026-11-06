@@ -68,7 +68,7 @@ function AllOffices({ open }: { open: (id: string) => void }) {
         title="Company offices"
         sub={
           <>
-            {data.rule.source}. All offices in one place: staffing, desk cover and every company's open work. Each company still acts on its own work; totals
+            {officeRule(data.rule)} All offices in one place: staffing, desk cover and every company's open work. Each company still acts on its own work; totals
             are a management view, not combined company records.
           </>
         }
@@ -352,7 +352,7 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
         title={`${data.company.name} office`}
         sub={
           <>
-            {data.rule.source}. {data.role === 'head' ? 'You share' : 'The Company Manager or GM shares'} the work out by desk. Each desk has an owner and a
+            {officeRule(data.rule)} {data.role === 'head' ? 'You share' : 'The Company Manager or GM shares'} the work out by desk. Each desk has an owner and a
             backup, so the work moves to the backup when the owner is on leave.
           </>
         }
@@ -407,7 +407,10 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
                   <span className="ld-row-text">{f.message}</span>
                 </span>
                 <span className="ld-row-aside">
-                  <Chip tone={f.tone}>{f.rule}</Chip>
+                  {/* P80: how urgent, in words; the rule's code stays on hover for whoever looks it up. */}
+                  <Chip tone={f.tone} title={`Rule ${f.rule}`}>
+                    {f.tone === 'crit' ? 'Urgent' : f.tone === 'warn' ? 'To fix' : 'Note'}
+                  </Chip>
                 </span>
               </li>
             ))}
@@ -770,3 +773,8 @@ const OFFICE_ASK_LABEL: Record<string, string> = {
   company_office: 'Company office (manager and admin executives)',
   director_office: 'Director Office',
 };
+
+/** P80: the office size rule as a sentence, not its source note. */
+function officeRule(r: { heads: number; minExecs: number; maxExecs: number }): string {
+  return `Each company office has ${r.heads} Company Manager or GM and ${r.minExecs} to ${r.maxExecs} executives.`;
+}

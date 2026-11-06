@@ -695,6 +695,8 @@ th.num {
   height: 6px;
   border-radius: 50%;
   background: currentColor;
+  /* P80: the dot keeps its size when a chip is squeezed (it became a thin line). */
+  flex: none;
 }
 .chip[data-tone='ok'] {
   background: var(--ok-soft);
@@ -2219,6 +2221,15 @@ button.list-item:hover,
   font-size: 0.74rem;
   line-height: 1.5;
 }
+/* P80: on a phone a long chip ("With Regional Operations Manager (name)") wraps instead of pushing the page sideways
+   or being cut off; nothing to hover there. */
+@media (max-width: 720px) {
+  .chip {
+    white-space: normal;
+    overflow-wrap: break-word;
+    border-radius: 12px;
+  }
+}
 
 /* ---------- Notices ---------- */
 .notice {
@@ -2529,6 +2540,16 @@ button.k-stat:active {
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+/* P80: a word in place of a number (Unknown, Tidak diketahui, Not set) is smaller and never broken mid-word. */
+.k-stat-value[data-text],
+.kpi-value[data-text] {
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 .k-stat-note {
   font-size: 0.78rem;
