@@ -38,6 +38,7 @@ const STATUS: Record<Request['status'], [Tone, string]> = {
 const dueText = (days: number) => (days < 0 ? `${-days} days late` : days === 0 ? 'Today' : `${days} days`);
 
 export function FleetView() {
+  const { companyId, company } = useApp();
   const { data, error } = useLoad(() => api.fleetBoard(), []);
   const [tab, setTab] = useState<string | null>(null);
   if (error)
@@ -81,6 +82,7 @@ export function FleetView() {
       <PageHead
         title="Vehicles"
         sub="The head of Transport runs every company vehicle: renewals, servicing, payments, and each trip out and in. Staff request a vehicle here. CMS watches trackers, dashcams and driver health."
+        actions={full && <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} primary />}
       />
       {data.board.length > 0 && (
         <Stats>
@@ -180,7 +182,11 @@ function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
       actions={<RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} />}
       flush
     >
-      {data.board.length === 0 && <Empty title="No vehicles yet." />}
+      {data.board.length === 0 && (
+        <Empty title="No vehicles yet." action={<RecordButton kind="vehicle" companyId={companyId} label="Add vehicle" primary />}>
+          Add each company vehicle with its road tax, insurance and service dates; Prima reminds Transport before they fall due.
+        </Empty>
+      )}
       <ul className="op-list">
         {data.board.map((v) => {
           const worst = v.reminders?.[0];

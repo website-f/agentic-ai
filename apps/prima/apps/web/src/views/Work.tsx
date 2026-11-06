@@ -9,6 +9,7 @@ import {
   HourglassIcon,
   ListChecksIcon,
   MapPinIcon,
+  PlusIcon,
   UserIcon,
   UsersThreeIcon,
   WarningIcon,
@@ -71,6 +72,9 @@ export function WorkView() {
     ...(leader ? [{ key: 'summary' as const, label: 'Monday summary' }] : []),
   ];
   const [tab, setTab] = useState<WorkTab | null>(null);
+  // P78: group leadership gives a task to anyone on staff, not only to its direct reports.
+  const [giving, setGiving] = useState(false);
+  const staff = team.data?.staff ?? [];
   const settled = !!team.data || !!team.error;
   const cur: WorkTab | null = tab ?? (settled ? (tabs[0]?.key ?? 'mine') : null);
   return (
@@ -82,7 +86,17 @@ export function WorkView() {
             ? 'Your team’s exceptions, help requests and reviews first, then your own tasks. Tasks are also kept in Microsoft Planner.'
             : 'What to do today, what done means for each task, and help when you are stuck. Tasks are also kept in Microsoft Planner.'
         }
+        actions={
+          leader &&
+          staff.length > 0 && (
+            <button className="btn btn-primary" onClick={() => setGiving(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              Give a task
+            </button>
+          )
+        }
       />
+      {giving && <GiveTaskDrawer staff={staff} onClose={() => setGiving(false)} />}
       <CentralAdminGuide view="work" />
       {tabs.length > 1 && (
         <div className="tabbar ss-tabs" role="tablist" aria-label="Work sections">
@@ -1109,6 +1123,35 @@ function AdviceRow({ a }: { a: WorkRebalance['advice'][number] }) {
         </div>
       )}
     </article>
+  );
+}
+
+/** P78: give a task to anyone on staff (group leadership); the same form as from a person's own page. */
+function GiveTaskDrawer({ staff, onClose }: { staff: TeamWork['staff']; onClose: () => void }) {
+  const [userId, setUserId] = useState('');
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const shown = staff.filter((s) => !needle || has(needle, s.name, s.title ?? '')).slice(0, 200);
+  return (
+    <Drawer title="Give a task" sub="They see it in My work and in Microsoft Planner. You review it when they mark it done." onClose={onClose}>
+      <div className="ss-form">
+        <Search value={q} onChange={setQ} placeholder="Search name or title" />
+        <label className="field">
+          <span className="label">Who</span>
+          <select className="select" aria-label="Who" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">Choose…</option>
+            {shown.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.title ? ` · ${s.title}` : ''}
+              </option>
+            ))}
+          </select>
+          {staff.length === 0 && <span className="help">Nobody on staff has a Prima sign-in yet.</span>}
+        </label>
+      </div>
+      {userId && <AssignForm key={userId} userId={userId} />}
+    </Drawer>
   );
 }
 

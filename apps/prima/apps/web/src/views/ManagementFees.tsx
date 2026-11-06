@@ -69,9 +69,13 @@ function FeeLine({ r, ops }: { r: Row; ops: (typeof OPS)[number] }) {
               : 'Not entered'}
           </span>
         </div>
-        <button className="btn btn-sm" disabled={!r.finId} onClick={() => setOpen(!open)}>
-          {fee ? 'Change' : 'Enter'}
-        </button>
+        {r.finId ? (
+          <button className="btn btn-sm" onClick={() => setOpen(!open)}>
+            {fee ? 'Change' : 'Enter'}
+          </button>
+        ) : (
+          <span className="muted small">Start its Finance books first (Finance, Settings)</span>
+        )}
       </div>
       {open && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>

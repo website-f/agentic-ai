@@ -3,7 +3,7 @@ import {WebTicketReview,WebTicketHistory} from './WebTicketReview';
 import{RentalCorrections}from'./RentalCorrections';
 import { ItOnboardingStep } from './ItOnboardingStep';
 import { useState } from 'react';
-import { ClockCountdownIcon, DesktopIcon, LifebuoyIcon, PlusIcon, ShoppingCartIcon, StethoscopeIcon, UserSwitchIcon } from '@phosphor-icons/react';
+import { BookOpenTextIcon, ClockCountdownIcon, DesktopIcon, LifebuoyIcon, PlusIcon, ShoppingCartIcon, StethoscopeIcon, UserSwitchIcon } from '@phosphor-icons/react';
 import { arishaLeader } from '@prima/core';
 import { api, type ItBoard } from '../api';
 import { useApp } from '../App';
@@ -16,6 +16,7 @@ import { LoginHandoverPanel } from './LoginHandover';
 import { ItImport } from './ItImport';
 import { ItManualPanel, manualItVisible } from './ItManual';
 import { ItOperations } from './ItOperations';
+import { ItGuide } from './ItGuide';
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/it.css';
 
@@ -30,7 +31,7 @@ import '../styles/it.css';
  * an approval inbox. Staff who only ask IT for help see their own form and requests, nothing else.
  */
 
-type Tab = 'import' | 'audit' | 'work' | 'plan' | 'rental' | 'jobs' | 'team' | 'systems' | 'assets' | 'purchases' | 'maintenance' | 'websites' | 'tickets' | 'onboarding' | 'tenders' | 'mine';
+type Tab = 'guide' | 'import' | 'audit' | 'work' | 'plan' | 'rental' | 'jobs' | 'team' | 'systems' | 'assets' | 'purchases' | 'maintenance' | 'websites' | 'tickets' | 'onboarding' | 'tenders' | 'mine';
 type AssetRow = NonNullable<ItBoard['assets']>[number];
 type Asset = AssetRow['asset'];
 const manualRecord=(row:unknown)=>(row as {manual?:{kind?:string;unitLabel?:string;companyId?:string|null;purchaseDateUnknown?:boolean;personUserId?:string|null}}).manual;
@@ -137,12 +138,21 @@ export function ItView() {
             : 'Ask IT for help with your account, device, Microsoft 365, the network or Prima, and follow your requests here.'
         }
         actions={
-          has('mine') && current !== 'mine' ? (
-            <button className="btn btn-primary" onClick={() => setTab('mine')}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              Ask IT for help
-            </button>
-          ) : undefined
+          <>
+            {/* The step-by-step guide to every IT workflow, for this person's own screens (P78). */}
+            {k && current !== 'guide' && (
+              <button className="btn" onClick={() => setTab('guide')}>
+                <BookOpenTextIcon size={16} aria-hidden="true" />
+                Workflow guide
+              </button>
+            )}
+            {has('mine') && current !== 'mine' && (
+              <button className="btn btn-primary" onClick={() => setTab('mine')}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                Ask IT for help
+              </button>
+            )}
+          </>
         }
       />
       <p className="notice it-notice" data-tone="info">
@@ -209,7 +219,17 @@ export function ItView() {
           ))}
         </div>
       )}
-      <div className="it-panel" role={selfService ? undefined : 'tabpanel'} aria-label={selfService ? undefined : tabs.find(([t]) => t === current)?.[1]}>
+      <div className="it-panel" role={selfService ? undefined : 'tabpanel'} aria-label={selfService ? undefined : (tabs.find(([t]) => t === current)?.[1] ?? 'Workflow guide')}>
+        {current === 'guide' && (
+          <>
+            <div className="it-actions">
+              <button className="btn btn-sm" onClick={() => setTab(null)}>
+                Back to IT
+              </button>
+            </div>
+            <ItGuide allowedTabs={tabs.map(([t]) => t)} onOpen={(t) => setTab(t)} />
+          </>
+        )}
         {current === 'audit' && <ItAudit data={data} />}
         {current === 'work' && <MyWork data={data} openTab={setTab} />}
         {current === 'plan' && <ItPlanView board={data} />}
@@ -458,6 +478,8 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
 
 function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
   const [form, setForm] = useState(false);
+  // IT asks to buy; so may the owner (P78). The IT Manager still agrees the need.
+  const canAsk = staff || !!data.canRaisePurchase;
   const all = data.purchases ?? [];
   // The approval inbox: what waits for this person's decision comes first, then everything else in the same order.
   const mine = all.filter((p) => p.canApprove || p.canDecide);
@@ -467,7 +489,7 @@ function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
       title="Purchases"
       sub={mine.length ? `${mine.length} waiting for your decision · ${all.length} in all` : `${all.length} in all`}
       actions={
-        staff && (
+        canAsk && (
           <button className={form ? 'btn btn-sm' : 'btn btn-sm btn-primary'} aria-expanded={form} onClick={() => setForm(!form)}>
             {!form && <PlusIcon size={14} weight="bold" aria-hidden="true" />}
             {form ? 'Close' : 'Ask to buy'}
@@ -502,7 +524,7 @@ function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
           <PurchaseLine key={p.purchase.id} p={p} staff={staff} data={data} />
         ))}
       </ul>
-      {!all.length && <Empty title="No purchases yet.">{staff ? 'Use Ask to buy to start one.' : 'Purchases IT asks for appear here.'}</Empty>}
+      {!all.length && <Empty title="No purchases yet.">{canAsk ? 'Use Ask to buy to start one.' : 'Purchases IT asks for appear here.'}</Empty>}
     </Card>
   );
 }
@@ -685,7 +707,7 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
           <button className="btn btn-sm" aria-pressed={showDone} onClick={() => setShowDone(!showDone)}>
             {showDone ? 'Hide resolved' : 'Show resolved'}
           </button>
-          {staff && (
+          {(staff || !!data.canLogTicket) && (
             <button className={log ? 'btn btn-sm' : 'btn btn-sm btn-primary'} aria-expanded={log} onClick={() => setLog(!log)}>
               {!log && <PlusIcon size={14} weight="bold" aria-hidden="true" />}
               Log a request
@@ -711,7 +733,7 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
           <LogTicket onDone={() => setLog(false)} />
         </div>
       )}
-      {!rows.length && <Empty title="Nothing open.">New help requests appear here with their time limit.</Empty>}
+      {!rows.length && <Empty title="Nothing open.">{staff || data.canLogTicket ? 'Use Log a request when someone reaches IT by Teams, email, phone or in person.' : 'New help requests appear here with their time limit.'}</Empty>}
       {rows.length > 0 && (
         <div className="it-ticket it-ticket-head" aria-hidden="true">
           <span>Priority</span>
@@ -811,7 +833,7 @@ function Onboarding({ data, staff }: { data: ItBoard; staff: boolean }) {
       sub="Track the work needed for joiners and leavers. These checklists record staff-reported completion with evidence, not independent checking or certification. They do not create accounts, revoke access or prove changes in Microsoft."
     >
       <ErrorNotice error={act.error} />
-      {!list.length && <Empty title="No joiners or leavers.">People joining or leaving appear here with their IT steps.</Empty>}
+      {!list.length && <Empty title="No joiners or leavers.">People joining or leaving appear here with their IT steps. Use Add joining / leaving request above to record one.</Empty>}
       <div className="it-people">
         {list.map((o) => {
           const total = o.item.steps.length;

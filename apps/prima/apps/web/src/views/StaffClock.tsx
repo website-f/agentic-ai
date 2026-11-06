@@ -629,6 +629,7 @@ function MyFacePanel({ faceEnrolled, pending }: { faceEnrolled: boolean; pending
             <p className="small">You are clocked in from your sign-in. Confirm it is you with a quick face check.</p>
             <FaceCapture
               label="Check my face"
+              title="Check your face"
               busy={act.busy}
               onCapture={(r) =>
                 void act.run(
@@ -660,6 +661,7 @@ function MyFacePanel({ faceEnrolled, pending }: { faceEnrolled: boolean; pending
             <p className="small">Register your face once. HR looks at the photo and approves it; after that each sign-in asks for a quick face check.</p>
             <FaceCapture
               label="Register my face"
+              title="Register your face"
               busy={act.busy}
               onCapture={(r) => void act.run(() => api.registerFace({ photo: r.photo, descriptor: r.descriptor }), 'Sent to HR to approve.').then(() => mine.reload())}
             />

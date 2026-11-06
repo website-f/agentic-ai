@@ -182,6 +182,8 @@ export type WebBoardOk = Extract<WebBoard, { allowed: true }>;
 export type CorpBoard = R<'corpBoard'>;
 export type CompanyFiles = R<'companyFiles'>;
 export type CompanyFileInput = Parameters<PrimaService['saveCompanyFile']>[2];
+export type CompanyFileStart = Parameters<PrimaService['startCompanyFile']>[2];
+export type MeetingActionInput = Parameters<PrimaService['addMeetingAction']>[2];
 export type RenewalBoard = R<'renewalBoard'>;
 export type RenewalAction = 'open' | 'paper' | 'addPaper' | 'sign' | 'fee' | 'submit' | 'agency' | 'return' | 'renewed' | 'confirm';
 export type RenewalBody = { index?: number; name?: string; ref?: string; amount?: number | null; on?: string; note?: string; newExpiresOn?: string; ok?: boolean };
@@ -222,6 +224,7 @@ export type DeliveryProof = R<'deliveryProof'>;
 export type RecordFormData = R<'recordForm'>;
 export type PayChangesData = R<'payChanges'>;
 export type CorpChangeInput = Parameters<PrimaService['raiseCorpChange']>[2];
+export type CorpFilingInput = Parameters<PrimaService['addCorpFiling']>[2];
 export type ItTicketInput = Parameters<PrimaService['raiseItTicket']>[1];
 export type ItPurchaseInput = Parameters<PrimaService['raiseItPurchase']>[1];
 export type BranchAgreementInput = Parameters<PrimaService['addBranchAgreement']>[2];
@@ -323,6 +326,8 @@ export type SignOffOutcome = 'verified' | 'resolved' | 'sent_back' | 'confirmed'
 
 export type CaseAction = 'acknowledge' | 'escalate' | 'resolve' | 'close' | 'note';
 export type QuotationAction = 'submit' | 'approve' | 'return' | 'sent' | 'accepted' | 'rejected';
+
+export type NewTender = Parameters<PrimaService['addTender']>[2];
 
 export interface NewQuotation {
   client: string;
@@ -542,6 +547,7 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   directorLegalFlags(): Promise<R<'directorLegalFlags'>>;
   companyFiles(): Promise<CompanyFiles>;
   saveCompanyFile(companyId: string, input: CompanyFileInput): Promise<unknown>;
+  startCompanyFile(companyId: string, input: CompanyFileStart): Promise<unknown>;
   checkCompanyFile(companyId: string, input: { ok: boolean; ssmRef: string; mismatches?: string[]; note?: string }): Promise<unknown>;
   renewalBoard(): Promise<RenewalBoard>;
   renewalStep(id: string, action: RenewalAction, body?: RenewalBody): Promise<unknown>;
@@ -609,6 +615,9 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   salesLeadStep(id: string, action: SalesLeadAction, body: SalesLeadBody): Promise<unknown>;
   corpAuditStep(id: string, action: 'planning' | 'pbc_received' | 'add_adjustment' | 'agree_adjustment' | 'signed', body: AuditStepBody): Promise<unknown>;
   addLegalMatter(companyId: string, input: LegalMatterInput): Promise<unknown>;
+  addCorpAudit(companyId: string, input: Parameters<PrimaService['addCorpAudit']>[2]): Promise<unknown>;
+  addBcmSystem(input: Parameters<PrimaService['addBcmSystem']>[1]): Promise<unknown>;
+  addGrcObligation(companyId: string, input: Parameters<PrimaService['addGrcObligation']>[2]): Promise<unknown>;
   legalMatterStep(id: string, action: 'update' | 'fee' | 'close', body: LegalStepBody): Promise<unknown>;
   bcmRecord(
     systemId: string,
@@ -660,6 +669,7 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   stockReturn(id: string, condition: 'good' | 'worn' | 'damaged' | 'lost', note: string): Promise<unknown>;
   corpFilingStep(id: string, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: string }): Promise<unknown>;
   raiseCorpChange(companyId: string, input: CorpChangeInput): Promise<unknown>;
+  addCorpFiling(companyId: string, input: CorpFilingInput): Promise<unknown>;
   decideCorpChange(id: string, decision: 'approve' | 'reject', note: string, clauseRef: string): Promise<unknown>;
   recordCorpBoard(id: string, resolutionRef: string, effectiveOn: string): Promise<unknown>;
   raiseItTicket(input: ItTicketInput): Promise<unknown>;
@@ -719,6 +729,10 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   finCreatePayment(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finPaymentStep(companyId: string, paymentId: string, action: FinPaymentAction, input: Record<string, unknown>): Promise<unknown>;
   finCloseStep(companyId: string, action: FinCloseAction, input: Record<string, unknown>): Promise<unknown>;
+  /** P78: add a company bank account to its books; start books for a company with none. */
+  finAddBankAccount(companyId: string, input: { bank: string; last4: string; purpose: string }): Promise<unknown>;
+  finStartBooks(companyId: string, input: { team: number; fyEnd: string }): Promise<unknown>;
+  finAddPaper(companyId: string, pack: 'audit' | 'tax', input: { label: string; dueOn: string }): Promise<unknown>;
   staffPayRun(runId: string): Promise<StaffPayRunView>;
   prepareStaffPay(companyId: string, period: string): Promise<unknown>;
   setStaffPayLine(runId: string, personId: string, patch: StaffPayLinePatch): Promise<unknown>;
@@ -781,6 +795,8 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   candidates(shiftId: string, q?: string): Promise<Candidates>;
   assign(shiftId: string, personId: string | null): Promise<{ warnings: { message: string }[] }>;
   publish(siteId: string, from: IsoDate, to: IsoDate): Promise<{ published: number; unfilled: number }>;
+  /** P78: add unfilled draft shifts for a post (a new site or post, or extra guards). */
+  addShifts(siteId: string, input: Parameters<PrimaService['addShifts']>[2]): Promise<{ added: number; from: IsoDate; to: IsoDate }>;
   attendance(companyId: string, date: IsoDate): Promise<AttendanceDay>;
   lockAttendance(companyId: string, date: IsoDate): Promise<{ locked: number }>;
   attendanceAlerts(companyId: string): Promise<AttendanceAlerts>;
@@ -802,6 +818,8 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   compliance(): Promise<Compliance>;
   commercial(companyId: string): Promise<Commercial>;
   createQuotation(companyId: string, input: NewQuotation): Promise<Quotation>;
+  /** P78: enter a new tender for the company. */
+  addTender(companyId: string, input: NewTender): Promise<Tender>;
   quotationAction(quotationId: string, action: QuotationAction, note?: string): Promise<Quotation>;
   correctQuotation(quotationId: string, input: { guards: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: string; reason: string }): Promise<Quotation>;
   updateTender(tenderId: string, status: TenderStatus): Promise<Tender>;
@@ -832,6 +850,7 @@ export interface Api extends ConnectionsClient, ExtractionClient {
   addMinutes(meetingId: string, text: string): Promise<unknown>;
   checkMeetingSummary(meetingId: string, input: Parameters<PrimaService['checkMeetingSummary']>[2]): Promise<unknown>;
   setMeetingAction(meetingId: string, index: number, done: boolean): Promise<unknown>;
+  addMeetingAction(meetingId: string, input: MeetingActionInput): Promise<unknown>;
   setMeetingPrep(meetingId: string, input: { index?: number; done?: boolean; add?: string }): Promise<unknown>;
   submitReport(input: Parameters<PrimaService['submitReport']>[1]): Promise<unknown>;
   setReportDefs(defs: ReportDef[], note: string): Promise<unknown>;

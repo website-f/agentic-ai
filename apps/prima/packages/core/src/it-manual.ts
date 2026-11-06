@@ -2,7 +2,7 @@ import {liveItRows} from './it-cleanup-guards';
 // Manual IT work records only. Nothing here provisions accounts, changes permissions or certifies compliance.
 import type { Store } from './store';
 import type { ItAccount, ItAsset, ItManualMetadata, ItManualKind, ItOnboarding, User } from './types';
-import { AccessDenied, CENTRAL_EMPLOYER_IDS, accessClosed, centralEmployerName, isCentralEmployer } from './access';
+import { AccessDenied, CENTRAL_EMPLOYER_IDS, accessClosed, centralEmployerName, isCentralEmployer, isOwnerAdmin } from './access';
 import { BadRequest, NotFound } from './service';
 import { sha256Hex } from './audit';
 import { dateOf } from './time';
@@ -36,6 +36,9 @@ const exact = (i: Record<string, unknown>, keys: string[]) => { if (Object.keys(
 const isIt = (u: User) => !u.integration && u.role === 'pwvsb_officer' && u.department === 'it' && ['manager','lead','executive'].includes(u.itRole ?? '');
 const isManager=(u:User)=>isIt(u)&&u.itRole==='manager';
 const isLead = (u: User) => isIt(u) && ['manager','lead'].includes(u.itRole ?? '');
+/** P78: the owner (master administrator) records existing devices, systems and joiners too, and names the IT person. */
+const maker = (u: User) => isIt(u) || isOwnerAdmin(u);
+const assigns = (u: User) => isLead(u) || isOwnerAdmin(u);
 const mayRead = (u: User) => !u.integration && u.role !== 'site_device' && (isIt(u) || ['ceo','coo'].includes(u.opsTier ?? '') || ['audit','hr','chief_of_staff'].includes(u.department ?? ''));
 const hrOnly = (u: User) => ['hr','chief_of_staff'].includes(u.department ?? '') && !['ceo','coo'].includes(u.opsTier ?? '');
 const systemKinds: ItAccount['kind'][] = ['m365','azure','registrar','dns','hosting','github','sql_account','network','cctv','prima','other'];
@@ -76,13 +79,13 @@ export class ItManualService {
     const people = await this.people(); const companies = await this.store.list('companies', {});
     const readonlyHr = hrOnly(user);
     const problems=await this.store.itManualProblems?.() ?? []; const ready=problems.length===0;
-    return { ...marker(user), connection: 'not_connected' as const, configuration:ready?'ready':'setup_required', problems, canCreate: ready&&isIt(user), canCheck: ready&&isManager(user), canCreateAsset: ready&&isIt(user),
-      staff: isIt(user) ? people.map(u => ({ id:u.id, name:u.name, title:u.title })) : [],
-      itStaff: isIt(user) ? people.filter(isIt).map(u => ({ id:u.id, name:u.name })) : [],
+    return { ...marker(user), connection: 'not_connected' as const, configuration:ready?'ready':'setup_required', problems, canCreate: ready&&maker(user), canCheck: ready&&isManager(user), canCreateAsset: ready&&maker(user),
+      staff: maker(user) ? people.map(u => ({ id:u.id, name:u.name, title:u.title })) : [],
+      itStaff: maker(user) ? people.filter(isIt).map(u => ({ id:u.id, name:u.name })) : [],
       // The central employers (PWVSB, Merdeka Network, Goodwill Empire, Sasa Team) have staff and devices too; they are not
       // rows of the companies table, so they are listed first by name (Arisha main review round 2, 2 Nov 2026).
-      companies: isIt(user) ? [...CENTRAL_EMPLOYER_IDS.map(id => ({ id, name:centralEmployerName(id)! })), ...companies.map(c => ({ id:c.id, name:c.name }))] : [],
-      jobs: isIt(user) ? (await this.store.list('itJobs', {})).filter(j => j.status !== 'cancelled' && (isLead(user) || j.assigneeId === user.id || j.givenById === user.id)).map(j => ({ id:j.id, title:j.title })) : [],
+      companies: maker(user) ? [...CENTRAL_EMPLOYER_IDS.map(id => ({ id, name:centralEmployerName(id)! })), ...companies.map(c => ({ id:c.id, name:c.name }))] : [],
+      jobs: maker(user) ? (await this.store.list('itJobs', {})).filter(j => j.status !== 'cancelled' && (assigns(user) || j.assigneeId === user.id || j.givenById === user.id)).map(j => ({ id:j.id, title:j.title })) : [],
       onboarding: readonlyHr ? [] : await liveItRows(this.store,'itOnboarding'),
       accounts: readonlyHr ? [] : await liveItRows(this.store,'itAccounts'),
       assets: readonlyHr ? [] : await liveItRows(this.store,'itAssets'),
@@ -101,7 +104,7 @@ export class ItManualService {
     if(!['intake','system','guidance','asset'].includes(String(i.kind)))throw new BadRequest('Unknown manual record kind.');
     const kind=i.kind as ItManualKind;
     return withItRecordLock(this.store,'create',async tx=>{
-      user=await this.actor(user,tx);if(!isIt(user))throw new AccessDenied('view','(only IT reconciles its own manual attempts)');
+      user=await this.actor(user,tx);if(!maker(user))throw new AccessDenied('view','(only IT reconciles its own manual attempts)');
       if((await tx.itManualProblems?.() ?? []).length)throw new BadRequest('Manual IT storage protections are not configured.');
       const id=`${user.id}:${requestId}`,old=await tx.get('itManualReceipts',id);
       if(old){if(old.kind!==kind)throw new BadRequest('This request belongs to another manual record kind.');return {...marker(user),requestId,kind,found:true as const,terminal:old.outcome,recordId:old.recordId,version:old.version,message:old.message,replayed:true};}
@@ -117,7 +120,7 @@ export class ItManualService {
     const hash=sha256Hex(JSON.stringify({kind,update,input:canonical(i)}));
     return withItRecordLock(this.store,'create',async tx=>{
       user=await this.actor(user,tx);
-      if(!isIt(user))throw new AccessDenied('view','(only authorized IT records manual work)');
+      if(update?!isIt(user):!maker(user))throw new AccessDenied('view','(only authorized IT records manual work)');
       if((await tx.itManualProblems?.() ?? []).length)throw new BadRequest('Manual IT storage protections are not configured. No submission was accepted by this call; keep any uncertain earlier request for reconciliation.');
       const id=`${user.id}:${requestId}`;const old=await tx.get('itManualReceipts',id);
       if(old){
@@ -152,7 +155,7 @@ export class ItManualService {
     const hash = sha256Hex(JSON.stringify(keys.map(k => [k, i[k]])));
     return (async (tx:Store) => {
       user = await this.actor(user, tx);
-      if (!isIt(user)) throw new AccessDenied('view', '(only the authorized IT team records manual work)');
+      if (!maker(user)) throw new AccessDenied('view', '(only the authorized IT team records manual work)');
       const rows = await this.rows(tx); const prior = this.prior(rows, user, requestId);
       if (prior) { if (prior.receipt.hash !== hash || prior.row.manual?.kind !== kind) throw new BadRequest('This request ID was already used for different details.'); return this.result(user, prior.row, requestId, prior.receipt.version, true); }
       const companyId = await this.company(tx, i.companyId); const unitLabel = text(i.unitLabel, 'the unit label', 120);
@@ -165,7 +168,7 @@ export class ItManualService {
         if (!realCalendarDate(i.on)) throw new BadRequest('Give the real joining/leaving date.');
         const person = i.personUserId === null ? null : await this.person(tx, i.personUserId);
         const owner = await this.person(tx, i.ownerStaffId, true);
-        if (!isLead(user) && owner.id !== user.id) throw new BadRequest('Only the IT Manager or Lead assigns another IT person.');
+        if (!assigns(user) && owner.id !== user.id) throw new BadRequest('Only the IT Manager or Lead assigns another IT person.');
         manual.personUserId = person?.id ?? null;
         const personName = person?.name ?? text(i.personName, 'the unlinked person name', 120, 2);
         const jobTitle = person?.title ?? text(i.jobTitle, 'the job title', 120, 2);
@@ -190,9 +193,9 @@ export class ItManualService {
         if(kind==='guidance'){
           manual.siteOwnerUserId=i.siteOwnerUserId===null?null:(await this.person(tx,i.siteOwnerUserId)).id;
           manual.itResponsibleId=(await this.person(tx,i.itResponsibleId,true)).id;
-          if(!isLead(user)&&manual.itResponsibleId!==user.id)throw new BadRequest('Only the IT Manager or Lead assigns another IT person.');
+          if(!assigns(user)&&manual.itResponsibleId!==user.id)throw new BadRequest('Only the IT Manager or Lead assigns another IT person.');
           manual.guidanceById=null;manual.checkedById=null;manual.updatedAt=at;manual.siteUrl=this.siteUrl(i.url);manual.nextReviewOn=optionalDate(i.nextReviewOn);manual.evidence='';manual.guidanceNote=text(i.note,'a guidance note',500);
-          if(i.jobId!==null){const j=typeof i.jobId==='string'?await tx.get('itJobs',i.jobId):null;if(!j||j.status==='cancelled'||(!isLead(user)&&j.assigneeId!==user.id&&j.givenById!==user.id))throw new BadRequest('Choose an accessible current IT job.');manual.jobId=j.id;}else manual.jobId=null;
+          if(i.jobId!==null){const j=typeof i.jobId==='string'?await tx.get('itJobs',i.jobId):null;if(!j||j.status==='cancelled'||(!assigns(user)&&j.assigneeId!==user.id&&j.givenById!==user.id))throw new BadRequest('Choose an accessible current IT job.');manual.jobId=j.id;}else manual.jobId=null;
         }
         row={id,name:text(i.name,'the record name',120,2),kind:kind==='guidance'?'other':i.kind as ItAccount['kind'],ownerId:ceos[0].id,owner:ceos[0].name,masterKeptAt:'',mfa:null,access:[],reviewedOn:null,note:text(i.note,'a note',500),manual};table='itAccounts';
       }

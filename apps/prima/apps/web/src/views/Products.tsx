@@ -28,7 +28,8 @@ export function ProductsPanel() {
   const [adding, setAdding] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="products" />;
-  const officer = data.role === 'officer';
+  // The PDPA officer keeps the list; the owner may too (P78).
+  const officer = data.canKeep;
   return (
     <>
       {data.certsDue.length > 0 && (
@@ -47,7 +48,9 @@ export function ProductsPanel() {
         </div>
         {adding && <ProductForm onDone={() => setAdding(false)} />}
         <div className="list">
-          {data.products.length === 0 && <div className="empty">No products yet.</div>}
+          {data.products.length === 0 && (
+            <div className="empty">No products yet.{officer ? ' Use Add product to record what is sold or rented to clients.' : ' The PDPA officer records them.'}</div>
+          )}
           {data.products.map((p) => (
             <ProductLine key={p.id} p={p} officer={officer} />
           ))}

@@ -48,7 +48,7 @@ export function AttendanceView() {
         sub={
           <>
             The PIC is alerted when a guard is absent or a clock-in fails a check, every {a?.repeatMin ?? 5} minutes until someone acts. Lock each day after
-            checking it. Nothing here pays, deducts or disciplines anyone automatically.
+            checking it. Nothing here pays, deducts or disciplines anyone automatically. Clock-ins come only from the site device with a face check; they are not typed in here. Shifts are added on the Roster.
           </>
         }
       />

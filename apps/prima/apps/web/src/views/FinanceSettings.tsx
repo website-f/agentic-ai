@@ -111,6 +111,7 @@ export function FinanceSettingsTab() {
           </div>
         </div>
       </Card>
+      {data.canSet && data.noBooks.length > 0 && <StartBooks rows={data.noBooks} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.teams.length > 0 && <TeamPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
       {data.history.length > 0 && (
         <Card title="Earlier settings" flush>
@@ -127,6 +128,72 @@ export function FinanceSettingsTab() {
         </Card>
       )}
     </>
+  );
+}
+
+/**
+ * P78: a company added after go-live has no Finance books in Prima, so none of its payments, checks or close can be kept.
+ * The Finance Director or the CEO starts them: the team that keeps them and the financial year end.
+ */
+function StartBooks({ rows, onSaved }: { rows: { companyId: string; name: string }[]; onSaved: () => void }) {
+  const act = useAction();
+  const [open, setOpen] = useState<string | null>(null);
+  const [team, setTeam] = useState('1');
+  const [fyEnd, setFyEnd] = useState('12-31');
+  const fyOk = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(fyEnd.trim());
+  return (
+    <Card
+      title="Companies with no Finance books"
+      sub="Start a company's books so its payments, monthly checks and month-end close are kept here. Its figures stay unknown until SQL Account sends them."
+      flush
+    >
+      <ErrorNotice error={act.error} />
+      <div className="fin-rows">
+        {rows.map((r) => (
+          <div key={r.companyId} className="fin-kv fin-kv-wrap">
+            <span className="fin-min0 fin-strong">{r.name}</span>
+            {open === r.companyId ? (
+              <span className="fin-inline-form">
+                <label className="field">
+                  <span className="label">Team</span>
+                  <select className="select fin-w-sm" value={team} onChange={(e) => setTeam(e.target.value)}>
+                    {[1, 2, 3, 4, 5, 6, 7].map((t) => (
+                      <option key={t} value={t}>
+                        Team {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="label">Year ends (month-day)</span>
+                  <input className="input fin-w-sm" value={fyEnd} onChange={(e) => setFyEnd(e.target.value)} aria-invalid={!fyOk} placeholder="12-31" />
+                  {!fyOk && <span className="help fin-warn">Month and day, such as 12-31 or 06-30.</span>}
+                </label>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={act.busy || !fyOk}
+                  onClick={async () => {
+                    if (await act.run(() => api.finStartBooks(r.companyId, { team: Number(team), fyEnd: fyEnd.trim() }), `Books started for ${r.name}.`)) {
+                      setOpen(null);
+                      onSaved();
+                    }
+                  }}
+                >
+                  {act.busy ? 'Saving…' : 'Start books'}
+                </button>
+                <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => setOpen(null)}>
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button className="btn btn-sm" onClick={() => setOpen(r.companyId)}>
+                Start books
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

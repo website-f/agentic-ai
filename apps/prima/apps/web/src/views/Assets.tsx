@@ -6,12 +6,13 @@ import {
   WarningIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
-import { api, type AmBoard } from "../api";
-import { FixedAssetsPanel } from "./FixedAssets";
+import { api, type AmBoard, type DisposalBody } from "../api";
+import { FixedAssetsPanel, METHOD as DISPOSAL_METHOD } from "./FixedAssets";
 import { RecordButton } from "./RecordForm";
 import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from "../kit";
 import {
   Chip,
+  Drawer,
   ErrorNotice,
   Loading,
   dateLabel,
@@ -92,6 +93,18 @@ export function AssetsView() {
       <PageHead
         title="Asset Management"
         sub="The group's rental units, office furniture and fittings, resorts, orchards and training facility. Seen only by the Asset Management team, group leadership and the finance staff who oversee it. Test version on made-up data: the Asset Management system will send the real figures."
+        actions={
+          <>
+            <RecordButton kind="amUnit" label="Add unit" primary />
+            <RecordButton kind="amAsset" label="Add asset" />
+            <RecordButton kind="amWorkOrder" label="Add work order" />
+            {data.can.record && (
+              <button className="btn btn-sm" onClick={() => setTab("buy")}>
+                Ask to buy
+              </button>
+            )}
+          </>
+        }
       />
       <Stats>
         <Stat
@@ -977,6 +990,7 @@ function Maintenance({ data }: { data: AmBoard }) {
 
 function Assets({ data }: { data: AmBoard }) {
   const [q, setQ] = useState("");
+  const [disposing, setDisposing] = useState<AmBoard["assets"]["list"][number] | null>(null);
   const rows = data.assets.list.filter(
     (a) =>
       !q ||
@@ -1076,6 +1090,11 @@ function Assets({ data }: { data: AmBoard }) {
                     {a.status !== "disposed" && (
                       <RecordButton kind="amAsset" id={a.id} />
                     )}
+                    {data.can.record && a.status === "in_use" && (
+                      <button className="btn btn-sm" onClick={() => setDisposing(a)}>
+                        Dispose…
+                      </button>
+                    )}
                   </div>
                 </div>
               </li>
@@ -1088,13 +1107,80 @@ function Assets({ data }: { data: AmBoard }) {
           </p>
         )}
       </Card>
+      {disposing && <DisposeDrawer asset={disposing} onClose={() => setDisposing(null)} />}
     </>
+  );
+}
+
+/**
+ * P78: start a disposal from the asset itself. The team (or the owner) asks with the reason and method; the Finance
+ * Director or the COO decides on the Depreciation and disposal tab, never the person who asked.
+ */
+function DisposeDrawer({ asset, onClose }: { asset: AmBoard["assets"]["list"][number]; onClose: () => void }) {
+  const act = useAction();
+  const [tried, setTried] = useState(false);
+  const [f, setF] = useState({ reason: "", method: "SCRAP" as NonNullable<DisposalBody["method"]>, estProceeds: "0" });
+  const errors = {
+    reason: f.reason.trim().length >= 3 ? "" : "Say why it is being disposed of.",
+    estProceeds: f.estProceeds.trim() !== "" && Number(f.estProceeds) >= 0 ? "" : "Give the expected proceeds in RM, 0 if none.",
+  };
+  const save = async () => {
+    setTried(true);
+    if (errors.reason || errors.estProceeds) return;
+    const r = await act.run(
+      () => api.amDisposalStep(asset.id, "ask", { reason: f.reason.trim(), method: f.method, estProceeds: Number(f.estProceeds) }),
+      "Disposal requested. The Finance Director or the COO decides.",
+    );
+    if (r !== undefined) onClose();
+  };
+  return (
+    <Drawer title={`Dispose of ${asset.tag}`} sub={asset.description} onClose={onClose}>
+      <div className="bz-form">
+        <label className="field bz-span">
+          <span className="label">Reason</span>
+          <input className="input" value={f.reason} maxLength={300} aria-invalid={tried && !!errors.reason ? true : undefined} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+          {tried && errors.reason && <span className="bz-field-err">{errors.reason}</span>}
+        </label>
+        <label className="field">
+          <span className="label">Method</span>
+          <select className="select" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
+            {Object.entries(DISPOSAL_METHOD).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Expected proceeds (RM)</span>
+          <input className="input num" inputMode="decimal" value={f.estProceeds} aria-invalid={tried && !!errors.estProceeds ? true : undefined} onChange={(e) => setF({ ...f, estProceeds: e.target.value })} />
+          {tried && errors.estProceeds && <span className="bz-field-err">{errors.estProceeds}</span>}
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="bz-form-foot">
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? "Sending…" : "Ask to dispose"}
+        </button>
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </Drawer>
   );
 }
 
 function Properties({ data }: { data: AmBoard }) {
   return (
     <div className="bz-am-props">
+      <p className="notice bz-span" data-tone="info">
+        Resort, orchard and training figures come each month from the Asset Management system. They are read-only here; correct them in that system.
+      </p>
+      {data.properties.length === 0 && (
+        <div className="bz-span">
+          <Empty title="No figures received yet." />
+        </div>
+      )}
       {data.properties.map((p) => {
         const surplus = p.income6 >= p.cost6;
         return (

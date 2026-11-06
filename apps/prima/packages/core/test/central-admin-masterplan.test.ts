@@ -639,7 +639,8 @@ describe('§125 legal hold on files', () => {
     const c = ds.cases.find((x) => x.companyId === 'co-sasa')!;
     const other = ds.cases.find((x) => x.companyId !== 'co-sasa')!;
     const input = { tbl: 'cases' as const, refId: c.id, reason: 'Evidence for the Industrial Court claim (mock)' };
-    for (const id of ['u-cm-sasa', 'u-cos', 'u-fd', 'u-fauzan'])
+    // P78: the owner (master administrator) may place a hold too; releasing one stays with legal and the Deputy.
+    for (const id of ['u-cm-sasa', 'u-cos', 'u-fd'])
       await expect(svc.placeLegalHold(await svc.user(id), m.id, input)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.placeLegalHold(legal, m.id, { ...input, reason: 'x' })).rejects.toThrow(/why the record is held/);
     await expect(svc.placeLegalHold(legal, m.id, { ...input, refId: other.id })).rejects.toThrow(/same company/);
@@ -660,7 +661,8 @@ describe('§125 legal hold on files', () => {
     await expect(svc.legalHoldBoard(await svc.user('u-cm-sasa'))).rejects.toBeInstanceOf(AccessDenied);
     const ceoBoard = await svc.legalHoldBoard(await svc.user('u-fauzan'));
     expect(ceoBoard.rows[0]).toMatchObject({ versions: 1, canRelease: false });
-    expect(ceoBoard.canPlace).toBe(false);
+    expect(ceoBoard.canPlace).toBe(true);
+    await expect(svc.releaseLegalHold(await svc.user('u-fauzan'), h.id, 'Matter settled (mock)')).rejects.toBeInstanceOf(AccessDenied);
     // Release: legal or the Deputy, with a reason; afterwards changes are not kept.
     await expect(svc.releaseLegalHold(await svc.user('u-cm-sasa'), h.id, 'Matter settled (mock)')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.releaseLegalHold(legal, h.id, 'ok')).rejects.toThrow(/why the hold is released/);

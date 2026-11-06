@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CaretRightIcon,
   DownloadSimpleIcon,
   FileCsvIcon,
   FlagIcon,
   HourglassMediumIcon,
+  PlusIcon,
   WalletIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
@@ -94,6 +95,7 @@ export function StaffPayView() {
     me.user.department === "finance";
   const [tab, setTab] = useState<"runs" | "mine" | "tables" | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="staff payroll" />;
   const current = tab ?? (data.role ? "runs" : "mine");
@@ -108,6 +110,13 @@ export function StaffPayView() {
             Finance pays through the bank and posts to SQL Account. Wages are
             due by the {data.rule.payByDay}th of the next month.
           </>
+        }
+        actions={
+          data.canPrepare && current === "runs" ? (
+            <button className="btn btn-primary" onClick={() => setPreparing(true)}>
+              <PlusIcon size={16} /> Start a payroll month
+            </button>
+          ) : undefined
         }
       >
         {data.role && (
@@ -144,7 +153,99 @@ export function StaffPayView() {
         <Mine data={data} />
       )}
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
+      {preparing && (
+        <PrepareDrawer
+          data={data}
+          onClose={() => setPreparing(false)}
+          onDone={(id) => {
+            setPreparing(false);
+            setOpen(id);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Start (or recalculate) an employer's month (P78: HR, or the owner as master administrator). The month is built from
+ * the staff records, unpaid leave and approved claims; the lines are then checked and adjusted in the month itself.
+ */
+function PrepareDrawer({
+  data,
+  onClose,
+  onDone,
+}: {
+  data: StaffPayBoard;
+  onClose: () => void;
+  onDone: (runId: string) => void;
+}) {
+  const act = useAction();
+  const [companyId, setCompanyId] = useState(data.employers[0]?.companyId ?? "");
+  const [period, setPeriod] = useState(data.period);
+  const [tried, setTried] = useState(false);
+  const run = data.runs.find((r) => r.companyId === companyId && r.period === period) ?? null;
+  const locked = !!run && run.stage !== "draft";
+  const save = async () => {
+    setTried(true);
+    if (!companyId || locked) return;
+    const r = (await act.run(
+      () => api.prepareStaffPay(companyId, period),
+      run ? "Recalculated. Check the lines, then submit." : "Prepared. Check the lines, then submit.",
+    )) as { id?: string } | undefined;
+    if (r) onDone(r.id ?? `sp-${companyId}-${period}`);
+  };
+  return (
+    <Drawer title="Start a payroll month" sub="Staff payroll, for office staff" onClose={onClose}>
+      {data.employers.length === 0 ? (
+        <Empty title="No employer with office staff yet">
+          Add office staff on the People screen first; each employer's month lists its active office staff.
+        </Empty>
+      ) : (
+        <div className="pay-prep">
+          <label className="field">
+            <span className="label">Employer</span>
+            <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              {data.employers.map((e) => (
+                <option key={e.companyId} value={e.companyId}>
+                  {e.companyName} ({e.staff} staff)
+                </option>
+              ))}
+            </select>
+            {tried && !companyId && <span className="help" data-tone="crit">Choose the employer.</span>}
+          </label>
+          <label className="field">
+            <span className="label">Month</span>
+            <select className="select" value={period} onChange={(e) => setPeriod(e.target.value)}>
+              <option value={data.period}>{monthLabel(data.period)}</option>
+              <option value={data.prev}>{monthLabel(data.prev)}</option>
+            </select>
+            <span className="help">Payroll is prepared for this month or last month.</span>
+          </label>
+          {run && (
+            <div className="notice" data-tone={locked ? "warn" : "info"}>
+              {locked
+                ? `${monthLabel(period)} is already ${STAGE[run.stage][1].toLowerCase()}. It changes only if it is returned to HR.`
+                : `${monthLabel(period)} is already a draft. Starting it again recalculates it from the staff records; one-off allowances, entered PCB and part-month pay are kept.`}
+            </div>
+          )}
+          <p className="muted small">
+            Each line comes from the staff record: basic pay, fixed allowances, unpaid leave and approved claims, with EPF,
+            SOCSO, EIS and an estimated PCB. Add one-off allowances, the PCB from e-PCB and part-month pay on each line
+            after it opens. The Chief of Staff and the COO approve it; whoever prepares or submits a month cannot approve it.
+          </p>
+          <ErrorNotice error={act.error} />
+          <div className="pay-actions">
+            <button className="btn btn-primary" disabled={act.busy || locked} onClick={() => void save()}>
+              {act.busy ? "Working…" : run ? "Recalculate the month" : "Prepare the month"}
+            </button>
+            <button className="btn" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Drawer>
   );
 }
 
@@ -232,7 +333,9 @@ function Runs({
             </div>
             <ErrorNotice error={act.error} />
             {employers.length === 0 ? (
-              <Empty title="No employer with staff yet" />
+              <Empty title="No employer with staff yet">
+                Add office staff on the People screen; each employer with active office staff gets a payroll month here.
+              </Empty>
             ) : (
               <div className="pay-runs">
                 {employers.map((e) => {
@@ -285,7 +388,7 @@ function Runs({
                           </div>
                         </dl>
                       )}
-                      {(e.current || data.role === "hr") && (
+                      {(e.current || data.canPrepare) && (
                       <footer className="pay-run-foot">
                         {e.current ? (
                           <button
@@ -295,7 +398,7 @@ function Runs({
                             {r?.mineToAct ? "Open and act" : "Open"}
                             <CaretRightIcon size={14} aria-hidden="true" />
                           </button>
-                        ) : data.role === "hr" ? (
+                        ) : data.canPrepare ? (
                           <button
                             className="btn btn-primary btn-sm"
                             disabled={act.busy}
@@ -385,6 +488,7 @@ const REMIT: Record<
 function RunDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
   const { data, error } = useLoad(() => api.staffPayRun(runId), [runId]);
   const [slip, setSlip] = useState<StaffPayLine | null>(null);
+  const slipRef = useRef<HTMLDivElement>(null);
   return (
     <Drawer
       title={
@@ -410,11 +514,22 @@ function RunDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
               Back to the list
             </button>
           </div>
-          <Payslip
-            line={slip}
-            period={data.run.period}
-            companyName={data.companyName}
-          />
+          <div ref={slipRef}>
+            <Payslip
+              line={slip}
+              period={data.run.period}
+              companyName={data.companyName}
+            />
+          </div>
+          <div>
+            <button
+              className="btn btn-sm"
+              onClick={() => downloadSlip(slipRef.current, `${data.run.period}-${slip.staffNo}`)}
+            >
+              <DownloadSimpleIcon size={16} aria-hidden="true" />
+              {data.run.stage === "paid" ? "Download payslip" : "Download draft payslip"}
+            </button>
+          </div>
         </>
       )}
     </Drawer>
@@ -753,6 +868,11 @@ function RunBody({
             EPF {rm(totals.epf)} · PCB {rm(totals.pcb)} · HRD {rm(totals.hrd)}
           </span>
         }
+        actions={
+          run.lines.length > 0 ? (
+            <AllPayslips lines={run.lines} period={run.period} companyName={data.companyName} paid={run.stage === "paid"} />
+          ) : undefined
+        }
         flush
       >
         <SocsoColumns lines={run.lines} totals={totals} />
@@ -826,6 +946,46 @@ function RunBody({
         </ul>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Every payslip of the month in one file (P78), to print or keep: marked as a draft until Finance has paid the month.
+ * Staff still see their own payslip in the app once it is paid.
+ */
+function AllPayslips({
+  lines,
+  period,
+  companyName,
+  paid,
+}: {
+  lines: StaffPayLine[];
+  period: string;
+  companyName: string;
+  paid: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [making, setMaking] = useState(false);
+  useEffect(() => {
+    if (!making) return;
+    downloadSlip(ref.current, `${period}-${paid ? "all" : "draft"}`);
+    setMaking(false);
+  }, [making, period, paid]);
+  return (
+    <>
+      <button className="btn btn-sm" disabled={making} onClick={() => setMaking(true)}>
+        <DownloadSimpleIcon size={16} aria-hidden="true" />
+        {paid ? "Download all payslips" : "Download draft payslips"}
+      </button>
+      {making && (
+        <div ref={ref} hidden>
+          {!paid && <p className="muted">Draft: not paid yet. Figures may still change before Finance pays the month.</p>}
+          {lines.map((l) => (
+            <Payslip key={l.personId} line={l} period={period} companyName={companyName} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -962,7 +1122,7 @@ function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: Staff
  */
 function downloadSlip(node: HTMLElement | null, period: string) {
   if (!node) return;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${period}</title><style>body{font-family:system-ui,sans-serif;max-width:640px;margin:24px auto;padding:0 16px;color:#111}.list-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ddd}.muted{color:#555}h3{margin:0 0 4px}</style></head><body>${node.innerHTML}</body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${period}</title><style>body{font-family:system-ui,sans-serif;max-width:640px;margin:24px auto;padding:0 16px;color:#111}.list-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ddd}.muted{color:#555}h3{margin:0 0 4px}section{margin-bottom:32px;break-after:page}</style></head><body>${node.innerHTML}</body></html>`;
   const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
   const a = document.createElement("a");
   a.href = url;

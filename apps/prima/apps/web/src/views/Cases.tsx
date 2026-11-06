@@ -203,7 +203,18 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
                 ))}
               </ul>
             )}
-            {data.length === 0 && <Empty title="No cases." />}
+            {data.length === 0 && (
+              <Empty
+                title="No cases."
+                action={
+                  <button className="btn btn-sm btn-primary" onClick={() => setCreating(true)}>
+                    Raise a case
+                  </button>
+                }
+              >
+                An incident, complaint or alert at a site goes here, with its proof.
+              </Empty>
+            )}
             {data.length > 0 && shown.length === 0 && (
               <Empty
                 title="No cases."
@@ -386,7 +397,10 @@ function CaseDrawer({ caseId, onClose }: { caseId: string; onClose: () => void }
 }
 
 function NewCase({ onClose }: { onClose: () => void }) {
-  const { companyId, me } = useApp();
+  const app = useApp();
+  const { me } = app;
+  // Group leadership sees several companies: the case is raised for the one chosen here (the app's company to start).
+  const [companyId, setCompanyId] = useState(app.companyId);
   const sites = useLoad(() => api.sites(companyId), [companyId]);
   const [form, setForm] = useState({
     siteId: '',
@@ -402,6 +416,29 @@ function NewCase({ onClose }: { onClose: () => void }) {
   return (
     <Drawer title="Raise a case" sub={company?.name} onClose={onClose}>
       <div className="cs-form">
+        {me.companies.length > 1 && (
+          <div className="field cs-span">
+            <label className="label" htmlFor="nc-company">
+              Company
+            </label>
+            <select
+              id="nc-company"
+              className="select"
+              value={companyId}
+              onChange={(e) => {
+                setCompanyId(e.target.value);
+                setForm({ ...form, siteId: '' });
+                setProof([]);
+              }}
+            >
+              {me.companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="field">
           <label className="label" htmlFor="nc-site">
             Site

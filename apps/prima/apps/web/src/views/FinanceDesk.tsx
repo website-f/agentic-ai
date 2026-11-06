@@ -602,7 +602,7 @@ function EditReturned({ c, p, onDone, onCancel }: { c: Co; p: Pay; onDone: () =>
   );
 }
 
-function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => void }) {
+export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => void }) {
   const act = useAction();
   const cos = desk.companies.filter((c) => c.canAct);
   const [f, setF] = useState({

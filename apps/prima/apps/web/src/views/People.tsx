@@ -11,6 +11,7 @@ import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, Medica
 import { SHIFT_STATE } from './shared';
 import { RecordButton } from './RecordForm';
 import { GuardTrainingPanel } from './HrDevelop';
+import { FaceCapture } from './FaceCheck';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -42,10 +43,11 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         sub={
           <>
             Allowed to work means a valid KDN guard card (or vetting already submitted in eSIMS while KDN decides), CSG training done within the first year of
-            work, age 60 or under, and for Nepali guards a valid permit, passport, FOMEMA and insurance.
+            work, age 60 or under, and for Nepali guards a valid permit, passport, FOMEMA and insurance. Guards and officers come from the JA Group
+            app; office staff are added here.
           </>
         }
-        actions={<RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" />}
+        actions={<RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />}
       />
 
       {data && (
@@ -225,6 +227,34 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
   );
 }
 
+/**
+ * Face for clock-in, not enrolled yet (P78). An office staff member opening their own record registers it here with
+ * the full-screen camera; HR then approves the photo. Everyone else registers on their own phone.
+ */
+function FaceNotEnrolled({ personId, office }: { personId: string; office: boolean }) {
+  const { me } = useApp();
+  const act = useAction();
+  const [sent, setSent] = useState(false);
+  const own = office && me.user.personId === personId;
+  return (
+    <div className="pp-face">
+      <Chip tone={sent ? 'info' : 'warn'}>{sent ? 'Waiting for HR to approve' : 'Not enrolled'}</Chip>
+      {own && !sent && (
+        <FaceCapture
+          label="Register my face"
+          title="Register your face"
+          busy={act.busy}
+          onCapture={(r) =>
+            void act.run(() => api.registerFace({ photo: r.photo, descriptor: r.descriptor }), 'Sent to HR to approve.').then((ok) => ok && setSent(true))
+          }
+        />
+      )}
+      {!own && office && <span className="muted small">They register it on their own phone, on the Clock screen.</span>}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
 const ROLE_LABEL: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
 export function WorkTab({ data }: { data: PersonDetail }) {
@@ -239,7 +269,7 @@ export function WorkTab({ data }: { data: PersonDetail }) {
               ['Born', dateLabel(p.dob)],
               ['Phone', <span className="mono">{p.phone}</span>],
               ['Joined', dateLabel(p.hiredOn)],
-              ['Face for clock-in', p.faceEnrolledOn ? `Enrolled ${dateLabel(p.faceEnrolledOn)}` : <Chip tone="warn">Not enrolled</Chip>],
+              ['Face for clock-in', p.faceEnrolledOn ? `Enrolled ${dateLabel(p.faceEnrolledOn)}` : <FaceNotEnrolled personId={p.id} office={p.role === 'office'} />],
             ]}
           />
         </div>

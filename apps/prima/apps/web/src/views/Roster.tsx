@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, PencilSimpleLineIcon, ProhibitIcon, UserCircleDashedIcon } from '@phosphor-icons/react';
+import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, PencilSimpleLineIcon, PlusIcon, ProhibitIcon, UserCircleDashedIcon } from '@phosphor-icons/react';
 import { addDays, dateOf, isBlocked } from '@prima/core';
 import { api, type Roster } from '../api';
 import { useApp } from '../App';
-import { Card, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
+import { Card, Empty, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
+import { RecordButton } from './RecordForm';
 import { Chip, Drawer, ErrorNotice, Findings, Loading, dayLabel, hhmm, useAction, useLoad } from '../ui';
 import '../styles/attendance.css';
 
@@ -15,6 +16,7 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
   const [from, setFrom] = useState(today);
   const [siteId, setSiteId] = useState<string | undefined>(initialSite);
   const [editing, setEditing] = useState<RosterShift | null>(null);
+  const [adding, setAdding] = useState(false);
   const sites = useLoad(() => api.sites(companyId), [companyId]);
 
   useEffect(() => {
@@ -59,15 +61,30 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         title="Roster"
         sub="Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change."
         actions={
-          <select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
-            {sites.data?.map((s) => (
-              <option key={s.site.id} value={s.site.id}>
-                {s.site.code} · {s.site.name}
-              </option>
-            ))}
-          </select>
+          <>
+            <select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
+              {sites.data?.map((s) => (
+                <option key={s.site.id} value={s.site.id}>
+                  {s.site.code} · {s.site.name}
+                </option>
+              ))}
+            </select>
+            {r?.canEdit && (
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                Add shifts
+              </button>
+            )}
+          </>
         }
       />
+      {sites.data && sites.data.length === 0 && (
+        <Card>
+          <Empty title="No sites yet." action={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}>
+            A roster belongs to a site. Add the site and its posts first, then add the shifts here.
+          </Empty>
+        </Card>
+      )}
 
       {r && (
         <Stats>
@@ -143,7 +160,28 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
             <Loading what="roster" />
           </div>
         )}
-        {r && (
+        {r && rows.length === 0 && (
+          <Empty
+            title={r.posts.length ? 'No shifts this week.' : 'This site has no posts yet.'}
+            action={
+              r.posts.length ? (
+                r.canEdit && (
+                  <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                    <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                    Add shifts
+                  </button>
+                )
+              ) : (
+                <RecordButton kind="post" companyId={r.site.companyId} label="Add post" primary />
+              )
+            }
+          >
+            {r.posts.length
+              ? 'Add the shifts for each post, then assign guards and publish the week.'
+              : 'Add a post (a guard position with its shift pattern), then add its shifts here.'}
+          </Empty>
+        )}
+        {r && rows.length > 0 && (
           <div className="table-wrap ros-wrap">
             <table className="roster ros-grid">
               <thead>
@@ -214,7 +252,117 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         )}
       </Card>
       {editing && <AssignDrawer shift={editing} onClose={() => setEditing(null)} />}
+      {adding && r && <AddShiftsDrawer roster={r} from={from < today ? today : from} onClose={() => setAdding(false)} />}
     </div>
+  );
+}
+
+const PATTERN_LABEL: Record<string, string> = {
+  A: '2 shifts of 12 hours (07:00 and 19:00)',
+  B: '3 shifts of 8 hours (07:00, 15:00 and 23:00)',
+  C: 'Day only (07:00 to 19:00)',
+  D: 'Night only (19:00 to 07:00)',
+  E: 'Office hours (08:00 to 17:00, not Sundays)',
+};
+
+/** P78: add unfilled draft shifts for a post; guards are assigned and the week published as usual. */
+function AddShiftsDrawer({ roster: r, from: initialFrom, onClose }: { roster: Roster; from: string; onClose: () => void }) {
+  const act = useAction();
+  const [postId, setPostId] = useState(r.posts[0]?.id ?? '');
+  const post = r.posts.find((p) => p.id === postId);
+  const [from, setFrom] = useState(initialFrom);
+  const [days, setDays] = useState('7');
+  const [own, setOwn] = useState(false);
+  const [start, setStart] = useState('07:00');
+  const [end, setEnd] = useState('19:00');
+  const [guards, setGuards] = useState('');
+  const nDays = Number(days);
+  const nGuards = guards.trim() ? Number(guards) : null;
+  const problem = !postId
+    ? 'Choose the post.'
+    : !from
+      ? 'Give the first day.'
+      : !(Number.isInteger(nDays) && nDays >= 1 && nDays <= 31)
+        ? 'Add between 1 and 31 days at a time.'
+        : nGuards != null && !(Number.isInteger(nGuards) && nGuards >= 1 && nGuards <= 20)
+          ? 'Guards per shift: a whole number from 1 to 20.'
+          : own && (!start || !end || start === end)
+            ? 'Give a start and an end time that differ.'
+            : null;
+  const save = async () => {
+    const ok = await act.run(
+      () => api.addShifts(r.site.id, { postId, from, days: nDays, start: own ? start : null, end: own ? end : null, guards: nGuards }),
+      (x) => `Added ${x.added} shift${x.added === 1 ? '' : 's'}. Assign guards, then publish the week.`,
+    );
+    if (ok) onClose();
+  };
+  return (
+    <Drawer title="Add shifts" sub={`${r.site.code} · ${r.site.name}. New shifts start unfilled, as a draft.`} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <label className="field">
+          <span className="label">Post</span>
+          <select className="select" value={postId} onChange={(e) => setPostId(e.target.value)}>
+            {r.posts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {post && (
+            <span className="help">
+              Pattern: {PATTERN_LABEL[post.shiftStructure] ?? post.shiftStructure}, {post.guardsPerShift} guard{post.guardsPerShift === 1 ? '' : 's'} a shift.
+            </span>
+          )}
+        </label>
+        <label className="field">
+          <span className="label">First day</span>
+          <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">How many days</span>
+          <input className="input" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
+          <span className="help">Up to 31 days at a time. Shifts already on the roster are not added twice.</span>
+        </label>
+        <label className="row small" style={{ gap: 8, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={own} onChange={(e) => setOwn(e.target.checked)} />
+          <span>Use other times instead of the post's pattern</span>
+        </label>
+        {own && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+            <label className="field">
+              <span className="label">Starts</span>
+              <input className="input" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">Ends</span>
+              <input className="input" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+              <span className="help">An end before the start runs past midnight.</span>
+            </label>
+          </div>
+        )}
+        <label className="field">
+          <span className="label">Guards per shift (optional)</span>
+          <input
+            className="input"
+            inputMode="numeric"
+            placeholder={post ? String(post.guardsPerShift) : ''}
+            value={guards}
+            onChange={(e) => setGuards(e.target.value)}
+          />
+          <span className="help">Leave empty to use the post's number.</span>
+        </label>
+        {problem && <p className="help">{problem}</p>}
+        <ErrorNotice error={act.error} />
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-primary" disabled={!!problem || act.busy} onClick={save}>
+            {act.busy ? 'Adding…' : 'Add shifts'}
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Drawer>
   );
 }
 

@@ -170,7 +170,19 @@ export function ClientsView() {
 
       <Card title={FILTERS.find(([k]) => k === filter)?.[1]} sub={`${rows.length} client${rows.length === 1 ? '' : 's'}`} flush>
         {rows.length === 0 ? (
-          <Empty title="Nothing here.">{needle ? 'No client matches the search.' : undefined}</Empty>
+          <Empty
+            title="Nothing here."
+            action={
+              !needle &&
+              data.canAdd.length > 0 && (
+                <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+                  New client
+                </button>
+              )
+            }
+          >
+            {needle ? 'No client matches the search.' : 'A new client starts onboarding: contract, survey, award, deployment, billing and PDPA.'}
+          </Empty>
         ) : (
           <ul className="bz-rows">
             {rows.slice(0, 60).map((a) => (

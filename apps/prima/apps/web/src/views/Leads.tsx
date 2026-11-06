@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type SalesLeadInput, type SalesLeads } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { PlusIcon } from '@phosphor-icons/react';
+import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 
 /**
  * Sales leads before quoting (V3 CRM). Research the prospect (SSM search, payment record, current provider, risks) and
@@ -46,7 +47,8 @@ export function LeadsPanel({ companyId }: { companyId: string }) {
         <h3>Leads and client research</h3>
         <div className="row" style={{ gap: 6 }}>
           {data.can.prepare && (
-            <button className="btn btn-sm" onClick={() => setForm(!form)}>
+            <button className="btn btn-sm btn-primary" onClick={() => setForm(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
               New lead
             </button>
           )}
@@ -65,9 +67,17 @@ export function LeadsPanel({ companyId }: { companyId: string }) {
         <Kpi label="Also chased by a group company" value={k.conflicts} tone={k.conflicts ? 'warn' : 'ok'} />
         <Kpi label="Won in 90 days" value={k.won90} note={`of ${k.closed90} closed`} />
       </div>
-      {form && <NewLead companyId={companyId} onDone={() => setForm(false)} />}
+      {form && (
+        <Drawer title="New lead" sub="Research the prospect and survey the site before pricing it." onClose={() => setForm(false)}>
+          <NewLead companyId={companyId} onDone={() => setForm(false)} />
+        </Drawer>
+      )}
       <div className="list">
-        {!rows.length && <div className="empty">No open leads.</div>}
+        {!rows.length && (
+          <div className="empty">
+            {all ? 'No leads yet.' : 'No open leads.'} {data.can.prepare ? 'Use New lead to record a prospect.' : 'The company admin team records leads here.'}
+          </div>
+        )}
         {rows.map((r) => (
           <LeadLine key={r.lead.id} r={r} data={data} />
         ))}
@@ -382,84 +392,114 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
         .catch(() => []),
     [companyId],
   );
+  const [tried, setTried] = useState(false);
+  const guardsOk = /^\d+$/.test(f.guardsEst.trim()) && Number(f.guardsEst) >= 1 && Number(f.guardsEst) <= 1000;
+  const errors = {
+    prospect: f.prospect.trim() ? '' : 'Name the prospect.',
+    guardsEst: guardsOk ? '' : 'Estimate the guards needed, 1 to 1,000.',
+    estMonthly: !f.estMonthly.trim() || Number(f.estMonthly) > 0 ? '' : 'An amount in RM, or leave it empty.',
+  };
+  const err = (k: keyof typeof errors) => (tried && errors[k] ? <span className="bz-field-err">{errors[k]}</span> : null);
+  const save = () => {
+    setTried(true);
+    if (Object.values(errors).some(Boolean)) return;
+    act
+      .run(
+        () =>
+          api.addSalesLead(companyId, {
+            ...f,
+            guardsEst: Number(f.guardsEst),
+            estMonthly: f.estMonthly.trim() ? Number(f.estMonthly) : null,
+            nextOn: f.nextOn || null,
+            branchId: f.branchId || null,
+          }),
+        'Lead opened. Research the prospect next.',
+      )
+      .then((x) => {
+        if (x) onDone();
+      });
+  };
   return (
-    <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
-      <input
-        className="input"
-        aria-label="Prospect"
-        placeholder="Prospect (company or body)"
-        value={f.prospect}
-        onChange={(e) => setF({ ...f, prospect: e.target.value })}
-      />
-      <select className="input" aria-label="Sector" value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value as SalesLeadInput['sector'] })}>
-        {Object.entries(SECTOR).map(([v, t]) => (
-          <option key={v} value={v}>
-            {t}
-          </option>
-        ))}
-      </select>
-      <input
-        className="input"
-        aria-label="Source"
-        placeholder="Where it came from (referral, branch)"
-        value={f.source}
-        onChange={(e) => setF({ ...f, source: e.target.value })}
-      />
-      {(branches.data ?? []).length > 0 && (
-        <select className="input" aria-label="Branch that found it" value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>
-          <option value="">Head office (no branch)</option>
-          {(branches.data ?? []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      )}
-      <input
-        className="input"
-        aria-label="Guards"
-        placeholder="Guards needed (estimate)"
-        inputMode="numeric"
-        value={f.guardsEst}
-        onChange={(e) => setF({ ...f, guardsEst: e.target.value })}
-      />
-      <input
-        className="input"
-        aria-label="Monthly value"
-        placeholder="Value a month (RM, if known)"
-        inputMode="decimal"
-        value={f.estMonthly}
-        onChange={(e) => setF({ ...f, estMonthly: e.target.value })}
-      />
-      <label className="small">
-        Next step date
-        <input className="input" type="date" value={f.nextOn} onChange={(e) => setF({ ...f, nextOn: e.target.value })} />
-      </label>
-      <input className="input" aria-label="Next step" placeholder="Next step" value={f.nextWhat} onChange={(e) => setF({ ...f, nextWhat: e.target.value })} />
-      <button
-        className="btn btn-sm btn-primary"
-        disabled={act.busy}
-        onClick={() =>
-          act
-            .run(
-              () =>
-                api.addSalesLead(companyId, {
-                  ...f,
-                  guardsEst: Number(f.guardsEst),
-                  estMonthly: f.estMonthly.trim() ? Number(f.estMonthly) : null,
-                  nextOn: f.nextOn || null,
-                  branchId: f.branchId || null,
-                }),
-              'Lead opened.',
-            )
-            .then((x) => {
-              if (x) onDone();
-            })
-        }
-      >
-        Open lead
-      </button>
+    <>
+      <div className="bz-form">
+        <label className="field bz-span">
+          <span className="label">Prospect</span>
+          <input
+            className="input"
+            placeholder="Company or body"
+            value={f.prospect}
+            aria-invalid={tried && !!errors.prospect ? true : undefined}
+            onChange={(e) => setF({ ...f, prospect: e.target.value })}
+          />
+          {err('prospect')}
+        </label>
+        <label className="field">
+          <span className="label">Sector</span>
+          <select className="select" value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value as SalesLeadInput['sector'] })}>
+            {Object.entries(SECTOR).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Where it came from (optional)</span>
+          <input className="input" placeholder="Referral, branch, walk-in" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })} />
+        </label>
+        {(branches.data ?? []).length > 0 && (
+          <label className="field bz-span">
+            <span className="label">Branch that found it</span>
+            <select className="select" value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>
+              <option value="">Head office (no branch)</option>
+              {(branches.data ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="field">
+          <span className="label">Guards needed (estimate)</span>
+          <input
+            className="input num"
+            inputMode="numeric"
+            value={f.guardsEst}
+            aria-invalid={tried && !!errors.guardsEst ? true : undefined}
+            onChange={(e) => setF({ ...f, guardsEst: e.target.value })}
+          />
+          {err('guardsEst')}
+        </label>
+        <label className="field">
+          <span className="label">Value a month, RM (optional)</span>
+          <input
+            className="input num"
+            inputMode="decimal"
+            value={f.estMonthly}
+            aria-invalid={tried && !!errors.estMonthly ? true : undefined}
+            onChange={(e) => setF({ ...f, estMonthly: e.target.value })}
+          />
+          {err('estMonthly')}
+        </label>
+        <label className="field">
+          <span className="label">Next step date (optional)</span>
+          <input className="input" type="date" value={f.nextOn} onChange={(e) => setF({ ...f, nextOn: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Next step (optional)</span>
+          <input className="input" placeholder="Research the prospect" value={f.nextWhat} onChange={(e) => setF({ ...f, nextWhat: e.target.value })} />
+        </label>
+      </div>
       <ErrorNotice error={act.error} />
-    </div>
+      <div className="bz-form-foot">
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? 'Saving…' : 'Open lead'}
+        </button>
+        <button className="btn" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </>
   );
 }

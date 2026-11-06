@@ -3,7 +3,7 @@
  * client care (Fauzan, 2 Nov 2026). PrimaService uses these, and so do the guide cards, so a card is shown only to
  * people the server lets do the task.
  */
-import { GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, accessClosed, isGroupLeader, type OpsCompanyId } from './access';
+import { GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, accessClosed, isGroupLeader, isOwnerAdmin, type OpsCompanyId } from './access';
 import { registerRollout } from './rollouts';
 import type { IsoDate, Site, User } from './types';
 
@@ -64,6 +64,8 @@ export function managementFeeBillScope(u: User): OpsCompanyId[] {
 
 /** Who acts on clients (Operations Managers, the Operations Director, the OGM and officers) and who monitors. */
 export function clientRoleOf(user: User): 'act' | 'monitor' | null {
+  // P78: the owner opens clients for any company and works their care steps, as Operations does.
+  if (isOwnerAdmin(user)) return 'act';
   if (user.role === 'supervisor' || user.opsTier === 'patrol') return 'act';
   if (user.role === 'pwvsb_officer' && user.department === 'operations' && ['om', 'regional', 'ogm', 'ops_director'].includes(user.opsTier ?? '')) return 'act';
   if (isGroupLeader(user) || user.role === 'company_manager' || user.role === 'admin_exec') return 'monitor';

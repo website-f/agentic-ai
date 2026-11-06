@@ -69,7 +69,7 @@ export function AuditView() {
     <div className="page gv-page">
       <PageHead
         title="Audit trail"
-        sub="Every change is recorded with who, what and when. Each entry is sealed with the one before it, so any later edit breaks the seal and shows here."
+        sub="Every change is recorded with who, what and when. Prima writes each entry itself, so nobody adds or edits one here. Each entry is sealed with the one before it, so any later edit breaks the seal and shows here."
         actions={seal}
       />
       <Stats>

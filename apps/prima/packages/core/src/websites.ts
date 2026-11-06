@@ -734,7 +734,8 @@ export class WebsiteService {
     const name = (id: Id | null | undefined) => (id ? (d.users.find((u) => u.id === id)?.name ?? id) : null);
     const coName = (id: Id) => d.companies.find((c) => c.id === id)?.name ?? id;
     const seesVault = v.it || v.admin;
-    const canEditRecords = v.itHead;
+    // P78: the CEO is owner and master administrator of every domain and website, so may add and correct the records too.
+    const canEditRecords = v.itHead || v.admin;
 
     const siteRows = d.sites
       .filter((s) => visible.has(s.companyId))
@@ -1395,7 +1396,7 @@ export class WebsiteService {
     const existing = id ? await this.store.get('webDomains', id) : undefined;
     if (id && !existing) throw new NotFound('Domain');
     const assigned = existing && (existing.itAdminId === v.user.id || existing.backupId === v.user.id);
-    if (!v.itHead && !assigned) throw new BadRequest('Only the IT Head or the domain’s IT administrators change domain details.');
+    if (!v.itHead && !v.admin && !assigned) throw new BadRequest('Only the IT Head, the CEO or the domain’s IT administrators change domain details.');
     const name = this.text(i.name, 'the domain name', 3, 120).toLowerCase();
     if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name)) throw new BadRequest('The domain name looks wrong (like company.com.my, no https:// or www).');
     for (const k of ['password', 'authCode', 'recoveryCode', 'privateKey']) if (i[k]) throw new BadRequest('Do not put passwords or codes here. Record only where they are kept in the password manager.');
@@ -1449,7 +1450,7 @@ export class WebsiteService {
   private async confirmRenewal(v: Viewer, i: Record<string, unknown>) {
     const x = await this.store.get('webDomains', this.text(i.domainId, 'the domain'));
     if (!x) throw new NotFound('Domain');
-    if (!v.itHead && x.itAdminId !== v.user.id && x.backupId !== v.user.id && x.renewalOwnerId !== v.user.id)
+    if (!v.itHead && !v.admin && x.itAdminId !== v.user.id && x.backupId !== v.user.id && x.renewalOwnerId !== v.user.id)
       throw new BadRequest('Only the renewal owner or the domain’s IT administrators confirm a renewal.');
     const to = this.date(i.newExpiry, 'the new expiry date', true)!;
     if (x.expiresOn && to <= x.expiresOn) throw new BadRequest('The new expiry date must be later than the current one.');
@@ -1487,7 +1488,7 @@ export class WebsiteService {
     const existing = id ? await this.store.get('webSites', id) : undefined;
     if (id && !existing) throw new NotFound('Website');
     const assigned = existing && (existing.itAdminId === v.user.id || existing.backupId === v.user.id);
-    if (!v.itHead && !assigned) throw new BadRequest('Only the IT Head or the website’s IT administrators change hosting and repository details.');
+    if (!v.itHead && !v.admin && !assigned) throw new BadRequest('Only the IT Head, the CEO or the website’s IT administrators change hosting and repository details.');
     const companyId = this.text(i.companyId ?? existing?.companyId, 'the company');
     if (!(await this.store.get('companies', companyId))) throw new NotFound('Company');
     const url = this.text(i.url, 'the website address', 4, 200);

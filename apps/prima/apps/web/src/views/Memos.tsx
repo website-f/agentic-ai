@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react';
+import { CaretDownIcon, CaretUpIcon, PlusIcon } from '@phosphor-icons/react';
 import { api, type Memos } from '../api';
 import { Card, PageHead, Search } from '../kit';
-import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/selfservice.css';
 
 /**
@@ -24,6 +24,7 @@ export function MemosView() {
   const { data, error } = useLoad(() => api.memos(), []);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [q, setQ] = useState('');
+  const [writing, setWriting] = useState(false);
   if (error)
     return (
       <div className="page ss">
@@ -44,13 +45,23 @@ export function MemosView() {
     .filter((m) => !needle || [m.title, m.body, m.publishedBy].some((x) => x.toLowerCase().includes(needle)));
   return (
     <div className="page ss">
-      <PageHead title="Memos" sub={PAGE_SUB} />
+      <PageHead
+        title="Memos"
+        sub={PAGE_SUB}
+        actions={
+          data.audiences.length > 0 ? (
+            <button className="btn btn-primary" onClick={() => setWriting(true)}>
+              <PlusIcon size={16} /> New memo
+            </button>
+          ) : undefined
+        }
+      />
       {data.unread > 0 && (
         <div className="notice" data-tone="warn" role="status">
           {data.unread} memo{data.unread === 1 ? '' : 's'} not read yet.
         </div>
       )}
-      <div className={data.canPublish ? 'ss-cols' : undefined}>
+      <div>
         <Card title="Memos" flush>
           <div className="ss-tools">
             <div className="seg" role="group" aria-label="Which memos">
@@ -66,7 +77,16 @@ export function MemosView() {
             <Search value={q} onChange={setQ} placeholder="Search memos" />
           </div>
           <ul className="ss-rows">
-            {data.memos.length === 0 && <li className="empty">No memos yet.</li>}
+            {data.memos.length === 0 && (
+              <li className="empty">
+                No memos yet.{' '}
+                {data.audiences.length > 0 && (
+                  <button className="btn btn-sm" onClick={() => setWriting(true)}>
+                    Write the first memo
+                  </button>
+                )}
+              </li>
+            )}
             {data.memos.length > 0 && shown.length === 0 && <li className="empty">Nothing here.</li>}
             {shown.map((m) => (
               <li key={m.id}>
@@ -75,42 +95,39 @@ export function MemosView() {
             ))}
           </ul>
         </Card>
-        {data.canPublish && <Publish audience={data.canPublish} regions={data.states} />}
       </div>
+      {writing && (
+        <Drawer title="New memo" sub="Readers acknowledge it, and you see who has read it." onClose={() => setWriting(false)}>
+          <Publish audiences={data.audiences} regions={data.states} onDone={() => setWriting(false)} />
+        </Drawer>
+      )}
     </div>
   );
 }
 
-function Publish({ audience, regions }: { audience: Memo['audience']; regions: Regions }) {
+function Publish({ audiences, regions, onDone }: { audiences: Memo['audience'][]; regions: Regions; onDone: () => void }) {
+  const [audience, setAudience] = useState<Memo['audience']>(audiences[0]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [states, setStates] = useState<string[]>([]);
   const toggle = (list: string[], on: boolean) => setStates(on ? [...new Set([...states, ...list])] : states.filter((s) => !list.includes(s)));
   const act = useAction();
   return (
-    <Card
-      title={`New memo to ${AUDIENCE_LABEL[audience].toLowerCase()}`}
-      footer={
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={act.busy || title.trim().length < 3 || body.trim().length < 3}
-          onClick={() =>
-            act
-              .run(() => api.publishMemo(audience, title, body, states), 'Memo published.')
-              .then((r) => {
-                if (r) {
-                  setTitle('');
-                  setBody('');
-                  setStates([]);
-                }
-              })
-          }
-        >
-          Publish
-        </button>
-      }
-    >
-      <div className="ss-form">
+    <div className="ss-form">
+      {audiences.length > 1 ? (
+        <label className="field">
+          <span className="label">To</span>
+          <select className="select" value={audience} onChange={(e) => setAudience(e.target.value as Memo['audience'])}>
+            {audiences.map((a) => (
+              <option key={a} value={a}>
+                {AUDIENCE_LABEL[a]}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="small">To {AUDIENCE_LABEL[audience].toLowerCase()}.</p>
+      )}
         <label className="field">
           <span className="label">Title</span>
           <input className="input" aria-label="Title" placeholder="Title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -135,8 +152,21 @@ function Publish({ audience, regions }: { audience: Memo['audience']; regions: R
           ))}
         </fieldset>
         <ErrorNotice error={act.error} />
-      </div>
-    </Card>
+        <div className="ss-actions">
+          <button
+            className="btn btn-primary"
+            disabled={act.busy || title.trim().length < 3 || body.trim().length < 3}
+            onClick={() =>
+              act.run(() => api.publishMemo(audience, title, body, states), 'Memo published.').then((r) => {
+                if (r) onDone();
+              })
+            }
+          >
+            {act.busy ? 'Publishing…' : 'Publish'}
+          </button>
+          {title.trim().length > 0 && title.trim().length < 3 && <span className="help">The title needs at least 3 characters.</span>}
+        </div>
+    </div>
   );
 }
 

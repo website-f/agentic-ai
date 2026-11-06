@@ -613,7 +613,7 @@ function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: s
         title="Website register"
         note={`${rows.length} shown`}
         actions={
-          data.role.itHead && (
+          (data.role.itHead || data.role.admin) && (
             <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
               Add website
             </button>
@@ -945,7 +945,7 @@ function Domains({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
         title="Domain register"
         note={`${data.domains.length} · soonest expiry first`}
         actions={
-          data.role.itHead && (
+          (data.role.itHead || data.role.admin) && (
             <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
               Add domain
             </button>

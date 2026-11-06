@@ -68,7 +68,8 @@ export function CreditView() {
       </div>
     );
   const k = data.kpis;
-  const officer = data.roles.includes('officer');
+  // P78: the owner records new financing too (never a default confirmation).
+  const officer = data.roles.includes('officer') || data.owner;
   const canCheck = officer || data.roles.includes('finance');
   const openCases = data.cases.filter((c) => c.item.stage !== 'cleared').length;
   const activeLoans = data.rows.filter((r) => r.loan.status === 'active').length;
@@ -344,7 +345,11 @@ function Loans({ data }: { data: CreditBoard }) {
         flush
       >
         {!rows.length ? (
-          <Empty title="No financing." />
+          <Empty title="No financing.">
+            {data.roles.includes('officer') || data.owner
+              ? "Record a signed loan, or an amount PWVSB paid on a company's behalf, with Add financing above."
+              : 'The credit officer records financing once the agreement is signed.'}
+          </Empty>
         ) : (
           <ul className="bz-rows">
             {rows.map((r) => (
@@ -361,7 +366,7 @@ function Loans({ data }: { data: CreditBoard }) {
           sub={`${current.loan.kind === 'LOAN' ? 'Loan' : 'Paid on behalf'} · ${current.loan.purpose}`}
           onClose={() => setOpen(null)}
         >
-          <LoanDetail key={current.loan.id} r={current} licence={{ can: data.canCheckLicence, last: data.lastLicence }} />
+          <LoanDetail key={current.loan.id} r={current} owner={data.owner} licence={{ can: data.canCheckLicence, last: data.lastLicence }} />
         </Drawer>
       )}
     </>
@@ -426,8 +431,11 @@ function LoanLine({ r, onOpen }: { r: Row; onOpen: () => void }) {
   );
 }
 
-function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
+function LoanDetail({ r, licence, owner = false }: { r: Row; licence: LicenceCtx; owner?: boolean }) {
   const act = useAction();
+  // P78: the owner records what the credit officer or Finance records: repayments, stamping, the charge, corrections.
+  const officerRec = r.role === 'officer' || owner;
+  const financeRec = r.role === 'finance' || owner;
   const l = r.loan;
   const [pay, setPay] = useState({ no: r.overdue[0]?.no ?? r.next?.no ?? 0, amount: '', bankRef: '', paidOn: '' });
   const [ssm, setSsm] = useState({ ref: '', on: '' });
@@ -542,7 +550,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
         </div>
       </section>
 
-      {r.role === 'finance' && l.status === 'active' && unpaid.length > 0 && (
+      {financeRec && l.status === 'active' && unpaid.length > 0 && (
         <section className="bz-act" aria-label="Record repayment">
           <h3 className="bz-cr-acth">Record a repayment</h3>
           <div className="bz-form">
@@ -618,7 +626,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
         )}
       </section>
 
-      {r.role === 'officer' && !l.stamped && (
+      {officerRec && !l.stamped && (
         <section className="bz-act" aria-label="Agreement stamped">
           <h3 className="bz-cr-acth">Record stamping</h3>
           <div className="bz-form">
@@ -640,7 +648,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
           </div>
         </section>
       )}
-      {r.role === 'officer' && l.charge && !l.charge.lodgedOn && (
+      {officerRec && l.charge && !l.charge.lodgedOn && (
         <section className="bz-act" aria-label="Charge lodged">
           <h3 className="bz-cr-acth">Record the SSM charge</h3>
           <div className="bz-form">
@@ -684,7 +692,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
         </section>
       )}
 
-      {((l.corrections ?? []).length > 0 || r.role === 'officer') && (
+      {((l.corrections ?? []).length > 0 || officerRec) && (
         <section className="bz-sec">
           <h3>Record corrections</h3>
           {(l.corrections ?? []).length > 0 && (
@@ -696,7 +704,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
               ))}
             </ul>
           )}
-          {r.role === 'officer' && (
+          {officerRec && (
             <div className="bz-actions">
               {l.status === 'active' && !fix.open && (
                 <button className="btn btn-sm btn-ghost" onClick={() => setFix({ ...fix, open: true })}>
@@ -710,7 +718,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
               )}
             </div>
           )}
-          {r.role === 'officer' && l.status === 'active' && fix.open && (
+          {officerRec && l.status === 'active' && fix.open && (
             <div className="bz-act" aria-label="Correct collateral">
               <div className="bz-form">
                 <F label="Collateral kind">
@@ -745,7 +753,7 @@ function LoanDetail({ r, licence }: { r: Row; licence: LicenceCtx }) {
               </div>
             </div>
           )}
-          {r.role === 'officer' && rec.open && (
+          {officerRec && rec.open && (
             <div className="bz-act" aria-label="Correct a recorded entry">
               <div className="bz-form">
                 <F label="What to correct" span>

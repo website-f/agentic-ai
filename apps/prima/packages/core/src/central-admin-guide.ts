@@ -1,5 +1,5 @@
 import type { User } from './types';
-import { isGroupLeader } from './access';
+import { isGroupLeader, isOwnerAdmin } from './access';
 import { isCompanySecretary, isCorpAdminOwner } from './central-admin';
 
 /**
@@ -23,7 +23,9 @@ export type GuideRoleKey =
   | 'task_owner'
   | 'director'
   | 'finance_director'
-  | 'delegation_lead';
+  | 'delegation_lead'
+  /** P78: the owner, signed in as the CEO record, does the maker steps of every module. */
+  | 'owner_admin';
 type T = { ms: string; en: string };
 export interface GuideField {
   name: T;
@@ -66,7 +68,7 @@ const DATE = [
 export const CENTRAL_ADMIN_GUIDE: GuideCard[] = [
   {
     id: 'company-file-draft',
-    roles: ['company_manager', 'corp_owner'],
+    roles: ['company_manager', 'corp_owner', 'owner_admin'],
     view: 'corporate',
     tab: 'files',
     title: t('Fail syarikat: sediakan draf', 'Company file: prepare the draft'),
@@ -188,7 +190,7 @@ export const CENTRAL_ADMIN_GUIDE: GuideCard[] = [
   },
   {
     id: 'renewal',
-    roles: ['admin_exec', 'company_manager', 'corp_owner'],
+    roles: ['admin_exec', 'company_manager', 'corp_owner', 'owner_admin'],
     view: 'renewals',
     title: t('Pembaharuan lesen dan pendaftaran', 'Licence and registration renewal'),
     purpose: t(
@@ -259,7 +261,7 @@ export const CENTRAL_ADMIN_GUIDE: GuideCard[] = [
   },
   {
     id: 'panel-firm',
-    roles: ['corp_owner', 'legal'],
+    roles: ['corp_owner', 'legal', 'owner_admin'],
     view: 'corporate',
     tab: 'panel',
     title: t('Firma panel', 'Panel firms'),
@@ -523,7 +525,7 @@ export const CENTRAL_ADMIN_GUIDE: GuideCard[] = [
   },
   {
     id: 'adviser-money',
-    roles: ['corp_owner', 'legal', 'finance_director'],
+    roles: ['corp_owner', 'legal', 'finance_director', 'owner_admin'],
     view: 'corporate',
     tab: 'panel',
     title: t('Bajet dan invois penasihat', 'Adviser budgets and invoices'),
@@ -633,6 +635,7 @@ export function centralAdminGuideRoles(user: User): GuideRoleKey[] {
   if (user.leadership === 'finance_director') r.add('finance_director');
   // The service's delegationLead: the CEO or the Chief of Staff.
   if (user.opsTier === 'ceo' || user.leadership === 'cos') r.add('delegation_lead');
+  if (isOwnerAdmin(user)) r.add('owner_admin');
   if (isCompanySecretary(user)) r.delete('task_owner');
   return [...r];
 }

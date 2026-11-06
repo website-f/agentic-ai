@@ -20,7 +20,7 @@ import { RULES } from './rules';
 import { BadRequest, NotFound } from './service';
 import type { Store } from './store';
 import { dateOf } from './time';
-import { AccessDenied, centralEmployerName, tenantCompanyIds } from './access';
+import { AccessDenied, centralEmployerName, isOwnerAdmin, tenantCompanyIds } from './access';
 import type { HomeItem } from './service';
 import type { FinRequest, FinRequestStep, FinStatus, FinSubject, Id, IsoDate, IsoDateTime, User } from './types';
 
@@ -89,7 +89,11 @@ const finChecker = (u: User, f: FinStatus) =>
 export function finRequestFinalFits(u: User, subject: FinSubject): boolean {
   return finApproverFor(subject) === 'coo' ? isCoo(u) || isCeo(u) : isFd(u) || isCeo(u);
 }
-const creatorFits = (u: User, companyId: Id) => u.role === 'company_manager' && u.companyIds.includes(companyId);
+/**
+ * The company head creates requests for their own company; the owner (P78, master administrator) may create one for
+ * any company. The creator never approves it: they are in actedIds, so every later step needs someone else.
+ */
+const creatorFits = (u: User, companyId: Id) => (u.role === 'company_manager' && u.companyIds.includes(companyId)) || isOwnerAdmin(u);
 
 /** Everyone who did a step on this round of the request (since the last resubmission), and the creator. */
 function actedIds(r: FinRequest): Id[] {
@@ -160,10 +164,12 @@ export class FinanceRequestService {
             finalName: finApproverFor(r.subject) === 'coo' ? 'COO or CEO' : 'Finance Director or CEO',
             may: finRequestMay(user, f, r),
           });
-    const creates = user.role === 'company_manager' ? user.companyIds : [];
+    const creates = isOwnerAdmin(user) ? rows.map((f) => f.companyId) : user.role === 'company_manager' ? user.companyIds : [];
     return {
       requests: out.sort((a, b) => b.created.at.localeCompare(a.created.at)),
       canCreate: creates,
+      /** Names for the company picker (the owner may create for any company). */
+      companyNames: Object.fromEntries(creates.map((id) => [id, nameOf(id)])) as Record<Id, string>,
       subjects: FIN_SUBJECTS.map((s) => ({ id: s, label: LABEL[s], head: finRequestHeadName({ subject: s, sector: s === 'operations' ? 'government' : null }), final: finApproverFor(s) === 'coo' ? 'COO or CEO' : 'Finance Director or CEO' })),
     };
   }

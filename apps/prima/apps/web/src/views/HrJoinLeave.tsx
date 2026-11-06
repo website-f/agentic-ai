@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
 import { useApp } from "../App";
 import { Card, Empty } from "../kit";
@@ -25,7 +26,9 @@ function keepsHr(u: { role: string; department?: string | null; leadership?: str
 
 export function JoinLeavePanel() {
   const { me } = useApp();
-  const hr = keepsHr(me.user);
+  // P78: the owner records filings and drafts the EA forms like HR; confirming probation stays with HR.
+  const keeper = keepsHr(me.user);
+  const hr = keeper || isOwnerAdmin(me.user);
   const b = useLoad(() => (hr ? api.hrJoinLeave() : Promise.resolve(null)), [hr]);
   const act = useAction();
   const [ref, setRef] = useState<Record<string, string>>({});
@@ -139,6 +142,7 @@ export function JoinLeavePanel() {
                   </span>
                 </div>
                 <div className="hx-row-side">{p.overdue && <Chip tone="crit">passed</Chip>}</div>
+                {keeper && (
                 <div className="hx-row-body">
                   <div className="hp-probation">
                     <label className="field">
@@ -177,6 +181,7 @@ export function JoinLeavePanel() {
                     </button>
                   </div>
                 </div>
+                )}
               </li>
             ))}
           </ul>
@@ -334,9 +339,9 @@ export function VacanciesPanel() {
               <label className="field">
                 <span className="label">Employer</span>
                 <select className="select" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })} aria-label="Employer">
-                  {keepsHr(u) && <option value="pwvsb">PWVSB (central)</option>}
+                  {(keepsHr(u) || isOwnerAdmin(u)) && <option value="pwvsb">PWVSB (central)</option>}
                   {companies
-                    .filter((c) => keepsHr(u) || u.companyIds.includes(c.id))
+                    .filter((c) => keepsHr(u) || isOwnerAdmin(u) || u.companyIds.includes(c.id))
                     .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}

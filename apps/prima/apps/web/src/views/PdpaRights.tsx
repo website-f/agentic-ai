@@ -21,14 +21,13 @@ export function RequestsPanel() {
   const [all, setAll] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="data requests" />;
-  const officer = data.role === 'officer';
   const rows = data.requests.filter((r) => all || r.request.status === 'open');
   return (
     <section className="panel">
       <div className="panel-head">
         <h3>Requests about people's own data</h3>
         <div className="row" style={{ gap: 6 }}>
-          {officer && (
+          {data.canAdd && (
             <button className="btn btn-sm" onClick={() => setForm(!form)}>
               Log a request
             </button>
@@ -216,7 +215,7 @@ export function DpoPanel() {
       </p>
       <div className="list">
         {rows.slice(0, 60).map((d) => (
-          <DpoLine key={d.companyId} d={d} officer={data.role === 'officer'} />
+          <DpoLine key={d.companyId} d={d} officer={data.canAdd} />
         ))}
       </div>
     </section>

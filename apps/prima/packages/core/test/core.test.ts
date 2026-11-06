@@ -791,7 +791,8 @@ describe('tenders and quotations', () => {
     const ae = await svc.user('u-ae-arsh');
     const cm = await svc.user('u-cm-arsh');
     const view = await svc.commercial(ae, 'co-arsh');
-    expect(view.can).toEqual({ prepare: true, approve: false });
+    // P78: whoever prepares also enters new tenders.
+    expect(view.can).toEqual({ prepare: true, approve: false, addTender: true });
     expect(view.tenders.every((t) => t.tender.companyId === 'co-arsh')).toBe(true);
     await expect(svc.commercial(ae, 'co-sasa')).rejects.toBeInstanceOf(AccessDenied);
 
@@ -2358,7 +2359,9 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     const guard = await svc.user('u-guard-sasa-1');
     await expect(svc.publishMemo(dcos, 'STAFF', 'Test memo', 'Body text')).rejects.toThrow(/Only the Chief of Staff/);
     await expect(svc.publishMemo(cos, 'FIELD', 'Test memo', 'Body text')).rejects.toThrow(/Only the COO/);
-    await expect(svc.publishMemo(ceo, 'FIELD', 'Test memo', 'Body text')).rejects.toThrow(/Only the COO/);
+    // P78: the owner (the CEO record) is master administrator and may publish to either audience.
+    expect((await svc.memos(ceo)).audiences).toEqual(['STAFF', 'FIELD']);
+    await expect(svc.publishMemo(hr, 'FIELD', 'Test memo', 'Body text')).rejects.toThrow(/Only the COO/);
     const staffMemo = await svc.publishMemo(cos, 'STAFF', 'Claims cut-off', 'Submit by the 25th.');
     const fieldMemo = await svc.publishMemo(coo, 'FIELD', 'Inspection', 'Uniform check this week.');
     // Staff see staff memos only; guards see field memos only.
@@ -2999,7 +3002,8 @@ describe('Contracts and site mobilisation (V6 amendment)', () => {
     // Group leadership watches; another company's manager sees nothing.
     expect((await svc.contracts(await svc.user('u-fauzan'))).rows.length).toBeGreaterThan(100);
     expect((await svc.contracts(await svc.user('u-cm-sasa'))).rows.every((r) => r.contract.companyId === 'co-sasa')).toBe(true);
-    await expect(svc.contractStep(await svc.user('u-fauzan'), c.id, 'suspend', 'x')).rejects.toBeInstanceOf(AccessDenied);
+    // Group leadership other than the owner only watches (P78: the owner works contracts as the company manager does).
+    await expect(svc.contractStep(await svc.user('u-coo'), c.id, 'suspend', 'x')).rejects.toBeInstanceOf(AccessDenied);
   });
 });
 

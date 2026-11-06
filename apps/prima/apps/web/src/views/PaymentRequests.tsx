@@ -146,7 +146,19 @@ export function PaymentRequestsView() {
       ).map(([title, list, sub]) => (
         <Card key={title} title={title} sub={sub} actions={<span className="bz-count">{list.length}</span>} flush>
           {list.length === 0 ? (
-            <Empty title="None." />
+            <Empty
+              title={data.requests.length ? 'None.' : 'No payment requests yet.'}
+              action={
+                !data.requests.length && title === 'Other requests' && data.canCreate.length > 0 ? (
+                  <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                    <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                    New payment request
+                  </button>
+                ) : undefined
+              }
+            >
+              {!data.requests.length && title === 'Other requests' ? 'A request starts here: say what it is for, and the chain of approvers follows.' : undefined}
+            </Empty>
           ) : (
             <ul className="bz-rows">
               {list.map((r) => (
@@ -391,7 +403,7 @@ function NewRequest({ data, onClose, onDone }: { data: FinRequestList; onClose: 
             <select className="select" value={f.companyId} onChange={set('companyId')}>
               {data.canCreate.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {data.companyNames?.[c] ?? c}
                 </option>
               ))}
             </select>

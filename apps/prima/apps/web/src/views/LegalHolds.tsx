@@ -33,21 +33,21 @@ export function LegalHoldsPanel() {
       )}
       {data.canPlace && data.matters.length > 0 && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} aria-label="Place a legal hold">
-          <select aria-label="Legal matter" value={matterId} onChange={(e) => setF({ ...f, matterId: e.target.value, refId: '' })}>
+          <select className="select" aria-label="Legal matter" value={matterId} onChange={(e) => setF({ ...f, matterId: e.target.value, refId: '' })}>
             {data.matters.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.ref} {m.title}
               </option>
             ))}
           </select>
-          <select aria-label="Kind of record" value={f.tbl} onChange={(e) => setF({ ...f, tbl: e.target.value as LegalHoldTable, refId: '' })}>
+          <select className="select" aria-label="Kind of record" value={f.tbl} onChange={(e) => setF({ ...f, tbl: e.target.value as LegalHoldTable, refId: '' })}>
             {data.kinds.map((k) => (
               <option key={k.tbl} value={k.tbl}>
                 {k.label}
               </option>
             ))}
           </select>
-          <select aria-label="Record to hold" value={f.refId} onChange={(e) => setF({ ...f, refId: e.target.value })}>
+          <select className="select" aria-label="Record to hold" value={f.refId} onChange={(e) => setF({ ...f, refId: e.target.value })}>
             <option value="">Choose the record</option>
             {records.map((r) => (
               <option key={r.id} value={r.id}>
@@ -55,7 +55,7 @@ export function LegalHoldsPanel() {
               </option>
             ))}
           </select>
-          <input aria-label="Why held" placeholder="Why it is held" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+          <input className="input" aria-label="Why held" placeholder="Why it is held" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
           <button
             className="btn btn-sm"
             disabled={act.busy || !f.refId || f.reason.trim().length < 5}
@@ -74,6 +74,7 @@ export function LegalHoldsPanel() {
           </button>
         </div>
       )}
+      {data.canPlace && !data.matters.length && <p className="muted small">A hold is placed for an open legal matter. Open the matter first, then hold its records here.</p>}
       {act.error && <p className="error small">{act.error.message}</p>}
       <div className="list">
         {!data.rows.length && <div className="empty">No legal holds.</div>}

@@ -119,6 +119,8 @@ const COMPANY_ROLE_ACTIONS: Record<User['role'], Action[]> = {
 
 /** Actions an 'act' grant allows a group-level user. Closing cases stays with the company. */
 const GRANT_ACT_ACTIONS: Action[] = ['view', 'roster.edit', 'roster.publish', 'attendance.lock', 'case.raise', 'case.update'];
+/** Maker steps the owner (isOwnerAdmin) takes for any company it sees (P78). */
+const OWNER_MAKER_ACTIONS: Action[] = ['roster.edit', 'roster.publish', 'case.raise', 'case.update'];
 
 export function activeGrants(user: User, grants: AuthorityGrant[], today: IsoDate): AuthorityGrant[] {
   return grants.filter((g) => g.userId === user.id && g.validFrom <= today && today <= g.validTo);
@@ -289,6 +291,9 @@ export function can(user: User, grants: AuthorityGrant[], today: IsoDate, action
     if (action === 'view') return gs.length > 0;
     // Tenders and quotations: group leadership and the Director Office administrator's line of work.
     if (action === 'commercial.view') return gs.length > 0 && (lead || user.department === 'director_office');
+    // P78: the owner prepares like the company's admin team (leads, tenders, quotations); approving stays with the
+    // company manager ('commercial.approve'), and nobody approves a quotation they prepared.
+    if (action === 'commercial.prepare' && isOwnerAdmin(user)) return gs.length > 0;
     // Group users see HR only if their department needs to know (group leadership always).
     if (action === 'site.visit') return gs.length > 0 && (user.role === 'director' || user.department === 'operations');
     if (action === 'site.patrol') return gs.length > 0 && (user.role === 'director' || user.department === 'operations');
@@ -311,6 +316,9 @@ export function can(user: User, grants: AuthorityGrant[], today: IsoDate, action
           (user.department === 'operations' && !!user.opsTier && user.opsTier !== 'patrol'))
       );
     if (action === 'leave.request') return false;
+    // P78: the owner works the roster and raises and updates cases for every company it can see, not only those under
+    // an 'act' grant. Locking attendance and closing cases stay with the company.
+    if (isOwnerAdmin(user) && gs.length > 0 && OWNER_MAKER_ACTIONS.includes(action)) return true;
     return gs.some((g) => g.scope === 'act') && GRANT_ACT_ACTIONS.includes(action);
   }
   if (!user.companyIds.includes(companyId)) return false;

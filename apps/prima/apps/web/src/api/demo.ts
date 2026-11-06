@@ -71,6 +71,7 @@ type Mutations =
   | 'orgImport'
   | 'assign'
   | 'publish'
+  | 'addShifts'
   | 'lockAttendance'
   | 'clockIn'
   | 'clockOut'
@@ -83,6 +84,7 @@ type Mutations =
   | 'updateCase'
   | 'signOffCase'
   | 'createQuotation'
+  | 'addTender'
   | 'quotationAction'
   | 'correctQuotation'
   | 'updateTender'
@@ -177,6 +179,9 @@ type Mutations =
   | 'finRequestStep'
   | 'finSetSettings'
   | 'finCloseStep'
+  | 'finAddBankAccount'
+  | 'finStartBooks'
+  | 'finAddPaper'
   | 'finControlAction'
   | 'setMobItem'
   | 'setCmsService'
@@ -194,6 +199,7 @@ type Mutations =
   | 'corpFilingStep'
   | 'renewalStep'
   | 'saveCompanyFile'
+  | 'startCompanyFile'
   | 'addPanelFirm'
   | 'panelFirmStep'
   | 'adviserMoneyStep'
@@ -247,6 +253,9 @@ type Mutations =
   | 'amDecideLetter'
   | 'salesLeadStep'
   | 'addLegalMatter'
+  | 'addCorpAudit'
+  | 'addBcmSystem'
+  | 'addGrcObligation'
   | 'legalMatterStep'
   | 'bcmRecord'
   | 'bcmDrill'
@@ -272,6 +281,7 @@ type Mutations =
   | 'setManagementFee'
   | 'stockReturn'
   | 'raiseCorpChange'
+  | 'addCorpFiling'
   | 'decideCorpChange'
   | 'recordCorpBoard'
   | 'itTicketStep'
@@ -375,6 +385,7 @@ type Mutations =
   | 'addMinutes'
   | 'checkMeetingSummary'
   | 'setMeetingAction'
+  | 'addMeetingAction'
   | 'setMeetingPrep'
   | 'issueFirearm'
   | 'returnFirearm'
@@ -534,6 +545,8 @@ export class DemoApi implements Api {
         return this.svc.assignShift(u, a[0], a[1]);
       case 'publish':
         return this.svc.publishRoster(u, a[0], a[1], a[2]);
+      case 'addShifts':
+        return this.svc.addShifts(u, a[0], a[1]);
       case 'lockAttendance':
         return this.svc.lockAttendance(u, a[0], a[1]);
       case 'clockIn':
@@ -558,6 +571,8 @@ export class DemoApi implements Api {
         return this.svc.updateCase(u, a[0], a[1], a[2], a[3]);
       case 'createQuotation':
         return this.svc.createQuotation(u, a[0], a[1]);
+      case 'addTender':
+        return this.svc.addTender(u, a[0], a[1]);
       case 'correctQuotation':
         return this.svc.correctQuotation(u, a[0], a[1]);
       case 'quotationAction':
@@ -810,6 +825,12 @@ export class DemoApi implements Api {
         return this.svc.corpAuditStep(u, a[0], a[1], a[2]);
       case 'addLegalMatter':
         return this.svc.addLegalMatter(u, a[0], a[1]);
+      case 'addCorpAudit':
+        return this.svc.addCorpAudit(u, a[0], a[1]);
+      case 'addBcmSystem':
+        return this.svc.addBcmSystem(u, a[0]);
+      case 'addGrcObligation':
+        return this.svc.addGrcObligation(u, a[0], a[1]);
       case 'legalMatterStep':
         return this.svc.legalMatterStep(u, a[0], a[1], a[2]);
       case 'bcmRecord':
@@ -884,12 +905,16 @@ export class DemoApi implements Api {
         return this.svc.creditCheckLenderLicence(u, a[0], a[1]);
       case 'saveCompanyFile':
         return this.svc.saveCompanyFile(u, a[0], a[1]);
+      case 'startCompanyFile':
+        return this.svc.startCompanyFile(u, a[0], a[1]);
       case 'checkCompanyFile':
         return this.svc.checkCompanyFile(u, a[0], a[1]);
       case 'renewalStep':
         return this.svc.renewalStep(u, a[0], a[1], a[2]);
       case 'raiseCorpChange':
         return this.svc.raiseCorpChange(u, a[0], a[1]);
+      case 'addCorpFiling':
+        return this.svc.addCorpFiling(u, a[0], a[1]);
       case 'decideCorpChange':
         return this.svc.decideCorpChange(u, a[0], a[1], a[2], a[3]);
       case 'recordCorpBoard':
@@ -948,6 +973,12 @@ export class DemoApi implements Api {
         return this.svc.finance.paymentStep(u, a[0], a[1], a[2], a[3]);
       case 'finCloseStep':
         return this.svc.finance.closeStep(u, a[0], a[1], a[2]);
+      case 'finAddBankAccount':
+        return this.svc.finance.addBankAccount(u, a[0], a[1]);
+      case 'finStartBooks':
+        return this.svc.finance.startBooks(u, a[0], a[1]);
+      case 'finAddPaper':
+        return this.svc.addFinPaper(u, a[0], a[1], a[2]);
       case 'finSetSettings':
         return this.svc.finance.setSettings(u, { values: a[0], comment: a[1] });
       case 'finCreateRequest':
@@ -1155,6 +1186,8 @@ export class DemoApi implements Api {
         return this.svc.checkMeetingSummary(u, a[0], a[1]);
       case 'setMeetingAction':
         return this.svc.setMeetingAction(u, a[0], a[1], a[2]);
+      case 'addMeetingAction':
+        return this.svc.addMeetingAction(u, a[0], a[1]);
       case 'setMeetingPrep':
         return this.svc.setMeetingPrep(u, a[0], a[1]);
       case 'issueFirearm':
@@ -1843,6 +1876,15 @@ export class DemoApi implements Api {
   addLegalMatter(companyId: string, input: Parameters<Api['addLegalMatter']>[1]) {
     return this.write<unknown>('addLegalMatter', [companyId, input]);
   }
+  addCorpAudit(companyId: string, input: Parameters<Api['addCorpAudit']>[1]) {
+    return this.write<unknown>('addCorpAudit', [companyId, input]);
+  }
+  addBcmSystem(input: Parameters<Api['addBcmSystem']>[0]) {
+    return this.write<unknown>('addBcmSystem', [input]);
+  }
+  addGrcObligation(companyId: string, input: Parameters<Api['addGrcObligation']>[1]) {
+    return this.write<unknown>('addGrcObligation', [companyId, input]);
+  }
   legalMatterStep(id: string, action: Parameters<Api['legalMatterStep']>[1], body: Parameters<Api['legalMatterStep']>[2]) {
     return this.write<unknown>('legalMatterStep', [id, action, body]);
   }
@@ -1993,6 +2035,9 @@ export class DemoApi implements Api {
   saveCompanyFile(companyId: string, input: Parameters<Api['saveCompanyFile']>[1]) {
     return this.write<unknown>('saveCompanyFile', [companyId, input]);
   }
+  startCompanyFile(companyId: string, input: Parameters<Api['startCompanyFile']>[1]) {
+    return this.write<unknown>('startCompanyFile', [companyId, input]);
+  }
   checkCompanyFile(companyId: string, input: Parameters<Api['checkCompanyFile']>[1]) {
     return this.write<unknown>('checkCompanyFile', [companyId, input]);
   }
@@ -2010,6 +2055,9 @@ export class DemoApi implements Api {
   }
   raiseCorpChange(companyId: string, input: Parameters<Api['raiseCorpChange']>[1]) {
     return this.write<unknown>('raiseCorpChange', [companyId, input]);
+  }
+  addCorpFiling(companyId: string, input: Parameters<Api['addCorpFiling']>[1]) {
+    return this.write<unknown>('addCorpFiling', [companyId, input]);
   }
   decideCorpChange(id: string, decision: 'approve' | 'reject', note: string, clauseRef: string) {
     return this.write<unknown>('decideCorpChange', [id, decision, note, clauseRef]);
@@ -2293,6 +2341,15 @@ export class DemoApi implements Api {
   }
   finCloseStep(companyId: string, action: FinCloseAction, input: Record<string, unknown>) {
     return this.write<unknown>('finCloseStep', [companyId, action, input]);
+  }
+  finAddBankAccount(companyId: string, input: { bank: string; last4: string; purpose: string }) {
+    return this.write<unknown>('finAddBankAccount', [companyId, input]);
+  }
+  finStartBooks(companyId: string, input: { team: number; fyEnd: string }) {
+    return this.write<unknown>('finStartBooks', [companyId, input]);
+  }
+  finAddPaper(companyId: string, pack: 'audit' | 'tax', input: { label: string; dueOn: string }) {
+    return this.write<unknown>('finAddPaper', [companyId, pack, input]);
   }
   finDashboard() {
     return this.read((s, u) => s.financeControls.dashboard(u));
@@ -2746,6 +2803,9 @@ export class DemoApi implements Api {
   publish(siteId: string, from: string, to: string) {
     return this.write<{ published: number; unfilled: number }>('publish', [siteId, from, to]);
   }
+  addShifts(siteId: string, input: Parameters<Api['addShifts']>[1]) {
+    return this.write<Awaited<ReturnType<Api['addShifts']>>>('addShifts', [siteId, input]);
+  }
   lockAttendance(companyId: string, date: string) {
     return this.write<{ locked: number }>('lockAttendance', [companyId, date]);
   }
@@ -2770,6 +2830,9 @@ export class DemoApi implements Api {
 
   createQuotation(companyId: string, input: Parameters<Api['createQuotation']>[1]) {
     return this.write<Awaited<ReturnType<Api['createQuotation']>>>('createQuotation', [companyId, input]);
+  }
+  addTender(companyId: string, input: Parameters<Api['addTender']>[1]) {
+    return this.write<Awaited<ReturnType<Api['addTender']>>>('addTender', [companyId, input]);
   }
   correctQuotation(id: string, input: Parameters<Api['correctQuotation']>[1]) {
     return this.write<Awaited<ReturnType<Api['correctQuotation']>>>('correctQuotation', [id, input]);
@@ -2815,6 +2878,9 @@ export class DemoApi implements Api {
   }
   setMeetingAction(meetingId: string, index: number, done: boolean) {
     return this.write('setMeetingAction', [meetingId, index, done]);
+  }
+  addMeetingAction(meetingId: string, input: Parameters<Api['addMeetingAction']>[1]) {
+    return this.write('addMeetingAction', [meetingId, input]);
   }
   setMeetingPrep(meetingId: string, input: { index?: number; done?: boolean; add?: string }) {
     return this.write('setMeetingPrep', [meetingId, input]);

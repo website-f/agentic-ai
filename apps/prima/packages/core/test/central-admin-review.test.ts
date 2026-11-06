@@ -87,7 +87,8 @@ describe('Collateral correction (review defect 2)', () => {
     const l = await svc.addCreditLoan(officer, 'co-sasa', loan);
     expect((await svc.creditBoard(officer)).rows.find((r) => r.loan.id === l.id)!.collateralMissing).toBe(true);
     const fix = { kind: 'BENEFICIAL_INTEREST' as const, agreementRef: 'BIA-1 (mock)', reason: 'Signed copy found in the PWVSB file' };
-    for (const id of ['u-cm-sasa', 'u-cos', 'u-fauzan'])
+    // P78: the owner (master administrator) may correct it too; other group leaders and the company may not.
+    for (const id of ['u-cm-sasa', 'u-cos'])
       await expect(svc.creditCorrectCollateral(await svc.user(id), l.id, fix)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.creditCorrectCollateral(officer, l.id, { ...fix, reason: '' })).rejects.toThrow(/why/);
     await expect(svc.creditCorrectCollateral(officer, l.id, { ...fix, reason: '   ' })).rejects.toThrow(/why/);
@@ -181,7 +182,8 @@ describe('Corrections to records already stamped or lodged (review round 2)', ()
     const fix = { field: 'stamp' as const, ref: 'ST-2 (mock)', on: '2026-10-01', reason: 'Wrong certificate keyed in' };
     await expect(svc.creditCorrectRecord(officer, l.id, fix)).rejects.toThrow(/No stamping is recorded/);
     await svc.creditStamped(officer, l.id, 'ST-1 (mock)', '2026-10-02');
-    for (const id of ['u-cm-sasa', 'u-cos', 'u-fauzan'])
+    // P78: the owner (master administrator) may correct it too; other group leaders and the company may not.
+    for (const id of ['u-cm-sasa', 'u-cos'])
       await expect(svc.creditCorrectRecord(await svc.user(id), l.id, fix)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.creditCorrectRecord(officer, l.id, { ...fix, reason: 'no' })).rejects.toThrow(/why/);
     await expect(svc.creditCorrectRecord(officer, l.id, { ...fix, on: '2026-02-30' })).rejects.toThrow(/real date/);

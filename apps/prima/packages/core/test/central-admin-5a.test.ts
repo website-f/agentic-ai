@@ -39,7 +39,8 @@ describe('Company filings: head office records, everyone else views', () => {
     const { svc } = fresh();
     const dcos = await svc.user('u-dcos');
     const f = (await svc.corpBoard(dcos)).filings.find((x) => x.filing.status === 'open' && x.filing.companyId === 'co-sasa')!;
-    for (const id of ['u-cm-sasa', 'u-gm-sasa', 'u-cos', 'u-cosec', 'u-fauzan'])
+    // P78: the owner (u-fauzan) records filings too, as master administrator (owner-admin-governance.test.ts).
+    for (const id of ['u-cm-sasa', 'u-gm-sasa', 'u-cos', 'u-cosec', 'u-chair'])
       await expect(svc.corpFilingStep(await svc.user(id), f.filing.id, 'prepare')).rejects.toBeInstanceOf(AccessDenied);
     // Another company's manager cannot even see it.
     await expect(svc.corpFilingStep(await svc.user('u-cm-arsh'), f.filing.id, 'prepare')).rejects.toThrow(/not found/i);

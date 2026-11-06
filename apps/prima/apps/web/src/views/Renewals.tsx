@@ -5,6 +5,7 @@ import { Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } 
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
 import { CalendarGroup, DateLeaf } from './Compliance';
+import { RecordButton } from './RecordForm';
 import '../styles/hrx.css';
 
 /**
@@ -106,6 +107,7 @@ export function RenewalsView() {
       <PageHead
         title="Renewals"
         sub="Every licence, registration and certificate each company holds: KDN, MOF and vendor panels, council licences, ISO, fire certificate, insurance and SSM. Each company renews its own; Central Admin monitors and confirms the new expiry. The app never lodges or pays."
+        actions={<RecordButton kind="licence" primary label="Add licence" />}
       >
         <p className="notice" data-tone="info">
           Test data. Lead times and paper lists are starting proposals; the agency's current form decides.
@@ -187,7 +189,9 @@ export function RenewalsView() {
       </Toolbar>
       {rows.length === 0 && (
         <section className="k-card">
-          <Empty title="Nothing due.">{needle || focus || company ? 'No renewal matches the search or filter.' : undefined}</Empty>
+          <Empty title="Nothing due." action={needle || focus || company ? undefined : <RecordButton kind="licence" primary label="Add licence" />}>
+            {needle || focus || company ? 'No renewal matches the search or filter.' : 'Add each licence, registration or certificate with its expiry date; its renewal opens here when it falls due.'}
+          </Empty>
         </section>
       )}
       {groups

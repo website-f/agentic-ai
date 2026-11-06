@@ -4,6 +4,8 @@ import { BILLING_METHOD_LABEL, CMS_SERVICE_KINDS, MOB_WORKSTREAM_LABEL, type Bil
 import { api, type ContractBoard } from '../api';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { useApp } from '../App';
+import { RecordButton } from './RecordForm';
 import '../styles/biz.css';
 
 /**
@@ -126,7 +128,23 @@ export function ContractsView() {
 
       <Card title={FILTERS.find(([k]) => k === filter)?.[1]} sub={`${rows.length} contract${rows.length === 1 ? '' : 's'}`} flush>
         {rows.length === 0 ? (
-          <Empty title="Nothing here.">{needle ? 'No contract matches the search.' : undefined}</Empty>
+          <Empty
+            title="Nothing here."
+            action={
+              !needle &&
+              data.canAdd.length > 0 && (
+                <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+                  New contract
+                </button>
+              )
+            }
+          >
+            {needle
+              ? 'No contract matches the search.'
+              : filter !== 'all'
+                ? 'Nothing in this view. Choose All to see every contract, or record a signed contract to start its mobilisation.'
+                : 'Record a signed contract or letter of award to start its site mobilisation.'}
+          </Empty>
         ) : (
           <>
             <div className="bz-ct-headrow" aria-hidden="true">
@@ -601,7 +619,9 @@ function VariationForm({ id, current, onDone }: { id: string; current: Row['curr
 /** Record a signed contract or letter of award; mobilisation opens against its start date (company manager only). */
 function NewContractForm({ options, onDone }: { options: ContractBoard['canAdd']; onDone: () => void }) {
   const act = useAction();
-  const [companyId, setCompanyId] = useState(options[0]?.companyId ?? '');
+  const app = useApp();
+  // Start on the company chosen at the top of the app when this user may record contracts for it.
+  const [companyId, setCompanyId] = useState((options.find((o) => o.companyId === app.companyId) ?? options[0])?.companyId ?? '');
   const co = options.find((o) => o.companyId === companyId) ?? options[0];
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
@@ -666,7 +686,12 @@ function NewContractForm({ options, onDone }: { options: ContractBoard['canAdd']
         )}
         <fieldset className="bz-span bz-ct-sites">
           <legend className="label">Sites under this contract</legend>
-          {co?.sites.length === 0 && <span className="bz-note">No sites yet. Add the site first under Sites.</span>}
+          {co?.sites.length === 0 && (
+            <span className="bz-note">
+              No sites yet. Add the site first so the contract carries its posts; saved without a site it bills one main post.{' '}
+              <RecordButton kind="site" companyId={co.companyId} label="Add site" />
+            </span>
+          )}
           {co?.sites.map((x) => (
             <label key={x.id} className="bz-ct-check">
               <input type="checkbox" checked={chosen.includes(x.id)} onChange={(e) => setSiteIds(e.target.checked ? [...chosen, x.id] : chosen.filter((id) => id !== x.id))} />

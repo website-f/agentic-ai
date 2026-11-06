@@ -55,7 +55,7 @@ import { finDailyCashExceptions } from './finance-daily-cash';
 import { finYearEndExceptions } from './finance-yearend';
 import { finSupplierStatementExceptions } from './finance-supplier-statements';
 import { finIcExceptions, finIcPairs } from './finance-intercompany';
-import { finFsTests } from './finance-ledger';
+import { FIN_FS_LABELS, finFsTests } from './finance-ledger';
 
 export const FIN_PAYEE_KINDS: FinPayeeKind[] = ['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'];
 /** Tests that must be exactly RM0.00 before a close is approved (V6). */
@@ -1137,6 +1137,17 @@ export class FinanceDeskService {
               .sort((x, y) => x.name.localeCompare(y.name));
           })()
         : [],
+      /** P78: companies with no Finance books yet; the Finance Director or the CEO starts them. */
+      noBooks: isLead(a)
+        ? await (async () => {
+            const ids = await this.companies(user);
+            const [rows, companies] = await Promise.all([this.store.list('finStatus', { companyId: ids }), this.store.list('companies', { id: ids })]);
+            return companies
+              .filter((c) => !rows.some((f) => f.companyId === c.id))
+              .map((c) => ({ companyId: c.id, name: c.name }))
+              .sort((x, y) => x.name.localeCompare(y.name));
+          })()
+        : [],
       /** Whether payments may be set to be approved in Teams (the connection is switched on). */
       teamsReady: this.teamsApprovals,
     };
@@ -1211,6 +1222,75 @@ export class FinanceDeskService {
       await tx.update('finStatus', id, { settings });
       await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.set', entity: 'fin_status', entityId: id, summary: `Finance settings changed: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
       return finSettingsOf({ settings });
+    });
+  }
+
+  /**
+   * P78: add a company bank account to its Finance record (the team leader, the Finance Director or the CEO). Only the
+   * last four digits are kept. Balances, the reconciliation date and open items come from SQL Account and the bank
+   * statements afterwards; until then the account shows as never reconciled.
+   */
+  async addBankAccount(user: User, companyId: Id, input: Record<string, unknown>): Promise<FinBankAccount> {
+    return this.store.transaction(async (tx) => {
+      const a = this.actor(user);
+      if (!(isLead(a) || a.kind === 'leader')) throw new AccessDenied('view', '(the team leader, the Finance Director or the CEO adds a bank account)');
+      const f = await this.row(tx, user, a, companyId);
+      const bank = noSecrets(text(input.bank, 'Bank', 2, 60), 'Bank');
+      const last4 = typeof input.last4 === 'string' ? input.last4.replace(/\s/g, '') : '';
+      if (!/^\d{4}$/.test(last4)) throw new BadRequest('Give the last 4 digits of the account number (only those are kept).');
+      const purpose = (['operating', 'payroll', 'collection'] as const).find((p) => p === input.purpose);
+      if (!purpose) throw new BadRequest('Say what the account is for: operating, payroll or collection.');
+      const accountMasked = `****${last4}`;
+      if (f.banks.some((b) => b.bank.toLowerCase() === bank.toLowerCase() && b.accountMasked === accountMasked)) throw new BadRequest('That account is already on the list.');
+      let n = f.banks.length + 1;
+      while (f.banks.some((b) => b.id === `fb-${f.companyId}-${n}`)) n += 1;
+      const acct: FinBankAccount = { id: `fb-${f.companyId}-${n}`, bank, accountMasked, purpose, glBalance: 0, statementBalance: 0, reconciledTo: null, openItems: 0 };
+      await tx.update('finStatus', f.id, { banks: [...f.banks, acct] });
+      await this.log(tx, user, f, 'finance.bank.added', `Bank account ${bank} ${accountMasked} (${purpose}) added to the books.`);
+      return acct;
+    });
+  }
+
+  /**
+   * P78: start the Finance books for a company that has none yet (one added after go-live), so its payments, checks and
+   * month-end close can be kept. The Finance Director or the CEO chooses the team and the financial year end; the rest
+   * starts empty and shows Unknown until SQL Account figures arrive.
+   */
+  async startBooks(user: User, companyId: Id, input: Record<string, unknown>): Promise<FinStatus> {
+    return this.store.transaction(async (tx) => {
+      const a = this.actor(user);
+      if (!isLead(a)) throw new AccessDenied('view', "(the Finance Director or the CEO starts a company's books)");
+      if (typeof companyId !== 'string' || companyId.length > 120 || !(await this.companies(user)).includes(companyId)) throw new NotFound('Company');
+      const co = await tx.get('companies', companyId);
+      if (!co) throw new NotFound('Company');
+      const id = `fin-${companyId}`;
+      await tx.lock?.('finStatus', id);
+      if (await tx.get('finStatus', id)) throw new BadRequest('This company already has Finance books.');
+      const team = Number(input.team);
+      if (!Number.isInteger(team) || team < 1 || team > FIN_TEAMS) throw new BadRequest(`Team: a number from 1 to ${FIN_TEAMS}.`);
+      const fyEnd = typeof input.fyEnd === 'string' ? input.fyEnd.trim() : '';
+      const m = /^(\d{2})-(\d{2})$/.exec(fyEnd);
+      const days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (!m || Number(m[1]) < 1 || Number(m[1]) > 12 || Number(m[2]) < 1 || Number(m[2]) > days[Number(m[1]) - 1])
+        throw new BadRequest('Financial year end: the month and day, such as 12-31.');
+      const f: FinStatus = {
+        id,
+        companyId,
+        team,
+        fyEnd,
+        sqlLastAt: null,
+        closedTo: null,
+        banks: [],
+        posting: { period: this.closePeriod(), billed: 0, billedPosted: 0, staffPayPaid: false, staffPayPosted: false, guardPayPaid: false, guardPayPosted: false, supplierBillsUnposted: 0 },
+        tests: Object.entries(FIN_FS_LABELS).map(([tid, label]) => ({ id: tid, label, diff: null })),
+        arOver90: 0,
+        apOverdue: 0,
+        audit: [],
+        tax: [],
+      };
+      await tx.insert('finStatus', f);
+      await this.log(tx, user, f, 'finance.books.started', `Finance books started for ${co.name}: Team ${team}, year ends ${fyEnd}.`);
+      return f;
     });
   }
 

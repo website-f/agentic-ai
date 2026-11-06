@@ -59,7 +59,29 @@ export function DirectorDesk() {
   );
 }
 
+/** The CEO accepts a finished instruction with a reason, or returns it with what to fix (the server checks who may). */
+function ReviewResult({ taskId, reload }: { taskId: string; reload: () => void }) {
+  const act = useAction();
+  const [note, setNote] = useState('');
+  const decide = (accept: boolean) =>
+    act.run(() => api.workTaskReview(taskId, accept, note).then(reload), accept ? 'Accepted.' : 'Returned to fix.');
+  return (
+    <span className="ld-row-full ld-inline-add">
+      <input className="input" aria-label="Reason" placeholder="Reason (to return it, say what to fix)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => decide(true)}>
+        Accept
+      </button>
+      <button className="btn btn-sm" disabled={act.busy || note.trim().length < 10} onClick={() => decide(false)}>
+        Return to fix
+      </button>
+      {act.error && <span className="error small">{act.error.message}</span>}
+    </span>
+  );
+}
+
 function Instructions({ data, reload }: { data: NonNullable<Awaited<ReturnType<typeof api.ceoInstructions>>>; reload: () => void }) {
+  const { me } = useApp();
+  const ceo = me.user.opsTier === 'ceo';
   const act = useAction();
   const [userId, setUserId] = useState('');
   const [title, setTitle] = useState('');
@@ -182,6 +204,7 @@ function Instructions({ data, reload }: { data: NonNullable<Awaited<ReturnType<t
                 <span className="ld-row-aside">
                   <Chip tone={TONE[r.state]}>{LABEL[r.state]}</Chip>
                 </span>
+                {ceo && r.state === 'waiting_review' && <ReviewResult taskId={r.task.id} reload={reload} />}
               </li>
             ))}
           </ul>

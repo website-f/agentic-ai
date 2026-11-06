@@ -4,6 +4,7 @@ import {
   BankIcon,
   CaretRightIcon,
   FilesIcon,
+  PlusIcon,
   QuestionIcon,
   WarningOctagonIcon,
 } from '@phosphor-icons/react';
@@ -12,12 +13,12 @@ import { api, type FinBoard, type FinDesk } from '../api';
 import { useApp } from '../App';
 import { ManagementFeesPanel } from './ManagementFees';
 import { takeFinTarget, type FinTarget } from '../finTarget';
-import { CloseTab, FinPackPanel, PaymentsTab } from './FinanceDesk';
+import { CloseTab, FinPackPanel, NewPayment, PaymentsTab } from './FinanceDesk';
 import { ChecksTab } from './FinanceChecks';
 import { FinanceSettingsTab } from './FinanceSettings';
 import { FinanceKpiTab } from './FinanceKpi';
 import { FinanceDashboardTab } from './FinanceDashboard';
-import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import '../styles/finance.css';
 
@@ -66,12 +67,18 @@ export function FinanceView() {
     setTab(t.tab);
   };
   const [open, setOpen] = useState<string | null>(null);
+  // P78: what the person is adding from the page head (the owner, the Finance Director and the teams enter these by hand).
+  const [adding, setAdding] = useState<'payment' | 'bank' | 'paper' | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="finance" />;
   const count = (t: Row['tone']) => data.rows.filter((r) => r.tone === t).length;
   const banksLate = data.rows.reduce((n, r) => n + r.banksLate.length, 0);
   const papersOverdue = data.rows.reduce((n, r) => n + r.packsOverdue.length, 0);
   const row = data.rows.find((r) => r.status.companyId === open) ?? null;
+  const payCos = desk ? desk.companies.filter((c) => c.canAct) : [];
+  // A bank account is added by the team leader, the Finance Director or the CEO (the server checks it too).
+  const bankCos = desk && ['ceo', 'director', 'leader'].includes(desk.actor.kind) ? payCos.map((c) => ({ companyId: c.companyId, companyName: c.companyName })) : [];
+  const paperCos = data.rows.filter((r) => r.canSet).map((r) => ({ companyId: r.status.companyId, companyName: r.companyName }));
   const tabs: [Tab, string][] = [
     ['teams', 'Overview'],
     ...(desk
@@ -101,6 +108,30 @@ export function FinanceView() {
             The books stay in SQL Account. This shows whether each company&apos;s books are complete, reconciled and closed for {dateLabel(data.lastEnd)}, and
             the papers for the auditor and the tax agent. A company with no figures from SQL Account for {data.rule.staleHours} hours shows as unknown.
           </>
+        }
+        actions={
+          payCos.length > 0 || bankCos.length > 0 || paperCos.length > 0 ? (
+            <>
+              {paperCos.length > 0 && (
+                <button className="btn" onClick={() => setAdding('paper')}>
+                  <PlusIcon size={16} aria-hidden="true" />
+                  Add paper
+                </button>
+              )}
+              {bankCos.length > 0 && (
+                <button className="btn" onClick={() => setAdding('bank')}>
+                  <PlusIcon size={16} aria-hidden="true" />
+                  Add bank account
+                </button>
+              )}
+              {payCos.length > 0 && (
+                <button className="btn btn-primary" onClick={() => setAdding('payment')}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  New payment
+                </button>
+              )}
+            </>
+          ) : undefined
         }
       >
         <p className="notice" data-tone="info">
@@ -154,7 +185,15 @@ export function FinanceView() {
               <KeyNumbers onGo={() => setTab('dashboard')} />
             </div>
           )}
-          <Teams data={data} onOpen={setOpen} />
+          {data.rows.length === 0 ? (
+            <Card title="No company books yet" flush>
+              <Empty title="No company has Finance books in Prima yet.">
+                {data.role === 'lead' ? 'Start each company\'s books in Settings, under "Companies with no Finance books".' : 'The Finance Director starts each company\'s books.'}
+              </Empty>
+            </Card>
+          ) : (
+            <Teams data={data} onOpen={setOpen} />
+          )}
         </div>
       )}
       {tab === 'payments' && desk && (
@@ -189,9 +228,28 @@ export function FinanceView() {
       )}
       {tab === 'banks' && <Banks data={data} onOpen={setOpen} />}
       {tab === 'books' && <Books data={data} onOpen={setOpen} />}
-      {tab === 'papers' && <Papers data={data} onOpen={setOpen} />}
+      {tab === 'papers' && <Papers data={data} onOpen={setOpen} onAdd={paperCos.length ? () => setAdding('paper') : undefined} />}
       {(me.user.leadership === 'finance_director' || me.user.opsTier === 'ceo') && <ManagementFeesPanel />}
-      {row && <CompanyDrawer row={row} desk={desk} may={mayFor(data.financeRole)} onClose={() => setOpen(null)} />}
+      {row && (
+        <CompanyDrawer
+          row={row}
+          desk={desk}
+          may={mayFor(data.financeRole)}
+          canAddBank={bankCos.some((c) => c.companyId === row.status.companyId)}
+          onClose={() => setOpen(null)}
+        />
+      )}
+      {adding === 'payment' && desk && <NewPayment desk={desk} onClose={() => setAdding(null)} />}
+      {adding === 'bank' && (
+        <Drawer title="Add bank account" sub="A company's own bank account, kept on its books. Only the last 4 digits are kept." onClose={() => setAdding(null)}>
+          <AddBankAccount companies={bankCos} onDone={() => setAdding(null)} />
+        </Drawer>
+      )}
+      {adding === 'paper' && (
+        <Drawer title="Add paper" sub="Something the auditor or the tax agent asked for, with its due date" onClose={() => setAdding(null)}>
+          <AddPaper companies={paperCos} onDone={() => setAdding(null)} />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -347,7 +405,7 @@ function Books({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void 
   );
 }
 
-function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
+function Papers({ data, onOpen, onAdd }: { data: FinBoard; onOpen: (id: string) => void; onAdd?: () => void }) {
   const items = data.rows
     .flatMap((r) => [...r.packsOverdue.map((i) => ({ r, i, late: true })), ...r.packsDue.map((i) => ({ r, i, late: false }))])
     .sort((a, b) => a.i.dueOn.localeCompare(b.i.dueOn));
@@ -355,10 +413,18 @@ function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void
     <Card
       title={`Papers overdue or due within ${data.rule.packWarnDays} days`}
       sub="Data entry prepares, the leader or deputy reviews, the leader sends; reviewing and sending need a comment"
+      actions={
+        onAdd ? (
+          <button type="button" className="btn btn-sm" onClick={onAdd}>
+            <PlusIcon size={14} aria-hidden="true" />
+            Add paper
+          </button>
+        ) : undefined
+      }
       flush
     >
       {items.length === 0 ? (
-        <Empty title="Nothing due." />
+        <Empty title="Nothing due.">{onAdd ? 'When the auditor or the tax agent asks for something, add it with its due date.' : undefined}</Empty>
       ) : (
         <table className="fin-table">
           <thead>
@@ -395,7 +461,21 @@ function Papers({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void
   );
 }
 
-function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk | null; may: FinPackStatus[]; onClose: () => void }) {
+function CompanyDrawer({
+  row: r,
+  desk,
+  may,
+  canAddBank,
+  onClose,
+}: {
+  row: Row;
+  desk: FinDesk | null;
+  may: FinPackStatus[];
+  canAddBank: boolean;
+  onClose: () => void;
+}) {
+  const [addingBank, setAddingBank] = useState(false);
+  const [addingPaper, setAddingPaper] = useState(false);
   const f = r.status;
   const d = desk?.companies.find((c) => c.companyId === f.companyId) ?? null;
   const me = desk?.me ?? null;
@@ -421,38 +501,62 @@ function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk
           <dd>{rm(f.apOverdue)}</dd>
         </div>
       </dl>
-      <Card title="Bank accounts" flush>
-        <table className="fin-table">
-          <thead>
-            <tr>
-              <th>Account</th>
-              <th className="fin-num">Books</th>
-              <th className="fin-num">Statement</th>
-              <th className="fin-num">Open items</th>
-              <th>Reconciled</th>
-            </tr>
-          </thead>
-          <tbody>
-            {f.banks.map((b) => (
-              <tr key={b.id}>
-                <td>
-                  <span className="fin-strong">
-                    {b.bank} {b.accountMasked}
-                  </span>
-                  <span className="muted small fin-block">{b.purpose}</span>
-                </td>
-                <td className="fin-num">{rm(b.glBalance)}</td>
-                <td className="fin-num">{rm(b.statementBalance)}</td>
-                <td className="fin-num">{b.openItems}</td>
-                <td>
-                  <Chip tone={b.reconciledTo === r.lastEnd ? 'ok' : r.banksLate.some((x) => x.id === b.id) ? 'crit' : 'warn'}>
-                    {b.reconciledTo ? `To ${dateLabel(b.reconciledTo)}` : 'Never reconciled'}
-                  </Chip>
-                </td>
+      <Card
+        title="Bank accounts"
+        actions={
+          canAddBank && !addingBank ? (
+            <button type="button" className="btn btn-sm" onClick={() => setAddingBank(true)}>
+              <PlusIcon size={14} aria-hidden="true" />
+              Add bank account
+            </button>
+          ) : undefined
+        }
+        flush
+      >
+        {addingBank && (
+          <AddBankAccount
+            companies={[{ companyId: f.companyId, companyName: r.companyName }]}
+            fixed={f.companyId}
+            onDone={() => setAddingBank(false)}
+            onCancel={() => setAddingBank(false)}
+          />
+        )}
+        {f.banks.length === 0 && !addingBank && (
+          <Empty title="No bank accounts on the books yet.">{canAddBank ? 'Add each account the company pays from or is paid into.' : undefined}</Empty>
+        )}
+        {f.banks.length > 0 && (
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th className="fin-num">Books</th>
+                <th className="fin-num">Statement</th>
+                <th className="fin-num">Open items</th>
+                <th>Reconciled</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {f.banks.map((b) => (
+                <tr key={b.id}>
+                  <td>
+                    <span className="fin-strong">
+                      {b.bank} {b.accountMasked}
+                    </span>
+                    <span className="muted small fin-block">{b.purpose}</span>
+                  </td>
+                  <td className="fin-num">{rm(b.glBalance)}</td>
+                  <td className="fin-num">{rm(b.statementBalance)}</td>
+                  <td className="fin-num">{b.openItems}</td>
+                  <td>
+                    <Chip tone={b.reconciledTo === r.lastEnd ? 'ok' : r.banksLate.some((x) => x.id === b.id) ? 'crit' : 'warn'}>
+                      {b.reconciledTo ? `To ${dateLabel(b.reconciledTo)}` : 'Never reconciled'}
+                    </Chip>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Card>
       <Card title="Integrity tests" flush>
         <div className="fin-rows">
@@ -492,6 +596,24 @@ function CompanyDrawer({ row: r, desk, may, onClose }: { row: Row; desk: FinDesk
           </div>
         </div>
       </Card>
+      {r.canSet &&
+        (addingPaper ? (
+          <Card title="Add paper for the auditor or the tax agent" flush>
+            <AddPaper
+              companies={[{ companyId: f.companyId, companyName: r.companyName }]}
+              fixed={f.companyId}
+              onDone={() => setAddingPaper(false)}
+              onCancel={() => setAddingPaper(false)}
+            />
+          </Card>
+        ) : (
+          <div className="fin-flexrow">
+            <button type="button" className="btn btn-sm" onClick={() => setAddingPaper(true)}>
+              <PlusIcon size={14} aria-hidden="true" />
+              Add paper for the auditor or the tax agent
+            </button>
+          </div>
+        ))}
       <FinPackPanel title="For the auditor" companyId={f.companyId} pack="audit" items={f.audit} canSet={r.canSet} may={may} meId={me} />
       <FinPackPanel title="For the tax agent" companyId={f.companyId} pack="tax" items={f.tax} canSet={r.canSet} may={may} meId={me} />
       {d && (
@@ -605,5 +727,145 @@ function FinanceToday({ onGo }: { onGo: (t: FinTarget) => void }) {
         })}
       </div>
     </Card>
+  );
+}
+
+function FormField({ label, help, error, children }: { label: string; help?: string; error?: string; children: React.ReactNode }) {
+  return (
+    <label className="field">
+      <span className="label">{label}</span>
+      {children}
+      {error ? (
+        <span className="help fin-warn" role="alert">
+          {error}
+        </span>
+      ) : help ? (
+        <span className="help">{help}</span>
+      ) : null}
+    </label>
+  );
+}
+
+type FormCo = { companyId: string; companyName: string };
+
+/**
+ * P78: a company bank account added to its books (the team leader, the Finance Director or the CEO). Only the last four
+ * digits are kept; balances and the reconciliation come from SQL Account and the bank statements afterwards.
+ */
+function AddBankAccount({ companies, fixed, onDone, onCancel }: { companies: FormCo[]; fixed?: string; onDone: () => void; onCancel?: () => void }) {
+  const act = useAction();
+  const [f, setF] = useState({ companyId: fixed ?? companies[0]?.companyId ?? '', bank: '', last4: '', purpose: 'operating' });
+  const [tried, setTried] = useState(false);
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const bad = {
+    bank: f.bank.trim().length < 2 ? 'Give the bank, such as Maybank.' : '',
+    last4: /^\d{4}$/.test(f.last4.trim()) ? '' : 'Give the last 4 digits of the account number.',
+  };
+  const save = async () => {
+    setTried(true);
+    if (!f.companyId || bad.bank || bad.last4) return;
+    const ok = await act.run(
+      () => api.finAddBankAccount(f.companyId, { bank: f.bank.trim(), last4: f.last4.trim(), purpose: f.purpose }),
+      'Bank account added. Its balances follow from SQL Account and the bank statements.',
+    );
+    if (ok) onDone();
+  };
+  return (
+    <div className="fin-pad">
+      <ErrorNotice error={act.error} />
+      {!fixed && (
+        <FormField label="Company">
+          <select className="select" value={f.companyId} onChange={set('companyId')}>
+            {companies.map((c) => (
+              <option key={c.companyId} value={c.companyId}>
+                {c.companyName}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      )}
+      <FormField label="Bank" error={tried ? bad.bank : undefined}>
+        <input className="input" value={f.bank} onChange={set('bank')} aria-invalid={tried && !!bad.bank} placeholder="Maybank" />
+      </FormField>
+      <FormField label="Account number, last 4 digits" help="Never the full number: Prima keeps only these." error={tried ? bad.last4 : undefined}>
+        <input className="input" inputMode="numeric" maxLength={4} value={f.last4} onChange={set('last4')} aria-invalid={tried && !!bad.last4} placeholder="1234" />
+      </FormField>
+      <FormField label="Used for">
+        <select className="select" value={f.purpose} onChange={set('purpose')}>
+          <option value="operating">Operating: day-to-day payments</option>
+          <option value="payroll">Payroll</option>
+          <option value="collection">Collection: money in from clients</option>
+        </select>
+      </FormField>
+      <div className="fin-flexrow">
+        <button className="btn btn-primary" disabled={act.busy} onClick={() => void save()}>
+          {act.busy ? 'Saving…' : 'Add bank account'}
+        </button>
+        {onCancel && (
+          <button className="btn btn-ghost" disabled={act.busy} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** P78: a paper the auditor or the tax agent asked for, added with its due date by the company's team, the FD or the CEO. */
+function AddPaper({ companies, fixed, onDone, onCancel }: { companies: FormCo[]; fixed?: string; onDone: () => void; onCancel?: () => void }) {
+  const act = useAction();
+  const [f, setF] = useState({ companyId: fixed ?? companies[0]?.companyId ?? '', pack: 'audit', label: '', dueOn: '' });
+  const [tried, setTried] = useState(false);
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const bad = {
+    label: f.label.trim().length < 3 ? 'Say what the paper is.' : '',
+    dueOn: /^\d{4}-\d{2}-\d{2}$/.test(f.dueOn) ? '' : 'Give the due date.',
+  };
+  const save = async () => {
+    setTried(true);
+    if (!f.companyId || bad.label || bad.dueOn) return;
+    const ok = await act.run(
+      () => api.finAddPaper(f.companyId, f.pack === 'tax' ? 'tax' : 'audit', { label: f.label.trim(), dueOn: f.dueOn }),
+      'Paper added as not started; the team prepares it next.',
+    );
+    if (ok) onDone();
+  };
+  return (
+    <div className="fin-pad">
+      <ErrorNotice error={act.error} />
+      {!fixed && (
+        <FormField label="Company">
+          <select className="select" value={f.companyId} onChange={set('companyId')}>
+            {companies.map((c) => (
+              <option key={c.companyId} value={c.companyId}>
+                {c.companyName}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      )}
+      <FormField label="For">
+        <select className="select" value={f.pack} onChange={set('pack')}>
+          <option value="audit">The auditor</option>
+          <option value="tax">The tax agent</option>
+        </select>
+      </FormField>
+      <FormField label="What the paper is" error={tried ? bad.label : undefined}>
+        <input className="input" value={f.label} onChange={set('label')} aria-invalid={tried && !!bad.label} placeholder="Schedule of other receivables" />
+      </FormField>
+      <FormField label="Due" error={tried ? bad.dueOn : undefined}>
+        <input className="input" type="date" value={f.dueOn} onChange={set('dueOn')} aria-invalid={tried && !!bad.dueOn} />
+      </FormField>
+      <div className="fin-flexrow">
+        <button className="btn btn-primary" disabled={act.busy} onClick={() => void save()}>
+          {act.busy ? 'Saving…' : 'Add paper'}
+        </button>
+        {onCancel && (
+          <button className="btn btn-ghost" disabled={act.busy} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

@@ -56,6 +56,7 @@ export function HostelsView() {
       <PageHead
         title="Hostels"
         sub="Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM approves, then the COO."
+        actions={<RecordButton kind="hostel" label="Add hostel" primary />}
       />
       <Stats>
         <Stat label="Waiting for you" value={mine.length} tone={mine.length ? 'warn' : 'ok'} icon={<TrayIcon size={16} />} />
@@ -84,12 +85,14 @@ export function HostelsView() {
       </div>
       {view === 'bills' && (
         <div className="hx-stack">
-          <Toolbar end={<RecordButton kind="hostel" label="Add hostel" />}>
-            {data.hostels.length > 1 && <Search value={q} onChange={setQ} placeholder="Search hostel or company" label="Search hostels" />}
-          </Toolbar>
+          {data.hostels.length > 1 && (
+            <Toolbar>
+              <Search value={q} onChange={setQ} placeholder="Search hostel or company" label="Search hostels" />
+            </Toolbar>
+          )}
           {data.hostels.length === 0 && (
             <Card>
-              <Empty title="No hostel on record." />
+              <Empty title="No hostel on record.">Add the hostel first (Add hostel, above); its rent and utility bills are then entered on it.</Empty>
             </Card>
           )}
           {data.hostels.length > 0 && hostels.length === 0 && (

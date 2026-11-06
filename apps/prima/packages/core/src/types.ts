@@ -5486,6 +5486,8 @@ export interface ActImprovement {
   ownerUserId: Id;
   ownerName: string;
   ledBy: string;
+  /** Who proposed it (P78); they never approve it themselves. Absent on older rows. */
+  ledById?: Id;
   targetOn: IsoDate;
   steps: { text: string; doneOn: IsoDate | null; by: string | null }[];
   approved: { by: string; at: IsoDateTime } | null;

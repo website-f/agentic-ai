@@ -224,7 +224,18 @@ export function MeetingsView() {
       {tab === 'meetings' &&
         (data.rows.length === 0 ? (
           <Card>
-            <Empty title="No meetings yet." />
+            <Empty
+              title="No meetings yet."
+              action={
+                data.canSchedule && (
+                  <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                    <PlusIcon size={16} weight="bold" aria-hidden="true" /> New meeting
+                  </button>
+                )
+              }
+            >
+              {data.canSchedule ? 'Set the first meeting; its minutes and action items are kept here after it is held.' : undefined}
+            </Empty>
           </Card>
         ) : (
           <>
@@ -386,6 +397,7 @@ function MeetingDrawer({ r, reader, onClose }: { r: Row; reader: Meetings['reade
                 ))}
               </ul>
             )}
+            {r.canRun && <AddAction meetingId={m.id} />}
           </section>
         )}
 
@@ -434,6 +446,63 @@ function MeetingDrawer({ r, reader, onClose }: { r: Row; reader: Meetings['reade
         <ErrorNotice error={act.error} />
       </div>
     </Drawer>
+  );
+}
+
+/** Add an action item the minutes reader missed: what, who and by when. */
+function AddAction({ meetingId }: { meetingId: string }) {
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [owner, setOwner] = useState('');
+  const [due, setDue] = useState('');
+  if (!open)
+    return (
+      <div>
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>
+          <PlusIcon size={14} weight="bold" aria-hidden="true" /> Add an action item
+        </button>
+      </div>
+    );
+  return (
+    <div className="ld-subpanel">
+      <div className="ld-form">
+        <label className="field">
+          <span className="label">What has to be done</span>
+          <input className="input" aria-label="Action item" value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Who does it</span>
+          <input className="input" aria-label="Action owner" placeholder="Name" value={owner} onChange={(e) => setOwner(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">By when (optional)</span>
+          <input className="input" type="date" aria-label="Action due date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </label>
+      </div>
+      {text.trim().length > 0 && text.trim().length < 3 && <p className="help">Say a little more about what has to be done.</p>}
+      <ErrorNotice error={act.error} />
+      <div className="ld-actions">
+        <button className="btn btn-sm" disabled={act.busy} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || text.trim().length < 3 || !owner.trim()}
+          onClick={async () => {
+            const r = await act.run(() => api.addMeetingAction(meetingId, { text, owner, due: due || null }), 'Action item added.');
+            if (r) {
+              setText('');
+              setOwner('');
+              setDue('');
+              setOpen(false);
+            }
+          }}
+        >
+          {act.busy ? 'Saving…' : 'Add action item'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -519,6 +588,8 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
   const { companyId, company, me } = useApp();
   const isCompanyUser = me.user.role === 'company_manager' || me.user.role === 'admin_exec';
   const [forCompany, setForCompany] = useState(isCompanyUser);
+  // A Director Office meeting may be for any company the person can see, not only the one open now.
+  const [target, setTarget] = useState(companyId);
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<keyof typeof MEETING_KIND>('management');
   const [date, setDate] = useState(new Date(Date.now() + 8 * 3_600_000 + 86_400_000).toISOString().slice(0, 10));
@@ -536,9 +607,21 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
         {doa && (
           <label className="field">
             <span className="label">For</span>
-            <select className="select" value={forCompany ? 'company' : 'group'} onChange={(e) => setForCompany(e.target.value === 'company')} aria-label="For">
+            <select
+              className="select"
+              value={forCompany ? target : 'group'}
+              onChange={(e) => {
+                setForCompany(e.target.value !== 'group');
+                if (e.target.value !== 'group') setTarget(e.target.value);
+              }}
+              aria-label="For"
+            >
               <option value="group">The group (Director Office)</option>
-              <option value="company">{company?.name ?? 'This company'}</option>
+              {(me.companies.length ? me.companies : company ? [company] : []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </label>
         )}
@@ -644,7 +727,7 @@ function NewMeeting({ doa, onClose }: { doa: boolean; onClose: () => void }) {
               const r = await act.run(
                 () =>
                   api.scheduleMeeting({
-                    companyId: forCompany ? companyId : null,
+                    companyId: forCompany ? (doa ? target || companyId : companyId) : null,
                     kind,
                     title,
                     start: myt(date, from),

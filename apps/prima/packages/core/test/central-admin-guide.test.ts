@@ -108,8 +108,9 @@ describe('Central Admin cards in the shared guide-card format (PR #56)', () => {
       expect(card('company-file-check').allowed(u), `${id} check`).toBe(
         await can(async () => {
           const rows = await svc.companyFiles(u).catch(() => []);
-          // The checker role: the corporate owner (the service still refuses checking one's own draft).
-          if (!rows.length || !(await svc.panelBoard(u).catch(() => null))?.canKeep.AUDIT) throw new AccessDenied('view', 'x');
+          // The checker role: the corporate owner (the service still refuses checking one's own draft). P78: the owner
+          // keeps the panel lists too, so the corporate role itself is asked, not the panel.
+          if (!rows.length || !(await svc.corpBoard(u).catch(() => null))?.roles.includes('owner')) throw new AccessDenied('view', 'x');
         }),
       );
     }

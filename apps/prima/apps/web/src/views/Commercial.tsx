@@ -43,6 +43,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
   const [openTender, setOpenTender] = useState<string | null>(openTenderId ?? null);
   const [openQuote, setOpenQuote] = useState<string | null>(null);
   const [newQuote, setNewQuote] = useState<{ tenderId: string | null; client: string } | null>(null);
+  const [newTender, setNewTender] = useState(false);
 
   if (error)
     return (
@@ -86,11 +87,21 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
           </>
         }
         actions={
-          data.can.prepare && (
-            <button className="btn btn-primary" onClick={() => setNewQuote({ tenderId: null, client: '' })}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              New quotation
-            </button>
+          (data.can.addTender || data.can.prepare) && (
+            <>
+              {data.can.addTender && (
+                <button className="btn btn-primary" onClick={() => setNewTender(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  Add tender
+                </button>
+              )}
+              {data.can.prepare && (
+                <button className={data.can.addTender ? 'btn' : 'btn btn-primary'} onClick={() => setNewQuote({ tenderId: null, client: '' })}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  New quotation
+                </button>
+              )}
+            </>
           )
         }
       />
@@ -116,7 +127,21 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
 
       <Card title="Tender pipeline" sub="Closing date first. Open a tender to work on its papers, steps and bid files." actions={<span className="bz-count">{data.tenders.length}</span>}>
         {data.tenders.length === 0 ? (
-          <Empty title="No tenders recorded for this company yet." />
+          <Empty
+            title="No tenders recorded for this company yet."
+            action={
+              data.can.addTender ? (
+                <button className="btn btn-primary" onClick={() => setNewTender(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  Add tender
+                </button>
+              ) : undefined
+            }
+          >
+            {data.can.addTender
+              ? 'Enter a tender from MyProcurement, ePerolehan or a client invitation to start its protocol, papers and bid.'
+              : 'The company admin team or the Director Office enters tenders here.'}
+          </Empty>
         ) : (
           <div className="bz-board" aria-label="Tenders by stage">
             {stages.map((st) => (
@@ -154,7 +179,17 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
 
         <Card title="Quotations" sub="Prices are typed in by the admin team until costing rules are approved" flush>
           {data.quotations.length === 0 ? (
-            <Empty title="No quotations yet." />
+            <Empty
+              title="No quotations yet."
+              action={
+                data.can.prepare ? (
+                  <button className="btn" onClick={() => setNewQuote({ tenderId: null, client: '' })}>
+                    <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                    New quotation
+                  </button>
+                ) : undefined
+              }
+            />
           ) : (
             <ul className="bz-rows">
               {data.quotations.map((q) => (
@@ -211,6 +246,17 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
         />
       )}
       {newQuote && <NewQuoteDrawer companyId={companyId} initial={newQuote} tenders={live} onClose={() => setNewQuote(null)} />}
+      {newTender && (
+        <NewTenderDrawer
+          companyId={companyId}
+          companyName={company?.name ?? 'this company'}
+          onClose={() => setNewTender(false)}
+          onSaved={(id) => {
+            setNewTender(false);
+            setOpenTender(id);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -526,6 +572,135 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
       {ownQuote && q.status === 'awaiting_approval' && <p className="muted small">You prepared this quotation, so another person must approve it.</p>}
       {q.status === 'awaiting_approval' && !can.approve && <p className="muted small">Waiting for the Company Manager.</p>}
       {q.status === 'accepted' && <p className="muted small">Next: the signed contract and client onboarding (Wave 2).</p>}
+    </Drawer>
+  );
+}
+
+/** P78: enter a tender so its protocol, papers, checks and bid can be worked from this screen. */
+function NewTenderDrawer({ companyId, companyName, onClose, onSaved }: { companyId: string; companyName: string; onClose: () => void; onSaved: (id: string) => void }) {
+  const act = useAction();
+  const today = new Date().toISOString().slice(0, 10);
+  const [tried, setTried] = useState(false);
+  const [f, setF] = useState({
+    ref: '',
+    title: '',
+    buyer: '',
+    channel: 'GOVERNMENT' as 'GOVERNMENT' | 'PRIVATE',
+    source: '',
+    owner: '',
+    closesOn: '',
+    guards: '',
+    sites: '1',
+    estMonthly: '',
+    armed: false,
+  });
+  const set = (patch: Partial<typeof f>) => setF({ ...f, ...patch });
+  const whole = (v: string, min: number, max: number) => /^\d+$/.test(v.trim()) && Number(v) >= min && Number(v) <= max;
+  const errors: Partial<Record<keyof typeof f, string>> = {};
+  if (!f.ref.trim()) errors.ref = 'Give the tender reference number.';
+  if (f.title.trim().length < 3) errors.title = 'Give the tender title.';
+  if (!f.buyer.trim()) errors.buyer = 'Name the buyer.';
+  if (!f.closesOn) errors.closesOn = 'Give the closing date.';
+  else if (f.closesOn < today) errors.closesOn = 'The closing date cannot be in the past.';
+  if (!whole(f.guards, 1, 1000)) errors.guards = 'A whole number from 1 to 1,000.';
+  if (!whole(f.sites, 1, 500)) errors.sites = 'A whole number from 1 to 500.';
+  if (f.estMonthly.trim() && !(Number(f.estMonthly) > 0)) errors.estMonthly = 'An amount in RM, or leave it empty.';
+  const bad = Object.keys(errors).length > 0;
+  const err = (k: keyof typeof f) => (tried && errors[k] ? <span className="bz-field-err">{errors[k]}</span> : null);
+  const inv = (k: keyof typeof f) => (tried && errors[k] ? true : undefined);
+  const save = async () => {
+    setTried(true);
+    if (bad) return;
+    const t = await act.run(
+      () =>
+        api.addTender(companyId, {
+          ref: f.ref.trim(),
+          title: f.title.trim(),
+          buyer: f.buyer.trim(),
+          channel: f.channel,
+          source: f.source.trim(),
+          owner: f.owner.trim(),
+          closesOn: f.closesOn,
+          guards: Number(f.guards),
+          sites: Number(f.sites),
+          estMonthly: f.estMonthly.trim() ? Number(f.estMonthly) : null,
+          armed: f.armed,
+        }),
+      (x) => `${x.ref} added. Follow its protocol next.`,
+    );
+    if (t) onSaved(t.id);
+  };
+  return (
+    <Drawer title="Add tender" sub={`Entered in ${companyName}'s name. It starts open; the protocol, papers and the manager's signature follow.`} onClose={onClose}>
+      <div className="bz-form">
+        <label className="field">
+          <span className="label">Tender reference</span>
+          <input className="input" value={f.ref} maxLength={60} placeholder="e.g. JKR/T/2026/114" aria-invalid={inv('ref')} onChange={(e) => set({ ref: e.target.value })} />
+          {err('ref')}
+        </label>
+        <div className="field">
+          <span className="label">Type</span>
+          <div className="seg" role="group" aria-label="Type of tender">
+            <button type="button" aria-pressed={f.channel === 'GOVERNMENT'} onClick={() => set({ channel: 'GOVERNMENT' })}>
+              Government
+            </button>
+            <button type="button" aria-pressed={f.channel === 'PRIVATE'} onClick={() => set({ channel: 'PRIVATE' })}>
+              Private
+            </button>
+          </div>
+        </div>
+        <label className="field bz-span">
+          <span className="label">Title</span>
+          <input className="input" value={f.title} maxLength={160} placeholder="What the buyer wants guarded" aria-invalid={inv('title')} onChange={(e) => set({ title: e.target.value })} />
+          {err('title')}
+        </label>
+        <label className="field bz-span">
+          <span className="label">Buyer</span>
+          <input className="input" value={f.buyer} maxLength={120} placeholder="Ministry, agency or client" aria-invalid={inv('buyer')} onChange={(e) => set({ buyer: e.target.value })} />
+          {err('buyer')}
+        </label>
+        <label className="field">
+          <span className="label">Closing date</span>
+          <input className="input" type="date" min={today} value={f.closesOn} aria-invalid={inv('closesOn')} onChange={(e) => set({ closesOn: e.target.value })} />
+          {err('closesOn')}
+        </label>
+        <label className="field">
+          <span className="label">Where it came from (optional)</span>
+          <input className="input" value={f.source} maxLength={80} placeholder="MyProcurement, ePerolehan, invitation" onChange={(e) => set({ source: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Guards needed</span>
+          <input className="input num" inputMode="numeric" value={f.guards} aria-invalid={inv('guards')} onChange={(e) => set({ guards: e.target.value })} />
+          {err('guards')}
+        </label>
+        <label className="field">
+          <span className="label">Sites</span>
+          <input className="input num" inputMode="numeric" value={f.sites} aria-invalid={inv('sites')} onChange={(e) => set({ sites: e.target.value })} />
+          {err('sites')}
+        </label>
+        <label className="field">
+          <span className="label">Estimated value, RM a month (optional)</span>
+          <input className="input num" inputMode="decimal" value={f.estMonthly} aria-invalid={inv('estMonthly')} onChange={(e) => set({ estMonthly: e.target.value })} />
+          {err('estMonthly')}
+        </label>
+        <label className="field">
+          <span className="label">Leads the pursuit (optional)</span>
+          <input className="input" value={f.owner} maxLength={80} placeholder="You, if left empty" onChange={(e) => set({ owner: e.target.value })} />
+        </label>
+        <label className="row small bz-span">
+          <input type="checkbox" checked={f.armed} onChange={(e) => set({ armed: e.target.checked })} /> The work needs armed guards (bank, cash, close protection). Arms Control follows it.
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="bz-form-foot">
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? 'Saving…' : 'Add tender'}
+        </button>
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+        {tried && bad && <span className="bz-field-err">Fix the fields marked above.</span>}
+      </div>
     </Drawer>
   );
 }

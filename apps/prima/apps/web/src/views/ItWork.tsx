@@ -145,7 +145,7 @@ export function Jobs({ data }: { data: ItBoard }) {
         sub={`${rows.length} shown`}
         flush
         actions={
-          data.assigner && (
+          (data.assigner || data.canGiveJob) && (
             <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
               <PlusIcon size={16} weight="bold" aria-hidden="true" />
               Give a job
@@ -285,6 +285,8 @@ const LOG_WHAT: Record<string, string> = {
 export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onClose: () => void }) {
   const {me}=useApp();
   const emailClient=useMemo(()=>jobEmailClient((...args)=>api.m365Call(me.user.id,...args)),[me.user.id]);
+  // P78: inside the Agentic Office the browser holds no Microsoft token, so filing emails to a job uses the office's mail.
+  const inOffice=(api as { office?: boolean }).office===true;
   // The COO may decide anyone's IT job, always with a reason; whoever was in charge is told (Fauzan, 31 Oct 2026).
   const coo = data.role === 'coo' || data.role === 'view'; // The CEO's IT role is 'view'; he has full authority (Fauzan, 31 Oct 2026).
   const act = useAction();
@@ -325,7 +327,9 @@ export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onCl
         />
         {j.detail && <p className="iw-detail">{j.detail}</p>}
       </div>
-      <JobEmails key={`${me.user.id}:${j.id}`} client={emailClient} userId={me.user.id} jobId={j.id} />
+      {inOffice
+        ? <p className="notice" data-tone="info">Job emails use your office Microsoft 365 connection. Open Mail in the office to find the email and file it to {j.ref}.</p>
+        : <JobEmails key={`${me.user.id}:${j.id}`} client={emailClient} userId={me.user.id} jobId={j.id} />}
       <section className="iw-sec">
         <h3>Proof</h3>
         {!j.proof.length && <p className="muted small">No proof yet. A job cannot be submitted without it.</p>}

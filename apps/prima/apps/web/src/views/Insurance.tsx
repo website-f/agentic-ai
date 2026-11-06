@@ -75,6 +75,13 @@ export function InsuranceView() {
       <PageHead
         title="Insurance"
         sub={`Premiums, policies, claims and guarantees${group ? ' for every company' : ''}. The Chief of Staff's insurance section follows up; paying a premium, signing a guarantee or accepting a settlement stays with the company's board and Finance. A company with no records loaded shows Unknown, never as covered.`}
+        actions={
+          <>
+            <AddFor kind="insurancePolicy" label="Add policy" primary />
+            <AddFor kind="insuranceClaim" label="Record claim" />
+            <AddFor kind="insuranceGuarantee" label="Add guarantee" />
+          </>
+        }
       />
       <Stats>
         <Stat
@@ -176,7 +183,7 @@ function Policies({ data }: { data: Insurance }) {
   return (
     <Card title="Policies" sub={`Renewal starts ${data.rules.renewDays} days before expiry`} actions={<AddFor kind="insurancePolicy" label="Add policy" />} flush>
       {data.policies.length === 0 ? (
-        <Empty title="No policies recorded." />
+        <Empty title="No policies recorded." action={<AddFor kind="insurancePolicy" label="Add policy" primary />} />
       ) : (
         <ul className="bz-rows">
           {data.policies.map((r) => (
@@ -273,7 +280,7 @@ function Claims({ data }: { data: Insurance }) {
       flush
     >
       {data.claims.length === 0 ? (
-        <Empty title="No claims." />
+        <Empty title="No claims." action={<AddFor kind="insuranceClaim" label="Record claim" />} />
       ) : (
         <ul className="bz-rows">
           {data.claims.map((r) => {
@@ -523,7 +530,7 @@ function Guarantees({ data }: { data: Insurance }) {
       flush
     >
       {data.guarantees.length === 0 ? (
-        <Empty title="No guarantees." />
+        <Empty title="No guarantees." action={<AddFor kind="insuranceGuarantee" label="Add guarantee" />} />
       ) : (
         <ul className="bz-rows">
           {data.guarantees.map((r) => {
@@ -564,9 +571,9 @@ function Guarantees({ data }: { data: Insurance }) {
 }
 
 /** Adds for the company chosen at the top of the screen. */
-function AddFor({ kind, label }: { kind: 'insurancePolicy' | 'insuranceClaim' | 'insuranceGuarantee'; label: string }) {
+function AddFor({ kind, label, primary = false }: { kind: 'insurancePolicy' | 'insuranceClaim' | 'insuranceGuarantee'; label: string; primary?: boolean }) {
   const { companyId, company } = useApp();
-  return <RecordButton kind={kind} companyId={companyId} label={company ? `${label} (${company.code})` : label} />;
+  return <RecordButton kind={kind} companyId={companyId} label={company ? `${label} (${company.code})` : label} primary={primary} />;
 }
 
 function Companies({ data }: { data: Insurance }) {
@@ -583,6 +590,7 @@ function Companies({ data }: { data: Insurance }) {
                 </span>
                 <span className="bz-row-side">
                   <Chip tone="unknown">Unknown</Chip>
+                  <RecordButton kind="insurancePolicy" companyId={r.company.id} label="Add policy" />
                 </span>
               </li>
             );

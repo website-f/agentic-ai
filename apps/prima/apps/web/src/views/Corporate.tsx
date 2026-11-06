@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { CalendarCheckIcon, CalendarXIcon, GavelIcon, ReceiptIcon } from '@phosphor-icons/react';
-import type { CorpChangeKind } from '@prima/core';
+import { CalendarCheckIcon, CalendarXIcon, GavelIcon, PlusIcon, ReceiptIcon } from '@phosphor-icons/react';
+import type { CorpChangeKind, CorpFilingKind } from '@prima/core';
 import { api, type CorpBoard } from '../api';
 import { AuditLegalKpis, AuditPanel, LegalPanel } from './AuditLegal';
 import { CompanyFilePanel } from './CompanyFile';
@@ -8,7 +8,7 @@ import { PanelFirmsPanel } from './PanelFirms';
 import { DelegationsPanel } from './Delegations';
 import { LegalHoldsPanel } from './LegalHolds';
 import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
 import '../styles/gov.css';
 
@@ -40,6 +40,14 @@ const CHANGE_STATUS: Record<ChangeRow['change']['status'], ['warn' | 'info' | 'c
   rejected: ['crit', 'Rejected by PWVSB'],
   board_done: ['ok', 'Board resolution recorded'],
 };
+const FILING_KIND: Record<CorpFilingKind, string> = {
+  ANNUAL_RETURN: 'Annual return',
+  FINANCIAL_STATEMENTS: 'Financial statements',
+  DIRECTOR_CHANGE: 'Change of directors',
+  BO_CHANGE: 'Change of beneficial owners',
+  SHARE_CHANGE: 'Change of shares',
+  OTHER: 'Other SSM lodgement',
+};
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -47,6 +55,7 @@ export function CorporateView() {
   const { data, error } = useLoad(() => api.corpBoard(), []);
   const al = useLoad(() => api.corpAuditLegal().catch(() => null), []);
   const [tab, setTab] = useState<Tab>('filings');
+  const [adding, setAdding] = useState<'filing' | 'change' | null>(null);
   if (error && al.data) return <AuditLegalOnly data={al.data} />;
   if (error && !al.loading)
     return (
@@ -61,11 +70,35 @@ export function CorporateView() {
       </div>
     );
   const k = data.kpis;
+  const addFiling = () => {
+    setTab('filings');
+    setAdding('filing');
+  };
+  const addChange = () => {
+    setTab('changes');
+    setAdding('change');
+  };
   return (
     <div className="page gv-page">
       <PageHead
         title="Company secretary"
         sub="Each company keeps its own licensed secretary, filings and board. The secretary lodges in MBRS and the company records it here; a filing stays awaiting acknowledgement until the SSM receipt is recorded. Any change to a company's structure needs PWVSB approval before the board acts."
+        actions={
+          data.canFile.length > 0 || data.canRaise.length > 0 ? (
+            <>
+              {data.canRaise.length > 0 && (
+                <button className="btn" onClick={addChange}>
+                  <PlusIcon size={16} /> Ask for a change
+                </button>
+              )}
+              {data.canFile.length > 0 && (
+                <button className="btn btn-primary" onClick={addFiling}>
+                  <PlusIcon size={16} /> Add filing
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
       >
         <p className="notice" data-tone="info">
           Test data. Deadlines follow the Companies Act 2016 and are for the secretaries to confirm.
@@ -123,8 +156,8 @@ export function CorporateView() {
           ))}
       </div>
       {(tab === 'files' || tab === 'panel' || tab === 'delegations') && <CentralAdminGuide view="corporate" tab={tab} />}
-      {tab === 'filings' && <Filings data={data} />}
-      {tab === 'changes' && <Changes data={data} />}
+      {tab === 'filings' && <Filings data={data} onAdd={addFiling} />}
+      {tab === 'changes' && <Changes data={data} onAdd={addChange} />}
       {tab === 'audit' && al.data && <AuditPanel data={al.data} />}
       {tab === 'legal' && al.data && (
         <div className="gv-stack">
@@ -136,6 +169,24 @@ export function CorporateView() {
       {tab === 'files' && <CompanyFilePanel />}
       {tab === 'panel' && <PanelFirmsPanel />}
       {tab === 'delegations' && <DelegationsPanel />}
+      {adding === 'filing' && (
+        <Drawer
+          title="Add a filing"
+          sub="An SSM lodgement with its due date. Then mark the papers ready, record the MBRS lodgement reference, and record the SSM receipt."
+          onClose={() => setAdding(null)}
+        >
+          <FilingForm companies={data.canFile} onDone={() => setAdding(null)} />
+        </Drawer>
+      )}
+      {adding === 'change' && (
+        <Drawer
+          title="Ask PWVSB to approve a change"
+          sub="A change to a company's directors, shares, owners or other corporate details. The Deputy Chief of Staff decides for PWVSB, then the board acts and the SSM filing opens."
+          onClose={() => setAdding(null)}
+        >
+          <ChangeForm companies={data.canRaise} onDone={() => setAdding(null)} />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -177,7 +228,7 @@ function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof 
 }
 
 /** The filings calendar: grouped by the month they fall due, with each company's filings filterable. */
-function Filings({ data }: { data: CorpBoard }) {
+function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
   const [all, setAll] = useState(false);
   const [company, setCompany] = useState('');
   const companies = [...new Set(data.filings.map((f) => f.companyName))].sort((a, b) => a.localeCompare(b));
@@ -217,7 +268,20 @@ function Filings({ data }: { data: CorpBoard }) {
         </select>
       </Toolbar>
       <Card title="SSM filings" sub={`${rows.length} filing${rows.length === 1 ? '' : 's'}${all ? '' : ' still open'}, by the month they fall due`} flush>
-        {!rows.length && <Empty title="Nothing open." />}
+        {!rows.length && (
+          <Empty
+            title="Nothing open."
+            action={
+              data.canFile.length > 0 ? (
+                <button className="btn btn-primary" onClick={onAdd}>
+                  <PlusIcon size={16} /> Add filing
+                </button>
+              ) : undefined
+            }
+          >
+            {data.canFile.length > 0 ? 'Add each annual return, set of financial statements or other SSM lodgement with its due date.' : undefined}
+          </Empty>
+        )}
         <ul className="gv-list">
           {months.map(([m, list]) => (
             <li key={m} className="gv-group-li">
@@ -248,8 +312,8 @@ function FilingLine({ f: row }: { f: FilingRow }) {
   const act = useAction();
   const [ref, setRef] = useState('');
   const f = row.filing;
-  // Head office Corporate Admin (the Deputy Chief of Staff) records filings; the company and the secretary view them.
-  const works = row.role === 'owner';
+  // Head office Corporate Admin (the Deputy Chief of Staff) and the owner record filings; the company and the secretary view them.
+  const works = row.canWork;
   const order = ['open', 'prepared', 'lodged', 'acknowledged'] as const;
   const at = order.indexOf(f.status);
   const st = (i: number): StepState => (at > i ? 'done' : at === i ? 'now' : 'todo');
@@ -327,16 +391,15 @@ function FilingLine({ f: row }: { f: FilingRow }) {
   );
 }
 
-function Changes({ data }: { data: CorpBoard }) {
-  const mine = data.companies.filter((c) => c.role === 'manager' || c.role === 'owner');
-  const [form, setForm] = useState(false);
+function Changes({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
+  const can = data.canRaise.length > 0;
   return (
     <Card
       title="Corporate changes"
       flush
       actions={
-        mine.length > 0 && (
-          <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
+        can && (
+          <button className="btn btn-sm btn-primary" onClick={onAdd}>
             Ask PWVSB to approve a change
           </button>
         )
@@ -347,9 +410,21 @@ function Changes({ data }: { data: CorpBoard }) {
           The company manager asks, the Deputy Chief of Staff approves for PWVSB with a reason and the signed clause (the Chief of Staff monitors), then the
           board acts and head office Corporate Admin files with SSM within {data.rule.changeFileDays} days. Statutory deadlines are never held back.
         </p>
-        {form && <ChangeForm companies={mine} onDone={() => setForm(false)} />}
       </div>
-      {!data.changes.length && <Empty title="No corporate changes." />}
+      {!data.changes.length && (
+        <Empty
+          title="No corporate changes."
+          action={
+            can ? (
+              <button className="btn btn-primary" onClick={onAdd}>
+                <PlusIcon size={16} /> Ask for a change
+              </button>
+            ) : undefined
+          }
+        >
+          {can ? 'A new director, a share transfer or a change of owner starts here.' : undefined}
+        </Empty>
+      )}
       <ul className="gv-list">
         {data.changes.map((c) => (
           <li key={c.change.id}>
@@ -464,56 +539,147 @@ function ChangeLine({ c: row }: { c: ChangeRow }) {
   );
 }
 
-function ChangeForm({ companies, onDone }: { companies: CorpBoard['companies']; onDone: () => void }) {
+function ChangeForm({ companies, onDone }: { companies: CorpBoard['canRaise']; onDone: () => void }) {
   const act = useAction();
-  const [companyId, setCompanyId] = useState(companies[0].profile.companyId);
+  const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
   const [kind, setKind] = useState<CorpChangeKind>('DIRECTOR');
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
+  const [tried, setTried] = useState(false);
+  const missing = !companyId ? 'Choose the company.' : !title.trim() ? 'Say what the change is.' : '';
+  const save = () => {
+    setTried(true);
+    if (missing) return;
+    act.run(() => api.raiseCorpChange(companyId, { kind, title, detail }), 'Sent to PWVSB.').then((r) => r && onDone());
+  };
   return (
-    <div className="gv-box" aria-label="Ask PWVSB to approve a change">
-      <div className="gv-form">
-        {companies.length > 1 && (
-          <label className="field">
-            <span className="label">Company</span>
-            <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-              {companies.map((c) => (
-                <option key={c.profile.companyId} value={c.profile.companyId}>
-                  {c.companyName}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="field">
-          <span className="label">What changes</span>
-          <select className="select" aria-label="What changes" value={kind} onChange={(e) => setKind(e.target.value as CorpChangeKind)}>
-            {(Object.keys(CHANGE) as CorpChangeKind[]).map((x) => (
-              <option key={x} value={x}>
-                {CHANGE[x]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field gv-span">
-          <span className="label">Change</span>
-          <input className="input" aria-label="Change" placeholder="What the change is" value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label className="field gv-span">
-          <span className="label">Details</span>
-          <textarea className="textarea" aria-label="Details" placeholder="Details (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} />
-        </label>
-      </div>
+    <div className="gv-stack-sm" aria-label="Ask PWVSB to approve a change">
+      <label className="field">
+        <span className="label">Company</span>
+        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">What changes</span>
+        <select className="select" aria-label="What changes" value={kind} onChange={(e) => setKind(e.target.value as CorpChangeKind)}>
+          {(Object.keys(CHANGE) as CorpChangeKind[]).map((x) => (
+            <option key={x} value={x}>
+              {CHANGE[x]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Change</span>
+        <input className="input" aria-label="Change" placeholder="For example, appoint a new director" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Details</span>
+        <textarea className="textarea" aria-label="Details" placeholder="Details (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} />
+        <span className="help">The Deputy Chief of Staff decides it for PWVSB; nobody decides a change they asked for.</span>
+      </label>
+      {tried && missing && (
+        <p className="help" role="alert">
+          {missing}
+        </p>
+      )}
       <ErrorNotice error={act.error} />
       <div className="gv-form-foot">
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={act.busy || !title.trim()}
-          onClick={() => act.run(() => api.raiseCorpChange(companyId, { kind, title, detail }), 'Sent to PWVSB.').then((r) => r && onDone())}
-        >
-          Send to PWVSB
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? 'Sending...' : 'Send to PWVSB'}
         </button>
-        <button className="btn btn-sm btn-ghost" onClick={onDone}>
+        <button className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const FILING_BASIS: Partial<Record<CorpFilingKind, string>> = {
+  ANNUAL_RETURN: 'Companies Act 2016 s.68: within 30 days of the anniversary of incorporation',
+  FINANCIAL_STATEMENTS: 'Companies Act 2016 s.259: within 30 days of circulating them to members',
+};
+
+function FilingForm({ companies, onDone }: { companies: CorpBoard['canFile']; onDone: () => void }) {
+  const act = useAction();
+  const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
+  const [kind, setKind] = useState<CorpFilingKind>('ANNUAL_RETURN');
+  const [title, setTitle] = useState(FILING_KIND.ANNUAL_RETURN);
+  const [dueOn, setDueOn] = useState('');
+  const [basis, setBasis] = useState(FILING_BASIS.ANNUAL_RETURN ?? '');
+  const [tried, setTried] = useState(false);
+  // Fill in the usual wording for the chosen filing; the person can still change it.
+  const pick = (k: CorpFilingKind) => {
+    setKind(k);
+    setTitle(FILING_KIND[k]);
+    setBasis(FILING_BASIS[k] ?? 'Companies Act 2016');
+  };
+  const missing = !companyId
+    ? 'Choose the company.'
+    : title.trim().length < 3
+      ? 'Say what is being filed.'
+      : !dueOn
+        ? 'Give the date it is due.'
+        : basis.trim().length < 3
+          ? 'Give the rule that sets the deadline.'
+          : '';
+  const save = () => {
+    setTried(true);
+    if (missing) return;
+    act.run(() => api.addCorpFiling(companyId, { kind, title, dueOn, basis }), 'Filing added.').then((r) => r && onDone());
+  };
+  return (
+    <div className="gv-stack-sm" aria-label="Add a filing">
+      <label className="field">
+        <span className="label">Company</span>
+        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">What is being filed</span>
+        <select className="select" aria-label="What is being filed" value={kind} onChange={(e) => pick(e.target.value as CorpFilingKind)}>
+          {(Object.keys(FILING_KIND) as CorpFilingKind[]).map((x) => (
+            <option key={x} value={x}>
+              {FILING_KIND[x]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Title</span>
+        <input className="input" aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Due on</span>
+        <input className="input" type="date" aria-label="Due on" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Deadline rule</span>
+        <input className="input" aria-label="Deadline rule" value={basis} onChange={(e) => setBasis(e.target.value)} />
+        <span className="help">The company secretary confirms the date. Prima never lodges with SSM; it keeps the steps and the receipt.</span>
+      </label>
+      {tried && missing && (
+        <p className="help" role="alert">
+          {missing}
+        </p>
+      )}
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? 'Saving...' : 'Add filing'}
+        </button>
+        <button className="btn btn-ghost" onClick={onDone}>
           Cancel
         </button>
       </div>

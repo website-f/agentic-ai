@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ClockCountdownIcon, HandPalmIcon, ListChecksIcon, PlusIcon, StampIcon } from '@phosphor-icons/react';
-import { BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATION_LABEL, TERMINATION_STEPS, type BranchModel } from '@prima/core';
+import { BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATION_LABEL, TERMINATION_STEPS, isOwnerAdmin, type BranchModel } from '@prima/core';
 import { api, type BranchBoard } from '../api';
+import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import '../styles/biz.css';
@@ -92,7 +93,18 @@ export function BranchesView() {
       </Stats>
       {companies.length === 0 && (
         <Card>
-          <Empty title="No branches yet." />
+          <Empty
+            title="No branches yet."
+            action={
+              data.canAdd.length > 0 && (
+                <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+                  Propose a new branch
+                </button>
+              )
+            }
+          >
+            A branch works inside its licensed company under a signed agreement. Propose it here; the company manager approves its settlements.
+          </Empty>
         </Card>
       )}
       {companies.map((name) => {
@@ -142,6 +154,8 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
   const s = r.settlement;
   const sp = r.split;
   const manager = r.role === 'manager';
+  // P78: the owner records a signed agreement too (the server allows it); approvals stay with the company manager.
+  const owner = isOwnerAdmin(useApp().me.user);
   const [tone, label] = branchState(r);
   return (
     <Drawer title={r.branch.name} sub={`${r.companyName} · ${r.sites} sites · ${r.liveContracts} live contracts`} onClose={onClose}>
@@ -223,7 +237,7 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
       <section className="bz-sec">
         <div className="bz-sec-head">
           <h3>Agreement</h3>
-          {manager && (
+          {(manager || owner) && (
             <button className="btn btn-sm" aria-expanded={agreementForm} onClick={() => setAgreementForm(!agreementForm)}>
               New signed version
             </button>
@@ -252,7 +266,7 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
       <SetupPanel row={r} />
       {r.treasury && <TreasuryPanel row={r} />}
       <BusinessCasePanel row={r} />
-      {(r.role === 'manager' || r.role === 'view') && <ClosePanel row={r} />}
+      {(r.role === 'manager' || r.role === 'view' || r.role === 'staff') && <ClosePanel row={r} />}
     </Drawer>
   );
 }

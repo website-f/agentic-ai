@@ -4,6 +4,7 @@ import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpExc
 import type {
   AttendanceIssue,
   CorpChangeKind,
+  CorpFilingKind,
   ItAsset,
   ItAssetKind,
   ItTicketCategory,
@@ -923,6 +924,20 @@ export class AppController {
     );
   }
 
+  // P78: register a year's statutory audit (the company, or the owner as master administrator).
+  @Post('corporate/:companyId/audits')
+  addCorpAudit(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    const pbc = Array.isArray(b.pbc) ? b.pbc.filter((x): x is string => typeof x === 'string').slice(0, 30).map((x) => x.slice(0, 120)) : [];
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addCorpAudit(u, companyId.slice(0, 40), {
+        fyEnd: date(b.fyEnd, 'fyEnd'),
+        auditorFirm: str(b.auditorFirm ?? '', 'auditorFirm', 120),
+        fee: b.fee == null || b.fee === '' ? null : Number(b.fee),
+        pbc,
+      }),
+    );
+  }
+
   @Post('corporate/:companyId/legal-matters')
   addLegalMatter(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
     return this.db.asUser(uid, (svc, u) =>
@@ -972,6 +987,26 @@ export class AppController {
         hours: b.hours == null ? undefined : Number(b.hours),
         dataLossMinutes: b.dataLossMinutes == null ? undefined : Number(b.dataLossMinutes),
         note: b.note == null ? undefined : str(b.note, 'note', 300),
+      }),
+    );
+  }
+
+  // P78: list a system to protect (IT, or the owner as master administrator).
+  @Post('continuity/systems')
+  addBcmSystem(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const copies = Array.isArray(b.copies)
+      ? b.copies.slice(0, 6).map((c) => {
+          const x = (c ?? {}) as Record<string, unknown>;
+          return { site: str(x.site ?? '', 'site', 20), where: str(x.where ?? '', 'where', 160), inMalaysia: x.inMalaysia === true };
+        })
+      : [];
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addBcmSystem(u, {
+        name: str(b.name ?? '', 'name', 120),
+        impact: str(b.impact ?? '', 'impact', 300),
+        rtoHours: Number(b.rtoHours),
+        rpoHours: Number(b.rpoHours),
+        copies,
       }),
     );
   }
@@ -1028,6 +1063,19 @@ export class AppController {
   @Get('grc')
   grcBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.grcBoard(u));
+  }
+
+  // P78: add an obligation a company must prove (the company, internal audit, or the owner).
+  @Post('grc/companies/:companyId/obligations')
+  addGrcObligation(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addGrcObligation(u, companyId.slice(0, 40), {
+        stream: str(b.stream ?? '', 'stream', 30) as never,
+        title: str(b.title ?? '', 'title', 160),
+        basis: str(b.basis ?? '', 'basis', 200),
+        everyMonths: Number(b.everyMonths),
+      }),
+    );
   }
 
   @Post('grc/obligations/:id/evidence')
@@ -1442,6 +1490,19 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.corpBoard(u));
   }
 
+  // P78: Corporate Admin or the owner adds a filing (annual return, financial statements, other SSM lodgement).
+  @Post('corporate/:companyId/filings')
+  addCorpFiling(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addCorpFiling(u, companyId.slice(0, 40), {
+        kind: str(b.kind, 'kind', 30) as CorpFilingKind,
+        title: str(b.title ?? '', 'title', 160),
+        dueOn: date(b.dueOn, 'dueOn'),
+        basis: str(b.basis ?? '', 'basis', 200),
+      }),
+    );
+  }
+
   @Post('corporate/filings/:id/:action')
   corpFilingStep(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: { ref?: unknown; on?: unknown }) {
     const a = (['prepare', 'lodge', 'receipt'] as const).find((x) => x === action);
@@ -1463,6 +1524,26 @@ export class AppController {
     const keys = ['directors', 'shareholders', 'beneficialOwners', 'constitution', 'papers', 'secretaryFirm', 'secretaryLicence', 'auditor'] as const;
     const input = Object.fromEntries(keys.filter((k) => b[k] !== undefined).map((k) => [k, b[k]]));
     return this.db.asUser(uid, (svc, u) => svc.saveCompanyFile(u, companyId.slice(0, 40), input as Parameters<typeof svc.saveCompanyFile>[2]));
+  }
+
+  // P78: start the company file for a company with none yet; the service validates and checks who keeps the file.
+  @Post('corporate/:companyId/file/start')
+  startCompanyFile(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the company file fields.');
+    const directors = Array.isArray(b.directors)
+      ? b.directors.slice(0, 30).map((d: Record<string, unknown>) => ({ name: str(d?.name ?? '', 'name', 120), appointedOn: str(d?.appointedOn ?? '', 'appointedOn', 10) }))
+      : [];
+    return this.db.asUser(uid, (svc, u) =>
+      svc.startCompanyFile(u, companyId.slice(0, 40), {
+        regNo: b.regNo == null ? undefined : str(b.regNo, 'regNo', 40),
+        incorporatedOn: str(b.incorporatedOn ?? '', 'incorporatedOn', 10),
+        fyeMonth: Number(b.fyeMonth),
+        secretaryFirm: str(b.secretaryFirm ?? '', 'secretaryFirm', 120),
+        secretaryLicence: str(b.secretaryLicence ?? '', 'secretaryLicence', 40),
+        auditor: str(b.auditor ?? '', 'auditor', 120),
+        directors,
+      }),
+    );
   }
 
   @Post('corporate/:companyId/file/check')
@@ -2189,6 +2270,28 @@ export class AppController {
     if (!a) throw new BadRequestException('action must be evidence, explain, prepare, review, approve, return or reopen');
     if (b != null && (typeof b !== 'object' || Array.isArray(b))) throw new BadRequestException('Send the details as an object');
     return this.db.asUser(uid, (svc, u) => svc.finance.closeStep(u, companyId.slice(0, 120), a, b ?? {}));
+  }
+
+  // P78: a company bank account added to the books (team leader, FD or CEO), and books started for a new company (FD or CEO).
+  @Post('finance/:companyId/banks')
+  finAddBankAccount(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.finance.addBankAccount(u, companyId.slice(0, 120), b));
+  }
+
+  @Post('finance/:companyId/books')
+  finStartBooks(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.finance.startBooks(u, companyId.slice(0, 120), b));
+  }
+
+  // P78: a paper for the auditor or the tax agent added (declared before finance/:companyId/:pack/:itemId on purpose).
+  @Post('finance/:companyId/papers/:pack')
+  finAddPaper(@UserId() uid: string, @Param('companyId') companyId: string, @Param('pack') pack: string, @Body() b: { label?: unknown; dueOn?: unknown }) {
+    const p = (['audit', 'tax'] as const).find((x) => x === pack);
+    if (!p) throw new BadRequestException('pack must be audit or tax');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.addFinPaper(u, companyId.slice(0, 120), p, b));
   }
 
   @Post('finance/:companyId/:pack/:itemId')
@@ -4042,6 +4145,21 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.publishRoster(u, id, date(b.from, 'from'), date(b.to, 'to')));
   }
 
+  @Post('sites/:id/roster/shifts')
+  addShifts(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = {
+      postId: str(b.postId, 'postId', 100),
+      from: date(b.from, 'from'),
+      days: Number(b.days),
+      // No times: the post's own shift pattern.
+      start: b.start == null || b.start === '' ? null : str(b.start, 'start', 5),
+      end: b.end == null || b.end === '' ? null : str(b.end, 'end', 5),
+      guards: b.guards == null || b.guards === '' ? null : Number(b.guards),
+      skipSundays: typeof b.skipSundays === 'boolean' ? b.skipSundays : undefined,
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addShifts(u, id, input));
+  }
+
   @Get('shifts/:id/candidates')
   candidates(@UserId() uid: string, @Param('id') id: string, @Query('q') q = '') {
     return this.db.asUser(uid, (svc, u) => svc.candidates(u, id, String(q).slice(0, 100)));
@@ -4455,6 +4573,30 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.createQuotation(u, id, input));
   }
 
+  // P78: enter a new tender on the company's own screen (admin team, the owner, or the Director Office Administrator).
+  @Post('companies/:id/tenders')
+  addTender(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const num = (v: unknown, name: string) => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) throw new BadRequestException(`${name} must be a number`);
+      return v;
+    };
+    if (b.channel !== 'GOVERNMENT' && b.channel !== 'PRIVATE') throw new BadRequestException('channel must be GOVERNMENT or PRIVATE');
+    const input = {
+      ref: str(b.ref, 'ref', 60),
+      title: str(b.title, 'title', 160),
+      buyer: str(b.buyer, 'buyer', 120),
+      channel: b.channel as 'GOVERNMENT' | 'PRIVATE',
+      source: b.source == null ? '' : str(b.source, 'source', 80),
+      owner: b.owner == null ? '' : str(b.owner, 'owner', 80),
+      closesOn: str(b.closesOn, 'closesOn', 10),
+      guards: num(b.guards, 'guards'),
+      sites: b.sites == null ? 1 : num(b.sites, 'sites'),
+      estMonthly: b.estMonthly == null ? null : num(b.estMonthly, 'estMonthly'),
+      armed: b.armed === true,
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addTender(u, id, input));
+  }
+
   // Correct a draft or returned quotation's numbers, with a reason (review finding, 2 Nov 2026). Before :action so it matches first.
   @Post('quotations/:id/correct')
   correctQuotation(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
@@ -4706,6 +4848,18 @@ export class AppController {
         }))
       : undefined;
     return this.db.asUser(uid, (svc, u) => svc.checkMeetingSummary(u, id, { text: b.text == null ? undefined : str(b.text, 'text', 2000), actions }));
+  }
+
+  // P78: add an action item the minutes reader missed; the service checks who runs the meeting.
+  @Post('meetings/:id/actions')
+  addMeetingAction(@UserId() uid: string, @Param('id') id: string, @Body() b: { text?: unknown; owner?: unknown; due?: unknown }) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addMeetingAction(u, id.slice(0, 120), {
+        text: str(b?.text ?? '', 'text', 300),
+        owner: str(b?.owner ?? '', 'owner', 80),
+        due: b?.due == null || b.due === '' ? null : date(b.due, 'due'),
+      }),
+    );
   }
 
   @Post('meetings/:id/actions/:index')

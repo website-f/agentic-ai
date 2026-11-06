@@ -98,14 +98,17 @@ export function ComplianceView() {
         title="Company licences"
         sub="KDN licence, MOF registration, group insurance and SSM annual return for every company you can see. Reminders start 120, 90, 90 and 60 days before expiry. Filing is done by a person; the app keeps the date and receipt."
         actions={
-          <div className="seg" role="group" aria-label="Which licences">
-            <button aria-pressed={show === 'problems'} onClick={() => setShow('problems')}>
-              Needs action
-            </button>
-            <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
-              All
-            </button>
-          </div>
+          <>
+            <div className="seg" role="group" aria-label="Which licences">
+              <button aria-pressed={show === 'problems'} onClick={() => setShow('problems')}>
+                Needs action
+              </button>
+              <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
+                All
+              </button>
+            </div>
+            <RecordButton kind="licence" primary label="Add licence" />
+          </>
         }
       />
       <Stats>

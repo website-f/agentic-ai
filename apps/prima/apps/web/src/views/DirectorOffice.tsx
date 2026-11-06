@@ -17,7 +17,9 @@ type Show = 'mine' | 'live' | 'all';
  * leads and where each stands, the reports companies send in, and the meeting schedule.
  */
 export function DirectorOfficeView() {
-  const { setCompanyId, go } = useApp();
+  const { setCompanyId, go, canOpen } = useApp();
+  // Tenders and quotations are added on the company's Tenders and quotations screen (each bids in its own name).
+  const toCommercial = canOpen ? canOpen('commercial') : true;
   const { data, error } = useLoad(() => api.tenderBoard(), []);
   const [show, setShow] = useState<Show | null>(null);
   if (error)
@@ -42,6 +44,13 @@ export function DirectorOfficeView() {
       <PageHead
         title="Director Office"
         sub="Every company's tenders from papers to submission slip. Each company bids in its own name and does the work; the Director Office checks the checklist, follows each bid and gets the CEO's approval."
+        actions={
+          toCommercial && (
+            <button className="btn" onClick={() => go({ view: 'commercial' })}>
+              Open Tenders and quotations
+            </button>
+          )
+        }
       />
       <Stats>
         <Stat label="Waiting for you" value={mine} tone={mine ? 'warn' : 'ok'} icon={<TrayIcon />} onClick={() => setShow('mine')} />
@@ -79,7 +88,18 @@ export function DirectorOfficeView() {
         flush
       >
         {data.rows.length === 0 ? (
-          <Empty title="No tenders being worked on." />
+          <Empty
+            title="No tenders being worked on."
+            action={
+              toCommercial && (
+                <button className="btn btn-sm" onClick={() => go({ view: 'commercial' })}>
+                  Open Tenders and quotations
+                </button>
+              )
+            }
+          >
+            Each company works its tenders and quotations on its Tenders and quotations screen; they show here as they move.
+          </Empty>
         ) : rows.length === 0 ? (
           <Empty title="Nothing here." />
         ) : (

@@ -5,6 +5,7 @@ import { Chip, ErrorNotice, ExpiryChip, Loading, Sev, dateLabel, hhmm, useLoad }
 import { Card, Empty, PageHead, Person, Stat, Stats } from '../kit';
 import { VacanciesPanel } from './HrJoinLeave';
 import { StaffMovementPanel } from './HrMovement';
+import { RecordButton } from './RecordForm';
 import '../styles/leadership.css';
 
 export function CompanyView() {
@@ -38,7 +39,7 @@ export function CompanyView() {
           title={data.company.name}
           sub="No detailed data for this company yet. Only licence dates are held. Operational figures show Unknown until the company is connected."
         />
-        <Licences licences={row.licences} />
+        <Licences licences={row.licences} companyId={data.company.id} onAll={() => go({ view: 'compliance' })} />
         {headHr}
       </div>
     );
@@ -217,7 +218,7 @@ export function CompanyView() {
         </div>
       </section>
 
-      <Licences licences={row.licences} />
+      <Licences licences={row.licences} companyId={data.company.id} onAll={() => go({ view: 'compliance' })} />
       {headHr}
     </div>
   );
@@ -225,11 +226,27 @@ export function CompanyView() {
 
 function Licences({
   licences,
+  companyId,
+  onAll,
 }: {
   licences: { type: string; label: string; expiresOn: string | null; status: 'OK' | 'DUE' | 'OVERDUE' | 'UNKNOWN'; daysLeft: number | null }[];
+  companyId: string;
+  onAll: () => void;
 }) {
   return (
-    <Card title="Company licences" sub="Reminders start: KDN 120 days, MOF 90, insurance 90, SSM 60" flush>
+    <Card
+      title="Company licences"
+      sub="Reminders start: KDN 120 days, MOF 90, insurance 90, SSM 60"
+      flush
+      actions={
+        <>
+          <RecordButton kind="licence" companyId={companyId} label="Add licence" />
+          <button className="btn btn-sm" onClick={onAll}>
+            All licences
+          </button>
+        </>
+      }
+    >
       <ul className="ld-licences">
         {licences.map((l) => (
           <li key={l.type} className="ld-licence" data-status={l.status}>

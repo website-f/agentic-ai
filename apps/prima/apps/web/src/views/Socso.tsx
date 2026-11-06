@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { ClockCountdownIcon, FilesIcon, FirstAidKitIcon, PhoneIcon } from '@phosphor-icons/react';
+import { ClockCountdownIcon, FilesIcon, FirstAidKitIcon, PhoneIcon, PlusIcon } from '@phosphor-icons/react';
 import {
+  GROUP_EMPLOYER_ID,
+  isGroupLeader,
   SOCSO_STATUS_LABEL,
   SOCSO_TYPE_DETAIL,
   SOCSO_TYPE_LABEL,
@@ -16,6 +18,7 @@ import { api, type GuardProfile, type SocsoClaimDetail, type SocsoClaims } from 
 import { Card, Empty, Facts, PageHead, Person, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import { useApp } from '../App';
 import '../styles/hrx.css';
 
 /**
@@ -88,6 +91,7 @@ export function SocsoView() {
   const [filter, setFilter] = useState<'open' | 'all'>('open');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<SocsoStatus | ''>('');
+  const [starting, setStarting] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -117,7 +121,14 @@ export function SocsoView() {
     <div className="page">
       <PageHead
         title="SOCSO claims"
-        sub="Start a claim from the person's profile (Guards, then the SOCSO tab). HR submits Form 34 in PERKESO ASSIST and records the reference here."
+        sub="Start a claim here or from the person's profile (the SOCSO tab). HR submits Form 34 in PERKESO ASSIST and records the reference here."
+        actions={
+          data.canStart ? (
+            <button className="btn btn-primary" onClick={() => setStarting(true)}>
+              <PlusIcon size={16} /> Start a claim
+            </button>
+          ) : undefined
+        }
       />
       <Stats>
         <Stat label="Open claims" value={data.rows.filter((r) => r.claim.status !== 'CLOSED').length} icon={<FirstAidKitIcon size={16} />} tone="info" />
@@ -163,7 +174,16 @@ export function SocsoView() {
           </Toolbar>
           <Card title="Claims" actions={<span className="hx-count">{count}</span>} flush>
             {rows.length === 0 ? (
-              <Empty title={data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'} />
+              <Empty
+                title={data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'}
+                action={
+                  data.canStart ? (
+                    <button className="btn btn-sm" onClick={() => setStarting(true)}>
+                      Start a claim
+                    </button>
+                  ) : undefined
+                }
+              />
             ) : shown.length === 0 ? (
               <Empty title="No claim matches the search." />
             ) : (
@@ -184,7 +204,76 @@ export function SocsoView() {
           <SocsoClaimBody id={open} />
         </Drawer>
       )}
+      {starting && (
+        <StartClaimDrawer
+          onClose={() => setStarting(false)}
+          onStarted={(id) => {
+            setStarting(false);
+            setOpen(id);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Start a claim from the SOCSO page (P78): find the person in the chosen company, then the same form as the profile. */
+function StartClaimDrawer({ onClose, onStarted }: { onClose: () => void; onStarted: (id: string) => void }) {
+  const { companyId: chosen, me } = useApp();
+  const central = me.user.department === 'hr' || isGroupLeader(me.user);
+  const [own, setOwn] = useState(false);
+  const companyId = central && own ? GROUP_EMPLOYER_ID : chosen;
+  const [q, setQ] = useState('');
+  const [pick, setPick] = useState<{ id: string; name: string; nationality: Nationality; optedOut: boolean } | null>(null);
+  const list = useLoad(() => (pick ? Promise.resolve(null) : api.people(companyId, q)), [companyId, q, !!pick]);
+  return (
+    <Drawer title="Start a SOCSO claim" sub={pick ? pick.name : 'Choose the person'} onClose={onClose}>
+      {pick ? (
+        <>
+          <div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPick(null)}>
+              Choose someone else
+            </button>
+          </div>
+          <StartSocsoForm personId={pick.id} nationality={pick.nationality} optedOut={pick.optedOut} onDone={(id) => (id ? onStarted(id) : setPick(null))} />
+        </>
+      ) : (
+        <div className="hx-stack-tight">
+          {central && (
+            <div className="seg" role="group" aria-label="Employer">
+              <button aria-pressed={!own} onClick={() => setOwn(false)}>
+                Chosen company
+              </button>
+              <button aria-pressed={own} onClick={() => setOwn(true)}>
+                PWVSB central staff
+              </button>
+            </div>
+          )}
+          <Search value={q} onChange={setQ} placeholder="Search name or staff number" label="Search people" />
+          <ErrorNotice error={list.error} />
+          {!list.data && !list.error && <Loading what="people" />}
+          {list.data && list.data.length === 0 && <Empty title="Nobody matches." />}
+          {list.data && list.data.length > 0 && (
+            <ul className="hx-rows">
+              {list.data.slice(0, 30).map((r) => (
+                <li key={r.person.id}>
+                  <button
+                    className="sx-claim"
+                    onClick={() =>
+                      setPick({ id: r.person.id, name: r.person.name, nationality: r.person.nationality, optedOut: r.person.lindungOptOut === true })
+                    }
+                  >
+                    <span className="sx-claim-who">
+                      <Person name={r.person.name} sub={r.person.staffNo} />
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Drawer>
   );
 }
 

@@ -125,7 +125,14 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
             </li>
           ))}
         </ul>
-        {rows.length === 0 && <Empty title={q ? `No site matches “${q}”.` : 'No site to show.'}>Clear the search or show all sites.</Empty>}
+        {rows.length === 0 &&
+          (q ? (
+            <Empty title={`No site matches “${q}”.`}>Clear the search or show all sites.</Empty>
+          ) : (
+            <Empty title="No site to show." action={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}>
+              Add the site, then its posts and patrol checkpoints. Its roster opens from here.
+            </Empty>
+          ))}
       </Card>
       {open && <SiteDrawer siteId={open} onClose={() => setOpen(undefined)} />}
     </div>

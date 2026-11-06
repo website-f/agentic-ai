@@ -1,9 +1,9 @@
 import { useContext, useState } from 'react';
 import { ArrowSquareOutIcon, BellIcon, ClockCountdownIcon, TrayIcon } from '@phosphor-icons/react';
-import { Ctx, type ViewName } from '../App';
+import { Ctx, useApp, type ViewName } from '../App';
 import { MyGuide } from './GuideCard';
 import { api, type OrgImportPreview, type OrgInbox } from '../api';
-import { JOINING_SAY, JOINING_SAY_HR, joiningAllows, type RecordKind } from '@prima/core';
+import { GROUP_EMPLOYER_ID, JOINING_SAY, JOINING_SAY_HR, joiningAllows, type RecordKind } from '@prima/core';
 import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/hrx.css';
@@ -341,6 +341,7 @@ function OrgMapView() {
 }
 
 function ImportView() {
+  const { me } = useApp();
   const [kind, setKind] = useState<RecordKind>('site');
   const [companyId, setCompanyId] = useState('');
   const [csv, setCsv] = useState('');
@@ -394,8 +395,16 @@ function ImportView() {
             </label>
             {tpl.data?.companyScoped && (
               <label className="field">
-                <span className="label">Company id</span>
-                <input className="input" value={companyId} onChange={(e) => (setCompanyId(e.target.value.trim()), reset())} placeholder="e.g. co-sasa" />
+                <span className="label">Company</span>
+                <select className="select" value={companyId} onChange={(e) => (setCompanyId(e.target.value), reset())}>
+                  <option value="">Choose the company</option>
+                  {kind === 'officeStaff' && <option value={GROUP_EMPLOYER_ID}>PWVSB (central staff)</option>}
+                  {me.companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </label>
             )}
             <label className="field">

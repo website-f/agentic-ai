@@ -63,6 +63,7 @@ import { HandoversView } from './views/Handovers';
 import { ContinuityView } from './views/Continuity';
 import { WebsitesView } from './views/Websites';
 import { ConnectionsView } from './views/Connections';
+import { OfficeConnections } from './views/OfficeConnections';
 import { FwmView } from './views/Fwm';
 import { DirectorOfficeView } from './views/DirectorOffice';
 import { ReportsView } from './views/Reports';
@@ -901,7 +902,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       case 'it-extraction':
         return <ItExtractionWorkspace key={me.user.id} actor={me.user} />;
       case 'connections':
-        return <ConnectionsView key={me.user.id} userId={me.user.id} />;
+        // P78: inside the office, Microsoft 365 is the office's own connection (one system, one sign-in).
+        return inOffice ? <OfficeConnections key={me.user.id} /> : <ConnectionsView key={me.user.id} userId={me.user.id} />;
       case 'fwm':
         return <FwmView />;
       case 'doa':

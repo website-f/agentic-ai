@@ -912,6 +912,15 @@ export class HttpApi implements Api {
   addLegalMatter(companyId: string, input: Parameters<Api['addLegalMatter']>[1]) {
     return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/legal-matters`, input);
   }
+  addCorpAudit(companyId: string, input: Parameters<Api['addCorpAudit']>[1]) {
+    return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/audits`, input);
+  }
+  addBcmSystem(input: Parameters<Api['addBcmSystem']>[0]) {
+    return this.call<unknown>('POST', '/continuity/systems', input);
+  }
+  addGrcObligation(companyId: string, input: Parameters<Api['addGrcObligation']>[1]) {
+    return this.call<unknown>('POST', `/grc/companies/${encodeURIComponent(companyId)}/obligations`, input);
+  }
   legalMatterStep(id: string, action: Parameters<Api['legalMatterStep']>[1], body: Parameters<Api['legalMatterStep']>[2]) {
     return this.call<unknown>('POST', `/corporate/legal-matters/${encodeURIComponent(id)}/${action}`, body);
   }
@@ -1059,6 +1068,9 @@ export class HttpApi implements Api {
   saveCompanyFile(companyId: string, input: Parameters<Api['saveCompanyFile']>[1]) {
     return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/file`, input);
   }
+  startCompanyFile(companyId: string, input: Parameters<Api['startCompanyFile']>[1]) {
+    return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/file/start`, input);
+  }
   checkCompanyFile(companyId: string, input: Parameters<Api['checkCompanyFile']>[1]) {
     return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/file/check`, input);
   }
@@ -1079,6 +1091,9 @@ export class HttpApi implements Api {
   }
   raiseCorpChange(companyId: string, input: Parameters<Api['raiseCorpChange']>[1]) {
     return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/changes`, input);
+  }
+  addCorpFiling(companyId: string, input: Parameters<Api['addCorpFiling']>[1]) {
+    return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/filings`, input);
   }
   decideCorpChange(id: string, decision: 'approve' | 'reject', note: string, clauseRef: string) {
     return this.call<unknown>('POST', `/corporate/changes/${encodeURIComponent(id)}/decide`, { decision, note, clauseRef });
@@ -1370,6 +1385,15 @@ export class HttpApi implements Api {
   finCloseStep(companyId: string, action: FinCloseAction, input: Record<string, unknown>) {
     return this.call<unknown>('POST', `/finance/${encodeURIComponent(companyId)}/close/${action}`, input);
   }
+  finAddBankAccount(companyId: string, input: { bank: string; last4: string; purpose: string }) {
+    return this.call<unknown>('POST', `/finance/${encodeURIComponent(companyId)}/banks`, input);
+  }
+  finStartBooks(companyId: string, input: { team: number; fyEnd: string }) {
+    return this.call<unknown>('POST', `/finance/${encodeURIComponent(companyId)}/books`, input);
+  }
+  finAddPaper(companyId: string, pack: 'audit' | 'tax', input: { label: string; dueOn: string }) {
+    return this.call<unknown>('POST', `/finance/${encodeURIComponent(companyId)}/papers/${pack}`, input);
+  }
   finChecksTodo() {
     return this.call<Awaited<ReturnType<Api['finChecksTodo']>>>('GET', '/finance/checks-todo');
   }
@@ -1561,6 +1585,9 @@ export class HttpApi implements Api {
   }
   publish(siteId: string, from: string, to: string) {
     return this.call<{ published: number; unfilled: number }>('POST', `/sites/${siteId}/roster/publish`, { from, to });
+  }
+  addShifts(siteId: string, input: Parameters<Api['addShifts']>[1]) {
+    return this.call<Awaited<ReturnType<Api['addShifts']>>>('POST', `/sites/${siteId}/roster/shifts`, input);
   }
   attendance(id: string, date: string) {
     return this.call<Awaited<ReturnType<Api['attendance']>>>('GET', `/companies/${id}/attendance${this.q({ date })}`);
@@ -1783,6 +1810,9 @@ export class HttpApi implements Api {
   createQuotation(id: string, input: Parameters<Api['createQuotation']>[1]) {
     return this.call<Awaited<ReturnType<Api['createQuotation']>>>('POST', `/companies/${id}/quotations`, input);
   }
+  addTender(companyId: string, input: Parameters<Api['addTender']>[1]) {
+    return this.call<Awaited<ReturnType<Api['addTender']>>>('POST', `/companies/${encodeURIComponent(companyId)}/tenders`, input);
+  }
   correctQuotation(id: string, input: Parameters<Api['correctQuotation']>[1]) {
     return this.call<Awaited<ReturnType<Api['correctQuotation']>>>('POST', `/quotations/${encodeURIComponent(id)}/correct`, input);
   }
@@ -1827,6 +1857,9 @@ export class HttpApi implements Api {
   }
   setMeetingAction(meetingId: string, index: number, done: boolean) {
     return this.call('POST', `/meetings/${meetingId}/actions/${index}`, { done });
+  }
+  addMeetingAction(meetingId: string, input: Parameters<Api['addMeetingAction']>[1]) {
+    return this.call('POST', `/meetings/${encodeURIComponent(meetingId)}/actions`, input);
   }
   setMeetingPrep(meetingId: string, input: { index?: number; done?: boolean; add?: string }) {
     return this.call('POST', `/meetings/${meetingId}/prep`, input);

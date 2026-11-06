@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { COMPULSORY_HOLIDAY_LABEL, LEAVE_LABEL } from "@prima/core";
+import { COMPULSORY_HOLIDAY_LABEL, LEAVE_LABEL, isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
 import { useApp } from "../App";
 import {
@@ -256,7 +256,8 @@ const OVERRIDE_KINDS = ["ANNUAL", "SICK", "MATERNITY", "PATERNITY"] as const;
 /** HR's list of office staff: who may work from home, and leave days HR gives above the Act. */
 export function HrLeaveSettingsPanel() {
   const { me } = useApp();
-  const hr = keepsHr(me.user);
+  // P78: the owner sets these like HR (the server checks the same).
+  const hr = keepsHr(me.user) || isOwnerAdmin(me.user);
   const list = useLoad(
     () => (hr ? api.hrLeaveSettings() : Promise.resolve(null)),
     [hr],

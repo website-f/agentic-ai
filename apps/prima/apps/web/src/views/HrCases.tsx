@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
 import { useApp } from "../App";
 import { Card, Empty } from "../kit";
@@ -42,7 +43,8 @@ export function HrCasesPanel() {
   const u = me.user;
   const allowed = keepsHr(u) || u.opsTier === "ceo" || u.role === "company_manager";
   const list = useLoad(() => (allowed ? api.hrCases() : Promise.resolve(null)), [allowed]);
-  const staff = useLoad(() => (keepsHr(u) ? api.hrLeaveSettings() : Promise.resolve(null)), [u.id]);
+  // The staff list for opening a case: HR, and the owner, who may open one too (P78).
+  const staff = useLoad(() => (keepsHr(u) || isOwnerAdmin(u) ? api.hrLeaveSettings() : Promise.resolve(null)), [u.id]);
   const act = useAction();
   const [opening, setOpening] = useState(false);
   const [f, setF] = useState({

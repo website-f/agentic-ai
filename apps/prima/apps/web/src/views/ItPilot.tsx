@@ -434,8 +434,8 @@ export function ItTenders({ data }: { data: ItBoard }) {
         title="IT tenders (eP and government)"
         sub={`${rows.length} ${showClosed ? 'shown' : 'running'}`}
         actions={
-          (manager || data.lead) && (
-            <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)} disabled={!data.tenderExec}>
+          (manager || data.lead || data.canAddTender) && (
+            <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)} disabled={!data.tenderExec} title={data.tenderExec ? undefined : 'The IT Manager names the tender executive first'}>
               Add a tender found
             </button>
           )

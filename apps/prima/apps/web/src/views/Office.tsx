@@ -422,7 +422,7 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
             data.role === 'exec' && (
               <div className="seg" role="group" aria-label="Whose work">
                 <button type="button" aria-pressed={onlyMine} onClick={() => setOnlyMine(true)}>
-                  Only mine
+                  Show only mine
                 </button>
                 <button type="button" aria-pressed={!onlyMine} onClick={() => setOnlyMine(false)}>
                   The whole office

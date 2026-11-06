@@ -89,7 +89,7 @@ describe('company office', () => {
     await expect(svc.setOfficeDesks(await svc.user('u-ae-arsh'), 'co-arsh', { desks })).rejects.toThrow(/Not allowed/);
     await expect(svc.setOfficeDesks(await svc.user('u-cm-inas'), 'co-arsh', { desks })).rejects.toThrow(/Not allowed/);
     await expect(svc.setOfficeDesks(await svc.user('u-coo'), 'co-arsh', { desks })).rejects.toThrow(/Not allowed/);
-    await expect(svc.setOfficeDesks(await svc.user('u-fauzan'), 'co-arsh', { desks })).rejects.toThrow(/Not allowed/);
+    // P78: the owner (CEO record) is master administrator and may share out desks too (see p78-leadership-makers.test.ts).
   });
 
   it('refuses owners from another company, a backup equal to the owner and unknown desks', async () => {
@@ -150,7 +150,8 @@ describe('company office', () => {
     expect(g.rows.find((r) => r.company.id === 'co-arsh')?.execCount).toBe(2);
     const o = await svc.companyOffice(ceo, 'co-arsh');
     expect(o.role).toBe('monitor');
-    expect(o.canAssign).toBe(false);
+    // P78: the owner may share out desks as master administrator; other leaders only monitor.
+    expect(o.canAssign).toBe(true);
     // Consolidated (Fauzan, 2 Nov 2026): the leader sees the company's work, only that company's lines.
     expect(o.queue.length).toBeGreaterThan(0);
     expect(o.queue.every((q) => q.go.companyId === 'co-arsh' && !q.mine)).toBe(true);
@@ -160,7 +161,8 @@ describe('company office', () => {
     expect(g.work[0].tone).toBe('crit');
     expect(new Set(g.work.map((w) => w.companyId)).size).toBeGreaterThan(1);
     expect(g.work.every((w) => w.go.companyId === w.companyId)).toBe(true);
-    await expect(svc.setOfficeDesks(ceo, 'co-arsh', { desks: [{ desk: 'people', ownerUserId: 'u-ae-arsh' }] })).rejects.toThrow(/Not allowed/);
+    // P78: the owner may share out desks; another group leader (the COO) still only monitors.
+    await expect(svc.setOfficeDesks(await svc.user('u-coo'), 'co-arsh', { desks: [{ desk: 'people', ownerUserId: 'u-ae-arsh' }] })).rejects.toThrow(/Not allowed/);
   });
 
   it('refuses the office to department staff, other companies and site sign-ins', async () => {

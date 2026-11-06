@@ -129,7 +129,7 @@ export function PdpaView() {
                   {shut ? 'Hide closed' : 'Show closed'}
                 </button>
               )}
-              {officer && !adding && (
+              {data.canAdd && !adding && (
                 <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
                   <PlusIcon size={14} weight="bold" aria-hidden="true" />
                   Open a case

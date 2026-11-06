@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PlusIcon } from '@phosphor-icons/react';
 import type { RecordKind, RecordValues } from '@prima/core';
 import { api, type RecordFormData } from '../api';
 import { useApp } from '../App';
@@ -50,12 +51,13 @@ export function RecordButton({
   return (
     <>
       <button
-        className={`btn btn-sm${primary ? ' btn-primary' : ''}`}
+        className={primary ? 'btn btn-primary' : 'btn btn-sm'}
         onClick={(e) => {
           e.stopPropagation();
           setOpen(true);
         }}
       >
+        {primary && !id && <PlusIcon size={16} weight="bold" aria-hidden="true" />}
         {label ?? (id ? 'Edit' : 'Add')}
       </button>
       {open && <RecordDrawer kind={kind} id={id} companyId={companyId} onClose={() => setOpen(false)} />}

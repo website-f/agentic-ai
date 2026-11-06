@@ -2,6 +2,7 @@ import {ItCleanup} from './ItCleanup';
 import {ItCorrections} from './ItCorrections';
 import {correctionVisible} from '../it-corrections/client';
 import { useEffect, useMemo, useReducer, useState } from 'react';
+import { PlusIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
@@ -38,7 +39,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
     {data.configuration==='setup_required'&&<p className="notice" data-tone="warn">Setup required: the protected manual IT record store is not ready. No saving or checking is enabled. IT must complete the reviewed database setup before these records can be used.</p>}
     <h3>{mode==='intake'?'Record a joining or leaving request':mode==='assets'?'Register an existing device':'Register existing systems and SharePoint guidance'}</h3>
     <p className="muted small">Manual records only. This does not create or revoke accounts, grant permissions, create a SharePoint site, or prove a connection is working. Never enter passwords, tokens or recovery codes.</p>
-    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn" key={kind} onClick={()=>setOpened(kind as ManualKind)}>{kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}</div>}
+    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn btn-primary" key={kind} onClick={()=>setOpened(kind as ManualKind)}><PlusIcon size={16} weight="bold" aria-hidden="true"/> {kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}</div>}
     {!(mode==='assets'?data.canCreateAsset:data.canCreate)&&<p className="muted">Read-only here. Authorized IT staff record these details; system access still follows CEO approval.</p>}
     {opened&&data.configuration==='ready'&&(opened==='asset'?data.canCreateAsset:data.canCreate)&&<ManualEditor key={`${userId}:${opened}`} kind={opened} board={data} onClose={()=>{setOpened(null);reload();}}/>}
     {mode==='systems'&&data.accounts.filter(a=>(a.manual as {kind?:unknown}|undefined)?.kind==='guidance').map(a=>{
@@ -62,7 +63,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
   </section>;
 }
 function Select({label,value,onChange,items,optional=false}:{label:string;value:string;onChange:(value:string)=>void;items:Choice[];optional?:boolean}) {
-  return <label className="field">{label}<select aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</select></label>;
+  return <label className="field"><span className="label">{label}</span><select className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</select></label>;
 }
 function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:()=>void}) {
   const [,render]=useReducer(x=>x+1,0);
@@ -76,7 +77,7 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
   },manualMarker(board.userId),()=>render()),[board.userId,kind]);
   useEffect(()=>{session.start();return ()=>session.dispose();},[session]);
   const s=session.snapshot(),blocked=s.phase!=='editing';
-  const field=(label:string,key:string,type='text',required=false)=><label className="field">{label}<input type={type} value={form[key]??''} required={required} maxLength={key==='note'?500:200} onChange={e=>put(key,e.target.value)}/></label>;
+  const field=(label:string,key:string,type='text',required=false)=><label className="field"><span className="label">{label}</span><input className="input" type={type} value={form[key]??''} required={required} maxLength={key==='note'?500:200} onChange={e=>put(key,e.target.value)}/></label>;
   function submit(e:React.FormEvent){e.preventDefault();if(blocked)return;setValidation('');
     const companyId=form.companyId||null,unitLabel=form.unitLabel?.trim()||'';
     let payload:Record<string,unknown>;
@@ -96,16 +97,16 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
     {s.phase==='done'?<><p>Saved as an administrative record. Refresh the register to continue the existing IT workflow.</p><button className="btn" onClick={onClose}>Back to register</button></>:<form onSubmit={submit}>
       <fieldset disabled={blocked} className="it-fieldset">
         {kind==='intake'?<>
-          <label className="field">Request type<select value={form.kind} onChange={e=>put('kind',e.target.value)}><option value="join">Joining</option><option value="leave">Leaving</option></select></label>
+          <label className="field"><span className="label">Request type</span><select className="select" value={form.kind} onChange={e=>put('kind',e.target.value)}><option value="join">Joining</option><option value="leave">Leaving</option></select></label>
           <Select label="Existing authorized staff identity (optional)" value={form.personUserId??''} onChange={v=>put('personUserId',v)} items={board.staff} optional/>
           {!form.personUserId&&<>{field('Unlinked person name — not a verified staff account','personName','text',true)}<p className="small">This does not create a staff account or associate a typed name with an existing person.</p></>}
           {field('Job title','jobTitle','text',true)}{field('Joining / leaving date','on','date',true)}
         </>:kind==='asset'?<>
           <p className="small">Existing stock only. No purchase, cost, payment or rental record is created. The device starts unassigned.</p>
           {field('Asset tag','tag','text',true)}{field('Serial number','serial','text',true)}{field('Model','model','text',true)}
-          <label className="field">Device type<select value={form.assetKind} onChange={e=>put('assetKind',e.target.value)}>{['LAPTOP','DESKTOP','PHONE','TABLET','PRINTER','NETWORK','CCTV','OTHER'].map(k=><option key={k} value={k}>{k}</option>)}</select></label>
+          <label className="field"><span className="label">Device type</span><select className="select" value={form.assetKind} onChange={e=>put('assetKind',e.target.value)}>{['LAPTOP','DESKTOP','PHONE','TABLET','PRINTER','NETWORK','CCTV','OTHER'].map(k=><option key={k} value={k}>{k}</option>)}</select></label>
           {field('Current location','location','text',true)}{field('Purchase date (optional; unknown if empty)','boughtOn','date')}{field('Warranty expiry (optional)','warrantyTo','date')}
-        </>:<>{field(kind==='system'?'System name':'SharePoint guidance record name','name','text',true)}{kind==='system'&&<label className="field">System type<select value={form.systemKind} onChange={e=>put('systemKind',e.target.value)}>{['m365','azure','registrar','dns','hosting','github','sql_account','network','cctv','prima','other'].map(x=><option key={x} value={x}>{x}</option>)}</select></label>}</>}
+        </>:<>{field(kind==='system'?'System name':'SharePoint guidance record name','name','text',true)}{kind==='system'&&<label className="field"><span className="label">System type</span><select className="select" value={form.systemKind} onChange={e=>put('systemKind',e.target.value)}>{['m365','azure','registrar','dns','hosting','github','sql_account','network','cctv','prima','other'].map(x=><option key={x} value={x}>{x}</option>)}</select></label>}</>}
         <Select label="Company (optional)" value={form.companyId??''} onChange={v=>put('companyId',v)} items={board.companies} optional/>
         {!form.companyId&&field('Unlinked organization / unit label (optional)','unitLabel')}
         {(kind==='intake'||kind==='guidance')&&<Select label="Responsible IT staff" value={form.itResponsibleId??''} onChange={v=>put('itResponsibleId',v)} items={board.itStaff}/>}

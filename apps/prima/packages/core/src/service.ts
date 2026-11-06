@@ -69,6 +69,7 @@ import {
   hasOwnStaffRecord,
   isActHead,
   isGroupLeader,
+  isOwnerAdmin,
   canRunCms,
   isHrDirector,
   tenantCompanyIds,
@@ -733,6 +734,21 @@ export const LEAVE_LABEL: Record<LeaveKind, string> = {
 const PUR_CATEGORIES: PurCategory[] = ['UNIFORM', 'GUARD_EQUIPMENT', 'DEVICE', 'PATROL_DEVICE', 'CLEANING', 'SERVICES', 'IT', 'OTHER'];
 
 const LEAVE_LADDER: ('OM' | 'ROM' | 'HEAD' | 'COO' | 'CEO')[] = ['OM', 'ROM', 'HEAD', 'COO', 'CEO'];
+/** Shift times by a post's pattern (as the mock data uses): A 2 x 12h, B 3 x 8h, C day only, D night only, E office hours. */
+const SHIFT_PATTERN_TIMES: Record<Post['shiftStructure'], [string, string][]> = {
+  A: [
+    ['07:00', '19:00'],
+    ['19:00', '07:00'],
+  ],
+  B: [
+    ['07:00', '15:00'],
+    ['15:00', '23:00'],
+    ['23:00', '07:00'],
+  ],
+  C: [['07:00', '19:00']],
+  D: [['19:00', '07:00']],
+  E: [['08:00', '17:00']],
+};
 /** Other staff: the HR Admin, then the HR Director (Chief of Staff or Deputy, Fauzan 27 Oct 2026), then the Director Office. */
 const OFFICE_LEAVE_LADDER: ('HR' | 'HR_DIRECTOR' | 'DIRECTOR')[] = ['HR', 'HR_DIRECTOR', 'DIRECTOR'];
 const OFFICE_LEAVE_LABEL: Record<(typeof OFFICE_LEAVE_LADDER)[number], string> = {
@@ -1320,7 +1336,10 @@ export class PrimaService {
     const hasDetail = people.length > 0;
     const row: CompanyRow = {
       company: c,
-      canAct: can(user, await this.grants(), today, 'roster.publish', c.id),
+      // The grant the company signed (act or monitor). The owner's own maker rights (P78) do not change this label.
+      canAct: isOwnerAdmin(user)
+        ? activeGrants(user, await this.grants(), today).some((g) => g.companyId === c.id && g.scope === 'act')
+        : can(user, await this.grants(), today, 'roster.publish', c.id),
       licenceStatus: worst(licences.map((l) => l.status)),
       licences,
       guards: hasDetail ? people.filter((p) => p.status === 'active').length : 'UNKNOWN',
@@ -1737,6 +1756,14 @@ export class PrimaService {
     return hrKeeps(user);
   }
 
+  /**
+   * HR's maker steps (enter, add, raise, record, prepare): HR, and the owner as master administrator (P78). Checks,
+   * approvals and decisions stay with keepsHr and their own people; nobody checks a record they entered.
+   */
+  private hrMaker(user: User): boolean {
+    return this.keepsHr(user) || isOwnerAdmin(user);
+  }
+
   private async stateOf(p: Person): Promise<string | null> {
     return (await this.store.get('branches', p.branchId))?.state ?? null;
   }
@@ -1756,7 +1783,7 @@ export class PrimaService {
       year: y,
       holidays: all.filter((h) => h.date.startsWith(y)).sort((a, b) => a.date.localeCompare(b.date)),
       checks: states.map((st) => holidayYearCheck(all, st, y)),
-      canEdit: this.keepsHr(user),
+      canEdit: this.hrMaker(user),
       rule: RULES.publicHolidays,
     };
   }
@@ -1765,7 +1792,7 @@ export class PrimaService {
     user: User,
     input: { date: IsoDate; name: string; states: string[] | null; compulsory: PublicHoliday['compulsory']; note: string },
   ) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(public holidays)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(public holidays)');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date ?? '')) throw new BadRequest('Give the date.');
     const name = (input.name ?? '').trim().slice(0, 80);
     if (name.length < 3) throw new BadRequest('Give the holiday name.');
@@ -1804,7 +1831,7 @@ export class PrimaService {
   }
 
   async removePublicHoliday(user: User, id: Id, note: string) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(public holidays)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(public holidays)');
     const h = await this.store.get('publicHolidays', id);
     if (!h || h.removed) throw new NotFound('Public holiday');
     const text = requireApprovalReason(note, 'remove it');
@@ -1818,7 +1845,7 @@ export class PrimaService {
 
   /** HR gives a staff member more leave days than the Act (never fewer), with a reason; null takes it back to the Act. */
   async setLeaveOverride(user: User, personId: Id, kind: LeaveOverrideKind, days: number | null, note: string) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(leave days)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(leave days)');
     if (!['ANNUAL', 'SICK', 'MATERNITY', 'PATERNITY'].includes(kind)) throw new BadRequest('Choose annual, sick, maternity or paternity leave.');
     const p = await this.store.get('people', personId);
     if (!p || p.role !== 'office') throw new NotFound('Staff member');
@@ -1852,7 +1879,7 @@ export class PrimaService {
    * waiting arrangement, with HR's reason as the written answer.
    */
   async setWfhAllowed(user: User, personId: Id, allow: boolean, note: string) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(working from home)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(working from home)');
     const p = await this.store.get('people', personId);
     if (!p || p.role !== 'office') throw new NotFound('Staff member');
     if (p.id === user.personId) throw new BadRequest('Someone else in HR decides your own working from home.');
@@ -1886,7 +1913,7 @@ export class PrimaService {
 
   /** Staff and HR's list of staff with their working from home permission and leave overrides, for HR's screen. */
   async hrLeaveSettings(user: User) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(leave settings)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(leave settings)');
     const people = (await this.store.list('people', {})).filter((p) => p.role === 'office' && p.status === 'active');
     return {
       staff: people
@@ -2009,7 +2036,7 @@ export class PrimaService {
 
   /** HR's joining and leaving board: filings due (latest day), probation and retirement reminders, s.41A warnings. */
   async hrJoinLeave(user: User) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(joining and leaving)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(joining and leaving)');
     const today = this.today();
     const [people, filings, leaves, companies] = await Promise.all([
       this.store.list('people', {}),
@@ -2040,7 +2067,7 @@ export class PrimaService {
 
   /** HR records a filing made with LHDN, KWSP or PERKESO, with its reference. Prima never files it. */
   async recordHrFiling(user: User, input: { kind: HrFilingKind; companyId: Id; personId: Id | null; period: string; ref: string; filedOn: IsoDate }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(statutory filings)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(statutory filings)');
     if (!FILING_LABEL[input.kind]) throw new BadRequest('Unknown filing.');
     const ref = (input.ref ?? '').trim().slice(0, 80);
     if (ref.length < 3) throw new BadRequest('Give the reference or acknowledgement number.');
@@ -2069,7 +2096,7 @@ export class PrimaService {
 
   /** The EA form draft for an employer's year, from paid staff payroll runs (Fauzan: done by the system). */
   async eaDraft(user: User, companyId: Id, year: string) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(EA forms)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(EA forms)');
     if (!/^\d{4}$/.test(year)) throw new BadRequest('Give the year.');
     const ea = eaFigures(await this.store.list('staffPayRuns', { companyId }), companyId, year);
     const ids = seesStaffIds(user) ? new Map((await this.store.list('staffIds', { personId: ea.rows.map((r) => r.personId) })).map((x) => [x.personId, x.idFull])) : new Map();
@@ -2092,7 +2119,7 @@ export class PrimaService {
 
   /** The register of employees (records kept 6 years): active staff and those who left in the last 6 years. */
   async employeeRegister(user: User, companyId: Id) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(register of employees)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(register of employees)');
     const since = addDays(this.today(), -Math.round(RULES.hrJoinLeave.value.keepYears * 365.25));
     const people = (await this.store.list('people', { companyId })).filter((p) => p.role === 'office' && (p.status === 'active' || (p.leaving?.lastDayOn ?? '9999') >= since));
     const ids = seesStaffIds(user) ? new Map((await this.store.list('staffIds', { personId: people.map((p) => p.id) })).map((x) => [x.personId, x.idFull])) : new Map();
@@ -2145,7 +2172,7 @@ export class PrimaService {
 
   /** Notice and termination benefits for one staff member, to help HR (Fauzan, 2 Nov 2026: a guide, not a decision). */
   async leavingGuide(user: User, personId: Id) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(leaving guide)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(leaving guide)');
     const p = await this.store.get('people', personId);
     if (!p || p.role !== 'office') throw new NotFound('Staff member');
     const on = p.leaving?.lastDayOn ?? this.today();
@@ -2185,7 +2212,7 @@ export class PrimaService {
     const companies = await this.store.list('companies');
     const rows = (await this.store.list('vacancies', {})).filter((v) => hr || ceo || isHrDirector(user) || (cm && user.companyIds.includes(v.companyId)));
     return {
-      canRaise: hr || cm,
+      canRaise: hr || cm || this.hrMaker(user),
       rows: rows
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))
         .map((v) => ({
@@ -2201,7 +2228,7 @@ export class PrimaService {
   async raiseVacancy(user: User, input: { companyId: Id; title: string; department: string; headcount: number; reason: string; payFrom: number | null; payTo: number | null }) {
     const hr = this.keepsHr(user);
     const cm = user.role === 'company_manager' && !user.integration && user.companyIds.includes(input.companyId);
-    if (!hr && !cm) throw new AccessDenied('hr.monitor', '(vacancies)');
+    if (!hr && !cm && !this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(vacancies)');
     const title = (input.title ?? '').trim().slice(0, 80);
     const reason = (input.reason ?? '').trim().slice(0, 500);
     if (title.length < 3) throw new BadRequest('Give the job title.');
@@ -2326,7 +2353,7 @@ export class PrimaService {
           waitingOn: next ? label[next] : null,
           canAct: can.ok,
           standIn: can.ok && can.standIn,
-          canCancel: hr && (m.status === 'waiting' || m.status === 'approved'),
+          canCancel: this.hrMaker(user) && (m.status === 'waiting' || m.status === 'approved'),
           due,
           canApply: due && this.movementApplier(user),
           login: (() => {
@@ -2337,7 +2364,7 @@ export class PrimaService {
         };
       });
     // For HR's form: active office staff, and each employer with its branches (central employers use PWVSB head office).
-    const prep = hr
+    const prep = this.hrMaker(user)
       ? {
           staff: (await this.store.list('people', {}))
             .filter((p) => p.role === 'office' && p.status === 'active' && !p.leaving)
@@ -2358,7 +2385,7 @@ export class PrimaService {
     const allowancesDue = this.movementApplier(user)
       ? (await this.store.list('payChanges', {})).filter((c) => c.kind === 'ALLOWANCE' && c.status === 'verified' && c.applied === null && c.effectiveOn <= this.today()).length
       : 0;
-    return { canPrepare: hr, rows, prep, allowancesDue };
+    return { canPrepare: this.hrMaker(user), rows, prep, allowancesDue };
   }
 
   /** HR prepares a movement. Nothing changes on the staff record until the last step approves it. */
@@ -2379,7 +2406,7 @@ export class PrimaService {
       until?: IsoDate | null;
     },
   ) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(staff movements)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(staff movements)');
     if (!['promotion', 'transfer', 'secondment'].includes(input.kind)) throw new BadRequest('Choose promotion, transfer or secondment.');
     const p = await this.store.get('people', input.personId);
     if (!p || p.role !== 'office') throw new NotFound('Staff member');
@@ -2451,7 +2478,7 @@ export class PrimaService {
 
   /** HR withdraws a movement that is waiting or approved but not yet applied (comment needed). */
   async cancelStaffMovement(user: User, id: Id, note: string) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(staff movements)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(staff movements)');
     const text = requireApprovalReason(note, 'cancel it');
     const at = this.now();
     return this.store.transaction(async (tx) => {
@@ -3001,14 +3028,14 @@ export class PrimaService {
     const people = new Map((await this.store.list('people', { id: [...new Set(all.flatMap((c) => [c.personId, c.complainantId].filter(Boolean) as Id[]))] })).map((p) => [p.id, p]));
     const users = await this.store.list('users', {});
     return {
-      canOpen: this.keepsHr(user),
+      canOpen: this.hrMaker(user),
       rows: all.sort((a, b) => b.openedAt.localeCompare(a.openedAt)).map((c) => this.hrCaseView(user, c, people, users)),
       rule: RULES.hrCases,
     };
   }
 
   async openHrCase(user: User, input: { personId: Id; kind: HrCaseKind; title: string; complainantId: Id | null; receivedOn: IsoDate; note: string }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(HR cases)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(HR cases)');
     if (!['misconduct', 'sexual_harassment', 'grievance', 'performance'].includes(input.kind)) throw new BadRequest('Choose the kind of case.');
     const p = await this.store.get('people', input.personId);
     if (!p || p.role !== 'office') throw new NotFound('Staff member');
@@ -3161,7 +3188,7 @@ export class PrimaService {
   /** The employers whose OSH records this user may keep: HR all; a named coordinator their own employer. */
   private async oshKeeps(user: User, companyId: Id): Promise<boolean> {
     if (user.integration) return false;
-    if (this.keepsHr(user)) return true;
+    if (this.hrMaker(user)) return true;
     if (!user.personId) return false;
     const recs = await this.store.list('officeOsh', { companyId: [companyId] });
     return recs.some((r) => r.kind === 'coordinator' && !r.endedOn && r.personId === user.personId);
@@ -3179,7 +3206,7 @@ export class PrimaService {
     const today = this.today();
     const rows = oshEmployers(people, records, today)
       .filter((r) => all || own.has(r.companyId))
-      .map((r) => ({ ...r, companyName: name(r.companyId), canKeep: this.keepsHr(user) || coordinatorOf.includes(r.companyId), canAppoint: this.keepsHr(user) }));
+      .map((r) => ({ ...r, companyName: name(r.companyId), canKeep: this.hrMaker(user) || coordinatorOf.includes(r.companyId), canAppoint: this.hrMaker(user) }));
     const staff = people
       .filter((p) => p.status === 'active' && rows.some((r) => r.companyId === p.companyId && (r.canKeep || r.canAppoint)))
       .map((p) => ({ personId: p.id, name: p.name, companyId: p.companyId }));
@@ -3188,7 +3215,7 @@ export class PrimaService {
 
   /** HR names the employer's OSH coordinator; the one before is ended the same day. */
   async appointOshCoordinator(user: User, input: { companyId: Id; personId: Id; appointedOn: IsoDate; trainingRef: string | null; note: string }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(OSH coordinator)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(OSH coordinator)');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.appointedOn ?? '')) throw new BadRequest('Give the date of appointment.');
     const p = await this.store.get('people', input.personId);
     if (!p || p.status !== 'active' || p.companyId !== input.companyId) throw new BadRequest('Choose an active staff member of this employer.');
@@ -3494,7 +3521,7 @@ export class PrimaService {
     const p = await this.store.get('people', input.personId);
     if (!p) throw new BadRequest('Choose a staff member or guard.');
     // Office staff: HR. Guards and officers: HR or their company head (Fauzan, 2 Nov 2026).
-    let may = this.keepsHr(user);
+    let may = this.hrMaker(user);
     if (!may && p.role !== 'office') {
       const scope = await this.guardTrainingScope(user);
       may = (scope.manage === 'all' || scope.manage.includes(p.companyId)) && scope.covers(p);
@@ -3561,7 +3588,7 @@ export class PrimaService {
       .filter((a) => this.seesDevelopment(user, a.companyId, a.personId) || a.appraiserId === user.id)
       .sort((a, b) => b.year.localeCompare(a.year) || a.name.localeCompare(b.name))
       .map((a) => this.appraisalView(user, a));
-    const canOpen = this.keepsHr(user);
+    const canOpen = this.hrMaker(user);
     const [people, users] = canOpen ? await Promise.all([this.store.list('people', {}), this.store.list('users', {})]) : [[], []];
     const office = people.filter((p) => p.role === 'office' && p.status === 'active');
     return {
@@ -3575,7 +3602,7 @@ export class PrimaService {
 
   /** HR opens a staff member's appraisal for a year and names the appraiser. */
   async openAppraisal(user: User, input: { personId: Id; year: string; appraiserId: Id }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(appraisals)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(appraisals)');
     if (!/^\d{4}$/.test(input.year ?? '')) throw new BadRequest('Give the year.');
     const p = await this.store.get('people', input.personId);
     if (!p || p.role !== 'office' || p.status !== 'active') throw new BadRequest('Choose an active office staff member.');
@@ -3698,14 +3725,14 @@ export class PrimaService {
       setting: sees ? s : { enabled: s.enabled, normal: s.normal, restDay: s.restDay, publicHoliday: s.publicHoliday },
       mine,
       staff: people.map((p) => ({ personId: p.id, name: p.name, companyId: p.companyId, eligible: s.personIds.includes(p.id), coveredByAct: (p.basicPay ?? 0) <= RULES.staffOvertime.value.eaWageCap })),
-      canEdit: this.keepsHr(user),
+      canEdit: this.hrMaker(user),
       rule: RULES.staffOvertime,
     };
   }
 
   /** HR turns overtime on or off, sets the rates and names who may claim it, with a reason. Never below the Act. */
   async setStaffOvertime(user: User, input: { enabled: boolean; normal: number; restDay: number; publicHoliday: number; personIds: Id[]; comment: string }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(overtime)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(overtime)');
     const comment = requireApprovalReason(input.comment, 'save the overtime change');
     const law = RULES.staffOvertime.value;
     const rates = { normal: Number(input.normal), restDay: Number(input.restDay), publicHoliday: Number(input.publicHoliday) };
@@ -3843,13 +3870,13 @@ export class PrimaService {
           missing: hr ? office.filter((o) => !current.some((a) => a.personId === o.id)).map((o) => ({ personId: o.id, name: o.name, companyId: o.companyId })) : null,
         };
       }),
-      canPublish: this.keepsHr(user),
+      canPublish: this.hrMaker(user),
     };
   }
 
   /** HR publishes a policy, or a new version of one; a new version asks every staff member to acknowledge again. */
   async publishPolicy(user: User, input: { id: Id | null; kind: HrPolicyKind; title: string; body: string }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(policies)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(policies)');
     const kinds: HrPolicyKind[] = ['handbook', 'code_of_conduct', 'it_use', 'other'];
     if (!kinds.includes(input.kind)) throw new BadRequest('Choose the kind of policy.');
     const title = (input.title ?? '').trim().slice(0, 160);
@@ -5080,6 +5107,78 @@ export class PrimaService {
         summary: `Published ${drafts.length} shifts at ${site.code}, ${from} to ${to}`,
       });
       return { published: drafts.length, unfilled: drafts.filter((d) => !d.personId).length };
+    });
+  }
+
+  /**
+   * P78: add shifts to a site's roster (a new site, a new post, or extra guards). Each day from `from` for `days` days
+   * gets the post's slots: its shift pattern (A to E, as the post records it) with its guards per shift, or one slot
+   * from `start` to `end` (an end at or before the start runs past midnight) for `guards` guards. Shifts already there
+   * count, so adding the same week twice adds nothing. The shifts start unfilled and in draft; guards are assigned and
+   * the week published as usual. Whoever edits the roster may add them.
+   */
+  async addShifts(
+    user: User,
+    siteId: Id,
+    input: { postId: Id; from: IsoDate; days: number; start?: string | null; end?: string | null; guards?: number | null; skipSundays?: boolean },
+  ) {
+    const site = await this.siteFor(user, siteId);
+    await this.assertRoster(user, 'roster.edit', site.companyId, siteId);
+    const post = await this.store.get('posts', String(input?.postId ?? ''));
+    if (!post || post.siteId !== siteId) throw new BadRequest('Choose a post at this site. Add the post under Sites first if it is not there.');
+    if (!isRealDate(String(input.from ?? ''))) throw new BadRequest('Give the first day.');
+    const days = Math.floor(Number(input.days));
+    if (!(days >= 1 && days <= 31)) throw new BadRequest('Add between 1 and 31 days at a time.');
+    const pattern = !input.start && !input.end;
+    const hhmmOk = (t: unknown) => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+    if (!pattern && (!hhmmOk(input.start) || !hhmmOk(input.end)))
+      throw new BadRequest('Give the start and end times as HH:MM, for example 07:00 and 19:00.');
+    if (!pattern && input.start === input.end) throw new BadRequest('The shift must end at a different time from when it starts.');
+    const slots: [string, string][] = pattern ? SHIFT_PATTERN_TIMES[post.shiftStructure] : [[input.start!, input.end!]];
+    const guards = input.guards == null ? post.guardsPerShift : Math.floor(Number(input.guards));
+    if (!(guards >= 1 && guards <= 20)) throw new BadRequest('Give between 1 and 20 guards for each shift.');
+    const skipSundays = input.skipSundays ?? (pattern && post.shiftStructure === 'E');
+    if (input.from < this.today()) throw new BadRequest('Shifts can be added from today onwards only.');
+    const to = addDays(input.from, days - 1);
+    const existing = (await this.store.list('shifts', { siteId })).filter((s) => s.postId === post.id && s.date >= input.from && s.date <= to);
+    const nowMs = toMs(this.now());
+    const made: Shift[] = [];
+    for (let i = 0; i < days; i++) {
+      const date = addDays(input.from, i);
+      if (skipSundays && new Date(`${date}T00:00:00Z`).getUTCDay() === 0) continue;
+      for (const [from, till] of slots) {
+        const start = myt(date, from);
+        if (toMs(start) < nowMs) continue;
+        const end = myt(till <= from ? addDays(date, 1) : date, till);
+        const there = existing.filter((s) => s.date === date && s.start === start).length;
+        for (let k = there; k < guards; k++)
+          made.push({
+            id: `sh-${site.companyId}-${toMs(start).toString(36)}-${globalThis.crypto.randomUUID().slice(0, 8)}`,
+            companyId: site.companyId,
+            siteId,
+            postId: post.id,
+            personId: null,
+            date,
+            start,
+            end,
+            status: 'draft',
+          });
+      }
+    }
+    if (!made.length) throw new BadRequest('Those shifts are already on the roster. Nothing was added.');
+    const times = slots.map(([a, b]) => `${a} to ${b}`).join(', ');
+    return this.store.transaction(async (tx) => {
+      for (const s of made) await tx.insert('shifts', s);
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'roster.add',
+        entity: 'site',
+        entityId: siteId,
+        summary: `Added ${made.length} unfilled shift${made.length === 1 ? '' : 's'} at ${site.code} ${post.name} (${times}), ${input.from} to ${to}`,
+      });
+      return { added: made.length, from: input.from, to };
     });
   }
 
@@ -12533,6 +12632,8 @@ export class PrimaService {
       can: {
         prepare: can(user, g, today, 'commercial.prepare', companyId),
         approve: can(user, g, today, 'commercial.approve', companyId),
+        // P78: who enters a new tender (addTender): the admin team, the owner, or the Director Office Administrator.
+        addTender: can(user, g, today, 'commercial.prepare', companyId) || isDoa(user),
       },
     };
   }
@@ -13072,6 +13173,39 @@ export class PrimaService {
         entity: 'meeting',
         entityId: m.id,
         summary: `${actions[index].text}: ${done ? 'done' : 'reopened'}`,
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * P78: whoever runs the meeting adds an action item the minutes reader missed, with its owner and due date. The
+   * summary's check stays with the Director Office; an added item is in the audit trail under the person who added it.
+   */
+  async addMeetingAction(user: User, meetingId: Id, input: { text: string; owner: string; due?: IsoDate | null }) {
+    const m = await this.store.get('meetings', meetingId);
+    if (!m) throw new NotFound('Meeting');
+    if (!this.canRunMeeting(user, m, visibleCompanyIds(user, await this.grants(), this.today()))) throw new AccessDenied('view', m.companyId ?? '(meeting)');
+    if (!m.summary) throw new BadRequest('Add the minutes first; action items come with them.');
+    const text = String(input?.text ?? '').trim().slice(0, 300);
+    if (text.length < 3) throw new BadRequest('Say what has to be done.');
+    const owner = String(input?.owner ?? '').trim().slice(0, 80);
+    if (!owner) throw new BadRequest('Name who does it.');
+    const due = input?.due ? String(input.due) : null;
+    if (due !== null && !isRealDate(due)) throw new BadRequest('The due date is not a real date.');
+    if (m.summary.actions.length >= 40) throw new BadRequest('This meeting already has 40 action items.');
+    const at = this.now();
+    const actions = [...m.summary.actions, { text, owner, due, done: false }];
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('meetings', m.id, { summary: { ...m.summary!, actions } });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: m.companyId,
+        action: 'meeting.action.add',
+        entity: 'meeting',
+        entityId: m.id,
+        summary: `Action added to ${m.title}: ${text} (${owner}${due ? `, by ${due}` : ''})`,
       });
       return updated;
     });
@@ -14032,6 +14166,82 @@ export class PrimaService {
     };
   }
 
+  /**
+   * P78: a tender is entered on the company's own screen, so the pipeline never starts empty. The company's admin team
+   * (and the owner, as master administrator) or the Director Office Administrator enters it; it starts open, and the
+   * protocol, papers, checks and the manager's signature follow as before.
+   */
+  async addTender(
+    user: User,
+    companyId: Id,
+    input: {
+      ref: string;
+      title: string;
+      buyer: string;
+      channel: Tender['channel'];
+      source?: string;
+      owner?: string;
+      closesOn: IsoDate;
+      guards: number;
+      sites?: number;
+      estMonthly?: number | null;
+      armed?: boolean;
+    },
+  ) {
+    this.notArmsOnly(user);
+    const company = await this.company(user, companyId);
+    const g = await this.grants();
+    const today = this.today();
+    if (!can(user, g, today, 'commercial.prepare', companyId) && !(isDoa(user) && can(user, g, today, 'commercial.view', companyId)))
+      throw new AccessDenied('commercial.prepare', companyId);
+    const ref = String(input?.ref ?? '').trim().slice(0, 60);
+    const title = String(input?.title ?? '').trim().slice(0, 160);
+    const buyer = String(input?.buyer ?? '').trim().slice(0, 120);
+    if (!ref) throw new BadRequest('Give the tender reference number.');
+    if (title.length < 3) throw new BadRequest('Give the tender title.');
+    if (!buyer) throw new BadRequest('Name the buyer.');
+    if (input.channel !== 'GOVERNMENT' && input.channel !== 'PRIVATE') throw new BadRequest('Choose government or private.');
+    if (!isRealDate(String(input.closesOn ?? '')) || input.closesOn < today) throw new BadRequest('Give the closing date, today or later.');
+    const guards = Number(input.guards);
+    if (!Number.isInteger(guards) || guards < 1 || guards > 1000) throw new BadRequest('Guards must be a whole number from 1 to 1,000.');
+    const sites = input.sites == null || (input.sites as unknown) === '' ? 1 : Number(input.sites);
+    if (!Number.isInteger(sites) || sites < 1 || sites > 500) throw new BadRequest('Sites must be a whole number from 1 to 500.');
+    const est = input.estMonthly == null || (input.estMonthly as unknown) === '' ? null : Number(input.estMonthly);
+    if (est !== null && !(est > 0 && est <= 10_000_000)) throw new BadRequest('Give the estimated monthly value in RM, or leave it empty.');
+    const existing = await this.store.list('tenders', { companyId });
+    if (existing.some((t) => t.ref.toLowerCase() === ref.toLowerCase())) throw new BadRequest(`${company.name} already has tender ${ref}.`);
+    const at = this.now();
+    const t: Tender = {
+      id: `tn-${company.code.toLowerCase()}-${toMs(at).toString(36)}-${existing.length + 1}`,
+      companyId,
+      ref,
+      title,
+      buyer,
+      channel: input.channel,
+      source: String(input.source ?? '').trim().slice(0, 80) || 'Entered on Prima',
+      owner: String(input.owner ?? '').trim().slice(0, 80) || user.name,
+      closesOn: input.closesOn,
+      guards,
+      sites,
+      status: 'open',
+      estMonthly: est === null ? null : Math.round(est * 100) / 100,
+      ...(input.armed ? { armed: true } : {}),
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('tenders', t);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'tender.add',
+        entity: 'tender',
+        entityId: t.id,
+        summary: `${t.ref} entered: ${t.title} for ${t.buyer} (${t.channel === 'GOVERNMENT' ? 'government' : 'private'}), closes ${t.closesOn}, ${t.guards} guards`,
+      });
+      return t;
+    });
+  }
+
   async createQuotation(
     user: User,
     companyId: Id,
@@ -14310,6 +14520,13 @@ export class PrimaService {
     return {
       rows: out.map((r) => ({ ...r, companyName: companies.find((c) => c.id === r.claim.companyId)?.name ?? '' })),
       canSeeAny: ids.length > 0,
+      // Who may start a claim from this page (P78); the server checks the person again (socsoAccess.start).
+      canStart:
+        ids.length > 0 &&
+        user.department !== 'fwm' &&
+        user.leadership !== 'chairman' &&
+        user.leadership !== 'vice_chairman' &&
+        user.leadership !== 'finance_director',
     };
   }
 
@@ -14724,6 +14941,11 @@ export class PrimaService {
     return null;
   }
 
+  /** FWM's maker steps (record a renewal, send a task, record a welfare check): FWM staff, and the owner (P78). */
+  private fwmMaker(user: User): boolean {
+    return this.fwmRoleOf(user) === 'staff' || isOwnerAdmin(user);
+  }
+
   private fwLevelOf(user: User): FwLevel | null {
     if (user.department === 'fwm') return 'FWM';
     if (user.department === 'chief_of_staff') return 'CHIEF_OF_STAFF';
@@ -14833,7 +15055,7 @@ export class PrimaService {
     return {
       role,
       level,
-      canWork: role === 'staff',
+      canWork: this.fwmMaker(user),
       /** The COO must give a reason to accept or return a task in place of FWM. */
       reasonRequired: user.opsTier === 'coo' || user.opsTier === 'ceo',
       cooNotices: visibleTasks.flatMap((t) =>
@@ -14865,7 +15087,7 @@ export class PrimaService {
 
   /** FWM records a renewal submitted with its receipt; the reminder ladder pauses until the new date is on record. */
   async submitFwRenewal(user: User, personId: Id, paper: FwPaper, input: { submittedOn: IsoDate; channel: string; note?: string }, proof: ProofInput[]) {
-    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.pay', '(foreign worker renewals)');
+    if (!this.fwmMaker(user)) throw new AccessDenied('hr.pay', '(foreign worker renewals)');
     const person = await this.fwmWorker(user, personId);
     if (!FW_PAPER_LABEL[paper]) throw new BadRequest('Choose the paper.');
     const cred = latestCredentials(await this.store.list('credentials', { personId })).get(paper);
@@ -14913,7 +15135,7 @@ export class PrimaService {
 
   /** FWM sends the OM of the guard's area a dated task: bring the guard to FOMEMA, JIM, TNG training. */
   async createFwmTask(user: User, personId: Id, input: { kind: FwmTaskKind; what: string; place: string; dueOn: IsoDate }) {
-    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('roster.edit', '(FWM tasks)');
+    if (!this.fwmMaker(user)) throw new AccessDenied('roster.edit', '(FWM tasks)');
     const person = await this.fwmWorker(user, personId);
     if (!FWM_TASK_LABEL[input.kind]) throw new BadRequest('Choose the kind of task.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dueOn ?? '') || input.dueOn < this.today()) throw new BadRequest('Give a due date from today on.');
@@ -15140,7 +15362,7 @@ export class PrimaService {
       });
     return {
       role,
-      canRecord: role === 'staff',
+      canRecord: this.fwmMaker(user),
       confidential,
       counts: {
         workers: foreign.length,
@@ -15190,7 +15412,7 @@ export class PrimaService {
     },
     proof: ProofInput[],
   ) {
-    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker welfare checks)');
+    if (!this.fwmMaker(user)) throw new AccessDenied('hr.monitor', '(foreign worker welfare checks)');
     const person = await this.fwmWorker(user, personId);
     if (!FW_CHECK_LABEL[input.kind]) throw new BadRequest('Choose the kind of check.');
     const parsed = /^\d{4}-\d{2}-\d{2}$/.test(input.checkedOn ?? '') ? new Date(`${input.checkedOn}T00:00:00Z`) : null;
@@ -18227,7 +18449,8 @@ export class PrimaService {
               bill: b,
               ...st,
               can: {
-                request: role === 'company' && (b.status === 'due' || b.status === 'returned'),
+                // P78: the owner may also enter a bill and ask for its approval; FWM's check and the approvals stay as they are.
+                request: (role === 'company' || isOwnerAdmin(user)) && (b.status === 'due' || b.status === 'returned'),
                 check: role === 'fwm' && b.status === 'requested',
                 approve:
                   (role === 'sector' && b.status === 'fwm_checked' && (h.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director')) ||
@@ -18263,7 +18486,7 @@ export class PrimaService {
       : [];
     return {
       role,
-      canAddBill: role === 'company' || role === 'fwm',
+      canAddBill: role === 'company' || role === 'fwm' || isOwnerAdmin(user),
       hostels: rows,
       charges: chargeRows,
       rules: { reminders: RULES.hostelBillReminders, utility: RULES.utilityAllowance },
@@ -18292,7 +18515,7 @@ export class PrimaService {
   /** A hostel bill, by the company that owns or rents the hostel or by FWM; electricity and water work out the excess. */
   async addHostelBill(user: User, input: { hostelId: Id; kind: HostelBillKind; period: string; amount: number; dueOn: IsoDate }, proof: ProofInput[] = []) {
     const role = this.hostelRoleOf(user);
-    if (role !== 'company' && role !== 'fwm') throw new AccessDenied('view', '(hostel bills)');
+    if (role !== 'company' && role !== 'fwm' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(hostel bills)');
     const hostel = await this.store.get('hostels', input.hostelId);
     if (!hostel) throw new NotFound('Hostel');
     if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(hostel.companyId)) throw new AccessDenied('view', hostel.companyId);
@@ -18410,7 +18633,7 @@ export class PrimaService {
   /** The company asks for payment approval, with the bill; it goes to FWM. */
   async requestHostelPayment(user: User, billId: Id, note: string) {
     const { bill } = await this.hostelBillFor(user, billId);
-    if (this.hostelRoleOf(user) !== 'company') throw new AccessDenied('commercial.prepare', bill.companyId);
+    if (this.hostelRoleOf(user) !== 'company' && !isOwnerAdmin(user)) throw new AccessDenied('commercial.prepare', bill.companyId);
     if (bill.status !== 'due' && bill.status !== 'returned') throw new BadRequest('Payment approval was already asked for.');
     return this.hostelStep(user, billId, 'requested', 'request', note, { returned: null });
   }
@@ -19470,7 +19693,7 @@ export class PrimaService {
     const addIds =
       user.role === 'company_manager'
         ? user.companyIds
-        : user.role === 'pwvsb_officer' && role === 'act'
+        : (user.role === 'pwvsb_officer' && role === 'act') || isOwnerAdmin(user)
           ? visibleCompanyIds(user, await this.grants(), this.today())
           : [];
     const [addCos, addSites] = addIds.length
@@ -19484,7 +19707,7 @@ export class PrimaService {
         companyName: c.name,
         sites: addSites.filter((x) => x.companyId === c.id && scopes.get(c.id)!(x)).map((x) => ({ id: x.id, name: x.name })),
       }))
-      .filter((c) => user.role === 'company_manager' || c.sites.length);
+      .filter((c) => user.role === 'company_manager' || isOwnerAdmin(user) || c.sites.length);
     return { role, canBill: user.role === 'company_manager' || user.role === 'admin_exec' || role === 'act', canAdd, accounts: rows, byCompany, opsMeetings };
   }
 
@@ -19540,7 +19763,10 @@ export class PrimaService {
    */
   async addClientAccount(user: User, input: { companyId: Id; name: string; siteIds: Id[]; contractEndsOn: IsoDate | null }) {
     const companyId = String(input.companyId ?? '');
-    const ownManager = user.role === 'company_manager' && user.companyIds.includes(companyId);
+    // P78: the owner opens a client for any company it sees, with or without its sites yet, like the company manager.
+    const ownManager =
+      (user.role === 'company_manager' && user.companyIds.includes(companyId)) ||
+      (isOwnerAdmin(user) && visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId));
     const ops =
       this.clientRoleOf(user) === 'act' && user.role === 'pwvsb_officer' && visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId);
     if (!ownManager && !ops) throw new AccessDenied('view', '(the company manager or Operations opens a client)');
@@ -19918,10 +20144,13 @@ export class PrimaService {
         canCos: r.cos && e.kind === 'OFFICE' && e.status === 'submitted',
         canCoo: r.coo && ((e.kind === 'OPS_CLAIM' && e.status === 'submitted') || (e.kind === 'OFFICE' && e.status === 'cos_approved')),
       }));
-    const omCompanies = r.om ? visibleCompanyIds(user, await this.grants(), this.today()) : [];
+    // P78: the owner may draft either kind for any company it sees; the Chief of Staff and COO still decide, never on
+    // their own request (decideExpense).
+    const owner = isOwnerAdmin(user);
+    const omCompanies = r.om || owner ? visibleCompanyIds(user, await this.grants(), this.today()) : [];
     return {
-      can: { opsClaim: r.om, office: r.cm },
-      companies: (r.om ? omCompanies : user.companyIds).map((id) => ({ id, name: companies.find((c) => c.id === id)?.name ?? id })),
+      can: { opsClaim: r.om || owner, office: r.cm || owner },
+      companies: (r.om || owner ? omCompanies : user.companyIds).map((id) => ({ id, name: companies.find((c) => c.id === id)?.name ?? id })),
       requests: rows,
       waiting: rows.filter((x) => x.canCos || x.canCoo).length,
     };
@@ -19950,9 +20179,10 @@ export class PrimaService {
     proof: ProofInput[] = [],
   ) {
     const r = this.expenseRoleOf(user);
-    if (input.kind === 'OPS_CLAIM' && !r.om) throw new AccessDenied('view', '(only an Operations Manager makes operation claims)');
-    if (input.kind === 'OFFICE' && !r.cm) throw new AccessDenied('view', '(only the company manager requests office needs)');
-    const companies = input.kind === 'OPS_CLAIM' ? visibleCompanyIds(user, await this.grants(), this.today()) : user.companyIds;
+    const owner = isOwnerAdmin(user);
+    if (input.kind === 'OPS_CLAIM' && !r.om && !owner) throw new AccessDenied('view', '(only an Operations Manager makes operation claims)');
+    if (input.kind === 'OFFICE' && !r.cm && !owner) throw new AccessDenied('view', '(only the company manager requests office needs)');
+    const companies = input.kind === 'OPS_CLAIM' || owner ? visibleCompanyIds(user, await this.grants(), this.today()) : user.companyIds;
     if (!companies.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
     if (!/^\d{4}-\d{2}$/.test(input.period)) throw new BadRequest('Give the month as YYYY-MM.');
     const category = input.kind === 'OFFICE' ? (input.category ?? null) : null;
@@ -20027,8 +20257,9 @@ export class PrimaService {
    * is sent on its own, and the approval chain (Chief of Staff, then COO) is unchanged.
    */
   async prefillOfficeRequest(user: User, input: { companyId: Id; category: 'RENT' | 'UTILITIES'; period?: string }) {
-    if (!this.expenseRoleOf(user).cm) throw new AccessDenied('view', '(only the company manager requests office needs)');
-    if (!user.companyIds.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
+    const owner = isOwnerAdmin(user);
+    if (!this.expenseRoleOf(user).cm && !owner) throw new AccessDenied('view', '(only the company manager requests office needs)');
+    if (!(owner ? visibleCompanyIds(user, await this.grants(), this.today()) : user.companyIds).includes(input.companyId)) throw new AccessDenied('view', input.companyId);
     if (input.category !== 'RENT' && input.category !== 'UTILITIES') throw new BadRequest('Rent or utilities.');
     const period = input.period ?? this.today().slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
@@ -20493,6 +20724,14 @@ export class PrimaService {
     return pdpaRole(user);
   }
 
+  /**
+   * Who opens a PDPA case, logs a data request or records a DPO: the PDPA officer, and the owner as master
+   * administrator (P78). Working the case on (the steps) stays with the PDPA officer.
+   */
+  private pdpaMaker(user: User): boolean {
+    return this.pdpaRoleOf(user) === 'officer' || isOwnerAdmin(user);
+  }
+
   /** Breach clocks: the Commissioner within 72 hours of finding it; the people within 7 days of that, if harm is significant. */
   private pdpaClock(c: PdpaCase) {
     const b = c.breach;
@@ -20519,6 +20758,7 @@ export class PrimaService {
     const late = open.filter((c) => c.clock && (c.clock.commissionerLate || c.clock.subjectsLate));
     return {
       role,
+      canAdd: this.pdpaMaker(user),
       companies: companies.map((c) => ({ id: c.id, name: c.name })),
       counts: {
         breachesOpen: open.filter((c) => c.kind === 'BREACH').length,
@@ -20567,6 +20807,7 @@ export class PrimaService {
       .sort((a, b) => Number(b.request.status === 'open') - Number(a.request.status === 'open') || a.request.dueOn.localeCompare(b.request.dueOn));
     return {
       role,
+      canAdd: this.pdpaMaker(user),
       rule,
       dpos: dpoRows,
       requests: reqRows,
@@ -20585,7 +20826,7 @@ export class PrimaService {
     companyId: Id,
     input: { name: string; email: string; appointedOn: IsoDate; notifiedOn: IsoDate | null; notifyRef: string | null; published: boolean },
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(the PDPA officer keeps the DPO register)');
+    if (!this.pdpaMaker(user)) throw new AccessDenied('view', '(the PDPA officer keeps the DPO register)');
     const company = await this.store.get('companies', companyId);
     if (!company) throw new NotFound('Company');
     const name = (input.name ?? '').trim().slice(0, 100);
@@ -20626,7 +20867,7 @@ export class PrimaService {
     user: User,
     input: { companyId: Id; kind: PdpaRequest['kind']; subjectName: string; subjectKind: PdpaRequest['subjectKind']; detail: string; receivedOn: IsoDate },
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(the PDPA officer logs data requests)');
+    if (!this.pdpaMaker(user)) throw new AccessDenied('view', '(the PDPA officer logs data requests)');
     const kind = (['ACCESS', 'CORRECTION', 'PORTABILITY', 'WITHDRAW_CONSENT', 'OBJECTION'] as const).find((k) => k === input.kind);
     if (!kind) throw new BadRequest('Choose the kind of request.');
     const subjectName = (input.subjectName ?? '').trim().slice(0, 100);
@@ -20716,7 +20957,7 @@ export class PrimaService {
       risk?: 'low' | 'medium' | 'high';
     },
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(only the PDPA officer opens PDPA cases)');
+    if (!this.pdpaMaker(user)) throw new AccessDenied('view', '(only the PDPA officer opens PDPA cases)');
     if (!['BREACH', 'CLIENT_CONSENT', 'SOCIAL'].includes(input.kind)) throw new BadRequest('Choose breach, client consent or social media.');
     const companyId = input.companyId || GROUP_EMPLOYER_ID;
     if (companyId !== GROUP_EMPLOYER_ID && !(await this.store.get('companies', companyId))) throw new NotFound('Company');
@@ -20888,7 +21129,13 @@ export class PrimaService {
     const certsDue = rows.flatMap((p) =>
       p.certs.filter((c) => ['expired', 'urgent', 'due'].includes(c.state)).map((c) => ({ product: p.name, productId: p.id, cert: c })),
     );
-    return { role, products: rows, certsDue };
+    // P78: the owner keeps the product list and certificates too; the Operations Director still checks proposals.
+    return { role, canKeep: this.productKeeper(user), products: rows, certsDue };
+  }
+
+  /** The PDPA officer keeps products and their certificates; the owner may too (P78). */
+  private productKeeper(user: User): boolean {
+    return this.pdpaRoleOf(user) === 'officer' || isOwnerAdmin(user);
   }
 
   async saveProduct(
@@ -20905,7 +21152,7 @@ export class PrimaService {
       notes: string;
     },
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(only the PDPA officer keeps the product list)');
+    if (!this.productKeeper(user)) throw new AccessDenied('view', '(only the PDPA officer keeps the product list)');
     const name = String(input.name ?? '').trim();
     if (name.length < 2) throw new BadRequest('Name the product.');
     if (!['SALE', 'RENTAL', 'BOTH'].includes(input.mode)) throw new BadRequest('Choose sold, rented or both.');
@@ -20963,7 +21210,7 @@ export class PrimaService {
     input: { certId?: Id | null; body: CertBody; scheme: string; ref: string; status: ProductCert['status']; expiresOn: IsoDate | null; procedure: string },
     proof: ProofInput[] = [],
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(only the PDPA officer keeps certificates)');
+    if (!this.productKeeper(user)) throw new AccessDenied('view', '(only the PDPA officer keeps certificates)');
     const p = await this.store.get('products', productId);
     if (!p) throw new NotFound('Product');
     if (!['MySTI', 'SIRIM', 'MCMC', 'OTHER'].includes(input.body)) throw new BadRequest('Choose MySTI, SIRIM, MCMC or other.');
@@ -21101,6 +21348,8 @@ export class PrimaService {
       });
     return {
       canPublish: publishes,
+      // P78: the owner, as master administrator, may publish to either audience.
+      audiences: (isOwnerAdmin(user) ? ['STAFF', 'FIELD'] : publishes ? [publishes] : []) as MemoAudience[],
       states: REGIONS.map((r) => ({ region: r.name, states: r.states })),
       unread: rows.filter((m) => m.forMe && !m.myRead).length,
       memos: rows,
@@ -21109,7 +21358,7 @@ export class PrimaService {
 
   async publishMemo(user: User, audience: MemoAudience, title: string, body: string, states: string[] = []) {
     if (audience !== 'STAFF' && audience !== 'FIELD') throw new BadRequest('Choose staff or guards and officers.');
-    if (this.memoPublisherFor(user) !== audience)
+    if (this.memoPublisherFor(user) !== audience && !isOwnerAdmin(user))
       throw new BadRequest(
         audience === 'STAFF' ? 'Only the Chief of Staff publishes memos to all staff.' : 'Only the COO publishes memos to all guards and officers.',
       );
@@ -21191,6 +21440,11 @@ export class PrimaService {
   // Deputy) and the finance staff who oversee it.
 
   private amRoleOf(user: User): 'team' | 'oversee' | null {
+    // P78: the owner enters what the team enters (units, tenants, rent received, follow-ups, purchase requests,
+    // disposal requests). Decisions keep their people: the Asset Director approves letters and reversals, Finance banks
+    // and posts, the FD or COO decides purchases and disposals, never the person who asked. The department wall is
+    // unchanged (assetRole in access.ts); group leadership already sees these records.
+    if (isOwnerAdmin(user)) return 'team';
     return assetRole(user);
   }
 
@@ -21580,6 +21834,8 @@ export class PrimaService {
     // Pilot go-live (Fauzan, 28 Oct 2026): Prima starts on a clean slate and the CEO fills the records, with Arisha
     // turning what he tells her into forms he saves. Every save is in the audit log under his name.
     if (this.pilotApproves(user)) return !RECORD_KINDS[kind].companyScoped || !!companyId;
+    // P78: the owner is master administrator, so he keeps these records after the pilot too.
+    if (isOwnerAdmin(user)) return !RECORD_KINDS[kind].companyScoped || !!companyId;
     const companyDesk = (user.role === 'company_manager' || user.role === 'admin_exec') && !!companyId && user.companyIds.includes(companyId);
     const dept = user.role === 'pwvsb_officer' ? user.department : undefined;
     switch (kind) {
@@ -22413,7 +22669,7 @@ export class PrimaService {
    * governs HR in every company). HR, group leaders and the payroll steps read it; only HR changes it.
    */
   async allowanceTypes(user: User) {
-    const hr = this.keepsHr(user);
+    const hr = this.hrMaker(user);
     if (!(hr || isGroupLeader(user) || this.staffPayRoleOf(user))) throw new AccessDenied('hr.pay', '(allowances)');
     const types = (await this.store.list('allowanceTypes', {})).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
     if (!hr) return { canEdit: false, types, staff: null };
@@ -22461,7 +22717,7 @@ export class PrimaService {
       note: string;
     },
   ) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.pay', '(only HR keeps the allowance list)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.pay', '(only HR keeps the allowance list)');
     const name = String(input.name ?? '').trim().slice(0, 60);
     const basis = String(input.basis ?? '').trim().slice(0, 300);
     const note = String(input.note ?? '').trim().slice(0, 300);
@@ -22515,7 +22771,7 @@ export class PrimaService {
    * Director verifies it and the Vice Chairman consents (decidePayChange). One waiting allowance change per person.
    */
   async requestAllowanceChange(user: User, personId: Id, input: { allowances: { typeId: Id; amount: number }[]; effectiveOn: IsoDate; reason: string }) {
-    if (!this.keepsHr(user)) throw new AccessDenied('hr.pay', '(only HR sets allowances)');
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.pay', '(only HR sets allowances)');
     const p = await this.store.get('people', personId);
     if (!p || p.role !== 'office' || p.status !== 'active') throw new NotFound('Staff member');
     if (user.personId === p.id) throw new BadRequest('Another HR officer sets your own allowances.');
@@ -22991,6 +23247,8 @@ export class PrimaService {
       .map((p) => {
         const pr = prs.find((x) => x.id === p.purRequestId) ?? null;
         const managerOwn = this.itManagerRaised(p, users);
+        // P78: the owner asked for it, so the COO decides the CEO step in the CEO's place (maker-checker).
+        const ownerAsked = users.some((u) => u.id === p.requestedById && isOwnerAdmin(u));
         const goodsIn = !!pr && (pr.status === 'received' || pr.status === 'posted');
         const bare = (x: ItProof[] | undefined) => (x ?? []).map((f) => ({ ...f, data: '' }));
         const bareStep = (a: ItApproval | null | undefined) => (a ? { ...a, proof: bare(a.proof) } : (a ?? null));
@@ -23015,7 +23273,7 @@ export class PrimaService {
                 ? goodsIn
                   ? 'IT to tag the items'
                   : `Procurement${pr ? ` (${pr.ref}, ${pr.status.replace('_', ' ')})` : ''}`
-                : ({ quoting: 'IT: three quotes and an online price', coo: 'COO approval', ceo: 'CEO approval', finance: 'Assigned Finance: PO and matching workflow', partially_received: 'IT: outstanding PO quantities', paid: 'Historical paid record: reconciliation required' } as Record<string, string>)[
+                : ({ quoting: 'IT: three quotes and an online price', coo: 'COO approval', ceo: ownerAsked ? 'COO approval in the CEO’s place (the CEO asked for it)' : 'CEO approval', finance: 'Assigned Finance: PO and matching workflow', partially_received: 'IT: outstanding PO quantities', paid: 'Historical paid record: reconciliation required' } as Record<string, string>)[
                     p.status
                   ] ?? null,
           canApprove: p.status === 'submitted' && ((role === 'manager' && !managerOwn && p.requestedById !== user.id) || (role === 'coo' && managerOwn)),
@@ -23023,7 +23281,7 @@ export class PrimaService {
           buy: this.itBuyState(p),
           canBuy: isStaff && ['quoting', 'coo', 'ceo', 'finance'].includes(p.status),
           canPay: false,
-          canDecide: (p.status === 'coo' && role === 'coo') || (p.status === 'ceo' && user.opsTier === 'ceo'),
+          canDecide: p.requestedById !== user.id && ((p.status === 'coo' && role === 'coo') || (p.status === 'ceo' && (ownerAsked ? role === 'coo' : user.opsTier === 'ceo'))),
         };
       })
       .sort((a, b) => Number(!a.waitingOn) - Number(!b.waitingOn) || b.purchase.at.localeCompare(a.purchase.at));
@@ -23208,12 +23466,19 @@ export class PrimaService {
     // Need to know (Fauzan, 28 Oct 2026, "enforce secrecy in company"): HR gets the team and their jobs only, the
     // Finance Director the purchases, rental and assets only. Nothing else leaves the server for them.
     const none = <T,>(rows: T[], hide: boolean): T[] => (hide ? [] : rows);
+    // P78: the owner is the master administrator: they may ask to buy, log a help request for someone and give IT a job.
+    // IT still works them, and checks and approvals keep their own people.
+    const ownerAdmin = isOwnerAdmin(user);
     return {
       role,
       lead,
       assigner,
       ceo,
       audit,
+      canRaisePurchase: isStaff || ownerAdmin,
+      canLogTicket: isStaff || ownerAdmin,
+      canGiveJob: assigner || ownerAdmin,
+      canAddTender: role === 'manager' || lead || ownerAdmin,
       pilot: RULES.pilot.value,
       buyRule: RULES.itBuy.value,
       away,
@@ -23636,7 +23901,8 @@ export class PrimaService {
     input: { ownerId: Id; reason: string; items: { kind: ItAssetKind; description: string; qty: number; unitPrice: number }[] },
   ) {
     const role = this.itRoleOf(user);
-    if (role !== 'manager' && role !== 'team') throw new AccessDenied('view', '(IT buys IT and electronic equipment)');
+    // P78: the owner (master administrator) may ask too; the IT Manager still agrees the need and the COO approves.
+    if (role !== 'manager' && role !== 'team' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(IT buys IT and electronic equipment)');
     const reason = (input.reason ?? '').trim().slice(0, 300);
     if (!reason) throw new BadRequest('Say why it is needed.');
     const items = (input.items ?? []).slice(0, 20).map((i) => ({
@@ -24257,8 +24523,14 @@ export class PrimaService {
         const note = str(i.note);
         if (decision === 'reject' && note.length < 3) throw new BadRequest('Say why it is rejected.');
         let approval: ItApproval;
+        // P78 maker-checker: nobody approves a purchase they asked for. When the owner (the CEO) asked, the COO decides
+        // the CEO step in the CEO's place, in Prima (not from a Teams screenshot that would name the CEO).
+        const ownerAsked = (await this.store.list('users', {})).some((u) => u.id === p.requestedById && isOwnerAdmin(u));
+        if (step === 'teams' && level === 'ceo' && ownerAsked) throw new BadRequest('The CEO asked for this purchase: the COO decides the CEO step in Prima.');
         if (step === 'decide') {
-          if (level === 'coo' ? role !== 'coo' : user.opsTier !== 'ceo') throw new BadRequest(`Only the ${level.toUpperCase()} decides this step.`);
+          if (level === 'coo' ? role !== 'coo' : ownerAsked ? role !== 'coo' : user.opsTier !== 'ceo')
+            throw new BadRequest(level === 'ceo' && ownerAsked ? 'The CEO asked for this purchase, so the COO decides the CEO step.' : `Only the ${level.toUpperCase()} decides this step.`);
+          if (p.requestedById === user.id) throw new BadRequest('Someone else approves a purchase you asked for.');
           approval = { by: user.name, at, note, via: 'prima', decision };
         } else {
           if (!staff) throw new BadRequest('IT records an approval given in Teams.');
@@ -24271,7 +24543,7 @@ export class PrimaService {
         }
         if (decision === 'reject') patch = { status: 'rejected', [level === 'coo' ? 'cooStep' : 'ceoStep']: approval };
         else patch = level === 'coo' ? { status: 'ceo', cooStep: approval } : { status: 'finance', ceoStep: approval };
-        said = `${level.toUpperCase()} ${decision === 'reject' ? 'rejected' : 'approved'}${approval.via === 'teams' ? ` in Teams (${approval.teamsRef}), recorded by ${user.name}` : ' in Prima'}${note ? `: ${note}` : ''}`;
+        said = `${level.toUpperCase()} ${decision === 'reject' ? 'rejected' : 'approved'}${approval.via === 'teams' ? ` in Teams (${approval.teamsRef}), recorded by ${user.name}` : ' in Prima'}${level === 'ceo' && ownerAsked ? ` by ${user.name} in the CEO's place (the CEO asked for it)` : ''}${note ? `: ${note}` : ''}`;
         break;
       }
       case 'finance': {
@@ -24345,7 +24617,8 @@ export class PrimaService {
     input: { raisedFor: string; channel: NonNullable<ItTicket['channel']>; category: ItTicketCategory; priority: 'P1' | 'P2' | 'P3'; title: string; detail: string },
   ) {
     const role = this.itRoleOf(user);
-    if (role !== 'manager' && role !== 'team') throw new BadRequest('IT logs help requests for staff.');
+    // P78: the owner may log a request someone brought to them; IT still takes, fixes and records the answer.
+    if (role !== 'manager' && role !== 'team' && !isOwnerAdmin(user)) throw new BadRequest('IT logs help requests for staff.');
     const who = (input.raisedFor ?? '').trim().slice(0, 80);
     if (who.length < 2) throw new BadRequest('Say who asked for help.');
     if (!['teams', 'email', 'phone', 'in_person'].includes(input.channel)) throw new BadRequest('Say how they reached IT.');
@@ -24563,7 +24836,8 @@ export class PrimaService {
     },
   ) {
     const role = this.itRoleOf(user);
-    if (role !== 'manager' && user.itRole !== 'lead') throw new BadRequest('The IT Manager (or the IT Lead) adds IT tenders.');
+    // P78: the owner may add a tender they found too; the tender executive and the IT Manager then run it.
+    if (role !== 'manager' && user.itRole !== 'lead' && !isOwnerAdmin(user)) throw new BadRequest('The IT Manager (or the IT Lead) adds IT tenders.');
     const exec = (await this.store.get('itSettings', 'it'))?.tenderExecId ?? null;
     if (!exec) throw new BadRequest('Name the IT tender executive first: the IT Executive paired with the IT Manager who does every IT tender.');
     const kind = input.kind === 'quotation' ? 'quotation' : 'tender';
@@ -24819,7 +25093,8 @@ export class PrimaService {
   ) {
     return withItRecordLock(this.store,'create',async(tx)=>{
     const role = this.itRoleOf(user);
-    if (role !== 'manager' && user.itRole !== 'lead') throw new AccessDenied('view', '(the IT Manager or IT Lead gives IT jobs)');
+    // P78: the owner may give IT a job too; the IT Manager (IT Lead first for technical work) still accepts it.
+    if (role !== 'manager' && user.itRole !== 'lead' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(the IT Manager or IT Lead gives IT jobs)');
     const kind = (['task', 'install', 'check', 'training', 'access', 'other'] as const).find((k) => k === input.kind);
     if (!kind) throw new BadRequest('Choose what kind of job it is.');
     if (!['P1', 'P2', 'P3'].includes(input.priority)) throw new BadRequest('Choose how urgent it is.');
@@ -25353,7 +25628,7 @@ export class PrimaService {
     user: User,
     input: { area: string; doneOn: IsoDate; where: string; observed: { step: string; actual: number; unit: string; note?: string }[]; result: 'clean' | 'findings'; note: string },
   ) {
-    if (!this.actJob(user)) throw new ActDenied('Only ACT staff can record a field check.');
+    if (!this.actJob(user) && !isOwnerAdmin(user)) throw new ActDenied('Only ACT staff can record a field check.');
     if (!RULES.act.value.areas.some((a) => a.id === input.area)) throw new BadRequest('Choose the workflow.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? '') || input.doneOn > this.today()) throw new BadRequest('Give the date of the visit, not in the future.');
     const where = (input.where ?? '').trim().slice(0, 160);
@@ -26164,6 +26439,8 @@ export class PrimaService {
         mine: mine(i),
         done: i.steps.filter((s) => s.doneOn).length,
         late: !i.result && i.targetOn < today,
+        // Nobody approves an improvement they proposed themselves.
+        canApprove: !i.approved && !i.result && (user.opsTier === 'coo' || user.opsTier === 'ceo') && i.ledById !== user.id,
       }));
     const open = findingRows.filter((r) => r.finding.status !== 'closed');
     const signals = role ? await this.actSignals() : [];
@@ -26264,7 +26541,10 @@ export class PrimaService {
             .map((u) => ({ id: u.id, name: u.name, title: u.title ?? '', companyIds: u.companyIds, central: u.role === 'director' || u.role === 'pwvsb_officer' }))
         : [],
       canApprove: user.opsTier === 'coo' || user.opsTier === 'ceo',
-      canRaise: role === 'act' && !!job,
+      // P78: the owner (master administrator) raises findings, records audits and field checks, and proposes
+      // improvements; ACT keeps every check, follow-up and close.
+      canRaise: (role === 'act' && !!job) || isOwnerAdmin(user),
+      canRecordAudit: job === 'director' || job === 'auditor' || isOwnerAdmin(user),
       canCheck: job === 'director' || job === 'auditor',
       canCloseHigh: job === 'director',
       kpis: {
@@ -26301,7 +26581,7 @@ export class PrimaService {
       signalKey?: string | null;
     },
   ) {
-    if (!this.actJob(user)) throw new ActDenied('Only ACT staff can raise a finding.');
+    if (!this.actJob(user) && !isOwnerAdmin(user)) throw new ActDenied('Only ACT staff can raise a finding.');
     const rule = RULES.act.value;
     let area = input.area;
     let evidence = (input.evidence ?? '').trim().slice(0, 500);
@@ -26584,7 +26864,9 @@ export class PrimaService {
     },
   ) {
     const job = this.actJob(user);
-    if (job !== 'director' && job !== 'auditor') throw new ActDenied('Only an ACT Auditor or the ACT Director can record audits and reviews.');
+    // P78: the owner records an audit done; work the Director gave a team stays with that team.
+    if (job !== 'director' && job !== 'auditor' && !(isOwnerAdmin(user) && !input.assignmentId))
+      throw new ActDenied('Only an ACT Auditor or the ACT Director can record audits and reviews.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? '') || input.doneOn > this.today()) throw new BadRequest('Give the date it was done, not in the future.');
     const note = (input.note ?? '').trim().slice(0, 500);
     if (!note) throw new BadRequest('Say what was checked.');
@@ -26640,7 +26922,7 @@ export class PrimaService {
   }
 
   async addActImprovement(user: User, input: { title: string; benefit: string; findingIds: Id[]; ownerUserId: Id; targetOn: IsoDate; steps: string[] }) {
-    if (!this.actJob(user)) throw new ActDenied('Only ACT staff can propose an improvement.');
+    if (!this.actJob(user) && !isOwnerAdmin(user)) throw new ActDenied('Only ACT staff can propose an improvement.');
     const title = (input.title ?? '').trim().slice(0, 160);
     const benefit = (input.benefit ?? '').trim().slice(0, 300);
     const steps = (input.steps ?? [])
@@ -26661,6 +26943,7 @@ export class PrimaService {
       ownerUserId: owner.id,
       ownerName: owner.name,
       ledBy: user.name,
+      ledById: user.id,
       targetOn: input.targetOn,
       steps: steps.map((text) => ({ text, doneOn: null, by: null })),
       approved: null,
@@ -26692,6 +26975,7 @@ export class PrimaService {
     if (action === 'approve') {
       if (user.opsTier !== 'coo' && user.opsTier !== 'ceo') throw new AccessDenied('view', '(the COO or CEO approves improvements)');
       if (i.approved) throw new BadRequest('Already approved.');
+      if (i.ledById === user.id) throw new BadRequest('Someone other than the person who proposed this improvement approves it.');
       patch = { approved: { by: user.name, at } };
     } else if (action === 'step') {
       if (i.ownerUserId !== user.id && !this.actJob(user)) throw new ActDenied('Only the owner or ACT can tick a step.');
@@ -27375,7 +27659,17 @@ export class PrimaService {
     const auditPanel = firms ? firms.filter((f) => f.kind === 'AUDIT' && f.status === 'active').map((f) => f.name) : null;
     const lawPanel = firms ? firms.filter((f) => f.kind === 'LAW' && f.status === 'active').map((f) => f.name) : null;
     const auditRows = audits
-      .map((a) => ({ audit: a, companyName: name(a.companyId), role: this.legalRoleOf(user, a.companyId), ...this.corpAuditState(a, today, auditPanel) }))
+      .map((a) => {
+        const role = this.legalRoleOf(user, a.companyId);
+        return {
+          audit: a,
+          companyName: name(a.companyId),
+          role,
+          // P78: who records the audit's progress (the company, or the owner); the manager alone agrees adjustments.
+          canWork: !a.signed && (role === 'manager' || role === 'staff' || isOwnerAdmin(user)),
+          ...this.corpAuditState(a, today, auditPanel),
+        };
+      })
       .sort((a, b) => rank[a.tone] - rank[b.tone] || a.signBy.localeCompare(b.signBy));
     const matterRows = matters
       .map((m) => {
@@ -27383,10 +27677,12 @@ export class PrimaService {
         const stale = m.status === 'open' && daysBetween(lastAt, today) > rule.legalStaleDays;
         const soon = m.status === 'open' && !!m.nextDate && daysBetween(today, m.nextDate.on) <= rule.legalSoonDays && m.nextDate.on >= today;
         const missed = m.status === 'open' && !!m.nextDate && m.nextDate.on < today;
+        const role = this.legalRoleOf(user, m.companyId);
         return {
           matter: m,
           companyName: name(m.companyId),
-          role: this.legalRoleOf(user, m.companyId),
+          role,
+          canWork: m.status === 'open' && (role === 'legal' || role === 'manager' || isOwnerAdmin(user)),
           stale,
           soon,
           missed,
@@ -27401,6 +27697,15 @@ export class PrimaService {
       rule,
       roles: [...new Set(allowed.map((id) => this.legalRoleOf(user, id)))],
       companies: allowed.map((id) => ({ id, name: name(id) })),
+      // P78: the companies this person may open a legal matter for, and register a statutory audit for.
+      matterCompanies: allowed.filter((id) => {
+        const r = this.legalRoleOf(user, id);
+        return r === 'legal' || r === 'manager' || isOwnerAdmin(user);
+      }),
+      auditCompanies: allowed.filter((id) => {
+        const r = this.legalRoleOf(user, id);
+        return r === 'manager' || r === 'staff' || isOwnerAdmin(user);
+      }),
       audits: auditRows,
       matters: matterRows,
       kpis: {
@@ -27427,6 +27732,9 @@ export class PrimaService {
 
   private panelKeeps(user: User, kind: PanelFirm['kind']): boolean {
     if (user.integration) return false;
+    // P78: the owner keeps the panel lists too; the Finance Director still agrees budgets and someone other than the
+    // keyer confirms and checks each invoice.
+    if (isOwnerAdmin(user)) return true;
     return kind === 'LAW' ? user.role === 'pwvsb_officer' && user.department === 'legal' : isCorpAdminOwner(user);
   }
 
@@ -27796,7 +28104,8 @@ export class PrimaService {
     const a = await this.store.get('corpAudits', id);
     if (!a) throw new NotFound('Audit');
     const role = this.legalRoleOf(user, a.companyId);
-    if (role !== 'manager' && role !== 'staff') throw new AccessDenied('view', '(the company runs its own audit)');
+    // P78: the owner (master administrator) records the audit's progress too; the manager alone agrees adjustments.
+    if (role !== 'manager' && role !== 'staff' && !(role && isOwnerAdmin(user))) throw new AccessDenied('view', '(the company runs its own audit)');
     if (a.signed) throw new BadRequest('This audit is signed.');
     const at = this.now();
     const day = (v?: string) => {
@@ -27842,6 +28151,54 @@ export class PrimaService {
     });
   }
 
+  /**
+   * P78: the company (manager or admin executive), or the owner as master administrator, registers a year's statutory
+   * audit: the year end, the audit firm, the fee and what the auditor asked for (the PBC list). One audit per company
+   * and financial year. The company then records each step; the manager alone agrees adjustments.
+   */
+  async addCorpAudit(user: User, companyId: Id, input: { fyEnd: IsoDate; auditorFirm: string; fee: number | null; pbc: string[] }) {
+    const role = this.legalRoleOf(user, companyId);
+    if (role !== 'manager' && role !== 'staff' && !(role && isOwnerAdmin(user)))
+      throw new AccessDenied('view', '(the company registers its own audit)');
+    if (!(await this.store.get('companies', companyId))) throw new BadRequest('Unknown company.');
+    const fyEnd = String(input.fyEnd ?? '');
+    if (!isRealDate(fyEnd)) throw new BadRequest('Give the financial year end, a real date.');
+    if (fyEnd > addDays(this.today(), 366)) throw new BadRequest('The financial year end is more than a year away.');
+    const auditorFirm = (input.auditorFirm ?? '').trim().slice(0, 120);
+    if (auditorFirm.length < 3) throw new BadRequest('Name the audit firm.');
+    const fee = input.fee == null || (input.fee as unknown) === '' ? null : Math.round(Number(input.fee) * 100) / 100;
+    if (fee !== null && !(Number.isFinite(fee) && fee >= 0 && fee < 1e8)) throw new BadRequest('Give the audit fee in RM, or leave it empty.');
+    const items = [...new Set((input.pbc ?? []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean))].slice(0, 30);
+    if (!items.length) throw new BadRequest('List at least one document the auditor asked for.');
+    const id = `audit-${companyId}-${fyEnd.slice(0, 4)}`;
+    if (await this.store.get('corpAudits', id)) throw new BadRequest(`The audit for the year ending in ${fyEnd.slice(0, 4)} is already registered.`);
+    const a: CorpAudit = {
+      id,
+      companyId,
+      fyEnd,
+      auditorFirm,
+      fee,
+      planningOn: null,
+      pbc: items.map((item, k) => ({ item, dueOn: addDays(fyEnd, 40 + k * 7), receivedOn: null })),
+      adjustments: [],
+      signed: null,
+    };
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.insert('corpAudits', a);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'corp.audit.add',
+        entity: 'corp_audit',
+        entityId: id,
+        summary: `Audit FY ${fyEnd} registered with ${auditorFirm}, ${items.length} documents asked for.`,
+      });
+      return a;
+    });
+  }
+
   async addLegalMatter(
     user: User,
     companyId: Id,
@@ -27857,7 +28214,8 @@ export class PrimaService {
     },
   ) {
     const role = this.legalRoleOf(user, companyId);
-    if (role !== 'legal' && role !== 'manager') throw new AccessDenied('view', '(PWVSB legal or the company manager opens legal matters)');
+    if (role !== 'legal' && role !== 'manager' && !(role && isOwnerAdmin(user)))
+      throw new AccessDenied('view', '(PWVSB legal or the company manager opens legal matters)');
     const title = (input.title ?? '').trim().slice(0, 160);
     const counterparty = (input.counterparty ?? '').trim().slice(0, 120);
     const lawyer = (input.lawyer ?? '').trim().slice(0, 120);
@@ -27905,7 +28263,7 @@ export class PrimaService {
     const m = await this.store.get('legalMatters', id);
     if (!m) throw new NotFound('Matter');
     const role = this.legalRoleOf(user, m.companyId);
-    if (role !== 'legal' && role !== 'manager') throw new AccessDenied('view', '(PWVSB legal or the company manager)');
+    if (role !== 'legal' && role !== 'manager' && !(role && isOwnerAdmin(user))) throw new AccessDenied('view', '(PWVSB legal or the company manager)');
     if (m.status === 'closed') throw new BadRequest('This matter is closed.');
     const at = this.now();
     const text = (body.text ?? '').trim().slice(0, 1000);
@@ -28019,6 +28377,8 @@ export class PrimaService {
     });
     return {
       role,
+      // P78: IT, or the owner as master administrator, lists systems and records backups, restore tests and drills.
+      canRecord: role === 'it' || isOwnerAdmin(user),
       rule,
       systems: rows,
       playbooks,
@@ -28040,7 +28400,7 @@ export class PrimaService {
     kind: 'backup' | 'restore',
     input: { at?: IsoDateTime; on?: IsoDate; ok?: boolean; hours?: number; dataLossMinutes?: number; note?: string },
   ) {
-    if (this.bcmRoleOf(user) !== 'it') throw new AccessDenied('view', '(IT records backups and restore tests)');
+    if (this.bcmRoleOf(user) !== 'it' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(IT records backups and restore tests)');
     const s = await this.store.get('bcmSystems', systemId);
     if (!s || !s.copies[copyIndex]) throw new NotFound('System copy');
     const at = this.now();
@@ -28076,7 +28436,7 @@ export class PrimaService {
   }
 
   async bcmDrill(user: User, playbookId: string, input: { on: IsoDate; findings: string; actionsOpen: number }) {
-    if (this.bcmRoleOf(user) !== 'it') throw new AccessDenied('view', '(IT records drills)');
+    if (this.bcmRoleOf(user) !== 'it' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(IT records drills)');
     if (!RULES.continuity.value.playbooks.some((p) => p.id === playbookId)) throw new NotFound('Playbook');
     const findings = (input.findings ?? '').trim().slice(0, 1000);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.on ?? '') || input.on > this.today()) throw new BadRequest('Give the drill date.');
@@ -28103,6 +28463,48 @@ export class PrimaService {
         summary: `Drill ${playbookId} on ${input.on}: ${d.actionsOpen} actions open.`,
       });
       return d;
+    });
+  }
+
+  /**
+   * P78: IT, or the owner as master administrator, lists a system to protect, with its recovery targets and where each
+   * copy is kept. A new copy has no backup or restore test on record, so it shows as unknown until IT records them.
+   */
+  async addBcmSystem(
+    user: User,
+    input: { name: string; impact: string; rtoHours: number; rpoHours: number; copies: { site: string; where: string; inMalaysia: boolean }[] },
+  ) {
+    if (this.bcmRoleOf(user) !== 'it' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(IT lists the systems to protect)');
+    const name = (input.name ?? '').trim().slice(0, 120);
+    const impact = (input.impact ?? '').trim().slice(0, 300);
+    if (name.length < 2 || impact.length < 3) throw new BadRequest('Name the system and say what breaks when it is down.');
+    const rto = Math.round(Number(input.rtoHours) * 10) / 10;
+    const rpo = Math.round(Number(input.rpoHours) * 10) / 10;
+    if (!(rto > 0 && rto <= 720) || !(rpo > 0 && rpo <= 720)) throw new BadRequest('Give the recovery targets in hours, above zero and at most 720.');
+    const sites = ['CLOUD', 'OWN_SERVER', 'EMERGENCY'] as const;
+    const copies = (input.copies ?? []).slice(0, 6).map((c, i) => {
+      const site = sites.find((x) => x === c.site);
+      const where = String(c.where ?? '').trim().slice(0, 160);
+      if (!site || !where) throw new BadRequest(`Copy ${i + 1}: choose where it is kept and describe the place.`);
+      return { site, where, inMalaysia: c.inMalaysia === true, lastBackupAt: null, lastRestoreTest: null };
+    });
+    if (!copies.length) throw new BadRequest('List at least one copy of the system.');
+    const all = await this.store.list('bcmSystems', {});
+    if (all.some((s) => s.name.toLowerCase() === name.toLowerCase())) throw new BadRequest('A system with this name is already listed.');
+    const at = this.now();
+    const s: import('./types').BcmSystem = { id: `bcm-${all.length + 1}-${toMs(at)}`, name, impact, rtoHours: rto, rpoHours: rpo, copies };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('bcmSystems', s);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'bcm.system',
+        entity: 'bcm_system',
+        entityId: s.id,
+        summary: `${name} listed: back within ${rto} h, at most ${rpo} h of data lost, ${copies.length} cop${copies.length === 1 ? 'y' : 'ies'}.`,
+      });
+      return s;
     });
   }
 
@@ -28156,7 +28558,11 @@ export class PrimaService {
     const name = (id: Id | null) => (id ? (companies.find((c) => c.id === id)?.name ?? id) : 'PWVSB');
     const rank = { failed: 0, overdue: 1, unknown: 2, unchecked: 3, due_soon: 4, ok: 5 };
     const rows = obligations
-      .map((o) => ({ item: o, companyName: name(o.companyId), role: this.grcRoleOf(user, o.companyId), ...this.grcState(o, today) }))
+      .map((o) => {
+        const role = this.grcRoleOf(user, o.companyId);
+        // P78: the company or the owner records proof; internal audit checks it (never the recorder).
+        return { item: o, companyName: name(o.companyId), role, canProve: role === 'company' || isOwnerAdmin(user), ...this.grcState(o, today) };
+      })
       .sort((a, b) => rank[a.state] - rank[b.state] || a.companyName.localeCompare(b.companyName));
     const oshRows = sites
       .map((s) => {
@@ -28175,7 +28581,7 @@ export class PrimaService {
           companyName: name(s.companyId),
           last,
           state,
-          canRecord: this.grcRoleOf(user, s.companyId) === 'company',
+          canRecord: this.grcRoleOf(user, s.companyId) === 'company' || isOwnerAdmin(user),
         };
       })
       .sort((a, b) => ({ overdue: 0, unknown: 1, due_soon: 2, ok: 3 })[a.state] - { overdue: 0, unknown: 1, due_soon: 2, ok: 3 }[b.state]);
@@ -28210,6 +28616,11 @@ export class PrimaService {
     return {
       rule,
       roles: [...new Set(allowed.map((id) => this.grcRoleOf(user, id)))],
+      // P78: the companies this person may add an obligation for.
+      obligationCompanies: allowed.filter((id) => {
+        const r = this.grcRoleOf(user, id);
+        return r === 'company' || r === 'auditor' || isOwnerAdmin(user);
+      }),
       companies: allowed.map((id) => ({ id, name: name(id) })),
       obligations: rows,
       osh: oshRows.slice(0, 400),
@@ -28240,7 +28651,9 @@ export class PrimaService {
   async grcEvidence(user: User, id: Id, on: IsoDate, ref: string) {
     const o = await this.store.get('grcObligations', id);
     if (!o) throw new NotFound('Obligation');
-    if (this.grcRoleOf(user, o.companyId) !== 'company') throw new AccessDenied('view', '(the company records its own proof)');
+    const grcRole = this.grcRoleOf(user, o.companyId);
+    // P78: the owner (master administrator) may record proof too; internal audit still checks it, never the recorder.
+    if (grcRole !== 'company' && !(grcRole && isOwnerAdmin(user))) throw new AccessDenied('view', '(the company records its own proof)');
     const r = (ref ?? '').trim().slice(0, 120);
     if (!r) throw new BadRequest('Give the document or reference that proves it.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(on ?? '') || on > this.today()) throw new BadRequest('Give the date it was done, not in the future.');
@@ -28288,11 +28701,48 @@ export class PrimaService {
     });
   }
 
+  /**
+   * P78: the company, internal audit, or the owner as master administrator, adds an obligation a company must prove:
+   * what it is, the law or policy behind it and how often. It starts unknown (no proof) until the company records proof.
+   */
+  async addGrcObligation(user: User, companyId: Id, input: { stream: GrcObligation['stream']; title: string; basis: string; everyMonths: number }) {
+    const role = this.grcRoleOf(user, companyId);
+    if (role !== 'company' && role !== 'auditor' && !(role && isOwnerAdmin(user)))
+      throw new AccessDenied('view', '(the company, internal audit or the owner adds obligations)');
+    if (!(await this.store.get('companies', companyId))) throw new BadRequest('Unknown company.');
+    const streams: GrcObligation['stream'][] = ['OSH', 'EMPLOYEE_RELATIONS', 'ANTI_BRIBERY', 'TAX', 'CONTINUITY', 'PRIVACY', 'INTERNAL_AUDIT', 'SUPPLIER', 'WELFARE', 'FRAUD'];
+    const stream = streams.find((x) => x === input.stream);
+    if (!stream) throw new BadRequest('Choose the workstream.');
+    const title = (input.title ?? '').trim().slice(0, 160);
+    const basis = (input.basis ?? '').trim().slice(0, 200);
+    if (title.length < 3 || basis.length < 3) throw new BadRequest('Say what must be done and the law or policy behind it.');
+    const everyMonths = Math.round(Number(input.everyMonths));
+    if (!(everyMonths >= 1 && everyMonths <= 60)) throw new BadRequest('Say how often, every 1 to 60 months.');
+    const all = await this.store.list('grcObligations', { companyId: [companyId] });
+    if (all.some((o) => o.stream === stream && o.title.toLowerCase() === title.toLowerCase())) throw new BadRequest('This obligation is already listed for the company.');
+    const at = this.now();
+    const o: GrcObligation = { id: `grc-${companyId}-${all.length + 1}-${toMs(at)}`, companyId, stream, title, basis, everyMonths, evidence: null, checked: null, history: [] };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('grcObligations', o);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'grc.obligation',
+        entity: 'grc_obligation',
+        entityId: o.id,
+        summary: `${title} added (${stream}, every ${everyMonths} months).`,
+      });
+      return o;
+    });
+  }
+
   /** The company records a site's OSH risk assessment (HIRARC). */
   async recordOshAssessment(user: User, siteId: Id, input: { assessedOn: IsoDate; hazards: number; highRisks: number; controlsRef: string }) {
     const site = await this.store.get('sites', siteId);
     if (!site) throw new NotFound('Site');
-    if (this.grcRoleOf(user, site.companyId) !== 'company') throw new AccessDenied('view', '(the company records its own risk assessments)');
+    const oshRole = this.grcRoleOf(user, site.companyId);
+    if (oshRole !== 'company' && !(oshRole && isOwnerAdmin(user))) throw new AccessDenied('view', '(the company records its own risk assessments)');
     const ref = (input.controlsRef ?? '').trim().slice(0, 120);
     const hazards = Math.round(Number(input.hazards));
     const highRisks = Math.round(Number(input.highRisks));
@@ -28613,6 +29063,11 @@ export class PrimaService {
     return !user.integration && ((user.role === 'pwvsb_officer' && user.department === 'legal') || isCorpAdminOwner(user));
   }
 
+  /** P78: the owner (master administrator) may also place a hold; releasing one stays with PWVSB legal and the Deputy. */
+  private legalHoldPlacer(user: User): boolean {
+    return this.legalHoldKeeper(user) || isOwnerAdmin(user);
+  }
+
   private legalHoldLabel(tbl: LegalHoldTable, r: Record<string, unknown> | undefined, id: Id): string {
     const kind = PrimaService.HOLD_TABLES[tbl].label;
     if (!r) return `${kind} ${id}`;
@@ -28624,6 +29079,7 @@ export class PrimaService {
   /** The legal team's and the group leaders' list of holds, and for the keepers, the records they may hold per open matter. */
   async legalHoldBoard(user: User) {
     const keeper = this.legalHoldKeeper(user);
+    const placer = this.legalHoldPlacer(user);
     if (!keeper && !isGroupLeader(user)) throw new AccessDenied('view', '(legal holds: PWVSB legal, the Deputy Chief of Staff and the group leaders)');
     const holds = await this.legalHoldsIfInstalled();
     const matters = await this.store.list('legalMatters', {});
@@ -28643,7 +29099,7 @@ export class PrimaService {
     rows.sort((a, b) => Number(!!a.hold.released) - Number(!!b.hold.released) || b.hold.at.localeCompare(a.hold.at));
     // What a keeper may put on hold: records of the matter's company, newest first, at most 100 a kind.
     const candidates: Record<Id, Record<LegalHoldTable, { id: Id; label: string }[]>> = {};
-    if (keeper && holds)
+    if (placer && holds)
       for (const m of matters.filter((x) => x.status === 'open')) {
         const out = {} as Record<LegalHoldTable, { id: Id; label: string }[]>;
         for (const tbl of Object.keys(PrimaService.HOLD_TABLES) as LegalHoldTable[]) {
@@ -28657,9 +29113,9 @@ export class PrimaService {
       }
     return {
       installed: holds !== null,
-      canPlace: keeper && holds !== null,
+      canPlace: placer && holds !== null,
       kinds: (Object.keys(PrimaService.HOLD_TABLES) as LegalHoldTable[]).map((k) => ({ tbl: k, label: PrimaService.HOLD_TABLES[k].label })),
-      matters: keeper ? matters.filter((m) => m.status === 'open').map((m) => ({ id: m.id, ref: m.ref, title: m.title, companyId: m.companyId })) : [],
+      matters: placer ? matters.filter((m) => m.status === 'open').map((m) => ({ id: m.id, ref: m.ref, title: m.title, companyId: m.companyId })) : [],
       candidates,
       rows,
       note: 'While a hold stands, every change to the record keeps the earlier version and the record cannot be deleted. Staff work is not stopped.',
@@ -28667,7 +29123,7 @@ export class PrimaService {
   }
 
   async placeLegalHold(user: User, matterId: Id, input: { tbl: LegalHoldTable; refId: Id; reason: string }) {
-    if (!this.legalHoldKeeper(user)) throw new AccessDenied('view', '(PWVSB legal or the Deputy Chief of Staff places a legal hold)');
+    if (!this.legalHoldPlacer(user)) throw new AccessDenied('view', '(PWVSB legal or the Deputy Chief of Staff places a legal hold)');
     const holds = await this.legalHoldsIfInstalled();
     if (!holds) throw new BadRequest('Legal holds are not set up on this database yet. Ask the release owner to install them.');
     const m = await this.store.get('legalMatters', matterId);
@@ -29385,6 +29841,8 @@ export class PrimaService {
     if (user.integration) return null;
     if (user.department === 'legal') return 'legal';
     if (user.leadership === 'cos' || user.leadership === 'deputy_cos') return 'control';
+    // P78: the owner registers and ends mandates like the Chief of Staff; the board confirms and PWVSB legal verifies.
+    if (isOwnerAdmin(user)) return 'control';
     if (user.role === 'company_manager') return user.companyIds.includes(companyId) ? 'company' : null;
     if (isGroupLeader(user)) return 'view';
     return null;
@@ -29466,7 +29924,7 @@ export class PrimaService {
     };
   }
 
-  /** PWVSB legal or the Chief of Staff registers a signed management agreement or board mandate. */
+  /** PWVSB legal, the Chief of Staff or the owner (P78) registers a signed management agreement or board mandate. */
   async addGovMandate(
     user: User,
     companyId: Id,
@@ -29481,7 +29939,7 @@ export class PrimaService {
     },
   ) {
     const role = this.govRoleOf(user, companyId);
-    if (role !== 'legal' && role !== 'control') throw new AccessDenied('view', '(PWVSB legal or the Chief of Staff registers mandates)');
+    if (role !== 'legal' && role !== 'control') throw new AccessDenied('view', '(PWVSB legal, the Chief of Staff or the owner registers mandates)');
     const ref = (input.ref ?? '').trim().slice(0, 60);
     const title = (input.title ?? '').trim().slice(0, 160);
     if (!ref || !title) throw new BadRequest('Give the agreement reference and title.');
@@ -29809,6 +30267,10 @@ export class PrimaService {
     return {
       rule,
       roles,
+      // P78: the companies this user can raise a purchase or add a supplier for, so the forms offer every one of them
+      // (not only those that already have stock or suppliers).
+      raiseFor: allowed.filter((id) => this.purCanRaise(user, id)).map((id) => ({ id, name: name(id) })),
+      supplierFor: allowed.filter((id) => this.purCanAddSupplier(user, id)).map((id) => ({ id, name: name(id) })),
       losses,
       billing,
       suppliers: supplierRows,
@@ -29850,8 +30312,7 @@ export class PrimaService {
     companyId: Id,
     input: { title: string; category: PurCategory; lines: { item: string; stockItemId: Id | null; qty: number; unitPrice: number }[] },
   ) {
-    const role = this.purRoleOf(user, companyId);
-    if (role !== 'manager' && role !== 'staff' && role !== 'proc') throw new AccessDenied('view', '(the company or Procurement raises a purchase)');
+    if (!this.purCanRaise(user, companyId)) throw new AccessDenied('view', '(the company or Procurement raises a purchase)');
     const title = (input.title ?? '').trim().slice(0, 120);
     if (!title) throw new BadRequest('Say what is being bought.');
     const category = PUR_CATEGORIES.find((c) => c === input.category) ?? 'OTHER';
@@ -29998,7 +30459,14 @@ export class PrimaService {
         // the usual approvers.
         tiers: await (async () => {
           const lim = (await this.approvalLimitsRow()).purchasesMax;
-          return lim != null && amount <= lim ? rule.approvers.filter((a) => a !== 'ceo') : [...rule.approvers];
+          const tiers = lim != null && amount <= lim ? rule.approvers.filter((a) => a !== 'ceo') : [...rule.approvers];
+          // P78: a purchase the owner raised is approved by the COO, never by its own raiser (maker-checker).
+          const raiser = await this.store.get('users', r.raisedById);
+          if (raiser && isOwnerAdmin(raiser)) {
+            const others = tiers.filter((a) => a !== 'ceo');
+            return others.length ? others : (['coo'] as typeof tiers);
+          }
+          return tiers;
         })(),
       };
     } else if (action === 'approve' || action === 'reject') {
@@ -30127,14 +30595,28 @@ export class PrimaService {
     });
   }
 
+  /**
+   * Who raises a purchase for a company: its manager or admin team, Procurement, and the owner as master administrator
+   * (P78). Raising is the maker step only: whoever raised it never approves it (purStep), and when the owner raised it the
+   * COO approves it in the CEO's place, so it never waits on its own raiser.
+   */
+  private purCanRaise(user: User, companyId: Id): boolean {
+    const role = this.purRoleOf(user, companyId);
+    return role === 'manager' || role === 'staff' || role === 'proc' || (isOwnerAdmin(user) && !!role);
+  }
+
+  /** Procurement registers suppliers; the owner may too (P78). Finance still verifies the bank account and reviews them. */
+  private purCanAddSupplier(user: User, companyId: Id): boolean {
+    return this.purRoleOf(user, companyId) === 'proc' || (isOwnerAdmin(user) && !!this.purRoleOf(user, companyId));
+  }
+
   /** The company adds a supplier with its due diligence; Finance verifies the bank account. */
   async addPurSupplier(
     user: User,
     companyId: Id,
     input: { name: string; ssmNo: string; categories: PurCategory[]; bankName: string; bankAccount: string; coiDeclared: boolean; abcAck: boolean },
   ) {
-    const role = this.purRoleOf(user, companyId);
-    if (role !== 'proc') throw new AccessDenied('view', '(Procurement registers suppliers)');
+    if (!this.purCanAddSupplier(user, companyId)) throw new AccessDenied('view', '(Procurement registers suppliers)');
     const name = (input.name ?? '').trim().slice(0, 100);
     const ssmNo = (input.ssmNo ?? '').trim().slice(0, 30);
     const bankName = (input.bankName ?? '').trim().slice(0, 60);
@@ -30767,6 +31249,15 @@ export class PrimaService {
     return null;
   }
 
+  /**
+   * P78: a record step (new financing, a repayment received, stamping, the charge lodged, a correction) is done by its
+   * role, or by the owner as master administrator. Checks and default confirmations keep their own people.
+   */
+  private creditMayRecord(user: User, companyId: Id, role: 'officer' | 'finance'): boolean {
+    const r = this.creditRoleOf(user, companyId);
+    return r === role || (isOwnerAdmin(user) && r !== null);
+  }
+
   private creditLoanView(l: CreditLoan, defaults: CreditDefault[], today: IsoDate) {
     const rule = RULES.credit.value;
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -30896,6 +31387,10 @@ export class PrimaService {
     return {
       rule: RULES.credit.value,
       roles: [...new Set(allowed.map((id) => this.creditRoleOf(user, id)))],
+      /** P78: the owner records financing, repayments, stamping, charges and corrections (never default confirmations). */
+      owner: isOwnerAdmin(user),
+      /** Companies this person may record new financing for (the company picker). */
+      canRecordFor: allowed.filter((id) => this.creditMayRecord(user, id, 'officer')).map((id) => ({ id, name: name(id) })),
       // Masterplan §103: the Deputy Chief of Staff records the KPKT licence check; the last one is offered again.
       canCheckLicence: isCorpAdminOwner(user),
       lastLicence: checkedLicences[0] ? { ref: checkedLicences[0].lenderLicence!.ref, validTo: checkedLicences[0].lenderLicence!.validTo } : null,
@@ -31076,7 +31571,7 @@ export class PrimaService {
   async creditRepayment(user: User, loanId: Id, no: number, amount: number, bankRef: string, paidOn: IsoDate) {
     const l = await this.store.get('creditLoans', loanId);
     if (!l) throw new NotFound('Loan');
-    if (this.creditRoleOf(user, l.companyId) !== 'finance') throw new AccessDenied('view', '(Finance records repayments)');
+    if (!this.creditMayRecord(user, l.companyId, 'finance')) throw new AccessDenied('view', '(Finance records repayments)');
     const inst = l.schedule.find((i) => i.no === no);
     if (!inst) throw new NotFound('Instalment');
     const amt = Math.round(Number(amount) * 100) / 100;
@@ -31110,7 +31605,7 @@ export class PrimaService {
   async creditCorrectCollateral(user: User, loanId: Id, input: { kind: CreditLoan['collateral']['kind']; agreementRef: string | null; reason: string }) {
     const l = await this.store.get('creditLoans', loanId);
     if (!l) throw new NotFound('Loan');
-    if (this.creditRoleOf(user, l.companyId) !== 'officer') throw new AccessDenied('view', '(the credit officer corrects the collateral record)');
+    if (!this.creditMayRecord(user, l.companyId, 'officer')) throw new AccessDenied('view', '(the credit officer corrects the collateral record)');
     if (l.status !== 'active') throw new BadRequest('Only an active loan can be corrected.');
     const kinds: CreditLoan['collateral']['kind'][] = ['BENEFICIAL_INTEREST', 'ASSET_CHARGE', 'GUARANTEE', 'NONE'];
     if (!kinds.includes(input.kind)) throw new BadRequest('Choose the kind of collateral.');
@@ -31160,7 +31655,7 @@ export class PrimaService {
   ) {
     const l = await this.store.get('creditLoans', loanId);
     if (!l) throw new NotFound('Loan');
-    if (this.creditRoleOf(user, l.companyId) !== 'officer') throw new AccessDenied('view', '(the credit officer corrects the loan record)');
+    if (!this.creditMayRecord(user, l.companyId, 'officer')) throw new AccessDenied('view', '(the credit officer corrects the loan record)');
     const reason = approvalReason(input?.reason);
     if (!reason || reason.length < 5) throw new BadRequest('Say why the record is being corrected.');
     const today = this.today();
@@ -31264,7 +31759,7 @@ export class PrimaService {
   async creditStamped(user: User, loanId: Id, ref: string, on: IsoDate) {
     const l = await this.store.get('creditLoans', loanId);
     if (!l) throw new NotFound('Loan');
-    if (this.creditRoleOf(user, l.companyId) !== 'officer') throw new AccessDenied('view', '(the credit officer records stamping)');
+    if (!this.creditMayRecord(user, l.companyId, 'officer')) throw new AccessDenied('view', '(the credit officer records stamping)');
     if (l.stamped) throw new BadRequest('Already recorded as stamped.');
     const r = (ref ?? '').trim().slice(0, 60);
     if (!r) throw new BadRequest('Give the stamp certificate number.');
@@ -31288,7 +31783,7 @@ export class PrimaService {
   async creditChargeLodged(user: User, loanId: Id, ssmRef: string, lodgedOn: IsoDate) {
     const l = await this.store.get('creditLoans', loanId);
     if (!l) throw new NotFound('Loan');
-    if (this.creditRoleOf(user, l.companyId) !== 'officer') throw new AccessDenied('view', '(the credit officer records the charge)');
+    if (!this.creditMayRecord(user, l.companyId, 'officer')) throw new AccessDenied('view', '(the credit officer records the charge)');
     if (!l.charge) throw new BadRequest('This loan has no charge.');
     const ref = (ssmRef ?? '').trim().slice(0, 60);
     if (!ref) throw new BadRequest('Give the SSM charge reference.');
@@ -31361,7 +31856,7 @@ export class PrimaService {
       chargeCreatedOn: IsoDate | null;
     },
   ) {
-    if (this.creditRoleOf(user, companyId) !== 'officer') throw new AccessDenied('view', '(the credit officer records financing)');
+    if (!this.creditMayRecord(user, companyId, 'officer')) throw new AccessDenied('view', '(the credit officer records financing)');
     const rule = RULES.credit.value;
     const principal = Math.round(Number(input.principal) * 100) / 100;
     const rate = Math.round(Number(input.ratePct) * 100) / 100;
@@ -31513,6 +32008,18 @@ export class PrimaService {
     return null;
   }
 
+  /** P78: the company manager asks for corporate changes; the owner may too. The Deputy Chief of Staff decides, never their own. */
+  private corpRaises(user: User, companyId: Id): boolean {
+    const role = this.corpRoleOf(user, companyId);
+    return role === 'manager' || (!!role && isOwnerAdmin(user));
+  }
+
+  /** Head office Corporate Admin (the Deputy Chief of Staff) records filings; the owner may too (P78). */
+  private corpFiles(user: User, companyId: Id): boolean {
+    const role = this.corpRoleOf(user, companyId);
+    return role === 'owner' || (!!role && isOwnerAdmin(user));
+  }
+
   private corpFilingState(f: CorpFiling, today: IsoDate) {
     const rule = RULES.corporate.value;
     const days = daysBetween(today, f.dueOn);
@@ -31556,7 +32063,13 @@ export class PrimaService {
     const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
     const rank = { crit: 0, warn: 1, info: 2, ok: 3 };
     const filingRows = filings
-      .map((f) => ({ filing: f, companyName: name(f.companyId), role: this.corpRoleOf(user, f.companyId), ...this.corpFilingState(f, today) }))
+      .map((f) => ({
+        filing: f,
+        companyName: name(f.companyId),
+        role: this.corpRoleOf(user, f.companyId),
+        canWork: this.corpFiles(user, f.companyId),
+        ...this.corpFilingState(f, today),
+      }))
       .sort((a, b) => rank[a.tone] - rank[b.tone] || a.filing.dueOn.localeCompare(b.filing.dueOn));
     const changeRows = changes
       .map((c) => {
@@ -31568,7 +32081,7 @@ export class PrimaService {
           age: daysBetween(c.at.slice(0, 10), today),
           // Nobody approves a change they raised themselves.
           canDecide: c.status === 'awaiting_pwvsb' && role === 'owner' && c.raisedById !== user.id,
-          canRecordBoard: c.status === 'approved' && (role === 'manager' || role === 'owner'),
+          canRecordBoard: c.status === 'approved' && (role === 'manager' || role === 'owner' || isOwnerAdmin(user)),
           filing: c.filingId ? (filings.find((f) => f.id === c.filingId) ?? null) : null,
         };
       })
@@ -31576,6 +32089,9 @@ export class PrimaService {
     return {
       rule: RULES.corporate.value,
       roles: [...new Set(allowed.map((id) => this.corpRoleOf(user, id)))],
+      // P78: where this user may ask for a change (the company manager, the owner) and add a filing (Corporate Admin, the owner).
+      canRaise: allowed.filter((id) => this.corpRaises(user, id)).map((id) => ({ id, name: name(id) })),
+      canFile: allowed.filter((id) => this.corpFiles(user, id)).map((id) => ({ id, name: name(id) })),
       kpis: {
         overdue: filingRows.filter((f) => f.tone === 'crit').length,
         dueSoon: filingRows.filter((f) => f.tone === 'warn' && f.filing.status !== 'lodged').length,
@@ -31606,7 +32122,7 @@ export class PrimaService {
     if (!f) throw new NotFound('Filing');
     const role = this.corpRoleOf(user, f.companyId);
     if (!role) throw new NotFound('Filing');
-    if (role !== 'owner') throw new AccessDenied('view', '(head office Corporate Admin, the Deputy Chief of Staff, records filings)');
+    if (!this.corpFiles(user, f.companyId)) throw new AccessDenied('view', '(head office Corporate Admin, the Deputy Chief of Staff, records filings)');
     const at = this.now();
     const ref = (body.ref ?? '').trim().slice(0, 60);
     let patch: Partial<CorpFiling>;
@@ -31637,11 +32153,56 @@ export class PrimaService {
   }
 
   /**
+   * P78: Corporate Admin or the owner adds a filing that no corporate change opened (the annual return, the financial
+   * statements, or any other SSM lodgement), with its due date and the rule behind it. It then runs the same steps.
+   */
+  async addCorpFiling(user: User, companyId: Id, input: { kind: CorpFiling['kind']; title: string; dueOn: IsoDate; basis: string }) {
+    if (!this.corpFiles(user, companyId)) throw new AccessDenied('view', '(head office Corporate Admin, the Deputy Chief of Staff, records filings)');
+    const kinds: CorpFiling['kind'][] = ['ANNUAL_RETURN', 'FINANCIAL_STATEMENTS', 'DIRECTOR_CHANGE', 'BO_CHANGE', 'SHARE_CHANGE', 'OTHER'];
+    if (!kinds.includes(input.kind)) throw new BadRequest('Choose what is being filed.');
+    const title = (input.title ?? '').trim().slice(0, 160);
+    if (title.length < 3) throw new BadRequest('Say what is being filed.');
+    if (!isRealDate(input.dueOn ?? '')) throw new BadRequest('Give the date it is due, a real date.');
+    const basis = (input.basis ?? '').trim().slice(0, 200);
+    if (basis.length < 3) throw new BadRequest('Give the rule that sets the deadline, for example "Companies Act 2016 s.68".');
+    const all = await this.store.list('corpFilings', { companyId: [companyId] });
+    if (all.some((x) => x.kind === input.kind && x.dueOn === input.dueOn && x.title.toLowerCase() === title.toLowerCase()))
+      throw new BadRequest('This filing is already on the list.');
+    const at = this.now();
+    const f: CorpFiling = {
+      id: `cf-${companyId}-${all.length + 1}-${toMs(at)}`,
+      companyId,
+      kind: input.kind,
+      title,
+      dueOn: input.dueOn,
+      basis,
+      status: 'open',
+      prepared: null,
+      lodged: null,
+      receipt: null,
+      changeId: null,
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('corpFilings', f);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'corp.filing.add',
+        entity: 'corp_filing',
+        entityId: f.id,
+        summary: `${title} added, due ${f.dueOn} (${basis}).`,
+      });
+      return f;
+    });
+  }
+
+  /**
    * The company manager (Head of Company) asks PWVSB to approve a change to the company's corporate structure. Corporate
    * Admin decides it, so it never raises one itself: nobody approves their own request.
    */
   async raiseCorpChange(user: User, companyId: Id, input: { kind: CorpChangeKind; title: string; detail: string }) {
-    if (this.corpRoleOf(user, companyId) !== 'manager') throw new AccessDenied('view', '(the company manager raises corporate changes)');
+    if (!this.corpRaises(user, companyId)) throw new AccessDenied('view', '(the company manager raises corporate changes)');
     const kinds: CorpChangeKind[] = [
       'DIRECTOR',
       'SHARES',
@@ -31723,7 +32284,8 @@ export class PrimaService {
     const c = await this.store.get('corpChanges', id);
     if (!c) throw new NotFound('Change');
     const role = this.corpRoleOf(user, c.companyId);
-    if (role !== 'manager' && role !== 'owner') throw new AccessDenied('view', '(the company manager or Corporate Admin records the board resolution)');
+    if (role !== 'manager' && role !== 'owner' && !(role && isOwnerAdmin(user)))
+      throw new AccessDenied('view', '(the company manager or Corporate Admin records the board resolution)');
     if (c.status !== 'approved')
       throw new BadRequest(c.status === 'awaiting_pwvsb' ? 'PWVSB has not approved this change yet.' : `This change is ${c.status.replace('_', ' ')}.`);
     const ref = (resolutionRef ?? '').trim().slice(0, 80);
@@ -31866,7 +32428,8 @@ export class PrimaService {
           status: p.file?.status ?? 'none',
           ...flags,
           can: {
-            edit: role === 'manager' || role === 'owner',
+            // P78: the owner (CEO record) may draft too; the Deputy Chief of Staff still checks, never their own draft.
+            edit: role === 'manager' || role === 'owner' || isOwnerAdmin(user),
             check: role === 'owner' && p.file?.status === 'draft' && p.file.draftById !== user.id,
           },
         };
@@ -31890,7 +32453,7 @@ export class PrimaService {
   ) {
     const role = this.corpRoleOf(user, companyId);
     if (!role) throw new NotFound('Company');
-    if (role !== 'manager' && role !== 'owner') throw new AccessDenied('view', '(the Head of Company or Central Admin keeps the company file)');
+    if (role !== 'manager' && role !== 'owner' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(the Head of Company or Central Admin keeps the company file)');
     const p = (await this.store.list('corpProfiles', { companyId }))[0];
     if (!p) throw new NotFound('Company file');
     const date = (v: unknown, what: string, required = false): IsoDate | null => {
@@ -31967,6 +32530,81 @@ export class PrimaService {
           .join(', ')}); waiting for the Deputy Chief of Staff's SSM check.`,
       });
       return (await tx.get('corpProfiles', p.id))!;
+    });
+  }
+
+  /**
+   * P78: start the company file for a company that has none yet (its SSM basics, then the first directors). Whoever
+   * keeps the file starts it: the Head of Company, Central Admin or the owner. It starts as a draft, so the Deputy
+   * Chief of Staff checks it against SSM like any other save, never their own.
+   */
+  async startCompanyFile(
+    user: User,
+    companyId: Id,
+    input: {
+      regNo?: string;
+      incorporatedOn: IsoDate;
+      fyeMonth: number;
+      secretaryFirm: string;
+      secretaryLicence: string;
+      auditor: string;
+      directors: { name: string; appointedOn: IsoDate }[];
+    },
+  ) {
+    const role = this.corpRoleOf(user, companyId);
+    if (!role) throw new NotFound('Company');
+    if (role !== 'manager' && role !== 'owner' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(the Head of Company or Central Admin keeps the company file)');
+    const company = await this.store.get('companies', companyId);
+    if (!company) throw new NotFound('Company');
+    if ((await this.store.list('corpProfiles', { companyId })).length) throw new BadRequest('This company already has a file. Open it and edit it.');
+    const text = (v: unknown, what: string, max = 120) => {
+      const t = typeof v === 'string' ? v.trim().slice(0, max) : '';
+      if (!t) throw new BadRequest(`Give ${what}.`);
+      return t;
+    };
+    const past = (v: unknown, what: string): IsoDate => {
+      if (!isRealDate(v)) throw new BadRequest(`Give ${what}, a real date.`);
+      if (v > this.today()) throw new BadRequest(`${what[0].toUpperCase()}${what.slice(1)} cannot be in the future.`);
+      return v;
+    };
+    // Key once: the SSM number comes from the company record when it is there.
+    const regNo = (company.ssmNo ?? '').trim() || text(input.regNo, 'the SSM registration number', 40);
+    const incorporatedOn = past(input.incorporatedOn, 'the date of incorporation');
+    const fyeMonth = Number(input.fyeMonth);
+    if (!Number.isInteger(fyeMonth) || fyeMonth < 1 || fyeMonth > 12) throw new BadRequest('Choose the month the financial year ends.');
+    if (!Array.isArray(input.directors) || !input.directors.length) throw new BadRequest('A company has at least one director.');
+    if (input.directors.length > 30) throw new BadRequest('Too many directors (at most 30).');
+    const directors = input.directors.map((d) => ({ name: text(d?.name, 'the director’s name'), appointedOn: past(d?.appointedOn, `${d?.name || 'a director'}'s appointment date`) }));
+    const at = this.now();
+    const p: CorpProfile = {
+      id: `cp-${companyId}`,
+      companyId,
+      regNo,
+      incorporatedOn,
+      fyeMonth,
+      secretaryFirm: text(input.secretaryFirm, 'the company secretary firm'),
+      secretaryLicence: text(input.secretaryLicence, 'the secretary’s licence number', 40),
+      auditor: text(input.auditor, 'the auditor'),
+      directors,
+      shareholders: [],
+      beneficialOwners: [],
+      constitution: null,
+      papers: [],
+      file: { status: 'draft', draftById: user.id, draftBy: user.name, draftAt: at, checkedBy: null, checkedById: null, checkedAt: null, ssmRef: null, mismatches: [], note: null, history: [] },
+    };
+    if (await this.store.get('corpProfiles', p.id)) throw new BadRequest('This company already has a file. Open it and edit it.');
+    return this.store.transaction(async (tx) => {
+      await tx.insert('corpProfiles', p);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'corp.file.start',
+        entity: 'corp_profile',
+        entityId: p.id,
+        summary: `Company file started for ${company.name} (${regNo}, ${directors.length} director${directors.length === 1 ? '' : 's'}); waiting for the Deputy Chief of Staff's SSM check.`,
+      });
+      return p;
     });
   }
 
@@ -32226,7 +32864,8 @@ export class PrimaService {
     const rows = licences.map((l) => {
       const st = licenceStatus(l, today);
       const role = this.renewalRoleOf(user, l.companyId);
-      const company = role === 'manager' || role === 'staff';
+      // P78: the owner works a renewal like the company does; the company manager still signs and Central Admin confirms.
+      const company = role === 'manager' || role === 'staff' || (!!role && isOwnerAdmin(user));
       const stage = this.renewalStage(l, st.status);
       const overdue = st.daysLeft !== null && st.daysLeft < 0 ? -st.daysLeft : 0;
       const escalatedTo =
@@ -32291,7 +32930,7 @@ export class PrimaService {
     if (!l) throw new NotFound('Renewal');
     const role = this.renewalRoleOf(user, l.companyId);
     if (!role) throw new NotFound('Renewal');
-    const company = role === 'manager' || role === 'staff';
+    const company = role === 'manager' || role === 'staff' || isOwnerAdmin(user);
     const today = this.today();
     const mark = (note?: string | null): RenewalMark => ({ by: user.name, byId: user.id, at: this.now(), note: note ?? null });
     const text = (v: unknown, max = 300) => String(v ?? '').trim().slice(0, max);
@@ -32492,6 +33131,9 @@ export class PrimaService {
   private branchRoleOf(user: User, companyId: Id): 'manager' | 'staff' | 'view' | null {
     if (user.role === 'company_manager' && user.companyIds.includes(companyId)) return 'manager';
     if (user.role === 'admin_exec' && user.companyIds.includes(companyId)) return 'staff';
+    // P78: the owner prepares branch work as company staff do; approving settlements and reviewing actions stay with
+    // the company manager.
+    if (isOwnerAdmin(user)) return 'staff';
     if (isGroupLeader(user)) return 'view';
     return null;
   }
@@ -32589,7 +33231,9 @@ export class PrimaService {
         };
       })
       .sort((a, b) => a.companyName.localeCompare(b.companyName) || a.branch.name.localeCompare(b.branch.name));
-    const canAdd = allowed.filter((id) => this.branchRoleOf(user, id) === 'manager').map((id) => ({ id, name: companies.find((c) => c.id === id)?.name ?? id }));
+    const canAdd = allowed
+      .filter((id) => this.branchRoleOf(user, id) === 'manager' || isOwnerAdmin(user))
+      .map((id) => ({ id, name: companies.find((c) => c.id === id)?.name ?? id }));
     return { rule, prev, rows, canAdd };
   }
 
@@ -32693,7 +33337,7 @@ export class PrimaService {
     await this.store.lock?.('branches', String(branchId ?? '').slice(0, 120));
     const b = await this.store.get('branches', branchId);
     if (!b || !this.branchRoleOf(user, b.companyId)) throw new NotFound('Branch');
-    if (this.branchRoleOf(user, b.companyId) !== 'manager') throw new AccessDenied('view', '(the company manager records branch agreements)');
+    if (this.branchRoleOf(user, b.companyId) !== 'manager' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(the company manager records branch agreements)');
     const signedRef = (input.signedRef ?? '').trim().slice(0, 80);
     if (!signedRef) throw new BadRequest('Give the reference of the signed agreement.');
     if (!['A', 'B', 'C'].includes(input.model)) throw new BadRequest('Choose Model A, B or C.');
@@ -32779,7 +33423,8 @@ export class PrimaService {
 
   /** The company manager proposes a new branch of their own company (masterplan 145). It starts as proposed. */
   async addBranch(user: User, companyId: Id, input: { name: string; state: string; model: BranchModel }) {
-    if (this.branchRoleOf(user, companyId) !== 'manager') throw new AccessDenied('view', '(the company manager adds branches)');
+    if (this.branchRoleOf(user, companyId) !== 'manager' && !(isOwnerAdmin(user) && this.branchRoleOf(user, companyId)))
+      throw new AccessDenied('view', '(the company manager adds branches)');
     const name = this.branchText(input.name, 'the branch name', 3, 80);
     const state = this.branchText(input.state, 'the state', 3, 40);
     if (!['A', 'B', 'C'].includes(input.model)) throw new BadRequest('Choose Model A, B or C.');
@@ -33803,6 +34448,8 @@ export class PrimaService {
   private contractRoleOf(user: User, companyId: Id): 'manager' | 'staff' | 'view' | null {
     if (user.role === 'company_manager' && user.companyIds.includes(companyId)) return 'manager';
     if (user.role === 'admin_exec' && user.companyIds.includes(companyId)) return 'staff';
+    // P78: the owner records a signed contract for any company and runs its mobilisation, as its manager would.
+    if (isOwnerAdmin(user)) return 'manager';
     if (user.role === 'pwvsb_officer' && user.department === 'operations' && ['om', 'regional', 'ogm', 'ops_director'].includes(user.opsTier ?? ''))
       return 'staff';
     if (isGroupLeader(user)) return 'view';
@@ -34574,16 +35221,54 @@ export class PrimaService {
           ok: count('ok'),
         };
       });
-    const canSet = (f: FinStatus) => user.leadership === 'finance_director' || (role === 'team' && f.team === user.financeTeam);
+    // P78: the CEO moves papers along with the Finance Director's authority (setFinPack already allows it).
+    const canSet = (f: FinStatus) => user.leadership === 'finance_director' || isOwnerAdmin(user) || (role === 'team' && f.team === user.financeTeam);
     return {
       role,
       team: user.financeTeam ?? null,
-      financeRole: user.financeRole ?? (user.leadership === 'finance_director' ? 'director' : null),
+      financeRole: user.financeRole ?? (user.leadership === 'finance_director' || isOwnerAdmin(user) ? 'director' : null),
       rule: RULES.finance.value,
       lastEnd: view[0]?.lastEnd ?? periodEnd(this.prevPeriod(today.slice(0, 7))),
       rows: view.map((v) => ({ ...v, canSet: canSet(v.status) })),
       teams,
     };
+  }
+
+  /**
+   * P78: add a paper the auditor or the tax agent asked for (a label and a due date). Anyone who works on the company's
+   * papers adds it: its team, the Finance Director or the CEO. It starts "Not started" and moves on as any paper does.
+   */
+  async addFinPaper(user: User, companyId: Id, pack: 'audit' | 'tax', input: { label?: unknown; dueOn?: unknown }) {
+    return this.store.transaction(async (tx) => {
+      const role = this.finRoleOf(user);
+      const fd = user.leadership === 'finance_director' || finActor(user)?.kind === 'ceo';
+      if (!role || (role === 'lead' && !fd)) throw new AccessDenied('view', '(finance papers)');
+      if (pack !== 'audit' && pack !== 'tax') throw new BadRequest('Papers are for the auditor or the tax agent.');
+      if (typeof companyId !== 'string' || !tenantCompanyIds(user, await this.grants(), this.today()).includes(companyId)) throw new NotFound('Company');
+      const label = typeof input.label === 'string' ? input.label.trim() : '';
+      if (label.length < 3 || label.length > 160) throw new BadRequest('Say what the paper is (3 to 160 characters).');
+      const dueOn = typeof input.dueOn === 'string' ? input.dueOn : '';
+      if (!isRealDate(dueOn)) throw new BadRequest('Give the due date.');
+      await tx.lock?.('finStatus', `fin-${companyId}`);
+      const f = await tx.get('finStatus', `fin-${companyId}`);
+      if (!f || (!fd && f.team !== user.financeTeam)) throw new NotFound('Company books');
+      const list = f[pack];
+      if (list.some((i) => i.label.toLowerCase() === label.toLowerCase() && i.dueOn === dueOn)) throw new BadRequest('That paper is already on the list.');
+      let n = list.length + 1;
+      while (list.some((i) => i.id === `${pack}-add-${n}`)) n += 1;
+      const item: FinPackItem = { id: `${pack}-add-${n}`, label, dueOn, status: 'todo', by: null, at: null };
+      await tx.update('finStatus', f.id, { [pack]: [...list, item] } as Partial<FinStatus>);
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: companyId === GROUP_EMPLOYER_ID ? null : companyId,
+        action: 'finance.paper.added',
+        entity: 'fin_status',
+        entityId: f.id,
+        summary: `Paper for the ${pack === 'audit' ? 'auditor' : 'tax agent'} added: "${label}", due ${dueOn}.`,
+      });
+      return item;
+    });
   }
 
   /**
@@ -34745,6 +35430,19 @@ export class PrimaService {
     return staffPayRole(user);
   }
 
+  /**
+   * Who prepares a month and keys its lines: HR, and the owner as master administrator (P78). The approvals stay with
+   * the Chief of Staff (or the CEO standing in) and the COO, and never with whoever prepared or submitted the month.
+   */
+  private staffPayMaker(user: User): boolean {
+    return this.staffPayRoleOf(user) === 'hr' || isOwnerAdmin(user);
+  }
+
+  /** Whether this user prepared or submitted the month (so may not approve it). */
+  private staffPayMadeBy(user: User, run: StaffPayRun): boolean {
+    return run.prepared?.byId === user.id || run.submitted?.byId === user.id;
+  }
+
   private async staffPayEmployers(user: User): Promise<Id[]> {
     const role = this.staffPayRoleOf(user);
     if (!role) return [];
@@ -34879,7 +35577,7 @@ export class PrimaService {
       waiting: stored.filter((t) => t.status === 'loaded'),
       history: [...stored].reverse().slice(0, 60).map(({ rows, ...t }) => ({ ...t, rowCount: rows.length })),
       builtIn: builtIn.map(({ rows, ...t }) => ({ ...t, rowCount: rows.length })),
-      canLoad: ['hr', 'finance'].includes(this.staffPayRoleOf(user) ?? ''),
+      canLoad: ['hr', 'finance'].includes(this.staffPayRoleOf(user) ?? '') || isOwnerAdmin(user),
       canCheck: this.statTableChecker(user),
     };
   }
@@ -34890,7 +35588,8 @@ export class PrimaService {
    */
   async loadStatTable(user: User, input: { id?: unknown; from?: unknown; source?: unknown; doc?: unknown; rows?: unknown; above?: unknown }) {
     const role = this.staffPayRoleOf(user);
-    if (role !== 'hr' && role !== 'finance') throw new AccessDenied('hr.pay', '(HR or Finance loads the EPF and PERKESO tables)');
+    // P78: the owner loads a table too; a second person still checks it (nobody checks a table they loaded).
+    if (role !== 'hr' && role !== 'finance' && !isOwnerAdmin(user)) throw new AccessDenied('hr.pay', '(HR or Finance loads the EPF and PERKESO tables)');
     const id = STAT_TABLE_IDS.find((x) => x === input.id);
     if (!id) throw new BadRequest(`Choose the table: ${STAT_TABLE_IDS.join(', ')}.`);
     const from = String(input.from ?? '');
@@ -34973,7 +35672,7 @@ export class PrimaService {
   /** The employer's own EPF, PERKESO, LHDN (E number) and HRD Corp numbers, for the contribution files. */
   async setEmployerNos(user: User, companyId: Id, input: { epf?: unknown; socso?: unknown; lhdnE?: unknown; hrd?: unknown }) {
     const role = this.staffPayRoleOf(user);
-    if (role !== 'hr' && role !== 'finance') throw new AccessDenied('hr.pay', '(HR or Finance keeps the employer numbers)');
+    if (role !== 'hr' && role !== 'finance' && !isOwnerAdmin(user)) throw new AccessDenied('hr.pay', '(HR or Finance keeps the employer numbers)');
     if (!(await this.staffPayEmployers(user)).includes(companyId)) throw new NotFound('Employer');
     const clean = (v: unknown, label: string) => {
       if (v == null || v === '') return null;
@@ -35042,8 +35741,8 @@ export class PrimaService {
         totals: this.staffPayTotals(r.lines),
         mineToAct:
           (role === 'hr' && r.stage === 'draft') ||
-          ((role === 'cos' || standIn) && r.stage === 'submitted') ||
-          (role === 'coo' && r.stage === 'approved' && r.approved?.byId !== user.id) ||
+          ((role === 'cos' || standIn) && r.stage === 'submitted' && !this.staffPayMadeBy(user, r)) ||
+          (role === 'coo' && r.stage === 'approved' && r.approved?.byId !== user.id && !this.staffPayMadeBy(user, r)) ||
           (role === 'finance' && r.stage === 'coo_approved'),
       }));
     const status = employers.map((id) => {
@@ -35060,6 +35759,8 @@ export class PrimaService {
     });
     return {
       role,
+      /** HR, or the owner as master administrator, prepares a month (P78). */
+      canPrepare: this.staffPayMaker(user),
       period,
       prev,
       rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor },
@@ -35101,7 +35802,7 @@ export class PrimaService {
       role,
       ownLine,
       /** What stops HR submitting a draft month (part-month pay, staff changes, open movements). */
-      blockers: run.stage === 'draft' && role === 'hr' ? await this.staffPayBlockers(run) : [],
+      blockers: run.stage === 'draft' && this.staffPayMaker(user) ? await this.staffPayBlockers(run) : [],
       // The bank file's control total: Finance checks the count, the amount and this code in the bank portal.
       control: {
         count: run.lines.length,
@@ -35109,17 +35810,18 @@ export class PrimaService {
         code: sha256Hex(run.lines.map((l) => `${l.staffNo}|${l.bank?.accountMasked ?? ''}|${l.net.toFixed(2)}`).join('\n')).slice(0, 12).toUpperCase(),
       },
       can: {
-        prepare: role === 'hr' && run.stage === 'draft',
-        submit: role === 'hr' && run.stage === 'draft' && run.lines.length > 0,
-        approve: (role === 'cos' || standIn) && run.stage === 'submitted',
+        prepare: this.staffPayMaker(user) && run.stage === 'draft',
+        submit: this.staffPayMaker(user) && run.stage === 'draft' && run.lines.length > 0,
+        // Nobody approves a month they prepared or submitted (maker-checker, P78: the owner may prepare).
+        approve: (role === 'cos' || standIn) && run.stage === 'submitted' && !this.staffPayMadeBy(user, run),
         // The COO approves second, never the same person who approved as Chief of Staff.
-        cooApprove: role === 'coo' && run.stage === 'approved' && run.approved?.byId !== user.id,
+        cooApprove: role === 'coo' && run.stage === 'approved' && run.approved?.byId !== user.id && !this.staffPayMadeBy(user, run),
         pay: role === 'finance' && run.stage === 'coo_approved',
         return:
           ((role === 'cos' || standIn) && run.stage === 'submitted') ||
           (role === 'coo' && run.stage === 'approved') ||
           (role === 'finance' && run.stage === 'coo_approved'),
-        export: (role === 'finance' || role === 'hr') && (run.stage === 'coo_approved' || run.stage === 'paid'),
+        export: (role === 'finance' || this.staffPayMaker(user)) && (run.stage === 'coo_approved' || run.stage === 'paid'),
         bankFile: role === 'finance' && (run.stage === 'coo_approved' || run.stage === 'paid'),
       },
     };
@@ -35208,7 +35910,7 @@ export class PrimaService {
 
   /** HR builds or rebuilds an employer's month from staff records, unpaid leave and approved claims. */
   async prepareStaffPay(user: User, companyId: Id, period: string) {
-    if (this.staffPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(staff payroll)');
+    if (!this.staffPayMaker(user)) throw new AccessDenied('hr.monitor', '(staff payroll)');
     if (!(await this.staffPayEmployers(user)).includes(companyId)) throw new NotFound('Employer');
     if (!/^\d{4}-\d{2}$/.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
     const now = this.today().slice(0, 7);
@@ -35308,7 +36010,7 @@ export class PrimaService {
     personId: Id,
     patch: { pcb?: number | null; extra?: { label: string; amount: number; typeId?: Id | null }[]; partPay?: { basic: number; allowances: number; note: string } | null },
   ) {
-    if (this.staffPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(staff payroll)');
+    if (!this.staffPayMaker(user)) throw new AccessDenied('hr.monitor', '(staff payroll)');
     const run = await this.staffPayRunFor(user, runId);
     if (run.stage !== 'draft') throw new BadRequest('Only a draft can change.');
     const old = run.lines.find((l) => l.personId === personId);
@@ -36057,7 +36759,7 @@ export class PrimaService {
       company: { id: company.id, code: company.code, name: company.name },
       role,
       ready,
-      canAssign: role === 'head' && ready,
+      canAssign: (role === 'head' || (role === 'monitor' && isOwnerAdmin(user))) && ready,
       rule: OFFICE_TEAM,
       team: team.map((u) => ({
         userId: u.id,
@@ -36084,7 +36786,7 @@ export class PrimaService {
       findings,
       tone: worstTone(findings),
       desks,
-      suggested: role === 'head' && desks.some((d) => d.state === 'unassigned') ? suggested : null,
+      suggested: (role === 'head' || (role === 'monitor' && isOwnerAdmin(user))) && desks.some((d) => d.state === 'unassigned') ? suggested : null,
       queue,
     };
   }
@@ -36193,7 +36895,9 @@ export class PrimaService {
    * a backup is never the owner. Every change is audited with what it was before.
    */
   async setOfficeDesks(user: User, companyId: Id, input: { desks: { desk: string; ownerUserId: Id | null; backupUserId?: Id | null }[]; note?: string }) {
-    if ((await this.officeRole(user, companyId)) !== 'head') throw new AccessDenied('office.desks', companyId);
+    // P78: the owner (CEO record) may share out the desks too, as master administrator; the change is audited under his name.
+    const deskRole = await this.officeRole(user, companyId);
+    if (deskRole !== 'head' && !(deskRole === 'monitor' && isOwnerAdmin(user))) throw new AccessDenied('office.desks', companyId);
     if (!Array.isArray(input?.desks) || !input.desks.length) throw new BadRequest('Choose at least one desk.');
     if (input.desks.length > OFFICE_DESKS.length) throw new BadRequest('Too many desks.');
     const note = typeof input.note === 'string' ? input.note.trim().slice(0, 300) : '';

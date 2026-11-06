@@ -678,3 +678,13 @@
 .pay-socso td:first-child {
   min-width: 150px;
 }
+
+/* Start a payroll month (P78): the employer and month form in its drawer. */
+.pay-prep {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pay-prep .help[data-tone='crit'] {
+  color: var(--crit);
+}

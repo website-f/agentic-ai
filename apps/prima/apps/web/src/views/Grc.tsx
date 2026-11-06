@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { FirstAidKitIcon, GiftIcon, MegaphoneIcon, QuestionIcon, ShieldWarningIcon, StampIcon } from '@phosphor-icons/react';
+import { FirstAidKitIcon, GiftIcon, MegaphoneIcon, PlusIcon, QuestionIcon, ShieldWarningIcon, StampIcon } from '@phosphor-icons/react';
 import type { GrcStream } from '@prima/core';
 import { api, type GiftInput, type GrcBoard, type WhistleInput } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/gov.css';
 
 /**
@@ -50,6 +50,7 @@ const toneOf = (t: string) => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : u
 export function GrcView() {
   const { data, error } = useLoad(() => api.grcBoard(), []);
   const [tab, setTab] = useState<Tab>('speak');
+  const [adding, setAdding] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -75,6 +76,13 @@ export function GrcView() {
       <PageHead
         title="Speak up and assurance"
         sub="Report wrongdoing safely, declare gifts, and see what each company must prove. A report never goes to anyone it names, and you can stay anonymous."
+        actions={
+          data.obligationCompanies.length > 0 ? (
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={16} /> Add obligation
+            </button>
+          ) : undefined
+        }
       >
         <p className="notice" data-tone="info">
           Test data. The gift limit, acknowledgement time and who handles reports are proposals.
@@ -124,6 +132,17 @@ export function GrcView() {
       {tab === 'obligations' && <Obligations data={data} />}
       {tab === 'osh' && <Osh data={data} />}
       {tab === 'reports' && <Reports data={data} />}
+      {adding && (
+        <Drawer title="Add an obligation" sub="Something a company must prove it does, how often, and the law or policy behind it." onClose={() => setAdding(false)}>
+          <NewObligation
+            data={data}
+            onDone={(ok) => {
+              setAdding(false);
+              if (ok) setTab('obligations');
+            }}
+          />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -501,7 +520,9 @@ function Obligations({ data }: { data: GrcBoard }) {
         </select>
       </Toolbar>
       <Card title="What each company must prove" sub="The company records the proof; internal audit checks it. Only checked, current proof is green." flush>
-        {!rows.length && <Empty title="Nothing open." />}
+        {!rows.length && (
+          <Empty title="Nothing open.">{data.obligationCompanies.length ? 'List what a company must prove with "Add obligation" at the top.' : undefined}</Empty>
+        )}
         <ul className="gv-list">
           {rows.slice(0, 150).map((o) => (
             <li key={o.item.id}>
@@ -560,7 +581,7 @@ function OblLine({ o: row }: { o: Obl }) {
           {o.checked ? ` · ${o.checked.ok ? 'accepted' : 'rejected'} by ${o.checked.by}${o.checked.note ? `: ${o.checked.note}` : ''}` : ''}
         </div>
       </div>
-      {row.role === 'company' && (
+      {row.canProve && (
         <div className="gv-box">
           <div className="gv-box-title">Record proof</div>
           <div className="gv-form">
@@ -892,6 +913,79 @@ function ReportLine({ h }: { h: GrcBoard['handled'][number] }) {
         </div>
       )}
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+function NewObligation({ data, onDone }: { data: GrcBoard; onDone: (saved: boolean) => void }) {
+  const act = useAction();
+  const companies = data.companies.filter((c) => data.obligationCompanies.includes(c.id));
+  const [f, setF] = useState({ companyId: companies[0]?.id ?? '', stream: 'OSH' as GrcStream, title: '', basis: '', everyMonths: '12' });
+  const months = Number(f.everyMonths);
+  const missing = !f.companyId
+    ? 'Choose the company.'
+    : f.title.trim().length < 3
+      ? 'Say what must be done.'
+      : f.basis.trim().length < 3
+        ? 'Give the law or policy behind it.'
+        : !(Number.isInteger(months) && months >= 1 && months <= 60)
+          ? 'Say how often, every 1 to 60 months.'
+          : '';
+  return (
+    <div className="gv-stack-sm" aria-label="Add an obligation">
+      <label className="field">
+        <span className="label">Company</span>
+        <select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Workstream</span>
+        <select className="select" aria-label="Workstream" value={f.stream} onChange={(e) => setF({ ...f, stream: e.target.value as GrcStream })}>
+          {Object.entries(STREAM).map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">What must be done</span>
+        <input className="input" aria-label="What must be done" placeholder="For example, fire drill at head office" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Law or policy behind it</span>
+        <input className="input" aria-label="Law or policy" placeholder="For example, OSHA 1994 s.15" value={f.basis} onChange={(e) => setF({ ...f, basis: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">How often (months)</span>
+        <input className="input" aria-label="How often in months" inputMode="numeric" value={f.everyMonths} onChange={(e) => setF({ ...f, everyMonths: e.target.value })} />
+        <span className="help">It shows as unknown until the company records proof; internal audit then checks it.</span>
+      </label>
+      {missing && <p className="help">{missing}</p>}
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !!missing}
+          onClick={() =>
+            act
+              .run(() => api.addGrcObligation(f.companyId, { stream: f.stream, title: f.title, basis: f.basis, everyMonths: months }), 'Obligation added.')
+              .then((x) => {
+                if (x) onDone(true);
+              })
+          }
+        >
+          {act.busy ? 'Saving...' : 'Add obligation'}
+        </button>
+        <button className="btn btn-ghost" onClick={() => onDone(false)}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

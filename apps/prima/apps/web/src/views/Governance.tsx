@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { CalendarXIcon, HourglassIcon, KeyIcon, ScalesIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
+import { CalendarXIcon, HourglassIcon, KeyIcon, PlusIcon, ScalesIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import type { GovArea } from '@prima/core';
 import { api, type GovBoard, type GovMandateInput } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import '../styles/gov.css';
 
 /**
@@ -30,6 +30,7 @@ const rm = (n: number) => `RM${n.toLocaleString('en-MY')}`;
 export function GovernanceView() {
   const { data, error } = useLoad(() => api.govBoard(), []);
   const [tab, setTab] = useState<Tab>('mandates');
+  const [adding, setAdding] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -43,11 +44,24 @@ export function GovernanceView() {
       </div>
     );
   const k = data.kpis;
+  // PWVSB legal, the Chief of Staff and the owner register mandates (P78); the server checks again on save.
+  const canAdd = data.roles.includes('legal') || data.roles.includes('control');
+  const add = () => {
+    setTab('mandates');
+    setAdding(true);
+  };
   return (
     <div className="page gv-page">
       <PageHead
         title="Mandates and authority"
         sub="PWVSB acts in a company only under a signed management agreement or board mandate, confirmed by the company's board and verified by PWVSB legal. Where there is none, PWVSB only monitors and the area shows as unknown."
+        actions={
+          canAdd ? (
+            <button className="btn btn-primary" onClick={add}>
+              <PlusIcon size={16} /> Add mandate
+            </button>
+          ) : undefined
+        }
       >
         <p className="notice" data-tone="info">
           Test data. The areas and wording are proposals for counsel to check against the signed agreements.
@@ -92,17 +106,24 @@ export function GovernanceView() {
           </button>
         ))}
       </div>
-      {tab === 'mandates' && <Mandates data={data} />}
+      {tab === 'mandates' && <Mandates data={data} canAdd={canAdd} onAdd={add} />}
       {tab === 'coverage' && <Coverage data={data} />}
       {tab === 'matrix' && <Matrix data={data} />}
+      {adding && (
+        <Drawer
+          title="Add a mandate"
+          sub="A signed management agreement or board mandate. After you save it, the company's board confirms it and PWVSB legal verifies the signed copy before it is in force."
+          onClose={() => setAdding(false)}
+        >
+          <NewMandate data={data} onDone={() => setAdding(false)} />
+        </Drawer>
+      )}
     </div>
   );
 }
 
-function Mandates({ data }: { data: GovBoard }) {
-  const [form, setForm] = useState(false);
+function Mandates({ data, canAdd, onAdd }: { data: GovBoard; canAdd: boolean; onAdd: () => void }) {
   const [all, setAll] = useState(false);
-  const canAdd = data.roles.includes('legal') || data.roles.includes('control');
   const rows = data.rows.filter((r) => all || r.state !== 'terminated');
   return (
     <Card
@@ -114,20 +135,23 @@ function Mandates({ data }: { data: GovBoard }) {
           <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
             {all ? 'Hide ended' : 'Show ended'}
           </button>
-          {canAdd && (
-            <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
-              Register a mandate
-            </button>
-          )}
         </>
       }
     >
-      {form && (
-        <div className="gv-card-intro">
-          <NewMandate data={data} onDone={() => setForm(false)} />
-        </div>
+      {!rows.length && (
+        <Empty
+          title="No mandates registered."
+          action={
+            canAdd ? (
+              <button className="btn btn-primary" onClick={onAdd}>
+                <PlusIcon size={16} /> Add mandate
+              </button>
+            ) : undefined
+          }
+        >
+          {canAdd ? 'Add each signed management agreement or board mandate, with the powers it gives PWVSB.' : 'PWVSB legal or the Chief of Staff adds them.'}
+        </Empty>
       )}
-      {!rows.length && <Empty title="No mandates registered." />}
       <ul className="gv-list">
         {rows.map((r) => (
           <li key={r.mandate.id}>
@@ -278,6 +302,7 @@ function NewMandate({ data, onDone }: { data: GovBoard; onDone: () => void }) {
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
   const [f, setF] = useState<Omit<GovMandateInput, 'powers'>>({ kind: 'MANAGEMENT_AGREEMENT', ref: '', title: '', signedOn: '', validFrom: '', validTo: null });
   const [powers, setPowers] = useState<Record<string, { scope: 'none' | 'monitor' | 'act'; limit: string }>>({});
+  const [tried, setTried] = useState(false);
   const list = data.rule.areas.map((a) => ({ ...a, v: powers[a.area] ?? { scope: 'none' as const, limit: '' } }));
   const input: GovMandateInput = {
     ...f,
@@ -285,94 +310,110 @@ function NewMandate({ data, onDone }: { data: GovBoard; onDone: () => void }) {
       .filter((a) => a.v.scope !== 'none')
       .map((a) => ({ area: a.area, scope: a.v.scope as 'act' | 'monitor', limit: a.v.limit ? Number(a.v.limit) : null })),
   };
+  const badLimit = input.powers.some((p) => p.limit !== null && !(Number.isFinite(p.limit) && p.limit >= 0));
+  const missing = !companyId
+    ? 'Choose the company.'
+    : !f.ref.trim()
+      ? 'Give the reference on the signed document.'
+      : !f.title.trim()
+        ? 'Give its title.'
+        : !f.signedOn
+          ? 'Give the date it was signed.'
+          : !f.validFrom
+            ? 'Give the date it runs from.'
+            : f.validTo && f.validTo < f.validFrom
+              ? 'It cannot end before it starts.'
+              : !input.powers.length
+                ? 'Choose at least one power the signed document gives PWVSB.'
+                : badLimit
+                  ? 'A limit must be an amount in RM.'
+                  : '';
+  const save = () => {
+    setTried(true);
+    if (missing) return;
+    act.run(() => api.addGovMandate(companyId, input), 'Mandate added. The company board confirms it next.').then((x) => {
+      if (x) onDone();
+    });
+  };
   return (
-    <div className="gv-box" aria-label="Register a mandate">
-      <div className="gv-box-title">Register a mandate</div>
-      <div className="gv-form">
-        <label className="field">
-          <span className="label">Company</span>
-          <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="label">Kind</span>
-          <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as GovMandateInput['kind'] })}>
-            <option value="MANAGEMENT_AGREEMENT">Management agreement</option>
-            <option value="BOARD_MANDATE">Board mandate</option>
-          </select>
-        </label>
-        <label className="field">
-          <span className="label">Reference</span>
-          <input className="input" aria-label="Reference" placeholder="Reference" value={f.ref} onChange={(e) => setF({ ...f, ref: e.target.value })} />
-        </label>
-        <label className="field">
-          <span className="label">Title</span>
-          <input className="input" aria-label="Title" placeholder="Title" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
-        </label>
-        <label className="field">
-          <span className="label">Signed on</span>
-          <input className="input" type="date" value={f.signedOn} onChange={(e) => setF({ ...f, signedOn: e.target.value })} />
-        </label>
-        <label className="field">
-          <span className="label">Runs from</span>
-          <input className="input" type="date" value={f.validFrom} onChange={(e) => setF({ ...f, validFrom: e.target.value })} />
-        </label>
-        <label className="field">
-          <span className="label">Runs to (leave empty if open-ended)</span>
-          <input className="input" type="date" value={f.validTo ?? ''} onChange={(e) => setF({ ...f, validTo: e.target.value || null })} />
-        </label>
-      </div>
+    <div className="gv-stack-sm" aria-label="Add a mandate">
+      <label className="field">
+        <span className="label">Company</span>
+        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Kind</span>
+        <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as GovMandateInput['kind'] })}>
+          <option value="MANAGEMENT_AGREEMENT">Management agreement</option>
+          <option value="BOARD_MANDATE">Board mandate</option>
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Reference</span>
+        <input className="input" aria-label="Reference" placeholder="For example, MA/INAS/2026/01" value={f.ref} onChange={(e) => setF({ ...f, ref: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Title</span>
+        <input className="input" aria-label="Title" placeholder="What the document covers" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Signed on</span>
+        <input className="input" type="date" aria-label="Signed on" value={f.signedOn} onChange={(e) => setF({ ...f, signedOn: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Runs from</span>
+        <input className="input" type="date" aria-label="Runs from" value={f.validFrom} onChange={(e) => setF({ ...f, validFrom: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Runs to</span>
+        <input className="input" type="date" aria-label="Runs to" value={f.validTo ?? ''} onChange={(e) => setF({ ...f, validTo: e.target.value || null })} />
+        <span className="help">Leave empty if it runs until it is ended.</span>
+      </label>
       <div className="gv-box-title">Powers the signed document gives PWVSB</div>
-      <div className="gv-form">
-        {list.map((a) => (
-          <div key={a.area} className="field">
-            <span className="label">{a.label}</span>
-            <div className="gv-btns">
-              <select
-                className="select"
-                aria-label={`${a.label} power`}
-                value={a.v.scope}
-                onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, scope: e.target.value as 'none' | 'monitor' | 'act' } })}
-              >
-                <option value="none">None</option>
-                <option value="monitor">Monitor</option>
-                <option value="act">Act</option>
-              </select>
-              {a.v.scope === 'act' && (
-                <input
-                  className="input"
-                  aria-label={`${a.label} limit`}
-                  placeholder="Limit RM (optional)"
-                  inputMode="decimal"
-                  value={a.v.limit}
-                  onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, limit: e.target.value } })}
-                />
-              )}
-            </div>
+      {list.map((a) => (
+        <div key={a.area} className="field">
+          <span className="label">{a.label}</span>
+          <div className="gv-btns">
+            <select
+              className="select"
+              aria-label={`${a.label} power`}
+              value={a.v.scope}
+              onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, scope: e.target.value as 'none' | 'monitor' | 'act' } })}
+            >
+              <option value="none">None</option>
+              <option value="monitor">Monitor</option>
+              <option value="act">Act</option>
+            </select>
+            {a.v.scope === 'act' && (
+              <input
+                className="input"
+                aria-label={`${a.label} limit`}
+                placeholder="Limit RM (optional)"
+                inputMode="decimal"
+                value={a.v.limit}
+                onChange={(e) => setPowers({ ...powers, [a.area]: { ...a.v, limit: e.target.value } })}
+              />
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
+      {tried && missing && (
+        <p className="help" role="alert">
+          {missing}
+        </p>
+      )}
       <ErrorNotice error={act.error} />
       <div className="gv-form-foot">
-        <button
-          className="btn btn-sm btn-primary"
-          disabled={act.busy || !companyId}
-          onClick={() =>
-            act
-              .run(() => api.addGovMandate(companyId, input), 'Registered. The company board confirms it next.')
-              .then((x) => {
-                if (x) onDone();
-              })
-          }
-        >
-          Register
+        <button className="btn btn-primary" disabled={act.busy} onClick={save}>
+          {act.busy ? 'Saving...' : 'Add mandate'}
         </button>
-        <button className="btn btn-sm btn-ghost" onClick={onDone}>
+        <button className="btn btn-ghost" onClick={onDone}>
           Cancel
         </button>
       </div>

@@ -13,7 +13,7 @@ import '../styles/finance.css';
 type Disposal = FixedAssets['disposals'][number];
 const rm = (n: number) => `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const CATEGORY = { FURNITURE: 'Furniture', FITTING: 'Fittings', RENOVATION: 'Renovations', OTHER: 'Other' } as const;
-const METHOD: Record<NonNullable<DisposalBody['method']>, string> = {
+export const METHOD: Record<NonNullable<DisposalBody['method']>, string> = {
   SALE: 'Sale',
   SCRAP: 'Scrap',
   DONATE: 'Donation',
@@ -261,7 +261,14 @@ function Disposals({ data }: { data: FixedAssets }) {
         above that; the person who asked never decides. Then the team records the receipt or scrap note, and Finance posts the gain or loss in SQL Account.
       </p>
       <div className="list">
-        {!rows.length && <div className="empty">No disposals open.</div>}
+        {!rows.length && (
+          <div className="empty">
+            No disposals open.{' '}
+            {data.can.ask
+              ? 'To start one, mark the asset "waiting for disposal" with Edit on the Assets tab, or choose Dispose on a written-off asset above.'
+              : 'The Asset Management team starts them.'}
+          </div>
+        )}
         {rows.slice(0, 40).map((d) => (
           <DisposalLine key={d.asset.id} d={d} data={data} />
         ))}

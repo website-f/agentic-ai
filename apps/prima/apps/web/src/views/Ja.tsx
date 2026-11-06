@@ -53,7 +53,7 @@ export function JaView() {
     <div className="page bz-ja-page">
       <PageHead
         title="JA Group app"
-        sub={`Guards and officers use the JA Group app. Their payroll, foreign worker papers and incidents come here from its feed, read-only. A company with no data for over ${data.rule.staleHours} hours shows as unknown.`}
+        sub={`Guards and officers use the JA Group app. Their payroll, foreign worker papers and incidents come here from its feed, read-only. A company with no data for over ${data.rule.staleHours} hours shows as unknown. Nothing is added or changed here: correct a record in the JA Group app and it arrives with the next feed.`}
       >
         <p className="notice" data-tone="info">
           Preview with test data: the JA feed is not live yet, so Prima&apos;s own foreign worker, incident, pay and hostel screens stay on until it is.

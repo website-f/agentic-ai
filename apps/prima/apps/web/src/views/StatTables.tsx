@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { StatTable } from "@prima/core";
 import { api } from "../api";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad, type Tone } from "../ui";
+import { useApp } from "../App";
 
 /**
  * EPF and PERKESO contribution tables kept row by row in Prima (Fauzan, 2 Nov 2026: "Make sure epf and socso have table
@@ -20,6 +21,7 @@ const n2 = (n: number) => n.toLocaleString("en-MY", { minimumFractionDigits: 2, 
 const TABLES = ["EPF-A", "EPF-E", "EPF-F", "SOCSO-1", "SOCSO-2", "EIS"];
 
 export function StatTablesView() {
+  const { me } = useApp();
   const { data, error, reload } = useLoad(() => api.statTables(), []);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
@@ -38,7 +40,8 @@ export function StatTablesView() {
             <h3>Waiting for a check</h3>
           </div>
           {data.waiting.map((t) => (
-            <Waiting key={`${t.id}-${t.version}`} t={t} canCheck={data.canCheck} onDone={reload} />
+            // Nobody checks a table they loaded (the server refuses it too).
+            <Waiting key={`${t.id}-${t.version}`} t={t} canCheck={data.canCheck && t.loaded?.byId !== me.user.id} onDone={reload} />
           ))}
         </section>
       )}

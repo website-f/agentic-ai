@@ -8,13 +8,14 @@ import {
   FlagIcon,
   MagnifyingGlassIcon,
   PhoneCallIcon,
+  PlusIcon,
   SealCheckIcon,
   SirenIcon,
   UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { api, type ActBoard, type ActFindingInput } from '../api';
 import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { actGuide, type ActGuideCtx, type ActGuideKind } from '../act-guide/guide';
 import '../styles/gov.css';
 
@@ -74,6 +75,7 @@ export function ActView() {
   const { data, error } = useLoad(() => api.actBoard(), []);
   const [tab, setTab] = useState<Tab | null>(null);
   const [prefill, setPrefill] = useState<Prefill>(null);
+  const [drawer, setDrawer] = useState<'' | 'finding' | 'audit'>('');
   if (error)
     return (
       <div className="page gv-page">
@@ -120,6 +122,19 @@ export function ActView() {
               You are the ACT {ROLE[data.actRole]}
               {data.myTeam ? `, Team ${data.myTeam}` : ''}.
             </Chip>
+          ) : data.canRaise || data.canRecordAudit ? (
+            <>
+              {data.canRecordAudit && (
+                <button className="btn" onClick={() => setDrawer('audit')}>
+                  <PlusIcon size={16} /> Record an audit
+                </button>
+              )}
+              {data.canRaise && (
+                <button className="btn btn-primary" onClick={() => setDrawer('finding')}>
+                  <PlusIcon size={16} /> Raise a finding
+                </button>
+              )}
+            </>
           ) : undefined
         }
       >
@@ -222,6 +237,16 @@ export function ActView() {
       {current === 'improvements' && <Improvements data={data} />}
       {current === 'fraud' && <Fraud data={data} />}
       {data.structure && <Structure data={data} />}
+      {drawer === 'finding' && (
+        <Drawer title="Raise a finding" sub="ACT gives it to a team, the owner fixes it, and ACT checks the fix." onClose={() => setDrawer('')}>
+          <NewFinding data={data} prefill={null} onDone={() => setDrawer('')} />
+        </Drawer>
+      )}
+      {drawer === 'audit' && (
+        <Drawer title="Record an audit done" sub="A workflow audit already carried out, with what was checked." onClose={() => setDrawer('')}>
+          <AuditForm data={data} onDone={() => setDrawer('')} />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -715,8 +740,6 @@ function NewFinding({ data, prefill, onDone }: { data: ActBoard; prefill: Prefil
 }
 
 function Plan({ data }: { data: ActBoard }) {
-  const act = useAction();
-  const [f, setF] = useState({ area: data.rule.areas[0].id, companyId: '', doneOn: '', result: 'clean' as 'clean' | 'findings', note: '' });
   const STATE = { never: ['warn', 'Never audited'], overdue: ['crit', 'Audit overdue'], due_soon: ['warn', 'Due soon'], ok: ['ok', 'Audited'] } as const;
   return (
     <div className="gv-stack">
@@ -746,66 +769,80 @@ function Plan({ data }: { data: ActBoard }) {
           ))}
         </ul>
       </Card>
-      {data.canCheck && (
+      {data.canRecordAudit && (
         <Card title="Record an audit done">
-          <div className="gv-stack-sm">
-            <div className="gv-form">
-              <label className="field">
-                <span className="label">Workflow audited</span>
-                <select className="select" aria-label="Workflow audited" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
-                  {data.rule.areas.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="label">Company audited</span>
-                <select className="select" aria-label="Company audited" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
-                  <option value="">PWVSB or group-wide</option>
-                  {data.companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="label">Audited on</span>
-                <input className="input" type="date" value={f.doneOn} onChange={(e) => setF({ ...f, doneOn: e.target.value })} />
-              </label>
-              <label className="field">
-                <span className="label">Result</span>
-                <select className="select" aria-label="Result" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value as 'clean' | 'findings' })}>
-                  <option value="clean">Clean</option>
-                  <option value="findings">Findings raised</option>
-                </select>
-              </label>
-              <label className="field gv-span">
-                <span className="label">What was checked</span>
-                <input
-                  className="input"
-                  aria-label="What was checked"
-                  placeholder="What was checked (sample, period)"
-                  value={f.note}
-                  onChange={(e) => setF({ ...f, note: e.target.value })}
-                />
-              </label>
-            </div>
-            <ErrorNotice error={act.error} />
-            <div className="gv-form-foot">
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={act.busy}
-                onClick={() => act.run(() => api.recordActAudit({ ...f, companyId: f.companyId || null }), 'Audit recorded.')}
-              >
-                Save audit
-              </button>
-            </div>
-          </div>
+          <AuditForm data={data} />
         </Card>
       )}
+    </div>
+  );
+}
+
+/** Record a workflow audit already done: ACT's Auditor or Director, or the owner (P78). Work given to a team is recorded on the team's list. */
+function AuditForm({ data, onDone }: { data: ActBoard; onDone?: () => void }) {
+  const act = useAction();
+  const [f, setF] = useState({ area: data.rule.areas[0].id, companyId: '', doneOn: '', result: 'clean' as 'clean' | 'findings', note: '' });
+  return (
+    <div className="gv-stack-sm">
+      <div className="gv-form">
+        <label className="field">
+          <span className="label">Workflow audited</span>
+          <select className="select" aria-label="Workflow audited" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
+            {data.rule.areas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Company audited</span>
+          <select className="select" aria-label="Company audited" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+            <option value="">PWVSB or group-wide</option>
+            {data.companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Audited on</span>
+          <input className="input" type="date" value={f.doneOn} onChange={(e) => setF({ ...f, doneOn: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Result</span>
+          <select className="select" aria-label="Result" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value as 'clean' | 'findings' })}>
+            <option value="clean">Clean</option>
+            <option value="findings">Findings raised</option>
+          </select>
+        </label>
+        <label className="field gv-span">
+          <span className="label">What was checked</span>
+          <input
+            className="input"
+            aria-label="What was checked"
+            placeholder="What was checked (sample, period)"
+            value={f.note}
+            onChange={(e) => setF({ ...f, note: e.target.value })}
+          />
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || !f.doneOn || !f.note.trim()}
+          onClick={() =>
+            act.run(() => api.recordActAudit({ ...f, companyId: f.companyId || null }), 'Audit recorded.').then((x) => {
+              if (x) onDone?.();
+            })
+          }
+        >
+          {act.busy ? 'Saving...' : 'Save audit'}
+        </button>
+        {(!f.doneOn || !f.note.trim()) && <span className="help">Give the date and what was checked.</span>}
+      </div>
     </div>
   );
 }
@@ -888,7 +925,7 @@ function ImprovementLine({ r, data }: { r: ActBoard['improvements'][number]; dat
           </div>
         </div>
       )}
-      {!i.approved && data.canApprove && (
+      {r.canApprove && (
         <div className="gv-btns">
           <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.actImprovementStep(i.id, 'approve', {}), 'Approved.')}>
             Approve

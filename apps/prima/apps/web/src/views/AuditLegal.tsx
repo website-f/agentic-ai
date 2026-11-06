@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { CalendarDotsIcon, FileXIcon, ScalesIcon, SignatureIcon } from '@phosphor-icons/react';
+import { CalendarDotsIcon, FileXIcon, PlusIcon, ScalesIcon, SignatureIcon } from '@phosphor-icons/react';
 import { api, type CorpAuditLegal, type LegalMatterInput } from '../api';
 import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
-import { Chip, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
+import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
 import '../styles/gov.css';
 
 /**
@@ -54,23 +54,37 @@ export function AuditLegalKpis({ data }: { data: CorpAuditLegal }) {
 
 export function AuditPanel({ data }: { data: CorpAuditLegal }) {
   const [all, setAll] = useState(false);
+  const [form, setForm] = useState(false);
   const rows = data.audits.filter((a) => all || !a.audit.signed || a.tone !== 'ok');
+  const canAdd = data.auditCompanies.length > 0;
   return (
     <Card
       title="Statutory audit"
       flush
       actions={
-        <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
-          {all ? 'Hide clean signed' : 'Show all'}
-        </button>
+        <>
+          <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
+            {all ? 'Hide clean signed' : 'Show all'}
+          </button>
+          {canAdd && (
+            <button className="btn btn-sm btn-primary" onClick={() => setForm(true)}>
+              <PlusIcon size={16} /> Register an audit
+            </button>
+          )}
+        </>
       }
     >
+      {form && (
+        <Drawer title="Register a statutory audit" sub="The year end, the audit firm and the documents the auditor asked for." onClose={() => setForm(false)}>
+          <NewAudit data={data} onDone={() => setForm(false)} />
+        </Drawer>
+      )}
       <p className="gv-card-intro">
         The audited accounts are signed within {data.rule.auditSignMonths} months of the year end so they can be circulated and lodged in time (Companies Act
         2016 s.258 and s.259). The company hands over each document, the manager agrees each adjustment, then the auditor signs. A qualified, adverse or
         disclaimer opinion is red.
       </p>
-      {!rows.length && <Empty title="Nothing outstanding." />}
+      {!rows.length && <Empty title="Nothing outstanding.">{canAdd ? 'Register the audit for a year end with "Register an audit".' : undefined}</Empty>}
       <ul className="gv-list">
         {rows.map((r) => (
           <li key={r.audit.id}>
@@ -85,7 +99,8 @@ export function AuditPanel({ data }: { data: CorpAuditLegal }) {
 function AuditLine({ r }: { r: AuditRow }) {
   const act = useAction();
   const a = r.audit;
-  const company = r.role === 'manager' || r.role === 'staff';
+  // The company (or the owner) records each step; the manager alone agrees adjustments.
+  const company = r.canWork;
   const [on, setOn] = useState('');
   const [adj, setAdj] = useState({ desc: '', amount: '' });
   const [sign, setSign] = useState<{ opinion: keyof typeof OPINION; ref: string }>({ opinion: 'unmodified', ref: '' });
@@ -272,7 +287,7 @@ function AuditLine({ r }: { r: AuditRow }) {
 export function LegalPanel({ data }: { data: CorpAuditLegal }) {
   const [form, setForm] = useState(false);
   const [all, setAll] = useState(false);
-  const canOpen = data.roles.includes('legal') || data.roles.includes('manager');
+  const canOpen = data.matterCompanies.length > 0;
   const rows = data.matters.filter((m) => all || m.matter.status === 'open');
   return (
     <Card
@@ -284,8 +299,8 @@ export function LegalPanel({ data }: { data: CorpAuditLegal }) {
             {all ? 'Hide closed' : 'Show closed'}
           </button>
           {canOpen && (
-            <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
-              Open a matter
+            <button className="btn btn-sm btn-primary" onClick={() => setForm(true)}>
+              <PlusIcon size={16} /> Open a matter
             </button>
           )}
         </>
@@ -296,9 +311,13 @@ export function LegalPanel({ data }: { data: CorpAuditLegal }) {
           Each company keeps its own lawyers. A missed date is red; a date within {data.rule.legalSoonDays} days, or no update for {data.rule.legalStaleDays}{' '}
           days, needs attention. Fees so far {rm(data.kpis.fees)}.
         </p>
-        {form && <NewMatter data={data} onDone={() => setForm(false)} />}
       </div>
-      {!rows.length && <Empty title="No open matters." />}
+      {form && (
+        <Drawer title="Open a legal matter" sub="A claim, demand, labour case, regulator matter or contract dispute." onClose={() => setForm(false)}>
+          <NewMatter data={data} onDone={() => setForm(false)} />
+        </Drawer>
+      )}
+      {!rows.length && <Empty title="No open matters.">{canOpen ? 'Record a new claim or demand with "Open a matter".' : undefined}</Empty>}
       <ul className="gv-list">
         {rows.map((m) => (
           <li key={m.matter.id}>
@@ -313,7 +332,7 @@ export function LegalPanel({ data }: { data: CorpAuditLegal }) {
 function MatterLine({ r }: { r: MatterRow }) {
   const act = useAction();
   const m = r.matter;
-  const can = (r.role === 'legal' || r.role === 'manager') && m.status === 'open';
+  const can = r.canWork;
   const [mode, setMode] = useState<'' | 'update' | 'fee' | 'close'>('');
   const [f, setF] = useState({ text: '', nextOn: '', nextWhat: '', amount: '', invoiceRef: '', on: '' });
   const label =
@@ -470,7 +489,8 @@ function MatterLine({ r }: { r: MatterRow }) {
 
 function NewMatter({ data, onDone }: { data: CorpAuditLegal; onDone: () => void }) {
   const act = useAction();
-  const [companyId, setCompanyId] = useState(data.companies[0]?.id ?? '');
+  const companies = data.companies.filter((c) => data.matterCompanies.includes(c.id));
+  const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
   const [f, setF] = useState({
     title: '',
     kind: 'DEMAND' as LegalMatterInput['kind'],
@@ -487,7 +507,7 @@ function NewMatter({ data, onDone }: { data: CorpAuditLegal; onDone: () => void 
         <label className="field">
           <span className="label">Company</span>
           <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-            {data.companies.map((c) => (
+            {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -558,8 +578,8 @@ function NewMatter({ data, onDone }: { data: CorpAuditLegal; onDone: () => void 
       <ErrorNotice error={act.error} />
       <div className="gv-form-foot">
         <button
-          className="btn btn-sm btn-primary"
-          disabled={act.busy}
+          className="btn btn-primary"
+          disabled={act.busy || !companyId || !f.title.trim() || !f.counterparty.trim() || !f.lawyer.trim()}
           onClick={() =>
             act
               .run(
@@ -571,9 +591,92 @@ function NewMatter({ data, onDone }: { data: CorpAuditLegal; onDone: () => void 
               })
           }
         >
-          Open matter
+          {act.busy ? 'Saving...' : 'Open matter'}
         </button>
-        <button className="btn btn-sm btn-ghost" onClick={onDone}>
+        <button className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Documents an auditor usually asks for; the form starts with these and the company edits them to match the request. */
+const PBC_DEFAULT = ['Trial balance and general ledger', 'Bank confirmations', 'Fixed asset register', 'Payroll and statutory contributions', 'Debtor ageing and contracts'];
+
+function NewAudit({ data, onDone }: { data: CorpAuditLegal; onDone: () => void }) {
+  const act = useAction();
+  const companies = data.companies.filter((c) => data.auditCompanies.includes(c.id));
+  const [f, setF] = useState({ companyId: companies[0]?.id ?? '', fyEnd: '', auditorFirm: '', fee: '', pbc: PBC_DEFAULT.join('\n') });
+  const pbc = f.pbc
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const missing = !f.companyId
+    ? 'Choose the company.'
+    : !f.fyEnd
+      ? 'Give the financial year end.'
+      : f.auditorFirm.trim().length < 3
+        ? 'Name the audit firm.'
+        : !pbc.length
+          ? 'List at least one document.'
+          : '';
+  return (
+    <div className="gv-stack-sm" aria-label="Register an audit">
+      <label className="field">
+        <span className="label">Company</span>
+        <select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Financial year end</span>
+        <input className="input" type="date" aria-label="Financial year end" value={f.fyEnd} onChange={(e) => setF({ ...f, fyEnd: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Audit firm</span>
+        <input
+          className="input"
+          aria-label="Audit firm"
+          placeholder="The firm appointed"
+          value={f.auditorFirm}
+          onChange={(e) => setF({ ...f, auditorFirm: e.target.value })}
+        />
+        {data.rule.auditorPanel.length > 0 && <span className="help">On the panel: {data.rule.auditorPanel.join(', ')}.</span>}
+      </label>
+      <label className="field">
+        <span className="label">Audit fee in RM (optional)</span>
+        <input className="input" aria-label="Audit fee" inputMode="decimal" value={f.fee} onChange={(e) => setF({ ...f, fee: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Documents the auditor asked for, one per line</span>
+        <textarea className="textarea" aria-label="Documents" rows={6} value={f.pbc} onChange={(e) => setF({ ...f, pbc: e.target.value })} />
+        <span className="help">The first is due 40 days after the year end, each next one a week later.</span>
+      </label>
+      {missing && <p className="help">{missing}</p>}
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !!missing}
+          onClick={() =>
+            act
+              .run(
+                () => api.addCorpAudit(f.companyId, { fyEnd: f.fyEnd, auditorFirm: f.auditorFirm, fee: f.fee.trim() ? Number(f.fee) : null, pbc }),
+                'Audit registered. Record the planning meeting next.',
+              )
+              .then((x) => {
+                if (x) onDone();
+              })
+          }
+        >
+          {act.busy ? 'Saving...' : 'Register audit'}
+        </button>
+        <button className="btn btn-ghost" onClick={onDone}>
           Cancel
         </button>
       </div>

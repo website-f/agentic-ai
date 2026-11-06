@@ -304,6 +304,12 @@ button.bz-tile:focus-visible {
   background: var(--surface);
 }
 
+/* P78: a field's own message when it is missing or wrong, under the field. */
+.bz-field-err {
+  color: var(--crit);
+  font-size: 13px;
+}
+
 .bz-sr {
   position: absolute;
   width: 1px;

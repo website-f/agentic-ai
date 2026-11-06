@@ -89,6 +89,7 @@ function F({ label, children, span }: { label: string; children: ReactNode; span
 export function PurchasingView() {
   const { data, error } = useLoad(() => api.purBoard(), []);
   const [tab, setTab] = useState<Tab>('requests');
+  const [newReq, setNewReq] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -113,6 +114,20 @@ export function PurchasingView() {
       <PageHead
         title="Procurement and Inventory"
         sub="Procurement buys all operational and cleaning equipment for the group, under the Operations General Manager."
+        actions={
+          (canRaise(data.roles) || data.raiseFor.length > 0) && (
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setTab('requests');
+                setNewReq(true);
+              }}
+            >
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              New purchase
+            </button>
+          )
+        }
       >
         <p className="bz-note">
           Every purchase needs {r.quotesNeeded} quotes from approved suppliers and an online or marketplace price check, then the COO and the CEO approve.
@@ -176,7 +191,7 @@ export function PurchasingView() {
           </button>
         ))}
       </div>
-      {tab === 'requests' && <Requests data={data} />}
+      {tab === 'requests' && <Requests data={data} form={newReq} setForm={setNewReq} />}
       {tab === 'suppliers' && <Suppliers data={data} />}
       {tab === 'store' && <Store data={data} />}
     </div>
@@ -193,9 +208,8 @@ const companiesOf = (data: PurBoard) => {
   return [...seen.entries()].map(([id, name]) => ({ id, name }));
 };
 
-function Requests({ data }: { data: PurBoard }) {
+function Requests({ data, form, setForm }: { data: PurBoard; form: boolean; setForm: (open: boolean) => void }) {
   const [all, setAll] = useState(false);
-  const [form, setForm] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
@@ -218,12 +232,6 @@ function Requests({ data }: { data: PurBoard }) {
                 Show finished
               </button>
             </div>
-            {canRaise(data.roles) && (
-              <button className="btn btn-primary" onClick={() => setForm(true)}>
-                <PlusIcon size={16} weight="bold" aria-hidden="true" />
-                New purchase
-              </button>
-            )}
           </>
         }
       >
@@ -252,7 +260,17 @@ function Requests({ data }: { data: PurBoard }) {
             ))}
           </ul>
         ) : (
-          <Empty title={needle ? 'Nothing matches the search.' : 'No open purchases.'} />
+          <Empty
+            title={needle ? 'Nothing matches the search.' : all ? 'No purchases yet.' : 'No open purchases.'}
+            action={
+              !needle && (canRaise(data.roles) || data.raiseFor.length > 0) ? (
+                <button className="btn btn-primary" onClick={() => setForm(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  New purchase
+                </button>
+              ) : undefined
+            }
+          />
         )}
       </Card>
 
@@ -697,7 +715,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
 
 function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
   const act = useAction();
-  const companies = companiesOf(data);
+  const companies = data.raiseFor.length ? data.raiseFor : companiesOf(data);
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<PurCategory>('UNIFORM');
@@ -815,7 +833,7 @@ function Suppliers({ data }: { data: PurBoard }) {
     <>
       <Toolbar
         end={
-          isProc(data.roles) && (
+          (isProc(data.roles) || data.supplierFor.length > 0) && (
             <button className="btn btn-primary" onClick={() => setForm(true)}>
               <PlusIcon size={16} weight="bold" aria-hidden="true" />
               Add supplier
@@ -831,7 +849,19 @@ function Suppliers({ data }: { data: PurBoard }) {
       </p>
       {!data.suppliers.length && (
         <Card>
-          <Empty title="No suppliers yet." />
+          <Empty
+            title="No suppliers yet."
+            action={
+              isProc(data.roles) || data.supplierFor.length > 0 ? (
+                <button className="btn btn-primary" onClick={() => setForm(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  Add supplier
+                </button>
+              ) : undefined
+            }
+          >
+            A purchase needs quotes from approved suppliers, so add them first.
+          </Empty>
         </Card>
       )}
       {notReady.length > 0 && (
@@ -975,7 +1005,7 @@ function SupplierLine({ s: row }: { s: SupRow }) {
 
 function NewSupplier({ data, onDone }: { data: PurBoard; onDone: () => void }) {
   const act = useAction();
-  const companies = companiesOf(data);
+  const companies = data.supplierFor.length ? data.supplierFor : companiesOf(data);
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
   const [f, setF] = useState({
     name: '',
@@ -1195,7 +1225,7 @@ function Store({ data }: { data: PurBoard }) {
               ))}
             </tbody>
           </table>
-          {!data.stock.length && <Empty title="No store items yet." />}
+          {!data.stock.length && <Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
         </div>
       </Card>
       <div className={company ? 'bz-two bz-pu-issue' : 'bz-stack'}>

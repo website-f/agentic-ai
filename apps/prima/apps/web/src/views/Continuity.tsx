@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ArrowsClockwiseIcon, ClipboardTextIcon, HardDrivesIcon, QuestionIcon, WarningOctagonIcon } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon, ClipboardTextIcon, HardDrivesIcon, PlusIcon, QuestionIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { api, type BcmBoard } from '../api';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/gov.css';
 
 /** Today in Malaysia, so a date field starts filled in. */
@@ -21,6 +21,7 @@ const LABEL = { crit: 'Red', unknown: 'Unknown', warn: 'Behind target', ok: 'Tes
 export function ContinuityView() {
   const { data, error } = useLoad(() => api.bcmBoard(), []);
   const [tab, setTab] = useState<'systems' | 'playbooks'>('systems');
+  const [adding, setAdding] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -34,12 +35,20 @@ export function ContinuityView() {
       </div>
     );
   const k = data.kpis;
-  const it = data.role === 'it';
+  // IT, or the owner as master administrator, records backups, restore tests and drills (P78).
+  const it = data.canRecord;
   return (
     <div className="page gv-page">
       <PageHead
         title="Continuity"
         sub={`Every system keeps copies in Malaysia: the cloud, our own server and an emergency server. A copy counts only when it was backed up within its target and restored in a test in the last ${data.rule.restoreTestMonths} months. No record means unknown.`}
+        actions={
+          it ? (
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={16} /> Add system
+            </button>
+          ) : undefined
+        }
       >
         <p className="notice" data-tone="info">
           Prima is not hosted yet, so every entry here is test data. Recovery targets are proposals for IT and Fauzan to confirm.
@@ -70,7 +79,7 @@ export function ContinuityView() {
         <div className="gv-stack">
           {!data.systems.length && (
             <Card>
-              <Empty title="No systems listed." />
+              <Empty title="No systems listed.">{it ? 'List each system to protect with "Add system", then record its backups and restore tests.' : undefined}</Empty>
             </Card>
           )}
           {data.systems.map((s) => (
@@ -79,6 +88,11 @@ export function ContinuityView() {
         </div>
       )}
       {tab === 'playbooks' && <Playbooks data={data} />}
+      {adding && (
+        <Drawer title="Add a system" sub="A system to protect, its recovery targets and where each copy is kept." onClose={() => setAdding(false)}>
+          <NewSystem onDone={() => setAdding(false)} />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -223,7 +237,7 @@ function Playbooks({ data }: { data: BcmBoard }) {
       <ul className="gv-list">
         {data.playbooks.map((p) => (
           <li key={p.playbook.id}>
-            <PlaybookLine p={p} it={data.role === 'it'} />
+            <PlaybookLine p={p} it={data.canRecord} />
           </li>
         ))}
       </ul>
@@ -309,6 +323,89 @@ function PlaybookLine({ p, it }: { p: BcmBoard['playbooks'][number]; it: boolean
         </div>
       )}
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+type CopyDraft = { site: keyof typeof SITE; where: string; inMalaysia: boolean };
+
+function NewSystem({ onDone }: { onDone: () => void }) {
+  const act = useAction();
+  const [f, setF] = useState({ name: '', impact: '', rtoHours: '', rpoHours: '' });
+  const [copies, setCopies] = useState<CopyDraft[]>([
+    { site: 'CLOUD', where: '', inMalaysia: true },
+    { site: 'OWN_SERVER', where: '', inMalaysia: true },
+    { site: 'EMERGENCY', where: '', inMalaysia: true },
+  ]);
+  const used = copies.filter((c) => c.where.trim());
+  const missing =
+    f.name.trim().length < 2
+      ? 'Name the system.'
+      : f.impact.trim().length < 3
+        ? 'Say what breaks when it is down.'
+        : !(Number(f.rtoHours) > 0) || !(Number(f.rpoHours) > 0)
+          ? 'Give both recovery targets in hours.'
+          : !used.length
+            ? 'Describe where at least one copy is kept.'
+            : '';
+  const setCopy = (i: number, c: Partial<CopyDraft>) => setCopies(copies.map((x, k) => (k === i ? { ...x, ...c } : x)));
+  return (
+    <div className="gv-stack-sm" aria-label="Add a system">
+      <label className="field">
+        <span className="label">System</span>
+        <input className="input" aria-label="System" placeholder="For example, payroll" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">What breaks when it is down</span>
+        <input className="input" aria-label="Impact" value={f.impact} onChange={(e) => setF({ ...f, impact: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Back working within (hours)</span>
+        <input className="input" aria-label="Recovery time in hours" inputMode="decimal" value={f.rtoHours} onChange={(e) => setF({ ...f, rtoHours: e.target.value })} />
+      </label>
+      <label className="field">
+        <span className="label">Most data we may lose (hours)</span>
+        <input className="input" aria-label="Data loss in hours" inputMode="decimal" value={f.rpoHours} onChange={(e) => setF({ ...f, rpoHours: e.target.value })} />
+      </label>
+      {copies.map((c, i) => (
+        <div key={c.site} className="field">
+          <span className="label">{SITE[c.site]}</span>
+          <input
+            className="input"
+            aria-label={`${SITE[c.site]}: where`}
+            placeholder="Where it is kept (leave empty if there is none)"
+            value={c.where}
+            onChange={(e) => setCopy(i, { where: e.target.value })}
+          />
+          <label className="small">
+            <input type="checkbox" checked={c.inMalaysia} onChange={(e) => setCopy(i, { inMalaysia: e.target.checked })} /> Kept in Malaysia
+          </label>
+        </div>
+      ))}
+      <p className="help">New copies show as unknown until a backup and a restore test are recorded.</p>
+      {missing && <p className="help">{missing}</p>}
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !!missing}
+          onClick={() =>
+            act
+              .run(
+                () => api.addBcmSystem({ name: f.name, impact: f.impact, rtoHours: Number(f.rtoHours), rpoHours: Number(f.rpoHours), copies: used }),
+                'System added. Record its backups and restore tests next.',
+              )
+              .then((x) => {
+                if (x) onDone();
+              })
+          }
+        >
+          {act.busy ? 'Saving...' : 'Add system'}
+        </button>
+        <button className="btn btn-ghost" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

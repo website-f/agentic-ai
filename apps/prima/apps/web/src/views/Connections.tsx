@@ -10,7 +10,6 @@ import { SharePointRequest } from '../connections/sharepoint/request';
 import { sharePointAdapter } from '../connections/sharepoint/adapter';
 import { m365Client } from '../connections/m365/client';
 import { M365ConnectionsPanel } from '../connections/m365/panel';
-import { OfficeConnections } from './OfficeConnections';
 
 const titles = { mail: 'Mail', sharepoint: 'SharePoint', powerbi: 'Power BI' };
 export function ConnectionCard({ serviceId, userId, adapter }: { serviceId: ServiceId; userId: string; adapter?: Adapter }) {
@@ -54,11 +53,6 @@ export function ConnectionCard({ serviceId, userId, adapter }: { serviceId: Serv
 }
 /** SharePoint metadata adapter plus existing selected-message Outlook capability; never register Mail.Send. */
 export function ConnectionsView({ userId }: { userId: string }) {
-  // P78: inside the office, Microsoft 365 is the office's connection (one system, one sign-in).
-  if ((api as { office?: boolean }).office) return <OfficeConnections />;
-  return <PrimaConnections userId={userId} />;
-}
-function PrimaConnections({ userId }: { userId: string }) {
   const registry = useMemo(() => createRegistry([sharePointAdapter(api)]), [userId]);
   const selectedMail = useMemo(()=>jobEmailClient((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
   const m365 = useMemo(()=>m365Client((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
