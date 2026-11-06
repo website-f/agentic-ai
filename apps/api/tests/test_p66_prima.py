@@ -7,6 +7,7 @@ owner links them in one click; nobody runs a script."""
 import hashlib
 import hmac
 import json
+import sys
 from pathlib import Path
 
 import httpx
@@ -525,3 +526,40 @@ async def test_only_the_owner_sets_the_branch_companies(client, prima_on):
             await db.scalars(select(AuditLog).where(AuditLog.action == "prima.companies"))
         ).all()
         assert len(rows) == 1 and rows[0].after == {bid: "co-lain"}
+
+
+async def test_the_owner_always_opens_prima_as_its_top_record(client, prima_on, monkeypatch):
+    """P78: a link made before the owner rule (or before Prima was reinstalled) opened Prima as
+    an ordinary staff record with no access. The owner is moved to Prima's top record once."""
+    await office(client)
+    await _microsoft("owner@example.com", OWNER_OID)
+    owner_id, ws = await _ids("owner@example.com")
+    async with SessionLocal() as db:
+        db.add(PrimaLink(workspace_id=ws, user_id=owner_id, prima_user_id="u-ahmad-2",
+                         prima_name="Ahmad", how="name", linked_by="auto:name"))  # fmt: skip
+        await db.commit()
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "STAFF",
+        [
+            *STAFF,
+            {
+                "id": "u-ceo",
+                "name": "Fauzan",
+                "title": "CEO",
+                "role": "director",
+                "entraOid": None,
+                "canSignIn": True,
+                "top": "ceo",
+            },
+        ],  # fmt: skip
+    )
+    r = await client.get("/api/prima/api/leave")
+    assert r.json()["as"] == "u-ceo"
+    async with SessionLocal() as db:
+        link = await db.get(PrimaLink, (ws, owner_id))
+        assert (link.prima_user_id, link.how) == ("u-ceo", "owner")
+    # Once moved, no more checks: the next call goes straight through.
+    n = len(prima_on)
+    await client.get("/api/prima/api/leave")
+    assert len(prima_on) == n + 1

@@ -79,6 +79,21 @@ export class HttpApi implements Api {
     return (ms?.account() ? await ms.token() : null) ?? this.token;
   }
 
+  /**
+   * P78: the "receipt-checked" IT and HR screens, inside the office. The office signs every call for the person signed
+   * in (there is no Microsoft token in the browser), so the same checks run over that transport: the person is still
+   * the one the screen opened for, and the receipt names them and the service.
+   */
+  private async officeStrict(expectedUserId: string, method: 'GET' | 'POST', path: string, body: unknown, serviceId: string | null, label: string): Promise<unknown> {
+    if (!expectedUserId) throw new ApiError(`Reopen ${label}.`, 401, []);
+    const me = await this.call<Me>('GET', '/me');
+    if (me.user.id !== expectedUserId || me.user.integration) throw new ApiError('Your identity no longer matches this screen.', 401, []);
+    const result = await this.call<{ userId?: string; serviceId?: string } | null>(method, path, method === 'GET' ? undefined : body);
+    if (serviceId && (!result || result.userId !== expectedUserId || result.serviceId !== serviceId))
+      throw new ApiError(`${label} receipt identity did not match.`, 409, []);
+    return result;
+  }
+
   async signInOptions() {
     const { config } = await this.ready();
     return { microsoft: !!config.microsoft, devLogin: config.devLogin, office: this.office };
@@ -197,6 +212,7 @@ export class HttpApi implements Api {
 
   sharePointRequestPreview(url: string, signal?: AbortSignal) { return this.call<import('./connections').ConnectionRequestPreview>('POST', '/connections/sharepoint/requests/preview', {url}, signal); }
   async sharePointRequest(url: string, requestId: string, expectedUserId: string, signal?: AbortSignal): Promise<import('./connections').ConnectionRequestReceipt> {
+    if (this.office) return (await this.officeStrict(expectedUserId, 'POST', '/connections/sharepoint/requests', { url, requestId }, null, 'setup')) as import('./connections').ConnectionRequestReceipt;
     const {ms}=await this.ready();const account=()=>ms?.account()?.homeAccountId??null;const selected=account();
     const token=await this.bearer();if(!token||!expectedUserId||selected!==account()||signal?.aborted)throw new ApiError('Sign-in changed. Reopen setup.',401,[]);
     const headers={'content-type':'application/json',authorization:`Bearer ${token}`};
@@ -1092,6 +1108,10 @@ export class HttpApi implements Api {
     return this.call<unknown>('POST', `/it/tickets/${encodeURIComponent(id)}/${action}`, { note });
   }
   async itGuidanceBoard(expectedUserId: string): Promise<{userId:string;observedAt:string;board:Awaited<ReturnType<Api['itBoard']>>}> {
+    if (this.office) {
+      const board = (await this.officeStrict(expectedUserId, 'GET', '/it', undefined, null, 'your workflow guide')) as Awaited<ReturnType<Api['itBoard']>>;
+      return { userId: expectedUserId, observedAt: new Date().toISOString(), board };
+    }
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token,token=await this.bearer();
@@ -1106,6 +1126,7 @@ export class HttpApi implements Api {
   }
   async itCleanupAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['cleanupBoard','cleanupReceipt','cleanupAbandon','cleanupNominate','cleanupDecide','cleanupRestore'].includes(action)) throw new ApiError('Unsupported Controlled cleanup action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'it-cleanup', 'Controlled cleanup');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;
@@ -1124,6 +1145,7 @@ export class HttpApi implements Api {
   }
   async itMetricsAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['metricsChoices','metricsBoard','metricsTargets','metricsRecovery','metricsOpen','metricsCommand','metricsSync','metricsReconcile','metricsReviewTarget','metricsReceipt','metricsAbandon'].includes(action)) throw new ApiError('Unsupported Workflow timing action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'it-workflow-metrics', 'Workflow timing');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;
@@ -1142,6 +1164,7 @@ export class HttpApi implements Api {
   }
   async itProcurementAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['procurementBoard','procurementReceipt','procurementAbandon','issuePurchaseOrder','recordPurchaseReceipt','checkPurchaseInvoice','requestPurchaseAdvance','decidePurchaseAdvance','recordPurchasePayment'].includes(action)) throw new ApiError('Unsupported Procurement action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'it-procurement', 'Procurement');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;
@@ -1160,6 +1183,7 @@ export class HttpApi implements Api {
   }
   async itFinanceAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['rentalCorrectionBoard','rentalCorrectionReceipt','rentalCorrectionAbandon','rentalCorrectionPropose','rentalCorrectionManagerReview','rentalCorrectionFinanceReview','rentalCorrectionCancel','rentalCorrectionRecordPayment'].includes(action)) throw new ApiError('Unsupported Rental correction action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'it-rental-correction', 'Rental correction');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;
@@ -1178,6 +1202,7 @@ export class HttpApi implements Api {
   }
   async hrItAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['hrItBoard','hrItReceipt','hrItAbandon','hrItCreate','hrItEditScope','hrItSubmit','hrItCancel','hrItTechnical','hrItCollectDetails','hrItSelfDetails','hrItReviewScope','hrItReviewHandoff','hrItRequestDelegation','hrItDecideDelegation'].includes(action)) throw new ApiError('Unsupported HR/IT coordination action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'hr-it-intake', 'HR/IT coordination');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;
@@ -1196,6 +1221,7 @@ export class HttpApi implements Api {
   }
   async itManualAct(expectedUserId: string, action: string, input: Record<string, unknown>): Promise<unknown> {
     if (!['correctionBoard','correctAsset','correctSystem','correctIntake','manualBoard','manualReceipt','manualAbandon','createIntake','createSystem','createGuidance','updateGuidance','createAsset','operationalBoard','operationalReceipt','operationalAbandon','setRentalRates','prepareRentalBill','recordRentalHistory','recordAssetInspection'].includes(action)) throw new ApiError('Unsupported manual IT action.',400,[]);
+    if (this.office) return this.officeStrict(expectedUserId, 'POST', `/it/act/${action}`, input, 'it-manual', 'Manual IT');
     const {ms}=await this.ready();
     const account=()=>{const a=ms?.account();return a ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
     const selected=account(),devToken=this.token;

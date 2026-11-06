@@ -310,8 +310,13 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
             code="microsoft_needed",
         )
     link = await db.get(PrimaLink, (workspace_id, user_id))
-    if link is not None:
+    if link is not None and (m.role != "owner" or link.how == "owner"):
         return link
+    if link is not None:
+        # P78: the owner runs the company, so they always open Prima as its top record (CEO,
+        # else COO). A link made before that rule, or before Prima was reinstalled, would open
+        # it as an ordinary staff record with no access: moved to the top record once.
+        return await _owner_to_top(db, link)
     records = matchable(await staff())
     persons = await people.people(db, workspace_id)
     rid = people.suggestions(persons, records).get(user_id)
@@ -357,6 +362,44 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
         target=user_id,
         note=f"Linked to Prima record {record.id} by their "
         + ("Microsoft account" if how == "microsoft" else "name"),
+    )
+    await db.commit()
+    return link
+
+
+async def _owner_to_top(db: AsyncSession, link: PrimaLink) -> PrimaLink:
+    """P78: the owner's link, moved to Prima's top record (CEO, else COO) when it is not on one.
+    Left as it is when Prima has no top record or another person already holds it (the owner
+    can move it on the Prima page)."""
+    records = await staff()
+    tops = sorted((r for r in records if r.top), key=lambda r: 0 if r.top == "ceo" else 1)
+    if not tops:
+        return link
+    top = tops[0]
+    if link.prima_user_id == top.id:
+        link.how = "owner"
+        await db.commit()
+        return link
+    holder = await db.scalar(
+        select(PrimaLink).where(
+            PrimaLink.workspace_id == link.workspace_id,
+            PrimaLink.prima_user_id == top.id,
+        )
+    )
+    if holder is not None:
+        return link
+    before = link.prima_user_id
+    link.prima_user_id = top.id
+    link.prima_name = top.name[:200]
+    link.how = "owner"
+    link.linked_by = "auto:owner"
+    await audit.record(
+        db,
+        link.workspace_id,
+        "system:prima",
+        "prima.link",
+        target=link.user_id,
+        note=f"The owner opens Prima as its top record {top.id} (was {before})",
     )
     await db.commit()
     return link

@@ -134,6 +134,17 @@ export function isGroupLeader(user: User): boolean {
   return user.role === 'pwvsb_officer' && (user.opsTier === 'ceo' || user.opsTier === 'coo' || !!user.leadership || isActHead(user));
 }
 
+/**
+ * P78 (Agentic Office): the owner, signed in as Prima's CEO record, is the master administrator of every module
+ * ("the CEO is the owner and master administrator of every system", PILOT-IT). Where a module lets a department
+ * enter or start a record (a maker step), the owner may enter it too, for any company. Checks, approvals and
+ * payments keep their own people, and nobody ever approves a record they entered themselves (maker-checker).
+ * Every entry is in the audit trail under the owner's name.
+ */
+export function isOwnerAdmin(user: User): boolean {
+  return !user.integration && user.opsTier === 'ceo' && (user.role === 'director' || user.role === 'pwvsb_officer');
+}
+
 /** The head of ACT (Audit, Compliance and Transformation) sees everything, to audit it (Fauzan, 28 Oct 2026). */
 export function isActHead(user: User): boolean {
   return user.role === 'pwvsb_officer' && user.department === 'audit' && user.actRole === 'lead';
