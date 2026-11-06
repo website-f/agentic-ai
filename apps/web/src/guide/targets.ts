@@ -165,7 +165,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   {
     id: "library", route: "/library", title: "Guidelines", group: "Knowledge", states: [],
-    targets: [t("library.upload", "Upload guidelines"), t("library.sources", "Sources and status"), t("library.search", "Try a search")],
+    targets: [t("library.upload", "Upload guidelines"), t("library.sources", "Sources and status"), t("library.search", "Try a search"), t("library.sharepoint", "SharePoint and OneDrive")],
   },
   {
     id: "brain", route: "/brain", title: "Brain", group: "Knowledge", states: [],

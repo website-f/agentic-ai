@@ -324,6 +324,9 @@ class PassageOut(BaseModel):
     similarity: float
     strong: bool
     via: list[str]
+    # P80: a SharePoint passage's file link and its place in the linked folder.
+    url: str | None = None
+    path: str | None = None
 
 
 @router.get("/api/library/search")
@@ -348,6 +351,8 @@ async def search_library(
             similarity=h.similarity,
             strong=h.strong,
             via=h.via,
+            url=h.url,
+            path=h.path,
         )
         for i, h in enumerate(hits, 1)
     ]

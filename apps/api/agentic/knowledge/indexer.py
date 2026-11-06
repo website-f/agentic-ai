@@ -127,6 +127,30 @@ async def _write(
     return len(passages)
 
 
+async def index_text(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    kind: str,
+    source_id: str,
+    branch_id: str | None,
+    title: str,
+    body: str,
+) -> int:
+    """P80: (re)build the passages of a source whose text is not kept anywhere else (a
+    SharePoint file: read in memory, indexed, dropped). The caller commits."""
+    return await _write(
+        db,
+        workspace_id=workspace_id,
+        kind=kind,
+        source_id=source_id,
+        branch_id=branch_id,
+        department_id=None,
+        title=title,
+        body=body,
+    )
+
+
 def file_title(f: DocFile) -> str:
     return (f.title or f.name or "Untitled file").strip()
 
@@ -266,6 +290,12 @@ async def reindex_workspace(db: AsyncSession, workspace_id: str) -> dict[str, in
         KnowledgeChunk.workspace_id == workspace_id
     )
     known = {("file", i) for i in file_ids} | {("sop", i) for i in sop_ids}
+    # P80: a linked SharePoint file's passages are rebuilt by its folder's sync (the text is
+    # not kept here to rebuild them from); only those of a file no longer linked go.
+    from ..sharepoint.models import LinkedFile
+
+    linked = await db.scalars(select(LinkedFile.id).where(LinkedFile.workspace_id == workspace_id))
+    known |= {("sharepoint", i) for i in linked.all()}
     for kind, sid in set((await db.execute(stale.distinct())).all()) - known:
         await remove(db, kind, sid)
     await db.commit()

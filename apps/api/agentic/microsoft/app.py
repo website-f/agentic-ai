@@ -39,6 +39,21 @@ DELEGATED_SCOPES = (
     " Chat.Read ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All"
 )
 TEAMS_SCOPES = ("Chat.Read", "ChatMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All")
+# P80: read (never write) the SharePoint and OneDrive files a person can already open, so the
+# Library can learn from a folder they link. Never part of everyone's sign-in (a tenant that
+# lets users consent only to low-risk permissions would stop every sign-in at "needs admin
+# approval"): asked for only by the Library's "Reconnect Microsoft 365 to allow SharePoint",
+# and from then on in that person's own sign-ins and refreshes (auth.scopes_for,
+# auth.refresh_scopes).
+FILES_SCOPES = ("Files.Read.All", "Sites.Read.All")
+
+
+def with_files(scopes: str) -> str:
+    """The scopes plus the file-reading ones (once)."""
+    have = scopes.split()
+    return " ".join(have + [s for s in FILES_SCOPES if s not in have])
+
+
 # P63: the posts in the Teams channels a person belongs to. Only an admin may consent to it,
 # so it is asked for only once the Channels page says an admin granted it (asking for it
 # before would stop everyone's sign-in at "needs admin approval").

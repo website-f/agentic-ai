@@ -1064,11 +1064,13 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Lihat setiap sumber dan sama ada ia sudah sedia (**Diindeks**) atau masih dibaca.",
       "Cuba carian seperti yang dibuat oleh ejen, dan lihat petikan serta rujukan yang diperolehnya.",
       "Keluarkan fail daripada perpustakaan; fail itu kekal dalam Fail.",
+      "Sambungkan folder SharePoint atau OneDrive dengan menampal pautannya. Fail kekal dalam SharePoint; hanya teks yang boleh dicari disimpan, dan ia disegerakkan setiap beberapa jam.",
     ],
     spots: {
       "library.upload": "Pilih untuk siapa, kemudian lepaskan fail.",
       "library.sources": "Setiap garis panduan dan SOP, dan sama ada ia sudah sedia.",
       "library.search": "Tanya soalan seperti yang ditanya oleh ejen.",
+      "library.sharepoint": "Folder yang dipautkan dari SharePoint atau OneDrive, statusnya dan Segerak sekarang.",
     },
     howto: [
       {
@@ -1083,6 +1085,14 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         steps: [
           s("Taip soalan dalam **Cuba cari** dan klik **Cari**.", "library.search"),
           s("Setiap hasil menunjukkan halaman, tajuk dan rujukan. Padanan yang kuat ditanda **Ejen dapat ini tanpa diminta**."),
+        ],
+      },
+      {
+        title: "Sambungkan folder SharePoint",
+        steps: [
+          s("Dalam SharePoint atau OneDrive, salin pautan folder itu dengan **Share** atau **Copy link**."),
+          s("Tampalkannya dalam **SharePoint dan OneDrive** dan klik **Semak pautan**.", "library.sharepoint"),
+          s("Semak nama folder dan berapa fail akan dibaca, pilih **Untuk siapa**, kemudian klik **Sambung**.", "library.sharepoint"),
         ],
       },
     ],

@@ -133,6 +133,10 @@ def _page_slice(text: str, pages: str) -> str:
 
 
 async def _read_file(ctx: ToolContext, args: dict[str, Any]) -> str:
+    if str(args.get("file_id") or "").startswith("lf_"):  # P80: a SharePoint file (Library)
+        from ..sharepoint.tools import read_linked
+
+        return await read_linked(ctx, str(args["file_id"]), str(args.get("pages") or ""))
     f = await _file(ctx, str(args.get("file_id") or ""))
     if f is None:
         return "Error: no such file for you. Use list_files to see the ids."

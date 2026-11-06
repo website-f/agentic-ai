@@ -153,7 +153,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   {
     id: "library", route: "/library", title: "Garis panduan", group: "Knowledge", states: [],
-    targets: [t("library.upload", "Muat naik garis panduan"), t("library.sources", "Sumber dan status"), t("library.search", "Cuba cari")],
+    targets: [t("library.upload", "Muat naik garis panduan"), t("library.sources", "Sumber dan status"), t("library.search", "Cuba cari"), t("library.sharepoint", "SharePoint dan OneDrive")],
   },
   {
     id: "brain", route: "/brain", title: "Brain", group: "Knowledge", states: [],

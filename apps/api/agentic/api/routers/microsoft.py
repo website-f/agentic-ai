@@ -188,9 +188,16 @@ async def microsoft_configure(
 # ---------------------------------------------------------------- a person's own Outlook
 
 
+class ConnectIn(BaseModel):
+    # P80: also allow reading SharePoint / OneDrive files (the Library's "Reconnect Microsoft
+    # 365 to allow SharePoint"). Never asked for otherwise.
+    with_files: bool = False
+
+
 @router.post(f"{BASE}/connect")
 async def microsoft_connect(
     request: Request,
+    body: ConnectIn | None = None,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -206,7 +213,12 @@ async def microsoft_connect(
     base = _base(request)
     try:
         url = await auth.auth_url(
-            db, principal.workspace_id, principal.user.id, principal.session_id, base
+            db,
+            principal.workspace_id,
+            principal.user.id,
+            principal.session_id,
+            base,
+            with_files=bool(body and body.with_files),
         )
     except NotConfigured as e:
         raise api_error(status.HTTP_409_CONFLICT, "not_configured", str(e)) from e
@@ -288,11 +300,27 @@ async def microsoft_callback(
     if await signin.is_sign_in(state):  # P63: Sign in with Microsoft, not a connection
         return await _sign_in(request, background, db, state, code, error, error_description)
     home = await _home(db, principal)
+    files = await auth.started_with_files(state)
+    if files:  # P80: the Library's SharePoint reconnect comes back to the Library
+        home = "/library"
 
     def back(result: str, msg: str = "") -> RedirectResponse:
         q = urllib.parse.urlencode({"ms": result, **({"msg": msg[:200]} if msg else {})})
         return RedirectResponse(f"{home}?{q}", status_code=303)
 
+    if error and files:
+        # P80: file reading refused (often "needs admin approval"). Nothing else changed: the
+        # person's existing connection, sign-in and mail keep working as they were.
+        await auth.drop_state(state)
+        return back(
+            "error",
+            tr(
+                "SharePoint reading was not allowed. Your Microsoft 365 admin must grant "
+                "Files.Read.All and Sites.Read.All to this app (Azure portal > App "
+                "registrations > API permissions > Grant admin consent), then try again. Your "
+                "sign-in and mail keep working."
+            ),
+        )
     if error:
         if error == "access_denied":
             return back("error", tr("Microsoft sign-in was cancelled."))
@@ -333,6 +361,7 @@ async def microsoft_account(
             "calendar_ok": False,
             "teams_ok": False,
             "channels_ok": False,
+            "files_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -347,6 +376,9 @@ async def microsoft_account(
         # P52: Teams needs a reconnect for connections made before Teams was added.
         "teams_ok": auth.has_scope(acct.scopes, "Chat.Read"),
         "channels_ok": auth.has_scope(acct.scopes, app.CHANNEL_SCOPE),  # P63: channel posts
+        # P80: SharePoint / OneDrive reading for the Library needs a reconnect for connections
+        # made before it was added.
+        "files_ok": auth.has_scope(acct.scopes, app.FILES_SCOPES[0]),
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,

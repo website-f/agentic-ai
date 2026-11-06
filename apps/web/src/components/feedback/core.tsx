@@ -42,6 +42,15 @@ export interface FeedbackPage {
 
 type View = "shot" | "general" | "rules" | "mine" | "tour";
 
+/** P80: what a host page's own launcher opens (the stand-alone widget's host mode, Prima). */
+export type FeedbackPanel = "feedback" | "guide";
+export interface FeedbackControl {
+  open(panel: FeedbackPanel): void;
+  close(): void;
+  isOpen(): boolean;
+}
+const panelOf = (v: View | null): FeedbackPanel | null => (v === null ? null : v === "rules" || v === "tour" ? "guide" : "feedback");
+
 const ITEMS: { view: View; icon: Icon; label: string; hint: string }[] = [
   { view: "shot", icon: CameraIcon, label: msg("Mark up this screen"), hint: msg("Screenshot, then circle what you mean") },
   { view: "general", icon: ChatTeardropTextIcon, label: msg("Write feedback"), hint: msg("No screenshot, just tell us") },
@@ -94,10 +103,18 @@ export function Feedback({
   page: pageOf,
   rules: rulesPanel,
   onOpen,
+  hosted = false,
+  control,
+  onPanel,
 }: {
   page: () => FeedbackPage;
   rules: (p: RulesProps) => ReactNode;
   onOpen?: () => void;
+  /** P80: the page has its own launcher: no floating button here; it opens the panels through `control`. */
+  hosted?: boolean;
+  control?: (c: FeedbackControl | null) => void;
+  /** P80: which panel is open now (null: none), for the host page's launcher. */
+  onPanel?: (panel: FeedbackPanel | null) => void;
 }) {
   const t = useT();
   const lang = useLang((s) => s.lang);
@@ -122,9 +139,11 @@ export function Feedback({
   };
 
   const where = useCallback((): Origin => {
+    // P80: hosted, the panels grow out of the host's launcher in the bottom right corner.
+    if (hosted) return { x: window.innerWidth - 44, y: window.innerHeight - 44 };
     const r = button.current?.getBoundingClientRect();
     return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth - 36, y: window.innerHeight * y };
-  }, [y]);
+  }, [y, hosted]);
 
   // Escape folds the drops back.
   useEffect(() => {
@@ -307,6 +326,31 @@ export function Feedback({
 
   const closeView = useCallback(() => setView(null), []);
   const backToGuide = useCallback(() => setView("rules"), []);
+
+  // P80: the host's launcher opens and closes the panels; it hears which one is open.
+  const viewNow = useRef<View | null>(view);
+  useEffect(() => {
+    viewNow.current = view;
+    onPanel?.(panelOf(view));
+  }, [view, onPanel]);
+  const onOpenRef = useRef(onOpen);
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+  }, [onOpen]);
+  useEffect(() => {
+    if (!control) return;
+    control({
+      open: (panel) => {
+        onOpenRef.current?.();
+        setOpen(false);
+        setOrigin(where());
+        setView(panel === "guide" ? "rules" : "general");
+      },
+      close: () => setView(null),
+      isOpen: () => viewNow.current !== null,
+    });
+    return () => control(null);
+  }, [control, where]);
   // Free the picture's memory once the circle has shrunk away.
   useEffect(() => {
     if (view === "shot" || !shot) return;
@@ -327,6 +371,8 @@ export function Feedback({
 
   return (
     <>
+      {hosted ? null : (
+      <>
       {/* The goo: the drops melt into the button and out of it. */}
       <svg aria-hidden width="0" height="0" className="pointer-events-none fixed" data-feedback-ignore="">
         <defs>
@@ -449,6 +495,8 @@ export function Feedback({
           {!open ? <span aria-hidden className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-accent/30 [animation-duration:2.6s] [animation-iteration-count:3]" /> : null}
         </button>
       </div>
+      </>
+      )}
 
       {busy ? (
         <div data-feedback-ignore="" className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+1rem)] z-[70] flex justify-center">

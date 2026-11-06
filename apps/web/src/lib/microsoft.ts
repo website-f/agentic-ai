@@ -63,6 +63,8 @@ export interface MicrosoftAccount {
   teams_ok?: boolean;
   /** P63: the connection may read Teams channel posts (an admin turned it on, then a reconnect). */
   channels_ok?: boolean;
+  /** P80: the connection may read SharePoint / OneDrive files for the Library (else reconnect once). */
+  files_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */
@@ -175,6 +177,9 @@ export const saveMicrosoftConfig = (body: MicrosoftConfigIn) => {
 
 /** Starts Microsoft sign-in for the person's own Outlook; the page then goes to `url`. */
 export const startMicrosoftConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST");
+
+/** P80: the same, also asking to read SharePoint / OneDrive files (only the Library asks this). */
+export const startSharePointConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_files: true });
 
 export const getMicrosoftAccount = () => api<MicrosoftAccount>(`${MS_PATH}/account`);
 

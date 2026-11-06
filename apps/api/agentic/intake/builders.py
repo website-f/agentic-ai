@@ -1052,12 +1052,20 @@ async def build_sop(
     workspace_id: str | None = None,
     progress: Progress | None = None,
     focus: str | None = None,
+    linked_ids: list[str] | None = None,
 ) -> SOP:
     """A draft SOP written from the documents. Scope: the department when given, else the
     company (branch), else the library (only agents it is attached to). With a focus, only
     that procedure of the documents is written (its section when a heading names it)."""
     focus = " ".join((focus or "").split())[:300] or None
-    files = await load_files(db, file_ids, workspace_id)
+    if linked_ids and workspace_id:
+        # P80: SharePoint files of the Library (their text from their passages; the files
+        # themselves stay in SharePoint).
+        from ..sharepoint import library as linked
+
+        files: list[Any] = await linked.as_documents(db, workspace_id, linked_ids)
+    else:
+        files = await load_files(db, file_ids, workspace_id)
     ws = files[0].workspace_id
     scope, scope_id = await _sop_scope(db, ws, branch_id, department_id)
     text, lang, removed_in, narrowed = _source(files, focus)
@@ -1081,6 +1089,8 @@ async def build_sop(
         )
     raw = await _ask(db, ws, system, user, task="builders.sop", max_tokens=8000, accept=_usable_sop)
     title, body, removed_out = finish_sop(raw, files, lang, focus if narrowed else None)
+    if linked_ids and workspace_id:
+        body = linked.cite_links(body, files)
     s = SOP(
         workspace_id=ws,
         scope=scope,
@@ -1089,7 +1099,7 @@ async def build_sop(
         body=body,
         updated_by=actor,
         status="draft",
-        source_file_ids=[f.id for f in files],
+        source_file_ids=[f.id for f in files if isinstance(f, DocFile)],
     )
     db.add(s)
     await db.flush()
@@ -1859,6 +1869,7 @@ async def new_job(
     batch_id: str | None = None,
     sid: str | None = None,
     focus: str | None = None,
+    linked_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     job = {
         "id": f"bj_{secrets.token_hex(8)}",
@@ -1871,6 +1882,7 @@ async def new_job(
         "batch_id": batch_id,
         "sid": sid,
         "focus": focus,
+        "linked_ids": linked_ids or [],  # P80: SharePoint files of the Library
         "status": "running",
         "detail": error_of(BuildError(Msg("Waiting to start"))),
         "built_id": None,
@@ -1919,6 +1931,7 @@ async def build(
     actor: str,
     progress: Progress | None = None,
     focus: str | None = None,
+    linked_ids: list[str] | None = None,
 ) -> SOP | Workflow:
     if what == "sop":
         return await build_sop(
@@ -1930,6 +1943,7 @@ async def build(
             workspace_id=workspace_id,
             progress=progress,
             focus=focus,
+            linked_ids=linked_ids,
         )
     return await build_workflow(
         db,
@@ -1964,6 +1978,7 @@ async def run_job(db: AsyncSession, job_id: str) -> dict[str, Any] | None:
             actor=job["actor"],
             progress=progress,
             focus=job.get("focus"),
+            linked_ids=job.get("linked_ids") or None,
         )
     except (BuildError, gateway.GatewayUnavailable) as e:
         await db.rollback()

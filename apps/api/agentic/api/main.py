@@ -348,6 +348,11 @@ from .routers import builders as builders_router  # noqa: E402
 
 app.include_router(builders_router.router)
 
+# P80: SharePoint / OneDrive folders in the Library (only their searchable text is kept).
+from .routers import linked_sources as linked_sources_router  # noqa: E402
+
+app.include_router(linked_sources_router.router)
+
 # P24: company documents intake (zip / many files / one file); raw bytes like /api/files.
 from .routers import intake as intake_router  # noqa: E402
 
@@ -470,6 +475,12 @@ app.include_router(erasure_router.router)
 from .routers import prima as prima_router  # noqa: E402
 
 app.include_router(prima_router.router)
+
+# P80: Prima's assistant (Arisha) runs on the office's AI: one signed model turn at a time,
+# from Prima's API only (/internal/, never served to the outside).
+from .routers import prima_model as prima_model_router  # noqa: E402
+
+app.include_router(prima_model_router.router)
 
 # P73: feedback from the floating button on every page, read by the developer.
 from .routers import feedback as feedback_router  # noqa: E402

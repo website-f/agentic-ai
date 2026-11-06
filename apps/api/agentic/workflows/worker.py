@@ -55,6 +55,7 @@ from .intake_activities import intake_fail, intake_finish, intake_pending, intak
 from .intake_workflows import IntakeWorkflow
 from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
+from .linked_workflows import LinkedSyncTickWorkflow, LinkedSyncWorkflow, linked_sync, linked_tick
 from .mail_workflows import MailPendingWorkflow, MailSyncTickWorkflow, mail_pending, mail_tick
 from .minutes_activities import (
     minutes_fail,
@@ -115,6 +116,8 @@ WORKFLOWS = [
     MoneyRemindersWorkflow,
     ExportWorkspaceWorkflow,
     EraseWorkspaceWorkflow,
+    LinkedSyncWorkflow,
+    LinkedSyncTickWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -166,6 +169,8 @@ ACTIVITIES = [
     export_build,
     erase_step,
     erase_failed,
+    linked_sync,
+    linked_tick,
 ]
 
 
@@ -186,6 +191,8 @@ async def ensure_schedules(client: Client) -> None:
         ("mail-sync", MailSyncTickWorkflow.run, timedelta(minutes=1)),
         # P35: payment-reminder drafts for receivables on their reminder days (crm/reminders).
         ("money-reminders", MoneyRemindersWorkflow.run, timedelta(hours=1)),
+        # P80: linked SharePoint / OneDrive folders, each synced every few hours.
+        ("linked-sync", LinkedSyncTickWorkflow.run, timedelta(minutes=30)),
     ]
     for schedule_id, run, every in jobs:
         try:

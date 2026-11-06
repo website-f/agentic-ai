@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { arishaMayPrepareFinance, RECORD_KINDS, type Company, type User } from '@prima/core';
+import { useEffect, useRef, useState } from 'react';
+import { arishaMayPrepareFinance, arishaPilotAllowed, RECORD_KINDS, type Company, type User } from '@prima/core';
 import { api, type Api } from './api';
 
 type Review = Awaited<ReturnType<Api['arishaDrafts']>>[number];
@@ -17,6 +17,15 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
   const [note, setNote] = useState('');
   const generation = useRef(0);
   const inFlight = useRef(false);
+  // P80: the leaders who prepare drafts always see the queue; anyone else only when a draft waits for their review.
+  const leader = arishaPilotAllowed(user);
+  const [visible, setVisible] = useState(leader);
+  useEffect(() => {
+    if (leader) return;
+    let live = true;
+    api.arishaDrafts().then((r) => { if (live && r.length) setVisible(true); }, () => undefined);
+    return () => { live = false; };
+  }, [leader]);
   const refresh = async () => {
     if (inFlight.current) return;
     const current = generation.current;
@@ -65,6 +74,7 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
     } catch { if (current === generation.current) setError('Submission was not confirmed. Refresh the queue before retrying.'); }
     finally { inFlight.current = false; if (current === generation.current) setBusy(false); }
   };
+  if (!visible) return null;
   return <section aria-label="Draft reviews" className="draft-queue" data-open={open}>
     <button className="btn btn-sm" aria-expanded={open} onClick={() => { if (open) close(); else { setOpen(true); void refresh(); } }}>Draft reviews {open ? '−' : '+'}</button>
     {open && <div style={{ maxHeight: '60vh', overflow: 'auto', paddingTop: 8 }}>

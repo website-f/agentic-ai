@@ -34,6 +34,9 @@ QUEUE_MAX = 5000
 BATCH = 100
 FLUSH_EVERY = 3.0
 MAX_FIELD = 8000  # characters per message kept in a trace
+# P80: Prima's assistant (prima/model.py): its prompts carry Prima's people and records, so
+# they never leave for traces. The call is still counted in llm_calls.
+UNTRACED = ("prima.",)
 
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake Langfuse
 _queue: asyncio.Queue[dict[str, Any]] | None = None
@@ -99,7 +102,7 @@ def generation(
 ) -> None:
     """Queue one model call. Never raises, never waits."""
     global _dropped
-    if not enabled():
+    if not enabled() or kind.startswith(UNTRACED):
         return
     try:
         end = time.time_ns()

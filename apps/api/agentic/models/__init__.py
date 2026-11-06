@@ -2589,3 +2589,6 @@ from ..erasure.models import ErasureRecord, WorkspaceExport  # noqa: E402, F401
 
 # P73: feedback from the floating button, read by the developer (agentic/feedback/models.py).
 from ..feedback.models import Feedback  # noqa: E402, F401
+
+# P80: SharePoint and OneDrive folders in the Library (agentic/sharepoint/models.py).
+from ..sharepoint.models import LinkedFile, LinkedSource  # noqa: E402, F401

@@ -208,13 +208,13 @@
   "method": "GET",
   "path": "api/arisha",
   "name": "arishaStatus",
-  "doc": "Whether Arisha is switched on here (the CEO approves it; off by default)."
+  "doc": "Whether Arisha is switched on here, for this person (P80: everyone who opens Prima from the office)."
  },
  {
   "method": "POST",
   "path": "api/arisha",
   "name": "arisha",
-  "doc": "Leadership pilot AI chat; preparation is independently scoped and never saves records.",
+  "doc": "Arisha's chat (P80: everyone may consult her); preparation is independently scoped and never saves records.",
   "body": "{ brief?: unknown; history?: unknown }"
  },
  {
@@ -1215,6 +1215,15 @@
   ]
  },
  {
+  "method": "POST",
+  "path": "api/companies/:id/tenders",
+  "name": "addTender",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/compliance",
   "name": "compliance"
@@ -1469,6 +1478,12 @@
  },
  {
   "method": "POST",
+  "path": "api/continuity/systems",
+  "name": "addBcmSystem",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/continuity/systems/:id/copies/:copy/:kind",
   "name": "bcmRecord",
   "params": [
@@ -1584,6 +1599,15 @@
  },
  {
   "method": "POST",
+  "path": "api/corporate/:companyId/audits",
+  "name": "addCorpAudit",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/corporate/:companyId/changes",
   "name": "raiseCorpChange",
   "params": [
@@ -1604,6 +1628,24 @@
   "method": "POST",
   "path": "api/corporate/:companyId/file/check",
   "name": "checkCompanyFile",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/:companyId/file/start",
+  "name": "startCompanyFile",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/:companyId/filings",
+  "name": "addCorpFiling",
   "params": [
    "companyId"
   ],
@@ -1910,6 +1952,24 @@
  },
  {
   "method": "POST",
+  "path": "api/finance/:companyId/banks",
+  "name": "finAddBankAccount",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/books",
+  "name": "finStartBooks",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/finance/:companyId/close/:action",
   "name": "finCloseStep",
   "params": [
@@ -1950,6 +2010,16 @@
   "params": [
    "companyId"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/:companyId/papers/:pack",
+  "name": "finAddPaper",
+  "params": [
+   "companyId",
+   "pack"
+  ],
+  "body": "{ label?: unknown; dueOn?: unknown }"
  },
  {
   "method": "POST",
@@ -2273,6 +2343,15 @@
   "method": "GET",
   "path": "api/grc",
   "name": "grcBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/grc/companies/:companyId/obligations",
+  "name": "addGrcObligation",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -3102,6 +3181,15 @@
  },
  {
   "method": "POST",
+  "path": "api/meetings/:id/actions",
+  "name": "addMeetingAction",
+  "params": [
+   "id"
+  ],
+  "body": "{ text?: unknown; owner?: unknown; due?: unknown }"
+ },
+ {
+  "method": "POST",
   "path": "api/meetings/:id/actions/:index",
   "name": "setAction",
   "params": [
@@ -3745,6 +3833,15 @@
    "id"
   ],
   "body": "{ from?: unknown; to?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/sites/:id/roster/shifts",
+  "name": "addShifts",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",

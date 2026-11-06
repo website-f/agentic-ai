@@ -99,6 +99,14 @@ def _pkce() -> tuple[str, str]:
 async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "") -> str:
     """Microsoft's sign-in page for this office."""
     ws_id, cfg = await _office_for(db, email)
+    # P80: a person who allowed SharePoint for the Library keeps it (asked for again here); no
+    # one else is ever asked for file reading at sign-in.
+    known = (
+        await db.scalar(select(User.id).where(User.email == email.strip().lower()))
+        if email.strip()
+        else None
+    )
+    scope = await auth.scopes_for(db, cfg, ws_id, known, False)
     state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(16)
     verifier, challenge = _pkce()
     redirect = app.redirect_uri(base)
@@ -111,6 +119,7 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
                 "nonce": nonce,
                 "redirect": redirect,
                 "next": next_path,
+                "scope": scope,
             }
         ),
         ex=STATE_TTL,
@@ -120,7 +129,7 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
         "response_type": "code",
         "redirect_uri": redirect,
         "response_mode": "query",
-        "scope": cfg.scopes,
+        "scope": scope,
         "state": state,
         "nonce": nonce,
         "code_challenge": challenge,
@@ -184,7 +193,7 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
             "code": code,
             "redirect_uri": st["redirect"],
             "code_verifier": st["verifier"],
-            "scope": cfg.scopes,
+            "scope": st.get("scope") or cfg.scopes,
         },
     )
     if status >= 400 or not tok.get("access_token"):

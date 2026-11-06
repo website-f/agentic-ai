@@ -145,6 +145,10 @@ class Hit:
     matched: int  # distinct query words in the passage
     strong: bool
     via: list[str] = field(default_factory=list)  # keyword | meaning
+    # P80: a SharePoint file's own link and its place in the linked folder (the file stays
+    # in SharePoint; people and agents open it there).
+    url: str | None = None
+    path: str | None = None
 
     def cite(self) -> str:
         """How agents cite it: [Title p.N]."""
@@ -273,7 +277,24 @@ async def search(
         out.append(h)
         if len(out) >= limit:
             break
+    await _linked(db, out)
     return out
+
+
+async def _linked(db: AsyncSession, hits: list[Hit]) -> None:
+    """P80: SharePoint passages carry their file's link and path (one query for all)."""
+    ids = [h.source_id for h in hits if h.source_kind == "sharepoint"]
+    if not ids:
+        return
+    from ..sharepoint.models import LinkedFile
+
+    rows = await db.execute(
+        select(LinkedFile.id, LinkedFile.web_url, LinkedFile.path).where(LinkedFile.id.in_(ids))
+    )
+    found = {i: (url, path) for i, url, path in rows.all()}
+    for h in hits:
+        if h.source_id in found:
+            h.url, h.path = found[h.source_id]
 
 
 def excerpt(text: str, query: str, limit: int) -> str:
@@ -309,6 +330,11 @@ def _source_line(h: Hit) -> str:
     if h.source_kind == "file":
         pages = f" pages='{h.page}'" if h.page else ""
         return f"source: file {h.source_id} (read_file file_id='{h.source_id}'{pages} for more)"
+    if h.source_kind == "sharepoint":
+        return (
+            f"source: SharePoint file {h.source_id} '{h.path or h.title}' "
+            f"(read_file file_id='{h.source_id}' for more; give people its link: {h.url or '-'})"
+        )
     return f"source: SOP {h.source_id} (find_sop for the whole procedure)"
 
 
@@ -376,10 +402,17 @@ async def auto_section(
         mark = ""
         if flagged(body):
             warn, mark = True, " [flagged: reads like instructions to AI]"
-        ref = f"file {h.source_id}" if h.source_kind == "file" else f"SOP {h.source_id}"
+        ref = (
+            f"file {h.source_id}"
+            if h.source_kind == "file"
+            else f"SharePoint file {h.source_id}, link {h.url}"
+            if h.source_kind == "sharepoint"
+            else f"SOP {h.source_id}"
+        )
         parts.append(f"[{i}] {h.label()} ({ref}){mark}\n{body}")
         if used is not None and not any(u.get("id") == h.source_id for u in used):
-            used.append({"kind": h.source_kind, "id": h.source_id, "text": h.title, "page": h.page})
+            u = {"kind": h.source_kind, "id": h.source_id, "text": h.title, "page": h.page}
+            used.append({**u, "url": h.url} if h.url else u)
     lines = [
         "From the library (the office's guidelines; cite what you use as [title p.N]; "
         "search_library or read_file for more):",

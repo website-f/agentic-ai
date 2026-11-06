@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     ms_client_id: str = ""
     ms_client_secret: str = ""
     ms_tenant: str = "organizations"
+    # P80: SharePoint / OneDrive folders in the Library (agentic/sharepoint). Bounds of one
+    # folder walk, the largest file read (in memory, never stored), and how often each linked
+    # folder is checked for changes.
+    sharepoint_max_files: int = 500
+    sharepoint_max_depth: int = 6
+    sharepoint_max_folders: int = 200
+    sharepoint_max_file_mb: int = 30
+    sharepoint_sync_hours: float = 3.0
     # WhatsApp through WAHA (P16): the self-hosted gateway, and how it reaches our webhook.
     waha_url: str = "http://waha:3000"
     waha_api_key: str = ""

@@ -42,6 +42,7 @@ import { branchesQuery, meQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 import { FileTile } from "./documents/visuals";
 import { LibraryHeader } from "./library-hub/hub";
+import { LinkedSources } from "./library-hub/linked-sources";
 
 type Show = "all" | "file" | "sop";
 
@@ -69,7 +70,7 @@ function Passage({ p }: { p: LibraryPassage }) {
         </div>
         <div className="flex flex-wrap items-center gap-1.5 max-sm:pl-8.5">
           {p.strong ? <Pill tone="ok">{t("Agents get this unasked")}</Pill> : null}
-          <Pill tone="neutral">{p.source_kind === "sop" ? "SOP" : t("File")}</Pill>
+          <Pill tone="neutral">{p.source_kind === "sop" ? "SOP" : p.source_kind === "sharepoint" ? "SharePoint" : t("File")}</Pill>
         </div>
       </div>
       <p className="ml-8.5 line-clamp-6 text-[13px] leading-relaxed whitespace-pre-line text-fg/85 max-sm:ml-0">{p.text}</p>
@@ -78,7 +79,9 @@ function Passage({ p }: { p: LibraryPassage }) {
           <QuotesIcon size={12} /> {p.cite}
         </span>
         <Button size="sm" variant="ghost" asChild>
-          {p.source_kind === "file"
+          {p.source_kind === "sharepoint" && p.url
+            ? <a href={p.url} target="_blank" rel="noreferrer noopener"><ArrowSquareOutIcon size={14} /> {t("Open in SharePoint")}</a>
+            : p.source_kind === "file"
             ? <Link to="/files" search={{ f: p.source_id }}><ArrowSquareOutIcon size={14} /> {t("Open the file")}</Link>
             : <Link to="/sops" search={{ sop: p.source_id }}><ArrowSquareOutIcon size={14} /> {t("Open the SOP")}</Link>}
         </Button>
@@ -226,6 +229,9 @@ export function LibraryPage() {
           <Stat label={t("On the way")} value={reading} icon={HourglassMediumIcon} tone={reading ? "warn" : "neutral"} hint={t("Being read or indexed")} />
         </StatGrid>
       </div>
+
+      {/* P80: SharePoint / OneDrive folders: the files stay there, only their text is kept. */}
+      <LinkedSources />
 
       <TrySearch />
 

@@ -1,4 +1,4 @@
-import { arishaLeader, arishaMayReadContext, arishaMayPrepareFinance, arishaRecordKindsFor, type ArishaPilotUser } from './arisha-policy';
+import { arishaMayConsult, arishaMayReadContext, arishaMayPrepareFinance, arishaRecordKindsFor, type ArishaPilotUser } from './arisha-policy';
 import type { ArishaContextSummary } from './arisha-context';
 import { RECORD_KINDS, checkRecordValues, type RecordKind, type RecordValues } from './records';
 
@@ -79,13 +79,16 @@ export const ARISHA_TOOLS: ArishaToolSpec[] = [
   },
 ];
 
-/** Advertised tools are scoped too; every execution still rechecks authorization in the service. */
+/**
+ * Advertised tools are scoped too; every execution still rechecks authorization in the service.
+ * P80: everyone who may consult Arisha gets the read-only guide (task_guide: their own cards); summaries, record and
+ * finance preparation stay with the leaders arisha-policy names.
+ */
 export function arishaToolsFor(user: ArishaPilotUser): ArishaToolSpec[] {
-  const role = arishaLeader(user);
-  if (!role) return [];
+  if (!arishaMayConsult(user)) return [];
   const contexts = ['operations', 'compliance', 'finance-papers'].filter((context) => arishaMayReadContext(user, context));
   return ARISHA_TOOLS.filter((tool) =>
-    tool.name === 'executive_summary' ||
+    (tool.name === 'executive_summary' && contexts.length > 0) ||
     tool.name === 'task_guide' ||
     ((tool.name === 'record_form' || tool.name === 'prepare_record') && arishaRecordKindsFor(user).length > 0) ||
     ((tool.name === 'finance_papers' || tool.name === 'prepare_finance_paper') && arishaMayPrepareFinance(user))

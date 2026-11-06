@@ -1,20 +1,21 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { arishaGuideView, arishaToolsFor, RECORD_KINDS, RULES, arishaFormView, arishaKind, arishaRecordKindsFor, arishaMayDraftRecord, arishaMayDraftCompany, type ArishaDraft, type ArishaFinanceDraft, type ArishaContextSummary, type User, centralAdminGuideFor, finGuidesText } from '@prima/core';
 import { api } from './api';
+import { XIcon } from '@phosphor-icons/react';
 import { ArishaAvatar } from './ArishaAvatar';
 import { useLang, type Lang } from './i18n';
 
 /**
- * Arisha, the in-app assistant (Fauzan, 28 Oct 2026): a small avatar staff can drag anywhere on the screen, which opens
- * a chat box. Arisha teaches and guides: she explains the screen, gives small numbered steps naming the exact buttons,
+ * Arisha, the in-app assistant (Fauzan, 28 Oct 2026). P80: she opens from Prima's one launcher (Launcher.tsx), as a
+ * panel on the right on a computer and a full-height sheet on a phone. Arisha teaches and guides: she explains the screen, gives small numbered steps naming the exact buttons,
  * and says which rule applies. She is an AI assistant. Every decision, approval and button press is
  * the staff member's own. Tools return only role- and grant-authorized structured summaries and draft schemas.
  *
- * In the test link she runs on Claude through the viewer's `sample` capability. In the live web app she runs on
- * Microsoft's AI, Azure OpenAI, through the Prima server (Fauzan, 28 Oct 2026: "Microsoft ai"), once it is switched on.
+ * In the test link she runs on Claude through the viewer's `sample` capability. In the live web app she runs through the
+ * Prima server: inside the Agentic Office on the office's AI (P80), else on Microsoft's Azure OpenAI once switched on.
  *
- * Four-leader pilot: scoped non-sensitive drafts are proposals. A human submits, then an authorized
- * reviewer explicitly saves. No client screen text is sent automatically to a model.
+ * P80: everyone may consult her; only the four leaders' scoped non-sensitive drafts are proposals. A human submits, then
+ * an authorized reviewer explicitly saves. No client screen text is sent automatically to a model.
  */
 
 interface SampleError {
@@ -90,18 +91,22 @@ export function useSample(enabled = true): Sample | null | undefined {
   return sample;
 }
 
+/** The Prima server's own generic refusals: said in the screen language instead. */
+const GENERIC = ['Arisha is busy right now.', 'Arisha could not answer.', 'Arisha is not switched on.'];
+
 /** Arisha's words for a failed call, in the screen language. */
 export function sampleProblem(e: unknown, lang: Lang): string | null {
   const err = e as SampleError & { status?: number };
   if (err?.code === 'aborted') return null;
-  // From the Prima server: 429 when Azure OpenAI is busy.
+  // P80: the office's own plain words (the person's AI allowance is used up, not opened from the office, no model)
+  // come through as they are; Prima's generic ones are said in the screen language.
+  const said = typeof err?.message === 'string' ? err.message.trim() : '';
+  if ((err?.status === 429 || err?.status === 503 || err?.status === 403) && said && said.length <= 300 && !GENERIC.includes(said)) return said;
+  // From the Prima server: 429 when the AI service is busy.
   if (err?.status === 429) return t('busy', lang);
   return err?.code === 'not_granted' ? t('denied', lang) : err?.code === 'rate_limited' ? t('busy', lang) : t('failed', lang);
 }
 export { LANG_RULE };
-
-const POS_KEY = 'prima.arisha.pos';
-const SIZE = 56;
 
 // The panel's own words, in the three screen languages. The panel is kept out of the page translator so Arisha's
 // answers are never changed on the way to the screen.
@@ -127,9 +132,9 @@ const T: Record<string, Record<Lang, string>> = {
     mix: 'Arisha boleh silap. Check screen dan rule dulu sebelum buat apa-apa.',
   },
   off: {
-    en: 'Arisha is not switched on yet. In the test link she runs on Claude; in Prima she runs on Microsoft AI once the CEO switches her on.',
-    ms: 'Arisha belum dihidupkan. Dalam pautan ujian dia berjalan di Claude; dalam Prima dia berjalan di Microsoft AI selepas CEO menghidupkannya.',
-    mix: 'Arisha belum on lagi. Dalam test link dia guna Claude; dalam Prima dia guna Microsoft AI bila CEO on-kan.',
+    en: 'Arisha is not switched on here yet. Inside the Agentic Office she uses the office AI once it is set up.',
+    ms: 'Arisha belum dihidupkan di sini. Dalam Agentic Office dia menggunakan AI pejabat selepas ia disediakan.',
+    mix: 'Arisha belum on di sini. Dalam Agentic Office dia guna AI office bila sudah setup.',
   },
   denied: {
     en: 'Arisha needs your permission to use Claude in this page. Allow it from the page permissions, then ask again.',
@@ -151,7 +156,12 @@ const T: Record<string, Record<Lang, string>> = {
     ms: 'Saya boleh sediakan draf tapak, pos, checkpoint dan domain IT baharu. Semak dan hantar kepada penyemak manusia yang berkuasa. Jangan tampal kata laluan atau butiran identiti, bank dan perubatan.',
     mix: 'Saya boleh prepare site, post, checkpoint dan IT domain baru. Check kemudian submit untuk reviewer berkuasa. Jangan paste password atau data identity, bank dan medical.',
   },
-  open: { en: 'Open Arisha, your AI assistant (drag to move)', ms: 'Buka Arisha, pembantu AI anda (seret untuk alih)', mix: 'Buka Arisha, assistant AI anda (drag untuk alih)' },
+  open: { en: 'Open Arisha, your AI assistant', ms: 'Buka Arisha, pembantu AI anda', mix: 'Buka Arisha, assistant AI anda' },
+  consult: {
+    en: 'Ask how to do something in Prima, what this screen means, which rule applies, or what to do next with your own work.',
+    ms: 'Tanya cara membuat sesuatu dalam Prima, maksud skrin ini, peraturan mana yang terpakai, atau langkah seterusnya untuk kerja anda.',
+    mix: 'Tanya cara buat sesuatu dalam Prima, maksud screen ini, rule mana yang apply, atau apa next step untuk kerja anda.',
+  },
 };
 const t = (k: keyof typeof T, lang: Lang) => T[k][lang];
 
@@ -240,32 +250,6 @@ function pickRules(view: string, question: string): string {
     .join('\n');
 }
 
-function loadPos(): { x: number; y: number } | null {
-  try {
-    const v = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null');
-    if (v && typeof v.x === 'number' && typeof v.y === 'number') return v;
-  } catch {
-    /* private window or blocked storage: use the default place */
-  }
-  return null;
-}
-function savePos(p: { x: number; y: number }) {
-  try {
-    localStorage.setItem(POS_KEY, JSON.stringify(p));
-  } catch {
-    /* not kept: fine */
-  }
-}
-/** Keep the avatar on screen, and above the phone's bottom bar. */
-function clamp(p: { x: number; y: number }) {
-  const bottomBar = window.innerWidth <= 860 ? 72 : 0;
-  return {
-    x: Math.min(Math.max(8, p.x), window.innerWidth - SIZE - 8),
-    y: Math.min(Math.max(8, p.y), window.innerHeight - SIZE - 8 - bottomBar),
-  };
-}
-const defaultPos = () => clamp({ x: window.innerWidth - SIZE - 20, y: window.innerHeight - SIZE - 24 - (window.innerWidth <= 860 ? 72 : 0) });
-
 /** Light formatting for Arisha's answers: **bold** and line breaks; everything else is plain text. */
 export function Rich({ text }: { text: string }) {
   return (
@@ -282,14 +266,12 @@ export function Rich({ text }: { text: string }) {
   );
 }
 
-export function Arisha({ user, view, menu }: { user: User; view: string; viewLabel: string; menu: string[] }) {
-  const { lang } = useLang();
-  const [pos, setPos] = useState(() => clamp(loadPos() ?? defaultPos()));
-  const [open, setOpen] = useState(false);
+/** P80: whether Arisha can answer this person here: the Prima server's AI is on for them, or the test link's Claude. */
+export function useArishaReady(): { serverOn: boolean; sample: Sample | null | undefined; ready: boolean } {
   const sampleCapability = useSample(api.mode === 'demo');
   // Never substitute the demo's provider for the configured server AI service.
   const sample = api.mode === 'demo' ? sampleCapability : null;
-  // On the Prima server Arisha uses Azure OpenAI once switched on; the test link uses Claude through the page.
+  // On the Prima server: the office's AI (or Azure OpenAI) once switched on; the test link uses Claude through the page.
   const [serverOn, setServerOn] = useState(false);
   useEffect(() => {
     if (api.mode !== 'server') return;
@@ -298,6 +280,22 @@ export function Arisha({ user, view, menu }: { user: User; view: string; viewLab
       () => setServerOn(false),
     );
   }, []);
+  return { serverOn, sample, ready: serverOn || !!sample };
+}
+
+export function Arisha({ user, view, menu, open, onClose, serverOn, sample }: {
+  user: User;
+  view: string;
+  viewLabel: string;
+  menu: string[];
+  open: boolean;
+  onClose: () => void;
+  serverOn: boolean;
+  sample: Sample | null | undefined;
+}) {
+  const { lang } = useLang();
+  const titleId = useId();
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [live, setLive] = useState<string | null>(null);
@@ -313,38 +311,24 @@ export function Arisha({ user, view, menu }: { user: User; view: string; viewLab
   const [summaryEvidence, setSummaryEvidence] = useState<ArishaContextSummary[]>([]);
   const financeSubmitting = useRef(new Set<string>());
   const toolSpecs = arishaToolsFor(user);
-  const drag = useRef<{ dx: number; dy: number; moved: boolean; id: number } | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onResize = () => setPos((p) => clamp(p));
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [turns, live, problem]);
-
-  const down = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false, id: e.pointerId };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-  const move = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    if (!d || d.id !== e.pointerId) return;
-    const next = clamp({ x: e.clientX - d.dx, y: e.clientY - d.dy });
-    if (!d.moved && Math.hypot(next.x - pos.x, next.y - pos.y) < 6) return;
-    d.moved = true;
-    setPos(next);
-  };
-  const up = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    drag.current = null;
-    if (!d) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (d.moved) savePos(pos);
-    else setOpen((o) => !o);
-  };
+  // Opening puts the cursor in the question box; Escape closes (and stops an answer on its way).
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      abort.current?.abort();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   const ask = async (question: string) => {
     const q = question.trim();
@@ -360,6 +344,7 @@ export function Arisha({ user, view, menu }: { user: User; view: string; viewLab
     // Finance guide cards (2 Nov 2026): the same role-scoped cards the screens show, on Finance-related screens.
     const financeGuides = ['finance', 'payreq', 'staffpay'].includes(view) ? finGuidesText(user, lang) : '';
     const brief = `You are Arisha, the AI assistant inside Prima Secure. Advise and explain; never decide, approve, save, pay, send email or grant access.
+You consult the person using Prima: how to do things, what a screen means, which rule applies, and their own work. Answer from the guide cards, the rules and the screen below; say plainly when you do not know.
 You can prepare only the narrow draft forms listed below. Call record_form, then prepare_record. Never invent facts or references.
 The author must explicitly submit a draft; an authorized human reviews and saves it. Existing authority is unchanged.
 Only the designated CEO may prepare an existing company master as an unverified draft. The CEO confirms and saves it manually; never set source verification. Other drafts use an authorized human reviewer. Unsupported records stay in their existing screens. Use finance_papers to discover permitted company and paper IDs. prepare_finance_paper prepares a local todo-to-prepared proposal only; never submit or save it yourself. Do not invent paper labels or facts.
@@ -439,53 +424,30 @@ ${q}`;
   const draftBusy = drafts.some((d) => d.state === 'saving');
   const waiting = drafts.map((d, i) => (d.kind !== 'company' && (d.state === 'ready' || d.state === 'failed') ? i : -1)).filter((i) => i >= 0);
 
-  // The panel opens beside the avatar on a computer and as a sheet on a phone.
-  const phone = window.innerWidth <= 560;
-  const panelW = 380;
-  const panelH = Math.min(560, window.innerHeight - 120);
-  const panelStyle = phone
-    ? { left: 8, right: 8, bottom: 80, height: Math.min(520, window.innerHeight - 140) }
-    : {
-        left: Math.min(Math.max(8, pos.x + SIZE - panelW), window.innerWidth - panelW - 8),
-        top: pos.y > panelH + 16 ? pos.y - panelH - 8 : Math.min(pos.y + SIZE + 8, window.innerHeight - panelH - 8),
-        width: panelW,
-        height: panelH,
-      };
-
+  // P80: a panel on the right on a computer, a full-height sheet on a phone (styles.css). Kept while closed, so
+  // the conversation is still there when she is opened again.
   return (
     <div data-no-translate>
-      <button
-        className="arisha-avatar"
-        style={{ left: pos.x, top: pos.y }}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={() => (drag.current = null)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setOpen((o) => !o))}
-        aria-label={t('open', lang)}
-        title={t('open', lang)}
-        aria-expanded={open}
-      >
-        <ArishaAvatar size={52} decorative />
-      </button>
-      {open && (
-        <section className="arisha-panel" style={panelStyle} role="dialog" aria-label={t('title', lang)}>
+        <section className="arisha-panel" hidden={!open} role="dialog" aria-modal="false" aria-labelledby={titleId}>
           <header className="arisha-head">
-            <ArishaAvatar size={28} decorative />
-            <strong className="arisha-heading">{t('title', lang)}</strong>
-            <span className="grow" />
+            <ArishaAvatar size={36} decorative />
+            <div className="arisha-title">
+              <strong className="arisha-heading" id={titleId}>{t('title', lang)}</strong>
+              <span className="arisha-sub">{t('note', lang)}</span>
+            </div>
             {turns.length > 0 && live === null && (
               <button className="btn btn-sm btn-ghost" onClick={() => (setTurns([]), setProblem(null), setSummaryEvidence([]))}>
                 {t('clear', lang)}
               </button>
             )}
-            <button className="btn btn-sm btn-ghost" onClick={() => { abort.current?.abort(); setOpen(false); }}>
-              {t('close', lang)}
+            <button className="arisha-close" aria-label={t('close', lang)} title={t('close', lang)} onClick={() => { abort.current?.abort(); onClose(); }}>
+              <XIcon size={18} weight="bold" aria-hidden="true" />
             </button>
           </header>
           <div className="arisha-body">
             <div className="arisha-msg" data-who="arisha">
               {t('hello', lang).replace('{name}', user.name.replace(/\s*\(mock\)$/, ''))}
+              <p className="arisha-consult">{t('consult', lang)}</p>
             </div>
             {toolSpecs.length > 0 && <div className="arisha-msg" data-who="note">Ask for a permitted numeric summary or draft proposal. Source references and coverage limits appear below the answer. No payments, approvals or background saving.</div>}
             {full && <div className="arisha-msg" data-who="arisha">{t('fillHint', lang)}{arishaMayDraftCompany(user) && <p>CEO: existing company master drafts remain a separate manual save, never automatic source verification.</p>}</div>}
@@ -580,6 +542,7 @@ ${q}`;
             }}
           >
             <textarea
+              ref={inputRef}
               className="input"
               rows={2}
               value={draft}
@@ -604,9 +567,7 @@ ${q}`;
               </button>
             )}
           </form>
-          <div className="arisha-note muted small">{t('note', lang)}</div>
         </section>
-      )}
     </div>
   );
 }

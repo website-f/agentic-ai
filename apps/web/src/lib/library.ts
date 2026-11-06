@@ -41,7 +41,8 @@ export interface Library {
 
 export interface LibraryPassage {
   n: number;
-  source_kind: "file" | "sop";
+  /** P80: "sharepoint" passages come from a linked SharePoint / OneDrive folder. */
+  source_kind: "file" | "sop" | "sharepoint";
   source_id: string;
   title: string;
   heading: string;
@@ -52,6 +53,9 @@ export interface LibraryPassage {
   similarity: number;
   strong: boolean;
   via: string[];
+  /** P80: a SharePoint passage's file link and its place in the linked folder. */
+  url?: string | null;
+  path?: string | null;
 }
 
 /** File payloads carry the library fields too (P18). */

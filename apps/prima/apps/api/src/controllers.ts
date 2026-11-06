@@ -1,6 +1,6 @@
 import {releaseState} from './release-state';
 import { companyOfficeProblems, companyRunLinkProblems } from './company-office-readiness';
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, ServiceUnavailableException, UseGuards, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, Req, ServiceUnavailableException, UseGuards, Res } from '@nestjs/common';
 import type {
   AttendanceIssue,
   CorpChangeKind,
@@ -21,10 +21,10 @@ import type {
   RecordValues,
   User,
 } from '@prima/core';
-import { RECORD_KINDS, RULES, accessClosed, arishaFormView, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames } from '@prima/core';
-import { ArishaBusy, IdentityToken, arishaConfig, askArisha } from './arisha';
-import { arishaPilotAllowed } from './arisha-pilot';
-import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly } from './auth';
+import { RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames } from '@prima/core';
+import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel } from './arisha';
+import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
+import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest } from './auth';
 import { officeSecret } from './office';
 import { Db, schemaState } from './db';
 import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, signShare, verifyShare } from './share-links';
@@ -196,7 +196,22 @@ const CMS_SETTING_KEYS = [
 /** Arisha's access to Azure OpenAI, from this server's managed identity. */
 const arishaToken = new IdentityToken();
 /** Rebalance advice may also ask Arisha AI per case (Fauzan, 2 Nov 2026). Off by default; needs Arisha AI on too. */
-const rebalanceAiOn = (env: NodeJS.ProcessEnv = process.env) => env.WORK_REBALANCE_AI_ENABLED?.trim() === 'true' && !!arishaConfig(env);
+const rebalanceAiOn = (env: NodeJS.ProcessEnv = process.env) => env.WORK_REBALANCE_AI_ENABLED?.trim() === 'true' && !!arishaProvider(env);
+
+/**
+ * P80: the model Arisha answers this person on. On the office's AI only for someone who opened Prima from the office
+ * (a person's signed call): the office counts it against the person it linked to that staff record. null = not here.
+ */
+function arishaModelFor(provider: ArishaProvider, userId: string, req: AuthedRequest): ArishaModel | null {
+  if (provider.kind === 'azure') return null;
+  return req.office?.via === 'person' ? officeModel(provider.office, userId) : null;
+}
+function askArishaFor(provider: ArishaProvider, userId: string, req: AuthedRequest, input: Parameters<typeof askArisha>[2]) {
+  if (provider.kind === 'azure') return askArisha(provider.azure, () => arishaToken.get(), input);
+  const model = arishaModelFor(provider, userId, req);
+  if (!model) throw new ForbiddenException('Open Prima from the office to ask Arisha.');
+  return askArishaOn(model, input);
+}
 
 /** A form kind from the request; an unknown or missing kind is an input error (400), never a server error. */
 export function formKind(v: unknown) {
@@ -348,11 +363,13 @@ export class OfficeController {
 export class AppController {
   constructor(private db: Db) {}
 
-  /** Whether Arisha is switched on here (the CEO approves it; off by default). */
+  /** Whether Arisha is switched on here, for this person (P80: everyone who opens Prima from the office). */
   @Get('arisha')
-  async arishaStatus(@UserId() uid: string) {
+  async arishaStatus(@UserId() uid: string, @Req() req: AuthedRequest) {
     const user = await this.db.asUser(uid, async (_svc, u) => u);
-    return { enabled: !!arishaConfig() && arishaPilotAllowed(user) };
+    const provider = arishaProvider();
+    const reachable = !!provider && (provider.kind === 'azure' || !!arishaModelFor(provider, user.id, req));
+    return { enabled: reachable && arishaMayConsult(user), on: provider?.kind ?? null };
   }
 
   @Get('arisha/draft-form')
@@ -429,14 +446,14 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.arishaDrafts.returnDraft(u, id, b.version));
   }
 
-  /** Leadership pilot AI chat; preparation is independently scoped and never saves records. */
+  /** Arisha's chat (P80: everyone may consult her); preparation is independently scoped and never saves records. */
   @Post('arisha')
-  async arisha(@UserId() uid: string, @Body() b: { brief?: unknown; history?: unknown }) {
-    // Four-person leadership pilot: reject all other callers BEFORE contacting the AI service.
+  async arisha(@UserId() uid: string, @Body() b: { brief?: unknown; history?: unknown }, @Req() req: AuthedRequest) {
+    // Integration logins never reach the AI service; the tools below are scoped per person.
     const user = await this.db.asUser(uid, async (_svc, u) => u);
-    if (!arishaPilotAllowed(user)) throw new ForbiddenException('Arisha is restricted to the approved leadership pilot.');
-    const cfg = arishaConfig();
-    if (!cfg) throw new ServiceUnavailableException('Arisha is not switched on.');
+    if (!arishaMayConsult(user)) throw new ForbiddenException('Arisha is not available to integration logins.');
+    const provider = arishaProvider();
+    if (!provider) throw new ServiceUnavailableException('Arisha is not switched on.');
     const brief = str(b.brief, 'brief', 20_000);
     const history: ArishaTurn[] = (Array.isArray(b.history) ? b.history : [])
       .slice(-8)
@@ -463,9 +480,11 @@ export class AppController {
       throw new BadRequestException('Unknown tool.');
     };
     try {
-      return await askArisha(cfg, () => arishaToken.get(), { history, brief, tools, toolSpecs });
+      return await askArishaFor(provider, user.id, req, { history, brief, tools, toolSpecs });
     } catch (e) {
+      if (e instanceof ForbiddenException) throw e;
       if (e instanceof ArishaBusy) throw new HttpException(e.message, 429);
+      if (e instanceof ArishaUnavailable) throw new ServiceUnavailableException(e.message);
       console.error('Arisha request failed'); // Do not log prompts, model output, or submitted values.
       throw new ServiceUnavailableException('Arisha could not answer.');
     }
@@ -3961,16 +3980,18 @@ export class AppController {
    * answer in words. Names are put back only in the answer returned to the manager.
    */
   @Post('work/rebalance/ask-ai')
-  async workRebalanceAskAi(@UserId() uid: string, @Body() b: { adviceId?: unknown }) {
-    const cfg = arishaConfig();
-    if (!cfg || !rebalanceAiOn()) throw new ServiceUnavailableException('Arisha AI is not switched on for rebalancing.');
+  async workRebalanceAskAi(@UserId() uid: string, @Body() b: { adviceId?: unknown }, @Req() req: AuthedRequest) {
+    const provider = arishaProvider();
+    if (!provider || !rebalanceAiOn()) throw new ServiceUnavailableException('Arisha AI is not switched on for rebalancing.');
     const adviceId = str(b?.adviceId, 'adviceId', 200);
     const { brief, labels } = await this.db.asUser(uid, (svc, u) => svc.workRebalanceAiCase(u, adviceId));
     try {
-      const answer = await askArisha(cfg, () => arishaToken.get(), { history: [], brief, tools: null });
+      const answer = await askArishaFor(provider, uid, req, { history: [], brief, tools: null });
       return { text: rebalanceAiNames(answer.text, labels).slice(0, 4000), source: 'Arisha AI (advice only; names were not sent)' };
     } catch (e) {
+      if (e instanceof ForbiddenException) throw e;
       if (e instanceof ArishaBusy) throw new HttpException(e.message, 429);
+      if (e instanceof ArishaUnavailable) throw new ServiceUnavailableException(e.message);
       console.error('Rebalance AI request failed'); // Never log the brief or the answer.
       throw new ServiceUnavailableException('Arisha AI could not answer. The rule-based advice is still on the screen.');
     }

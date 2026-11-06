@@ -1,4 +1,4 @@
-import { arishaToolsFor } from '@prima/core';
+import { arishaMayConsult, arishaToolsFor } from '@prima/core';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { arishaPilotAllowed, arishaCanPrepareRecords, leadershipOnboardingPermits } from '../src/arisha-pilot';
@@ -9,8 +9,8 @@ const coo = { id: 'u-coo', opsTier: 'coo' };
 const act = { id: 'u-audit', actRole: 'lead' };
 const staff = { id: 'u-it-mgr', opsTier: 'manager' };
 
-describe('Arisha four-leader onboarding pilot', () => {
-  it('allows only designated CEO, Finance Director, COO and ACT Lead accounts to chat', () => {
+describe('Arisha: everyone consults, the four leaders prepare', () => {
+  it('keeps the leadership pilot to the designated CEO, Finance Director, COO and ACT Lead accounts', () => {
     for (const user of [ceo, finance, coo, act]) assert.equal(arishaPilotAllowed(user), true);
     for (const user of [staff, { id: 'u-act-dep', actRole: 'deputy' }, { id: 'u-chair' },
       { id: 'other', opsTier: 'ceo' }, { id: 'other', leadership: 'finance_director' },
@@ -19,6 +19,11 @@ describe('Arisha four-leader onboarding pilot', () => {
       { id: 'u-fauzan', opsTier: 'coo' },
       { id: 'u-coo', opsTier: 'coo', integration: 'feed' },
     ]) assert.equal(arishaPilotAllowed(user), false);
+  });
+
+  it('P80: lets everyone who opens Prima consult her, never an integration login', () => {
+    for (const user of [ceo, finance, coo, act, staff, { id: 'u-off-1' }, { id: 'other', opsTier: 'ceo' }]) assert.equal(arishaMayConsult(user), true);
+    assert.equal(arishaMayConsult({ id: 'u-coo', opsTier: 'coo', integration: 'feed' }), false);
   });
 
   it('allows narrowly scoped preparation for CEO, COO and ACT, not general record writes', () => {
@@ -37,7 +42,9 @@ describe('Arisha four-leader onboarding pilot', () => {
     assert.equal(names(coo).includes('finance_papers'), false);
     assert.equal(names(coo).includes('prepare_record'), true);
     assert.equal(names(act).includes('finance_papers'), true);
-    assert.deepEqual(arishaToolsFor({ id: 'spoof', opsTier: 'ceo' }), []);
+    // P80: anyone else gets only the read-only guide, never summaries, records or finance; integrations get nothing.
+    assert.deepEqual(arishaToolsFor({ id: 'spoof', opsTier: 'ceo' }).map((t) => t.name), ['task_guide']);
+    assert.deepEqual(arishaToolsFor(staff).map((t) => t.name), ['task_guide']);
     assert.deepEqual(arishaToolsFor({ ...ceo, integration: 'feed' }), []);
     const context = arishaToolsFor(coo).find((t) => t.name === 'executive_summary')!.inputSchema.properties.context as { enum: string[] };
     assert.deepEqual(context.enum, ['operations']);

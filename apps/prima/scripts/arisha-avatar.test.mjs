@@ -43,14 +43,17 @@ test('decorative slots avoid duplicate accessible labels, including after image 
   const fallback=load({...React,useState:()=>[true,()=>{}]})({size:28,decorative:true});
   const markup=renderToStaticMarkup(fallback); assert.match(markup,/aria-hidden="true"/); assert.doesNotMatch(markup,/role="img"|aria-label=/);
 });
-test('launcher and header use the same component and retain interaction hooks', () => {
+test('P80: the one launcher and the panel header use the same component; the panel is a side panel, not a dragged avatar', () => {
   const integration=readFileSync(new URL('../apps/web/src/Arisha.tsx',import.meta.url),'utf8');
-  assert.equal((integration.match(/<ArishaAvatar /g)||[]).length,2);
-  for(const hook of ['onPointerDown={down}','onPointerMove={move}','onPointerUp={up}','onPointerCancel=','onKeyDown=','aria-label={t(\'open\', lang)}']) assert.ok(integration.includes(hook));
-  assert.doesNotMatch(integration,/function Face\(|<Face/);
+  const launcher=readFileSync(new URL('../apps/web/src/Launcher.tsx',import.meta.url),'utf8');
+  assert.equal((integration.match(/<ArishaAvatar /g)||[]).length,1);
+  assert.equal((launcher.match(/<ArishaAvatar /g)||[]).length,2);
+  for(const hook of ['role="dialog"','aria-labelledby={titleId}','hidden={!open}',"e.key !== 'Escape'","aria-label={t('close', lang)}"])assert.ok(integration.includes(hook),hook);
+  assert.doesNotMatch(integration,/onPointerDown|function Face\(|<Face|prima\.arisha\.pos/);
   const css=readFileSync(new URL('../apps/web/src/styles.css',import.meta.url),'utf8');
-  assert.match(css,/\.arisha-avatar \{[^}]*width: 56px;[^}]*height: 56px;/s);
+  assert.match(css,/\.launcher-button \{[^}]*width: 56px;[^}]*height: 56px;/s);
   assert.match(css,/\.arisha-head \.arisha-heading \{[^}]*min-width: 0;[^}]*text-overflow: ellipsis;/s);
+  assert.doesNotMatch(css,/\.arisha-avatar/);
 });
 test('built demo contains exact image bytes with no external avatar file dependency', {skip:!existsSync(new URL('../apps/web/dist-demo/index.html',import.meta.url))}, () => {
   const html=readFileSync(new URL('../apps/web/dist-demo/index.html',import.meta.url),'utf8');

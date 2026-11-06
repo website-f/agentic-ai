@@ -276,6 +276,19 @@ async def start_intake(batch_id: str) -> None:
         await client.get_workflow_handle(workflow_id).signal(IntakeWorkflow.poke)
 
 
+async def start_linked_sync(source_id: str) -> None:
+    """P80: read (or bring up to date) a linked SharePoint folder on the worker."""
+    from ..workflows.linked_workflows import LinkedSyncWorkflow
+
+    client = await temporal_client()
+    await client.start_workflow(
+        LinkedSyncWorkflow.run,
+        source_id,
+        id=f"linked-sync-{source_id}-{datetime.now(UTC):%Y%m%d%H%M%S%f}",
+        task_queue=settings.temporal_task_queue,
+    )
+
+
 async def start_build(job_id: str) -> None:
     """Build a draft SOP or workflow from long documents on the worker (P24)."""
     from ..workflows.builder_workflows import BuildFromDocsWorkflow

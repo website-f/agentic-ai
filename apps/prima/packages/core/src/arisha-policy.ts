@@ -33,6 +33,15 @@ export function arishaPilotAllowed(user: ArishaPilotUser): boolean {
   return arishaLeader(user) !== null;
 }
 
+/**
+ * P80: everyone who opens Prima (owner, managers, staff; never an integration login) may consult Arisha: how to do
+ * things, what a screen means, the rules and guide cards. That is read-only guidance; reading context and preparing
+ * drafts stay with the leaders above, and every tool is still authorised per person by the service.
+ */
+export function arishaMayConsult(user: ArishaPilotUser): boolean {
+  return !user.integration;
+}
+
 /** Existing CEO master-data preparation, separate from the cross-user create-only queue. */
 export function arishaMayDraftCompany(user: ArishaPilotUser): boolean {
   return arishaLeader(user) === 'ceo';

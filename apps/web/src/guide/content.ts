@@ -1103,11 +1103,13 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "See every source and whether it is ready (**Indexed**) or still being read.",
       "Try a search the way an agent would, and see the passage and citation it gets.",
       "Take a file out of the library; it stays in Files.",
+      "Connect a SharePoint or OneDrive folder by pasting its link. The files stay in SharePoint; only their searchable text is kept, and it is synced every few hours.",
     ],
     spots: {
       "library.upload": "Pick who it is for, then drop files.",
       "library.sources": "Every guideline and SOP, and whether it is ready.",
       "library.search": "Ask a question the way an agent would.",
+      "library.sharepoint": "Folders linked from SharePoint or OneDrive, their status and Sync now.",
     },
     howto: [
       {
@@ -1122,6 +1124,14 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         steps: [
           s("Type a question in **Try a search** and click **Search**.", "library.search"),
           s("Each result shows the page, heading and citation. Strong matches are marked **Agents get this unasked**."),
+        ],
+      },
+      {
+        title: "Connect a SharePoint folder",
+        steps: [
+          s("In SharePoint or OneDrive, copy the folder's link with **Share** or **Copy link**."),
+          s("Paste it in **SharePoint and OneDrive** and click **Check link**.", "library.sharepoint"),
+          s("Check the folder's name and how many files will be read, choose **Who it is for**, then click **Connect**.", "library.sharepoint"),
         ],
       },
     ],

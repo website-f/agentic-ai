@@ -12,7 +12,9 @@ import { publishPage, rulesFor } from './prima-page';
 import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
+import { ArishaReviewQueue } from './ArishaReviewQueue';
 import { ConfidentialityGate } from './Confidential';
+import { Launcher } from './Launcher';
 import { LANGS, LangCtx, saveLang, savedLang, startTranslator, useLang, type Lang } from './i18n';
 import { Overview } from './views/Overview';
 import { CompanyView } from './views/Company';
@@ -964,8 +966,11 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       {nav.some((n) => n.view === 'clock') && <StaffTracker />}
       {/* Each person accepts the confidentiality rule before using Prima (Fauzan, 28 Oct 2026). */}
       <ConfidentialityGate userId={me.user.id} />
-      {/* P75: Prima's own AI assistant (Arisha) is not shown: in the Agentic Office the office's AI staff do
-          the work and its feedback button explains each page. */}
+      {/* P80: one launcher, bottom right: Arisha (everyone who opens Prima; she teaches and guides, never decides) and
+          the office's feedback and Rules & guide. Never for integration logins. */}
+      {!me.user.integration && (
+        <Launcher key={me.user.id} user={me.user} view={route.view} viewLabel={nav.find((n) => n.view === route.view)?.label ?? route.view} menu={nav.map((n) => n.label)} />
+      )}
       <div className="shell">
         <aside className="rail">
           <div className="brand">
@@ -1015,6 +1020,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         </aside>
         <div className="main">
           {!me.user.integration && <CleanupReceiptRecovery key={`${me.user.id}:${route.view}`} owner={me.user.id}/>}
+          {!me.user.integration && <ArishaReviewQueue key={me.user.id} user={me.user} companies={me.companies} />}
           {api.mode === 'demo' && (
             <div className="demo-band">
               <strong>Test version.</strong>

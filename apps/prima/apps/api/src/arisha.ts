@@ -3,8 +3,10 @@ import { ARISHA_TOOLS, type ArishaDraft, type ArishaTurn, type ArishaFinanceDraf
 
 // Arisha, the in-app AI assistant, on Microsoft's AI (Fauzan, 28 Oct 2026: "Microsoft ai"): Azure OpenAI chat completions,
 // called by this API with its own managed identity, so there is no AI key to store or leak. Arisha is off until the CEO
-// approves it (ARISHA_ENABLED=true). The exact four pilot leaders receive scoped help; record tools only prepare narrow drafts.
+// approves it (ARISHA_ENABLED=true). Record tools only prepare narrow drafts, for the leaders arisha-policy names.
 // Submission and authorized human review are separate from model execution.
+// P80: inside the Agentic Office she runs on the office's AI instead (arisha-office.ts, OFFICE_MODEL_URL), for everyone
+// who opens Prima from the office; the loop, rules, tool authorisation and budgets below are the same.
 
 export const ARISHA_SYSTEM_RULES = `You are Arisha, the AI assistant in Prima Secure. You advise and prepare drafts only.
 Never claim to save, approve, pay, send email, grant access, or deploy. Tool authorization is enforced independently by the server.
@@ -79,12 +81,24 @@ export class IdentityToken {
 /** Runs one of the scoped preparation tools for this user; a thrown error goes back to Arisha as the result. */
 export type ArishaToolRunner = (name: string, input: Record<string, unknown>) => Promise<unknown>;
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
 }
+
+/** An OpenAI-style function tool as sent to the model. */
+export interface ArishaFunctionTool { type: 'function'; function: { name: string; description: string; parameters: unknown } }
+
+/**
+ * P80: one chat-completion turn on whichever AI Arisha runs on: Azure OpenAI (azureModel) or the Agentic Office's AI
+ * gateway (arisha-office.ts). The loop below, its rules, tools and budgets are the same for both.
+ */
+export type ArishaModel = (
+  turn: { messages: ChatMessage[]; tools?: ArishaFunctionTool[]; maxTokens: number },
+  signal: AbortSignal,
+) => Promise<{ choices?: { message?: ChatMessage }[] }>;
 
 /** The most tool rounds in one answer; the last round must answer. */
 const ROUNDS = 6;
@@ -95,54 +109,63 @@ const ROUNDS = 6;
  */
 export interface ArishaBudgets { overallMs: number; callMs: number }
 const DEFAULT_BUDGETS: ArishaBudgets = { overallMs: 90_000, callMs: 30_000 };
+type ArishaInput = { history: ArishaTurn[]; brief: string; tools: ArishaToolRunner | null; toolSpecs?: ArishaToolSpec[] };
 export async function askArisha(
   cfg: ArishaConfig,
   token: (signal?: AbortSignal) => Promise<string>,
-  input: { history: ArishaTurn[]; brief: string; tools: ArishaToolRunner | null; toolSpecs?: ArishaToolSpec[] },
+  input: ArishaInput,
   http: Fetch = fetch,
   budgets: ArishaBudgets = DEFAULT_BUDGETS,
 ): Promise<ArishaAnswer> {
   const endpoint = azureOpenAiEndpoint(cfg.endpoint);
   if (!endpoint) throw new Error('Arisha has an invalid Azure endpoint.');
-  return withinArishaBudget(budgets.overallMs, signal => askArishaWithinBudget({ ...cfg, endpoint }, token, input, http, budgets, signal));
+  return askArishaOn(azureModel({ ...cfg, endpoint }, token, http), input, budgets);
+}
+
+/** P80: the same answer on any model (the office's gateway, arisha-office.ts). */
+export async function askArishaOn(model: ArishaModel, input: ArishaInput, budgets: ArishaBudgets = DEFAULT_BUDGETS): Promise<ArishaAnswer> {
+  return withinArishaBudget(budgets.overallMs, signal => askArishaWithinBudget(model, input, budgets, signal));
+}
+
+/** Azure OpenAI chat completions with this server's managed identity token. */
+function azureModel(cfg: ArishaConfig, token: (signal?: AbortSignal) => Promise<string>, http: Fetch): ArishaModel {
+  const url = `${cfg.endpoint}/openai/deployments/${encodeURIComponent(cfg.deployment)}/chat/completions?api-version=${encodeURIComponent(cfg.apiVersion)}`;
+  return async ({ messages, tools, maxTokens }, signal) => {
+    const accessToken = await token(signal);
+    checkArishaBudget(signal);
+    const res = await http(url, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ messages, ...(tools ? { tools, tool_choice: 'auto' } : {}), max_completion_tokens: maxTokens }),
+    });
+    checkArishaBudget(signal);
+    if (res.status === 429) throw new ArishaBusy();
+    if (!res.ok) throw new Error(`Azure OpenAI answered ${res.status}.`);
+    return await arishaJson(res, 256_000, signal) as { choices?: { message?: ChatMessage }[] };
+  };
 }
 
 async function askArishaWithinBudget(
-  cfg: ArishaConfig,
-  token: (signal?: AbortSignal) => Promise<string>,
-  input: { history: ArishaTurn[]; brief: string; tools: ArishaToolRunner | null; toolSpecs?: ArishaToolSpec[] },
-  http: Fetch,
+  model: ArishaModel,
+  input: ArishaInput,
   budgets: ArishaBudgets,
   overallSignal: AbortSignal,
 ): Promise<ArishaAnswer> {
   const messages: ChatMessage[] = [{ role: 'system', content: ARISHA_SYSTEM_RULES }, ...input.history.slice(-8).map((t) => ({ role: t.role, content: t.content })), { role: 'user', content: input.brief }];
-  const tools = input.tools
+  const tools: ArishaFunctionTool[] | undefined = input.tools
     ? (input.toolSpecs ?? ARISHA_TOOLS).map((t) => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }))
     : undefined;
   const drafts: ArishaDraft[] = [];
   const financeDrafts: ArishaFinanceDraft[] = [];
   const summaryEvidence: ArishaContextSummary[] = [];
   let toolCallsUsed = 0;
-  const url = `${cfg.endpoint}/openai/deployments/${encodeURIComponent(cfg.deployment)}/chat/completions?api-version=${encodeURIComponent(cfg.apiVersion)}`;
   for (let round = 0; round < ROUNDS; round++) {
     const last = round === ROUNDS - 1;
     checkArishaBudget(overallSignal);
-    const body = await withinArishaBudget(budgets.callMs, async signal => {
-      const accessToken = await token(signal);
-      checkArishaBudget(signal);
-      const res = await http(url, {
-        method: 'POST', redirect: 'error', signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ messages, ...(tools && !last ? { tools, tool_choice: 'auto' } : {}), max_completion_tokens: 2000 }),
-      });
-      checkArishaBudget(signal);
-      if (res.status === 429) throw new ArishaBusy();
-      if (!res.ok) throw new Error(`Azure OpenAI answered ${res.status}.`);
-      return await arishaJson(res, 256_000, signal) as { choices?: { message?: ChatMessage }[] };
-    }, overallSignal);
+    const body = await withinArishaBudget(budgets.callMs, signal => model({ messages, tools: tools && !last ? tools : undefined, maxTokens: 2000 }, signal), overallSignal);
     checkArishaBudget(overallSignal);
     const msg = body?.choices?.[0]?.message;
-    if (!msg) throw new Error('Azure OpenAI gave no answer.');
+    if (!msg) throw new Error('The AI service gave no answer.');
     const calls = msg.tool_calls ?? [];
     if (calls.length > 4 || toolCallsUsed + calls.length > 12) throw new Error('Too many tool requests in one answer.');
     toolCallsUsed += calls.length;
@@ -178,10 +201,13 @@ async function askArishaWithinBudget(
   return { text: '', drafts, financeDrafts, summaryEvidence };
 }
 
-/** Azure OpenAI is rate limiting: the web app says Arisha is busy. */
+/** The AI service is rate limiting (or, P80, the person's office AI allowance is used up): the web app says so. */
 export class ArishaBusy extends Error {
-  constructor() {
-    super('Arisha is busy right now.');
+  constructor(message = 'Arisha is busy right now.') {
+    super(message);
   }
 }
+
+/** P80: the AI service refused in plain words (not linked, no model, allowance): shown to the person as it is. */
+export class ArishaUnavailable extends Error {}
 

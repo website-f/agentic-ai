@@ -27,7 +27,9 @@ if (!__DEMO__ && 'serviceWorker' in navigator) {
 
 // P75: the Agentic Office's feedback button (built by apps/web, served by the office at the site root as
 // /feedback-widget.js). Loaded at run time, only inside the office (not in the test version, which has no office).
+// P80: in host mode: Prima's own launcher (Launcher.tsx) opens its panels, so it draws no button of its own.
 if (!__DEMO__ && import.meta.env.VITE_OFFICE === 'true') {
+  window.__agenticLauncher = 'host';
   const widget = document.createElement('script');
   widget.type = 'module';
   widget.src = '/feedback-widget.js';

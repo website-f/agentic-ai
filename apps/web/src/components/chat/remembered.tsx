@@ -12,10 +12,12 @@ import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export interface Recalled {
-  kind: "fact" | "file" | "sop";
+  kind: "fact" | "file" | "sop" | "sharepoint";
   id: string;
   text: string;
   page?: number | null;
+  /** P80: a SharePoint file's own link (the file stays in SharePoint). */
+  url?: string | null;
 }
 
 export function Remembered({ items }: { items: Recalled[] }) {
@@ -59,6 +61,10 @@ export function Remembered({ items }: { items: Recalled[] }) {
                 <Link to="/files" search={{ f: x.id, page: x.page ?? undefined } as never} className="min-w-0 flex-1 truncate text-accent hover:underline">
                   {x.text}{x.page ? ` · ${t("p.{n}", { n: x.page })}` : ""}
                 </Link>
+              ) : x.kind === "sharepoint" && x.url ? (
+                <a href={x.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate text-accent hover:underline">
+                  {x.text}{x.page ? ` · ${t("p.{n}", { n: x.page })}` : ""}
+                </a>
               ) : (
                 <span className="min-w-0 flex-1 truncate">{x.text}</span>
               )}

@@ -90,12 +90,35 @@ async def _configured(db: AsyncSession, workspace_id: str) -> app.AppConfig:
 # ---------------------------------------------------------------- a person's own mailbox
 
 
+async def scopes_for(
+    db: AsyncSession, cfg: app.AppConfig, workspace_id: str, user_id: str | None, files: bool
+) -> str:
+    """P80: what a person's sign-in asks for: the office's scopes, plus file reading when they
+    asked for it now (`files`) or granted it before (so it is never lost on a later sign-in)."""
+    if not files and user_id:
+        acct = await db.scalar(
+            select(MicrosoftAccount).where(
+                MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+            )
+        )
+        files = acct is not None and has_scope(acct.scopes, app.FILES_SCOPES[0])
+    return app.with_files(cfg.scopes) if files else cfg.scopes
+
+
 async def auth_url(
-    db: AsyncSession, workspace_id: str, user_id: str, session_id: str, base: str
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+    session_id: str,
+    base: str,
+    *,
+    with_files: bool = False,
 ) -> str:
     """Microsoft's sign-in page for this person. `base` is the public address the callback
-    returns to; it is remembered in the state so the token call uses the same one."""
+    returns to; it is remembered in the state so the token call uses the same one. P80:
+    `with_files` also asks to read their SharePoint / OneDrive files (the Library)."""
     cfg = await _configured(db, workspace_id)
+    scope = await scopes_for(db, cfg, workspace_id, user_id, with_files)
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
     challenge = (
@@ -111,6 +134,8 @@ async def auth_url(
                 "sid": _sid(session_id),
                 "verifier": verifier,
                 "redirect": redirect,
+                "scope": scope,
+                "files": with_files,
             }
         ),
         ex=STATE_TTL,
@@ -120,13 +145,27 @@ async def auth_url(
         "response_type": "code",
         "redirect_uri": redirect,
         "response_mode": "query",
-        "scope": cfg.scopes,
+        "scope": scope,
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "prompt": "select_account",
     }
     return f"{app.LOGIN}/{cfg.tenant}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
+
+
+async def started_with_files(state: str) -> bool:
+    """P80: was this connect started by the Library's "allow SharePoint" (with_files)?"""
+    raw = await valkey().get(f"msauth:{state}") if state else None
+    try:
+        return bool(raw and json.loads(raw).get("files"))
+    except ValueError:
+        return False
+
+
+async def drop_state(state: str) -> None:
+    if state:
+        await valkey().delete(f"msauth:{state}")
 
 
 async def finish(
@@ -157,7 +196,7 @@ async def finish(
             "code": code,
             "redirect_uri": st["redirect"],
             "code_verifier": st["verifier"],
-            "scope": cfg.scopes,
+            "scope": st.get("scope") or cfg.scopes,
         },
     )
     if status >= 400 or not tok.get("access_token"):
@@ -210,6 +249,12 @@ async def store(
     acct.tenant_id = str(claims.get("tid") or "")[:80]
     acct.email = str(email).lower()[:254]
     acct.display_name = str(profile.get("displayName") or claims.get("name") or "")[:200]
+    had_files = has_scope(acct.scopes or "", app.FILES_SCOPES[0])
+    if had_files and not changed_mailbox and not has_scope(granted, app.FILES_SCOPES[0]):
+        # P80: a sign-in that did not ask for file reading (no email to know them by) does not
+        # take back what this person granted for the Library; the next refresh asks for it,
+        # and drops it if it was withdrawn (access_token).
+        granted = app.with_files(granted)
     acct.scopes = granted
     acct.token_enc = crypto.encrypt(tok["refresh_token"], acct.aad)
     acct.status, acct.last_error = "connected", None
@@ -236,6 +281,14 @@ def has_scope(granted: str, scope: str) -> bool:
     return any(s.rsplit("/", 1)[-1].lower() == want for s in granted.split())
 
 
+def refresh_scopes(asked: str, granted: str) -> str:
+    """P80: what a token refresh asks for: the office's scopes, plus Files.Read.All /
+    Sites.Read.All only when this person granted them (the Library's reconnect). Asking for
+    them without that grant would make Microsoft refuse the refresh and stop their mail too."""
+    asked = " ".join(s for s in asked.split() if s not in app.FILES_SCOPES)
+    return app.with_files(asked) if has_scope(granted, app.FILES_SCOPES[0]) else asked
+
+
 async def _cache(account_id: str, tok: dict[str, Any]) -> None:
     ttl = max(60, int(tok.get("expires_in") or 3600) - 120)
     await valkey().set(f"mstok:{account_id}", tok["access_token"], ex=ttl)
@@ -252,6 +305,7 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
             return str(cached)
     cfg = await _configured(db, acct.workspace_id)
     tenant = acct.tenant_id or cfg.tenant
+    want = refresh_scopes(cfg.scopes, acct.scopes)
     status, tok = await _token_call(
         tenant,
         {
@@ -259,12 +313,16 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
             "client_secret": cfg.client_secret,
             "grant_type": "refresh_token",
             "refresh_token": crypto.decrypt(acct.token_enc, acct.aad),
-            "scope": cfg.scopes,
+            "scope": want,
         },
     )
-    if cfg.teams_channels and str(tok.get("error") or "") in RECONNECT_ERRORS:
-        # P63: Teams channel posts were switched on but this person's grant lacks them (no
-        # consent yet): keep everything else working with the scopes they have.
+    # P63: Teams channel posts were switched on but this person's grant lacks them (no consent
+    # yet); P80: their file reading was withdrawn (an admin revoked it). Either way, keep mail
+    # and everything else working with the scopes they still have.
+    for drop in ({app.CHANNEL_SCOPE} if cfg.teams_channels else set(), set(app.FILES_SCOPES)):
+        if str(tok.get("error") or "") not in RECONNECT_ERRORS or not drop & set(want.split()):
+            continue
+        want = " ".join(s for s in want.split() if s not in drop)
         status, tok = await _token_call(
             tenant,
             {
@@ -272,7 +330,7 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
                 "client_secret": cfg.client_secret,
                 "grant_type": "refresh_token",
                 "refresh_token": crypto.decrypt(acct.token_enc, acct.aad),
-                "scope": app.DELEGATED_SCOPES,
+                "scope": want,
             },
         )
     if status >= 400 or not tok.get("access_token"):

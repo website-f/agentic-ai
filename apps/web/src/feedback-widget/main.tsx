@@ -9,6 +9,9 @@
  * lives in a shadow root: the office's look comes with it and the page's own styles stay out
  * (and the other way round). Light or dark follows the page (<html data-theme>, which Prima sets
  * from the office's saved choice); the language follows Prima's (prima.lang).
+ *
+ * P80: a page with its own launcher (Prima) sets window.__agenticLauncher = "host" first: no
+ * button here, and the page opens the panels through window.AgenticFeedback (host.ts).
  */
 import { HOST_LANG } from "./keep-lang"; // first: before the office i18n touches <html lang>
 
@@ -26,6 +29,7 @@ import { api } from "@/lib/api";
 import { feedbackConfigQuery } from "@/lib/feedback";
 import type { Me } from "@/lib/types";
 
+import { createBridge, hostMode, type Bridge } from "./host";
 import { primaPath, readPrimaLang, readPrimaPage, widgetUnwelcome } from "./prima";
 import { PrimaRulesPanel } from "./prima-rules";
 import css from "./widget.css?inline";
@@ -74,19 +78,28 @@ const syncLang = () => {
 // The first screen has no hash yet: Prima's own word for it then.
 const here = () => primaPath(window.location.pathname, window.location.hash || `#${readPrimaPage().view}`);
 
-function Widget({ applyTheme }: { applyTheme: (t: Theme) => void }) {
+export function Widget({ applyTheme, bridge }: { applyTheme: (t: Theme) => void; bridge?: Bridge }) {
   const theme = useTheme(applyTheme);
   const me = useQuery({ queryKey: ["feedback-widget", "me"], queryFn: () => api<Me>("/api/auth/me"), staleTime: 60_000, retry: false });
   const signedIn = !!me.data && !me.data.user.must_change_password && !me.data.user.two_factor_setup_required;
   const cfg = useQuery({ ...feedbackConfigQuery, enabled: signedIn });
   const who = me.data;
+  const on = !!(signedIn && who && cfg.data?.enabled);
+  // P80: the host page hears once whether feedback is on for this person, then any change.
+  const decided = !me.isPending && (!signedIn || !cfg.isPending);
+  useEffect(() => {
+    if (bridge && decided) bridge.setEnabled(on);
+  }, [bridge, decided, on]);
   return (
     <>
-      {signedIn && who && cfg.data?.enabled ? (
+      {on && who ? (
         <Feedback
           page={() => ({ path: here(), title: readPrimaPage().name })}
           rules={({ rules, onClose, onTour }) => <PrimaRulesPanel me={who} page={readPrimaPage()} path={here()} rules={rules} onClose={onClose} onTour={onTour} />}
           onOpen={syncLang}
+          hosted={!!bridge}
+          control={bridge?.setControl}
+          onPanel={bridge?.setPanel}
         />
       ) : null}
       <Toaster
@@ -103,8 +116,9 @@ function Widget({ applyTheme }: { applyTheme: (t: Theme) => void }) {
   );
 }
 
-function mount(): void {
+export function mount(): void {
   if (widgetUnwelcome() || document.getElementById("agentic-feedback")) return;
+  const bridge = hostMode() ? createBridge() : undefined;
 
   // Tailwind's @property rules do nothing inside a shadow root; registered on the page they
   // apply everywhere (shadows, rings and transforms need their starting values).
@@ -140,7 +154,7 @@ function mount(): void {
   createRoot(app).render(
     <StrictMode>
       <QueryClientProvider client={client}>
-        <Widget applyTheme={(t) => (root.dataset.theme = t)} />
+        <Widget applyTheme={(t) => (root.dataset.theme = t)} bridge={bridge} />
       </QueryClientProvider>
     </StrictMode>,
   );

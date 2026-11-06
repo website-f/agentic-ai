@@ -19,6 +19,84 @@ MS: dict[str, str] = {
     ),
     "Set a new password before continuing.": "Tetapkan kata laluan baharu sebelum teruskan.",
     "Your role ({role}) cannot do this.": "Peranan anda ({role}) tidak boleh buat ini.",
+    # ------------------------------------------------------------ P80 SharePoint folders in the Library
+    "Paste the link to a SharePoint or OneDrive folder.": (
+        "Tampal pautan folder SharePoint atau OneDrive."
+    ),
+    "That does not look like one link. Paste just the folder's link.": (
+        "Itu tidak kelihatan seperti satu pautan. Tampal pautan folder itu sahaja."
+    ),
+    "Only https links to SharePoint or OneDrive can be connected.": (
+        "Hanya pautan https ke SharePoint atau OneDrive boleh disambungkan."
+    ),
+    "Only SharePoint (sharepoint.com) and OneDrive links can be connected. Copy the link from SharePoint or OneDrive with Share or Copy link.": (  # noqa: E501
+        "Hanya pautan SharePoint (sharepoint.com) dan OneDrive boleh disambungkan. Salin pautan "
+        "dari SharePoint atau OneDrive dengan Share atau Copy link."
+    ),
+    "Microsoft did not say which folder that link opens.": (
+        "Microsoft tidak memberitahu folder mana yang dibuka oleh pautan itu."
+    ),
+    "Refused a download address that is not Microsoft's.": (
+        "Alamat muat turun yang bukan milik Microsoft ditolak."
+    ),
+    "Microsoft answered {status} for the file.": "Microsoft menjawab {status} untuk fail itu.",
+    "The Microsoft 365 connection that linked this folder is gone. Connect it again.": (
+        "Sambungan Microsoft 365 yang memautkan folder ini sudah tiada. Sambungkannya semula."
+    ),
+    "{name} needs to reconnect Microsoft 365 to allow SharePoint, then sync again.": (
+        "{name} perlu menyambung semula Microsoft 365 untuk membenarkan SharePoint, kemudian "
+        "segerakkan semula."
+    ),
+    "SharePoint says this folder is gone, or {name} can no longer open it. Check the folder, or disconnect it.": (  # noqa: E501
+        "SharePoint kata folder ini sudah tiada, atau {name} tidak boleh membukanya lagi. Semak "
+        "folder itu, atau putuskan sambungannya."
+    ),
+    "None of these SharePoint files has readable text yet. Sync the folder first.": (
+        "Belum ada teks yang boleh dibaca dalam fail SharePoint ini. Segerakkan folder itu dahulu."
+    ),
+    "Only an owner, an admin or the company's manager can connect SharePoint folders.": (
+        "Hanya pemilik, pentadbir atau pengurus syarikat boleh menyambung folder SharePoint."
+    ),
+    "That SharePoint folder is not here.": "Folder SharePoint itu tiada di sini.",
+    "SharePoint reading was not allowed. Your Microsoft 365 admin must grant Files.Read.All and Sites.Read.All to this app (Azure portal > App registrations > API permissions > Grant admin consent), then try again. Your sign-in and mail keep working.": (  # noqa: E501
+        "Bacaan SharePoint tidak dibenarkan. Pentadbir Microsoft 365 anda perlu memberi "
+        "Files.Read.All dan Sites.Read.All kepada aplikasi ini (portal Azure > App registrations "
+        "> API permissions > Grant admin consent), kemudian cuba lagi. Log masuk dan e-mel anda "
+        "tetap berfungsi."
+    ),
+    "Connect your Microsoft 365 account first. The folder is opened with your own sign-in.": (
+        "Sambungkan akaun Microsoft 365 anda dahulu. Folder itu dibuka dengan log masuk anda "
+        "sendiri."
+    ),
+    "Reconnect Microsoft 365 once to allow SharePoint, then paste the link again.": (
+        "Sambung semula Microsoft 365 sekali untuk membenarkan SharePoint, kemudian tampal "
+        "pautan itu semula."
+    ),
+    "Your Microsoft account cannot open that link. Check that it was shared with you, and that you connected the same Microsoft account.": (  # noqa: E501
+        "Akaun Microsoft anda tidak boleh membuka pautan itu. Semak sama ada ia dikongsi dengan "
+        "anda, dan anda menyambung akaun Microsoft yang sama."
+    ),
+    "Microsoft could not find what that link opens. Copy the link again from SharePoint or OneDrive.": (  # noqa: E501
+        "Microsoft tidak menjumpai apa yang dibuka oleh pautan itu. Salin pautan itu semula dari "
+        "SharePoint atau OneDrive."
+    ),
+    "Microsoft did not answer as expected: {why}": (
+        "Microsoft tidak menjawab seperti yang dijangka: {why}"
+    ),
+    "That link opens a file the Library cannot read. Link a folder, or a Word, Excel, PowerPoint, PDF, text or CSV file.": (  # noqa: E501
+        "Pautan itu membuka fail yang tidak dapat dibaca oleh Perpustakaan. Pautkan folder, atau "
+        "fail Word, Excel, PowerPoint, PDF, teks atau CSV."
+    ),
+    "That folder is in the Library already. Use Sync now on it instead.": (
+        "Folder itu sudah ada dalam Perpustakaan. Guna Segerak sekarang padanya."
+    ),
+    "Some of those files have no readable text yet. Sync the folder first.": (
+        "Sebahagian fail itu belum ada teks yang boleh dibaca. Segerakkan folder itu dahulu."
+    ),
+    "None of these files reads like a procedure (an SOP, guide, policy or checklist). Open Files and pick the ones to turn into SOP drafts.": (  # noqa: E501
+        "Tiada fail ini yang berbunyi seperti prosedur (SOP, panduan, polisi atau senarai semak). "
+        "Buka Fail dan pilih yang hendak dijadikan draf SOP."
+    ),
     # ------------------------------------------------------------ P73 feedback (routers/feedback)
     "Only the system's developer can do this.": "Hanya pembangun sistem boleh buat ini.",
     "Feedback is switched off right now.": "Maklum balas sedang dimatikan.",

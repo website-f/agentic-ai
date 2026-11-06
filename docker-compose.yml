@@ -715,6 +715,11 @@ services:
       # P68: everyone linked in the office opens Prima (not only the pilot group). The pilot's
       # own workflow rules are unchanged. false = only the pilot group signs in again.
       PRIMA_SIGNIN_EVERYONE: ${PRIMA_SIGNIN_EVERYONE:-true}
+      # P80: Prima's assistant Arisha runs on the office's AI: each model turn goes to the office
+      # api on the private network (edge; nginx never serves /internal/), signed with
+      # OFFICE_SIGNING_SECRET, and counts toward the person's daily AI allowance. Empty = Arisha
+      # off (unless Azure OpenAI is set up for her: ARISHA_ENABLED and AZURE_OPENAI_*).
+      OFFICE_MODEL_URL: ${PRIMA_OFFICE_MODEL_URL-http://api:8501/internal/prima/model}
     depends_on:
       prima-setup: { condition: service_completed_successfully }
     healthcheck:
