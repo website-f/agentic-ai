@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Store } from '@prima/core';
-import { MAX_ROWS, SNAPSHOT_AFTER, exact, pgMatches, withReadSnapshots } from '../src/read-cache';
+import { MAX_ROWS, SNAPSHOT_AFTER, exact, forgetCatalog, pgMatches, withReadSnapshots } from '../src/read-cache';
 
 type R = Record<string, unknown>;
 
@@ -97,5 +97,30 @@ describe('per-request read snapshots', () => {
     const again = (await h.store.list('people', { companyId: 'co-2' }))[0] as R;
     assert.notEqual(again.name, 'Mutated by a caller');
     assert.equal(h.store.hrItTrustedTenant(), 'tenant');
+  });
+
+  it('keeps a passing schema check for a while, never a failing one, and never the HR/IT tenant check', async () => {
+    forgetCatalog();
+    let runs = 0, hr = 0, answer: string[] = [];
+    const base = {
+      async rentalCorrectionProblems() { runs++; return [...answer]; },
+      async hrItProblems() { hr++; return []; },
+      async list() { return []; },
+    };
+    const fake = { query: async () => ({ rows: [] }) };
+    const a = withReadSnapshots(base as unknown as Store, fake as never, (t) => t) as unknown as typeof base;
+    answer = ['missing_policy'];
+    await a.rentalCorrectionProblems();
+    await a.rentalCorrectionProblems();
+    assert.equal(runs, 2, 'a failing answer is checked again every time');
+    answer = [];
+    await a.rentalCorrectionProblems();
+    const b = withReadSnapshots(base as unknown as Store, fake as never, (t) => t) as unknown as typeof base;
+    await b.rentalCorrectionProblems();
+    assert.equal(runs, 3, 'a passing answer is kept across requests');
+    await a.hrItProblems();
+    await b.hrItProblems();
+    assert.equal(hr, 2, 'the HR/IT check sets the tenant for its transaction: always run');
+    forgetCatalog();
   });
 });

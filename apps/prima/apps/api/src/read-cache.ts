@@ -23,8 +23,31 @@ export const MAX_ROWS = 3000;
 
 /** Tables read in their own order (audit, by seq) or behind readiness checks: never snapshotted. */
 const NEVER = new Set<string>(['audit', 'companyDesks', 'companyRunLinks']);
-/** Plain reads: everything else on the store counts as a change. */
-const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady']);
+/**
+ * Schema checks that only read the database catalogue (table privileges, row-level security, whether an optional module
+ * is installed). Their answer does not depend on the person and only changes with a deploy or a module install (which
+ * restarts the API), so a PASSING answer is kept for CATALOG_TTL_MS across requests; a failing one is never kept, so a
+ * problem still refuses at once. The home screen alone ran one of these on every load.
+ */
+const CATALOG = new Set<string>([
+  'rentalCorrectionProblems',
+  'procurementProblems',
+  'itOperationsProblems',
+  'itManualProblems',
+  'workflowMetricProblems',
+  'itCleanupProblems',
+]);
+export const CATALOG_TTL_MS = 5 * 60_000;
+const catalogKept = new Map<string, { at: number; value: unknown }>();
+const passing = (v: unknown): boolean => v === true || (Array.isArray(v) && v.length === 0);
+/** Tests: forget the kept schema answers. */
+export function forgetCatalog(): void {
+  catalogKept.clear();
+}
+
+/** Plain reads (no change): everything else on the store counts as a change. hrItProblems sets the tenant for the
+ *  transaction, so it is a read but is never kept. */
+const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady', ...CATALOG, 'hrItProblems', 'itImportProblems', 'rentalSimulation', 'hrItTrustedTenant']);
 
 type Snap = { rows: Record<string, unknown>[]; byId: Map<string, Record<string, unknown>> } | 'too-big';
 
@@ -124,6 +147,18 @@ export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolCl
             return r ? copy(r) : undefined;
           }
           return value.call(target, table, id);
+        };
+      }
+      if (CATALOG.has(name)) {
+        return async (...args: unknown[]) => {
+          // Per database (host, port, name): one API process normally serves one, but never mixes two.
+          const cp = (client as { connectionParameters?: { host?: string; port?: number; database?: string } }).connectionParameters;
+          const key = `${cp?.host ?? ''}:${cp?.port ?? ''}/${cp?.database ?? ''} ${name}:${JSON.stringify(args)}`;
+          const kept = catalogKept.get(key);
+          if (kept && Date.now() - kept.at < CATALOG_TTL_MS) return structuredClone(kept.value);
+          const out = await value.apply(target, args);
+          if (passing(out)) catalogKept.set(key, { at: Date.now(), value: out });
+          return out;
         };
       }
       if (READS.has(name)) return value.bind(target);
